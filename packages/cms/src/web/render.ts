@@ -58,6 +58,7 @@ import type { ReplyContext } from '../webmention/reply-context.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
 import { locationContext, syndicationLinks } from './context.ts';
+import { pingbackEndpointFor } from '../webmention/pingback.ts';
 import { webmentionEndpointFor } from '../webmention/routes.ts';
 
 /** Templates the default theme ships and the public routes ask for by name. */
@@ -693,6 +694,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // only when the site takes them, so a theme asks `{% if webmention %}`
     // and a site that has turned them off advertises nothing.
     const webmention = webmentionEndpointFor(siteData.read());
+    // And the pingback endpoint (TASK-203), only where a pingback could land.
+    const pingback = pingbackEndpointFor(siteData.read(), document, config.now());
     // The posts either side of this one, as the two links a theme draws under
     // an entry (TASK-79). Each is on the context only when there is one, so a
     // theme asks `{% if previous %}` and the ends of the archive draw nothing.
@@ -728,6 +731,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(form === undefined ? {} : { commentForm: form }),
       ...(contact === undefined ? {} : { contactForm: contact }),
       ...(webmention === undefined ? {} : { webmention }),
+      ...(pingback === undefined ? {} : { pingback }),
       ...cited,
       syndicateTo: syndicated?.targets ?? [],
       syndication: syndicationLinks([

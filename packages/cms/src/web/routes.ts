@@ -32,6 +32,7 @@ import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments
 import { commenterOf } from '../comments/viewer.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
+import { mountPingbacks, pingbackEndpointFor } from '../webmention/pingback.ts';
 import { mountWebmentions, WEBMENTION_PATH } from '../webmention/routes.ts';
 import { mountNotificationLinks } from '../notifications/routes.ts';
 import { advertiseIdentityEndpoints } from '../indieauth/discovery.ts';
@@ -68,6 +69,7 @@ import {
 } from './feeds.ts';
 import type { CommentFeedSource, FeedComment, FeedFormat, FeedSource } from './feeds.ts';
 import {
+  absoluteUrl,
   DOCUMENT_REPRESENTATIONS,
   documentJson,
   LISTING_REPRESENTATIONS,
@@ -156,6 +158,7 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // And where a webmention is sent (TASK-51), for the same reason and under
   // the same prefix.
   mountWebmentions(app);
+  mountPingbacks(app);
 
   // And where the one-click links in a notification land (TASK-55): the same
   // prefix again, and no session behind either of them.
@@ -795,7 +798,7 @@ function negotiateDocument(
         ? documentJson(document, { baseUrl: c.var.config.baseUrl })
         : page?.html;
 
-  return representationResponse({
+  const response = representationResponse({
     body,
     representation,
     href: encodePath(href),
@@ -824,6 +827,12 @@ function negotiateDocument(
       : { etag: representationEtag(representation, page.fingerprint) }),
     conditional: conditionalHeaders(c),
   });
+
+  const pingback = pingbackEndpointFor(c.var.renderer.site(), document, c.var.config.now());
+  if (pingback !== undefined) {
+    response.headers.set('x-pingback', absoluteUrl(pingback, c.var.config.baseUrl));
+  }
+  return response;
 }
 
 /**

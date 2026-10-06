@@ -1154,10 +1154,10 @@ The open web's version of what ActivityPub does: one page telling another that
 it linked to it. Both directions are on by default and each has a switch on the
 Discussion settings page.
 
-| Setting in `site.json` | What it does                                                             |
-| ---------------------- | ------------------------------------------------------------------------ |
-| `webmentionsSend`      | Tell the external pages a post links to, when it is published or edited. |
-| `webmentionsReceive`   | Advertise the endpoint on every page and accept what is sent to it.      |
+| Setting in `site.json` | What it does                                                               |
+| ---------------------- | -------------------------------------------------------------------------- |
+| `webmentionsSend`      | Tell the external pages a post links to, when it is published or edited.   |
+| `webmentionsReceive`   | Advertise the endpoints and accept webmentions and pingbacks sent to them. |
 
 **Sending** runs off the same index changes federation does, so a post saved in
 the editor and one edited on disk are one thing, and a full scan sends nothing.
@@ -1186,6 +1186,21 @@ what it left rather than adding a second, and one whose link has gone — or whi
 answers 404 or 410 — takes it away. Closing rules do not apply: a post that
 stopped taking comments still hears about a page that links to it, exactly as it
 still hears a fediverse reply.
+
+**Pingbacks** are how most WordPress sites say they linked here. The same
+switch takes them at `/_geekity/pingback`, advertised as an absolute URL in an
+`X-Pingback` header and a `<link rel="pingback">` on every post and on every
+page that takes comments. A `pingback.ping(source, target)` XML-RPC call goes
+through the same check, verification, spam checker and moderation queue as a
+webmention and is filed as the same comment, so a link pinged and a link
+mentioned are one entry. Because XML-RPC wants an answer, the source is read
+before the endpoint replies, and a failure is one of the spec's fault codes:
+`0x0010` for a source that does not exist, `0x0011` for one that does not link
+here, `0x0020` for a target that does not exist, `0x0021` for a target that
+takes no pingbacks, and `0x0030` for a ping sent again, which still rewrites
+the entry from the source as it now reads. A body over 16 KB, XML that is not
+well formed, and any document type declaration are refused with `-32700`
+before anything is resolved. The CMS does not send pingbacks.
 
 ### Syndication targets
 

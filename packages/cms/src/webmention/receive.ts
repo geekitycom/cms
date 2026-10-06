@@ -67,7 +67,14 @@ export type WebmentionRequest =
       readonly document: Document;
     }
   /** Not a webmention at all, with the reason a sender is told. */
-  | { readonly ok: false; readonly message: string };
+  | { readonly ok: false; readonly problem: RequestProblem; readonly message: string };
+
+/**
+ * Which half of a refused pair was wrong, which a pingback's fault code is read
+ * off: the source, a target that is no page here, a target on somebody else's
+ * site, or a pair that names one page twice.
+ */
+export type RequestProblem = 'source' | 'target' | 'elsewhere' | 'same';
 
 /** What {@link checkWebmentionRequest} needs to answer. */
 export interface CheckWebmentionOptions {
@@ -90,30 +97,31 @@ export function checkWebmentionRequest(
   target: string,
   options: CheckWebmentionOptions,
 ): WebmentionRequest {
-  if (source.trim() === '' || target.trim() === '') {
-    return refuse('A webmention needs both a source and a target.');
-  }
+  if (source.trim() === '') return refuse('source', 'A webmention needs a source.');
+  if (target.trim() === '') return refuse('target', 'A webmention needs a target.');
 
   const from = webUrl(source);
   const to = webUrl(target);
-  if (from === undefined) return refuse('The source is not an http or https URL.');
-  if (to === undefined) return refuse('The target is not an http or https URL.');
-  if (from.href === to.href) return refuse('The source and the target are the same page.');
+  if (from === undefined) return refuse('source', 'The source is not an http or https URL.');
+  if (to === undefined) return refuse('target', 'The target is not an http or https URL.');
+  if (from.href === to.href) {
+    return refuse('same', 'The source and the target are the same page.');
+  }
 
   // A source on a loopback or private address is not somebody else's page: it
   // is this network, and fetching it would make the site a way of reaching
   // machines nobody outside can reach. This stops the obvious spelling of that
   // and not a name that resolves to one — a receiver that has to be sure needs
   // to check the address it actually connects to.
-  if (isPrivateHost(from.hostname)) return refuse('The source is not a public URL.');
+  if (isPrivateHost(from.hostname)) return refuse('source', 'The source is not a public URL.');
 
   const site = webUrl(options.baseUrl);
   if (site === undefined || to.origin !== site.origin) {
-    return refuse('The target is not a page on this site.');
+    return refuse('elsewhere', 'The target is not a page on this site.');
   }
 
   const document = options.documentAt(to.pathname);
-  if (document === undefined) return refuse('There is no page here at that address.');
+  if (document === undefined) return refuse('target', 'There is no page here at that address.');
 
   return { ok: true, source: from.href, target: to.href, document };
 }
@@ -148,10 +156,10 @@ export type WebmentionOutcome =
    * time (TASK-55), for an entry that has been in the queue all along.
    */
   | { readonly kind: 'stored'; readonly comment: PostComment; readonly created: boolean }
-  /** The source does not link here any more, and what it left is gone. */
-  | { readonly kind: 'deleted' }
-  /** The source does not link here, and there was nothing to remove. */
-  | { readonly kind: 'ignored' }
+  /** Nothing is stored from the source any more, and what it left is gone. */
+  | { readonly kind: 'deleted'; readonly why: NotStored }
+  /** Nothing is stored from the source, and there was nothing to remove. */
+  | { readonly kind: 'ignored'; readonly why: NotStored }
   /** The source could not be read this time; whatever is stored stands. */
   | { readonly kind: 'unreachable'; readonly reason: string };
 
@@ -181,9 +189,10 @@ export async function verifyWebmention(
   }
 
   if (fetched.kind === 'gone' || !mentions(fetched, incoming)) {
-    if (held === undefined) return { kind: 'ignored' };
+    const why = fetched.kind === 'gone' ? 'gone' : 'unlinked';
+    if (held === undefined) return { kind: 'ignored', why };
     await deleteComment(records, held.id);
-    return { kind: 'deleted' };
+    return { kind: 'deleted', why };
   }
 
   const entry = fetched.html
@@ -254,9 +263,17 @@ export async function verifyWebmention(
   // A source nobody was holding anything from leaves nothing behind, and one
   // whose entry went while this was deciding has already been dealt with.
   return outcome.kind === 'discarded' && outcome.removed
-    ? { kind: 'deleted' }
-    : { kind: 'ignored' };
+    ? { kind: 'deleted', why: 'discarded' }
+    : { kind: 'ignored', why: 'discarded' };
 }
+
+/**
+ * Why a source left nothing behind: it is not there, it does not link here, or
+ * it was thrown away, by the checker or by a moderator deleting the entry while
+ * this was deciding. A pingback is told which; a webmention,
+ * answered before any of it was known, never is.
+ */
+export type NotStored = 'gone' | 'unlinked' | 'discarded';
 
 /** What reading a source page came to. */
 type FetchedSource =
@@ -342,8 +359,8 @@ function paragraph(text: string): string {
   return `<p>${text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</p>`;
 }
 
-function refuse(message: string): WebmentionRequest {
-  return { ok: false, message };
+function refuse(problem: RequestProblem, message: string): WebmentionRequest {
+  return { ok: false, problem, message };
 }
 
 function messageOf(error: unknown): string {

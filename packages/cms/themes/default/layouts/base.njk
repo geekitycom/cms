@@ -153,6 +153,9 @@
     {% if webmention %}
     <link rel="webmention" href="{{ webmention | url }}">
     {% endif %}
+    {% if pingback %}
+    <link rel="pingback" href="{{ pingback | absoluteUrl }}">
+    {% endif %}
     {#- The site's search, for a browser to offer from its address bar
         (TASK-204). #}
     <link rel="search" type="application/opensearchdescription+xml" title="{{ site.title }}" href="{{ "/opensearch.xml" | url }}">

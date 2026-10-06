@@ -1544,6 +1544,18 @@ site that has turned them off advertises nothing. The CMS also sends the same
 endpoint as a `Link` header on every representation of a document, so a sender
 that does not parse HTML still finds it.
 
+The pingback endpoint follows it, as an absolute URL because the spec asks for
+one:
+
+```html
+<link rel="pingback" href="https://example.com/_geekity/pingback" />
+```
+
+It comes from `pingback` on the context, which is there only when the site
+takes webmentions and the document can be answered: every post, and a page
+only while it takes comments. The same endpoint goes out in an `X-Pingback`
+header under the same rule.
+
 On the front page it also writes the site's index for language models:
 
 ```html
