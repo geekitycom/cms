@@ -270,6 +270,28 @@ describe('updating a like, a repost and a bookmark (TASK-169)', () => {
   });
 });
 
+describe('an RSVP over q=source and update (TASK-198)', () => {
+  const event = 'https://events.example/2026/10/indieweb-camp';
+
+  it('answers rsvp beside in-reply-to, and changes it on a replace', async () => {
+    const { cms, token } = await site(ALL);
+    const url = await created(cms, token, { 'in-reply-to': [event], rsvp: ['maybe'] });
+
+    const source = await query(cms, token, `q=source&url=${encodeURIComponent(url)}`);
+    const body = (await source.json()) as { properties: Record<string, unknown[]> };
+    assert.deepEqual(body.properties['rsvp'], ['maybe']);
+    assert.deepEqual(body.properties['in-reply-to'], [event]);
+
+    const response = await postJson(cms, token, {
+      action: 'update',
+      url,
+      replace: { rsvp: ['yes'] },
+    });
+    assert.equal(response.status, 204, await response.clone().text());
+    assert.equal(documentAt(cms, url).extra['rsvp'], 'yes');
+  });
+});
+
 describe('action=update (AC #2)', () => {
   it('replaces, adds and deletes only the properties it names', async () => {
     const { cms, token } = await site();

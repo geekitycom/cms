@@ -84,6 +84,7 @@ describe('q=config', () => {
         { type: 'note', name: 'Note' },
         { type: 'article', name: 'Article' },
         { type: 'reply', name: 'Reply' },
+        { type: 'rsvp', name: 'RSVP' },
         { type: 'photo', name: 'Photo' },
         { type: 'like', name: 'Like' },
         { type: 'repost', name: 'Repost' },

@@ -39,7 +39,7 @@
       title and read the note as an article. -#}
   {% if named %}
   <header class="post-header">
-    {{ kicker.line(postType | capitalize, false, false, categories) }}
+    {{ kicker.line("RSVP" if postType == "rsvp" else postType | capitalize, false, false, categories) }}
     <h1 class="p-name">{{ title }}</h1>
     {% if description %}
     <p class="post-deck p-summary">{{ description }}</p>
@@ -49,11 +49,11 @@
   {% include "partials/citations.njk" %}
   {% else %}
   <h1 class="screen-reader-text">
-    {{- postType | capitalize if postType in ["reply", "like", "repost", "bookmark", "read"] else "Note" }}
+    {{- "RSVP" if postType == "rsvp" else (postType | capitalize if postType in ["reply", "like", "repost", "bookmark", "read"] else "Note") }}
     {%- if bioAuthor.name %} by {{ bioAuthor.name }}{% endif %}
     {%- if date %}, {{ date | date("readable", none, lang) }}{% endif -%}
   </h1>
-  {{ kicker.line(postType | capitalize, false, false, categories) }}
+  {{ kicker.line("RSVP" if postType == "rsvp" else postType | capitalize, false, false, categories) }}
   {% include "partials/reply-context.njk" %}
   {% include "partials/citations.njk" %}
   {% endif %}
@@ -69,6 +69,7 @@
   <section class="e-content">
     {#- Inside the content, so a parser that reads only the content of a
         read, as a webmention receiver does, has its sentence. -#}
+    {% include "partials/rsvp.njk" %}
     {% include "partials/read.njk" %}
     {{ content | safe }}
     <p class="entry-meta">

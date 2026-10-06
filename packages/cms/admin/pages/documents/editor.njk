@@ -263,6 +263,18 @@
           {{ citedCard('in-reply-to') }}
           <p class="label block whitespace-normal text-xs">The address of the post this one answers. Leave it empty for a post that answers nobody.</p>
 
+          {#- The mf2 `rsvp` (TASK-198): with In reply to naming an event, it
+              makes the post an RSVP to it. -#}
+          {% call field.select('editor-rsvp', 'rsvp', 'RSVP', error=(error if errorField == 'editor-rsvp' else '')) %}
+            <option value=""{% if form.rsvp == "" %} selected{% endif %}>Not an RSVP</option>
+            {% for choice in rsvpChoices %}
+              <option value="{{ choice.value }}"{% if form.rsvp == choice.value %} selected{% endif %}>{{ choice.label }}</option>
+            {% endfor %}
+            {% if unrecognizedRsvp %}
+              <option value="{{ unrecognizedRsvp }}" selected>{{ unrecognizedRsvp }} (not recognized)</option>
+            {% endif %}
+          {% endcall %}
+
           {#- The mf2 `like-of`, `repost-of` and `bookmark-of` (TASK-169): each
               cites a page the way a reply does, and sends it a webmention. -#}
           {{ field.text('editor-like-of', 'like-of', 'Like of', value=form.likeOf, type='url', error=(error if errorField == 'editor-like-of' else '')) }}

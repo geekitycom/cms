@@ -1,3 +1,5 @@
+import { rsvpValue } from '../content/rsvp.ts';
+import type { RsvpValue } from '../content/rsvp.ts';
 import { classesOf, elementsIn, innerHtmlOf, isElement, parseHtml, textOf } from './html.ts';
 import type { HtmlElement } from './html.ts';
 
@@ -57,6 +59,8 @@ export interface SourceEntry {
   readonly published: string | null;
   /** Where it lives: its own `u-url`, else the URL it was fetched from. */
   readonly url: string;
+  /** A reply's `p-rsvp`, when it is one of the four values (TASK-198). */
+  readonly rsvp?: RsvpValue;
 }
 
 /** The attributes that make an element a link to somewhere. */
@@ -117,8 +121,12 @@ export function sourceEntry(html: string, sourceUrl: string, target: string): So
   const author = authorOf(chosen, items, sourceUrl);
   const content = contentOf(chosen, root);
 
+  const kind = chosen === undefined ? 'mention' : kindOf(chosen, wanted);
+  const rsvp =
+    chosen === undefined || kind !== 'reply' ? undefined : rsvpValue(first(chosen, 'rsvp')?.text);
   return {
-    kind: chosen === undefined ? 'mention' : kindOf(chosen, wanted),
+    kind,
+    ...(rsvp === undefined ? {} : { rsvp }),
     author,
     content,
     published: chosen === undefined ? null : instantOf(first(chosen, 'published')),
@@ -179,6 +187,34 @@ export function citedEntry(root: HtmlElement, pageUrl: string): CitedEntry | und
     published: instantOf(first(entry, 'published')),
     urls: [...valuesOf(entry, 'url'), ...valuesOf(entry, 'uid')],
     syndication: valuesOf(entry, 'syndication'),
+  };
+}
+
+/** The first `h-event` on a page, as the parts an RSVP's citation of it shows (TASK-198). */
+export interface CitedEvent {
+  /** Its `p-name`, or empty. */
+  readonly name: string;
+  /** Its `p-summary`, `p-description` or `e-content` as text, or empty. */
+  readonly text: string;
+  /** Its `dt-start` as written, or empty. */
+  readonly start: string;
+  /** Its `p-location`: a place's name when it is an `h-card` or `h-adr`, else its text. */
+  readonly location: string;
+}
+
+/** What the first `h-event` on a parsed page says about itself, or `undefined`. */
+export function citedEvent(root: HtmlElement, pageUrl: string): CitedEvent | undefined {
+  const event = itemsOfType(itemsIn(root, baseOf(root, pageUrl)), 'h-event')[0];
+  if (event === undefined) return undefined;
+  return {
+    name: first(event, 'name')?.text ?? '',
+    text:
+      first(event, 'summary')?.text ??
+      first(event, 'description')?.text ??
+      first(event, 'content')?.text ??
+      '',
+    start: first(event, 'start')?.text ?? '',
+    location: first(event, 'location')?.text ?? '',
   };
 }
 

@@ -3,8 +3,8 @@ import type { CitedImage, CitedPicture, PictureSource } from './cited-picture.ts
 import { fetchPublic, webUrl } from './fetch-public.ts';
 import { elementsIn, hasRel, parseHtml, textOf } from './html.ts';
 import type { HtmlElement } from './html.ts';
-import { citedEntry } from './microformats.ts';
-import type { CitedEntry } from './microformats.ts';
+import { citedEntry, citedEvent } from './microformats.ts';
+import type { CitedEntry, CitedEvent } from './microformats.ts';
 import { publicHost } from './public-address.ts';
 import type { HostLookup } from './public-address.ts';
 
@@ -55,6 +55,14 @@ export interface ReplyContext {
   readonly published?: string;
   /** The site it is on, its `og:site_name`, kept only when it names no author. */
   readonly site?: string;
+  /**
+   * When an event starts (TASK-198): an ISO 8601 instant when the page gives
+   * a zone, else the date, or the date and time, as the page wrote them, which
+   * no reader's zone may move.
+   */
+  readonly start?: string;
+  /** Where an event takes place, as the page names it. */
+  readonly location?: string;
   /** Its picture, copied into the site's uploads (TASK-252). */
   readonly picture?: CitedPicture;
 }
@@ -182,12 +190,13 @@ export async function fetchReplyContext(
   return (await describePage(target, read.page, post, known, limits)) ?? refuse('nothing to show');
 }
 
-/** A cited page read as HTML, its `h-entry` only when it was read in full. */
+/** A cited page read as HTML, its `h-entry` and `h-event` only when it was read in full. */
 interface HtmlPage {
   /** Where it was read from, after any redirects. */
   readonly url: string;
   readonly root: HtmlElement;
   readonly entry: CitedEntry | undefined;
+  readonly event: CitedEvent | undefined;
 }
 
 type PageRead =
@@ -215,7 +224,8 @@ async function readPage(url: string, limits: Limits): Promise<PageRead> {
   if (fetched.read === 'headers') return { ok: true, image: fetched.url };
   const root = parseHtml(new TextDecoder().decode(fetched.body));
   const entry = fetched.truncated ? undefined : citedEntry(root, fetched.url);
-  return { ok: true, page: { url: fetched.url, root, entry } };
+  const event = fetched.truncated ? undefined : citedEvent(root, fetched.url);
+  return { ok: true, page: { url: fetched.url, root, entry, event } };
 }
 
 /** The ActivityPub object a page with no `h-entry` names, when there is a way to read it. */
@@ -236,15 +246,17 @@ async function describePage(
   known: KnownEndpoint | undefined,
   limits: Limits,
 ): Promise<Extract<ReplyContextFetch, { ok: true }> | undefined> {
-  const { root, url, entry } = page;
+  const { root, url, entry, event } = page;
   const endpoint =
     entry === undefined && known === undefined ? oembedEndpoint(root, url) : undefined;
   const oembed = endpoint === undefined ? undefined : await fetchOembed(endpoint, limits);
   return described(target, [
     entry === undefined ? undefined : entrySource(entry),
+    event === undefined ? undefined : eventSource(event),
     post === undefined ? undefined : fediverseSource(post),
     oembedSource(oembed),
     jsonLdSource(root, url),
+    jsonLdEventSource(root),
     pageSource(root, url),
   ]);
 }
@@ -332,6 +344,8 @@ interface Source {
   readonly photo?: string;
   readonly published?: string;
   readonly site?: string;
+  readonly start?: string;
+  readonly location?: string;
   readonly picture?: PictureSource;
 }
 
@@ -378,12 +392,16 @@ function contextOf(
           ...(handle === '' ? {} : { handle }),
         };
   const site = author === undefined ? withoutDirectionControls(found.site) : '';
+  const start = eventStart(found.start);
+  const location = withoutDirectionControls(found.location);
   if (
     name === '' &&
     text === '' &&
     author === undefined &&
     published === undefined &&
-    site === ''
+    site === '' &&
+    start === undefined &&
+    location === ''
   ) {
     return undefined;
   }
@@ -395,7 +413,28 @@ function contextOf(
     ...(author === undefined ? {} : { author }),
     ...(published === undefined ? {} : { published }),
     ...(site === '' ? {} : { site }),
+    ...(start === undefined ? {} : { start }),
+    ...(location === '' ? {} : { location }),
   };
+}
+
+const FLOATING_START = /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?))?$/;
+
+/**
+ * An event's start as {@link ReplyContext.start} keeps it. A date, or a date
+ * and time, with no zone is a wall clock where the event is, so it is kept as
+ * written; one with a zone is an instant.
+ */
+function eventStart(value: string | undefined): string | undefined {
+  const written = (value ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}/.test(written)) return undefined;
+  const floating = FLOATING_START.exec(written);
+  if (floating !== null) {
+    const [, date, time] = floating;
+    const kept = time === undefined ? `${date}` : `${date}T${time}`;
+    return Number.isNaN(Date.parse(`${date}T${time ?? '00:00'}Z`)) ? undefined : kept;
+  }
+  return instant(written);
 }
 
 function instant(value: string | undefined): string | undefined {
@@ -419,6 +458,15 @@ function entrySource(entry: CitedEntry): Source {
           ...(author.photo === null ? {} : { photo: author.photo }),
         }),
     ...(entry.published === null ? {} : { published: entry.published }),
+  };
+}
+
+function eventSource(event: CitedEvent): Source {
+  return {
+    ...(event.name === '' ? {} : { name: event.name }),
+    ...(event.text === '' ? {} : { text: event.text }),
+    ...(event.start === '' ? {} : { start: event.start }),
+    ...(event.location === '' ? {} : { location: event.location }),
   };
 }
 
@@ -479,6 +527,33 @@ function jsonLdSource(root: HtmlElement, base: string): Source | undefined {
         }),
     ...(published === undefined ? {} : { published }),
     ...(picture === undefined ? {} : { picture: { url: picture, kind: 'thumbnail' } }),
+  };
+}
+
+/** A schema.org `Event` or one of its kinds, such as `MusicEvent`. */
+const EVENT_TYPE = /Event$/;
+
+function jsonLdEventSource(root: HtmlElement): Source | undefined {
+  const node = jsonLdNodes(root).find((candidate) =>
+    [candidate['@type']].flat().some((type) => typeof type === 'string' && EVENT_TYPE.test(type)),
+  );
+  if (node === undefined) return undefined;
+
+  const name = plainText(node['name']);
+  const text = plainText(node['description']);
+  const start = plainText(node['startDate']);
+  const place: unknown = [node['location']].flat()[0];
+  const location =
+    typeof place === 'string'
+      ? plainText(place)
+      : isRecord(place)
+        ? plainText(place['name'])
+        : undefined;
+  return {
+    ...(name === undefined ? {} : { name }),
+    ...(text === undefined ? {} : { text }),
+    ...(start === undefined ? {} : { start }),
+    ...(location === undefined ? {} : { location }),
   };
 }
 

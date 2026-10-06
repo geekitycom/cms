@@ -6,6 +6,7 @@ import type { Document } from '../content/document.ts';
 import { locationToMicropub } from '../content/location.ts';
 import { readOf } from '../content/read.ts';
 import type { ReadOf } from '../content/read.ts';
+import { rsvpOf } from '../content/rsvp.ts';
 import type { KeptProperties } from '../content/kept-properties.ts';
 import type { PostLocations } from '../content/locations.ts';
 import type { PermalinkFile } from '../content/permalink-file.ts';
@@ -27,6 +28,7 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
   summary: ['description'],
   category: ['tags'],
   'in-reply-to': ['inReplyTo'],
+  rsvp: ['rsvp'],
   'repost-of': ['repostOf'],
   'like-of': ['likeOf'],
   'bookmark-of': ['bookmarkOf'],
@@ -66,6 +68,7 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
   text('summary', document.description);
   if (document.tags.length > 0) properties['category'] = [...document.tags];
   text('in-reply-to', document.inReplyTo);
+  text('rsvp', rsvpOf(document.extra));
   for (const { property, url } of citationsOf(document.extra)) text(property, url);
   const read = readOf(document.extra);
   if (read !== undefined) {

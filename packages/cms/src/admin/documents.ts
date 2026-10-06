@@ -31,6 +31,7 @@ import {
   readWorkFrontMatter,
 } from '../content/read.ts';
 import type { Read } from '../content/read.ts';
+import { RSVP_FRONT_MATTER_KEY, RSVP_LABELS, RSVP_VALUES, rsvpValue } from '../content/rsvp.ts';
 import {
   ENCLOSURE_FRONT_MATTER_KEY,
   enclosureOf,
@@ -424,6 +425,7 @@ async function saveFromForm(
     description: text(body['description']).trim(),
     author: text(body['author']).trim(),
     inReplyTo: text(body['in-reply-to']).trim(),
+    rsvp: kind.type === 'post' ? text(body[RSVP_FRONT_MATTER_KEY]).trim() : '',
     ...citationFields((property) => (kind.type === 'post' ? text(body[property]).trim() : '')),
     readStatus: kind.type === 'post' ? text(body[READ_FIELDS.status]).trim() : '',
     readOf: kind.type === 'post' ? submittedReadOfForm(body) : BLANK_READ_OF_FORM,
@@ -579,6 +581,18 @@ export async function writeDocument(
       'In reply to has to be a web address, like https://example.com/a-post/.',
       'editor-in-reply-to',
     );
+  }
+
+  if (kind.type === 'post' && form.rsvp !== '') {
+    if (rsvpValue(form.rsvp) === undefined) {
+      return refused(`RSVP is ${RSVP_VALUES.join(', ')}, not ${form.rsvp}.`, 'editor-rsvp');
+    }
+    if (form.inReplyTo === '') {
+      return refused(
+        'An RSVP answers an event. Put the event’s address in In reply to.',
+        'editor-in-reply-to',
+      );
+    }
   }
 
   let read: Read | undefined;
@@ -860,6 +874,7 @@ const CITED_SLUGS: Partial<
   repost: { prefix: 'reposted', field: 'repostOf' },
   like: { prefix: 'liked', field: 'likeOf' },
   reply: { prefix: 'reply-to', field: 'inReplyTo' },
+  rsvp: { prefix: 'rsvp', field: 'inReplyTo' },
   bookmark: { prefix: 'bookmarked', field: 'bookmarkOf' },
 };
 
@@ -874,6 +889,7 @@ async function typeSlug(
     'repost-of': form.repostOf,
     'like-of': form.likeOf,
     'in-reply-to': form.inReplyTo,
+    rsvp: form.rsvp,
     'bookmark-of': form.bookmarkOf,
     photo: photos.map((photo) => photo.url),
   });
@@ -1135,6 +1151,7 @@ function resolveExtra(
     | 'visibility'
     | 'readStatus'
     | 'readOf'
+    | 'rsvp'
     | (typeof CITATION_FIELDS)[CitationProperty]
   >,
   now: Date,
@@ -1153,6 +1170,9 @@ function resolveExtra(
       if (cited === '') delete extra[property];
       else extra[property] = cited;
     }
+    const rsvp = rsvpValue(form.rsvp);
+    if (rsvp === undefined) delete extra[RSVP_FRONT_MATTER_KEY];
+    else extra[RSVP_FRONT_MATTER_KEY] = rsvp;
     if (form.previewHidden) extra[PREVIEW_FRONT_MATTER_KEY] = false;
     else delete extra[PREVIEW_FRONT_MATTER_KEY];
     if (form.citedAlt === '') delete extra[CITED_ALT_FRONT_MATTER_KEY];
@@ -1668,6 +1688,11 @@ export interface EditorForm {
   author: string;
   /** The post this one replies to, the mf2 `in-reply-to`. Posts only. */
   inReplyTo: string;
+  /**
+   * Whether the author is going to the event `inReplyTo` names, the mf2
+   * `rsvp` (TASK-198), as the file or the form spells it. Posts only.
+   */
+  rsvp: string;
   /** The post this one reposts, the mf2 `repost-of` (TASK-169). Posts only. */
   repostOf: string;
   /** The post this one likes, the mf2 `like-of` (TASK-169). Posts only. */
@@ -1756,6 +1781,7 @@ export function blankForm(
     // {@link authorChoices} is where the default is applied.
     author: '',
     inReplyTo: '',
+    rsvp: '',
     ...citationFields(() => ''),
     readStatus: '',
     readOf: BLANK_READ_OF_FORM,
@@ -1804,6 +1830,10 @@ export function formFor(
     description: document.description ?? '',
     author: document.author ?? '',
     inReplyTo: document.inReplyTo ?? '',
+    rsvp:
+      document.type === 'post' && typeof document.extra[RSVP_FRONT_MATTER_KEY] === 'string'
+        ? document.extra[RSVP_FRONT_MATTER_KEY]
+        : '',
     // As the file spells it, so a save writes back what it read.
     ...citationFields((property) =>
       document.type === 'post' ? citationText(document.extra[property]) : '',
@@ -1915,6 +1945,10 @@ async function renderEditor(
           photoChoices: await photoChoices(c.var.config.contentDir),
           locationFields: LOCATION_FIELDS,
           ...citedPreviews(c, form),
+          rsvpChoices: RSVP_VALUES.map((value) => ({ value, label: RSVP_LABELS[value] })),
+          ...(form.rsvp === '' || rsvpValue(form.rsvp) !== undefined
+            ? {}
+            : { unrecognizedRsvp: form.rsvp }),
           readFields: READ_FIELDS,
           readStatuses: READ_STATUSES.map((value) => ({ value, label: READ_STATUS_LABELS[value] })),
           ...(form.readStatus === '' || isReadStatus(form.readStatus)

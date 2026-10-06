@@ -363,6 +363,23 @@ describe('sending a webmention for a like, a repost or a bookmark (TASK-169 AC #
   }
 });
 
+describe('sending a webmention for an RSVP (TASK-198 AC #2)', () => {
+  it('tells the event it answers, though the body links nowhere', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+
+    const response = await publish(agent, '', { 'in-reply-to': FRIENDLY, rsvp: 'yes' });
+    assert.equal(response.status, 303, 'the RSVP was published');
+    await cms.webmentions.settled();
+
+    assert.equal(cms.store.getBySlug('hello-world')?.extra['rsvp'], 'yes', 'saved as an RSVP');
+    assert.deepEqual(
+      sent.map((one) => [one.source, one.target]),
+      [[`${BASE_URL}/2026/03/hello-world/`, FRIENDLY]],
+    );
+  });
+});
+
 describe('sending a webmention for a read (TASK-233 AC #1)', () => {
   it('tells the page a read post’s read-of names, as it tells a citation', async () => {
     const cms = await site();

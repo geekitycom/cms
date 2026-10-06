@@ -144,6 +144,7 @@ const FILLED_FORM: [string, string][] = [
   ['read-of-url', ''],
   ['read-status', 'finished'],
   ['repost-of', 'https://edu.example/files/calculator.png'],
+  ['rsvp', ''],
   ['slug', 'everything'],
   ['syndicate-to-mastodon', '1'],
   ['tags', 'one'],

@@ -108,6 +108,9 @@ async function submit(
     categories: field(html, 'categories') ?? '',
     description: field(html, 'description') ?? '',
     'in-reply-to': field(html, 'in-reply-to') ?? '',
+    rsvp:
+      /<select[^>]*name="rsvp"[^>]*>[\s\S]*?<option value="([^"]*)" selected>/.exec(html)?.[1] ??
+      '',
     'like-of': field(html, 'like-of') ?? '',
     'repost-of': field(html, 'repost-of') ?? '',
     'bookmark-of': field(html, 'bookmark-of') ?? '',
@@ -694,6 +697,90 @@ describe('a read in the editor (TASK-229 AC #2)', () => {
       assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
     });
   }
+});
+
+describe('an RSVP in the editor (TASK-198 AC #3)', () => {
+  const FILE = ['posts', '2026-01-02-published.md'];
+  const EVENT = 'https://events.example/2026/10/indieweb-camp';
+
+  async function published(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  it('offers the four answers, sets rsvp, shows it on reload, and clears it again', async () => {
+    const { contentDir, agent } = await published();
+
+    const blank = await (await agent.get('/admin/posts/new')).text();
+    assert.match(blank, /<option value="" selected>Not an RSVP<\/option>/);
+    for (const label of ['Going', 'Not going', 'Maybe', 'Interested']) {
+      assert.match(blank, new RegExp(`<option value="[a-z]+">${label}</option>`));
+    }
+
+    const saved = await submit(agent, '/admin/posts/published', {
+      'in-reply-to': EVENT,
+      rsvp: 'maybe',
+    });
+    assert.equal(saved.status, 303);
+    const { data } = matter(await readFile(path.join(contentDir, ...FILE), 'utf8'));
+    assert.equal(data['rsvp'], 'maybe');
+    assert.equal(data['in-reply-to'], EVENT);
+
+    const reloaded = await (await agent.get('/admin/posts/published')).text();
+    assert.match(reloaded, /<option value="maybe" selected>Maybe<\/option>/);
+
+    assert.equal((await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status, 303);
+    const kept = matter(await readFile(path.join(contentDir, ...FILE), 'utf8')).data;
+    assert.equal(kept['rsvp'], 'maybe', 'another save keeps it');
+
+    assert.equal((await submit(agent, '/admin/posts/published', { rsvp: '' })).status, 303);
+    const written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+    assert.doesNotMatch(written, /rsvp/, 'the key is gone, not left empty');
+  });
+
+  for (const [changes, message] of [
+    [{ rsvp: 'yes' }, /An RSVP answers an event/],
+    [{ 'in-reply-to': EVENT, rsvp: 'perhaps' }, /RSVP is yes, no, maybe, interested, not perhaps/],
+  ] as const) {
+    it(`refuses ${JSON.stringify(changes)}, and writes nothing`, async () => {
+      const { contentDir, agent } = await published();
+      const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+      const response = await submit(agent, '/admin/posts/published', changes);
+
+      assert.equal(response.status, 400);
+      assert.match(await response.text(), message);
+      assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+    });
+  }
+
+  it('files a new RSVP with no title or text under the event it answers', async () => {
+    const { contentDir, agent } = await published();
+    const html = await (await agent.get('/admin/posts/new')).text();
+    const response = await agent.post('/admin/posts/new', {
+      csrf_token: csrfField(html) ?? '',
+      date: '2026-01-05T09:00:00Z',
+      'in-reply-to': EVENT,
+      rsvp: 'yes',
+      body: '',
+      action: 'publish',
+    });
+    assert.equal(response.status, 303);
+    assert.match(response.headers.get('location') ?? '', /rsvp-events-example-indieweb-camp/);
+    const files = await readdir(path.join(contentDir, 'posts'));
+    assert.ok(
+      files.some((name) => name.includes('rsvp-events-example')),
+      files.join(', '),
+    );
+  });
 });
 
 describe('the post language in the editor (TASK-154 AC #1)', () => {

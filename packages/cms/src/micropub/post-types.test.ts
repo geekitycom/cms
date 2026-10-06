@@ -45,6 +45,7 @@ const SAMPLES: Readonly<Record<string, unknown>> = {
     properties: { name: ['A Book'], author: ['An Author'], uid: ['isbn:9780000000000'] },
   },
   'read-status': 'finished',
+  rsvp: 'yes',
 };
 
 /** Micropublish's own known properties (config/properties.json), and the legacy names Quill sends. */
@@ -183,6 +184,10 @@ describe('q=config post-types properties (AC #1, AC #2)', () => {
           required: ['name', 'content'],
         },
         reply: { properties: ['in-reply-to', 'name', ...shared], required: ['in-reply-to'] },
+        rsvp: {
+          properties: ['in-reply-to', 'rsvp', 'name', ...shared],
+          required: ['in-reply-to', 'rsvp'],
+        },
         photo: { properties: ['photo', 'name', ...shared], required: ['photo'] },
         like: { properties: ['like-of', 'name', ...shared], required: ['like-of'] },
         repost: { properties: ['repost-of', 'name', ...shared], required: ['repost-of'] },

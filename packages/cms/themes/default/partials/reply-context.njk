@@ -19,6 +19,14 @@
   `replyContext.picture`, when the target has one and the reply shows it, is
   drawn as a thumbnail beside the line, as `citations.njk` draws it (TASK-252).
 
+  An RSVP (`rsvp` on the context, TASK-198) says "RSVP to" rather than "In
+  reply to", and an event's `replyContext.start` and `replyContext.location`
+  follow its name as a `dt-start` and a `p-location`. `startDate` is the
+  instant to print and `startZone` the zone to print it in: "UTC" for a start
+  the event page wrote with no zone, which is the wall clock where the event
+  is, and nothing otherwise, so the site's zone applies. The `dt-start`
+  carries `start` as the page wrote it.
+
   `replyContext.original`, when the target is a silo copy of a post that lists
   the copy as its own (TASK-197), is the post cited: the `h-cite` links the
   original and describes it, so its site finds the link when it is sent a
@@ -31,10 +39,12 @@
 {% set answered = replyContext.original or inReplyTo %}
 <div class="reply-context cite u-in-reply-to h-cite{% if picture %} cite-with-thumb{% endif %}">
   {%- if picture %}{{ cited.thumb(answered, picture) }}{% endif %}
-  <p class="cite-line small">In reply to
+  <p class="cite-line small">{{ "RSVP to" if rsvp else "In reply to" }}
     {{- cited.page(answered, replyContext) }}
-    {%- if replyContext.published %}, <time class="dt-published" datetime="{{ replyContext.published | date("iso") }}">{{ replyContext.published | date("readable", none, lang) }}</time>
+    {%- if replyContext.startDate %}, <time class="dt-start" datetime="{{ replyContext.start }}">{{ replyContext.startDate | date("readable", replyContext.startZone, lang) }}</time>
+    {%- elif replyContext.published %}, <time class="dt-published" datetime="{{ replyContext.published | date("iso") }}">{{ replyContext.published | date("readable", none, lang) }}</time>
     {%- endif -%}
+    {%- if replyContext.location %}, <span class="p-location">{{ replyContext.location }}</span>{% endif -%}
   </p>
   {% if replyContext.text %}
   <blockquote class="cite-quote p-content">{{ replyContext.text }}</blockquote>

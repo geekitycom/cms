@@ -284,7 +284,9 @@ function hasNoPictureOrWords(context: ReplyContext): boolean {
     context.name === undefined &&
     context.text === undefined &&
     context.author === undefined &&
-    context.site === undefined
+    context.site === undefined &&
+    context.start === undefined &&
+    context.location === undefined
   );
 }
 
@@ -337,6 +339,8 @@ function parseContexts(text: string): Record<string, ReplyContext> {
           }),
       ...optional('published', stringOf(value['published'])),
       ...optional('site', stringOf(value['site'])),
+      ...optional('start', stringOf(value['start'])),
+      ...optional('location', stringOf(value['location'])),
       ...(picture === undefined ? {} : { picture }),
     };
   }

@@ -29,6 +29,7 @@ import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.t
 import { CITATION_VERBS, citationsOf, citedPageName } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { readLine, readOf } from '../content/read.ts';
+import { RSVP_PHRASES, rsvpOf } from '../content/rsvp.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf, isUploadUrl, playsAsVideo } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
@@ -203,6 +204,7 @@ type PostObjectType = keyof typeof OBJECT_TYPES;
 const OBJECT_TYPE_OF: Record<PostType, PostObjectType> = {
   // A like or a repost of a fediverse object goes as a `Like` or an
   // `Announce` instead (decision-28); this is the object its permalink serves.
+  rsvp: 'Note',
   repost: 'Note',
   like: 'Note',
   bookmark: 'Note',
@@ -458,17 +460,27 @@ const QUOTABLE_BY_ANYONE = new InteractionPolicy({
 });
 
 /**
- * What a like, a repost or a bookmark cites, as a line linking each page
- * (decision-28): the words a peer shows, since a `Note` has no field for it.
- * The anchor stays plain: Mastodon builds no link card from one with a
- * `u-url` or `h-card` class or a `rel=tag`.
+ * What an RSVP answers and what a like, a repost or a bookmark cites, as a
+ * line linking each page (decision-28, decision-31): the words a peer shows,
+ * since a `Note` has no field for it. The anchor stays plain: Mastodon
+ * builds no link card from one with a `u-url` or `h-card` class or a
+ * `rel=tag`.
  */
 function citing(document: Document, cited: CitedPageReader): string {
-  return citationsOf(document.extra)
-    .map(({ property, url }) => {
+  const rsvp = rsvpOf(document.extra);
+  const event = replyTarget(document);
+  const lines = citationsOf(document.extra).map(({ property, url }) => ({
+    verb: CITATION_VERBS[property],
+    url,
+  }));
+  if (rsvp !== undefined && event !== undefined) {
+    lines.unshift({ verb: RSVP_PHRASES[rsvp], url: event });
+  }
+  return lines
+    .map(({ verb, url }) => {
       const href = escapeHtml(url).replaceAll('"', '&quot;');
       const name = escapeHtml(citedPageName(url, cited(url)));
-      return `<p>${CITATION_VERBS[property]} <a href="${href}">${name}</a></p>\n`;
+      return `<p>${verb} <a href="${href}">${name}</a></p>\n`;
     })
     .join('');
 }

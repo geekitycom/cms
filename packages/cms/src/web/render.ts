@@ -1024,9 +1024,23 @@ function currentUrl(context: Record<string, unknown>): string {
 function replyContextFor(context: Omit<ReplyContext, 'picture'>): Record<string, unknown> {
   const published = context.published === undefined ? undefined : new Date(context.published);
   const { published: _published, ...rest } = context;
-  return published === undefined || Number.isNaN(published.getTime())
-    ? rest
-    : { ...rest, published };
+  const dated =
+    published === undefined || Number.isNaN(published.getTime()) ? rest : { ...rest, published };
+  return { ...dated, ...eventStartFor(context.start) };
+}
+
+/**
+ * An event's start as a theme prints it: `start` stays as stored, for the
+ * `datetime` attribute, and `startDate` is the instant to format. A start
+ * with no zone is a wall clock where the event is, so it is read as UTC and
+ * `startZone` says to show it in UTC, which no site's zone can move.
+ */
+function eventStartFor(start: string | undefined): Record<string, unknown> {
+  if (start === undefined) return {};
+  const floating = !/(?:Z|[+-]\d{2}:?\d{2})$/.test(start);
+  const startDate = new Date(floating && start.includes('T') ? `${start}Z` : start);
+  if (Number.isNaN(startDate.getTime())) return {};
+  return floating ? { startDate, startZone: 'UTC' } : { startDate };
 }
 
 function licenseContext(

@@ -381,3 +381,45 @@ describe('a read (TASK-229)', () => {
     );
   });
 });
+
+describe('an RSVP (TASK-198 AC #3)', () => {
+  const event = 'https://events.example/2026/10/indieweb-camp';
+
+  it('is a post with a valid rsvp value, ahead of everything else the spec types', () => {
+    for (const rsvp of ['yes', 'no', 'maybe', 'interested']) {
+      assert.equal(discoverPostType({ rsvp, 'in-reply-to': event }), 'rsvp');
+    }
+    assert.equal(
+      discoverPostType({
+        rsvp: 'yes',
+        'in-reply-to': event,
+        'repost-of': event,
+        'like-of': event,
+        photo: ['/uploads/a.jpg'],
+        name: 'A title',
+        content: 'Some words.',
+      }),
+      'rsvp',
+    );
+  });
+
+  it('is not made by a value the spec does not list', () => {
+    assert.equal(discoverPostType({ rsvp: 'perhaps', 'in-reply-to': event }), 'reply');
+    assert.equal(discoverPostType({ rsvp: '', 'in-reply-to': event }), 'reply');
+  });
+
+  it('reads the rsvp key of a document, in any case', () => {
+    assert.equal(postTypeOf(post(`in-reply-to: ${event}\nrsvp: maybe\n`, '')), 'rsvp');
+    assert.equal(postTypeOf(post(`in-reply-to: ${event}\nrsvp: Yes\n`, '')), 'rsvp');
+    assert.equal(postTypeOf(post(`in-reply-to: ${event}\nrsvp: true\n`, 'Hm.')), 'reply');
+  });
+
+  it('is labelled after the event when it has no words', () => {
+    const rsvp = post(`in-reply-to: ${event}\nrsvp: yes\n`, '');
+    assert.equal(
+      postLabel(rsvp, () => ({ name: 'IndieWeb Camp' })),
+      'Going to IndieWeb Camp',
+    );
+    assert.equal(postLabel(rsvp), 'Going to a page on events.example');
+  });
+});

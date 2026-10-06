@@ -1723,6 +1723,7 @@ otherwise.
 | `post-status`          | `published` or `draft`. A draft is not published, federated or sent webmentions.                                                                                                                                                                                                                                                                                |
 | `mp-slug`              | The slug in the file name and the URL. Without it the slug comes from `name`, then the content's first five words. A like, repost, bookmark or reply with neither is named after the cited page's title, as `liked-scripting-news`, else its address, as `liked-scripting-com`. A photo post with neither is named by its first photo's alt text, else `photo`. |
 | `in-reply-to`          | Makes the post a reply to that URL.                                                                                                                                                                                                                                                                                                                             |
+| `rsvp`                 | `yes`, `no`, `maybe` or `interested`. With `in-reply-to` naming an event, makes the post an RSVP to it, and refused without it. Needs no content. It federates as a Note replying to the event (decision-31).                                                                                                                                                   |
 | `like-of`              | Makes the post a like of that URL. Needs no content. A like of a fediverse status federates as a `Like` of it (decision-28).                                                                                                                                                                                                                                    |
 | `repost-of`            | Makes the post a repost of that URL. Needs no content. A repost of a fediverse status federates as an `Announce` of it (decision-28).                                                                                                                                                                                                                           |
 | `bookmark-of`          | Makes the post a bookmark of that URL. Needs no content.                                                                                                                                                                                                                                                                                                        |
@@ -1831,8 +1832,8 @@ A `GET` with `q` asks the endpoint a question and answers JSON. A query with
 no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
 
 - `?q=config` lists the media endpoint, the syndication targets under
-  `syndicate-to`, the post types the site accepts (note, article, reply, photo,
-  like, repost, bookmark and read), the queries it answers, and the visibility
+  `syndicate-to`, the post types the site accepts (note, article, reply, RSVP,
+  photo, like, repost, bookmark and read), the queries it answers, and the visibility
   values a post may take, `"visibility": ["public", "unlisted"]`. Each post
   type lists the `properties` a client should offer for it and the
   `required-properties` that make a post that type, so a client that reads

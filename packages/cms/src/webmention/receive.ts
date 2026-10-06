@@ -1,3 +1,4 @@
+import { rsvpField } from '../admin/store.ts';
 import type { PostComment } from '../admin/store.ts';
 import { deleteComment, heldWebmention, intakeComment } from '../comments/records.ts';
 import type { CommentNotices, CommentRecords, ProposedComment } from '../comments/records.ts';
@@ -245,6 +246,7 @@ export async function verifyWebmention(
     url: incoming.source,
     // A page has nobody to ask, and no address to ask them at.
     notify: false,
+    ...rsvpField(entry?.rsvp),
   };
 
   const outcome = await intakeComment({

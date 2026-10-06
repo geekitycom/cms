@@ -2,6 +2,7 @@ import type { Context, Hono } from 'hono';
 
 import { CITATION_PROPERTIES } from '../content/citation.ts';
 import { READ_OF_FRONT_MATTER_KEY, READ_STATUS_FRONT_MATTER_KEY } from '../content/read.ts';
+import { RSVP_FRONT_MATTER_KEY, rsvpValue } from '../content/rsvp.ts';
 import type { Document, DocumentType } from '../content/document.ts';
 import { handleDirectory } from '../content/handles.ts';
 import { renderMarkdown } from '../content/markdown.ts';
@@ -105,6 +106,7 @@ function previewDocument(
         }),
       ),
       ...previewRead(body),
+      ...previewRsvp(body),
     },
     body: markdown,
     html: renderMarkdown(markdown, handleDirectory(c.var.config.contentDir)),
@@ -112,6 +114,11 @@ function previewDocument(
     // mistaken for one.
     hash: '',
   };
+}
+
+function previewRsvp(body: Record<string, unknown>): Record<string, unknown> {
+  const rsvp = rsvpValue(body[RSVP_FRONT_MATTER_KEY]);
+  return rsvp === undefined ? {} : { [RSVP_FRONT_MATTER_KEY]: rsvp };
 }
 
 function previewRead(body: Record<string, unknown>): Record<string, unknown> {

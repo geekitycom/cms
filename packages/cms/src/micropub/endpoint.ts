@@ -77,6 +77,11 @@ const POST_TYPES: Readonly<
   note: { name: 'Note', properties: ANY_TYPE, required: ['content'] },
   article: { name: 'Article', properties: NAMED, required: ['name', 'content'] },
   reply: { name: 'Reply', properties: ['in-reply-to', ...NAMED], required: ['in-reply-to'] },
+  rsvp: {
+    name: 'RSVP',
+    properties: ['in-reply-to', 'rsvp', ...NAMED],
+    required: ['in-reply-to', 'rsvp'],
+  },
   photo: { name: 'Photo', properties: ['photo', ...NAMED], required: ['photo'] },
   like: { name: 'Like', properties: ['like-of', ...NAMED], required: ['like-of'] },
   repost: { name: 'Repost', properties: ['repost-of', ...NAMED], required: ['repost-of'] },

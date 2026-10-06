@@ -3,6 +3,8 @@ import type { ActorProfile, AdminStore, InboxActivity, PostComment } from '../ad
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
+import { RSVP_LABELS } from '../content/rsvp.ts';
+import type { RsvpValue } from '../content/rsvp.ts';
 import type { ContentStore } from '../content/store.ts';
 import { readAllQuoteAuthorizations } from '../federation/quotes.ts';
 import type { QuoteAuthorizationRecord } from '../federation/quotes.ts';
@@ -113,6 +115,11 @@ export interface Interaction {
   readonly status: InteractionStatus;
   /** The replies to this one, oldest first. */
   readonly replies: Interaction[];
+  /**
+   * What a reply that is an RSVP says (TASK-198): its `rsvp` value and the
+   * words for it. Only a webmention carries one.
+   */
+  readonly rsvp?: { readonly value: RsvpValue; readonly label: string };
 }
 
 /** How many of each a conversation holds. */
@@ -526,6 +533,9 @@ function interactionOf(comment: PostComment, permalink: string): Interaction {
     inReplyTo: comment.inReplyTo,
     status: comment.status,
     replies: [],
+    ...(comment.rsvp === undefined
+      ? {}
+      : { rsvp: { value: comment.rsvp, label: RSVP_LABELS[comment.rsvp] } }),
   };
 }
 

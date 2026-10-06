@@ -427,6 +427,20 @@ original, and a `p.cite-copy` after it says "Also in reply to its copy on" the
 silo's host, linking the copy as a `u-in-reply-to` of its own, so a parser
 reads both as what the post answers.
 
+**An RSVP says whether its author is going** (TASK-198). An RSVP is a reply
+to an event whose `rsvp` is `yes`, `no`, `maybe` or `interested`.
+`partials/rsvp.njk` opens its `e-content` with a `p.rsvp-line` holding a
+`data.p-rsvp` whose value is the answer and whose text is Going, Not going,
+Maybe or Interested; it prints `rsvp.line`, the HTML the feeds also carry. Its
+reply context says "RSVP to" rather than "In reply to", and when the event's
+page is an `h-event`, or describes a schema.org `Event` in JSON-LD, its start
+follows the event's name as a `time.dt-start` and its place as a
+`span.p-location`, inside the `h-cite`. A start the event page wrote with no
+zone is that wall clock where the event is, so it is printed in UTC
+(`replyContext.startZone`) rather than moved into the site's zone. Its kicker
+and its hidden `h1` say RSVP. An RSVP to a silo copy of an event cites the
+original as a reply does.
+
 **A like, a repost or a bookmark cites what it cites** (TASK-169) with
 `partials/citations.njk`, beside the reply context and drawn the same way: one
 `div.reply-context.cite.h-cite` per entry of `citations`, classed
@@ -1293,6 +1307,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `photos`                                    | The post's photos, each `{ url, alt, html }`; `html` is the `img.u-photo`, responsive. Empty with none.           |
 | `citations`                                 | What it reposts, likes or bookmarks, each `{ property, url, context }`; `context` as `replyContext`, when known.  |
 | `read`                                      | A read post's `{ status, statusLabel, of, line }`; `of` is `{ name, author, uid, uidLabel, url }`.                |
+| `rsvp`                                      | An RSVP's `{ value, label, line }`: `yes`, `no`, `maybe` or `interested`, its words, and its `p-rsvp` line.       |
 | `syndicateTo`                               | On a post's page, the syndication targets it selects, each `{ id, name, url }`. Empty with none.                  |
 | `syndication`                               | Its copies elsewhere, each `{ url, label }`: front matter `syndication`, and on its page the copies targets made. |
 | `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |
@@ -1692,6 +1707,7 @@ Each entry — a reply, a like or a boost — is:
 | `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                                                                                                                      |
 | `status`         | `"published"`. On the record for the sources that moderate.                                                                                                                                                                                       |
 | `replies`        | The replies to this one, oldest first, nested as deep as the site has seen.                                                                                                                                                                       |
+| `rsvp`           | A webmention reply that is an RSVP: `{ value, label }`, its `p-rsvp` (`yes`, `no`, `maybe` or `interested`) and the words for it. Absent otherwise. The default theme prints it as a `data.p-rsvp` at the top of the comment's content.           |
 
 Three rules decide what is in the thread, and they are the CMS's rather than a
 theme's: a reply whose author deleted it is gone, and its own answers move up to

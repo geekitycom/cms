@@ -12,6 +12,8 @@ import { shownInFull } from '../webmention/cited-picture.ts';
 import type { CitedImage, CitedPicture } from '../webmention/cited-picture.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
 import { READ_STATUS_LABELS, readLine, readOf, uidLabel } from '../content/read.ts';
+import { RSVP_LABELS, rsvpLine, rsvpOf } from '../content/rsvp.ts';
+import type { RsvpValue } from '../content/rsvp.ts';
 import type { ReadOf, ReadStatus } from '../content/read.ts';
 import { postLabel, postTypeOf, replyTarget, showsTitle } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
@@ -155,7 +157,7 @@ export interface DocumentContext {
   /** Display title. Empty for an untitled post. */
   title: string;
   /**
-   * `repost`, `like`, `reply`, `photo`, `read`, `bookmark`, `note` or `article`,
+   * `rsvp`, `repost`, `like`, `reply`, `photo`, `read`, `bookmark`, `note` or `article`,
    * discovered from the front matter, the title and the body (Post Type
    * Discovery) on every render rather than read from the file.
    */
@@ -169,6 +171,12 @@ export interface DocumentContext {
   named: boolean;
   /** The URL a reply answers, present only on a reply. */
   inReplyTo?: string | undefined;
+  /**
+   * What an RSVP says (TASK-198): its `rsvp` value, the words for it, and
+   * `line`, the `p-rsvp` as the HTML its content opens with. Present only on
+   * a post whose front matter names one of the four values.
+   */
+  rsvp?: { value: RsvpValue; label: string; line: string } | undefined;
   /**
    * What the post reposts, likes or bookmarks (TASK-169): each valid
    * `repost-of`, `like-of` and `bookmark-of`, as its property and its URL, in
@@ -376,6 +384,7 @@ export function documentContext(
     postType: postTypeOf(document),
     named: showsTitle(document),
     ...optional('inReplyTo', replyTarget(document)),
+    rsvp: rsvpContext(document),
     citations: citationsOf(document.extra),
     read: readContext(document),
     // Over the raw front-matter value the spread above put here.
@@ -664,6 +673,12 @@ function enclosureContext(document: Document): EnclosureContext | undefined {
       ? {}
       : { transcript: { ...transcript, captions: isCaptions(transcript) } }),
   };
+}
+
+function rsvpContext(document: Document): DocumentContext['rsvp'] {
+  const value = rsvpOf(document.extra);
+  if (value === undefined) return undefined;
+  return { value, label: RSVP_LABELS[value], line: rsvpLine(value) };
 }
 
 function readContext(document: Document): DocumentContext['read'] {

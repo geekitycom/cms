@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
@@ -564,6 +564,103 @@ describe('a webmention on the page', () => {
       'its permalink is the page it was sent from, not an anchor on this one',
     );
     assert.doesNotMatch(after, /reply_to=/, 'and it offers no Reply link, which would go nowhere');
+  });
+});
+
+describe('an RSVP webmention (TASK-198 AC #4)', () => {
+  function rsvp(value: string): string {
+    return reply(
+      `<a class="u-in-reply-to" href="${POST_URL}">the event</a>` +
+        `<data class="p-rsvp" value="${value}">${value}</data>` +
+        '<div class="e-content"><p>See you there.</p></div>',
+    );
+  }
+
+  it('is stored as an RSVP, and shown as one in the thread once approved', async () => {
+    const cms = await site();
+    pages.set('https://them.example/rsvp', { body: rsvp('yes') });
+    await sendAndSettle(cms, 'https://them.example/rsvp');
+
+    const [held] = stored(cms);
+    assert.ok(held !== undefined);
+    assert.equal(held.kind, 'reply');
+    assert.equal(held.rsvp, 'yes');
+
+    const { updateComment } = await import('../comments/records.ts');
+    await updateComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      held.id,
+      { status: 'approved' },
+    );
+
+    const page = await (await cms.app.request('/2026/09/hello-world/')).text();
+    const comment = /<li id="comment-[^"]*" class="comment h-entry[\s\S]*?<\/li>/.exec(page)?.[0];
+    assert.ok(comment !== undefined, 'the RSVP is in the thread');
+    assert.match(comment, /<data class="p-rsvp" value="yes">Going<\/data>/);
+    assert.match(comment, /See you there\./);
+  });
+
+  it('follows the page when it sends again with another answer, or none', async () => {
+    const cms = await site();
+    pages.set('https://them.example/rsvp', { body: rsvp('yes') });
+    await sendAndSettle(cms, 'https://them.example/rsvp');
+
+    pages.set('https://them.example/rsvp', { body: rsvp('no') });
+    await sendAndSettle(cms, 'https://them.example/rsvp');
+    assert.deepEqual(
+      stored(cms).map((one) => one.rsvp),
+      ['no'],
+    );
+
+    pages.set('https://them.example/rsvp', { body: rsvp('') });
+    await sendAndSettle(cms, 'https://them.example/rsvp');
+    const [plain] = stored(cms);
+    assert.ok(plain !== undefined);
+    assert.equal('rsvp' in plain, false);
+  });
+
+  it('keeps being an RSVP when the index is rebuilt from the comment file', async () => {
+    const cms = await site();
+    pages.set('https://them.example/rsvp', { body: rsvp('maybe') });
+    await sendAndSettle(cms, 'https://them.example/rsvp');
+
+    const rebuilt = createCms({
+      contentDir: cms.config.contentDir,
+      dataDir: await temporaryDir('geekity-wm-in-rebuilt-'),
+      baseUrl: BASE_URL,
+      watch: false,
+      now: () => NOW,
+    });
+    started.push(rebuilt);
+    await rebuilt.sync();
+
+    assert.deepEqual(
+      rebuilt.admin.listCommentsFor('hello-world').map((one) => one.rsvp),
+      ['maybe'],
+    );
+  });
+
+  it('is a plain reply when its rsvp is none of the four, or there is none', async () => {
+    const cms = await site();
+    pages.set('https://them.example/rsvp', { body: rsvp('perhaps') });
+    pages.set('https://them.example/note', {
+      body: reply(
+        `<a class="u-in-reply-to" href="${POST_URL}">re</a>` +
+          '<div class="e-content"><p>Good post.</p></div>',
+      ),
+    });
+    await sendAndSettle(cms, 'https://them.example/rsvp');
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    for (const comment of stored(cms)) {
+      assert.equal(comment.kind, 'reply');
+      assert.equal('rsvp' in comment, false, `${comment.url ?? ''} carries no rsvp`);
+    }
+    const file = await readFile(
+      path.join(cms.config.contentDir, '_data', 'comments', 'hello-world.json'),
+      'utf8',
+    );
+    assert.doesNotMatch(file, /"rsvp":/);
   });
 });
 

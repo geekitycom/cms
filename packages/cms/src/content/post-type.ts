@@ -3,6 +3,7 @@ import type { CitationProperty, CitedPageReader } from './citation.ts';
 import type { Document } from './document.ts';
 import { photosOf } from './photo.ts';
 import { isReadStatus, readLine, readOf } from './read.ts';
+import { RSVP_PHRASES, rsvpOf, rsvpValue } from './rsvp.ts';
 import { htmlToText } from './search.ts';
 
 /**
@@ -10,10 +11,10 @@ import { htmlToText } from './search.ts';
  * ptd.spec.indieweb.org): what kind of post a post is, inferred from its own
  * properties rather than declared by its author.
  *
- * Repost, like, reply, photo and the note/article tail of the algorithm are
- * here. The spec's full order is event, rsvp, repost, like, reply, video,
- * photo, then the tail, and the order matters because the first branch that
- * matches wins: a reply with a photo is a reply. Each new type is a check in
+ * RSVP, repost, like, reply, photo and the note/article tail of the
+ * algorithm are here. The spec's full order is event, rsvp, repost, like,
+ * reply, video, photo, then the tail, and the order matters because the first
+ * branch that matches wins: a reply with a photo is a reply. Each new type is a check in
  * {@link discoverPostType} in that order. granary's `mf2util` diverges from
  * the spec, putting reply ahead of repost and like and having no video
  * branch; this follows the spec.
@@ -25,7 +26,7 @@ import { htmlToText } from './search.ts';
  * the spec would have called a note or an article.
  */
 export type PostType =
-  'repost' | 'like' | 'reply' | 'photo' | 'read' | 'bookmark' | 'note' | 'article';
+  'rsvp' | 'repost' | 'like' | 'reply' | 'photo' | 'read' | 'bookmark' | 'note' | 'article';
 
 /** The mf2 properties the algorithm reads, each as its plain-text value. */
 export interface PostProperties {
@@ -33,6 +34,7 @@ export interface PostProperties {
   content?: string | undefined;
   summary?: string | undefined;
   'in-reply-to'?: string | undefined;
+  rsvp?: string | undefined;
   /** Each photo's address. */
   photo?: readonly string[] | undefined;
   'repost-of'?: string | undefined;
@@ -44,6 +46,7 @@ export interface PostProperties {
 
 /** The type of a post with these properties. */
 export function discoverPostType(properties: PostProperties): PostType {
+  if (rsvpValue(properties.rsvp) !== undefined) return 'rsvp';
   if (validUrl(properties['repost-of']) !== undefined) return 'repost';
   if (validUrl(properties['like-of']) !== undefined) return 'like';
   if (validUrl(properties['in-reply-to']) !== undefined) return 'reply';
@@ -86,6 +89,7 @@ function propertiesOf(document: PostDocument): PostProperties {
     content: htmlToText(document.html),
     summary: document.description,
     'in-reply-to': document.inReplyTo,
+    rsvp: rsvpOf(document.extra),
     // Only addresses {@link photosOf} accepts, the spec's "valid URL" for a
     // file whose uploads are site-relative.
     photo: photosOf(document.extra).map((photo) => photo.url),
@@ -134,9 +138,11 @@ function wordlessLabel(document: PostDocument, cited: CitedPageReader | undefine
     const author = context?.name === undefined ? context?.author?.name : undefined;
     return author === undefined ? `${verb} ${name}` : `${verb} ${name} by ${author}`;
   };
-  if (type === 'reply') {
+  if (type === 'reply' || type === 'rsvp') {
     const url = replyTarget(document);
-    if (url !== undefined) return citing('Reply to', url);
+    const rsvp = rsvpOf(document.extra);
+    const verb = rsvp === undefined ? 'Reply to' : RSVP_PHRASES[rsvp];
+    if (url !== undefined) return citing(verb, url);
   }
   if (type === 'repost' || type === 'like' || type === 'bookmark') {
     const property = `${type}-of` as const;

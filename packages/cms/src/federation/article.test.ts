@@ -1486,3 +1486,31 @@ describe('a cited page in a note (TASK-262)', () => {
     });
   });
 });
+
+describe('an RSVP (TASK-198)', () => {
+  const EVENT = 'https://events.example/2026/10/indieweb-camp';
+
+  it('is a Note replying to the event, its content opening with what its author will do', async () => {
+    const instance = await site({
+      '_data/replyContexts.json': JSON.stringify({ [EVENT]: { name: 'IndieWeb Camp' } }),
+      'posts/2026-09-02-camp.md': rawPost(
+        [
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/camp/',
+          `in-reply-to: ${EVENT}`,
+          'rsvp: maybe',
+        ],
+        'If the trains run.',
+      ),
+    });
+
+    const note = await articleAt(instance, '/2026/09/camp/');
+
+    assert.equal(note['type'], 'Note');
+    assert.equal(note['inReplyTo'], EVENT);
+    assert.equal(
+      note['content'],
+      `<p>Maybe going to <a href="${EVENT}">IndieWeb Camp</a></p>\n${renderMarkdown('If the trains run.')}`,
+    );
+  });
+});

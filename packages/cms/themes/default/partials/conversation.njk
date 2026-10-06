@@ -81,6 +81,9 @@
       </div>
     </footer>
     <div class="comment-content e-content">
+      {%- if reply.rsvp %}
+      <p class="comment-rsvp"><data class="p-rsvp" value="{{ reply.rsvp.value }}">{{ reply.rsvp.label }}</data></p>
+      {%- endif %}
       {{ reply.content | safe }}
     </div>
     {#

@@ -29,13 +29,14 @@
   {% endif %}
   <article class="feed-item h-entry"{{ language.attr(post.lang) }}>
     {% if post.named %}
-    {{ kicker.line(post.postType | capitalize, post.date, false, post.categories, lang=post.lang) }}
+    {{ kicker.line("RSVP" if post.postType == "rsvp" else post.postType | capitalize, post.date, false, post.categories, lang=post.lang) }}
     {% else %}
-    {{ kicker.line(post.postType | capitalize, post.date, post.url, [], post.label, lang=post.lang) }}
+    {{ kicker.line("RSVP" if post.postType == "rsvp" else post.postType | capitalize, post.date, post.url, [], post.label, lang=post.lang) }}
     {% endif %}
     {% set cited %}
     {% if post.inReplyTo %}
     {% set inReplyTo = post.inReplyTo %}
+    {% set rsvp = post.rsvp %}
     {% set replyContext = post.replyContext %}
     {% set lang = post.lang %}
     {% include "partials/reply-context.njk" %}
@@ -44,6 +45,8 @@
     {% include "partials/citations.njk" %}
     {% endset %}
     {% if not post.named %}{{ cited | safe }}{% endif %}
+    {% set rsvp = post.rsvp %}
+    {% include "partials/rsvp.njk" %}
     {% set read = post.read %}
     {% include "partials/read.njk" %}
     {% if post.photos.length %}

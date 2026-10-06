@@ -68,9 +68,11 @@ const GROUPS: Readonly<Record<EditorGroup, GroupRule>> = {
     fieldPrefixes: ['editor-slug', 'editor-permalink'],
   },
   responding: {
-    filled: (form) => filledIn(form.inReplyTo, form.likeOf, form.repostOf, form.bookmarkOf),
+    filled: (form) =>
+      filledIn(form.inReplyTo, form.rsvp, form.likeOf, form.repostOf, form.bookmarkOf),
     fieldPrefixes: [
       'editor-in-reply-to',
+      'editor-rsvp',
       'editor-like-of',
       'editor-repost-of',
       'editor-bookmark-of',

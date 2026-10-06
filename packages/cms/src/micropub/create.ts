@@ -40,6 +40,7 @@ const SINGLE_VALUED = {
   name: 'title',
   summary: 'description',
   'in-reply-to': 'inReplyTo',
+  rsvp: 'rsvp',
   'repost-of': 'repostOf',
   'like-of': 'likeOf',
   'bookmark-of': 'bookmarkOf',

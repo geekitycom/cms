@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-03 23:50'
+updated_date: '2026-10-06 03:28'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -66,6 +66,7 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | `updated` | last modified date, a UTC instant, written on every admin save |
 | `author` | the username of a user; see below |
 | `in-reply-to` | the URL of the post this one answers, under its microformats2 name. An http or https URL makes the post a reply (Post Type Discovery, TASK-121): the theme cites it as an embedded `u-in-reply-to h-cite` filled in from `_data/replyContexts.json` (TASK-123, decision-19), the ActivityStreams object carries it as `inReplyTo`, and publishing sends it a webmention. Any other value is kept in the file, logged as a warning when the file is indexed, and ignored; the admin editor refuses to save one |
+| `rsvp` | whether the author is going to the event `in-reply-to` names (TASK-198): `yes`, `no`, `maybe` or `interested`, under its microformats2 name. One of the four makes the post an RSVP under Post Type Discovery, ahead of every other type as the spec orders it. The theme opens its content with a `p-rsvp` and cites the event, with its start and place when its page gives them, as the reply's `u-in-reply-to h-cite`; publishing sends the event a webmention, and the post federates as a note replying to the event that opens with a line such as "Going to Event" (decision-31). Any other value is ignored; the admin editor refuses to save one, and refuses an RSVP with no `in-reply-to` |
 | `photo` | the post's photos (TASK-166), a list in Micropub's name. Each entry is `url`, an upload's `/uploads/…` path or an http or https URL, and an optional `alt`; a bare URL string reads as an entry without `alt`. An entry with no `alt` takes the media library's alt text for that upload (TASK-141), so a library image is described once. The theme prints each as an `img.u-photo` in the h-entry, the ActivityStreams object attaches each as an `Image` named by its alt text, and the JSON-LD lists each as an `ImageObject`. A post with a photo is a photo post under Post Type Discovery unless it is a reply, which comes first. An entry whose `url` is neither is dropped when read; the admin editor refuses to save one, and refuses an upload that is not an image in the library |
 | `like-of`, `repost-of`, `bookmark-of` | the URL a post likes, reposts or bookmarks (TASK-169), each under its microformats2 name, one URL each; a list of one reads as that URL. An http or https URL makes the post a like, a repost or a bookmark under Post Type Discovery, in the order repost, like, reply, photo, bookmark: the spec's order, with bookmark, which the spec leaves to note and article, just ahead of them. The theme cites each as an embedded `u-like-of`, `u-repost-of` or `u-bookmark-of` `h-cite`, and publishing sends the URL a webmention. A like or repost of a fediverse object federates as a `Like` or `Announce` of it; anything else federates as the note it is, with a line linking the page (decision-28). Any other value is ignored; the admin editor refuses to save one |
 | `read-of`, `read-status` | what a read post read, and how far its author got (TASK-229), as indiebookclub posts it. `read-of` is a map of `name` and, when known, `author`, `uid` (`isbn:…` or `doi:…`) and `url`; a bare string reads as its `name`. `read-status` is `to-read`, `reading` or `finished`. With both, the post is a read under Post Type Discovery, placed after photo and ahead of bookmark. The theme prints a `p-read-status` and a `p-read-of` `h-cite`, and the post federates as a note opening with the same sentence, such as "Want to read: Title by Author". Either without the other is ignored; the admin editor refuses to save one |
@@ -144,6 +145,7 @@ A post created over Micropub (TASK-164) is written by the editor's own write pat
 | `summary` | `description` |
 | `category`, each value | `tags` |
 | `in-reply-to` | `in-reply-to` |
+| `rsvp` | `rsvp` |
 | `like-of`, `repost-of`, `bookmark-of` | the key of the same name |
 | `read-of` (an h-cite), `read-status` | `read-of` as a map of `name`, `author`, `uid` and `url`, and `read-status` |
 | `published` | `date`, as a UTC instant; now when it is missing |
