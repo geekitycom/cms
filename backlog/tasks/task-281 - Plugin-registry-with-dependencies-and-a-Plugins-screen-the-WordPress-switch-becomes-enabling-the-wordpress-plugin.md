@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:08'
+updated_date: '2026-10-06 12:31'
 labels:
   - plugins
 milestone: m-30
@@ -39,4 +40,5 @@ Foundation of M31 (decision-33). Core gains a plugin definition (name, label, de
 - [ ] #7 At boot, an existing site.json with `wordpressActivityPub: true` becomes `plugins.wordpress` enabled and the old key is removed; the migration is idempotent and a site without the key is untouched
 - [ ] #8 The WordPress paths under /wp-json/activitypub/1.0/ answer exactly as before when the wordpress plugin is enabled and 404 when it is not, proven by the existing wordpress.test.ts retargeted to the plugin state
 - [ ] #9 doc-1 drops plugins from its out-of-scope list and gains a Plugins section describing the registry, dependencies and enabled state
+- [ ] #10 Booting with every first-party plugin disabled loads none of their npm dependencies, proven by a test that records module resolution at boot; a first-party plugin imports its dependencies with await import() where it uses them
 <!-- AC:END -->
