@@ -71,29 +71,29 @@ pnpm install
 
 Run from the repository root.
 
-| Command                  | What it does                                                                |
-| ------------------------ | --------------------------------------------------------------------------- |
-| `pnpm install`           | Installs both workspace packages and links `apps/demo` to `packages/cms`.   |
-| `pnpm dev`               | Starts the demo site with `tsx watch` (`pnpm --filter demo dev`).           |
-| `pnpm start`             | Starts the demo site once, without watching.                                |
-| `pnpm demo:reset`        | Replaces the demo's `playground/` with a fresh copy of `content/`.          |
-| `pnpm build`             | Compiles `packages/cms`, bundles the editor, compiles theme and admin CSS.  |
-| `pnpm test`              | Runs the `node:test` suites in every package through `tsx`.                 |
-| `pnpm test:coverage`     | The same suites with `--experimental-test-coverage`.                        |
-| `pnpm test:11ty`         | Builds the fixtures and the demo content with Eleventy, comparing URLs.     |
-| `pnpm typecheck`         | `tsc --noEmit` across the workspace, tests included.                        |
-| `pnpm lint`              | Fans out to each package's lint script.                                     |
-| `pnpm lint:fix`          | The same, with eslint's fixes applied.                                      |
-| `pnpm format`            | Rewrites every file prettier owns.                                          |
-| `pnpm format:check`      | Fails if any of them is not already formatted.                              |
-| `pnpm clean`             | Removes build output.                                                       |
-| `pnpm docker:dry-run`    | Prints the image tags a Docker publish would push, and builds nothing.      |
-| `pnpm docker:build-push` | Builds the image for amd64 and arm64 and pushes it to ghcr.io.              |
-| `pnpm docker:smoke`      | Builds the image locally, boots it on empty volumes and checks it serves.   |
-| `pnpm npm:dry-run`       | Prints the package, version and tag a publish needs, and publishes nothing. |
-| `pnpm npm:publish`       | Publishes `@geekity/cms` to npm from the commit carrying its version tag.   |
-| `pnpm release:dry-run`   | Prints every step of a release, and checks, publishes and builds nothing.   |
-| `pnpm release`           | Publishes to npm and pushes the image, with the quality gates run once.     |
+| Command                  | What it does                                                                                                                                                                                                                                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install`           | Installs both workspace packages and links `apps/demo` to `packages/cms`.                                                                                                                                                                                                                                 |
+| `pnpm dev`               | Starts the demo site with `tsx watch` (`pnpm --filter demo dev`). It listens on every interface and prints the network address a phone on the same Wi-Fi can open; set `GEEKITY_BASE_URL` to that address when testing feeds, IndieAuth or Micropub from the phone, since those links carry the base URL. |
+| `pnpm start`             | Starts the demo site once, without watching.                                                                                                                                                                                                                                                              |
+| `pnpm demo:reset`        | Replaces the demo's `playground/` with a fresh copy of `content/`.                                                                                                                                                                                                                                        |
+| `pnpm build`             | Compiles `packages/cms`, bundles the editor, compiles theme and admin CSS.                                                                                                                                                                                                                                |
+| `pnpm test`              | Runs the `node:test` suites in every package through `tsx`.                                                                                                                                                                                                                                               |
+| `pnpm test:coverage`     | The same suites with `--experimental-test-coverage`.                                                                                                                                                                                                                                                      |
+| `pnpm test:11ty`         | Builds the fixtures and the demo content with Eleventy, comparing URLs.                                                                                                                                                                                                                                   |
+| `pnpm typecheck`         | `tsc --noEmit` across the workspace, tests included.                                                                                                                                                                                                                                                      |
+| `pnpm lint`              | Fans out to each package's lint script.                                                                                                                                                                                                                                                                   |
+| `pnpm lint:fix`          | The same, with eslint's fixes applied.                                                                                                                                                                                                                                                                    |
+| `pnpm format`            | Rewrites every file prettier owns.                                                                                                                                                                                                                                                                        |
+| `pnpm format:check`      | Fails if any of them is not already formatted.                                                                                                                                                                                                                                                            |
+| `pnpm clean`             | Removes build output.                                                                                                                                                                                                                                                                                     |
+| `pnpm docker:dry-run`    | Prints the image tags a Docker publish would push, and builds nothing.                                                                                                                                                                                                                                    |
+| `pnpm docker:build-push` | Builds the image for amd64 and arm64 and pushes it to ghcr.io.                                                                                                                                                                                                                                            |
+| `pnpm docker:smoke`      | Builds the image locally, boots it on empty volumes and checks it serves.                                                                                                                                                                                                                                 |
+| `pnpm npm:dry-run`       | Prints the package, version and tag a publish needs, and publishes nothing.                                                                                                                                                                                                                               |
+| `pnpm npm:publish`       | Publishes `@geekity/cms` to npm from the commit carrying its version tag.                                                                                                                                                                                                                                 |
+| `pnpm release:dry-run`   | Prints every step of a release, and checks, publishes and builds nothing.                                                                                                                                                                                                                                 |
+| `pnpm release`           | Publishes to npm and pushes the image, with the quality gates run once.                                                                                                                                                                                                                                   |
 
 Package-scoped variants work too, for example
 `pnpm --filter @geekity/cms test` or `pnpm --filter demo dev`.
