@@ -6,13 +6,14 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:09'
-updated_date: '2026-10-06 12:09'
+updated_date: '2026-10-06 12:31'
 labels:
   - plugins
   - deploy
 milestone: m-30
 dependencies:
   - TASK-284
+  - TASK-288
 references:
   - >-
     backlog/decisions/decision-33 -
@@ -34,10 +35,10 @@ M31 (decision-33). Sites on the Docker image run no code of their own today. `GE
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A plugin folder mounted at /site/plugins/<name>/ with a bundled index.js appears on the Plugins screen as third-party and can be enabled, proven by building the Docker image and running it with the demo plugin mounted
-- [ ] #2 A folder whose module fails to import, exports no plugin, or targets a newer host API version is unavailable with the reason; the site still boots
-- [ ] #3 `@geekity/cms/plugin` exports the plugin and host types and definePlugin; an example plugin in apps/demo type-checks against it and runs from the packed tarball (decision-6 smoke)
-- [ ] #4 Plugins passed in config.plugins register the same way as mounted and first-party plugins; two plugins with one name refuse to boot with both sources named
-- [ ] #5 The Dockerfile creates /site/plugins and sets GEEKITY_PLUGINS_DIR; deploy/compose.yaml has a commented read-only plugins volume beside themes
-- [ ] #6 The README has a plugin author section: the plugin shape, requires and services, settings and secrets, the host API version, bundling for the mounted folder, and a warning that a plugin runs with the site's access to data/
+- [ ] #1 A folder whose module fails to import, exports no plugin, or targets a newer host API version is unavailable with the reason; the site still boots
+- [ ] #2 `@geekity/cms/plugin` exports the plugin and host types and definePlugin; an example plugin in apps/demo type-checks against it and runs from the packed tarball (decision-6 smoke)
+- [ ] #3 Plugins passed in config.plugins register the same way as mounted and first-party plugins; two plugins with one name refuse to boot with both sources named
+- [ ] #4 The Dockerfile creates /site/plugins and sets GEEKITY_PLUGINS_DIR; deploy/compose.yaml has a commented read-only plugins volume beside themes
+- [ ] #5 The README has a plugin author section: the plugin shape, requires and services, settings and secrets, the host API version, bundling for the mounted folder, and a warning that a plugin runs with the site's access to data/
+- [ ] #6 A plugin folder copied into /site/plugins/<name>/ with a bundled index.js appears on the Plugins screen as third-party after Reload, with no container restart, and can be enabled; proven by building the Docker image and running it with the demo plugin copied in while it runs
 <!-- AC:END -->
