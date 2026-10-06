@@ -395,17 +395,21 @@ function postConversation(context: ConversationContext, document: Document): Con
 }
 
 function rsvpGroups(answers: readonly Interaction[]): RsvpGroup[] {
-  const latest = new Map<string, Interaction>();
-  for (const answer of [...answers].sort(byPublished)) {
-    const { author } = answer;
-    latest.set(author.actorId ?? author.url ?? answer.id, answer);
-  }
-  const people = [...latest.values()].sort(byPublished);
+  const people = latestAnswerPerPerson(answers);
   return RSVP_GROUP_ORDER.map((value) => ({
     value,
     label: RSVP_LABELS[value],
     people: people.filter((person) => person.rsvp?.value === value),
   })).filter((group) => group.people.length > 0);
+}
+
+function latestAnswerPerPerson(answers: readonly Interaction[]): Interaction[] {
+  const latest = new Map<string, Interaction>();
+  for (const answer of [...answers].sort(byPublished)) {
+    const { author } = answer;
+    latest.set(author.actorId ?? author.url ?? answer.id, answer);
+  }
+  return [...latest.values()].sort(byPublished);
 }
 
 /**

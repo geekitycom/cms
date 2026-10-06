@@ -1,5 +1,6 @@
 import { discoverPostType } from '../content/post-type.ts';
 import type { CitedImage, CitedPicture, PictureSource } from './cited-picture.ts';
+import { readCitedStart } from './cited-start.ts';
 import { fetchPublic, webUrl } from './fetch-public.ts';
 import { elementsIn, hasRel, parseHtml, textOf } from './html.ts';
 import type { HtmlElement } from './html.ts';
@@ -279,9 +280,13 @@ async function originalOf(
   for (const candidate of candidates) {
     const read = await readPage(candidate, limits);
     if (!read.ok || read.page === undefined) continue;
-    if (syndicationOf(read.page).some((url) => copyUrls.has(url))) return read.page;
+    if (listsCopy(read.page, copyUrls)) return read.page;
   }
   return undefined;
+}
+
+function listsCopy(original: HtmlPage, copyUrls: ReadonlySet<string>): boolean {
+  return syndicationOf(original).some((url) => copyUrls.has(url));
 }
 
 function syndicationOf(page: HtmlPage): string[] {
@@ -320,8 +325,10 @@ function described(
   };
 }
 
+const NAMELESS_NOTE: unique symbol = Symbol('nameless note');
+
 interface Source {
-  readonly name?: string | null;
+  readonly name?: string | typeof NAMELESS_NOTE;
   readonly text?: string;
   readonly author?: { readonly name: string; readonly url?: string; readonly handle?: string };
   /** The author's avatar, where it is on the web. */
@@ -338,18 +345,25 @@ function merge(sources: readonly (Source | undefined)[]): Source {
   for (const source of sources) {
     if (source === undefined) continue;
     const { author, photo, ...fields } = source;
-    const held = merged.author;
-    const samePerson =
-      author !== undefined &&
-      (held === undefined || held.name.toLowerCase() === author.name.toLowerCase());
-    merged = {
-      ...fields,
-      ...merged,
-      ...(samePerson ? { author: { ...author, ...held } } : {}),
-      ...(samePerson && merged.photo === undefined && photo !== undefined ? { photo } : {}),
-    };
+    merged = { ...fields, ...merged, ...mergeAuthor(merged, author, photo) };
   }
   return merged;
+}
+
+function mergeAuthor(
+  merged: Source,
+  author: Source['author'],
+  photo: string | undefined,
+): Pick<Source, 'author' | 'photo'> {
+  const held = merged.author;
+  const samePerson =
+    author !== undefined &&
+    (held === undefined || held.name.toLowerCase() === author.name.toLowerCase());
+  if (!samePerson) return {};
+  return {
+    author: { ...author, ...held },
+    ...(merged.photo === undefined && photo !== undefined ? { photo } : {}),
+  };
 }
 
 function contextOf(
@@ -397,18 +411,10 @@ function contextOf(
   };
 }
 
-const FLOATING_START = /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?))?$/;
-
 function eventStart(value: string | undefined): string | undefined {
-  const written = (value ?? '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}/.test(written)) return undefined;
-  const floating = FLOATING_START.exec(written);
-  if (floating !== null) {
-    const [, date, time] = floating;
-    const kept = time === undefined ? `${date}` : `${date}T${time}`;
-    return Number.isNaN(Date.parse(`${date}T${time ?? '00:00'}Z`)) ? undefined : kept;
-  }
-  return instant(written);
+  const start = readCitedStart(value ?? '');
+  if (start === undefined) return undefined;
+  return start.kind === 'wall-clock' ? start.written : start.at.toISOString();
 }
 
 function instant(value: string | undefined): string | undefined {
@@ -423,7 +429,7 @@ function entrySource(entry: CitedEntry): Source {
   const named = discoverPostType({ name, content: text }) === 'article';
   const author = entry.author;
   return {
-    ...(named ? { name } : text === '' ? {} : { name: null }),
+    ...(named ? { name } : text === '' ? {} : { name: NAMELESS_NOTE }),
     ...(text === '' ? {} : { text }),
     ...(author === undefined
       ? {}
@@ -445,7 +451,7 @@ function eventSource(event: CitedEvent): Source {
 }
 
 function fediverseSource(post: FediversePost): Source {
-  const text = textOf(parseHtml((post.html ?? '').replace(/<\/p>|<br\s*\/?>/gi, '$& ')));
+  const text = textOf(parseHtml(spaceOutBreaks(post.html ?? '')));
   const { photo, ...author } = post.author ?? { name: '' };
   const image = webUrl(post.image ?? '');
   return {
@@ -453,12 +459,16 @@ function fediverseSource(post: FediversePost): Source {
       ? { name: post.name }
       : text === ''
         ? {}
-        : { name: null }),
+        : { name: NAMELESS_NOTE }),
     ...(text === '' ? {} : { text }),
     ...(author.name === '' ? {} : { author, ...(photo === undefined ? {} : { photo }) }),
     ...(post.published === undefined ? {} : { published: post.published }),
     ...(image === undefined ? {} : { picture: { url: image.href, kind: 'thumbnail' } }),
   };
+}
+
+function spaceOutBreaks(html: string): string {
+  return html.replace(/<\/p>|<br\s*\/?>/gi, '$& ');
 }
 
 function oembedSource(oembed: Oembed | undefined): Source | undefined {

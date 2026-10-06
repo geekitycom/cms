@@ -22,10 +22,14 @@ function refuse(host: string): Error {
     return Object.assign(new Error(`getaddrinfo ENOTFOUND ${host}`), { code: 'ENOTFOUND' });
   }
   const error = new Error(`A test reached ${host} without stubbing it; tests stay off the network`);
+  failEvenIfCaught(error);
+  return error;
+}
+
+function failEvenIfCaught(error: Error): void {
   process.nextTick(() => {
     throw error;
   });
-  return error;
 }
 
 const realFetch = globalThis.fetch;

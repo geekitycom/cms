@@ -378,9 +378,10 @@ export function documentContext(
 ): DocumentContext {
   const date = toDate(document.date);
   const photos = photoContexts(document, images, loading);
+  const { location: _frontMatterLocation, ...extra } = document.extra;
 
   return {
-    ...document.extra,
+    ...extra,
     permalink: document.permalink,
     slug: document.slug,
     draft: document.draft,
@@ -395,7 +396,6 @@ export function documentContext(
     ...optional('inReplyTo', replyTarget(document)),
     rsvp: rsvpContext(document),
     event: eventContext(document),
-    location: undefined,
     citations: citationsOf(document.extra),
     read: readContext(document),
     // Over the raw front-matter value the spread above put here.

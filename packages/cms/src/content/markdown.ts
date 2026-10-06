@@ -16,9 +16,13 @@ const markdown: MarkdownItInstance = new MarkdownIt({ html: true, linkify: true 
   .use(headingAnchors)
   .use(focusableCodeBlocks)
   .use(htmlInlineOffsets)
-  .use(fediverseHandles);
-markdown.linkify.set({ fuzzyLink: false, fuzzyEmail: false, fuzzyIP: false });
-for (const schema of ['ftp:', '//', 'mailto:']) markdown.linkify.add(schema, null);
+  .use(fediverseHandles)
+  .use(schemedLinksOnly);
+
+function schemedLinksOnly(md: MarkdownItInstance): void {
+  md.linkify.set({ fuzzyLink: false, fuzzyEmail: false, fuzzyIP: false });
+  for (const schema of ['ftp:', '//', 'mailto:']) md.linkify.add(schema, null);
+}
 
 /**
  * Render a Markdown body to the HTML the site and the feeds serve. A handle

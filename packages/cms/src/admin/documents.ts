@@ -130,6 +130,7 @@ import {
 } from './event-field.ts';
 import type { EventForm } from './event-field.ts';
 import { eventOf } from '../content/event.ts';
+import type { PostEvent } from '../content/event.ts';
 import {
   SYNDICATE_TO_FRONT_MATTER_KEY,
   syndicateToOf,
@@ -1211,8 +1212,7 @@ function resolveExtra(
     if (rsvp === undefined) delete extra[RSVP_FRONT_MATTER_KEY];
     else extra[RSVP_FRONT_MATTER_KEY] = rsvp;
     const event = resolveEvent(form.event, timezone);
-    const wasEvent = document !== undefined && eventOf(document.extra) !== undefined;
-    if ('event' in event && (event.event !== undefined || wasEvent)) {
+    if ('event' in event && isOrWasEvent(event.event, document)) {
       for (const [key, value] of Object.entries(eventFrontMatter(event.event))) {
         if (value === undefined) delete extra[key];
         else extra[key] = value;
@@ -1286,6 +1286,10 @@ function resolveExtra(
   }
 
   return extra;
+}
+
+function isOrWasEvent(saved: PostEvent | undefined, document: Document | undefined): boolean {
+  return saved !== undefined || (document !== undefined && eventOf(document.extra) !== undefined);
 }
 
 /** The editor checkbox that selects one syndication target. */

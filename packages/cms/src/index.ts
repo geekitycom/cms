@@ -1707,20 +1707,11 @@ export function createCms(config: GeekityConfig = {}): Cms {
   const copies = syndicationCopies(resolved.contentDir);
   const locations = postLocations(resolved.dataDir);
 
-  const federationContext = () =>
-    federation.createContext(new URL(resolved.baseUrl), {
-      admin,
-      store,
-      config: resolved,
-      actorProfiles,
-      cited: (url) => replyContexts.read(url),
-    });
-
   const replyContexts = createReplyContextService({
     store,
     config: resolved,
     lookup: resolved.hostLookup,
-    fediverse: citedPostReader(federationContext),
+    fediverse: citedPostReader(() => federationContext()),
     onStored: (target, previous) => {
       delivery.citedPageStored(target, previous);
       const original = replyContexts.read(target)?.original;
@@ -1860,6 +1851,15 @@ export function createCms(config: GeekityConfig = {}): Cms {
       }),
     ),
   });
+
+  const federationContext = () =>
+    federation.createContext(new URL(resolved.baseUrl), {
+      admin,
+      store,
+      config: resolved,
+      actorProfiles,
+      cited: (url) => replyContexts.read(url),
+    });
 
   const learnHandles = handleLearner(federationContext);
 

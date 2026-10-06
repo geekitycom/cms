@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-06 03:54'
-updated_date: '2026-10-06 04:12'
+updated_date: '2026-10-06 04:37'
 labels:
   - test
 milestone: m-28
@@ -51,6 +51,8 @@ Proof: src/__testing__/offline.test.ts runs child test files under the preload: 
 Fixes: src/__testing__/notify-pings.ts answers the default rsscloud ping (imported by admin/__testing__/harness.ts); 18 test files call remoteHostsDoNotExist() or set federation.allowPrivateAddress so their stubs answer Fedify's validatePublicUrl DNS lookup. cited-image-alt uses remoteHostsDoNotExist after one unexplained flake under allowPrivateAddress.
 
 The remaining 'rpc.rsscloud.io/ping answered 404' lines in the test log come from test files whose own fetch stub answers 404 to URLs it does not route; no request reaches rsscloud.io. Open gaps: http.request to a remote IP literal skips DNS (nothing does this); test:11ty does not preload the guard.
+
+After the comment pass, notify-pings.ts was renamed src/__testing__/stub-notify-pings.ts so its side-effect import says what it does.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

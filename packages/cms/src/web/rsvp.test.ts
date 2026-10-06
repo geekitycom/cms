@@ -13,6 +13,7 @@ const CAMP = 'https://events.example/2026/10/indieweb-camp';
 const CLUB = 'https://events.example/2026/10/homebrew';
 const COPY = 'https://silo.example/events/42';
 const ORIGINAL = 'https://them.example/2026/10/party';
+const ZONE_WEST_OF_UTC = 'America/Chicago';
 
 const PAGES: Record<string, string> = {
   [CAMP]: `<div class="h-event">
@@ -71,7 +72,7 @@ describe('an RSVP in the default theme', () => {
   before(async () => {
     contentDir = await box.dir('geekity-rsvp-content-');
     const files: Record<string, string> = {
-      '_data/site.json': JSON.stringify({ title: 'A Site', timezone: 'America/Chicago' }),
+      '_data/site.json': JSON.stringify({ title: 'A Site', timezone: ZONE_WEST_OF_UTC }),
       'posts/2026-09-10-camp.md': rsvp('camp', CAMP, 'yes', 'See you there.'),
       'posts/2026-09-10-club.md': rsvp('club', CLUB, 'interested'),
       'posts/2026-09-10-copy.md': rsvp('copy', COPY, 'yes'),

@@ -55,6 +55,7 @@ import { createTemplateEnvironment, useThemeDirs } from './templates.ts';
 import { createThemeSource, findThemeFile } from './themes.ts';
 import type { ThemeColors, ThemeSource } from './themes.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
+import { readCitedStart } from '../webmention/cited-start.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
@@ -1027,12 +1028,12 @@ function replyContextFor(context: Omit<ReplyContext, 'picture'>): Record<string,
   return { ...dated, ...eventStartFor(context.start) };
 }
 
-function eventStartFor(start: string | undefined): Record<string, unknown> {
+function eventStartFor(written: string | undefined): Record<string, unknown> {
+  const start = readCitedStart(written ?? '');
   if (start === undefined) return {};
-  const floating = !/(?:Z|[+-]\d{2}:?\d{2})$/.test(start);
-  const startDate = new Date(floating && start.includes('T') ? `${start}Z` : start);
-  if (Number.isNaN(startDate.getTime())) return {};
-  return floating ? { startDate, startZone: 'UTC' } : { startDate };
+  return start.kind === 'wall-clock'
+    ? { startDate: start.asUtc, startZone: 'UTC' }
+    : { startDate: start.at };
 }
 
 function licenseContext(

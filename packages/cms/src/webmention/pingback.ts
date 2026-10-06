@@ -173,7 +173,7 @@ function readMethodCall(xml: string): MethodCall | Fault {
     .replace(/^\s*<\?xml[^?]*\?>/, '')
     .replaceAll(/<!--[^]*?-->/g, '')
     .trim();
-  if (body.includes('<!') || body.includes('<?')) return refused;
+  if (hasDeclarationOrInstruction(body)) return refused;
 
   const call = CALL.exec(body);
   if (call === null) return refused;
@@ -192,6 +192,10 @@ function readMethodCall(xml: string): MethodCall | Fault {
   const method = decodeText(call[1] ?? '');
   if (method === undefined) return refused;
   return { method: method.trim(), params: params.map((param) => param.trim()) };
+}
+
+function hasDeclarationOrInstruction(body: string): boolean {
+  return body.includes('<!') || body.includes('<?');
 }
 
 const PREDEFINED: Record<string, string> = {
