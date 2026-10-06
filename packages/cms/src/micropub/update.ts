@@ -1,5 +1,6 @@
 import { formFor } from '../admin/documents.ts';
 import type { EditorForm } from '../admin/documents.ts';
+import { eventFrontMatter } from '../admin/event-field.ts';
 import { photoRows } from '../admin/photo-field.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
@@ -79,10 +80,7 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
   text('name', document.title);
   const event = eventOf(document.extra);
   if (event !== undefined) {
-    text('start', event.start);
-    text('end', event.end);
-    const place = event.location;
-    text('location', place?.kind === 'virtual' ? place.url : place?.name);
+    for (const [name, value] of Object.entries(eventFrontMatter(event))) text(name, value);
   }
   text('content', document.body.trim());
   text('summary', document.description);

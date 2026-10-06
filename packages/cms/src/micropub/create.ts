@@ -212,7 +212,6 @@ export function createForm(
     const named = request.type === '' ? 'no type' : request.type;
     return { errors: [`This endpoint creates h-entry and h-event posts, not ${named}.`] };
   }
-  const isEvent = request.type === 'h-event';
 
   const properties = new Map<string, readonly unknown[]>();
   for (const [name, values] of request.properties) {
@@ -278,7 +277,7 @@ export function createForm(
     checkinFromMicropub,
     errors,
   );
-  if (isEvent) {
+  if (request.type === 'h-event') {
     form.event = {
       start: text('start'),
       end: text('end'),
@@ -405,8 +404,8 @@ function eventPlace(values: readonly unknown[], errors: string[]): string {
       ? (properties as Record<string, unknown>)
       : {};
   const first = (name: string): string => {
-    const values: unknown = given[name];
-    const text: unknown = Array.isArray(values) ? values[0] : undefined;
+    const listed = given[name];
+    const text: unknown = Array.isArray(listed) ? listed[0] : undefined;
     return typeof text === 'string' ? text.trim() : '';
   };
   const words = [...new Set(PLACE_WORDS.map(first).filter((part) => part !== ''))].join(', ');
