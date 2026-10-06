@@ -6,6 +6,7 @@ import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
 import { publicDocumentAt } from '../web/documents.ts';
+import { escapeXml } from '../web/feed-xml.ts';
 import { checkWebmentionRequest } from './receive.ts';
 import type { RequestProblem, WebmentionOutcome } from './receive.ts';
 import { webmentionEndpointFor } from './routes.ts';
@@ -262,8 +263,4 @@ function fault({ code, message }: Fault): string {
 <member><name>faultString</name><value><string>${escapeXml(message)}</string></value></member>
 </struct></value></fault></methodResponse>
 `;
-}
-
-function escapeXml(text: string): string {
-  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }

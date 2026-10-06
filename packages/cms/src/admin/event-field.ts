@@ -70,8 +70,7 @@ export function resolveEvent(
   if (end !== undefined && Date.parse(end) < Date.parse(start)) {
     return { error: 'An event cannot end before it starts.', field: 'editor-event-end' };
   }
-  const event = eventOf({ start, end, location: form.location });
-  return { event };
+  return { event: eventOf({ start, end, location: form.location }) };
 }
 
 /** The keys an event writes into front matter, every one of them, so a cleared field is removed. */

@@ -31,7 +31,7 @@ export function citedPostReader(contextOf: () => Context<FederationContextData>)
 
     const attributed = await object.getAttribution({ ...loaders, suppressError: true });
     const profile = isActor(attributed) ? await profileFrom(attributed, loaders) : undefined;
-    const handle = profile?.handle?.replace(/^@/, '') ?? undefined;
+    const handle = profile?.handle?.replace(/^@/, '');
     const authorName = profile?.name ?? handle;
     const warning = object.summary?.toString() ?? '';
     const hidden = warning !== '' || object.sensitive === true;

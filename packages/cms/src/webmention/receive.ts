@@ -279,8 +279,8 @@ export async function verifyWebmention(
 /**
  * Why a source left nothing behind: it is not there, it does not link here, or
  * it was thrown away, by the checker or by a moderator deleting the entry while
- * this was deciding. A pingback is told which; a webmention,
- * answered before any of it was known, never is.
+ * this was deciding. A pingback is told which; a webmention, answered before
+ * any of it was known, never is.
  */
 export type NotStored = 'gone' | 'unlinked' | 'discarded';
 

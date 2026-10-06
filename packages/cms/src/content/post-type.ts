@@ -18,10 +18,9 @@ import { htmlToText } from './search.ts';
  * branch that matches wins: a reply with a photo is a reply. The spec's event
  * is a post of type h-event; a file has no such type, so an event is a post
  * with a readable `start`, the property an h-event cannot do without
- * (TASK-200). Each new type is a check in
- * {@link discoverPostType} in that order. granary's `mf2util` diverges from
- * the spec, putting reply ahead of repost and like and having no video
- * branch; this follows the spec.
+ * (TASK-200). Each new type is a check in {@link discoverPostType} in that
+ * order. granary's `mf2util` diverges from the spec, putting reply ahead of
+ * repost and like and having no video branch; this follows the spec.
  *
  * Bookmark is an IndieWeb extension the spec lists only as under
  * consideration, so the spec types a bookmark as a note or an article. It

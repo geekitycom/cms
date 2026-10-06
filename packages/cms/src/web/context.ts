@@ -159,9 +159,9 @@ export interface DocumentContext {
   /** Display title. Empty for an untitled post. */
   title: string;
   /**
-   * `event`, `rsvp`, `repost`, `like`, `reply`, `photo`, `read`, `bookmark`, `note` or `article`,
-   * discovered from the front matter, the title and the body (Post Type
-   * Discovery) on every render rather than read from the file.
+   * `event`, `rsvp`, `repost`, `like`, `reply`, `photo`, `read`, `bookmark`,
+   * `note` or `article`, discovered from the front matter, the title and the
+   * body (Post Type Discovery) on every render rather than read from the file.
    */
   postType: PostType;
   /**

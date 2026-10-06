@@ -44,14 +44,16 @@ export function eventOf(extra: Readonly<Record<string, unknown>>): PostEvent | u
 }
 
 export function eventLocation(value: unknown): EventLocation | undefined {
-  if (typeof value !== 'string' || value.trim() === '') return undefined;
+  if (typeof value !== 'string') return undefined;
   const words = value.trim();
+  if (words === '') return undefined;
   return isWebUrl(words) ? { kind: 'virtual', url: words } : { kind: 'place', name: words };
 }
 
 /** A start or an end as written, read as an instant, or `undefined`. */
 export function instantOf(value: unknown): string | undefined {
   if (value instanceof Date) return toUtcInstant(value, 'UTC');
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(value.trim())) return undefined;
-  return toUtcInstant(value.trim(), 'UTC');
+  if (typeof value !== 'string') return undefined;
+  const written = value.trim();
+  return /^\d{4}-\d{2}-\d{2}/.test(written) ? toUtcInstant(written, 'UTC') : undefined;
 }
