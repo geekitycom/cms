@@ -4,6 +4,7 @@ title: geekity serve supervises its server and reloads it without dropping reque
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:30'
+updated_date: '2026-10-06 12:41'
 labels:
   - plugins
   - deploy
@@ -25,7 +26,7 @@ ordinal: 244800
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-M31 (decision-33). Adding a third-party plugin must not need a container restart. `geekity serve` becomes a small supervisor (node:cluster primary) that owns the listening port and runs the CMS in one worker. To reload, the old worker stops taking writes and stops its timers, a new worker boots and starts listening, and only then is the old worker disconnected and drained. The port never closes, so requests keep being answered throughout. A sketch on 2026-10-06 (Node 24.18, about 90 requests a second during the handoff) showed the order matters. Retiring the old worker before the new one listened closed the port and refused requests. Starting the new worker first and then calling worker.disconnect() on the old one dropped nothing in two runs and reset one reused keep-alive connection in a third. The Plugins screen offers Reload when the plugins folder differs from what is loaded. The same supervisor respawns a worker that crashes, without a container restart.
+M31 (decision-33). Installing a plugin must not need a container restart. `geekity serve` becomes a small supervisor (node:cluster primary) that owns the listening port and runs the CMS in one worker. To reload, the old worker stops taking writes and stops its timers, a new worker boots and starts listening, and only then is the old worker disconnected and drained. The port never closes, so requests keep being answered throughout. A sketch on 2026-10-06 (Node 24.18, about 90 requests a second during the handoff) showed the order matters. Retiring the old worker before the new one listened closed the port and refused requests. Starting the new worker first and then calling worker.disconnect() on the old one dropped nothing in two runs and reset one reused keep-alive connection in a third. The Plugins screen offers Reload when the plugins folder differs from what is loaded. The same supervisor respawns a worker that crashes, without a container restart.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

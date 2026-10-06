@@ -1,11 +1,12 @@
 ---
 id: TASK-285
 title: >-
-  Editor actions, with the post-summary plugin suggesting a title and
+  @geekity/plugin-post-summary: editor actions that suggest a title and
   description
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:09'
+updated_date: '2026-10-06 12:41'
 labels:
   - plugins
   - llm
@@ -28,7 +29,7 @@ ordinal: 241800
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-M31 (decision-33). Core gains editor actions: a plugin contributes a button beside an editor field (title, description, tags), a JSON endpoint under /admin/plugins/<name>/ behind the admin guard and CSRF, and a static script served from the plugin folder under the admin CSP (script-src self, connect-src self). First user: a `post-summary` plugin that requires llm. On a click it sends the draft title, body and kind to the server, which asks llm for a title and a description with a schema, and the editor shows the suggestions to accept or dismiss. Nothing is sent on save or publish.
+M31 (decision-33). Core gains editor actions: a plugin contributes a button beside an editor field (title, description, tags), a JSON endpoint under /admin/plugins/<name>/ behind the admin guard and CSRF, and a static script served from the plugin under the admin CSP (script-src self, connect-src self). First user: a new package, packages/plugin-post-summary (@geekity/plugin-post-summary), that requires llm. On a click it sends the draft title, body and kind to the server, which asks llm for a title and a description with a schema, and the editor shows the suggestions to accept or dismiss. Nothing is sent on save or publish. Each plugin package added here gets its release-please entry (include-component-in-tag true), its commitlint scope and CLAUDE.md scope row, CI lint, typecheck and tests, the shared bundle build, and a smoke test installing it against the packed @geekity/cms tarball.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -40,4 +41,5 @@ M31 (decision-33). Core gains editor actions: a plugin contributes a button besi
 - [ ] #5 Every llm error is shown in plain words beside the button and the editor stays usable; with llm unconfigured the buttons explain how to configure it
 - [ ] #6 The editor works unchanged with JavaScript off and with the plugin disabled
 - [ ] #7 Verified in a real browser against a fake llm server: click, see the suggestion, accept it, save
+- [ ] #8 The package has its release-please entry, commitlint scope, CLAUDE.md scope row, CI jobs, bundle build and packed-tarball smoke test
 <!-- AC:END -->

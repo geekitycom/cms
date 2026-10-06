@@ -1,18 +1,18 @@
 ---
 id: TASK-287
 title: >-
-  Third-party plugins: a mounted plugins folder on Docker and plugins in the
-  site config
+  geekity plugin add: install plugin packages into a mounted plugins folder on
+  Docker
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:09'
-updated_date: '2026-10-06 12:31'
+updated_date: '2026-10-06 12:41'
 labels:
   - plugins
   - deploy
 milestone: m-30
 dependencies:
-  - TASK-284
+  - TASK-281
   - TASK-288
 references:
   - >-
@@ -21,7 +21,7 @@ references:
   - Dockerfile
   - deploy/compose.yaml
   - packages/cms/src/cli.ts
-  - packages/cms/src/config.ts
+  - 'https://docs.npmjs.com/cli/v10/configuring-npm/package-json'
 priority: medium
 type: feature
 ordinal: 243800
@@ -30,15 +30,17 @@ ordinal: 243800
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-M31 (decision-33). Sites on the Docker image run no code of their own today. `GEEKITY_PLUGINS_DIR` (default /site/plugins in the image) holds one folder per plugin with a bundled index.js whose default export is the plugin; the host is passed in, so the module needs no runtime import of @geekity/cms, which a mounted folder could not resolve. Types for authors come from a new `@geekity/cms/plugin` subpath export. A site that runs its own server.ts passes plugin objects in `plugins` on its config. The host API carries a version; a plugin targeting a newer one is unavailable with a reason.
+M31 (decision-33). The Docker image contains core alone, so a Docker site needs a way to install plugin packages without npm or a package.json in the container. `GEEKITY_PLUGINS_DIR` (/site/plugins in the image, a writable mount) holds one folder per plugin. `geekity plugin add <package>[@version]` fetches the tarball from the npm registry, checks its integrity hash, and unpacks the package bundle and manifest into plugins/<name>/; `geekity plugin remove <name>` deletes it; Reload on the Plugins screen (TASK-288) loads the change. A hand-copied folder with a bundled index.js works the same way. This task also adds the shared build every plugin package uses to emit its self-contained bundle (dependencies inlined), proven on a private fixture plugin package in the workspace.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A folder whose module fails to import, exports no plugin, or targets a newer host API version is unavailable with the reason; the site still boots
-- [ ] #2 `@geekity/cms/plugin` exports the plugin and host types and definePlugin; an example plugin in apps/demo type-checks against it and runs from the packed tarball (decision-6 smoke)
-- [ ] #3 Plugins passed in config.plugins register the same way as mounted and first-party plugins; two plugins with one name refuse to boot with both sources named
-- [ ] #4 The Dockerfile creates /site/plugins and sets GEEKITY_PLUGINS_DIR; deploy/compose.yaml has a commented read-only plugins volume beside themes
-- [ ] #5 The README has a plugin author section: the plugin shape, requires and services, settings and secrets, the host API version, bundling for the mounted folder, and a warning that a plugin runs with the site's access to data/
-- [ ] #6 A plugin folder copied into /site/plugins/<name>/ with a bundled index.js appears on the Plugins screen as third-party after Reload, with no container restart, and can be enabled; proven by building the Docker image and running it with the demo plugin copied in while it runs
+- [ ] #1 `docker compose exec cms geekity plugin add <package>` installs a plugin that then appears on the Plugins screen after Reload, with no container restart; proven by building the image and installing the fixture package from a local registry or packed tarball while it runs
+- [ ] #2 plugin add refuses a tarball whose integrity hash does not match, a package with no bundle, and a bundle that targets a newer host API version, each with a plain message, and leaves the folder as it was
+- [ ] #3 plugin add is idempotent: running it twice leaves one folder, and adding a newer version replaces the old one atomically so a reload never sees a half-written folder
+- [ ] #4 A folder whose module fails to import or exports no plugin is unavailable on the Plugins screen with the reason; the site still boots
+- [ ] #5 The shared bundle build turns a plugin package into one index.js with its dependencies inlined and fails on a native module
+- [ ] #6 The Dockerfile creates /site/plugins and sets GEEKITY_PLUGINS_DIR; deploy/compose.yaml has a writable plugins volume beside themes
+- [ ] #7 The README has a plugin section for operators (plugin add, remove, Reload) and for authors (the package shape, requires and services, settings and secrets, the host API version and peer range, the bundle, and a warning that a plugin runs with the site's access to data/)
+- [ ] #8 A folder install whose manifest peer ranges are not met by core or by an installed plugin package is unavailable on the Plugins screen, naming the package and the range it needs
 <!-- AC:END -->

@@ -1,9 +1,10 @@
 ---
 id: TASK-286
-title: Tag suggestions ranked by tags.pub followers
+title: '@geekity/plugin-tag-suggest: tag suggestions ranked by tags.pub followers'
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:09'
+updated_date: '2026-10-06 12:41'
 labels:
   - plugins
   - llm
@@ -37,4 +38,5 @@ M31 (decision-33). A `tag-suggest` plugin that requires llm. On a click beside T
 - [ ] #5 The host fetch refuses a private or loopback address unless the site allows private addresses, tested with a planted redirect to 127.0.0.1
 - [ ] #6 Choosing a suggestion adds it to the Tags field without duplicating an existing tag and without saving
 - [ ] #7 Verified in a real browser against fake llm and tags.pub servers
+- [ ] #8 The package has its release-please entry, commitlint scope, CLAUDE.md scope row, CI jobs, bundle build and packed-tarball smoke test
 <!-- AC:END -->
