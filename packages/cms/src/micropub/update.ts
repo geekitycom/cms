@@ -3,6 +3,7 @@ import type { EditorForm } from '../admin/documents.ts';
 import { photoRows } from '../admin/photo-field.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
+import { eventOf } from '../content/event.ts';
 import { locationToMicropub } from '../content/location.ts';
 import { readOf } from '../content/read.ts';
 import type { ReadOf } from '../content/read.ts';
@@ -42,7 +43,19 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
   location: ['location'],
   checkin: ['location'],
   'mp-syndicate-to': ['syndicateTo'],
+  start: ['event'],
+  end: ['event'],
 };
+
+/** On an event, `location` is the event's place, not the author's own (decision-32). */
+const EVENT_UPDATABLE: typeof UPDATABLE = { ...UPDATABLE, location: ['event'] };
+
+const EVENT_PROPERTIES = ['start', 'end', 'location'] as const;
+
+/** The microformats type a post is read back and updated as. */
+export function micropubType(document: Document): 'h-entry' | 'h-event' {
+  return eventOf(document.extra) === undefined ? 'h-entry' : 'h-event';
+}
 
 export interface SourceSite extends Pick<CreateSite, 'baseUrl' | 'targets'> {
   readonly locations: PostLocations;
@@ -64,6 +77,13 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
     if (value !== undefined && value !== '') properties[name] = [value];
   };
   text('name', document.title);
+  const event = eventOf(document.extra);
+  if (event !== undefined) {
+    text('start', event.start);
+    text('end', event.end);
+    const place = event.location;
+    text('location', place?.kind === 'virtual' ? place.url : place?.name);
+  }
   text('content', document.body.trim());
   text('summary', document.description);
   if (document.tags.length > 0) properties['category'] = [...document.tags];
@@ -87,7 +107,7 @@ export function sourceProperties(document: Document, site: SourceSite): Record<s
   });
   if (photos.length > 0) properties['photo'] = photos;
   const authorLocation = site.locations.read(document.permalink);
-  if (authorLocation !== undefined) {
+  if (authorLocation !== undefined && (event === undefined || authorLocation.checkin === true)) {
     properties[authorLocation.checkin === true ? 'checkin' : 'location'] = [
       locationToMicropub(authorLocation),
     ];
@@ -183,8 +203,13 @@ export function updateForm(
   );
   if (unknown.length > 0) return { errors: [`This endpoint cannot update ${unknown.join(', ')}.`] };
 
+  const type = micropubType(document);
+  const updatable = type === 'h-event' ? EVENT_UPDATABLE : UPDATABLE;
+  // An event's start, end and place fill one editor field, so each is read
+  // whichever one changes, and the ones left alone are written back as they were.
+  const sourced = type === 'h-event' ? [...new Set([...touched, ...EVENT_PROPERTIES])] : touched;
   const source = sourceProperties(document, site);
-  const properties = new Map(touched.map((property) => [property, source[property] ?? []]));
+  const properties = new Map(sourced.map((property) => [property, source[property] ?? []]));
   for (const change of changes) {
     const current = properties.get(change.property) ?? [];
     properties.set(change.property, changed(current, change));
@@ -192,7 +217,7 @@ export function updateForm(
 
   const mapped = new Map([...properties].filter(([name]) => !keptPrivately(name)));
   const created = createForm(
-    { type: 'h-entry', properties: mapped },
+    { type, properties: mapped },
     { ...site, author: document.author ?? '' },
   );
   if ('errors' in created) return created;
@@ -209,7 +234,7 @@ export function updateForm(
 
   const form = formFor(document, site.timezone, site.locations.read(document.permalink));
   for (const property of touched) {
-    for (const field of UPDATABLE[property] ?? []) {
+    for (const field of updatable[property] ?? []) {
       Object.assign(form, { [field]: created.form[field] });
     }
   }

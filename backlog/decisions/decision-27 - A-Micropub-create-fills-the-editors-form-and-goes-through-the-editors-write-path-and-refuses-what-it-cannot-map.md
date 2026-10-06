@@ -139,3 +139,7 @@ A checkin kept by TASK-237 before this lands stays in `data/kept-properties.json
 - **The owner's own content is not cleaned.** The editor and hand-written files keep `html: true` and Eleventy compatibility. Only what a Micropub client sends is cleaned.
 
 turndown (MIT) was chosen over node-html-markdown for its rule API, which the kept blocks and the list layout use, and over the unified/rehype stack for size. turndown-plugin-gfm was not added: it has not been released since 2017, its only use here would be pipe tables, and a table kept as HTML is always faithful, where a pipe table cannot hold a cell with two paragraphs. Strikethrough is a three-line rule.
+
+## Amendment (2026-10-06, TASK-280)
+
+`h-event` is no longer refused. A create with `h=event` and a `start` makes an event post, as decision-32's TASK-280 amendment describes. Every other type is still refused.

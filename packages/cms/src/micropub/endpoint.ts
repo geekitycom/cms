@@ -39,7 +39,7 @@ import { syndicationTargetsReader } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
 import { createForm, fromForm, fromJson } from './create.ts';
 import type { CreatedForm, CreateRequest, Property } from './create.ts';
-import { parseChanges, sourceProperties, updateForm } from './update.ts';
+import { micropubType, parseChanges, sourceProperties, updateForm } from './update.ts';
 import type { Change } from './update.ts';
 
 const ANY_TYPE: readonly Property[] = [
@@ -66,7 +66,7 @@ const NAMED: readonly Property[] = ['name', ...ANY_TYPE];
  */
 const POST_TYPES: Readonly<
   Record<
-    Exclude<PostType, 'event'>,
+    PostType,
     {
       readonly name: string;
       readonly properties: readonly Property[];
@@ -95,6 +95,7 @@ const POST_TYPES: Readonly<
     properties: ['read-of', 'read-status', ...NAMED],
     required: ['read-of', 'read-status'],
   },
+  event: { name: 'Event', properties: ['start', 'end', ...NAMED], required: ['start', 'name'] },
 };
 
 /** Each `q` the endpoint answers. */
@@ -142,7 +143,7 @@ const QUERIES: Readonly<Record<Query, (context: QueryContext) => object>> = {
     if (document instanceof Refusal) return document;
     const all = sourceProperties(document, { baseUrl, targets, locations, kept });
     // Asked for by name, the answer is the properties alone, as the spec has it.
-    if (properties.length === 0) return { type: ['h-entry'], properties: all };
+    if (properties.length === 0) return { type: [micropubType(document)], properties: all };
     return {
       properties: Object.fromEntries(
         Object.entries(all).filter(([name]) => properties.includes(name)),

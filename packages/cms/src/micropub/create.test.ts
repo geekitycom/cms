@@ -425,13 +425,13 @@ describe('a refused create', () => {
       names: ['ate', 'weight'],
     },
     {
-      label: 'an h=event',
+      label: 'an h=event with no start',
       send: (cms, token) =>
         postForm(cms, token, [
           ['h', 'event'],
           ['name', 'A party'],
         ]),
-      names: ['h-event'],
+      names: ['start'],
     },
     {
       label: 'a JSON h-card',
