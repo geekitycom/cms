@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:09'
-updated_date: '2026-10-06 13:15'
+updated_date: '2026-10-06 13:45'
 labels:
   - plugins
   - federation
@@ -34,7 +34,7 @@ ordinal: 238800
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-M31 (decision-33). Everything behind the decision-14 switch moves into a new package, packages/plugin-wordpress, published as @geekity/plugin-wordpress: the second Fedify federation (src/federation/wordpress.ts), its gate, the data/wordpress-activitypub.json request record, the Federation > Settings section that shows it, the `geekity import wordpress-actor` CLI command (src/federation/import-wordpress.ts) and the per-user wordpressActorId. Core gains the host API these need and nothing more: a middleware phase in the federation mount (after the canonical Fedify middleware, before the stored-id middleware), access to the site federation KV and inbox handlers, a plugin data directory under data/plugins/wordpress/ with atomic writes, a plugin admin screen under Plugins, and CLI command registration. Stored actor and object ids, WebFinger aliases, the feed and archive layout and oEmbed stay in core (decision-14). No deployed site uses the switch (2026-10-06: shll.me is the only site on the CMS and does not use it; andrewshell.org is still on WordPress), so nothing migrates: the setting, the user field and the code leave core outright. Each plugin package added here gets its release-please entry (include-component-in-tag true), its commitlint scope and CLAUDE.md scope row, CI lint, typecheck and tests, the shared bundle build, and a smoke test installing it against the packed @geekity/cms tarball.
+M31 (decision-33). Everything behind the decision-14 switch moves into a new package, packages/plugin-wordpress, published as @geekity/plugin-wordpress: the second Fedify federation (src/federation/wordpress.ts), its gate, the data/wordpress-activitypub.json request record, the Federation > Settings section that shows it, the `geekity import wordpress-actor` CLI command (src/federation/import-wordpress.ts) and the per-user wordpressActorId. Core gains the host API these need and nothing more: a middleware phase in the federation mount (after the canonical Fedify middleware, before the stored-id middleware), access to the site federation KV and inbox handlers, a plugin data directory under data/plugins/@geekity/plugin-wordpress/ with atomic writes, a plugin admin screen under Plugins, and CLI command registration. Stored actor and object ids, WebFinger aliases, the feed and archive layout and oEmbed stay in core (decision-14). No deployed site uses the switch (2026-10-06: shll.me is the only site on the CMS and does not use it; andrewshell.org is still on WordPress), so nothing migrates: the setting, the user field and the code leave core outright. Each plugin package added here gets its release-please entry (include-component-in-tag true), its commitlint scope and CLAUDE.md scope row, CI lint, typecheck and tests, the shared bundle build, and a smoke test installing it against the packed @geekity/cms tarball.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

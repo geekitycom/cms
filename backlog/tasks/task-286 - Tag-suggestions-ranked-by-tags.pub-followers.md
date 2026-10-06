@@ -4,7 +4,7 @@ title: '@geekity/plugin-tag-suggest: tag suggestions ranked by tags.pub follower
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:09'
-updated_date: '2026-10-06 12:41'
+updated_date: '2026-10-06 13:45'
 labels:
   - plugins
   - llm
@@ -26,7 +26,7 @@ ordinal: 242800
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-M31 (decision-33). A `tag-suggest` plugin that requires llm. On a click beside Tags, the server asks llm for candidate hashtags for the draft, passing the tags the site already uses so it prefers them, then looks up each candidate on tags.pub: the actor at https://tags.pub/user/<tag> and its followers collection totalItems. tags.pub returns an actor for any string, so zero followers means nobody follows the tag. The editor shows candidates ranked by followers, marks the ones the site already uses, and adds the chosen ones to the Tags field. Core gains a host fetch that refuses private addresses unless the site allows them (the same rule as federation) and a plugin cache file in data/plugins/<name>/ with expiry.
+M31 (decision-33). @geekity/plugin-tag-suggest requires @geekity/plugin-llm. On a click beside Tags, the server asks llm for candidate hashtags for the draft, passing the tags the site already uses so it prefers them, then looks up each candidate on tags.pub: the actor at https://tags.pub/user/<tag> and its followers collection totalItems. tags.pub returns an actor for any string, so zero followers means nobody follows the tag. The editor shows candidates ranked by followers, marks the ones the site already uses, and adds the chosen ones to the Tags field. Core gains a host fetch that refuses private addresses unless the site allows them (the same rule as federation) and a plugin cache file in data/plugins/<package name>/ with expiry.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

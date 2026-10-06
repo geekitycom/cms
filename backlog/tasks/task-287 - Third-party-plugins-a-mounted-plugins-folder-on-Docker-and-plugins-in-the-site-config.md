@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:09'
-updated_date: '2026-10-06 13:27'
+updated_date: '2026-10-06 13:46'
 labels:
   - plugins
   - deploy
@@ -30,7 +30,7 @@ ordinal: 243800
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-M31 (decision-33). The Docker image contains core alone, so a Docker site needs a way to install plugin packages without npm or a package.json in the container. `GEEKITY_PLUGINS_DIR` (/site/plugins in the image, a writable mount) holds one folder per plugin. `geekity plugin add <package>[@version]` fetches the tarball from the npm registry, checks its integrity hash, and unpacks the package bundle and manifest into plugins/<name>/; `geekity plugin remove <name>` deletes it; Reload on the Plugins screen (TASK-288) loads the change. A hand-copied folder with a bundled index.js works the same way. This task also adds the shared build every plugin package uses to emit its self-contained bundle (dependencies inlined), proven on a private fixture plugin package in the workspace.
+M31 (decision-33). The Docker image contains core alone, so a Docker site needs a way to install plugin packages without npm or a package.json in the container. `GEEKITY_PLUGINS_DIR` (/site/plugins in the image, a writable mount) holds one folder per plugin. `geekity plugin add <package>[@version]` fetches the tarball from the npm registry, checks its integrity hash, and unpacks the package bundle and manifest into plugins/<package name>/ (for example plugins/@geekity/plugin-llm/); `geekity plugin remove <package>` deletes it; Reload on the Plugins screen (TASK-288) loads the change. A hand-copied folder with a bundled index.js works the same way. This task also adds the shared build every plugin package uses to emit its self-contained bundle (dependencies inlined), proven on a private fixture plugin package in the workspace.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -43,6 +43,6 @@ M31 (decision-33). The Docker image contains core alone, so a Docker site needs 
 - [ ] #6 The Dockerfile creates /site/plugins and sets GEEKITY_PLUGINS_DIR; deploy/compose.yaml has a writable plugins volume beside themes
 - [ ] #7 The README has a plugin section for operators (plugin add, remove, Reload) and for authors (the package shape, requires and services, settings and secrets, the host API version and peer range, the bundle, and a warning that a plugin runs with the site's access to data/)
 - [ ] #8 A folder install whose manifest peer ranges are not met by core or by an installed plugin package is unavailable on the Plugins screen, naming the package and the range it needs
-- [ ] #9 A plugin package declares its runtime name, host API range and required plugins in a geekity field of package.json, with required plugins as peerDependencies; the bundle build writes plugin.json from it and fails when the plugin object requires differs from package.json
+- [ ] #9 A plugin package marks itself a plugin and declares its host API range and required plugin packages in a geekity field of package.json, each required package also a peer dependency; the bundle build writes plugin.json from it and fails when the plugin object requires differs from package.json
 - [ ] #10 plugin add installs only the package it is given; when that plugin requires plugins that are missing or out of range, it still installs it, and both the command and the Plugins screen name each missing package and the range it needs. Nothing is installed on the operator behalf.
 <!-- AC:END -->
