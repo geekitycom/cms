@@ -71,7 +71,7 @@ export async function copyCitedImage(
 ): Promise<CitedImage | undefined> {
   const fetched = await fetchPublic(url, {
     lookup: options.lookup,
-    timeoutMs: options.timeoutMs ?? CITED_PICTURE_TIMEOUT_MS,
+    signal: AbortSignal.timeout(options.timeoutMs ?? CITED_PICTURE_TIMEOUT_MS),
     maxBytes: options.config.uploadMaxBytes,
     accept: 'image/avif, image/webp, image/png, image/gif, image/jpeg;q=0.9',
     contentType: { pattern: /^\s*image\//i, name: 'an image' },

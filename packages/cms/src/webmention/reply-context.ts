@@ -131,7 +131,7 @@ export interface FetchReplyContextOptions {
 
 interface Limits {
   readonly lookup: HostLookup;
-  readonly deadline: number;
+  readonly deadline: AbortSignal;
   readonly maxBytes: number;
 }
 
@@ -156,7 +156,7 @@ export async function fetchReplyContext(
 ): Promise<ReplyContextFetch> {
   const limits: Limits = {
     lookup: options.lookup,
-    deadline: Date.now() + (options.timeoutMs ?? REPLY_CONTEXT_TIMEOUT_MS),
+    deadline: AbortSignal.timeout(options.timeoutMs ?? REPLY_CONTEXT_TIMEOUT_MS),
     maxBytes: options.maxBytes ?? REPLY_CONTEXT_MAX_BYTES,
   };
 
@@ -206,11 +206,10 @@ type PageRead =
   | { readonly ok: true; readonly page?: undefined; readonly image: string };
 
 async function readPage(url: string, limits: Limits): Promise<PageRead> {
-  const timeoutMs = limits.deadline - Date.now();
-  if (timeoutMs <= 0) return { ok: false, reason: 'timed out' };
+  if (limits.deadline.aborted) return { ok: false, reason: 'timed out' };
   const fetched = await fetchPublic(url, {
     lookup: limits.lookup,
-    timeoutMs,
+    signal: limits.deadline,
     maxBytes: limits.maxBytes,
     overflow: 'truncate',
     accept: 'text/html, */*;q=0.8',
@@ -637,10 +636,9 @@ async function fetchFediversePost(
 ): Promise<FediversePost | undefined> {
   if (url === undefined) return undefined;
   if (!(await publicHost(new URL(url).hostname, limits.lookup))) return undefined;
-  const timeoutMs = limits.deadline - Date.now();
-  if (timeoutMs <= 0) return undefined;
+  if (limits.deadline.aborted) return undefined;
 
-  const signal = AbortSignal.timeout(timeoutMs);
+  const signal = limits.deadline;
   const aborted = new Promise<undefined>((resolve) => {
     signal.addEventListener('abort', () => {
       resolve(undefined);
@@ -768,16 +766,12 @@ function oembedEndpoint(root: HtmlElement, base: string): string | undefined {
   return undefined;
 }
 
-async function fetchOembed(
-  endpoint: string,
-  limits: { readonly lookup: HostLookup; readonly deadline: number; readonly maxBytes: number },
-): Promise<Oembed | undefined> {
-  const timeoutMs = limits.deadline - Date.now();
-  if (timeoutMs <= 0) return undefined;
+async function fetchOembed(endpoint: string, limits: Limits): Promise<Oembed | undefined> {
+  if (limits.deadline.aborted) return undefined;
 
   const fetched = await fetchPublic(endpoint, {
     lookup: limits.lookup,
-    timeoutMs,
+    signal: limits.deadline,
     maxBytes: limits.maxBytes,
     accept: 'application/json+oembed, application/json;q=0.9',
     contentType: {

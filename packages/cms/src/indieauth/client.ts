@@ -55,7 +55,7 @@ export async function fetchClientInformation(
 ): Promise<ClientFetch> {
   const fetched = await fetchPublic(clientId, {
     lookup: options.lookup,
-    timeoutMs: options.timeoutMs ?? CLIENT_FETCH_TIMEOUT_MS,
+    signal: AbortSignal.timeout(options.timeoutMs ?? CLIENT_FETCH_TIMEOUT_MS),
     maxBytes: options.maxBytes ?? CLIENT_FETCH_MAX_BYTES,
     accept: 'application/json, text/html;q=0.9',
     contentType: {
@@ -86,7 +86,7 @@ export async function fetchClientLogo(
 ): Promise<string | undefined> {
   const fetched = await fetchPublic(url, {
     lookup: options.lookup,
-    timeoutMs: options.timeoutMs ?? CLIENT_FETCH_TIMEOUT_MS,
+    signal: AbortSignal.timeout(options.timeoutMs ?? CLIENT_FETCH_TIMEOUT_MS),
     maxBytes: options.maxBytes ?? CLIENT_LOGO_MAX_BYTES,
     accept: 'image/*',
     contentType: { pattern: LOGO_TYPE, name: 'an image' },

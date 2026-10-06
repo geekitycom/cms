@@ -19,8 +19,8 @@ const MAX_REDIRECTS = 5;
 export interface FetchPublicOptions {
   /** How host names are resolved before they are trusted. */
   readonly lookup: HostLookup;
-  /** How long the whole exchange is given, body included. */
-  readonly timeoutMs: number;
+  /** Ends the whole exchange, body included, when it aborts. */
+  readonly signal: AbortSignal;
   /** The most of a body that is read. */
   readonly maxBytes: number;
   readonly overflow?: 'refuse' | 'truncate';
@@ -73,7 +73,7 @@ export async function fetchPublic(
   target: string,
   options: FetchPublicOptions,
 ): Promise<PublicFetch> {
-  const signal = AbortSignal.timeout(options.timeoutMs);
+  const { signal } = options;
   let at = target;
 
   try {
