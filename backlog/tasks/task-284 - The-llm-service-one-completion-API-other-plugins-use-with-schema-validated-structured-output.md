@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:09'
-updated_date: '2026-10-06 13:36'
+updated_date: '2026-10-06 13:40'
 labels:
   - plugins
   - llm
@@ -40,6 +40,5 @@ M31 (decision-33). Core gains services between plugins: host.provide(name, servi
 - [ ] #6 The llm plugin screen shows the model, token usage and outcome of the last call; nothing about the prompt is stored
 - [ ] #7 A test plugin that requires llm calls it end to end against the fake server, proving the service path a third party would use
 - [ ] #8 Core gains no dependency for the llm service; the llm package depends on nothing it does not use
-- [ ] #9 host.provide takes a factory; the service is created once per worker on the first host.use, and every consumer receives that same instance; a provider whose plugin is installed but disabled is never created
-- [ ] #10 A factory that throws makes the providing plugin and its dependents unavailable with the error, without stopping the site; a factory that reaches its own service through a chain of host.use fails with the chain named
+- [ ] #9 host.provide registers the one instance every consumer receives; host.use throws when called during register, so registration order never matters and a consumer only reaches a service once every plugin has registered
 <!-- AC:END -->
