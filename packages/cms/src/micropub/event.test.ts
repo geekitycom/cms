@@ -381,6 +381,18 @@ describe('updating an event', () => {
     assert.equal(data['location'], 'Chicago Public Library, 400 S State St');
   });
 
+  it('renames it and keeps its start, end and place', async () => {
+    const { cms, token } = await site();
+    const location = await created(await postJson(cms, token, CAMP));
+    const response = await update(cms, token, location, { replace: { name: ['Camp, again'] } });
+    assert.equal(response.status, 204, await response.clone().text());
+    const { data } = matter(await fileOf(cms, location));
+    assert.equal(data['title'], 'Camp, again');
+    assert.equal(data['start'], '2026-10-10T14:00:00Z');
+    assert.equal(data['end'], '2026-10-10T22:00:00Z');
+    assert.equal(data['location'], 'Chicago Public Library, 400 S State St');
+  });
+
   it('moves it online by replacing its location, and deletes its end', async () => {
     const { cms, token } = await site();
     const location = await created(await postJson(cms, token, CAMP));

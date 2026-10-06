@@ -48,13 +48,18 @@ const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
   end: ['event'],
 };
 
-/** On an event, `location` is the event's place, not the author's own (decision-32). */
-const EVENT_UPDATABLE: typeof UPDATABLE = { ...UPDATABLE, location: ['event'] };
+type MicropubType = 'h-entry' | 'h-event';
 
-const EVENT_PROPERTIES = ['start', 'end', 'location'] as const;
+const UPDATABLE_BY_TYPE: Readonly<Record<MicropubType, typeof UPDATABLE>> = {
+  'h-entry': UPDATABLE,
+  'h-event': { ...UPDATABLE, location: ['event'] },
+};
 
-/** The microformats type a post is read back and updated as. */
-export function micropubType(document: Document): 'h-entry' | 'h-event' {
+const EVENT_FIELD_PROPERTIES = Object.entries(UPDATABLE_BY_TYPE['h-event'])
+  .filter(([, fields]) => fields.includes('event'))
+  .map(([property]) => property);
+
+export function micropubType(document: Document): MicropubType {
   return eventOf(document.extra) === undefined ? 'h-entry' : 'h-event';
 }
 
@@ -202,10 +207,9 @@ export function updateForm(
   if (unknown.length > 0) return { errors: [`This endpoint cannot update ${unknown.join(', ')}.`] };
 
   const type = micropubType(document);
-  const updatable = type === 'h-event' ? EVENT_UPDATABLE : UPDATABLE;
-  // An event's start, end and place fill one editor field, so each is read
-  // whichever one changes, and the ones left alone are written back as they were.
-  const sourced = type === 'h-event' ? [...new Set([...touched, ...EVENT_PROPERTIES])] : touched;
+  const updatable = UPDATABLE_BY_TYPE[type];
+  const sourced =
+    type === 'h-event' ? [...new Set([...touched, ...EVENT_FIELD_PROPERTIES])] : touched;
   const source = sourceProperties(document, site);
   const properties = new Map(sourced.map((property) => [property, source[property] ?? []]));
   for (const change of changes) {

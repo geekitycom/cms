@@ -53,7 +53,6 @@ const SAMPLES: Readonly<Record<string, unknown>> = {
   end: '2026-10-10T17:00:00Z',
 };
 
-/** An event's location is its place in words; a geo: URI is the author's own. */
 const EVENT_SAMPLES: Readonly<Record<string, unknown>> = { ...SAMPLES, location: 'The library' };
 
 /** Micropublish's own known properties (config/properties.json), and the legacy names Quill sends. */
@@ -153,7 +152,6 @@ async function create(
   });
 }
 
-/** A create of a q=config post type, in the microformats type it is made with. */
 async function createOf(made: Site, entry: PostTypeEntry, names: readonly string[]) {
   return entry.type === 'event'
     ? await create(made, names, (name) => EVENT_SAMPLES[name], 'h-event')

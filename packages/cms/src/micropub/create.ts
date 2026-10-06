@@ -281,7 +281,7 @@ export function createForm(
     form.event = {
       start: text('start'),
       end: text('end'),
-      location: eventPlace(properties.get('location') ?? [], errors),
+      location: eventPlaceText(properties.get('location') ?? [], errors),
     };
     if (form.event.start === '') errors.push('An h-event needs a start.');
     form.location = locationForm(checkin);
@@ -380,15 +380,9 @@ function checkinOverLocation(
 const EVENT_PLACE_REFUSAL =
   'An event’s location is words, a web address, or an h-card or h-adr naming a place.';
 
-/** The parts of an h-card or h-adr that say where a place is, in the order they are written. */
 const PLACE_WORDS = ['name', 'street-address', 'locality', 'region', 'country-name'] as const;
 
-/**
- * An event's location as front matter keeps it (decision-32): words, or the
- * address to join it online. An h-card or h-adr is reduced to its words, or to
- * its `url` when it names nothing; its coordinates have nowhere to go.
- */
-function eventPlace(values: readonly unknown[], errors: string[]): string {
+function eventPlaceText(values: readonly unknown[], errors: string[]): string {
   if (values.length > 1) errors.push('location takes one value.');
   const [value] = values;
   if (value === undefined) return '';
