@@ -17,6 +17,7 @@ themes/default/
     author.njk   one person's archive, paginated
     search.njk   the search form and what it found, paginated
     404.njk      nothing at this URL
+    410.njk      what was at this URL was deleted
     500.njk      the request failed on the server
     503.njk      the site is in maintenance mode
   partials/
@@ -724,6 +725,13 @@ writes one today and the header is the heading alone.
 `layouts/404.njk` says `Content not found.` under a `Not found` kicker and
 links home and to the search. The 500 and 503 pages below open on a kicker the
 same way.
+
+`layouts/410.njk` is the page at the URL of a post or page that was moved to
+the trash (TASK-195). It says `This content has been deleted.` under a
+`Deleted` kicker and links home and to the search. The context is the 404's:
+`title`, `url` and `page.url`, and nothing of the deleted document. Its `.md`
+and `.json` representations answer 410 too. A trashed draft was never public,
+so its URL is a 404 instead.
 
 `layouts/500.njk` is the page a request gets when the server fails while
 answering it (TASK-129). It says `Something went wrong.` in an

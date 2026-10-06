@@ -49,6 +49,7 @@ import {
 import type { AuthorContext } from './authors.ts';
 import { feedComments, spokenIn } from './conversation.ts';
 import {
+  goneDocumentAt,
   isListed,
   isServed,
   permalinkOfObjectId,
@@ -503,6 +504,13 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
       .find((href) => href !== undefined);
   const { search } = new URL(c.req.url);
   if (formerly !== undefined) return c.redirect(`${formerly}${search}`, 301);
+
+  // A deleted document's URL says so, for as long as its file is in the trash
+  // and nothing live has taken the URL over (TASK-195).
+  const deleted = [pathname, ...(extension?.paths ?? [])].some(
+    (candidate) => goneDocumentAt(store, candidate) !== undefined,
+  );
+  if (deleted) return gone(c);
 
   const canonical = canonicalPath(c, pathname, bases, authors);
   if (canonical !== undefined) return c.redirect(canonical, 301);
@@ -1786,6 +1794,11 @@ export function feedHref(
  */
 export function commentsFeedHref(document: Document | undefined): string {
   return commentsFeedPath(document === undefined ? undefined : encodePath(document.permalink));
+}
+
+/** The theme's 410 page. */
+function gone(c: Context<GeekityEnv>): Response {
+  return c.html(c.var.renderer.renderGone(requestPath(c)), 410);
 }
 
 /** The theme's 404 page. */

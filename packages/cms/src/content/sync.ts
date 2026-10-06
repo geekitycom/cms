@@ -190,9 +190,8 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
   /**
    * Write a document, giving way to a file that has already gone.
    *
-   * Renaming a file — which is what trashing and restoring are — briefly
-   * leaves two rows claiming one permalink, and the watcher may well see the
-   * new name before the old one disappears. When the conflicting row's file is
+   * Renaming a live file briefly leaves two rows claiming one permalink, and
+   * the watcher may well see the new name before the old one disappears. When the conflicting row's file is
    * no longer on disk the row is stale, so it is dropped (and reported) and
    * the write retried. A conflict between two files that both exist is a
    * content mistake and is left to the caller to report.

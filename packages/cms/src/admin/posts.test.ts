@@ -2072,7 +2072,7 @@ describe('the trash', () => {
     assert.deepEqual(await readdir(path.join(contentDir, '_trash', 'posts')), [
       '2026-01-02-published.md',
     ]);
-    assert.equal((await cms.app.request('/2026/01/published/')).status, 404);
+    assert.equal((await cms.app.request('/2026/01/published/')).status, 410);
     assert.equal(cms.store.counts().trashed, 1);
 
     const restored = await submit(agent, '/admin/posts/published', { action: 'restore' });

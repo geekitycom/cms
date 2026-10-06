@@ -580,19 +580,31 @@ export function postDeleteActivity(
   document: Document,
   deleted: string,
 ): Delete {
-  const objectId = articleObjectId(context, document);
   const { actor, followers } = attribution(context, document);
 
   return new Delete({
-    id: deleteActivityId(objectId, deleted),
+    id: deleteActivityId(articleObjectId(context, document), deleted),
     actor,
-    object: new Tombstone({
-      id: objectId,
-      formerType: OBJECT_TYPES[postObjectType(document)],
-      deleted: toInstant(deleted) ?? null,
-    }),
+    object: postTombstone(context, document, deleted),
     to: PUBLIC_COLLECTION,
     cc: followers,
+  });
+}
+
+/**
+ * The `Tombstone` where a post's object was: what a `Delete` carries, and what
+ * a peer that fetches a deleted post's id is answered with (TASK-195). Nothing
+ * records when a post was trashed, so a fetched one carries no `deleted`.
+ */
+export function postTombstone(
+  context: Context<FederationContextData>,
+  document: Document,
+  deleted?: string,
+): Tombstone {
+  return new Tombstone({
+    id: articleObjectId(context, document),
+    formerType: OBJECT_TYPES[postObjectType(document)],
+    deleted: toInstant(deleted) ?? null,
   });
 }
 

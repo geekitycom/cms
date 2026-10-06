@@ -71,6 +71,7 @@ export const TEMPLATES = {
   author: 'layouts/author.njk',
   search: 'layouts/search.njk',
   notFound: 'layouts/404.njk',
+  gone: 'layouts/410.njk',
   serverError: 'layouts/500.njk',
   maintenance: 'layouts/503.njk',
 } as const;
@@ -214,6 +215,8 @@ export interface Renderer {
   renderSearch(search: SearchPage): string;
   /** The 404 page, for a path that resolved to nothing. */
   renderNotFound(url: string): string;
+  /** The 410 page, for the URL of a document that was deleted (TASK-195). */
+  renderGone(url: string): string;
   /** The 500 page, for a request whose handler threw. */
   renderServerError(url: string): string;
   /**
@@ -919,6 +922,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     renderNotFound(url) {
       return render(TEMPLATES.notFound, {
         title: 'Not found',
+        url,
+        page: { url },
+      });
+    },
+
+    renderGone(url) {
+      return render(TEMPLATES.gone, {
+        title: 'Deleted',
         url,
         page: { url },
       });

@@ -56,6 +56,13 @@ const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 const sent: Sent[] = [];
 
+/**
+ * The site the friendly endpoint fetches a source back from when it verifies,
+ * as a receiver does, and the status each fetch got.
+ */
+let verifyingAgainst: Cms | undefined;
+const verified: { source: string; status: number }[] = [];
+
 const restoreFetch = routeTheWeb();
 
 after(async () => {
@@ -66,6 +73,8 @@ after(async () => {
 
 beforeEach(() => {
   sent.length = 0;
+  verified.length = 0;
+  verifyingAgainst = undefined;
 });
 
 /** The make-believe web this test sends into. Nothing leaves the process. */
@@ -91,12 +100,17 @@ function routeTheWeb(): () => void {
       if (url !== FRIENDLY_ENDPOINT) return new Response('missing', { status: 404 });
 
       const body = new URLSearchParams(await request.text());
+      const source = body.get('source') ?? '';
       sent.push({
         endpoint: url,
-        source: body.get('source') ?? '',
+        source,
         target: body.get('target') ?? '',
         contentType: request.headers.get('content-type'),
       });
+      if (verifyingAgainst !== undefined) {
+        const response = await verifyingAgainst.app.request(new Request(source));
+        verified.push({ source, status: response.status });
+      }
       return new Response('', { status: 202 });
     }
 
@@ -366,6 +380,34 @@ describe('sending a webmention for a read (TASK-233 AC #1)', () => {
       sent.map((one) => [one.source, one.target]),
       [[`${BASE_URL}/2026/03/hello-world/`, FRIENDLY]],
     );
+  });
+});
+
+describe('sending webmentions when a post is deleted', () => {
+  it('tells the pages it linked to, which find it gone when they verify (TASK-195)', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+    assert.equal((await publish(agent, `A friendly [one](${FRIENDLY}).`)).status, 303);
+    await cms.webmentions.settled();
+    sent.length = 0;
+    verifyingAgainst = cms;
+
+    const token = csrfField(await (await agent.get('/admin/posts/hello-world')).text());
+    assert.ok(token !== undefined, 'the editor carried a CSRF token');
+    const trashed = await agent.post('/admin/posts/hello-world', {
+      csrf_token: token,
+      action: 'trash',
+    });
+    assert.equal(trashed.status, 303, 'the post was moved to the trash');
+    await cms.webmentions.settled();
+
+    const source = `${BASE_URL}/2026/03/hello-world/`;
+    assert.deepEqual(
+      sent.map((one) => [one.source, one.target]),
+      [[source, FRIENDLY]],
+      'the page it linked to was told',
+    );
+    assert.deepEqual(verified, [{ source, status: 410 }], 'and found the post gone');
   });
 });
 

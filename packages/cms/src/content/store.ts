@@ -58,8 +58,8 @@ export interface ContentStore {
    * Insert or replace the row for `document.path`, tags and categories
    * included.
    *
-   * Throws {@link DuplicatePermalinkError} when another path already claims
-   * the same permalink.
+   * Throws {@link DuplicatePermalinkError} when another live path already
+   * claims the same permalink.
    */
   upsert(document: Document): void;
   /** {@link ContentStore.upsert} for many documents, in one transaction. */
@@ -86,7 +86,14 @@ export interface ContentStore {
   clear(): void;
   /** The document at a content-relative path, or `undefined`. */
   getByPath(path: string): Document | undefined;
-  /** The document a URL resolves to, or `undefined`. Permalinks are unique. */
+  /**
+   * The document a URL resolves to, or `undefined`.
+   *
+   * Permalinks are unique among live documents only: a trashed document keeps
+   * its URL so that it can answer 410 Gone (TASK-195), until a live one takes
+   * the URL over. The live document wins; a trashed one answers only when
+   * nothing live holds the URL.
+   */
   getByPermalink(permalink: string): Document | undefined;
   /**
    * The post whose front matter names this ActivityStreams id, or `undefined`.
@@ -352,7 +359,7 @@ export interface TermUsage {
 }
 
 /**
- * Thrown when two files claim the same permalink. Two documents at one URL is
+ * Thrown when two live files claim the same permalink. Two documents at one URL is
  * a content mistake the site owner has to fix, so the index refuses it rather
  * than picking a winner.
  */
@@ -514,10 +521,12 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     insertCategory: db.prepare(
       'INSERT INTO document_categories (path, category, position) VALUES (?, ?, ?)',
     ),
-    pathForPermalink: db.prepare('SELECT path FROM documents WHERE permalink = ?'),
+    pathForPermalink: db.prepare('SELECT path FROM documents WHERE permalink = ? AND trashed = 0'),
     remove: db.prepare('DELETE FROM documents WHERE path = ?'),
     byPath: db.prepare('SELECT * FROM documents WHERE path = ?'),
-    byPermalink: db.prepare('SELECT * FROM documents WHERE permalink = ?'),
+    byPermalink: db.prepare(
+      'SELECT * FROM documents WHERE permalink = ? ORDER BY trashed, path DESC LIMIT 1',
+    ),
     deleteRedirects: db.prepare('DELETE FROM document_redirects WHERE path = ?'),
     insertRedirect: db.prepare(
       'INSERT INTO document_redirects (path, url, position) VALUES (?, ?, ?)',
@@ -532,7 +541,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       LIMIT 1
     `),
     byStoredObjectId: db.prepare(
-      `SELECT * FROM documents WHERE json_extract(activitypub, '$.id') = ? LIMIT 1`,
+      `SELECT * FROM documents WHERE json_extract(activitypub, '$.id') = ? ORDER BY trashed LIMIT 1`,
     ),
     bySlug: db.prepare(
       `SELECT * FROM documents WHERE slug = ? ORDER BY date_sort DESC, path DESC LIMIT 1`,
@@ -1252,6 +1261,17 @@ const MIGRATIONS: readonly Migration[] = [
 
       CREATE INDEX document_redirects_url ON document_redirects (url);
       DELETE FROM documents;
+    `,
+  },
+  {
+    version: 7,
+    sql: `
+      -- A trashed document gives its URL up to a live one (TASK-195), so the
+      -- permalink is unique among untrashed rows only. The plain index stays
+      -- for lookups, which ask about trashed rows too.
+      DROP INDEX documents_permalink;
+      CREATE UNIQUE INDEX documents_permalink_live ON documents (permalink) WHERE trashed = 0;
+      CREATE INDEX documents_permalink ON documents (permalink);
     `,
   },
 ];

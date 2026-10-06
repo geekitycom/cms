@@ -6,13 +6,14 @@ import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
+import { isTrashedPath } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
 import { authorHref, parseAuthorPath } from '../web/authors.ts';
-import { publicDocumentAt } from '../web/documents.ts';
+import { goneDocumentAt, isGone, publicDocumentAt } from '../web/documents.ts';
 import { absoluteUrl, prefersActivityStreams } from '../web/negotiate.ts';
 import { notFound, requestPath } from '../web/routes.ts';
 import { actorAliases, actorId, userActor } from './actor.ts';
-import { isFederatedDocument, postObject } from './article.ts';
+import { isFederatedDocument, postObject, postTombstone } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { accountOf, handleHref } from './paths.ts';
 import {
@@ -299,6 +300,16 @@ async function activityStreamsDocument(
   }
 
   const stored = storedObjectAt(c);
+  if (wantsObject) {
+    // A trashed post is a Tombstone at its id if it was ever public, and
+    // nothing at all if it never was (TASK-195).
+    const trashed = stored ?? goneDocumentAt(c.var.store, requestPath(c));
+    if (trashed?.type === 'post' && isTrashedPath(trashed.path)) {
+      return isGone(trashed, c.var.store.now())
+        ? await tombstone(c, federation, trashed)
+        : undefined;
+    }
+  }
   if (stored === undefined) return undefined;
   if (wantsObject) return await article(c, federation, stored);
   // A renamed post's old URL is its stored id (decision-20). Once a new
@@ -345,6 +356,23 @@ async function article(
   return await respondWithObject(postObject(context, document), {
     contextLoader: context.contextLoader,
   });
+}
+
+/**
+ * A deleted post as a peer that fetches its id is answered: 410 Gone, with the
+ * `Tombstone` its `Delete` carried, so a server that missed the `Delete` still
+ * learns the object went rather than that the URL was mistyped.
+ */
+async function tombstone(
+  c: Context<GeekityEnv>,
+  federation: SiteFederation,
+  document: Document,
+): Promise<Response> {
+  const context = federation.createContext(c.req.raw, contextData(c));
+  const response = await respondWithObject(postTombstone(context, document), {
+    contextLoader: context.contextLoader,
+  });
+  return new Response(response.body, { status: 410, headers: response.headers });
 }
 
 /** Where WebFinger lives, which is defined on the host rather than under a site. */

@@ -255,7 +255,7 @@ describe('the post object', () => {
     );
   });
 
-  it('serves nothing for a draft, a trashed post, a page or a URL naming nothing', async () => {
+  it('serves nothing for a draft, a page or a URL naming nothing, and a Tombstone for a trashed post', async () => {
     const instance = await site({
       ...HELLO,
       'posts/2026-09-01-secret.md': post('Secret', {
@@ -273,14 +273,17 @@ describe('the post object', () => {
       }),
     });
 
-    // A draft, a trashed post and a URL naming nothing have no public page at
-    // all, so they 404 exactly as they do for a browser. A page exists but
-    // federates nothing, so it falls through to the negotiator and earns the
-    // 406 doc-3 specifies.
-    for (const permalink of ['/2026/09/secret/', '/2026/08/gone/', '/2026/09/never-written/']) {
+    // A draft and a URL naming nothing have no public page at all, so they
+    // 404 exactly as they do for a browser, and a trashed post is the
+    // Tombstone it left (TASK-195). A page exists but federates nothing, so it
+    // falls through to the negotiator and earns the 406 doc-3 specifies.
+    for (const permalink of ['/2026/09/secret/', '/2026/09/never-written/']) {
       const response = await get(instance, permalink, ACTIVITY_STREAMS);
       assert.equal(response.status, 404, `${permalink} is not an object`);
     }
+    const gone = await get(instance, '/2026/08/gone/', ACTIVITY_STREAMS);
+    assert.equal(gone.status, 410);
+    assert.equal(((await gone.json()) as Record<string, unknown>)['type'], 'Tombstone');
     assert.equal((await get(instance, '/about/', ACTIVITY_STREAMS)).status, 406);
 
     // The published post next to them still is, so the refusals are the filter

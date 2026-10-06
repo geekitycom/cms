@@ -170,13 +170,17 @@ describe('a hidden post at its permalink, anonymous', () => {
     for (const variant of variants) {
       const unknown = await snapshot(await request(cms, UNKNOWN, variant), UNKNOWN);
       assert.equal(unknown.status, 404, `${variant.label}: the unknown URL is a 404`);
-      for (const [kind, url] of Object.entries({ ...HIDDEN, trashed: TRASHED })) {
+      for (const [kind, url] of Object.entries(HIDDEN)) {
         assert.deepEqual(
           await snapshot(await request(cms, url, variant), url),
           unknown,
           `${variant.label}: ${kind} answers as the unknown URL does`,
         );
       }
+      // A deleted post says it was deleted instead (TASK-195), and no more.
+      const trashed = await request(cms, TRASHED, variant);
+      assert.equal(trashed.status, 410, `${variant.label}: the trashed post is gone`);
+      assert.doesNotMatch(await trashed.text(), /lanterns, /, `${variant.label}: trashed body`);
     }
   });
 
@@ -240,13 +244,14 @@ describe('everything but the HTML page', () => {
 });
 
 describe('a trashed post, signed in', () => {
-  it('is still a 404, the same one an unknown URL is (AC #5)', async () => {
+  it('is no preview: the 410 anybody gets (AC #5, TASK-195)', async () => {
     const cms = await site();
     const agent = await signedIn(cms);
 
-    const trashed = await snapshot(await agent.get(TRASHED), TRASHED);
-    const unknown = await snapshot(await agent.get(UNKNOWN), UNKNOWN);
-    assert.equal(trashed.status, 404);
-    assert.deepEqual(trashed, unknown);
+    const response = await agent.get(TRASHED);
+    assert.equal(response.status, 410);
+    const html = await response.text();
+    assert.doesNotMatch(html, NOTICE, 'no preview banner');
+    assert.doesNotMatch(html, /lanterns, /, 'none of its words');
   });
 });

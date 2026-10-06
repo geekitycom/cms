@@ -472,7 +472,7 @@ async function moved(
     document,
     action,
   );
-  if (done === undefined) return invalid(`Could not move ${document.path}.`).answer(c);
+  if (done.outcome === 'refused') return invalid(done.reason).answer(c);
   return c.body(null, 204);
 }
 
