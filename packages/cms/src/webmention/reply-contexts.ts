@@ -7,11 +7,17 @@ import { replyTarget } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { updateFileAtomically } from '../files/atomic.ts';
-import { copyCitedPicture, parseCitedPicture, sweepCitedPictures } from './cited-picture.ts';
+import {
+  copyCitedImage,
+  copyCitedPicture,
+  parseCitedImage,
+  parseCitedPicture,
+  sweepCitedPictures,
+} from './cited-picture.ts';
 import type { CitedPictureConfig, PictureSource } from './cited-picture.ts';
 import type { HostLookup } from './public-address.ts';
 import { fetchReplyContext } from './reply-context.ts';
-import type { ReplyContext } from './reply-context.ts';
+import type { FediverseLookup, ReplyContext } from './reply-context.ts';
 
 /**
  * Where the fetched contexts are kept, relative to the content directory: one
@@ -35,6 +41,8 @@ export interface CreateReplyContextServiceOptions {
   readonly config: CitedPictureConfig;
   /** How host names are resolved before a target is fetched. */
   readonly lookup: HostLookup;
+  /** How the ActivityPub object a cited page links is read (TASK-199). */
+  readonly fediverse?: FediverseLookup | undefined;
   /** Defaults to `console`. */
   readonly logger?: ReplyContextLogger | undefined;
   /** Told each time a target's context is stored, with the one it replaced. */
@@ -78,7 +86,7 @@ export interface ReplyContextService {
 export function createReplyContextService(
   options: CreateReplyContextServiceOptions,
 ): ReplyContextService {
-  const { store, lookup, config } = options;
+  const { store, lookup, config, fediverse } = options;
   const logger = options.logger ?? console;
   const file = path.join(config.contentDir, ...REPLY_CONTEXTS_FILE.split('/'));
 
@@ -115,43 +123,60 @@ export function createReplyContextService(
     if (context !== undefined) options.onStored?.(target, previous);
   }
 
-  async function withPicture(
-    context: ReplyContext,
-    source: PictureSource | undefined,
-  ): Promise<ReplyContext> {
+  /** The context with its picture and its author's photo copied in, each when it can be. */
+  async function withImages(context: ReplyContext, images: Images): Promise<ReplyContext> {
+    const { picture: source, authorPhoto } = images;
     const picture =
-      source === undefined ? undefined : await copyCitedPicture(source, { lookup, config });
-    if (source !== undefined && picture === undefined) {
+      source === undefined || context.picture !== undefined
+        ? undefined
+        : await copyCitedPicture(source, { lookup, config });
+    if (source !== undefined && context.picture === undefined && picture === undefined) {
       logger.warn(`Could not copy ${source.url}, the picture of ${context.url}`);
     }
-    return picture === undefined ? context : { ...context, picture };
+    const { author } = context;
+    const photo =
+      authorPhoto === undefined || author === undefined || author.photo !== undefined
+        ? undefined
+        : await copyCitedImage(authorPhoto, { lookup, config });
+    if (authorPhoto !== undefined && author?.photo === undefined && photo === undefined) {
+      logger.warn(`Could not copy ${authorPhoto}, the author's photo on ${context.url}`);
+    }
+    return {
+      ...context,
+      ...(picture === undefined ? {} : { picture }),
+      ...(photo === undefined || author === undefined ? {} : { author: { ...author, photo } }),
+    };
   }
 
   async function sweep(): Promise<void> {
     const kept = new Set<string>();
     for (const context of Object.values(readAll())) {
       if (context.picture !== undefined) kept.add(context.picture.src);
+      if (context.author?.photo !== undefined) kept.add(context.author.photo.src);
     }
     await sweepCitedPictures(config, kept);
   }
 
   async function refresh(target: string): Promise<void> {
-    const fetched = await fetchReplyContext(target, { lookup });
+    const fetched = await fetchReplyContext(target, { lookup, fediverse });
     if (!fetched.ok) {
       logger.warn(`Could not read ${target} for a citation's context: ${fetched.reason}`);
       return;
     }
-    const context = await withPicture(fetched.context, fetched.picture);
+    const context = await withImages(fetched.context, fetched);
     if (hasNoPictureOrWords(context)) return;
     await write(target, context);
     await sweep();
   }
 
-  async function attachPicture(target: string, source: PictureSource): Promise<void> {
+  async function attachImages(target: string, images: Images): Promise<void> {
     const held = readAll()[target];
-    if (held === undefined || held.picture !== undefined) return;
-    const context = await withPicture(held, source);
-    if (context.picture !== undefined && readAll()[target] !== undefined) {
+    if (held === undefined) return;
+    const context = await withImages(held, images);
+    if (
+      (context.picture !== held.picture || context.author?.photo !== held.author?.photo) &&
+      readAll()[target] !== undefined
+    ) {
       await write(target, context);
     }
   }
@@ -210,7 +235,11 @@ export function createReplyContextService(
       const held = readAll()[target];
       if (held !== undefined) return held;
       const deadline = Date.now() + CITED_SLUG_TIMEOUT_MS;
-      const fetched = await fetchReplyContext(target, { lookup, timeoutMs: CITED_SLUG_TIMEOUT_MS });
+      const fetched = await fetchReplyContext(target, {
+        lookup,
+        fediverse,
+        timeoutMs: CITED_SLUG_TIMEOUT_MS,
+      });
       if (!fetched.ok) return undefined;
       const { picture } = fetched;
       if (hasNoPictureOrWords(fetched.context)) {
@@ -227,7 +256,9 @@ export function createReplyContextService(
       }
       await write(target, fetched.context);
       describedForSave.add(target);
-      if (picture !== undefined) enqueue(() => attachPicture(target, picture));
+      if (picture !== undefined || fetched.authorPhoto !== undefined) {
+        enqueue(() => attachImages(target, fetched));
+      }
       return fetched.context;
     },
 
@@ -239,6 +270,12 @@ export function createReplyContextService(
       return chain.then(ignore);
     },
   };
+}
+
+/** What a fetch found to copy into the site. */
+interface Images {
+  readonly picture?: PictureSource | undefined;
+  readonly authorPhoto?: string | undefined;
 }
 
 function hasNoPictureOrWords(context: ReplyContext): boolean {
@@ -280,6 +317,8 @@ function parseContexts(text: string): Record<string, ReplyContext> {
     const author = isRecord(value['author']) ? value['author'] : undefined;
     const authorName = stringOf(author?.['name']);
     const authorUrl = webUrlOf(author?.['url']);
+    const handle = stringOf(author?.['handle']);
+    const photo = parseCitedImage(author?.['photo']);
     const picture = parseCitedPicture(value['picture']);
     contexts[target] = {
       url: target,
@@ -287,7 +326,14 @@ function parseContexts(text: string): Record<string, ReplyContext> {
       ...optional('text', stringOf(value['text'])),
       ...(authorName === undefined
         ? {}
-        : { author: { name: authorName, ...optional('url', authorUrl) } }),
+        : {
+            author: {
+              name: authorName,
+              ...optional('url', authorUrl),
+              ...optional('handle', handle),
+              ...(photo === undefined ? {} : { photo }),
+            },
+          }),
       ...optional('published', stringOf(value['published'])),
       ...optional('site', stringOf(value['site'])),
       ...(picture === undefined ? {} : { picture }),

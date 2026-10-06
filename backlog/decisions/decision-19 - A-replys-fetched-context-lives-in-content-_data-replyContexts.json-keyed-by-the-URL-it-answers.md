@@ -103,3 +103,11 @@ An entry with nothing to show but its picture, no name, text, author or site, is
 An entry whose picture is a `photo` and which has no name and no author is an image. A citation of one says "an image from" the URL's host, as the link; a citation with nothing stored says "a page on" its host. The bare URL is never the link text, on the page, in a listing or in a feed.
 
 A post describes an image it cites with `cited-alt` in its front matter, which the editor's card for a reposted image writes. Its alt text is `cited-alt`, else the post's title, else empty. With `requireAltText` on, a published save whose repost of an image would be shown in full with neither is refused. A new post asks the image within the save's deadline, as naming it does, and an edit reads only the stored entry.
+
+## Amendment (2026-10-05, TASK-199)
+
+A cited page is described from every source it offers, in this order: its `h-entry`, the ActivityPub object it names with `<link rel="alternate" type="application/activity+json">` (asked only when there is no `h-entry`), the oEmbed answer, its `application/ld+json` scripts, and then its `og:`, `twitter:` and `article:` tags and `<title>`. Each source fills only the fields the sources before it left empty. An `h-entry` or fediverse object with text decides the name, so a note keeps none. A later source adds a URL, handle or photo to the author only when it names the same person. An `h-entry` with no properties of its own is not a source, so an empty `<article class="h-entry">` does not hide the page's JSON-LD.
+
+The ActivityPub object and its actor are fetched signed as the site's first account, as handle and profile lookups are, because servers in authorized-fetch mode refuse an unsigned fetch. The fetch stays within the one deadline and is held to public hosts.
+
+The author gains two optional fields. `handle` is the fediverse `user@host`. `photo` is the author's picture, `{src, width, height}`. It comes from the author h-card's `u-photo`, or from an h-card elsewhere on the page that names the same person, or from the actor's icon. It is copied into `content/uploads/cited/` with the same guards as the picture (TASK-252), and the same sweep keeps or deletes it. `preview: false` hides it with the picture.

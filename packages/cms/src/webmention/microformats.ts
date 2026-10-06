@@ -132,8 +132,10 @@ export interface CitedEntry {
   readonly name: string;
   /** Its `e-content` as text, or its `p-summary`, or empty. */
   readonly text: string;
-  /** Who wrote it, when the entry says, with their page when it gives one. */
-  readonly author: { readonly name: string; readonly url: string | null } | undefined;
+  /** Who wrote it, when the entry says, with their page and avatar when it gives them. */
+  readonly author:
+    | { readonly name: string; readonly url: string | null; readonly photo: string | null }
+    | undefined;
   /** When it says it was published, as an ISO 8601 instant, or `null`. */
   readonly published: string | null;
 }
@@ -142,20 +144,34 @@ export interface CitedEntry {
  * What the first `h-entry` on a parsed page says about itself, or `undefined`
  * when the page has none. Unlike {@link sourceEntry} nothing is filled in from
  * the page around it: a citation names who wrote a post only when the post
- * does.
+ * does. Only the author's avatar may come from elsewhere on the page, from an
+ * `h-card` that is the same person: the same page, or the same name when the
+ * entry's author has no page.
  */
 export function citedEntry(root: HtmlElement, pageUrl: string): CitedEntry | undefined {
-  const entry = itemsOfType(itemsIn(root, baseOf(root, pageUrl)), 'h-entry')[0];
+  const items = itemsIn(root, baseOf(root, pageUrl));
+  const entry = itemsOfType(items, 'h-entry')[0];
   if (entry === undefined) return undefined;
 
   const author = first(entry, 'author');
   const card = author?.item === undefined ? undefined : cardOf(author.item);
   const authorName = card?.name ?? author?.text ?? '';
+  const authorUrl = card?.url ?? null;
+  const photo =
+    card?.photo ??
+    itemsOfType(items, 'h-card')
+      .map(cardOf)
+      .find(
+        (other) =>
+          other.photo !== null &&
+          (authorUrl === null ? other.name === authorName : other.url === authorUrl),
+      )?.photo ??
+    null;
 
   return {
     name: first(entry, 'name')?.text ?? '',
     text: first(entry, 'content')?.text ?? first(entry, 'summary')?.text ?? '',
-    author: authorName === '' ? undefined : { name: authorName, url: card?.url ?? null },
+    author: authorName === '' ? undefined : { name: authorName, url: authorUrl, photo },
     published: instantOf(first(entry, 'published')),
   };
 }

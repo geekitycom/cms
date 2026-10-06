@@ -50,6 +50,7 @@ import {
   rebuildFederationIndexes,
   signedProfileLoader,
 } from './federation/index.ts';
+import { citedPostReader } from './federation/cited-post.ts';
 import { handleLearner } from './federation/handles.ts';
 import type {
   ActorProfileService,
@@ -1710,6 +1711,15 @@ export function createCms(config: GeekityConfig = {}): Cms {
     store,
     config: resolved,
     lookup: resolved.hostLookup,
+    fediverse: citedPostReader(() =>
+      federation.createContext(new URL(resolved.baseUrl), {
+        admin,
+        store,
+        config: resolved,
+        actorProfiles,
+        cited: (url) => replyContexts.read(url),
+      }),
+    ),
     onStored: (target, previous) => {
       delivery.citedPageStored(target, previous);
     },

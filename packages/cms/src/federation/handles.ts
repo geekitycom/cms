@@ -1,13 +1,12 @@
 import type { Context } from '@fedify/fedify';
 import { isActor } from '@fedify/vocab';
 
-import { primaryUser } from '../admin/accounts.ts';
 import { isWebUrl } from '../content/enclosure.ts';
 import { handleDirectory, rememberHandles } from '../content/handles.ts';
 import type { ResolvedHandle } from '../content/handles.ts';
 import { handlesIn } from '../content/markdown.ts';
-import { senderKeyPairs } from './actor.ts';
 import type { FederationContextData } from './federation.ts';
+import { siteLoaders } from './site-loaders.ts';
 
 /** How long one save waits for the handles it names to resolve. */
 export const HANDLE_TIMEOUT_MS = 5_000;
@@ -31,18 +30,13 @@ export function handleLearner(
 ): HandleLearner {
   return async (body) => {
     const context = contextOf();
-    const { contentDir, dataDir } = context.data.config;
+    const { contentDir } = context.data.config;
     const known = handleDirectory(contentDir);
     const unknown = handlesIn(body).filter((handle) => known(handle) === undefined);
     if (unknown.length === 0) return;
 
-    const signer = primaryUser(dataDir);
-    const [key] = signer === undefined ? [] : await senderKeyPairs(context, signer);
-    const options = {
-      documentLoader: key === undefined ? context.documentLoader : context.getDocumentLoader(key),
-      contextLoader: context.contextLoader,
-      signal: AbortSignal.timeout(HANDLE_TIMEOUT_MS),
-    };
+    const signal = AbortSignal.timeout(HANDLE_TIMEOUT_MS);
+    const options = { ...(await siteLoaders(context, signal)), signal };
 
     const resolved = await Promise.all(
       unknown.map(async (handle): Promise<[string, ResolvedHandle] | undefined> => {

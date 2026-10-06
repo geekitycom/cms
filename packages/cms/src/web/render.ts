@@ -19,6 +19,7 @@ import { archiveMonths, archiveOpen } from './archive.ts';
 import { authorContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import {
+  citedPhotoContext,
   citedPictureContext,
   createSiteDataSource,
   documentContext,
@@ -523,11 +524,22 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     const contextOf = (target: string, property: string): Record<string, unknown> | undefined => {
       const cited = options.replyContext?.(target);
       if (cited === undefined) return undefined;
-      const { picture, ...rest } = cited;
+      const { picture, author, ...rest } = cited;
       const image = citesAnImage(cited);
       const alt = citedPictureAlt(property, cited, document);
+      const { photo, ...named } = author ?? { name: '' };
       return {
         ...replyContextFor(rest),
+        ...(author === undefined
+          ? {}
+          : {
+              author: {
+                ...named,
+                ...(photo === undefined || !shown
+                  ? {}
+                  : { photo: citedPhotoContext(photo, config) }),
+              },
+            }),
         ...(image ? { image } : {}),
         ...(picture === undefined || !shown
           ? {}

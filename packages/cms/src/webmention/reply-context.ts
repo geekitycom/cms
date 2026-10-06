@@ -1,10 +1,11 @@
 import { discoverPostType } from '../content/post-type.ts';
-import type { CitedPicture, PictureSource } from './cited-picture.ts';
+import type { CitedImage, CitedPicture, PictureSource } from './cited-picture.ts';
 import { fetchPublic, webUrl } from './fetch-public.ts';
 import { elementsIn, hasRel, parseHtml, textOf } from './html.ts';
 import type { HtmlElement } from './html.ts';
 import { citedEntry } from './microformats.ts';
 import type { CitedEntry } from './microformats.ts';
+import { publicHost } from './public-address.ts';
 import type { HostLookup } from './public-address.ts';
 
 /**
@@ -42,8 +43,8 @@ export interface ReplyContext {
   readonly name?: string;
   /** A short excerpt of what it says, or the page's description. */
   readonly text?: string;
-  /** Who wrote it, with their page when that is an http(s) URL. */
-  readonly author?: { readonly name: string; readonly url?: string };
+  /** Who wrote it. */
+  readonly author?: CitedAuthor;
   /** When it says it was published, as an ISO 8601 instant. */
   readonly published?: string;
   /** The site it is on, its `og:site_name`, kept only when it names no author. */
@@ -52,9 +53,52 @@ export interface ReplyContext {
   readonly picture?: CitedPicture;
 }
 
+export interface CitedAuthor {
+  readonly name: string;
+  /** Their page, when that is an http(s) URL. */
+  readonly url?: string;
+  /** Their fediverse handle, `user@host`, when the post is a fediverse object. */
+  readonly handle?: string;
+  /** Their avatar, copied into the site's uploads like a picture (TASK-199). */
+  readonly photo?: CitedImage;
+}
+
 export type ReplyContextFetch =
-  | { readonly ok: true; readonly context: ReplyContext; readonly picture?: PictureSource }
+  | {
+      readonly ok: true;
+      readonly context: ReplyContext;
+      readonly picture?: PictureSource;
+      /** Where the author's avatar is, for the caller to copy. */
+      readonly authorPhoto?: string;
+    }
   | { readonly ok: false; readonly reason: string };
+
+/**
+ * A fediverse post as a citation shows it, read from the ActivityPub object a
+ * cited page links. `html` is its content, markup and all.
+ */
+export interface FediversePost {
+  readonly name?: string;
+  readonly html?: string;
+  readonly author?: {
+    readonly name: string;
+    readonly url?: string;
+    readonly handle?: string;
+    readonly photo?: string;
+  };
+  readonly published?: string;
+  /** Its first image attachment. */
+  readonly image?: string;
+}
+
+/**
+ * Read the ActivityPub object at a URL, or `undefined` when it is none. The
+ * signal aborts at the cited page's one deadline.
+ */
+export type FediverseLookup = (
+  url: string,
+  signal: AbortSignal,
+) => Promise<FediversePost | undefined>;
 
 /** What {@link fetchReplyContext} needs. */
 export interface FetchReplyContextOptions {
@@ -64,24 +108,34 @@ export interface FetchReplyContextOptions {
   readonly timeoutMs?: number | undefined;
   /** Defaults to {@link REPLY_CONTEXT_MAX_BYTES}. */
   readonly maxBytes?: number | undefined;
+  /** How a fediverse object is read; without one, none is. */
+  readonly fediverse?: FediverseLookup | undefined;
+}
+
+interface Limits {
+  readonly lookup: HostLookup;
+  readonly deadline: number;
+  readonly maxBytes: number;
 }
 
 /**
  * Fetch a page a post cites and read what it says about itself. A known
  * provider's oEmbed endpoint is asked first, and the page is read only when
- * that names nothing. Any other page is read, and asked about through the
- * oEmbed endpoint it links when it has no `h-entry`.
+ * that names nothing. Any other page is read, and when it has no `h-entry` it
+ * is also asked about through the ActivityPub object and the oEmbed endpoint
+ * it links. Each source fills only what the ones before it left empty:
+ * `h-entry`, ActivityPub, oEmbed, JSON-LD, then the page's own metadata.
  *
  * Only http and https, only public hosts (every redirect hop is checked, and a
  * name is refused when any address it resolves to is private), one timeout
- * over the whole exchange, every oEmbed request included, no more of a page
+ * over the whole exchange, every other request included, no more of a page
  * than the byte limit, and no oEmbed answer over it. Nothing throws.
  */
 export async function fetchReplyContext(
   target: string,
   options: FetchReplyContextOptions,
 ): Promise<ReplyContextFetch> {
-  const limits = {
+  const limits: Limits = {
     lookup: options.lookup,
     deadline: Date.now() + (options.timeoutMs ?? REPLY_CONTEXT_TIMEOUT_MS),
     maxBytes: options.maxBytes ?? REPLY_CONTEXT_MAX_BYTES,
@@ -90,8 +144,8 @@ export async function fetchReplyContext(
   const known = knownEndpoint(target);
   if (known !== undefined) {
     const oembed = withoutSuffix(await fetchOembed(known.endpoint, limits), known.titleSuffix);
-    const context = describe(parseHtml(''), undefined, target, oembed);
-    if (context !== undefined) return described(context, oembed?.picture);
+    const found = described(target, [oembedSource(oembed)]);
+    if (found !== undefined) return found;
   }
 
   const timeoutMs = limits.deadline - Date.now();
@@ -112,46 +166,331 @@ export async function fetchReplyContext(
         });
 
   if (fetched.ok && fetched.read === 'headers') {
-    return described({ url: target }, { url: fetched.url, kind: 'photo' });
+    return { ok: true, context: { url: target }, picture: { url: fetched.url, kind: 'photo' } };
   }
+  if (!fetched.ok) return fetched;
 
-  const root = parseHtml(fetched.ok ? new TextDecoder().decode(fetched.body) : '');
-  const entry = fetched.ok && !fetched.truncated ? citedEntry(root, fetched.url) : undefined;
-  const endpoint =
-    fetched.ok && entry === undefined && known === undefined
-      ? oembedEndpoint(root, fetched.url)
+  const root = parseHtml(new TextDecoder().decode(fetched.body));
+  const entry = fetched.truncated ? undefined : citedEntry(root, fetched.url);
+  const post =
+    entry === undefined && options.fediverse !== undefined
+      ? await fetchFediversePost(activityLink(root, fetched.url), options.fediverse, limits)
       : undefined;
+  const endpoint =
+    entry === undefined && known === undefined ? oembedEndpoint(root, fetched.url) : undefined;
   const oembed = endpoint === undefined ? undefined : await fetchOembed(endpoint, limits);
 
-  const context = describe(root, entry, target, oembed);
-  if (context !== undefined) {
-    return described(
-      context,
-      oembed?.picture ?? (fetched.ok ? pagePicture(root, fetched.url) : undefined),
-    );
-  }
-  return fetched.ok ? refuse('nothing to show') : fetched;
+  return (
+    described(target, [
+      entry === undefined ? undefined : entrySource(entry),
+      post === undefined ? undefined : fediverseSource(post),
+      oembedSource(oembed),
+      jsonLdSource(root, fetched.url),
+      pageSource(root, fetched.url),
+    ]) ?? refuse('nothing to show')
+  );
 }
 
-function described(context: ReplyContext, picture: PictureSource | undefined): ReplyContextFetch {
-  return { ok: true, context, ...(picture === undefined ? {} : { picture }) };
+function described(
+  target: string,
+  sources: readonly (Source | undefined)[],
+): Extract<ReplyContextFetch, { ok: true }> | undefined {
+  const { picture, photo, ...found } = merge(sources);
+  const context = contextOf(target, found);
+  if (context === undefined) return undefined;
+  const authorPhoto = context.author === undefined ? undefined : webUrl(photo ?? '');
+  return {
+    ok: true,
+    context,
+    ...(picture === undefined ? {} : { picture }),
+    ...(authorPhoto === undefined ? {} : { authorPhoto: authorPhoto.href }),
+  };
+}
+
+/**
+ * What one source says about a cited page, each field only when it says so.
+ * `name` is `null` when the source is a post with words and no title of its
+ * own, a note, which no later source may name.
+ */
+interface Source {
+  readonly name?: string | null;
+  readonly text?: string;
+  readonly author?: { readonly name: string; readonly url?: string; readonly handle?: string };
+  /** The author's avatar, where it is on the web. */
+  readonly photo?: string;
+  readonly published?: string;
+  readonly site?: string;
+  readonly picture?: PictureSource;
+}
+
+/**
+ * The sources folded in order, each filling only what the ones before it left
+ * empty. An author is one person: a later source adds to it, its page, handle
+ * or avatar, only when it names the same person.
+ */
+function merge(sources: readonly (Source | undefined)[]): Source {
+  let merged: Source = {};
+  for (const source of sources) {
+    if (source === undefined) continue;
+    const { author, photo, ...fields } = source;
+    const held = merged.author;
+    const samePerson =
+      author !== undefined &&
+      (held === undefined || held.name.toLowerCase() === author.name.toLowerCase());
+    merged = {
+      ...fields,
+      ...merged,
+      ...(samePerson ? { author: { ...author, ...held } } : {}),
+      ...(samePerson && merged.photo === undefined && photo !== undefined ? { photo } : {}),
+    };
+  }
+  return merged;
+}
+
+function contextOf(
+  target: string,
+  found: Omit<Source, 'picture' | 'photo'>,
+): ReplyContext | undefined {
+  const name = typeof found.name === 'string' ? withoutDirectionControls(found.name) : '';
+  const text = excerpt(withoutDirectionControls(found.text));
+  const authorName = withoutDirectionControls(found.author?.name);
+  const authorUrl = webUrl(found.author?.url ?? '');
+  const handle = withoutDirectionControls(found.author?.handle);
+  const published = instant(found.published);
+  const author: CitedAuthor | undefined =
+    authorName === ''
+      ? undefined
+      : {
+          name: authorName,
+          ...(authorUrl === undefined ? {} : { url: authorUrl.href }),
+          ...(handle === '' ? {} : { handle }),
+        };
+  const site = author === undefined ? withoutDirectionControls(found.site) : '';
+  if (
+    name === '' &&
+    text === '' &&
+    author === undefined &&
+    published === undefined &&
+    site === ''
+  ) {
+    return undefined;
+  }
+
+  return {
+    url: target,
+    ...(name === '' ? {} : { name }),
+    ...(text === '' ? {} : { text }),
+    ...(author === undefined ? {} : { author }),
+    ...(published === undefined ? {} : { published }),
+    ...(site === '' ? {} : { site }),
+  };
+}
+
+function instant(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim() === '') return undefined;
+  const at = new Date(value.trim());
+  return Number.isNaN(at.getTime()) ? undefined : at.toISOString();
+}
+
+function entrySource(entry: CitedEntry): Source {
+  const name = withoutDirectionControls(entry.name);
+  const text = withoutDirectionControls(entry.text);
+  const named = discoverPostType({ name, content: text }) === 'article';
+  const author = entry.author;
+  return {
+    ...(named ? { name } : text === '' ? {} : { name: null }),
+    ...(text === '' ? {} : { text }),
+    ...(author === undefined
+      ? {}
+      : {
+          author: { name: author.name, ...(author.url === null ? {} : { url: author.url }) },
+          ...(author.photo === null ? {} : { photo: author.photo }),
+        }),
+    ...(entry.published === null ? {} : { published: entry.published }),
+  };
+}
+
+function fediverseSource(post: FediversePost): Source {
+  // A paragraph or a line break is a space between words, not nothing.
+  const text = textOf(parseHtml((post.html ?? '').replace(/<\/p>|<br\s*\/?>/gi, '$& ')));
+  const { photo, ...author } = post.author ?? { name: '' };
+  const image = webUrl(post.image ?? '');
+  return {
+    ...(post.name !== undefined && post.name !== ''
+      ? { name: post.name }
+      : text === ''
+        ? {}
+        : { name: null }),
+    ...(text === '' ? {} : { text }),
+    ...(author.name === '' ? {} : { author, ...(photo === undefined ? {} : { photo }) }),
+    ...(post.published === undefined ? {} : { published: post.published }),
+    ...(image === undefined ? {} : { picture: { url: image.href, kind: 'thumbnail' } }),
+  };
+}
+
+function oembedSource(oembed: Oembed | undefined): Source | undefined {
+  if (oembed === undefined) return undefined;
+  return {
+    ...(oembed.title === undefined ? {} : { name: oembed.title }),
+    ...(oembed.author === undefined ? {} : { author: oembed.author }),
+    ...(oembed.picture === undefined ? {} : { picture: oembed.picture }),
+  };
+}
+
+/**
+ * Article-like schema.org types a page's JSON-LD describes itself as: any
+ * `…Article`, and the posting types blogs and social sites use.
+ */
+const POSTING_TYPE = /(Article|^BlogPosting|^SocialMediaPosting|^DiscussionForumPosting)$/;
+
+function jsonLdSource(root: HtmlElement, base: string): Source | undefined {
+  const node = jsonLdNodes(root).find((candidate) =>
+    [candidate['@type']].flat().some((type) => typeof type === 'string' && POSTING_TYPE.test(type)),
+  );
+  if (node === undefined) return undefined;
+
+  const first: unknown = [node['author']].flat()[0];
+  const author = isRecord(first) ? first : {};
+  const authorName = plainText(typeof first === 'string' ? first : author['name']);
+  const authorUrl = resolved(plainText(author['url']), base);
+  const photo = resolved(imageUrl(author['image']), base);
+  const picture = resolved(imageUrl(node['image']), base);
+  const name = plainText(node['headline']);
+  const published = plainText(node['datePublished']);
+  return {
+    ...(name === undefined ? {} : { name }),
+    ...(authorName === undefined
+      ? {}
+      : {
+          author: { name: authorName, ...(authorUrl === undefined ? {} : { url: authorUrl }) },
+          ...(photo === undefined ? {} : { photo }),
+        }),
+    ...(published === undefined ? {} : { published }),
+    ...(picture === undefined ? {} : { picture: { url: picture, kind: 'thumbnail' } }),
+  };
+}
+
+/** Every object in the page's JSON-LD scripts, `@graph` members included. */
+function jsonLdNodes(root: HtmlElement): Record<string, unknown>[] {
+  const nodes: Record<string, unknown>[] = [];
+  for (const element of elementsIn(root)) {
+    if (element.data === undefined) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(element.data);
+    } catch {
+      continue;
+    }
+    for (const value of [parsed].flat()) {
+      if (!isRecord(value)) continue;
+      nodes.push(value, ...[value['@graph']].flat().filter(isRecord));
+    }
+  }
+  return nodes;
+}
+
+/** A schema.org image: a URL, an `ImageObject`, or a list of either. */
+function imageUrl(value: unknown): string | undefined {
+  const image = [value].flat()[0];
+  if (typeof image === 'string') return plainText(image);
+  if (!isRecord(image)) return undefined;
+  return plainText(image['url']) ?? plainText(image['contentUrl']);
+}
+
+function resolved(href: string | undefined, base: string): string | undefined {
+  if (href === undefined) return undefined;
+  try {
+    return webUrl(new URL(href, base).href)?.href;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * What a page's own metadata says: its Open Graph, Twitter and article tags,
+ * its `<title>` and description. A title that is only a site suffix is none.
+ * `article:author` is a name, or the author's page when it is a URL, which
+ * `twitter:creator` then names.
+ */
+function pageSource(root: HtmlElement, base: string): Source {
+  const name =
+    pageTitle(metaOf(root, 'og:title')) ||
+    pageTitle(metaOf(root, 'twitter:title')) ||
+    pageTitle(titleOf(root));
+  const text =
+    metaOf(root, 'description') ||
+    metaOf(root, 'og:description') ||
+    metaOf(root, 'twitter:description');
+  const articleAuthor = metaOf(root, 'article:author');
+  const authorUrl = webUrl(articleAuthor);
+  const authorName =
+    (authorUrl === undefined ? articleAuthor : '') || metaOf(root, 'twitter:creator');
+  const published = metaOf(root, 'article:published_time');
+  const site = metaOf(root, 'og:site_name');
+  const picture = pagePicture(root, base);
+  return {
+    ...(name === '' ? {} : { name }),
+    ...(text === '' ? {} : { text }),
+    ...(authorName === ''
+      ? {}
+      : {
+          author: { name: authorName, ...(authorUrl === undefined ? {} : { url: authorUrl.href }) },
+        }),
+    ...(published === '' ? {} : { published }),
+    ...(site === '' ? {} : { site }),
+    ...(picture === undefined ? {} : { picture }),
+  };
 }
 
 function pagePicture(root: HtmlElement, base: string): PictureSource | undefined {
   const image =
     metaOf(root, 'og:image') || metaOf(root, 'twitter:image') || metaOf(root, 'twitter:image:src');
-  if (image === '') return undefined;
-  let url: URL | undefined;
-  try {
-    url = webUrl(new URL(image, base).href);
-  } catch {
-    return undefined;
-  }
+  const url = resolved(image === '' ? undefined : image, base);
   if (url === undefined) return undefined;
   const video =
     metaOf(root, 'og:type').toLowerCase().startsWith('video') ||
     metaOf(root, 'twitter:card').toLowerCase() === 'player';
-  return { url: url.href, kind: 'thumbnail', ...(video ? { video: true } : {}) };
+  return { url, kind: 'thumbnail', ...(video ? { video: true } : {}) };
+}
+
+/** The ActivityPub object a page names as its alternate, or `undefined`. */
+function activityLink(root: HtmlElement, base: string): string | undefined {
+  for (const element of elementsIn(root)) {
+    if (element.name !== 'link' || !hasRel(element, 'alternate')) continue;
+    const type = (element.attributes['type'] ?? '').replace(/\s+/g, '').toLowerCase();
+    if (
+      type !== 'application/activity+json' &&
+      type !== 'application/ld+json;profile="https://www.w3.org/ns/activitystreams"'
+    ) {
+      continue;
+    }
+    const url = resolved(element.attributes['href'], base);
+    if (url !== undefined) return url;
+  }
+  return undefined;
+}
+
+async function fetchFediversePost(
+  url: string | undefined,
+  lookupPost: FediverseLookup,
+  limits: Limits,
+): Promise<FediversePost | undefined> {
+  if (url === undefined) return undefined;
+  if (!(await publicHost(new URL(url).hostname, limits.lookup))) return undefined;
+  const timeoutMs = limits.deadline - Date.now();
+  if (timeoutMs <= 0) return undefined;
+
+  const signal = AbortSignal.timeout(timeoutMs);
+  const aborted = new Promise<undefined>((resolve) => {
+    signal.addEventListener('abort', () => {
+      resolve(undefined);
+    });
+  });
+  return await Promise.race([lookupPost(url, signal).catch(() => undefined), aborted]);
 }
 
 /**
@@ -221,15 +560,10 @@ export interface Oembed {
 
 /**
  * What a target page says about itself, or `undefined` when it says nothing a
- * preview could show.
- *
- * The first `h-entry` when there is one: its name when it has one of its own
- * (the test Post Type Discovery uses), an excerpt of its text, its author and
- * its date. A page with no `h-entry` is described by its oEmbed title and
- * author when `oembed` holds them, then its `og:title`, `<title>` and
- * description metadata, where a title that is only a site suffix is none.
- * Everything comes out as plain text; the theme escapes it like any other
- * string.
+ * preview could show: the sources {@link fetchReplyContext} reads from a page
+ * alone, its `h-entry`, the oEmbed answer when `oembed` holds one, its JSON-LD
+ * and its metadata. Everything comes out as plain text; the theme escapes it
+ * like any other string.
  */
 export function readReplyContext(
   html: string,
@@ -238,62 +572,13 @@ export function readReplyContext(
   oembed?: Oembed,
 ): ReplyContext | undefined {
   const root = parseHtml(html);
-  return describe(root, citedEntry(root, base), target, oembed);
-}
-
-function describe(
-  root: HtmlElement,
-  entry: CitedEntry | undefined,
-  target: string,
-  oembed: Oembed | undefined,
-): ReplyContext | undefined {
-  if (entry !== undefined) {
-    const entryName = withoutDirectionControls(entry.name);
-    const entryText = withoutDirectionControls(entry.text);
-    const named = discoverPostType({ name: entryName, content: entryText }) === 'article';
-    const text = excerpt(entryText);
-    const authorName = withoutDirectionControls(entry.author?.name);
-    const authorUrl = entry.author?.url === null ? undefined : webUrl(entry.author?.url ?? '');
-    return {
-      url: target,
-      ...(named ? { name: entryName } : {}),
-      ...(text === '' ? {} : { text }),
-      ...(authorName === ''
-        ? {}
-        : {
-            author: {
-              name: authorName,
-              ...(authorUrl === undefined ? {} : { url: authorUrl.href }),
-            },
-          }),
-      ...(entry.published === null ? {} : { published: entry.published }),
-      ...(authorName === '' ? siteOf(root) : {}),
-    };
-  }
-
-  const name =
-    withoutDirectionControls(oembed?.title) ||
-    pageTitle(metaOf(root, 'og:title')) ||
-    pageTitle(titleOf(root));
-  const text = excerpt(
-    withoutDirectionControls(metaOf(root, 'description')) ||
-      withoutDirectionControls(metaOf(root, 'og:description')),
-  );
-  const authorName = withoutDirectionControls(oembed?.author?.name);
-  const author = authorName === '' ? undefined : { ...oembed?.author, name: authorName };
-  if (name === '' && text === '' && author === undefined) return undefined;
-
-  return {
-    url: target,
-    ...(name === '' ? {} : { name }),
-    ...(text === '' ? {} : { text }),
-    ...(author === undefined ? siteOf(root) : { author }),
-  };
-}
-
-function siteOf(root: HtmlElement): { site?: string } {
-  const site = withoutDirectionControls(metaOf(root, 'og:site_name'));
-  return site === '' ? {} : { site };
+  const entry = citedEntry(root, base);
+  return described(target, [
+    entry === undefined ? undefined : entrySource(entry),
+    entry === undefined ? oembedSource(oembed) : undefined,
+    jsonLdSource(root, base),
+    pageSource(root, base),
+  ])?.context;
 }
 
 function withoutDirectionControls(text: string | undefined): string {

@@ -672,6 +672,14 @@
     clip-path: polygon(0 0, 100% 50%, 0 100%);
   }
 
+  .cite-avatar {
+    @apply me-1 inline-block size-5 rounded-full object-cover align-[-0.3em];
+  }
+
+  .cite-handle {
+    @apply text-muted;
+  }
+
   .cite-photo {
     @apply mt-2 block;
   }

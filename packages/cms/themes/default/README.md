@@ -453,6 +453,21 @@ bookmark of a Scripting News post reads "Bookmarked RSS tip #2 · Scripting
 News". A like's, a repost's or a bookmark's citation never prints the page's
 description, which on many sites describes the site rather than the post.
 
+**A citation shows who wrote the cited page** (TASK-199) as fully as the page
+said. The author's photo, an `img.u-photo.cite-avatar` with empty alt text
+since their name is beside it, comes before the name inside the `h-card`; a
+fediverse author's handle follows the name as a `span.p-nickname.cite-handle`
+reading `@user@host`. The photo is the `u-photo` of the `h-entry` author's
+`h-card` (or of the page's `h-card` for the same person), the avatar of the
+account an ActivityPub object is attributed to, or the author image in the
+page's JSON-LD, copied into the site's uploads as a picture is, and left out
+when the post has removed its preview. A Mastodon status is read from the
+ActivityPub object its page links, so its author's display name, handle,
+avatar, words, first image and date come from the status itself rather than
+from the page's `og:title`. A page with no `h-entry` and no object is read
+from its JSON-LD (`headline`, `author`, `datePublished`, `image`) and then its
+Open Graph, Twitter and `article:` tags.
+
 **A citation shows the cited page's picture** (TASK-252) when the page named
 one and the post has not removed its preview. The picture is the page's
 oEmbed photo, else its oEmbed thumbnail, else its `og:image`, else its

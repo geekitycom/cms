@@ -9,7 +9,7 @@ import { photoAlt, photosOf } from '../content/photo.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { citationsOf } from '../content/citation.ts';
 import { shownInFull } from '../webmention/cited-picture.ts';
-import type { CitedPicture } from '../webmention/cited-picture.ts';
+import type { CitedImage, CitedPicture } from '../webmention/cited-picture.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
 import { READ_STATUS_LABELS, readLine, readOf, uidLabel } from '../content/read.ts';
 import type { ReadOf, ReadStatus } from '../content/read.ts';
@@ -610,6 +610,18 @@ function photoContexts(
         : siteImageMarkup(images, tag, { lead: index === 0 && loading?.lead === true });
     return { url: photo.url, alt, html };
   });
+}
+
+export interface CitedPhotoContext extends CitedImage {
+  readonly imgHtml: string;
+}
+
+/** A cited author's photo, beside their name: decorative, since the name says who it is. */
+export function citedPhotoContext(photo: CitedImage, images: ImageConfig): CitedPhotoContext {
+  const tag =
+    `<img class="u-photo cite-avatar" src="${escapeAttribute(photo.src)}" alt=""` +
+    ` width="${String(photo.width)}" height="${String(photo.height)}" loading="lazy" decoding="async">`;
+  return { ...photo, imgHtml: siteImageMarkup(images, tag) };
 }
 
 export interface CitedPictureContext extends CitedPicture {

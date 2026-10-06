@@ -26,6 +26,8 @@ export interface HtmlElement {
   readonly attributes: Readonly<Record<string, string>>;
   /** What is inside it, in document order. */
   readonly children: HtmlNode[];
+  /** What a JSON-LD script holds, as written; it is data, not text of the page. */
+  readonly data?: string;
 }
 
 /** A run of text between tags, with its character references resolved. */
@@ -66,7 +68,8 @@ const VOID_ELEMENTS: ReadonlySet<string> = new Set([
  * A `<` inside one of them is a character in a program or a stylesheet, so
  * everything up to the closing tag is skipped rather than parsed. Their text
  * is dropped as well: an author name taken out of a script is not an author
- * name.
+ * name. A JSON-LD script is kept as an element with its contents as
+ * {@link HtmlElement.data}, out of the text, since it describes the page.
  */
 const RAW_TEXT: ReadonlySet<string> = new Set(['script', 'style']);
 
@@ -157,7 +160,15 @@ export function parseHtml(source: string): HtmlElement {
     }
 
     if (RAW_TEXT.has(tag.name)) {
+      const start = at;
       at = afterElement(source, tag.name, at);
+      if (
+        tag.name === 'script' &&
+        tag.attributes['type']?.trim().toLowerCase() === 'application/ld+json'
+      ) {
+        const data = source.slice(start, at).replace(/<\/script\s*>$/i, '');
+        current().children.push({ name: tag.name, attributes: tag.attributes, children: [], data });
+      }
       continue;
     }
 
