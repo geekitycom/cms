@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:09'
-updated_date: '2026-10-06 13:40'
+updated_date: '2026-10-06 13:42'
 labels:
   - plugins
   - llm
@@ -27,7 +27,7 @@ ordinal: 240800
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-M31 (decision-33). Core gains services between plugins: host.provide(name, service) and host.use(name), typed by a declaration map the provider package augments, and allowed only for names in the consumer requires list. @geekity/plugin-llm provides llm.complete({ messages, schema?, model?, maxTokens?, signal? }) over the OpenAI chat-completions shape, so OpenRouter, OpenAI and Ollama work by base URL. With a schema it asks for json_schema output (and provider.require_parameters on OpenRouter) and validates the reply itself; a schema validator, if needed, is a dependency of the llm package, never of core. It returns a Completion: ok with text or value, usage and the model that answered, or a typed error. Consumers never parse model output. The plugin screen shows the usage and outcome of the last call. A consumer package peer-depends on @geekity/plugin-llm for the service types and declares llm in requires.
+M31 (decision-33). Core gains services between plugins: host.provide(service), which names the service for the providing plugin, and host.use(pluginName), typed by a declaration map the provider package augments, and allowed only for names in the consumer requires list. @geekity/plugin-llm provides llm.complete({ messages, schema?, model?, maxTokens?, signal? }) over the OpenAI chat-completions shape, so OpenRouter, OpenAI and Ollama work by base URL. With a schema it asks for json_schema output (and provider.require_parameters on OpenRouter) and validates the reply itself; a schema validator, if needed, is a dependency of the llm package, never of core. It returns a Completion: ok with text or value, usage and the model that answered, or a typed error. Consumers never parse model output. The plugin screen shows the usage and outcome of the last call. A consumer package peer-depends on @geekity/plugin-llm for the service types and declares llm in requires.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -41,4 +41,5 @@ M31 (decision-33). Core gains services between plugins: host.provide(name, servi
 - [ ] #7 A test plugin that requires llm calls it end to end against the fake server, proving the service path a third party would use
 - [ ] #8 Core gains no dependency for the llm service; the llm package depends on nothing it does not use
 - [ ] #9 host.provide registers the one instance every consumer receives; host.use throws when called during register, so registration order never matters and a consumer only reaches a service once every plugin has registered
+- [ ] #10 A plugin provides at most one service, named for itself; a second host.provide from the same plugin fails at boot naming the plugin
 <!-- AC:END -->
