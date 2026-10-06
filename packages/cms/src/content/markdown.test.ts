@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { renderMarkdown } from './markdown.ts';
+import { handlesIn, renderMarkdown } from './markdown.ts';
 
 describe('renderMarkdown', () => {
   it('renders paragraphs and inline markup', () => {
@@ -78,5 +78,83 @@ describe('renderMarkdown', () => {
 
   it('renders an empty body as an empty string', () => {
     assert.equal(renderMarkdown(''), '');
+  });
+});
+
+describe('autolinks', () => {
+  it('links a bare http or https URL', () => {
+    const html = renderMarkdown('See https://example.com/a-post and http://example.org.\n');
+
+    assert.match(
+      html,
+      /<a href="https:\/\/example\.com\/a-post">https:\/\/example\.com\/a-post<\/a>/,
+    );
+    assert.match(html, /<a href="http:\/\/example\.org">http:\/\/example\.org<\/a>\./);
+  });
+
+  it('leaves a name without a scheme, a protocol-relative URL and an address as text', () => {
+    const html = renderMarkdown(
+      'Edit file.md on example.com, see //example.net, or write to bob@example.com.\n',
+    );
+
+    assert.doesNotMatch(html, /<a /);
+  });
+
+  it('leaves a URL in a code span alone', () => {
+    assert.doesNotMatch(renderMarkdown('Run `curl https://example.com`.\n'), /<a /);
+  });
+});
+
+describe('fediverse handles', () => {
+  const directory = (handle: string) =>
+    handle === 'alice@social.example'
+      ? {
+          profile: 'https://social.example/@alice',
+          actor: 'https://social.example/users/alice',
+          inbox: 'https://social.example/users/alice/inbox',
+        }
+      : undefined;
+
+  it('links a handle the directory knows to its profile as an h-card', () => {
+    const html = renderMarkdown('Thanks @alice@social.example!\n', directory);
+
+    assert.equal(
+      html,
+      '<p>Thanks <a class="u-category h-card" href="https://social.example/@alice">@alice@social.example</a>!</p>\n',
+    );
+  });
+
+  it('matches a handle whatever its case, and keeps it as written', () => {
+    const html = renderMarkdown('Hi @Alice@Social.Example.\n', directory);
+
+    assert.match(
+      html,
+      /<a class="u-category h-card" href="https:\/\/social\.example\/@alice">@Alice@Social\.Example<\/a>\./,
+    );
+  });
+
+  it('leaves a handle the directory does not know as text', () => {
+    assert.equal(
+      renderMarkdown('Hi @bob@nowhere.example.\n', directory),
+      '<p>Hi @bob@nowhere.example.</p>\n',
+    );
+  });
+
+  it('leaves a handle in a code span, inside a link or inside a word alone', () => {
+    const html = renderMarkdown(
+      '`@alice@social.example` [@alice@social.example](https://elsewhere.example/) me@alice@social.example\n',
+      directory,
+    );
+
+    assert.doesNotMatch(html, /h-card/);
+  });
+
+  it('lists the handles a body names, outside code, once each', () => {
+    assert.deepEqual(
+      handlesIn(
+        'Hi @alice@social.example and @Bob@Nowhere.example, again @alice@social.example.\n\n`@carol@code.example`\n',
+      ),
+      ['alice@social.example', 'bob@nowhere.example'],
+    );
   });
 });

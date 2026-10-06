@@ -1,6 +1,8 @@
 import path from 'node:path';
 
 import type { Document } from '../content/document.ts';
+import type { ContentStore } from '../content/store.ts';
+import { publicDocumentAt } from '../web/documents.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../web/locale.ts';
 
@@ -374,6 +376,25 @@ export function syndicationCopies(contentDir: string): SyndicationCopies {
       });
     },
   };
+}
+
+/**
+ * The public post `url` is a copy of, as its front matter `syndication` or a
+ * target's answer in the copies file says (TASK-197), or `undefined`.
+ */
+export function postSyndicatedAt(
+  url: string,
+  store: ContentStore,
+  copies: SyndicationCopies,
+): Document | undefined {
+  const post = store
+    .listAll()
+    .find(
+      (document) =>
+        handSyndicationOf(document.extra).includes(url) ||
+        Object.values(copies.read(document.permalink)).includes(url),
+    );
+  return post === undefined ? undefined : publicDocumentAt(store, post.permalink);
 }
 
 /**

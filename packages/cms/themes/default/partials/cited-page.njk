@@ -23,6 +23,11 @@
   `og:site_name`), printed after a middle dot as plain text: a site is not an
   author, so it is no `h-card`.
 
+  The author's `h-card` shows their photo before their name when the page
+  gave one (`author.photo.imgHtml`, an `img.u-photo` copied into the site's
+  uploads, TASK-199), and a fediverse author's handle after it as its
+  `p-nickname`, written `@user@host`.
+
   `thumb(url, picture)` is a cited page's thumbnail (TASK-252): a link to the
   page around `picture.imgHtml`, out of the tab order and hidden from assistive
   technology because the title beside it is the same link. A video's carries
@@ -52,7 +57,9 @@
 
 {% macro card(author, name) -%}
 <span class="p-author h-card">
+  {%- if author.photo %}{{ author.photo.imgHtml | safe }}{% endif -%}
   {%- if author.url %}<a class="u-url p-name" href="{{ author.url }}">{{ name }}</a>
   {%- else %}<span class="p-name">{{ name }}</span>{% endif -%}
+  {%- if author.handle %} <span class="p-nickname cite-handle">@{{ author.handle }}</span>{% endif -%}
 </span>
 {%- endmacro %}

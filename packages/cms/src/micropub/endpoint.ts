@@ -39,7 +39,7 @@ import { syndicationTargetsReader } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
 import { createForm, fromForm, fromJson } from './create.ts';
 import type { CreatedForm, CreateRequest, Property } from './create.ts';
-import { parseChanges, sourceProperties, updateForm } from './update.ts';
+import { micropubType, parseChanges, sourceProperties, updateForm } from './update.ts';
 import type { Change } from './update.ts';
 
 const ANY_TYPE: readonly Property[] = [
@@ -77,6 +77,11 @@ const POST_TYPES: Readonly<
   note: { name: 'Note', properties: ANY_TYPE, required: ['content'] },
   article: { name: 'Article', properties: NAMED, required: ['name', 'content'] },
   reply: { name: 'Reply', properties: ['in-reply-to', ...NAMED], required: ['in-reply-to'] },
+  rsvp: {
+    name: 'RSVP',
+    properties: ['in-reply-to', 'rsvp', ...NAMED],
+    required: ['in-reply-to', 'rsvp'],
+  },
   photo: { name: 'Photo', properties: ['photo', ...NAMED], required: ['photo'] },
   like: { name: 'Like', properties: ['like-of', ...NAMED], required: ['like-of'] },
   repost: { name: 'Repost', properties: ['repost-of', ...NAMED], required: ['repost-of'] },
@@ -90,6 +95,7 @@ const POST_TYPES: Readonly<
     properties: ['read-of', 'read-status', ...NAMED],
     required: ['read-of', 'read-status'],
   },
+  event: { name: 'Event', properties: ['start', 'end', ...NAMED], required: ['start', 'name'] },
 };
 
 /** Each `q` the endpoint answers. */
@@ -137,7 +143,7 @@ const QUERIES: Readonly<Record<Query, (context: QueryContext) => object>> = {
     if (document instanceof Refusal) return document;
     const all = sourceProperties(document, { baseUrl, targets, locations, kept });
     // Asked for by name, the answer is the properties alone, as the spec has it.
-    if (properties.length === 0) return { type: ['h-entry'], properties: all };
+    if (properties.length === 0) return { type: [micropubType(document)], properties: all };
     return {
       properties: Object.fromEntries(
         Object.entries(all).filter(([name]) => properties.includes(name)),
@@ -377,6 +383,7 @@ const ACTIONS: {
         writer: bearer.user.username,
         citedContext: (target) => replyContexts.describe(target),
         storedContext: (target) => replyContexts.read(target),
+        learnHandles: c.var.learnHandles,
       },
       {
         kind: POST_KIND,
@@ -421,6 +428,7 @@ const ACTIONS: {
         writer: bearer.user.username,
         citedContext: (target) => replyContexts.describe(target),
         storedContext: (target) => replyContexts.read(target),
+        learnHandles: c.var.learnHandles,
       },
       { kind: POST_KIND, document, ...updated, form: withoutClientReadSummary(updated.form) },
     );
@@ -470,7 +478,7 @@ async function moved(
     document,
     action,
   );
-  if (done === undefined) return invalid(`Could not move ${document.path}.`).answer(c);
+  if (done.outcome === 'refused') return invalid(done.reason).answer(c);
   return c.body(null, 204);
 }
 

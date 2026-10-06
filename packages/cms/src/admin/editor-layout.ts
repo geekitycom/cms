@@ -22,6 +22,7 @@ export type EditorGroup =
   | 'taxonomy'
   | 'address'
   | 'responding'
+  | 'event'
   | 'read'
   | 'summary'
   | 'syndication'
@@ -68,14 +69,20 @@ const GROUPS: Readonly<Record<EditorGroup, GroupRule>> = {
     fieldPrefixes: ['editor-slug', 'editor-permalink'],
   },
   responding: {
-    filled: (form) => filledIn(form.inReplyTo, form.likeOf, form.repostOf, form.bookmarkOf),
+    filled: (form) =>
+      filledIn(form.inReplyTo, form.rsvp, form.likeOf, form.repostOf, form.bookmarkOf),
     fieldPrefixes: [
       'editor-in-reply-to',
+      'editor-rsvp',
       'editor-like-of',
       'editor-repost-of',
       'editor-bookmark-of',
       'editor-cited-alt',
     ],
+  },
+  event: {
+    filled: ({ event }) => filledIn(event.start, event.end, event.location),
+    fieldPrefixes: ['editor-event-'],
   },
   read: {
     filled: ({ readStatus, readOf: of }) =>

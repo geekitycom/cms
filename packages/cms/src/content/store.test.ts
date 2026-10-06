@@ -169,14 +169,14 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
@@ -205,7 +205,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7]);
       // The hash of a file with no categories has not changed, so a sync would
       // leave a surviving row alone and never learn its categories. The row
       // has to go; the file it was derived from is still on disk.
@@ -234,7 +234,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7]);
       assert.equal(upgraded.counts().total, 0, 'the stale HTML survived the upgrade');
     } finally {
       upgraded.close();
@@ -270,7 +270,7 @@ describe('a reply target', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7]);
       assert.equal(upgraded.counts().total, 0, 'a row with in-reply-to in extra survived');
     } finally {
       upgraded.close();
@@ -319,7 +319,7 @@ describe('former permalinks (TASK-127)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7]);
       assert.equal(upgraded.counts().total, 0, 'a row with redirect_from in extra survived');
     } finally {
       upgraded.close();
@@ -1156,6 +1156,76 @@ describe('permalinks', () => {
   });
 });
 
+describe('the permalink of a trashed document (TASK-195)', () => {
+  const trashed = post({ path: '_trash/posts/2026-09-02-hello-world.md', title: 'Deleted' });
+  const again = post({ path: 'posts/2026-09-20-hello-world.md', title: 'Again' });
+
+  it('can be taken by a live document, which a lookup then finds', async () => {
+    const index = await store();
+    index.upsert(trashed);
+
+    index.upsert(again);
+
+    assert.equal(index.getByPermalink('/2026/09/hello-world/')?.title, 'Again');
+    index.remove(again.path);
+    assert.equal(index.getByPermalink('/2026/09/hello-world/')?.title, 'Deleted');
+  });
+
+  it('is found by its stored id behind a live document that claims the same id', async () => {
+    const index = await store();
+    const activitypub = { id: 'https://blog.example/2026/09/old/' };
+    index.upsert({ ...trashed, activitypub });
+    index.upsert({ ...again, activitypub });
+
+    assert.equal(index.getByStoredObjectId(activitypub.id)?.title, 'Again');
+  });
+
+  it('cannot be taken back from the live document that holds it', async () => {
+    const index = await store();
+    index.upsert(trashed);
+    index.upsert(again);
+
+    assert.throws(
+      () => {
+        index.upsert({ ...trashed, path: 'posts/2026-09-02-hello-world.md' });
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof DuplicatePermalinkError);
+        assert.equal(error.conflictingPath, again.path);
+        return true;
+      },
+    );
+  });
+
+  it('is freed on a database indexed before trashed documents gave URLs up', async () => {
+    const dir = await dataDir();
+    const before = openContentStore({ dataDir: dir });
+    before.upsert(trashed);
+    before.close();
+
+    const legacy = new DatabaseSync(path.join(dir, 'geekity.db'));
+    legacy.exec(`
+      DELETE FROM migrations WHERE version = 7;
+      DROP INDEX documents_permalink_live;
+      DROP INDEX documents_permalink;
+      CREATE UNIQUE INDEX documents_permalink ON documents (permalink);
+    `);
+    legacy.close();
+
+    const upgraded = openContentStore({ dataDir: dir });
+    try {
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7]);
+      upgraded.upsert(again);
+      assert.equal(upgraded.getByPermalink('/2026/09/hello-world/')?.title, 'Again');
+      assert.throws(() => {
+        upgraded.upsert({ ...again, path: 'posts/2026-09-21-hello-world.md' });
+      }, DuplicatePermalinkError);
+    } finally {
+      upgraded.close();
+    }
+  });
+});
+
 /** Read the schema versions a database has recorded, without going through the store. */
 function appliedMigrations(file: string): number[] {
   const db = new DatabaseSync(file, { readOnly: true });
@@ -1374,7 +1444,7 @@ describe('the search index migration (TASK-22 AC #2)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7]);
       assert.equal(upgraded.counts().total, 0, 'a row survived with no words indexed for it');
 
       upgraded.upsert(post());

@@ -7,8 +7,11 @@ import {
   COMMENT_SOURCES,
   COMMENT_STATUSES,
   REDACTED_FIELDS,
+  rsvpField,
 } from '../admin/store.ts';
 import type { AdminStore, CommentRecord, CommentStatus, PostComment } from '../admin/store.ts';
+import { rsvpValue } from '../content/rsvp.ts';
+import type { RsvpValue } from '../content/rsvp.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { hashClientAddress } from '../forms/protection.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
@@ -306,6 +309,7 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     // it, and defaulting the other way would email people who never opted in.
     notify: value['notify'] === true,
     ...redactedIn(value['redacted']),
+    ...rsvpField(rsvpValue(value['rsvp'])),
   };
 }
 
@@ -493,6 +497,7 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
       author: comment.author,
       content: comment.content,
       submitted: comment.submitted,
+      rsvp: comment.rsvp ?? null,
     });
     return moved === undefined
       ? { kind: 'gone' }
@@ -623,7 +628,10 @@ function messageOf(error: unknown): string {
 export async function updateComment(
   records: CommentRecords,
   id: string,
-  change: Partial<Pick<CommentRecord, 'status' | 'content' | 'author' | 'kind' | 'submitted'>>,
+  change: Partial<Pick<CommentRecord, 'status' | 'content' | 'author' | 'kind' | 'submitted'>> & {
+    /** What the comment now says it is going to, or `null` when it no longer says. */
+    readonly rsvp?: RsvpValue | null;
+  },
 ): Promise<PostComment | undefined> {
   const known = records.admin.getComment(id);
   if (known === undefined) return undefined;
@@ -635,7 +643,16 @@ export async function updateComment(
     const at = held.findIndex((entry) => entry.id === id);
     if (at === -1) return undefined;
 
-    const moved: PostComment = { ...known, ...(held[at] as CommentRecord), ...change };
+    const { rsvp, ...fields } = change;
+    const { rsvp: was, ...merged }: PostComment = {
+      ...known,
+      ...(held[at] as CommentRecord),
+      ...fields,
+    };
+    const moved: PostComment = {
+      ...merged,
+      ...rsvpField(rsvp === undefined ? was : (rsvp ?? undefined)),
+    };
     writePost(records, known.slug, known.permalink, held.with(at, moved));
     records.admin.putComment(moved);
     return moved;
@@ -845,6 +862,7 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     url: comment.url,
     notify: comment.notify,
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
+    ...rsvpField(comment.rsvp),
   };
 }
 
@@ -865,6 +883,7 @@ function publishedEntryOf(comment: CommentRecord): PublishedComment {
     inReplyTo: comment.inReplyTo,
     url: comment.url,
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
+    ...rsvpField(comment.rsvp),
   };
 }
 

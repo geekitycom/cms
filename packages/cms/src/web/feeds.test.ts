@@ -1056,6 +1056,35 @@ describe('a reply in the feeds', () => {
   });
 });
 
+describe('an RSVP in the feeds (TASK-198)', () => {
+  const EVENT = 'https://events.example/2026/10/indieweb-camp';
+
+  it('opens its HTML with what its author will do and the p-rsvp', async () => {
+    const { cms } = await site({
+      '_data/replyContexts.json': JSON.stringify({ [EVENT]: { name: 'IndieWeb Camp' } }),
+      'posts/2026-09-03-camp.md': [
+        '---',
+        "date: '2026-09-03T09:00:00Z'",
+        'permalink: /2026/09/camp/',
+        `in-reply-to: ${EVENT}`,
+        'rsvp: no',
+        '---',
+        '',
+        'Clashes with a wedding.',
+        '',
+      ].join('\n'),
+    });
+    const { items } = await jsonFeedAt(cms, '/feed/json/');
+
+    assert.equal(
+      items[0]?.['content_html'],
+      `<p class="cite-line">Not going to <a href="${EVENT}">IndieWeb Camp</a></p>\n` +
+        '<p class="rsvp-line"><data class="p-rsvp" value="no">Not going</data></p>\n' +
+        '<p>Clashes with a wedding.</p>\n',
+    );
+  });
+});
+
 describe('feed caching', () => {
   const files = {
     'posts/2026-09-02-one.md': post('One', {

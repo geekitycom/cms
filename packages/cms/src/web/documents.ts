@@ -29,6 +29,10 @@ export type HiddenReason =
  */
 export function hiddenReason(document: Document, now: Date = new Date()): HiddenReason | undefined {
   if (isTrashedPath(document.path)) return { kind: 'trashed' };
+  return withheldReason(document, now);
+}
+
+function withheldReason(document: Document, now: Date): HiddenReason | undefined {
   if (document.draft) return { kind: 'draft' };
   const at = scheduledFor(document, now);
   if (at !== undefined) return { kind: 'scheduled', at };
@@ -41,6 +45,25 @@ export function hiddenReason(document: Document, now: Date = new Date()): Hidden
 
 export function isServed(document: Document, now: Date = new Date()): boolean {
   return hiddenReason(document, now) === undefined;
+}
+
+/**
+ * Whether a document was deleted from the public site: it is in the trash, and
+ * would be served if it were not (TASK-195).
+ *
+ * The trash file is the record of the deletion (decision-9), so a restore and
+ * a new document at the URL both end it with no second record to clear. A
+ * trashed draft was never public, so its URL stays a 404 rather than telling
+ * anybody something used to be there.
+ */
+export function isGone(document: Document, now: Date = new Date()): boolean {
+  return isTrashedPath(document.path) && withheldReason(document, now) === undefined;
+}
+
+/** The deleted document a public URL used to serve, or `undefined`. */
+export function goneDocumentAt(store: ContentStore, permalink: string): Document | undefined {
+  const document = store.getByPermalink(permalink);
+  return document !== undefined && isGone(document, store.now()) ? document : undefined;
 }
 
 /**

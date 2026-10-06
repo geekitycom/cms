@@ -61,6 +61,13 @@
   {% endif %}
 </article>
 
+{% if conversation %}
+{% include "partials/conversation.njk" %}
+{% endif %}
+{% if commentForm %}
+{% include "partials/comment-form.njk" %}
+{% endif %}
+
 {# Only a page whose front matter says `contact: true` has one (TASK-56). #}
 {% if contactForm %}
 {% include "partials/contact-form.njk" %}

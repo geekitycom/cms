@@ -7,10 +7,12 @@ import { findUser } from './accounts.ts';
 import { CITED_SLUG_TIMEOUT_MS } from '../webmention/reply-contexts.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import type { HostLookup } from '../webmention/public-address.ts';
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
 
 const box = sandbox();
+remoteHostsDoNotExist();
 
 const BASE = 'https://blog.example';
 const NOW = new Date('2026-10-03T12:00:00.000Z');

@@ -2,13 +2,12 @@ import type { Context, DocumentLoader } from '@fedify/fedify';
 import { isActor } from '@fedify/vocab';
 import type { Actor, Link } from '@fedify/vocab';
 
-import { primaryUser } from '../admin/accounts.ts';
 import type { ActorProfile, AdminStore } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
-import { senderKeyPairs } from './actor.ts';
 import type { FederationContextData } from './federation.ts';
+import { siteLoaders } from './site-loaders.ts';
 
 /**
  * The names and faces of the fediverse actors who are not followers
@@ -56,12 +55,7 @@ export function signedProfileLoader(
 ): ActorProfileLoader {
   return async (actorId) => {
     const context = contextOf();
-    const signer = primaryUser(context.data.config.dataDir);
-    const [key] = signer === undefined ? [] : await senderKeyPairs(context, signer);
-    const loaders = {
-      documentLoader: key === undefined ? context.documentLoader : context.getDocumentLoader(key),
-      contextLoader: context.contextLoader,
-    };
+    const loaders = await siteLoaders(context);
     const found = await context.lookupObject(actorId, loaders);
     return isActor(found) ? await profileFrom(found, loaders) : undefined;
   };

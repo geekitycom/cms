@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
@@ -39,6 +39,28 @@ permalink: /2026/09/hello-world/
 
 Words.
 `;
+
+const PAGE = `---
+title: About
+permalink: /about/
+comments: true
+---
+
+Who this is.
+`;
+const PAGE_URL = `${BASE_URL}/about/`;
+
+const EVENT = `---
+title: IndieWeb Camp
+date: '2026-09-19T09:00:00Z'
+permalink: /2026/09/camp/
+start: '2026-10-10T14:00:00Z'
+location: Chicago Public Library
+---
+
+Two days of building.
+`;
+const EVENT_URL = `${BASE_URL}/2026/09/camp/`;
 
 /** The moment the site's clock is stopped at. */
 const NOW = new Date('2026-09-20T12:00:00.000Z');
@@ -116,6 +138,9 @@ async function site(
   const file = path.join(contentDir, 'posts', '2026-09-19-hello-world.md');
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, POST, 'utf8');
+  await writeFile(path.join(contentDir, 'posts', '2026-09-19-camp.md'), EVENT, 'utf8');
+  await mkdir(path.join(contentDir, 'pages'), { recursive: true });
+  await writeFile(path.join(contentDir, 'pages', 'about.md'), PAGE, 'utf8');
 
   await writeSiteJson({
     contentDir,
@@ -551,6 +576,207 @@ describe('a webmention on the page', () => {
       'its permalink is the page it was sent from, not an anchor on this one',
     );
     assert.doesNotMatch(after, /reply_to=/, 'and it offers no Reply link, which would go nowhere');
+  });
+});
+
+describe('an RSVP webmention (TASK-198 AC #4)', () => {
+  function rsvp(value: string): string {
+    return reply(
+      `<a class="u-in-reply-to" href="${POST_URL}">the event</a>` +
+        `<data class="p-rsvp" value="${value}">${value}</data>` +
+        '<div class="e-content"><p>See you there.</p></div>',
+    );
+  }
+
+  it('is stored as an RSVP, and shown as one in the thread once approved', async () => {
+    const cms = await site();
+    pages.set('https://them.example/rsvp', { body: rsvp('yes') });
+    await sendAndSettle(cms, 'https://them.example/rsvp');
+
+    const [held] = stored(cms);
+    assert.ok(held !== undefined);
+    assert.equal(held.kind, 'reply');
+    assert.equal(held.rsvp, 'yes');
+
+    const { updateComment } = await import('../comments/records.ts');
+    await updateComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      held.id,
+      { status: 'approved' },
+    );
+
+    const page = await (await cms.app.request('/2026/09/hello-world/')).text();
+    const comment = /<li id="comment-[^"]*" class="comment h-entry[\s\S]*?<\/li>/.exec(page)?.[0];
+    assert.ok(comment !== undefined, 'the RSVP is in the thread');
+    assert.match(comment, /<data class="p-rsvp" value="yes">Going<\/data>/);
+    assert.match(comment, /See you there\./);
+  });
+
+  it('follows the page when it sends again with another answer, or none', async () => {
+    const cms = await site();
+    pages.set('https://them.example/rsvp', { body: rsvp('yes') });
+    await sendAndSettle(cms, 'https://them.example/rsvp');
+
+    pages.set('https://them.example/rsvp', { body: rsvp('no') });
+    await sendAndSettle(cms, 'https://them.example/rsvp');
+    assert.deepEqual(
+      stored(cms).map((one) => one.rsvp),
+      ['no'],
+    );
+
+    pages.set('https://them.example/rsvp', { body: rsvp('') });
+    await sendAndSettle(cms, 'https://them.example/rsvp');
+    const [plain] = stored(cms);
+    assert.ok(plain !== undefined);
+    assert.equal('rsvp' in plain, false);
+  });
+
+  it('keeps being an RSVP when the index is rebuilt from the comment file', async () => {
+    const cms = await site();
+    pages.set('https://them.example/rsvp', { body: rsvp('maybe') });
+    await sendAndSettle(cms, 'https://them.example/rsvp');
+
+    const rebuilt = createCms({
+      contentDir: cms.config.contentDir,
+      dataDir: await temporaryDir('geekity-wm-in-rebuilt-'),
+      baseUrl: BASE_URL,
+      watch: false,
+      now: () => NOW,
+    });
+    started.push(rebuilt);
+    await rebuilt.sync();
+
+    assert.deepEqual(
+      rebuilt.admin.listCommentsFor('hello-world').map((one) => one.rsvp),
+      ['maybe'],
+    );
+  });
+
+  it('is a plain reply when its rsvp is none of the four, or there is none', async () => {
+    const cms = await site();
+    pages.set('https://them.example/rsvp', { body: rsvp('perhaps') });
+    pages.set('https://them.example/note', {
+      body: reply(
+        `<a class="u-in-reply-to" href="${POST_URL}">re</a>` +
+          '<div class="e-content"><p>Good post.</p></div>',
+      ),
+    });
+    await sendAndSettle(cms, 'https://them.example/rsvp');
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    for (const comment of stored(cms)) {
+      assert.equal(comment.kind, 'reply');
+      assert.equal('rsvp' in comment, false, `${comment.url ?? ''} carries no rsvp`);
+    }
+    const file = await readFile(
+      path.join(cms.config.contentDir, '_data', 'comments', 'hello-world.json'),
+      'utf8',
+    );
+    assert.doesNotMatch(file, /"rsvp":/);
+  });
+});
+
+describe('RSVP webmentions to an event (TASK-200 AC #2)', () => {
+  function answer(value: string, name: string): string {
+    return `<html><body><article class="h-entry">
+      <a class="p-author h-card" href="https://${name}.example/">${name}</a>
+      <a class="u-in-reply-to" href="${EVENT_URL}">IndieWeb Camp</a>
+      <data class="p-rsvp" value="${value}">${value}</data>
+      <time class="dt-published" datetime="2026-09-20T09:00:00Z">20 September</time>
+    </article></body></html>`;
+  }
+
+  function groups(page: string): Record<string, string[]> {
+    const found: Record<string, string[]> = {};
+    for (const [, kind, body] of page.matchAll(
+      /<div class="reaction-group rsvp-(\w+)">([\s\S]*?)<\/div>\s*<\/div>/g,
+    )) {
+      found[kind ?? ''] = [...(body ?? '').matchAll(/title="([^"]+)"/g)].map((m) => m[1] ?? '');
+    }
+    return found;
+  }
+
+  it('holds each one for the moderator, then shows it in its group once approved', async () => {
+    const cms = await site();
+    const answers = { ada: 'yes', bea: 'maybe', cy: 'interested', dee: 'no' };
+    for (const [name, value] of Object.entries(answers)) {
+      pages.set(`https://${name}.example/rsvp`, { body: answer(value, name) });
+      await sendAndSettle(cms, `https://${name}.example/rsvp`, EVENT_URL);
+    }
+    pages.set('https://eve.example/rsvp', {
+      body: '<html><body><p class="h-entry">Not a link to the event.</p></body></html>',
+    });
+    await sendAndSettle(cms, 'https://eve.example/rsvp', EVENT_URL);
+
+    const held = cms.admin.listCommentsFor('camp');
+    assert.deepEqual(
+      held.map((one) => [one.status, one.rsvp]).sort(),
+      [
+        ['pending', 'interested'],
+        ['pending', 'maybe'],
+        ['pending', 'no'],
+        ['pending', 'yes'],
+      ],
+      'four verified and held; the page that does not link the event is not stored',
+    );
+    assert.deepEqual(groups(await (await cms.app.request('/2026/09/camp/')).text()), {});
+
+    const { updateComment } = await import('../comments/records.ts');
+    for (const one of held) {
+      await updateComment(
+        { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+        one.id,
+        { status: 'approved' },
+      );
+    }
+
+    const page = await (await cms.app.request('/2026/09/camp/')).text();
+    assert.deepEqual(groups(page), {
+      yes: ['ada'],
+      maybe: ['bea'],
+      interested: ['cy'],
+      no: ['dee'],
+    });
+    assert.match(
+      page,
+      /<h2 class="reaction-title">Going <span class="reaction-count">1<\/span><\/h2>/,
+    );
+    assert.match(page, /<h2 class="reaction-title">Not going <span/);
+    assert.doesNotMatch(page, /class="comment h-entry/, 'and none of them is in the thread');
+  });
+});
+
+describe('a webmention to a page (TASK-196)', () => {
+  it('is held, then shown on the page once a moderator approves it, as on a post', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(
+        `<a class="u-in-reply-to" href="${PAGE_URL}">re</a>` +
+          '<div class="e-content"><p>Good page.</p></div>',
+      ),
+    });
+
+    const response = await sendAndSettle(cms, 'https://them.example/note', PAGE_URL);
+    assert.equal(response.status, 202);
+
+    const held = cms.admin.listCommentsFor('about').filter((one) => one.source === 'webmention');
+    assert.equal(held.length, 1);
+    assert.equal(held[0]?.status, 'pending', 'held for a moderator like one to a post');
+
+    const before = await (await cms.app.request('/about/')).text();
+    assert.doesNotMatch(before, /Good page\./, 'a pending webmention is on no page');
+
+    const { updateComment } = await import('../comments/records.ts');
+    await updateComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      held[0]?.id ?? '',
+      { status: 'approved' },
+    );
+
+    const after = await (await cms.app.request('/about/')).text();
+    assert.match(after, /comment-webmention/);
+    assert.match(after, /Good page\./);
+    assert.match(after, /href="https:\/\/them\.example\/note"/);
   });
 });
 

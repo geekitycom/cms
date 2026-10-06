@@ -233,7 +233,7 @@ describe('a single document', () => {
     assert.ok(!(await response.text()).includes('Secret'), 'the title does not leak');
   });
 
-  it('404s a trashed document', async () => {
+  it('answers 410 for a trashed document (TASK-195)', async () => {
     const { cms } = await site({
       '_trash/posts/2026-09-02-gone.md': post('Gone', {
         date: '2026-09-02T09:00:00Z',
@@ -242,7 +242,7 @@ describe('a single document', () => {
     });
 
     assert.equal(cms.store.getByPermalink('/2026/09/gone/')?.title, 'Gone');
-    assert.equal((await cms.app.request('/2026/09/gone/')).status, 404);
+    assert.equal((await cms.app.request('/2026/09/gone/')).status, 410);
   });
 
   it('404s a path no document claims, through the theme', async () => {

@@ -20,7 +20,7 @@ import { accountOf, ACTOR_PATH, federationOrigin } from '../federation/paths.ts'
 import { authorHref, profileContext, userForAuthor } from '../web/authors.ts';
 import { postObjectId, publicDocumentAt } from '../web/documents.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
-import { editorPath, POST_KIND } from './documents.ts';
+import { documentEditorPath, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { readSiteSettings } from './settings.ts';
@@ -387,7 +387,7 @@ export function deliveryRows(
       post: {
         slug: document.slug,
         title: postLabel(document, context.cited),
-        editUrl: editorPath(POST_KIND, document.slug),
+        editUrl: documentEditorPath(POST_KIND, document),
       },
       author: context.author(document),
       slug: document.slug,
@@ -636,7 +636,7 @@ export function localPosts(
     return {
       slug: document.slug,
       title: postLabel(document, cited),
-      editUrl: editorPath(POST_KIND, document.slug),
+      editUrl: documentEditorPath(POST_KIND, document),
     };
   };
 }

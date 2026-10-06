@@ -10,6 +10,7 @@ import { after, describe, it } from 'node:test';
 import matter from 'gray-matter';
 import sharp from 'sharp';
 
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { findUser } from '../admin/accounts.ts';
@@ -18,6 +19,8 @@ import { addFollower } from '../federation/records.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+
+remoteHostsDoNotExist();
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -416,19 +419,19 @@ describe('a refused create', () => {
       send: (cms, token) =>
         postForm(cms, token, [
           ['h', 'entry'],
-          ['rsvp', 'yes'],
+          ['ate', 'pizza'],
           ['weight', '70kg'],
         ]),
-      names: ['rsvp', 'weight'],
+      names: ['ate', 'weight'],
     },
     {
-      label: 'an h=event',
+      label: 'an h=event with no start',
       send: (cms, token) =>
         postForm(cms, token, [
           ['h', 'event'],
           ['name', 'A party'],
         ]),
-      names: ['h-event'],
+      names: ['start'],
     },
     {
       label: 'a JSON h-card',
@@ -484,6 +487,52 @@ describe('a refused create', () => {
       headers: { authorization: `Bearer ${token}`, 'content-type': 'text/plain' },
       body: 'h=entry&content=hi',
     });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await postFiles(cms), []);
+  });
+});
+
+describe('an RSVP (TASK-198)', () => {
+  const event = 'https://events.example/2026/10/indieweb-camp';
+
+  it('writes rsvp beside in-reply-to and makes an RSVP post', async () => {
+    const { cms, token } = await site();
+    const response = await postForm(cms, token, [
+      ['h', 'entry'],
+      ['in-reply-to', event],
+      ['rsvp', 'interested'],
+    ]);
+    assert.equal(response.status, 201, await response.clone().text());
+
+    const [file] = await postFiles(cms);
+    assert.ok(file !== undefined);
+    const { data } = matter(await fileAt(cms, `posts/${file}`));
+    assert.equal(data['rsvp'], 'interested');
+    assert.equal(data['in-reply-to'], event);
+    const document = cms.store.getByPath(`posts/${file}`);
+    assert.ok(document !== undefined);
+    assert.equal(postTypeOf(document), 'rsvp');
+  });
+
+  it('refuses a value that is not one of the four', async () => {
+    const { cms, token } = await site();
+    const response = await postForm(cms, token, [
+      ['h', 'entry'],
+      ['in-reply-to', event],
+      ['rsvp', 'perhaps'],
+    ]);
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /RSVP is yes, no, maybe, interested, not perhaps/);
+    assert.deepEqual(await postFiles(cms), []);
+  });
+
+  it('refuses one with no event to answer', async () => {
+    const { cms, token } = await site();
+    const response = await postForm(cms, token, [
+      ['h', 'entry'],
+      ['content', 'Count me in.'],
+      ['rsvp', 'yes'],
+    ]);
     assert.equal(response.status, 400);
     assert.deepEqual(await postFiles(cms), []);
   });

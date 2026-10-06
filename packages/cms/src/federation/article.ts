@@ -5,6 +5,7 @@ import {
   Audio,
   Create,
   Delete,
+  Event,
   Hashtag,
   Image,
   InteractionPolicy,
@@ -29,7 +30,10 @@ import { readSiteSettings, taxonomyBasesFromSettings } from '../admin/settings.t
 import { CITATION_VERBS, citationsOf, citedPageName } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { readLine, readOf } from '../content/read.ts';
+import { RSVP_PHRASES, rsvpOf } from '../content/rsvp.ts';
 import type { Document } from '../content/document.ts';
+import { eventOf } from '../content/event.ts';
+import type { PostEvent } from '../content/event.ts';
 import { enclosureOf, isUploadUrl, playsAsVideo } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
 import { placeWordList, shareLocation } from '../content/location.ts';
@@ -52,6 +56,8 @@ import { categoryHref, tagHref } from '../web/taxonomy.ts';
 import { actorId } from './actor.ts';
 import type { CitedObject } from './citations.ts';
 import type { FederationContextData } from './federation.ts';
+import { mentionedAccounts } from './handles.ts';
+import type { MentionedAccount } from './handles.ts';
 import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } from './paths.ts';
 
 /**
@@ -109,28 +115,45 @@ function addressing(
   document: Document,
   followers: URL,
   replyTo: CitedObject | undefined,
+  mentioned: readonly MentionedAccount[],
 ): { tos: URL[]; ccs: URL[] } {
-  const mentioned = replyTo?.author?.id;
-  const also = mentioned == null ? [] : [mentioned];
+  const ids = new Set<string>();
+  const author = replyTo?.author?.id;
+  if (author != null) ids.add(author.href);
+  for (const { account } of mentioned) ids.add(account.actor);
+  const also = [...ids].map((id) => new URL(id));
   return visibilityOf(document) === 'unlisted'
     ? { tos: [followers], ccs: [PUBLIC_COLLECTION, ...also] }
     : { tos: [PUBLIC_COLLECTION], ccs: [followers, ...also] };
 }
 
 /**
- * The `Mention` of the author a reply answers, which is what makes Mastodon
- * notify them, or nothing for a reply to no fediverse status.
+ * A `Mention` of the author a reply answers and of each account the post names
+ * by handle (TASK-194), which is what makes Mastodon notify them.
  */
-function replyMention(replyTo: CitedObject | undefined): Mention[] {
+function mentions(
+  replyTo: CitedObject | undefined,
+  mentioned: readonly MentionedAccount[],
+): Mention[] {
+  const found: Mention[] = [];
+  const named = new Set<string>();
   const author = replyTo?.author;
-  if (author?.id == null) return [];
-  const username = author.preferredUsername?.toString();
-  return [
-    new Mention({
-      href: author.id,
-      name: username === undefined ? null : `@${username}@${author.id.host}`,
-    }),
-  ];
+  if (author?.id != null) {
+    const username = author.preferredUsername?.toString();
+    named.add(author.id.href);
+    found.push(
+      new Mention({
+        href: author.id,
+        name: username === undefined ? null : `@${username}@${author.id.host}`,
+      }),
+    );
+  }
+  for (const { handle, account } of mentioned) {
+    if (named.has(account.actor)) continue;
+    named.add(account.actor);
+    found.push(new Mention({ href: new URL(account.actor), name: `@${handle}` }));
+  }
+  return found;
 }
 
 /** The media type an `Article`'s `source` is labelled with. */
@@ -170,7 +193,7 @@ export function postByObjectId(
 }
 
 /** The ActivityStreams object types a post can federate as, by name. */
-const OBJECT_TYPES = { Note, Article } as const;
+const OBJECT_TYPES = { Note, Article, Event } as const;
 
 /** The name of an ActivityStreams object type a post can federate as. */
 type PostObjectType = keyof typeof OBJECT_TYPES;
@@ -182,8 +205,10 @@ type PostObjectType = keyof typeof OBJECT_TYPES;
  * is a photo post, whose photos are its attachments (TASK-166).
  */
 const OBJECT_TYPE_OF: Record<PostType, PostObjectType> = {
+  event: 'Event',
   // A like or a repost of a fediverse object goes as a `Like` or an
   // `Announce` instead (decision-28); this is the object its permalink serves.
+  rsvp: 'Note',
   repost: 'Note',
   like: 'Note',
   bookmark: 'Note',
@@ -219,7 +244,7 @@ function postObjectType(document: Document): PostObjectType {
 }
 
 /**
- * One post as the `Note` or `Article` doc-4 describes, whichever
+ * One post as the `Note`, `Article` or `Event` doc-4 describes, whichever
  * {@link postObjectType} says it is.
  *
  * Its `id` and its `url` are the same URL — the permalink — because
@@ -247,7 +272,7 @@ export function postObject(
   context: Context<FederationContextData>,
   document: Document,
   replyTo?: CitedObject,
-): Article | Note {
+): Article | Note | Event {
   const { baseUrl } = context.data.config;
   const { actor, followers } = attribution(context, document);
   // The archives an activity points at are wherever the site currently serves
@@ -260,6 +285,7 @@ export function postObject(
     documentLanguage(document) ?? canonicalLocale(settings.language) ?? DEFAULT_LOCALE;
 
   const inReplyTo = replyTarget(document);
+  const mentioned = mentionedAccounts(document.body, context.data.config.contentDir);
   const common = {
     id: articleObjectId(context, document),
     // On either type, so an activitypub.type override never breaks a thread.
@@ -269,7 +295,7 @@ export function postObject(
     published: toInstant(document.date) ?? null,
     updated: toInstant(document.updated) ?? null,
     attribution: actor,
-    ...addressing(document, followers, replyTo),
+    ...addressing(document, followers, replyTo, mentioned),
     // FEP-044f: a post with no policy is one Mastodon lets nobody quote. Every
     // post that federates names Public, so anybody may quote it, and
     // the inbox approves each QuoteRequest on the same rule (TASK-125).
@@ -289,7 +315,7 @@ export function postObject(
     // hashtag has no reason to care which of the two a term came from, and
     // each one points at the archive the site serves for it.
     tags: [
-      ...replyMention(replyTo),
+      ...mentions(replyTo, mentioned),
       ...document.tags.map((tag) => hashtag(tag, tagHref(tag, 0, bases), baseUrl)),
       ...document.categories.map((category) =>
         hashtag(category, categoryHref(category, 0, bases), baseUrl),
@@ -310,6 +336,19 @@ export function postObject(
   }
 
   const summary = feedExcerpt(document);
+  const event = eventOf(document.extra);
+  if (postObjectType(document) === 'Event' && event !== undefined) {
+    return new Event({
+      ...common,
+      name: document.title === '' ? null : document.title,
+      summaries: summary === '' ? [] : inLanguage(escapeHtml(summary), language),
+      contents: inLanguage(document.html, language),
+      startTime: toInstant(event.start) ?? null,
+      endTime: toInstant(event.end) ?? null,
+      location: eventPlace(event) ?? common.location,
+    });
+  }
+
   return new Article({
     ...common,
     name: document.title === '' ? null : document.title,
@@ -328,6 +367,13 @@ export function postObject(
  */
 function inLanguage(text: string, language: string): (string | LanguageString)[] {
   return [text, new LanguageString(text, language)];
+}
+
+function eventPlace(event: PostEvent): Place | undefined {
+  const where = event.location;
+  if (where === undefined) return undefined;
+  if (where.kind === 'place') return new Place({ name: where.name });
+  return new Place({ name: where.url, url: new URL(where.url) });
 }
 
 function place(shared: SharedLocation | undefined): Place | null {
@@ -438,17 +484,27 @@ const QUOTABLE_BY_ANYONE = new InteractionPolicy({
 });
 
 /**
- * What a like, a repost or a bookmark cites, as a line linking each page
- * (decision-28): the words a peer shows, since a `Note` has no field for it.
- * The anchor stays plain: Mastodon builds no link card from one with a
- * `u-url` or `h-card` class or a `rel=tag`.
+ * What an RSVP answers and what a like, a repost or a bookmark cites, as a
+ * line linking each page (decision-28, decision-31): the words a peer shows,
+ * since a `Note` has no field for it. The anchor stays plain: Mastodon
+ * builds no link card from one with a `u-url` or `h-card` class or a
+ * `rel=tag`.
  */
 function citing(document: Document, cited: CitedPageReader): string {
-  return citationsOf(document.extra)
-    .map(({ property, url }) => {
+  const rsvp = rsvpOf(document.extra);
+  const event = replyTarget(document);
+  const lines = citationsOf(document.extra).map(({ property, url }) => ({
+    verb: CITATION_VERBS[property],
+    url,
+  }));
+  if (rsvp !== undefined && event !== undefined) {
+    lines.unshift({ verb: RSVP_PHRASES[rsvp], url: event });
+  }
+  return lines
+    .map(({ verb, url }) => {
       const href = escapeHtml(url).replaceAll('"', '&quot;');
       const name = escapeHtml(citedPageName(url, cited(url)));
-      return `<p>${CITATION_VERBS[property]} <a href="${href}">${name}</a></p>\n`;
+      return `<p>${verb} <a href="${href}">${name}</a></p>\n`;
     })
     .join('');
 }
@@ -497,7 +553,12 @@ export function postCreateActivity(
     actor,
     object,
     published: toInstant(document.date) ?? null,
-    ...addressing(document, followers, replyTo),
+    ...addressing(
+      document,
+      followers,
+      replyTo,
+      mentionedAccounts(document.body, context.data.config.contentDir),
+    ),
   });
 }
 
@@ -529,7 +590,12 @@ export function postUpdateActivity(
     actor,
     object,
     published: toInstant(document.updated ?? document.date) ?? null,
-    ...addressing(document, followers, replyTo),
+    ...addressing(
+      document,
+      followers,
+      replyTo,
+      mentionedAccounts(document.body, context.data.config.contentDir),
+    ),
   });
 }
 
@@ -550,19 +616,31 @@ export function postDeleteActivity(
   document: Document,
   deleted: string,
 ): Delete {
-  const objectId = articleObjectId(context, document);
   const { actor, followers } = attribution(context, document);
 
   return new Delete({
-    id: deleteActivityId(objectId, deleted),
+    id: deleteActivityId(articleObjectId(context, document), deleted),
     actor,
-    object: new Tombstone({
-      id: objectId,
-      formerType: OBJECT_TYPES[postObjectType(document)],
-      deleted: toInstant(deleted) ?? null,
-    }),
+    object: postTombstone(context, document, deleted),
     to: PUBLIC_COLLECTION,
     cc: followers,
+  });
+}
+
+/**
+ * The `Tombstone` where a post's object was: what a `Delete` carries, and what
+ * a peer that fetches a deleted post's id is answered with (TASK-195). Nothing
+ * records when a post was trashed, so a fetched one carries no `deleted`.
+ */
+export function postTombstone(
+  context: Context<FederationContextData>,
+  document: Document,
+  deleted?: string,
+): Tombstone {
+  return new Tombstone({
+    id: articleObjectId(context, document),
+    formerType: OBJECT_TYPES[postObjectType(document)],
+    deleted: toInstant(deleted) ?? null,
   });
 }
 

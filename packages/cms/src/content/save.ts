@@ -3,8 +3,10 @@ import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { Document, DocumentContent, DocumentType } from './document.ts';
+import { handleDirectory } from './handles.ts';
 import { parseDocument } from './parser.ts';
 import { defaultPermalink } from './slug.ts';
+import { isTrashedPath } from './store.ts';
 import type { ContentStore } from './store.ts';
 import { DEFAULT_TIMEZONE, toUtcInstant } from './time.ts';
 import { serializeDocument } from './writer.ts';
@@ -51,7 +53,8 @@ export interface FreeSlugOptions extends ContentFilePathInput {
 
 /**
  * The given slug, or the first numbered variant of it that neither the content
- * directory nor the index has already claimed.
+ * directory nor the index has already claimed. A trashed document's URL is free
+ * to take (TASK-195).
  *
  * Both are checked because they can disagree for a moment: a file the watcher
  * has not picked up yet is on disk and not in the index, and a file that was
@@ -67,7 +70,8 @@ export async function freeSlug(options: FreeSlugOptions): Promise<string> {
     const permalink = defaultPermalink({ type: input.type, slug, date: input.date });
 
     if (store.getByPath(relative) !== undefined) continue;
-    if (store.getByPermalink(permalink) !== undefined) continue;
+    const holder = store.getByPermalink(permalink);
+    if (holder !== undefined && !isTrashedPath(holder.path)) continue;
     if (await exists(path.join(contentDir, ...relative.split('/')))) continue;
 
     return slug;
@@ -110,7 +114,10 @@ export async function saveDocument(options: SaveDocumentOptions): Promise<Docume
 
   // Parsed before it is written, so a document that cannot be read back is
   // refused rather than left on disk for the watcher to complain about.
-  const document = parseDocument(source, { path: relative });
+  const document = parseDocument(source, {
+    path: relative,
+    handles: handleDirectory(options.contentDir),
+  });
 
   await mkdir(path.dirname(file), { recursive: true });
 

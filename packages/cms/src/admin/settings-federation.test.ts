@@ -112,7 +112,7 @@ describe('the relays setting', () => {
   async function relaySite(contentDir?: string) {
     return await box.site({
       ...(contentDir === undefined ? {} : { contentDir }),
-      federation: { queue: null },
+      federation: { queue: null, allowPrivateAddress: true },
     });
   }
 

@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { citedCard, fieldsOf } from './__testing__/editor-form.ts';
 import { editorScreens } from './__testing__/editor-screens.ts';
 import { sandbox } from './__testing__/harness.ts';
 import { classesOf, classesOutsideTheBar, screenOf } from './__testing__/markup.ts';
 
 const box = sandbox();
+remoteHostsDoNotExist();
 after(() => box.cleanup());
 
 const EDITORS = ['newPost', 'newPage', 'filled', 'refused', 'trashed'] as const;
@@ -35,6 +37,7 @@ const GROUPS: Readonly<Record<(typeof EDITORS)[number], [string, boolean][]>> = 
     ['Tags and categories', true],
     ['Address', false],
     ['Responding to', false],
+    ['Event', false],
     ['Read', false],
     ['Summary and language', false],
     ['Syndicate to', false],
@@ -59,6 +62,7 @@ const GROUPS: Readonly<Record<(typeof EDITORS)[number], [string, boolean][]>> = 
     ['Tags and categories', true],
     ['Address', true],
     ['Responding to', true],
+    ['Event', false],
     ['Read', true],
     ['Summary and language', true],
     ['Syndicate to', true],
@@ -75,6 +79,7 @@ const GROUPS: Readonly<Record<(typeof EDITORS)[number], [string, boolean][]>> = 
     ['Tags and categories', true],
     ['Address', false],
     ['Responding to', true],
+    ['Event', false],
     ['Read', false],
     ['Summary and language', false],
     ['Syndicate to', false],
@@ -91,6 +96,7 @@ const GROUPS: Readonly<Record<(typeof EDITORS)[number], [string, boolean][]>> = 
     ['Tags and categories', true],
     ['Address', true],
     ['Responding to', false],
+    ['Event', false],
     ['Read', false],
     ['Summary and language', false],
     ['Syndicate to', false],
@@ -123,6 +129,9 @@ const FILLED_FORM: [string, string][] = [
   ['enclosure-transcript-type', ''],
   ['enclosure-transcript-url', ''],
   ['enclosure-url', '/uploads/2026/10/episode.mp3'],
+  ['event-end', ''],
+  ['event-location', ''],
+  ['event-start', ''],
   ['hash', ''],
   ['in-reply-to', ''],
   ['lang', 'fr'],
@@ -144,6 +153,7 @@ const FILLED_FORM: [string, string][] = [
   ['read-of-url', ''],
   ['read-status', 'finished'],
   ['repost-of', 'https://edu.example/files/calculator.png'],
+  ['rsvp', ''],
   ['slug', 'everything'],
   ['syndicate-to-mastodon', '1'],
   ['tags', 'one'],

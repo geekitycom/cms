@@ -304,12 +304,12 @@ reads the same directory, and everything in it is meant to be public:
 `data/` is private. It is never in git, and it is the half that has to be
 copied somewhere safe:
 
-| Path                        | What it holds                                                                                                                              |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `data/users.json`           | Usernames and argon2id password hashes, mode 0600.                                                                                         |
-| `data/keys/`                | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.**                                                         |
-| `data/locations.json`       | Where each post was written, keyed by permalink, mode 0600. Never in `content/`, so a public repository never carries it (decision-29).    |
-| `data/kept-properties.json` | The Micropub properties a post was sent that the site does not understand, such as an `rsvp`, keyed by permalink, mode 0600 (decision-27). |
+| Path                        | What it holds                                                                                                                                   |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data/users.json`           | Usernames and argon2id password hashes, mode 0600.                                                                                              |
+| `data/keys/`                | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.**                                                              |
+| `data/locations.json`       | Where each post was written, keyed by permalink, mode 0600. Never in `content/`, so a public repository never carries it (decision-29).         |
+| `data/kept-properties.json` | The Micropub properties a post was sent that the site does not understand, such as an `itinerary`, keyed by permalink, mode 0600 (decision-27). |
 
 And three things under `data/` may be deleted at any time the site is stopped:
 
@@ -345,7 +345,7 @@ the editor may attach where a post was written; the site keeps it in
 `data/locations.json` and publishes nothing of it until **Settings > Privacy**
 says otherwise. [Location on posts](#location-on-posts) describes the choice.
 A Micropub checkin is a location like any other. A Micropub property the site
-does not understand, such as an RSVP, is kept the same way in `data/kept-properties.json` and published nowhere.
+does not understand, such as an itinerary, is kept the same way in `data/kept-properties.json` and published nowhere.
 
 ### What is in the database, and what a rebuild loses
 
@@ -1705,7 +1705,8 @@ A `POST` without an `action` creates a post and needs the create scope. The
 body is form-encoded (`h=entry&content=…`), multipart (the same fields, with
 files as parts), or JSON (`{"type": ["h-entry"], "properties": {…}}`). In a
 form, a property with several values is sent once per value, as `category` or
-`category[]`. The site answers 201 with a `Location` header naming the new
+`category[]`. In JSON, each property is a list of values, and a bare value is
+read as a list of one, as Quill's event editor sends some. The site answers 201 with a `Location` header naming the new
 post's URL, draft or not.
 
 The endpoint maps these properties onto the editor's fields, and decision-27
@@ -1714,7 +1715,8 @@ otherwise.
 
 | Property               | Becomes                                                                                                                                                                                                                                                                                                                                                         |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `h=entry`              | The only type accepted. In JSON, `"type": ["h-entry"]`.                                                                                                                                                                                                                                                                                                         |
+| `h=entry`              | A post. In JSON, `"type": ["h-entry"]`.                                                                                                                                                                                                                                                                                                                         |
+| `h=event`              | An event (decision-32). In JSON, `"type": ["h-event"]`. Needs `start` and `name`. Its `location` is the event's place, not where the post was written.                                                                                                                                                                                                          |
 | `content`              | The body. Text is kept as the Markdown it is written in, and `{"html": "…"}` is converted to Markdown. Either way the HTML in it is cleaned first; see below.                                                                                                                                                                                                   |
 | `name`                 | The title. A post without one is a note.                                                                                                                                                                                                                                                                                                                        |
 | `summary`              | The description.                                                                                                                                                                                                                                                                                                                                                |
@@ -1723,13 +1725,17 @@ otherwise.
 | `post-status`          | `published` or `draft`. A draft is not published, federated or sent webmentions.                                                                                                                                                                                                                                                                                |
 | `mp-slug`              | The slug in the file name and the URL. Without it the slug comes from `name`, then the content's first five words. A like, repost, bookmark or reply with neither is named after the cited page's title, as `liked-scripting-news`, else its address, as `liked-scripting-com`. A photo post with neither is named by its first photo's alt text, else `photo`. |
 | `in-reply-to`          | Makes the post a reply to that URL.                                                                                                                                                                                                                                                                                                                             |
+| `rsvp`                 | `yes`, `no`, `maybe` or `interested`. With `in-reply-to` naming an event, makes the post an RSVP to it, and refused without it. Needs no content. It federates as a Note replying to the event (decision-31).                                                                                                                                                   |
 | `like-of`              | Makes the post a like of that URL. Needs no content. A like of a fediverse status federates as a `Like` of it (decision-28).                                                                                                                                                                                                                                    |
 | `repost-of`            | Makes the post a repost of that URL. Needs no content. A repost of a fediverse status federates as an `Announce` of it (decision-28).                                                                                                                                                                                                                           |
 | `bookmark-of`          | Makes the post a bookmark of that URL. Needs no content.                                                                                                                                                                                                                                                                                                        |
 | `read-of`              | What was read: an h-cite, `{"type": ["h-cite"], "properties": {"name": ["…"]}}` with `author`, `uid` (`isbn:…` or `doi:…`) and `url` when known. With `read-status`, makes the post a read. Needs no content.                                                                                                                                                   |
 | `read-status`          | `to-read`, `reading` or `finished`. Sent with `read-of`, and refused without it.                                                                                                                                                                                                                                                                                |
 | `photo`                | A photo on the post. Several values. A value is a URL, `{"value": "…", "alt": "…"}` in JSON, or a file part in a multipart request. A post with a photo and no reply target is a photo post.                                                                                                                                                                    |
+| `start`                | When an event starts. A time without an offset is in the site's time zone. Sent only with `h=event`, and refused on an `h=entry`.                                                                                                                                                                                                                               |
+| `end`                  | When an event ends, with `h=event` only. An end before the start is refused.                                                                                                                                                                                                                                                                                    |
 | `location`             | Where the post was written: a `geo:` URI such as `geo:48.85837,2.29448;u=50`, which Quill sends, or an h-geo, h-adr or h-card object. Kept in `data/locations.json`, never in the post's file; [Settings > Privacy](#location-on-posts) decides what readers see.                                                                                               |
+| `location` (event)     | With `h=event`, where the event is, written into the post as its place: words, a web address for an online event, or an h-card or h-adr, which is written as its name and address joined by commas, or as its `url` when it names none. Its coordinates are dropped. A `geo:` URI is refused.                                                                   |
 | `checkin`              | The venue of a checkin, an h-card, as Swarm and micropub.rocks send it. It becomes the post's location, marked as a checkin: the name, coordinates, locality, region and country are kept, and the URL, street address and postcode are dropped. Needs no content. A `location` sent with it fills in what it leaves out. Readers see it as any other location. |
 | `mp-syndicate-to`      | Selects a syndication target by its `uid`, as the editor's Syndicate to checkboxes do. Several values. The post is sent to the targets when it is published.                                                                                                                                                                                                    |
 | `slug`, `syndicate-to` | The same as `mp-slug` and `mp-syndicate-to`. Quill accounts created before Quill renamed them still send these names.                                                                                                                                                                                                                                           |
@@ -1776,7 +1782,7 @@ A request whose `Content-Length` is over the larger of `uploadMaxBytes` and
 so several photo files in one create share it, and it applies to JSON and
 form-encoded bodies too. The media endpoint has the same check.
 
-A property not in the table, such as `rsvp`, is kept as it was
+A property not in the table, such as `itinerary`, is kept as it was
 sent and the rest of the post is published. The site keeps it in
 `data/kept-properties.json`, keyed by the post's URL and mode 0600, never in
 the post's file, and shows it nowhere: not on the page, its Markdown or JSON,
@@ -1785,7 +1791,7 @@ update changes it, and it moves with the post. A post keeps up to 16 KiB of
 them. decision-27 records the rule.
 
 Anything else gets 400 `invalid_request` with a description that names it, and
-nothing is written. That covers another type such as `h=event`, an `mp-`
+nothing is written. That covers another type such as `h=card`, an `mp-`
 command the site does not carry out such as `mp-channel`, a create whose only
 properties are ones the site does not understand (Quill's weight post, which
 would publish an empty post), a file sent as a property other than `photo`, a
@@ -1818,6 +1824,12 @@ post's URL on this site. A URL that is not a post here gets 400
   of overwriting the update. The site answers 204, or 201 with a `Location` header
   when the post's URL changed, which only a re-dated draft can do.
 
+  On an event, `start`, `end` and `location` change the event. Changing one
+  keeps the other two, an end before the start is refused, and deleting
+  `start` is refused, since it would leave a post that is no event; the
+  editor can do that. A `start` or `end` sent to a post that is no event is
+  refused.
+
 - `action=delete` needs the delete scope. It moves the post to the trash, as
   the editor's Move to trash does. The post leaves the site, its feeds and
   search, and federates a `Delete`. The body is form-encoded or JSON. The site
@@ -1831,12 +1843,14 @@ A `GET` with `q` asks the endpoint a question and answers JSON. A query with
 no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
 
 - `?q=config` lists the media endpoint, the syndication targets under
-  `syndicate-to`, the post types the site accepts (note, article, reply, photo,
-  like, repost, bookmark and read), the queries it answers, and the visibility
+  `syndicate-to`, the post types the site accepts (note, article, reply, RSVP,
+  photo, like, repost, bookmark, read and event), the queries it answers, and the visibility
   values a post may take, `"visibility": ["public", "unlisted"]`. Each post
   type lists the `properties` a client should offer for it and the
   `required-properties` that make a post that type, so a client that reads
-  the list, such as Micropublish, offers no field the site refuses.
+  the list, such as Micropublish, offers no field the site refuses. The event
+  type offers `start`, `end`, `name` and the common properties, and requires
+  `start` and `name`.
 - `?q=syndicate-to` lists the syndication targets on their own. Each is the
   `uid` and `name` of a target in `content/_data/syndicationTargets.json`, with
   its `id` as the `uid`. A site that declares none lists `[]`. The file is read
@@ -1853,8 +1867,10 @@ no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
   author who sent it: a `geo:` URI for coordinates alone, an h-adr for a
   place's words, an h-card for a named place, each with the coordinates and
   their accuracy nested as `geo`. A checkin is answered as `checkin`, an
-  h-card, instead of `location`. A property the site does not understand is
-  answered as it was sent. Add `&properties[]=content`, once
+  h-card, instead of `location`. An event is answered as an `h-event` with its
+  `start` and `end` as UTC instants and its place as `location`; the author's
+  own location on an event is answered only when it is a checkin. A property
+  the site does not understand is answered as it was sent. Add `&properties[]=content`, once
   per property, to get only those properties, without the type. The same
   ownership rules as an update apply.
 - `?q=source` on the media endpoint answers
@@ -1900,13 +1916,16 @@ Test 700 uploads a jpg with the token micropub.rocks signs in for, which has
 create, update, delete and undelete and no media. It passes because the media
 endpoint takes a create token.
 
-[Quill](https://quill.p3k.io/) is supported: its note, article, bookmark, like
-and repost editors, the location its note editor attaches, its photo uploads
+[Quill](https://quill.p3k.io/) is supported: its note, article, bookmark, like,
+repost and event editors, the location its note editor attaches, its photo uploads
 through the media endpoint, and its last photo offer. Tests replay the
 requests its source builds. On a site with `requireAltText` on, a photo needs
 alt text: type it in Quill's photo dialog, which then sends
-`{"value": "…", "alt": "…"}`, or the post is refused. Quill's RSVP, code,
-event, review, itinerary, exercise and weight posts are not supported yet.
+`{"value": "…", "alt": "…"}`, or the post is refused. An event whose place
+was looked up keeps the place's name and address and drops its coordinates,
+and one given a date and no time starts at midnight in the site's time zone.
+Quill's code, review, itinerary, exercise and weight posts are not supported
+yet.
 
 ## The theme
 

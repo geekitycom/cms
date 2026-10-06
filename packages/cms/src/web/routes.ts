@@ -32,6 +32,7 @@ import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments
 import { commenterOf } from '../comments/viewer.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
+import { mountPingbacks, pingbackEndpointFor } from '../webmention/pingback.ts';
 import { mountWebmentions, WEBMENTION_PATH } from '../webmention/routes.ts';
 import { mountNotificationLinks } from '../notifications/routes.ts';
 import { advertiseIdentityEndpoints } from '../indieauth/discovery.ts';
@@ -48,6 +49,7 @@ import {
 import type { AuthorContext } from './authors.ts';
 import { feedComments, spokenIn } from './conversation.ts';
 import {
+  goneDocumentAt,
   isListed,
   isServed,
   permalinkOfObjectId,
@@ -68,6 +70,7 @@ import {
 } from './feeds.ts';
 import type { CommentFeedSource, FeedComment, FeedFormat, FeedSource } from './feeds.ts';
 import {
+  absoluteUrl,
   DOCUMENT_REPRESENTATIONS,
   documentJson,
   LISTING_REPRESENTATIONS,
@@ -156,6 +159,7 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // And where a webmention is sent (TASK-51), for the same reason and under
   // the same prefix.
   mountWebmentions(app);
+  mountPingbacks(app);
 
   // And where the one-click links in a notification land (TASK-55): the same
   // prefix again, and no session behind either of them.
@@ -501,6 +505,11 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   const { search } = new URL(c.req.url);
   if (formerly !== undefined) return c.redirect(`${formerly}${search}`, 301);
 
+  const deleted = [pathname, ...(extension?.paths ?? [])].some(
+    (candidate) => goneDocumentAt(store, candidate) !== undefined,
+  );
+  if (deleted) return gone(c);
+
   const canonical = canonicalPath(c, pathname, bases, authors);
   if (canonical !== undefined) return c.redirect(canonical, 301);
 
@@ -795,7 +804,7 @@ function negotiateDocument(
         ? documentJson(document, { baseUrl: c.var.config.baseUrl })
         : page?.html;
 
-  return representationResponse({
+  const response = representationResponse({
     body,
     representation,
     href: encodePath(href),
@@ -824,6 +833,12 @@ function negotiateDocument(
       : { etag: representationEtag(representation, page.fingerprint) }),
     conditional: conditionalHeaders(c),
   });
+
+  const pingback = pingbackEndpointFor(c.var.renderer.site(), document, c.var.config.now());
+  if (pingback !== undefined) {
+    response.headers.set('x-pingback', absoluteUrl(pingback, c.var.config.baseUrl));
+  }
+  return response;
 }
 
 /**
@@ -1777,6 +1792,10 @@ export function feedHref(
  */
 export function commentsFeedHref(document: Document | undefined): string {
   return commentsFeedPath(document === undefined ? undefined : encodePath(document.permalink));
+}
+
+function gone(c: Context<GeekityEnv>): Response {
+  return c.html(c.var.renderer.renderGone(requestPath(c)), 410);
 }
 
 /** The theme's 404 page. */

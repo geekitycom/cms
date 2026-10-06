@@ -19,6 +19,7 @@ import { archiveMonths, archiveOpen } from './archive.ts';
 import { authorContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import {
+  citedPhotoContext,
   citedPictureContext,
   createSiteDataSource,
   documentContext,
@@ -31,6 +32,7 @@ import {
   themeName,
 } from './context.ts';
 import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
+import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { ContactFormContext } from '../contact/form.ts';
 import type { Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
@@ -53,10 +55,12 @@ import { createTemplateEnvironment, useThemeDirs } from './templates.ts';
 import { createThemeSource, findThemeFile } from './themes.ts';
 import type { ThemeColors, ThemeSource } from './themes.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
+import { readCitedStart } from '../webmention/cited-start.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
 import { locationContext, syndicationLinks } from './context.ts';
+import { pingbackEndpointFor } from '../webmention/pingback.ts';
 import { webmentionEndpointFor } from '../webmention/routes.ts';
 
 /** Templates the default theme ships and the public routes ask for by name. */
@@ -69,6 +73,7 @@ export const TEMPLATES = {
   author: 'layouts/author.njk',
   search: 'layouts/search.njk',
   notFound: 'layouts/404.njk',
+  gone: 'layouts/410.njk',
   serverError: 'layouts/500.njk',
   maintenance: 'layouts/503.njk',
 } as const;
@@ -212,6 +217,8 @@ export interface Renderer {
   renderSearch(search: SearchPage): string;
   /** The 404 page, for a path that resolved to nothing. */
   renderNotFound(url: string): string;
+  /** The 410 page, for the URL of a document that was deleted (TASK-195). */
+  renderGone(url: string): string;
   /** The 500 page, for a request whose handler threw. */
   renderServerError(url: string): string;
   /**
@@ -518,11 +525,22 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     const contextOf = (target: string, property: string): Record<string, unknown> | undefined => {
       const cited = options.replyContext?.(target);
       if (cited === undefined) return undefined;
-      const { picture, ...rest } = cited;
+      const { picture, author, ...rest } = cited;
       const image = citesAnImage(cited);
       const alt = citedPictureAlt(property, cited, document);
+      const { photo, ...named } = author ?? { name: '' };
       return {
         ...replyContextFor(rest),
+        ...(author === undefined
+          ? {}
+          : {
+              author: {
+                ...named,
+                ...(photo === undefined || !shown
+                  ? {}
+                  : { photo: citedPhotoContext(photo, config) }),
+              },
+            }),
         ...(image ? { image } : {}),
         ...(picture === undefined || !shown
           ? {}
@@ -674,7 +692,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // only when there is something in it, so a theme can ask `{% if
     // conversation %}` and a post nobody has answered renders no empty
     // section (TASK-49).
-    const said = options.conversation?.(document);
+    const said = answerable(document, commentPolicyOf(siteData.read()), config.now())
+      ? options.conversation?.(document)
+      : undefined;
     // `commentForm` is on the context only when the post is open, so the
     // theme asks `{% if commentForm %}` rather than working the rules out
     // for itself — and a closed post shows the thread with no form.
@@ -689,6 +709,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // only when the site takes them, so a theme asks `{% if webmention %}`
     // and a site that has turned them off advertises nothing.
     const webmention = webmentionEndpointFor(siteData.read());
+    const pingback = pingbackEndpointFor(siteData.read(), document, config.now());
     // The posts either side of this one, as the two links a theme draws under
     // an entry (TASK-79). Each is on the context only when there is one, so a
     // theme asks `{% if previous %}` and the ends of the archive draw nothing.
@@ -724,6 +745,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(form === undefined ? {} : { commentForm: form }),
       ...(contact === undefined ? {} : { contactForm: contact }),
       ...(webmention === undefined ? {} : { webmention }),
+      ...(pingback === undefined ? {} : { pingback }),
       ...cited,
       syndicateTo: syndicated?.targets ?? [],
       syndication: syndicationLinks([
@@ -916,6 +938,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       });
     },
 
+    renderGone(url) {
+      return render(TEMPLATES.gone, {
+        title: 'Deleted',
+        url,
+        page: { url },
+      });
+    },
+
     renderServerError(url) {
       return render(TEMPLATES.serverError, {
         title: 'Something went wrong',
@@ -993,9 +1023,17 @@ function currentUrl(context: Record<string, unknown>): string {
 function replyContextFor(context: Omit<ReplyContext, 'picture'>): Record<string, unknown> {
   const published = context.published === undefined ? undefined : new Date(context.published);
   const { published: _published, ...rest } = context;
-  return published === undefined || Number.isNaN(published.getTime())
-    ? rest
-    : { ...rest, published };
+  const dated =
+    published === undefined || Number.isNaN(published.getTime()) ? rest : { ...rest, published };
+  return { ...dated, ...eventStartFor(context.start) };
+}
+
+function eventStartFor(written: string | undefined): Record<string, unknown> {
+  const start = readCitedStart(written ?? '');
+  if (start === undefined) return {};
+  return start.kind === 'wall-clock'
+    ? { startDate: start.asUtc, startZone: 'UTC' }
+    : { startDate: start.at };
 }
 
 function licenseContext(

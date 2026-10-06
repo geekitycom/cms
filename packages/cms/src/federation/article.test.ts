@@ -255,7 +255,7 @@ describe('the post object', () => {
     );
   });
 
-  it('serves nothing for a draft, a trashed post, a page or a URL naming nothing', async () => {
+  it('serves nothing for a draft, a page or a URL naming nothing, and a Tombstone for a trashed post', async () => {
     const instance = await site({
       ...HELLO,
       'posts/2026-09-01-secret.md': post('Secret', {
@@ -273,14 +273,13 @@ describe('the post object', () => {
       }),
     });
 
-    // A draft, a trashed post and a URL naming nothing have no public page at
-    // all, so they 404 exactly as they do for a browser. A page exists but
-    // federates nothing, so it falls through to the negotiator and earns the
-    // 406 doc-3 specifies.
-    for (const permalink of ['/2026/09/secret/', '/2026/08/gone/', '/2026/09/never-written/']) {
+    for (const permalink of ['/2026/09/secret/', '/2026/09/never-written/']) {
       const response = await get(instance, permalink, ACTIVITY_STREAMS);
       assert.equal(response.status, 404, `${permalink} is not an object`);
     }
+    const gone = await get(instance, '/2026/08/gone/', ACTIVITY_STREAMS);
+    assert.equal(gone.status, 410);
+    assert.equal(((await gone.json()) as Record<string, unknown>)['type'], 'Tombstone');
     assert.equal((await get(instance, '/about/', ACTIVITY_STREAMS)).status, 406);
 
     // The published post next to them still is, so the refusals are the filter
@@ -1480,6 +1479,88 @@ describe('a cited page in a note (TASK-262)', () => {
       mediaType: 'audio/mpeg',
       url: `${BASE_URL}/uploads/2026/10/clip.mp3`,
       name: 'Liked No No No <GIF> & more',
+    });
+  });
+});
+
+describe('an RSVP (TASK-198)', () => {
+  const EVENT = 'https://events.example/2026/10/indieweb-camp';
+
+  it('is a Note replying to the event, its content opening with what its author will do', async () => {
+    const instance = await site({
+      '_data/replyContexts.json': JSON.stringify({ [EVENT]: { name: 'IndieWeb Camp' } }),
+      'posts/2026-09-02-camp.md': rawPost(
+        [
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/camp/',
+          `in-reply-to: ${EVENT}`,
+          'rsvp: maybe',
+        ],
+        'If the trains run.',
+      ),
+    });
+
+    const note = await articleAt(instance, '/2026/09/camp/');
+
+    assert.equal(note['type'], 'Note');
+    assert.equal(note['inReplyTo'], EVENT);
+    assert.equal(
+      note['content'],
+      `<p>Maybe going to <a href="${EVENT}">IndieWeb Camp</a></p>\n${renderMarkdown('If the trains run.')}`,
+    );
+  });
+});
+
+describe('an event (TASK-200 AC #1)', () => {
+  it('is an Event with its name, its times, its place and its description', async () => {
+    const instance = await site({
+      'posts/2026-09-02-camp.md': rawPost(
+        [
+          'title: IndieWeb Camp',
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/camp/',
+          "start: '2026-10-10T14:00:00Z'",
+          "end: '2026-10-10T22:00:00Z'",
+          'location: Chicago Public Library',
+        ],
+        'Two days of building our own websites.',
+      ),
+    });
+
+    const event = await articleAt(instance, '/2026/09/camp/');
+
+    assert.equal(event['type'], 'Event');
+    assert.equal(event['name'], 'IndieWeb Camp');
+    assert.equal(event['startTime'], '2026-10-10T14:00:00Z');
+    assert.equal(event['endTime'], '2026-10-10T22:00:00Z');
+    assert.deepEqual(event['location'], { type: 'Place', name: 'Chicago Public Library' });
+    assert.equal(event['content'], renderMarkdown('Two days of building our own websites.'));
+    assert.equal(event['summary'], 'Two days of building our own websites.');
+    assert.equal(event['url'], 'https://blog.example/2026/09/camp/');
+  });
+
+  it('names where to join an online event by its address', async () => {
+    const instance = await site({
+      'posts/2026-09-02-club.md': rawPost(
+        [
+          'title: Homebrew Website Club',
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/club/',
+          "start: '2026-10-14T00:30:00Z'",
+          'location: https://meet.example/hwc',
+        ],
+        'Bring a site.',
+      ),
+    });
+
+    const event = await articleAt(instance, '/2026/09/club/');
+
+    assert.equal(event['type'], 'Event');
+    assert.equal(event['endTime'], undefined);
+    assert.deepEqual(event['location'], {
+      type: 'Place',
+      name: 'https://meet.example/hwc',
+      url: 'https://meet.example/hwc',
     });
   });
 });

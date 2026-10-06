@@ -5,6 +5,7 @@ import { clientAddress } from '../admin/throttle.ts';
 import type { GeekityEnv } from '../env.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { checkWebmentionRequest } from './receive.ts';
+import { postSyndicatedAt, syndicationCopies } from './syndication.ts';
 
 /**
  * The one public endpoint webmentions add.
@@ -59,6 +60,7 @@ export function mountWebmentions(app: Hono<GeekityEnv>): void {
       {
         baseUrl: config.baseUrl,
         documentAt: (pathname) => publicDocumentAt(store, pathname),
+        syndicatedAt: (url) => postSyndicatedAt(url, store, syndicationCopies(config.contentDir)),
       },
     );
 

@@ -31,7 +31,7 @@
 
 {% block content %}
 {% set entryUrl = page.url or url %}
-<article class="blog-post h-entry"{{ language.attr(lang) }}>
+<article class="blog-post {{ "h-event" if postType == "event" else "h-entry" }}"{{ language.attr(lang) }}>
   {#- A post with no name of its own (a note, or a reply without a title) is
       its words, so it opens on them in sight. Its page still needs one h1 to
       navigate by, so it gets one that says what it is, who wrote it and when,
@@ -39,21 +39,23 @@
       title and read the note as an article. -#}
   {% if named %}
   <header class="post-header">
-    {{ kicker.line(postType | capitalize, false, false, categories) }}
+    {{ kicker.line("RSVP" if postType == "rsvp" else postType | capitalize, false, false, categories) }}
     <h1 class="p-name">{{ title }}</h1>
     {% if description %}
     <p class="post-deck p-summary">{{ description }}</p>
     {% endif %}
   </header>
+  {% include "partials/event.njk" %}
   {% include "partials/reply-context.njk" %}
   {% include "partials/citations.njk" %}
   {% else %}
   <h1 class="screen-reader-text">
-    {{- postType | capitalize if postType in ["reply", "like", "repost", "bookmark", "read"] else "Note" }}
+    {{- "RSVP" if postType == "rsvp" else (postType | capitalize if postType in ["event", "reply", "like", "repost", "bookmark", "read"] else "Note") }}
     {%- if bioAuthor.name %} by {{ bioAuthor.name }}{% endif %}
     {%- if date %}, {{ date | date("readable", none, lang) }}{% endif -%}
   </h1>
-  {{ kicker.line(postType | capitalize, false, false, categories) }}
+  {{ kicker.line("RSVP" if postType == "rsvp" else postType | capitalize, false, false, categories) }}
+  {% include "partials/event.njk" %}
   {% include "partials/reply-context.njk" %}
   {% include "partials/citations.njk" %}
   {% endif %}
@@ -69,6 +71,7 @@
   <section class="e-content">
     {#- Inside the content, so a parser that reads only the content of a
         read, as a webmention receiver does, has its sentence. -#}
+    {% include "partials/rsvp.njk" %}
     {% include "partials/read.njk" %}
     {{ content | safe }}
     <p class="entry-meta">

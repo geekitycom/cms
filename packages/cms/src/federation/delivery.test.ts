@@ -69,6 +69,10 @@ const PLAIN_PAGE = `${REMOTE_ORIGIN}/blog/a-page/`;
 
 const SLOW_PAGE = `${REMOTE_ORIGIN}/blog/slow-page/`;
 
+const ERIN_ACTOR = `${REMOTE_ORIGIN}/users/erin`;
+const ERIN_INBOX = `${REMOTE_ORIGIN}/users/erin/inbox`;
+const ERIN_PROFILE = `${REMOTE_ORIGIN}/@erin`;
+
 /** One POST the site made while delivering. */
 interface Delivery {
   /** Where it went. */
@@ -92,6 +96,8 @@ let carolDocument: unknown;
 let statusDocument: unknown;
 let sharedInboxAuthorDocument: unknown;
 let sharedInboxAuthorStatusDocument: unknown;
+let erinDocument: unknown;
+const webfingerLookups: string[] = [];
 let restoreFetch: () => void;
 let slowPage: Promise<void> = Promise.resolve();
 let inboxes: Promise<void> = Promise.resolve();
@@ -121,6 +127,12 @@ before(async () => {
     url: new URL(SHARED_INBOX_AUTHOR_STATUS_URL),
     attribution: new URL(SHARED_INBOX_AUTHOR),
     content: 'Something worth answering.',
+  }).toJsonLd();
+  erinDocument = await new Person({
+    id: new URL(ERIN_ACTOR),
+    preferredUsername: 'erin',
+    url: new URL(ERIN_PROFILE),
+    inbox: new URL(ERIN_INBOX),
   }).toJsonLd();
   restoreFetch = routeRemoteHost();
 });
@@ -187,6 +199,7 @@ function routeRemoteHost(): () => void {
     }
     const served = new Map([
       [new URL(CAROL_ACTOR).pathname, carolDocument],
+      [new URL(ERIN_ACTOR).pathname, erinDocument],
       [new URL(STATUS_ID).pathname, statusDocument],
       [new URL(STATUS_URL).pathname, statusDocument],
       [new URL(SHARED_INBOX_AUTHOR).pathname, sharedInboxAuthorDocument],
@@ -196,6 +209,15 @@ function routeRemoteHost(): () => void {
     if (served !== undefined) {
       return new Response(JSON.stringify(served), {
         headers: { 'content-type': 'application/activity+json' },
+      });
+    }
+    if (url.pathname === '/.well-known/webfinger') {
+      const resource = url.searchParams.get('resource') ?? '';
+      webfingerLookups.push(resource);
+      if (resource !== 'acct:erin@remote.example') return new Response('', { status: 404 });
+      return Response.json({
+        subject: resource,
+        links: [{ rel: 'self', type: 'application/activity+json', href: ERIN_ACTOR }],
       });
     }
     if (url.href === SLOW_PAGE) {
@@ -1999,4 +2021,85 @@ bookmark-of: ${SLOW_PAGE}
       assert.deepEqual(deliveries, [], `saw ${JSON.stringify(deliveries)}`);
     });
   }
+});
+
+describe('a post that mentions a fediverse handle (TASK-194)', () => {
+  const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
+  const FOLLOWERS = `${BASE_URL}/author/${ADA}/followers/`;
+  const BODY = 'Thanks @erin@remote.example, and @ghost@remote.example too.';
+
+  async function mention(): Promise<Site & { agent: Browser }> {
+    const published = await site();
+    const agent = await signedIn(published.cms);
+    webfingerLookups.length = 0;
+    const response = await publishNewPost(agent, { title: '', slug: 'thanks', body: BODY });
+    assert.equal(response.status, 303, await response.text());
+    await published.cms.delivery.settled();
+    return { ...published, agent };
+  }
+
+  function objectOf(delivery: Delivery): Record<string, unknown> {
+    return delivery.body['object'] as Record<string, unknown>;
+  }
+
+  function list(value: unknown): unknown[] {
+    return value === undefined ? [] : [value].flat();
+  }
+
+  it('links a handle WebFinger resolves to the profile, as an h-card, and leaves the other as text (AC #2, #4)', async () => {
+    const { cms } = await mention();
+
+    const html = cms.store.getByPath('posts/2026-03-04-thanks.md')?.html ?? '';
+    assert.equal(
+      html,
+      `<p>Thanks <a class="u-category h-card" href="${ERIN_PROFILE}">@erin@remote.example</a>, and @ghost@remote.example too.</p>\n`,
+    );
+    const page = await (await cms.app.request(`${BASE_URL}/2026/03/thanks/`)).text();
+    assert.match(
+      page,
+      /<a class="u-category h-card" href="https:\/\/remote\.example\/@erin">@erin@remote\.example<\/a>/,
+    );
+  });
+
+  it('carries a Mention of the resolved account, with it in cc, and none for the other (AC #3)', async () => {
+    await mention();
+
+    const create = delivered('Create').find((one) => one.url === REMOTE_SHARED_INBOX);
+    assert.ok(create !== undefined, `saw ${JSON.stringify(deliveries.map((one) => one.url))}`);
+    const note = objectOf(create);
+    assert.deepEqual(
+      list(note['tag']).filter((tag) => (tag as Record<string, unknown>)['type'] === 'Mention'),
+      [{ type: 'Mention', href: ERIN_ACTOR, name: '@erin@remote.example' }],
+    );
+    assert.equal(note['to'], PUBLIC);
+    assert.deepEqual(list(note['cc']).sort(), [ERIN_ACTOR, FOLLOWERS].sort());
+    assert.deepEqual(list(create.body['cc']).sort(), [ERIN_ACTOR, FOLLOWERS].sort());
+  });
+
+  it('delivers the Create to the mentioned account’s inbox as well as the followers’ (AC #3)', async () => {
+    await mention();
+
+    assert.deepEqual(
+      delivered('Create')
+        .map((one) => one.url)
+        .sort(),
+      [ERIN_INBOX, REMOTE_SHARED_INBOX].sort(),
+    );
+  });
+
+  it('asks WebFinger once per handle, and not again for one it already knows', async () => {
+    const { agent, cms } = await mention();
+    assert.deepEqual(webfingerLookups.toSorted(), [
+      'acct:erin@remote.example',
+      'acct:ghost@remote.example',
+    ]);
+
+    webfingerLookups.length = 0;
+    const response = await submitEditor(agent, '/admin/posts/thanks', {
+      body: `${BODY} Edited.`,
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+    assert.deepEqual(webfingerLookups, ['acct:ghost@remote.example']);
+  });
 });

@@ -3,11 +3,13 @@
   grouped by kind, and the replies as a thread, in the source design's markup
   (decision-16, TASK-84).
 
-  Rendered from `layouts/post.njk` with the `conversation` on the context,
-  which is only there when there is something in it, so a post nobody has
-  answered renders none of this. A site replaces the whole section with a
-  `partials/conversation.njk` of its own in the theme it wears; the shape it is
-  handed is documented in the theme README under "The conversation".
+  Rendered from `layouts/post.njk` and `layouts/page.njk` with the
+  `conversation` on the context, which is only there when there is something
+  in it and, on a page, only while the page takes comments (TASK-196), so a
+  post nobody has answered renders none of this. A site replaces the whole
+  section with a `partials/conversation.njk` of its own in the theme it wears;
+  the shape it is handed is documented in the theme README under "The
+  conversation".
 
   The macros come first because Nunjucks defines one where it stands rather
   than hoisting it, and the two sections below call them.
@@ -80,6 +82,9 @@
       </div>
     </footer>
     <div class="comment-content e-content">
+      {%- if reply.rsvp %}
+      <p class="comment-rsvp"><data class="p-rsvp" value="{{ reply.rsvp.value }}">{{ reply.rsvp.label }}</data></p>
+      {%- endif %}
       {{ reply.content | safe }}
     </div>
     {#
@@ -101,6 +106,21 @@
   {% endif %}
 </li>
 {% endmacro %}
+
+{#
+  Who is coming to an event (TASK-200): each answer it was given, by a
+  webmention RSVP or a fediverse Accept, TentativeAccept or Reject, as a
+  facepile per answer in the order `conversation.rsvps` gives them, going
+  first. A post that is no event has no groups.
+#}
+{% set rsvpIcons = { yes: "✅", maybe: "🤔", interested: "⭐", no: "❌" } %}
+{% if conversation.rsvps.length %}
+<div class="reactions-section rsvps-section">
+  {%- for answer in conversation.rsvps %}
+  {{- group(answer.people, answer.label, "rsvp-" + answer.value, rsvpIcons[answer.value]) }}
+  {%- endfor %}
+</div>
+{% endif %}
 
 {#
   The reactions, above the thread. A like and a boost come from the fediverse

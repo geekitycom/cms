@@ -3,6 +3,8 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { databaseFile, openDatabase } from '../cache.ts';
 import type { Migration } from '../cache.ts';
+import { rsvpValue } from '../content/rsvp.ts';
+import type { RsvpValue } from '../content/rsvp.ts';
 import { REPLY_ACTIVITY_TYPE, replyTargetOf } from '../federation/replies.ts';
 
 /**
@@ -558,6 +560,17 @@ export interface CommentRecord {
    * would walk past the queue.
    */
   redacted?: readonly RedactedField[];
+  /**
+   * What a reply that is an RSVP says (TASK-198): the `p-rsvp` of the page a
+   * webmention came from. Absent for every other comment, so the files of a
+   * site that has had none stay byte for byte what they were.
+   */
+  rsvp?: RsvpValue;
+}
+
+/** A comment's {@link CommentRecord.rsvp} as a record carries it: present only when there is one. */
+export function rsvpField(rsvp: RsvpValue | undefined): Pick<CommentRecord, 'rsvp'> {
+  return rsvp === undefined ? {} : { rsvp };
 }
 
 /**
@@ -1076,8 +1089,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         id, slug, permalink, source, kind, status,
         author_name, author_url, author_email,
         markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar, notify,
-        redacted
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        redacted, rsvp
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET
         slug = excluded.slug,
         permalink = excluded.permalink,
@@ -1095,7 +1108,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         url = excluded.url,
         author_avatar = excluded.author_avatar,
         notify = excluded.notify,
-        redacted = excluded.redacted
+        redacted = excluded.redacted,
+        rsvp = excluded.rsvp
     `),
     deleteComment: db.prepare('DELETE FROM comments WHERE id = ?'),
     clearComments: db.prepare('DELETE FROM comments'),
@@ -1577,6 +1591,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         comment.author.avatar,
         comment.notify ? 1 : 0,
         redactedColumn(comment.redacted),
+        comment.rsvp ?? null,
       );
       return comment;
     },
@@ -1608,6 +1623,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             comment.author.avatar,
             comment.notify ? 1 : 0,
             redactedColumn(comment.redacted),
+            comment.rsvp ?? null,
           );
         }
       });
@@ -1935,6 +1951,7 @@ function toComment(row: Record<string, unknown>): PostComment {
     url: nullableText(row['url']),
     notify: Number(row['notify'] ?? 0) === 1,
     ...redactedOf(row['redacted']),
+    ...rsvpField(rsvpValue(row['rsvp'])),
   };
 }
 
@@ -2633,5 +2650,9 @@ const MIGRATIONS: readonly Migration[] = [
 
       CREATE INDEX actor_profiles_icon_url ON actor_profiles (icon_url);
     `,
+  },
+  {
+    version: 22,
+    sql: `ALTER TABLE comments ADD COLUMN rsvp TEXT;`,
   },
 ];

@@ -594,3 +594,24 @@ function isoBaseMedia(brand: string): number[] {
 function png(): Uint8Array {
   return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 }
+
+describe('the preview of an event (TASK-200 AC #4)', () => {
+  it('renders the unsaved event as an h-event with its start and place', async () => {
+    const { agent, token } = await admin();
+
+    const html = await (
+      await agent.post('/admin/preview', {
+        csrf_token: token,
+        type: 'post',
+        title: 'IndieWeb Camp',
+        'event-start': '2026-10-10 09:00',
+        'event-location': 'Chicago Public Library',
+        body: 'Two days of building.\n',
+      })
+    ).text();
+
+    assert.match(html, /<article class="blog-post h-event">/);
+    assert.match(html, /<time class="dt-start" datetime="2026-10-10T09:00:00.000Z">/);
+    assert.match(html, /<span class="p-location">Chicago Public Library<\/span>/);
+  });
+});

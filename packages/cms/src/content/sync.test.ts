@@ -868,8 +868,10 @@ describe('the search index (TASK-22 AC #2)', () => {
       path.join(dir, '_trash/posts/2026-09-02-hello.md'),
     );
     await eventually(
-      () => index.getByPath('_trash/posts/2026-09-02-hello.md') !== undefined,
-      'the trashed file to be indexed',
+      () =>
+        index.getByPath('_trash/posts/2026-09-02-hello.md') !== undefined &&
+        index.getByPath('posts/2026-09-02-hello.md') === undefined,
+      'the trashed file to replace the live one in the index',
     );
     assert.equal(index.countSearch('badgers'), 0, 'a trashed post is still found');
 

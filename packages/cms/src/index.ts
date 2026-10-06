@@ -50,6 +50,8 @@ import {
   rebuildFederationIndexes,
   signedProfileLoader,
 } from './federation/index.ts';
+import { citedPostReader } from './federation/cited-post.ts';
+import { handleLearner } from './federation/handles.ts';
 import type {
   ActorProfileService,
   DeliveryService,
@@ -1709,8 +1711,13 @@ export function createCms(config: GeekityConfig = {}): Cms {
     store,
     config: resolved,
     lookup: resolved.hostLookup,
+    fediverse: citedPostReader(() => federationContext()),
     onStored: (target, previous) => {
       delivery.citedPageStored(target, previous);
+      const original = replyContexts.read(target)?.original;
+      if (original !== undefined && original !== previous?.original) {
+        webmentions.originalFound(target, original);
+      }
     },
   });
 
@@ -1845,6 +1852,17 @@ export function createCms(config: GeekityConfig = {}): Cms {
     ),
   });
 
+  const federationContext = () =>
+    federation.createContext(new URL(resolved.baseUrl), {
+      admin,
+      store,
+      config: resolved,
+      actorProfiles,
+      cited: (url) => replyContexts.read(url),
+    });
+
+  const learnHandles = handleLearner(federationContext);
+
   const delivery = createDeliveryService({
     federation,
     admin,
@@ -1882,7 +1900,13 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // And so does the webmention sender: telling the pages a post links to is
   // the same news as telling the followers, and it should not matter which
   // door the post came in by (TASK-51).
-  const webmentions = createWebmentionService({ admin, store, config: resolved, notifications });
+  const webmentions = createWebmentionService({
+    admin,
+    store,
+    config: resolved,
+    notifications,
+    originalOf: (url) => replyContexts.read(url)?.original,
+  });
   content.events.on('change', (change) => {
     webmentions.handle(change);
   });
@@ -1982,6 +2006,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('relays', relays);
     c.set('webmentions', webmentions);
     c.set('replyContexts', replyContexts);
+    c.set('learnHandles', learnHandles);
     c.set('mail', mail);
     c.set('notifications', notifications);
     c.set('redirects', redirects);

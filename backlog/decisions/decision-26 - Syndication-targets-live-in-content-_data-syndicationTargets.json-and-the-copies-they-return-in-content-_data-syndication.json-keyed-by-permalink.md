@@ -34,3 +34,7 @@ Three places were considered for the returned URLs.
 - A target that is deselected, or a post that is drafted or trashed, is notified as any unlinked page is, and its copy is removed from the file.
 - A person can edit or remove an entry by hand. The reader drops an entry that is not a URL rather than failing a render.
 - The default theme no longer hard-codes the IndieNews link for posts tagged `indienews`. A site that relied on it declares an IndieNews target with `tag: indienews`.
+
+## Amendment (2026-10-05, TASK-197)
+
+The copies are also how a response finds its way home. A webmention whose target is not on this site is accepted when the target is one of a public post's copies, listed by hand under the post's `syndication` front matter or recorded for it in `content/_data/syndication.json`. The source is checked for a link to the copy it named, and what it says is stored as a response to the post the copy is of. A target elsewhere that is no copy of a post here is still refused.

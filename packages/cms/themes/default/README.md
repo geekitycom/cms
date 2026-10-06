@@ -17,6 +17,7 @@ themes/default/
     author.njk   one person's archive, paginated
     search.njk   the search form and what it found, paginated
     404.njk      nothing at this URL
+    410.njk      what was at this URL was deleted
     500.njk      the request failed on the server
     503.njk      the site is in maintenance mode
   partials/
@@ -25,14 +26,15 @@ themes/default/
     tags.njk          macros for tag and category links
     kicker.njk        the line above an entry naming its kind and date
     reply-context.njk the citation of what a reply answers
+    event.njk         when and where an event is
     citations.njk     the citation of what a like, repost or bookmark cites
     cited-page.njk    the name and author both citations print
     read.njk          what a read post read, and how far
     bio.njk           who an entry is by, as an h-card
     menu.njk          one named menu, as a nav of links
     feeds.njk         macros for the feed links in <head>
-    conversation.njk  the replies, likes and boosts under a post
-    comment-form.njk  the form under a post that is taking comments
+    conversation.njk  the replies, likes and boosts under a post or an open page
+    comment-form.njk  the form under a post or page that is taking comments
     contact-form.njk  the form on a page whose front matter says contact: true
     archive.njk       every post by month, on a page that says archive: true
     search-form.njk   the search box, on the search page
@@ -418,6 +420,44 @@ title and summary. The same partial cites a reply in a feed. The layouts own
 the placement; the partial owns only what the citation says, and it stays
 inside the `h-entry` wherever it is printed.
 
+**A reply to a silo copy cites the original** (TASK-197). When the post a
+reply answers is a copy of a post on another site, and that post lists the
+copy as its `u-syndication`, `replyContext.original` is the original's URL and
+the rest of `replyContext` describes the original. The `h-cite` links the
+original, and a `p.cite-copy` after it says "Also in reply to its copy on" the
+silo's host, linking the copy as a `u-in-reply-to` of its own, so a parser
+reads both as what the post answers.
+
+**An RSVP says whether its author is going** (TASK-198). An RSVP is a reply
+to an event whose `rsvp` is `yes`, `no`, `maybe` or `interested`.
+`partials/rsvp.njk` opens its `e-content` with a `p.rsvp-line` holding a
+`data.p-rsvp` whose value is the answer and whose text is Going, Not going,
+Maybe or Interested; it prints `rsvp.line`, the HTML the feeds also carry. Its
+reply context says "RSVP to" rather than "In reply to", and when the event's
+page is an `h-event`, or describes a schema.org `Event` in JSON-LD, its start
+follows the event's name as a `time.dt-start` and its place as a
+`span.p-location`, inside the `h-cite`. A start the event page wrote with no
+zone is that wall clock where the event is, so it is printed in UTC
+(`replyContext.startZone`) rather than moved into the site's zone. Its kicker
+and its hidden `h1` say RSVP. An RSVP to a silo copy of an event cites the
+original as a reply does.
+
+**An event is an h-event** (TASK-200, decision-32). A post whose front matter
+has a readable `start` is an event: its title is the event's name, its body
+the description, and `end` and `location` are optional. `layouts/post.njk`
+types its article `h-event` rather than `h-entry`, its kicker and hidden `h1`
+say Event, and `partials/event.njk` follows the title with a
+`dl.event-details`. The When row is a `time.dt-start` and, with an end, a
+`time.dt-end`, each written with the `date` filter's `datetime` format in the
+site's zone, with the instant as its `datetime`. The Where row is a
+`span.p-location` holding the place's words, or "Online at" an
+`a.p-location` that links the address to join an online event. The JSON-LD
+describes the post as a schema.org `Event` instead of a `BlogPosting`. That
+`Event` is a `Place` or a `VirtualLocation`, carries an attendance mode and an
+`EventScheduled` status, and names the author's Person as its `organizer`.
+The answers it is given are grouped in `conversation.rsvps`; see [The
+conversation](#the-conversation).
+
 **A like, a repost or a bookmark cites what it cites** (TASK-169) with
 `partials/citations.njk`, beside the reply context and drawn the same way: one
 `div.reply-context.cite.h-cite` per entry of `citations`, classed
@@ -451,6 +491,21 @@ plain `span.cite-site`, never an `h-card`, because a site is not an author: a
 bookmark of a Scripting News post reads "Bookmarked RSS tip #2 · Scripting
 News". A like's, a repost's or a bookmark's citation never prints the page's
 description, which on many sites describes the site rather than the post.
+
+**A citation shows who wrote the cited page** (TASK-199) as fully as the page
+said. The author's photo, an `img.u-photo.cite-avatar` with empty alt text
+since their name is beside it, comes before the name inside the `h-card`; a
+fediverse author's handle follows the name as a `span.p-nickname.cite-handle`
+reading `@user@host`. The photo is the `u-photo` of the `h-entry` author's
+`h-card` (or of the page's `h-card` for the same person), the avatar of the
+account an ActivityPub object is attributed to, or the author image in the
+page's JSON-LD, copied into the site's uploads as a picture is, and left out
+when the post has removed its preview. A Mastodon status is read from the
+ActivityPub object its page links, so its author's display name, handle,
+avatar, words, first image and date come from the status itself rather than
+from the page's `og:title`. A page with no `h-entry` and no object is read
+from its JSON-LD (`headline`, `author`, `datePublished`, `image`) and then its
+Open Graph, Twitter and `article:` tags.
 
 **A citation shows the cited page's picture** (TASK-252) when the page named
 one and the post has not removed its preview. The picture is the page's
@@ -553,8 +608,9 @@ its front matter names no `image`.
 After the entry a post prints `nav.blog-post-nav`: the `previous` and `next`
 posts as two cards, `rel="prev"` and `rel="next"`, each opening on a
 `span.blog-post-nav-label`, and nothing at all at the ends of the archive; then
-the conversation and the comment form. A page prints the contact form when its
-front matter asked for one. A page has no neighbours, no tags and no
+the conversation and the comment form. A page prints the conversation and the
+comment form too when it takes comments, and the contact form when its front
+matter asked for one. A page has no neighbours, no tags and no
 syndication links, because none of those are things a page has.
 
 ### The bio
@@ -723,6 +779,13 @@ writes one today and the header is the heading alone.
 `layouts/404.njk` says `Content not found.` under a `Not found` kicker and
 links home and to the search. The 500 and 503 pages below open on a kicker the
 same way.
+
+`layouts/410.njk` is the page at the URL of a post or page that was moved to
+the trash (TASK-195). It says `This content has been deleted.` under a
+`Deleted` kicker and links home and to the search. The context is the 404's:
+`title`, `url` and `page.url`, and nothing of the deleted document. Its `.md`
+and `.json` representations answer 410 too. A trashed draft was never public,
+so its URL is a 404 instead.
 
 `layouts/500.njk` is the page a request gets when the server fails while
 answering it (TASK-129). It says `Something went wrong.` in an
@@ -1261,6 +1324,8 @@ A document — one post, one page, or one entry of a listing — adds:
 | `photos`                                    | The post's photos, each `{ url, alt, html }`; `html` is the `img.u-photo`, responsive. Empty with none.           |
 | `citations`                                 | What it reposts, likes or bookmarks, each `{ property, url, context }`; `context` as `replyContext`, when known.  |
 | `read`                                      | A read post's `{ status, statusLabel, of, line }`; `of` is `{ name, author, uid, uidLabel, url }`.                |
+| `rsvp`                                      | An RSVP's `{ value, label, line }`: `yes`, `no`, `maybe` or `interested`, its words, and its `p-rsvp` line.       |
+| `event`                                     | An event's `{ start, end, location }`: `Date`s, and `{ kind: "place", name }` or `{ kind: "virtual", url }`.      |
 | `syndicateTo`                               | On a post's page, the syndication targets it selects, each `{ id, name, url }`. Empty with none.                  |
 | `syndication`                               | Its copies elsewhere, each `{ url, label }`: front matter `syndication`, and on its page the copies targets made. |
 | `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |
@@ -1543,6 +1608,18 @@ site that has turned them off advertises nothing. The CMS also sends the same
 endpoint as a `Link` header on every representation of a document, so a sender
 that does not parse HTML still finds it.
 
+The pingback endpoint follows it, as an absolute URL because the spec asks for
+one:
+
+```html
+<link rel="pingback" href="https://example.com/_geekity/pingback" />
+```
+
+It comes from `pingback` on the context, which is there only when the site
+takes webmentions and the document can be answered: every post, and a page
+only while it takes comments. The same endpoint goes out in an `X-Pingback`
+header under the same rule.
+
 On the front page it also writes the site's index for language models:
 
 ```html
@@ -1586,7 +1663,17 @@ ask:
 {% endif %}
 ```
 
-That is what `layouts/post.njk` does. `partials/conversation.njk` is the whole
+That is what `layouts/post.njk` does, and `layouts/page.njk` with it.
+
+A page takes part only while it takes comments: when its front matter says
+`comments: true` and the site has not switched comments off. A page is closed
+by default, as WordPress closes them, and the CMS leaves `conversation` off the
+context of a closed page however much has been approved against it, so a page
+that turns comments off shows nothing. A post is different: it keeps its thread
+after it closes. Webmentions to a page are received and moderated either way,
+exactly as webmentions to a post are, and appear once the page opens.
+
+`partials/conversation.njk` is the whole
 section — a `div.reactions-section` of the likes, the boosts and the mentions
 as facepiles grouped by kind, and then the thread as
 `div#comments.comments-area` — and a site replaces it with a
@@ -1610,34 +1697,37 @@ correctly; one that does can style them apart. The one thing a theme does have
 to look at is `kind`: a `mention` is in `conversation.mentions` rather than in
 the thread, because it is not an answer.
 
-| Key                                                | What it holds                                                                              |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `replies`                                          | The replies to the post, oldest first, each carrying its own `replies`. See below.         |
-| `likes`                                            | The likes, oldest first, in the same shape.                                                |
-| `boosts`                                           | The boosts, oldest first, in the same shape. A webmention `repost` is one of them.         |
-| `mentions`                                         | The pages and fediverse quotes about this post, oldest first, in the same shape.           |
-| `counts.replies`                                   | How many replies, counted through the whole thread rather than the top of it.              |
-| `counts.likes`, `counts.boosts`, `counts.mentions` | How many of each.                                                                          |
-| `counts.total`                                     | All four added up. Zero never reaches a template: there would be no `conversation` at all. |
+| Key                                                | What it holds                                                                                                           |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `replies`                                          | The replies to the post, oldest first, each carrying its own `replies`. See below.                                      |
+| `likes`                                            | The likes, oldest first, in the same shape.                                                                             |
+| `boosts`                                           | The boosts, oldest first, in the same shape. A webmention `repost` is one of them.                                      |
+| `mentions`                                         | The pages and fediverse quotes about this post, oldest first, in the same shape.                                        |
+| `rsvps`                                            | An event's answers, each group `{ value, label, people }`, going, maybe, interested, not going, only with people in it. |
+| `counts.replies`                                   | How many replies, counted through the whole thread rather than the top of it.                                           |
+| `counts.likes`, `counts.boosts`, `counts.mentions` | How many of each.                                                                                                       |
+| `counts.rsvps`                                     | How many people answered an event, in every group.                                                                      |
+| `counts.total`                                     | All of them added up. Zero never reaches a template: there would be no `conversation` at all.                           |
 
 Each entry — a reply, a like or a boost — is:
 
-| Key              | What it holds                                                                                                                                                                                                                                     |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`             | What it is called: a reply's own note id, which is what an answer to it names.                                                                                                                                                                    |
-| `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page, `"webmention"` for another page linking here.                                                                                                                        |
-| `kind`           | `"reply"`, `"like"`, `"boost"`, `"repost"` or `"mention"`. A `repost` comes from a webmention; a `mention` is a webmention or an approved fediverse quote.                                                                                        |
-| `author.name`    | The best name available: their display name, else their handle, else their server, else their id. For a webmention, the source's `h-card` name, else its host.                                                                                    |
-| `author.handle`  | `@user@host`, or `null`. Taken from the follower or actor profile the site holds, else guessed from the actor URL unless it ends in a number. `null` for a native comment.                                                                        |
-| `author.url`     | Their profile page, the website a commenter typed, or a webmention author's `u-url`. May be `null`, so guard the link.                                                                                                                            |
-| `author.avatar`  | Their avatar, or `null`. The site knows one for a fediverse actor whose profile it holds and for a webmention whose `h-card` carried a `u-photo`. Always a same-origin `/_geekity/avatars/…` path, never the remote URL: see [Avatars](#avatars). |
-| `author.actorId` | Their id, which is what identifies them however they are named. `null` for a native comment.                                                                                                                                                      |
-| `url`            | Where it can be read: the remote note's `url` for a fediverse reply or quote, the source page for a webmention, and `{permalink}#comment-{id}` — this page's own anchor — for a native comment.                                                   |
-| `content`        | What it says, **already sanitised**, so print it with `\| safe`. Empty for a like or a boost.                                                                                                                                                     |
-| `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.                                                                                                                                                     |
-| `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                                                                                                                      |
-| `status`         | `"published"`. On the record for the sources that moderate.                                                                                                                                                                                       |
-| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen.                                                                                                                                                                       |
+| Key              | What it holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`             | What it is called: a reply's own note id, which is what an answer to it names.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page, `"webmention"` for another page linking here.                                                                                                                                                                                                                                                                                                                                                            |
+| `kind`           | `"reply"`, `"like"`, `"boost"`, `"repost"` or `"mention"`. A `repost` comes from a webmention; a `mention` is a webmention or an approved fediverse quote.                                                                                                                                                                                                                                                                                                                            |
+| `author.name`    | The best name available: their display name, else their handle, else their server, else their id. For a webmention, the source's `h-card` name, else its host.                                                                                                                                                                                                                                                                                                                        |
+| `author.handle`  | `@user@host`, or `null`. Taken from the follower or actor profile the site holds, else guessed from the actor URL unless it ends in a number. `null` for a native comment.                                                                                                                                                                                                                                                                                                            |
+| `author.url`     | Their profile page, the website a commenter typed, or a webmention author's `u-url`. May be `null`, so guard the link.                                                                                                                                                                                                                                                                                                                                                                |
+| `author.avatar`  | Their avatar, or `null`. The site knows one for a fediverse actor whose profile it holds and for a webmention whose `h-card` carried a `u-photo`. Always a same-origin `/_geekity/avatars/…` path, never the remote URL: see [Avatars](#avatars).                                                                                                                                                                                                                                     |
+| `author.actorId` | Their id, which is what identifies them however they are named. `null` for a native comment.                                                                                                                                                                                                                                                                                                                                                                                          |
+| `url`            | Where it can be read: the remote note's `url` for a fediverse reply or quote, the source page for a webmention, and `{permalink}#comment-{id}` — this page's own anchor — for a native comment.                                                                                                                                                                                                                                                                                       |
+| `content`        | What it says, **already sanitised**, so print it with `\| safe`. Empty for a like or a boost.                                                                                                                                                                                                                                                                                                                                                                                         |
+| `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.                                                                                                                                                                                                                                                                                                                                                                                         |
+| `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                                                                                                                                                                                                                                                                                                                                                          |
+| `status`         | `"published"`. On the record for the sources that moderate.                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `rsvp`           | An RSVP: `{ value, label }`, its `p-rsvp` (`yes`, `no`, `maybe` or `interested`) and the words for it. Absent otherwise. A webmention reply that is an RSVP carries one, and the default theme prints it as a `data.p-rsvp` at the top of the comment's content. On an event, an RSVP is in `rsvps` rather than the thread, and so is a fediverse `Accept` (`yes`), `TentativeAccept` (`maybe`) or `Reject` (`no`) of the event. Each person is there once, with their latest answer. |
 
 Three rules decide what is in the thread, and they are the CMS's rather than a
 theme's: a reply whose author deleted it is gone, and its own answers move up to
@@ -1898,13 +1988,13 @@ the import above carries `with context`: a macro imported without it cannot see
 
 ## Filters
 
-| Filter                       | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `date(format, zone, locale)` | Formats a `Date` or a date string. `long` gives `2 September 2026` on an `en` site and `2 septembre 2026` on an `fr` one; `full`, `medium` and `short` are Intl's other date styles, and `readable` (the default) is `long`. `month` gives `September 2026`, `year` gives `2026`, `html` gives `2026-09-02` for a `<time datetime>`, and `iso` gives the full ISO 8601 instant. Every format but `html` and `iso` is written in the site's locale: the `locale` setting, or the `language` when that is empty. Bare `en` writes the day first, as `en-GB` does; `en-US` gives `September 2, 2026`. A date in a file is a UTC instant; every format but `iso` is rendered in the site's `timezone` setting, and `iso` stays the instant. Pass `zone` — an IANA name — to override the setting for one call. Pass `locale` — a BCP 47 tag — to write the words in another language for one call; it comes after `zone`, so pass `none` for the zone to keep the site's: `{{ date \| date("readable", none, lang) }}`. An empty locale, or one that is no tag, writes in the site's. A value that is not a date renders as the empty string. |
-| `plural(forms, locale)`      | Picks the form for a count by its plural category in the site's locale, through `Intl.PluralRules`: `{{ n \| plural({ one: "# reply", other: "# replies" }) }}`. The keys are the CLDR categories (`zero`, `one`, `two`, `few`, `many`, `other`), a category the forms leave out falls back to `other`, and `#` is the count in the locale's digits. Pass `locale` when the strings are in a language of their own: the default theme's words are English, so it passes `"en"`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `url`                        | Prefixes a root-relative path with the base URL's path, so a site served from a subdirectory links correctly. Eleventy's filter of the same name.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `absoluteUrl`                | The same path as a fully qualified URL against the site's `baseUrl`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `asset`                      | The URL of a file in the theme's `static/` directory, with the base path in front and a hash of the file's bytes on the end: `{{ "style.css" \| asset }}` gives `/theme/style.css?v=3f2a9c01b7d4`. The file is found the way `/theme/` finds it, the chosen theme first. A hashed URL is served with `Cache-Control: public, max-age=31536000, immutable`, and editing the file changes the hash on the next render. A file no theme has gets its plain `/theme/` URL.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Filter                       | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `date(format, zone, locale)` | Formats a `Date` or a date string. `long` gives `2 September 2026` on an `en` site and `2 septembre 2026` on an `fr` one; `full`, `medium` and `short` are Intl's other date styles, and `readable` (the default) is `long`. `datetime` gives `10 October 2026 at 09:00 GMT-5`, the day and the time with the zone named. `month` gives `September 2026`, `year` gives `2026`, `html` gives `2026-09-02` for a `<time datetime>`, and `iso` gives the full ISO 8601 instant. Every format but `html` and `iso` is written in the site's locale: the `locale` setting, or the `language` when that is empty. Bare `en` writes the day first, as `en-GB` does; `en-US` gives `September 2, 2026`. A date in a file is a UTC instant; every format but `iso` is rendered in the site's `timezone` setting, and `iso` stays the instant. Pass `zone` — an IANA name — to override the setting for one call. Pass `locale` — a BCP 47 tag — to write the words in another language for one call; it comes after `zone`, so pass `none` for the zone to keep the site's: `{{ date \| date("readable", none, lang) }}`. An empty locale, or one that is no tag, writes in the site's. A value that is not a date renders as the empty string. |
+| `plural(forms, locale)`      | Picks the form for a count by its plural category in the site's locale, through `Intl.PluralRules`: `{{ n \| plural({ one: "# reply", other: "# replies" }) }}`. The keys are the CLDR categories (`zero`, `one`, `two`, `few`, `many`, `other`), a category the forms leave out falls back to `other`, and `#` is the count in the locale's digits. Pass `locale` when the strings are in a language of their own: the default theme's words are English, so it passes `"en"`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `url`                        | Prefixes a root-relative path with the base URL's path, so a site served from a subdirectory links correctly. Eleventy's filter of the same name.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `absoluteUrl`                | The same path as a fully qualified URL against the site's `baseUrl`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `asset`                      | The URL of a file in the theme's `static/` directory, with the base path in front and a hash of the file's bytes on the end: `{{ "style.css" \| asset }}` gives `/theme/style.css?v=3f2a9c01b7d4`. The file is found the way `/theme/` finds it, the chosen theme first. A hashed URL is served with `Cache-Control: public, max-age=31536000, immutable`, and editing the file changes the hash on the next render. A file no theme has gets its plain `/theme/` URL.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 `date` reads one word rather than parsing it: `{{ "now" | date("year") }}` is
 the year at the moment the page is rendered, in the site's own timezone. It is

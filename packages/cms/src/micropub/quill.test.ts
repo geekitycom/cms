@@ -5,10 +5,13 @@ import { after, describe, it } from 'node:test';
 
 import matter from 'gray-matter';
 
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { findUser } from '../admin/accounts.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
+
+remoteHostsDoNotExist();
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -198,6 +201,83 @@ describe("Quill's own requests (AC #6)", () => {
       assert.equal(matter(await fileOf(cms, location)).data[property], params[property]);
     });
   }
+});
+
+describe('Quill’s event editor (TASK-280)', () => {
+  /**
+   * views/event.php: `name` and `start` are lists, `location` is the chosen
+   * place's h-card or the typed words, and `content` and `end` are bare
+   * strings, all JSON-encoded as they are built.
+   */
+  const place = {
+    type: ['h-card'],
+    properties: {
+      name: ['Chicago Public Library'],
+      latitude: [41.8764],
+      longitude: [-87.6283],
+      'street-address': ['400 S State St'],
+      locality: ['Chicago'],
+      region: ['Illinois'],
+      'country-name': ['US'],
+    },
+  };
+
+  it('posts an event at a place it looked up', async () => {
+    const { cms, token } = await site();
+    const location = await created(
+      await quillJson(cms, token, {
+        type: ['h-event'],
+        properties: {
+          name: ['IndieWeb Camp Chicago'],
+          start: ['2026-10-10T09:00-05:00'],
+          location: place,
+          category: ['indieweb'],
+          content: 'Two days of building.',
+          end: '2026-10-10T17:00-05:00',
+        },
+      }),
+    );
+    const { data, content } = matter(await fileOf(cms, location));
+    assert.equal(data['title'], 'IndieWeb Camp Chicago');
+    assert.equal(data['start'], '2026-10-10T14:00:00Z');
+    assert.equal(data['end'], '2026-10-10T22:00:00Z');
+    assert.equal(data['location'], 'Chicago Public Library, 400 S State St, Chicago, Illinois, US');
+    assert.deepEqual(data['tags'], ['indieweb']);
+    assert.equal(content.trim(), 'Two days of building.');
+  });
+
+  it('posts an event with a typed place, no end and no time zone', async () => {
+    const { cms, token } = await site();
+    const location = await created(
+      await quillJson(cms, token, {
+        type: ['h-event'],
+        properties: {
+          name: ['Meetup'],
+          start: ['2026-10-10T18:30'],
+          location: 'The usual pub',
+          category: [],
+          content: '',
+        },
+      }),
+    );
+    const { data } = matter(await fileOf(cms, location));
+    assert.equal(data['start'], '2026-10-10T18:30:00Z');
+    assert.equal(data['location'], 'The usual pub');
+    assert.equal(data['end'], undefined);
+  });
+
+  it('posts an event with the place left empty', async () => {
+    const { cms, token } = await site();
+    const location = await created(
+      await quillJson(cms, token, {
+        type: ['h-event'],
+        properties: { name: ['Somewhere'], start: ['2026-10-10'], location: '', content: '' },
+      }),
+    );
+    const { data } = matter(await fileOf(cms, location));
+    assert.equal(data['start'], '2026-10-10T00:00:00Z');
+    assert.equal(data['location'], undefined);
+  });
 });
 
 describe('the names accounts from before Quill’s migrations send (AC #1)', () => {

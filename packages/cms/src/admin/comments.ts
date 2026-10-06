@@ -6,7 +6,7 @@ import { isModerationAction, moderateComment } from '../comments/moderate.ts';
 import { intakeComment } from '../comments/records.ts';
 import type { CommentRecords } from '../comments/records.ts';
 import type { GeekityEnv } from '../env.ts';
-import { editorPath, PAGE_KIND, POST_KIND } from './documents.ts';
+import { documentEditorPath, PAGE_KIND, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { findUserById } from './accounts.ts';
@@ -320,7 +320,7 @@ function commentRow(c: Context<GeekityEnv>, comment: PostComment): CommentRow {
     editUrl:
       document === undefined
         ? null
-        : editorPath(document.type === 'page' ? PAGE_KIND : POST_KIND, document.slug),
+        : documentEditorPath(document.type === 'page' ? PAGE_KIND : POST_KIND, document),
     inReplyTo: comment.inReplyTo,
   };
 }

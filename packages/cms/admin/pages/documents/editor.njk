@@ -263,6 +263,16 @@
           {{ citedCard('in-reply-to') }}
           <p class="label block whitespace-normal text-xs">The address of the post this one answers. Leave it empty for a post that answers nobody.</p>
 
+          {% call field.select('editor-rsvp', 'rsvp', 'RSVP', error=(error if errorField == 'editor-rsvp' else '')) %}
+            <option value=""{% if form.rsvp == "" %} selected{% endif %}>Not an RSVP</option>
+            {% for choice in rsvpChoices %}
+              <option value="{{ choice.value }}"{% if form.rsvp == choice.value %} selected{% endif %}>{{ choice.label }}</option>
+            {% endfor %}
+            {% if unrecognizedRsvp %}
+              <option value="{{ unrecognizedRsvp }}" selected>{{ unrecognizedRsvp }} (not recognized)</option>
+            {% endif %}
+          {% endcall %}
+
           {#- The mf2 `like-of`, `repost-of` and `bookmark-of` (TASK-169): each
               cites a page the way a reply does, and sends it a webmention. -#}
           {{ field.text('editor-like-of', 'like-of', 'Like of', value=form.likeOf, type='url', error=(error if errorField == 'editor-like-of' else '')) }}
@@ -278,6 +288,14 @@
           {% if form.citedAlt and not describesCitedImage %}
           <input type="hidden" name="cited-alt" value="{{ form.citedAlt }}">
           {% endif %}
+        {% endcall %}
+
+        {% call collapse('Event', open.event, fields=true) %}
+          {% set eventTimeHint %}Wall-clock time in {{ dateZone }}. Stored as UTC.{% endset %}
+          {{ field.text('editor-event-start', eventFields.start, 'Starts', value=form.event.start, placeholder='2026-10-10 09:00', autocomplete='off', error=(error if errorField == 'editor-event-start' else ''), hint=eventTimeHint, hintId='editor-event-time-hint') }}
+          {{ field.text('editor-event-end', eventFields.end, 'Ends', value=form.event.end, placeholder='2026-10-10 17:00', autocomplete='off', error=(error if errorField == 'editor-event-end' else ''), hintId='editor-event-time-hint') }}
+          {{ field.text('editor-event-location', eventFields.location, 'Where', value=form.event.location, error=(error if errorField == 'editor-event-location' else ''), hint='The place, or the address to join an online event at.', hintId='editor-event-location-hint') }}
+          <p class="label block whitespace-normal text-xs">A post with a start is an event, named by its Title and described by its Body. Empty every box to make it a post again.</p>
         {% endcall %}
 
         {% call collapse('Read', open.read, fields=true) %}

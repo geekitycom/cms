@@ -5,6 +5,7 @@ import { after, describe, it } from 'node:test';
 
 import matter from 'gray-matter';
 
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { browser, csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import { assertInOrder, titleCell } from './__testing__/markup.ts';
 import { statuses } from './__testing__/statuses.ts';
@@ -13,6 +14,7 @@ import type { Browser } from './__testing__/harness.ts';
 import { saveUrlOf } from './__testing__/editor-form.ts';
 
 const box = sandbox();
+remoteHostsDoNotExist();
 after(() => box.cleanup());
 
 /** One Markdown file in a content directory, written the way a site's would be. */
@@ -108,6 +110,12 @@ async function submit(
     categories: field(html, 'categories') ?? '',
     description: field(html, 'description') ?? '',
     'in-reply-to': field(html, 'in-reply-to') ?? '',
+    rsvp:
+      /<select[^>]*name="rsvp"[^>]*>[\s\S]*?<option value="([^"]*)" selected>/.exec(html)?.[1] ??
+      '',
+    'event-start': field(html, 'event-start') ?? '',
+    'event-end': field(html, 'event-end') ?? '',
+    'event-location': field(html, 'event-location') ?? '',
     'like-of': field(html, 'like-of') ?? '',
     'repost-of': field(html, 'repost-of') ?? '',
     'bookmark-of': field(html, 'bookmark-of') ?? '',
@@ -694,6 +702,90 @@ describe('a read in the editor (TASK-229 AC #2)', () => {
       assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
     });
   }
+});
+
+describe('an RSVP in the editor (TASK-198 AC #3)', () => {
+  const FILE = ['posts', '2026-01-02-published.md'];
+  const EVENT = 'https://events.example/2026/10/indieweb-camp';
+
+  async function published(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  it('offers the four answers, sets rsvp, shows it on reload, and clears it again', async () => {
+    const { contentDir, agent } = await published();
+
+    const blank = await (await agent.get('/admin/posts/new')).text();
+    assert.match(blank, /<option value="" selected>Not an RSVP<\/option>/);
+    for (const label of ['Going', 'Not going', 'Maybe', 'Interested']) {
+      assert.match(blank, new RegExp(`<option value="[a-z]+">${label}</option>`));
+    }
+
+    const saved = await submit(agent, '/admin/posts/published', {
+      'in-reply-to': EVENT,
+      rsvp: 'maybe',
+    });
+    assert.equal(saved.status, 303);
+    const { data } = matter(await readFile(path.join(contentDir, ...FILE), 'utf8'));
+    assert.equal(data['rsvp'], 'maybe');
+    assert.equal(data['in-reply-to'], EVENT);
+
+    const reloaded = await (await agent.get('/admin/posts/published')).text();
+    assert.match(reloaded, /<option value="maybe" selected>Maybe<\/option>/);
+
+    assert.equal((await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status, 303);
+    const kept = matter(await readFile(path.join(contentDir, ...FILE), 'utf8')).data;
+    assert.equal(kept['rsvp'], 'maybe', 'another save keeps it');
+
+    assert.equal((await submit(agent, '/admin/posts/published', { rsvp: '' })).status, 303);
+    const written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+    assert.doesNotMatch(written, /rsvp/, 'the key is gone, not left empty');
+  });
+
+  for (const [changes, message] of [
+    [{ rsvp: 'yes' }, /An RSVP answers an event/],
+    [{ 'in-reply-to': EVENT, rsvp: 'perhaps' }, /RSVP is yes, no, maybe, interested, not perhaps/],
+  ] as const) {
+    it(`refuses ${JSON.stringify(changes)}, and writes nothing`, async () => {
+      const { contentDir, agent } = await published();
+      const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+      const response = await submit(agent, '/admin/posts/published', changes);
+
+      assert.equal(response.status, 400);
+      assert.match(await response.text(), message);
+      assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+    });
+  }
+
+  it('files a new RSVP with no title or text under the event it answers', async () => {
+    const { contentDir, agent } = await published();
+    const html = await (await agent.get('/admin/posts/new')).text();
+    const response = await agent.post('/admin/posts/new', {
+      csrf_token: csrfField(html) ?? '',
+      date: '2026-01-05T09:00:00Z',
+      'in-reply-to': EVENT,
+      rsvp: 'yes',
+      body: '',
+      action: 'publish',
+    });
+    assert.equal(response.status, 303);
+    assert.match(response.headers.get('location') ?? '', /rsvp-events-example-indieweb-camp/);
+    const files = await readdir(path.join(contentDir, 'posts'));
+    assert.ok(
+      files.some((name) => name.includes('rsvp-events-example')),
+      files.join(', '),
+    );
+  });
 });
 
 describe('the post language in the editor (TASK-154 AC #1)', () => {
@@ -2072,7 +2164,7 @@ describe('the trash', () => {
     assert.deepEqual(await readdir(path.join(contentDir, '_trash', 'posts')), [
       '2026-01-02-published.md',
     ]);
-    assert.equal((await cms.app.request('/2026/01/published/')).status, 404);
+    assert.equal((await cms.app.request('/2026/01/published/')).status, 410);
     assert.equal(cms.store.counts().trashed, 1);
 
     const restored = await submit(agent, '/admin/posts/published', { action: 'restore' });
@@ -2350,4 +2442,131 @@ describe('dates in the editor', () => {
       'Just after midnight',
     );
   });
+});
+
+describe('an event in the editor (TASK-200 AC #4)', () => {
+  const FILE = ['posts', '2026-01-02-published.md'];
+
+  async function published(timezone = 'UTC'): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+      },
+    ]);
+    await writeSiteJson({ contentDir, settings: { ...readSiteSettings(contentDir), timezone } });
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  it('reads the times in the site’s zone, writes UTC instants, shows them again, and clears them', async () => {
+    const { contentDir, agent } = await published('America/Chicago');
+
+    const blank = await (await agent.get('/admin/posts/new')).text();
+    assert.match(blank, /name="event-start"/);
+    assert.match(blank, /Wall-clock time in America\/Chicago/);
+
+    const saved = await submit(agent, '/admin/posts/published', {
+      'event-start': '2026-10-10 09:00',
+      'event-end': '2026-10-10 17:00',
+      'event-location': 'Chicago Public Library',
+    });
+    assert.equal(saved.status, 303);
+    const { data } = matter(await readFile(path.join(contentDir, ...FILE), 'utf8'));
+    assert.equal(String(data['start']), '2026-10-10T14:00:00Z');
+    assert.equal(String(data['end']), '2026-10-10T22:00:00Z');
+    assert.equal(data['location'], 'Chicago Public Library');
+
+    const reloaded = await (await agent.get('/admin/posts/published')).text();
+    assert.equal(field(reloaded, 'event-start'), '2026-10-10 09:00:00');
+    assert.equal(field(reloaded, 'event-end'), '2026-10-10 17:00:00');
+    assert.equal(field(reloaded, 'event-location'), 'Chicago Public Library');
+    assert.match(
+      reloaded,
+      /<details\b[^>]*\sopen\b[^>]*>\s*<summary\b[^>]*>\s*Event\s*</,
+      'the Event group opens on a post that is one',
+    );
+
+    assert.equal((await submit(agent, '/admin/posts/published', { title: 'Camp' })).status, 303);
+    const kept = matter(await readFile(path.join(contentDir, ...FILE), 'utf8')).data;
+    assert.equal(String(kept['start']), '2026-10-10T14:00:00Z', 'another save keeps it');
+
+    const cleared = await submit(agent, '/admin/posts/published', {
+      'event-start': '',
+      'event-end': '',
+      'event-location': '',
+    });
+    assert.equal(cleared.status, 303);
+    const written = await readFile(path.join(contentDir, ...FILE), 'utf8');
+    assert.doesNotMatch(written, /^(start|end|location):/m, 'the keys are gone, not left empty');
+  });
+
+  it('creates a new event that renders as one', async () => {
+    const { contentDir, agent } = await published();
+    const html = await (await agent.get('/admin/posts/new')).text();
+    const response = await agent.post('/admin/posts/new', {
+      csrf_token: csrfField(html) ?? '',
+      title: 'Homebrew Website Club',
+      date: '2026-01-05T09:00:00Z',
+      'event-start': '2026-02-01 18:00',
+      'event-location': 'https://meet.example/hwc',
+      body: 'Bring a site.',
+      action: 'publish',
+    });
+    assert.equal(response.status, 303);
+    const files = await readdir(path.join(contentDir, 'posts'));
+    const file = files.find((name) => name.includes('homebrew-website-club'));
+    assert.ok(file !== undefined, `a file was written: ${files.join(', ')}`);
+    const { data } = matter(await readFile(path.join(contentDir, 'posts', file), 'utf8'));
+    assert.equal(String(data['start']), '2026-02-01T18:00:00Z');
+    assert.equal(data['location'], 'https://meet.example/hwc');
+    assert.equal('end' in data, false);
+  });
+
+  it('leaves a location written by hand into a post that is no event alone', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+        extra: ['location: Somewhere by hand'],
+      },
+    ]);
+    const agent = await signedIn(await box.site({ contentDir }));
+
+    assert.equal((await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status, 303);
+
+    const { data } = matter(await readFile(path.join(contentDir, ...FILE), 'utf8'));
+    assert.equal(data['location'], 'Somewhere by hand');
+  });
+
+  for (const [changes, message, field] of [
+    [{ 'event-start': 'next tuesday' }, /Starts has to be a date/, 'editor-event-start'],
+    [
+      { 'event-start': '2026-10-10 09:00', 'event-end': '2026-10-09 09:00' },
+      /An event cannot end before it starts/,
+      'editor-event-end',
+    ],
+    [{ 'event-location': 'Library' }, /An event needs a start/, 'editor-event-start'],
+    [{ 'event-start': '2026-10-10 09:00', title: '' }, /An event needs a name/, 'editor-title'],
+  ] as const) {
+    it(`refuses ${JSON.stringify(changes)}, and writes nothing`, async () => {
+      const { contentDir, agent } = await published();
+      const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+      const response = await submit(agent, '/admin/posts/published', changes);
+
+      assert.equal(response.status, 400);
+      const page = await response.text();
+      assert.match(page, message);
+      assert.match(
+        page,
+        new RegExp(`id="${field}"[^>]*aria-invalid="true"|aria-invalid="true"[^>]*id="${field}"`),
+      );
+      assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+    });
+  }
 });

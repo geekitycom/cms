@@ -4,12 +4,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, FIRST_ADMIN, resolveNothing, signedIn } from '../admin/__testing__/harness.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { seedActorKeys } from '../federation/__testing__/keys.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+
+remoteHostsDoNotExist();
 
 /** The site under test. */
 const BASE_URL = 'https://blog.example';
@@ -56,6 +59,9 @@ const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 const sent: Sent[] = [];
 
+let verifyingAgainst: Cms | undefined;
+const verified: { source: string; status: number }[] = [];
+
 const restoreFetch = routeTheWeb();
 
 after(async () => {
@@ -66,6 +72,8 @@ after(async () => {
 
 beforeEach(() => {
   sent.length = 0;
+  verified.length = 0;
+  verifyingAgainst = undefined;
 });
 
 /** The make-believe web this test sends into. Nothing leaves the process. */
@@ -91,12 +99,17 @@ function routeTheWeb(): () => void {
       if (url !== FRIENDLY_ENDPOINT) return new Response('missing', { status: 404 });
 
       const body = new URLSearchParams(await request.text());
+      const source = body.get('source') ?? '';
       sent.push({
         endpoint: url,
-        source: body.get('source') ?? '',
+        source,
         target: body.get('target') ?? '',
         contentType: request.headers.get('content-type'),
       });
+      if (verifyingAgainst !== undefined) {
+        const response = await verifyingAgainst.app.request(new Request(source));
+        verified.push({ source, status: response.status });
+      }
       return new Response('', { status: 202 });
     }
 
@@ -269,6 +282,22 @@ describe('sending webmentions when a post is published', () => {
   });
 });
 
+describe('sending webmentions to a bare URL (TASK-194 AC #5)', () => {
+  it('tells a page the post names by its URL alone, as it tells a link', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+
+    const response = await publish(agent, `Worth reading: ${FRIENDLY}`);
+    assert.equal(response.status, 303, 'the post was published');
+    await cms.webmentions.settled();
+
+    assert.deepEqual(
+      sent.map((one) => [one.endpoint, one.target]),
+      [[FRIENDLY_ENDPOINT, FRIENDLY]],
+    );
+  });
+});
+
 describe('sending a webmention for a reply', () => {
   it('tells the post it replies to, though the body links nowhere', async () => {
     const cms = await site();
@@ -333,6 +362,23 @@ describe('sending a webmention for a like, a repost or a bookmark (TASK-169 AC #
   }
 });
 
+describe('sending a webmention for an RSVP (TASK-198 AC #2)', () => {
+  it('tells the event it answers, though the body links nowhere', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+
+    const response = await publish(agent, '', { 'in-reply-to': FRIENDLY, rsvp: 'yes' });
+    assert.equal(response.status, 303, 'the RSVP was published');
+    await cms.webmentions.settled();
+
+    assert.equal(cms.store.getBySlug('hello-world')?.extra['rsvp'], 'yes', 'saved as an RSVP');
+    assert.deepEqual(
+      sent.map((one) => [one.source, one.target]),
+      [[`${BASE_URL}/2026/03/hello-world/`, FRIENDLY]],
+    );
+  });
+});
+
 describe('sending a webmention for a read (TASK-233 AC #1)', () => {
   it('tells the page a read post’s read-of names, as it tells a citation', async () => {
     const cms = await site();
@@ -350,6 +396,34 @@ describe('sending a webmention for a read (TASK-233 AC #1)', () => {
       sent.map((one) => [one.source, one.target]),
       [[`${BASE_URL}/2026/03/hello-world/`, FRIENDLY]],
     );
+  });
+});
+
+describe('sending webmentions when a post is deleted', () => {
+  it('tells the pages it linked to, which find it gone when they verify (TASK-195)', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+    assert.equal((await publish(agent, `A friendly [one](${FRIENDLY}).`)).status, 303);
+    await cms.webmentions.settled();
+    sent.length = 0;
+    verifyingAgainst = cms;
+
+    const token = csrfField(await (await agent.get('/admin/posts/hello-world')).text());
+    assert.ok(token !== undefined, 'the editor carried a CSRF token');
+    const trashed = await agent.post('/admin/posts/hello-world', {
+      csrf_token: token,
+      action: 'trash',
+    });
+    assert.equal(trashed.status, 303, 'the post was moved to the trash');
+    await cms.webmentions.settled();
+
+    const source = `${BASE_URL}/2026/03/hello-world/`;
+    assert.deepEqual(
+      sent.map((one) => [one.source, one.target]),
+      [[source, FRIENDLY]],
+      'the page it linked to was told',
+    );
+    assert.deepEqual(verified, [{ source, status: 410 }], 'and found the post gone');
   });
 });
 

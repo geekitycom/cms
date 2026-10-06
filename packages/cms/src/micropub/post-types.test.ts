@@ -3,11 +3,14 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { findUser } from '../admin/accounts.ts';
 import { postTypeOf } from '../content/post-type.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
+
+remoteHostsDoNotExist();
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -45,7 +48,12 @@ const SAMPLES: Readonly<Record<string, unknown>> = {
     properties: { name: ['A Book'], author: ['An Author'], uid: ['isbn:9780000000000'] },
   },
   'read-status': 'finished',
+  rsvp: 'yes',
+  start: '2026-10-10T09:00:00Z',
+  end: '2026-10-10T17:00:00Z',
 };
+
+const EVENT_SAMPLES: Readonly<Record<string, unknown>> = { ...SAMPLES, location: 'The library' };
 
 /** Micropublish's own known properties (config/properties.json), and the legacy names Quill sends. */
 const CANDIDATES = [
@@ -134,13 +142,20 @@ async function create(
   { cms, token }: Site,
   names: readonly string[],
   value: (name: string) => unknown = (name) => SAMPLES[name],
+  type = 'h-entry',
 ): Promise<Response> {
   const properties = Object.fromEntries(names.map((name) => [name, [value(name)]]));
   return await cms.app.request(ENDPOINT, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ type: ['h-entry'], properties }),
+    body: JSON.stringify({ type: [type], properties }),
   });
+}
+
+async function createOf(made: Site, entry: PostTypeEntry, names: readonly string[]) {
+  return entry.type === 'event'
+    ? await create(made, names, (name) => EVENT_SAMPLES[name], 'h-event')
+    : await create(made, names);
 }
 
 async function createdType(made: Site, response: Response): Promise<string> {
@@ -183,6 +198,10 @@ describe('q=config post-types properties (AC #1, AC #2)', () => {
           required: ['name', 'content'],
         },
         reply: { properties: ['in-reply-to', 'name', ...shared], required: ['in-reply-to'] },
+        rsvp: {
+          properties: ['in-reply-to', 'rsvp', 'name', ...shared],
+          required: ['in-reply-to', 'rsvp'],
+        },
         photo: { properties: ['photo', 'name', ...shared], required: ['photo'] },
         like: { properties: ['like-of', 'name', ...shared], required: ['like-of'] },
         repost: { properties: ['repost-of', 'name', ...shared], required: ['repost-of'] },
@@ -191,6 +210,10 @@ describe('q=config post-types properties (AC #1, AC #2)', () => {
           properties: ['read-of', 'read-status', 'name', ...shared],
           required: ['read-of', 'read-status'],
         },
+        event: {
+          properties: ['start', 'end', 'name', ...shared],
+          required: ['start', 'name'],
+        },
       },
     );
   });
@@ -198,7 +221,7 @@ describe('q=config post-types properties (AC #1, AC #2)', () => {
   it('accepts a create of each type carrying every property it lists, as a post of that type', async () => {
     const made = await site();
     for (const entry of await postTypes(made)) {
-      const response = await create(made, entry.properties);
+      const response = await createOf(made, entry, entry.properties);
       assert.equal(await createdType(made, response), entry.type, entry.type);
     }
   });
@@ -206,7 +229,7 @@ describe('q=config post-types properties (AC #1, AC #2)', () => {
   it('accepts a create of each type carrying only its required properties, as a post of that type', async () => {
     const made = await site();
     for (const entry of await postTypes(made)) {
-      const response = await create(made, entry['required-properties']);
+      const response = await createOf(made, entry, entry['required-properties']);
       assert.equal(await createdType(made, response), entry.type, entry.type);
     }
   });

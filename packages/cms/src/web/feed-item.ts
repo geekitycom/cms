@@ -5,6 +5,7 @@ import { enclosureOf } from '../content/enclosure.ts';
 import type { Enclosure } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
 import { readLine, readOf } from '../content/read.ts';
+import { RSVP_PHRASES, rsvpLine, rsvpOf } from '../content/rsvp.ts';
 import type { Photo } from '../content/photo.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
 import { replyTarget, showsTitle } from '../content/post-type.ts';
@@ -237,6 +238,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     summary: feedExcerpt(document),
     html:
       citationLines(document, context.replyContext, baseUrl) +
+      rsvpLine(rsvpOf(document.extra)) +
       readLine(readOf(document.extra)) +
       photosHtml(photos, context.altTexts ?? new Map(), baseUrl) +
       absoluteHtmlUrls(document.html, link, baseUrl),
@@ -299,8 +301,9 @@ function citationLines(
   return cited
     .map(({ property, url }) => {
       const context = replyContext?.(url);
-      const href = escapeXml(url);
-      const name = citedPageName(url, context);
+      const shown = (property === 'in-reply-to' ? context?.original : undefined) ?? url;
+      const href = escapeXml(shown);
+      const name = citedPageName(shown, context);
       const author = context?.author?.name;
       const credit =
         author !== undefined && !name.toLowerCase().endsWith(` by ${author.toLowerCase()}`)
@@ -308,7 +311,9 @@ function citationLines(
           : author === undefined && context?.site !== undefined
             ? ` · ${escapeXml(context.site)}`
             : '';
-      const line = `<p class="cite-line">${CITATION_LINE_VERBS[property] ?? ''} <a href="${href}">${escapeXml(name)}</a>${credit}</p>\n`;
+      const rsvp = property === 'in-reply-to' ? rsvpOf(document.extra) : undefined;
+      const verb = rsvp === undefined ? (CITATION_LINE_VERBS[property] ?? '') : RSVP_PHRASES[rsvp];
+      const line = `<p class="cite-line">${verb} <a href="${href}">${escapeXml(name)}</a>${credit}</p>\n`;
       if (context?.picture === undefined || !previewShown(document.extra)) return line;
       const { picture } = context;
       const alt = citedPictureAlt(property, context, document);

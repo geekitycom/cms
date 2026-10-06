@@ -29,6 +29,8 @@ export { checkWebmentionRequest, VERIFY_TIMEOUT_MS, verifyWebmention } from './r
 export type {
   CheckWebmentionOptions,
   IncomingWebmention,
+  NotStored,
+  RequestProblem,
   VerifyWebmentionOptions,
   WebmentionOutcome,
   WebmentionRequest,
@@ -39,6 +41,13 @@ export {
   WEBMENTION_PATH,
   webmentionEndpointFor,
 } from './routes.ts';
+export {
+  mountPingbacks,
+  PINGBACK_FAULTS,
+  PINGBACK_MAX_BYTES,
+  PINGBACK_PATH,
+  pingbackEndpointFor,
+} from './pingback.ts';
 export { isPrivateHost, publicHost, systemHostLookup } from './public-address.ts';
 export type { HostLookup } from './public-address.ts';
 export {

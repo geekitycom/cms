@@ -35,6 +35,7 @@ import type { FederationContextData, SiteFederation } from './federation.ts';
 import { citingActivity, repliedTo, undoActivity } from './citations.ts';
 import type { Citing, CitedObject } from './citations.ts';
 import { followerRecipient } from './followers.ts';
+import { mentionedAccounts } from './handles.ts';
 import { updateActivityId } from './paths.ts';
 import { acceptedRelays, relayRecipient } from './relays.ts';
 
@@ -313,7 +314,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         context,
         postDeleteActivity(context, document, deleted),
         document,
-        citedAuthor(shape.replyTo?.author),
+        objectTargets(document, shape.replyTo, config.contentDir),
       );
     }
     return await send(
@@ -348,7 +349,12 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     document: Document,
     shape: Shape & { kind: 'object' },
   ): Promise<DeliveryReport> {
-    const report = await send(context, activity, document, citedAuthor(shape.replyTo?.author));
+    const report = await send(
+      context,
+      activity,
+      document,
+      objectTargets(document, shape.replyTo, config.contentDir),
+    );
     const object = await activity.getObject();
     if (object !== null) sentThisProcess.set(shape.id, await fingerprint(object));
     return report;
@@ -637,6 +643,39 @@ function citedAuthor(author: Actor | undefined): DeliveryTarget[] {
       actorIds: [author.id.href],
     },
   ];
+}
+
+function objectTargets(
+  document: Document,
+  replyTo: CitedObject | undefined,
+  contentDir: string,
+): DeliveryTarget[] {
+  const byInbox = new Map<string, DeliveryTarget>();
+  const mentioned = mentionedAccounts(document.body, contentDir).map(({ account }) => ({
+    inboxId: account.sharedInbox ?? account.inbox,
+    recipients: [
+      {
+        id: new URL(account.actor),
+        inboxId: new URL(account.inbox),
+        endpoints:
+          account.sharedInbox === undefined ? null : { sharedInbox: new URL(account.sharedInbox) },
+      },
+    ],
+    actorIds: [account.actor],
+  }));
+  for (const target of [...citedAuthor(replyTo?.author), ...mentioned]) {
+    const held = byInbox.get(target.inboxId);
+    if (held === undefined) {
+      byInbox.set(target.inboxId, target);
+    } else if (!held.actorIds.some((id) => target.actorIds.includes(id))) {
+      byInbox.set(target.inboxId, {
+        inboxId: target.inboxId,
+        recipients: [...held.recipients, ...target.recipients],
+        actorIds: [...held.actorIds, ...target.actorIds],
+      });
+    }
+  }
+  return [...byInbox.values()];
 }
 
 async function fingerprint(object: ActivityObject): Promise<string> {

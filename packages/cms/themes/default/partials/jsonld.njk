@@ -127,6 +127,34 @@
       {{- member("mainEntity", person) }}
     }{% endset %}
 {% set _ = nodes.push(profilePage) %}
+{% elif isEntry and event %}
+{% if event.location.kind == "virtual" %}
+{% set eventLocation = { "@type": "VirtualLocation", "url": event.location.url } %}
+{% set attendance = "https://schema.org/OnlineEventAttendanceMode" %}
+{% elif event.location %}
+{% set eventLocation = { "@type": "Place", "name": event.location.name, "address": event.location.name } %}
+{% set attendance = "https://schema.org/OfflineEventAttendanceMode" %}
+{% else %}
+{% set eventLocation = "" %}
+{% set attendance = "" %}
+{% endif %}
+{% set entry %}
+    {
+      "@type": "Event"
+      {{- member("@id", metaUrl + "#event") }}
+      {{- member("name", headline) }}
+      {{- member("url", metaUrl) }}
+      {{- member("mainEntityOfPage", metaUrl) }}
+      {{- member("startDate", event.start | date("iso")) }}
+      {{- member("endDate", event.end | date("iso") if event.end else "") }}
+      {{- member("location", eventLocation) }}
+      {{- member("eventAttendanceMode", attendance) }}
+      {{- member("eventStatus", "https://schema.org/EventScheduled") }}
+      {{- member("description", metaDescription) }}
+      {{- member("image", entryImage) }}
+      {{- member("organizer", person or publisher) }}
+    }{% endset %}
+{% set _ = nodes.push(entry) %}
 {% elif isEntry %}
 {% set entry %}
     {

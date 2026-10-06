@@ -435,7 +435,7 @@ describe('the page trash', () => {
 
     assert.deepEqual(await readdir(path.join(contentDir, 'pages')), []);
     assert.deepEqual(await readdir(path.join(contentDir, '_trash', 'pages')), ['about.md']);
-    assert.equal((await cms.app.request('/about/')).status, 404);
+    assert.equal((await cms.app.request('/about/')).status, 410);
     assert.equal(cms.store.counts().trashed, 1);
 
     const restored = await submit(agent, '/admin/pages/about', { action: 'restore' });

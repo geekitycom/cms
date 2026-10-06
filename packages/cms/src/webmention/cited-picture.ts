@@ -25,12 +25,16 @@ export interface PictureSource {
   readonly video?: true;
 }
 
-/** A cited page's picture as the reply contexts file keeps it. */
-export interface CitedPicture {
+/** An image a cited page names, copied into the site: its picture, or its author's photo. */
+export interface CitedImage {
   /** Its public path, under {@link CITED_PICTURE_PREFIX}. */
   readonly src: string;
   readonly width: number;
   readonly height: number;
+}
+
+/** A cited page's picture as the reply contexts file keeps it. */
+export interface CitedPicture extends CitedImage {
   readonly kind: CitedPictureKind;
   /** Whether it is a video's thumbnail, which a theme marks with a play sign. */
   readonly video?: true;
@@ -46,17 +50,28 @@ export type CitedPictureConfig = ImageConfig & Pick<ResolvedConfig, 'uploadMaxBy
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.gif', '.webp', '.avif'] as const;
 
+interface CopyOptions {
+  readonly lookup: HostLookup;
+  readonly config: CitedPictureConfig;
+  readonly timeoutMs?: number | undefined;
+}
+
 export async function copyCitedPicture(
   source: PictureSource,
-  options: {
-    readonly lookup: HostLookup;
-    readonly config: CitedPictureConfig;
-    readonly timeoutMs?: number | undefined;
-  },
+  options: CopyOptions,
 ): Promise<CitedPicture | undefined> {
-  const fetched = await fetchPublic(source.url, {
+  const image = await copyCitedImage(source.url, options);
+  if (image === undefined) return undefined;
+  return { ...image, kind: source.kind, ...(source.video === true ? { video: true } : {}) };
+}
+
+export async function copyCitedImage(
+  url: string,
+  options: CopyOptions,
+): Promise<CitedImage | undefined> {
+  const fetched = await fetchPublic(url, {
     lookup: options.lookup,
-    timeoutMs: options.timeoutMs ?? CITED_PICTURE_TIMEOUT_MS,
+    signal: AbortSignal.timeout(options.timeoutMs ?? CITED_PICTURE_TIMEOUT_MS),
     maxBytes: options.config.uploadMaxBytes,
     accept: 'image/avif, image/webp, image/png, image/gif, image/jpeg;q=0.9',
     contentType: { pattern: /^\s*image\//i, name: 'an image' },
@@ -95,12 +110,7 @@ export async function copyCitedPicture(
     console.warn(`Copied ${name} but could not derive its variants: ${message}`);
   }
 
-  return {
-    src: `${CITED_PICTURE_PREFIX}${name}`,
-    ...size,
-    kind: source.kind,
-    ...(source.video === true ? { video: true } : {}),
-  };
+  return { src: `${CITED_PICTURE_PREFIX}${name}`, ...size };
 }
 
 /** The size a reader sees: orientations 5 to 8 turn the picture on its side. */
@@ -147,20 +157,27 @@ export function citedPictureAlt(
 }
 
 export function parseCitedPicture(value: unknown): CitedPicture | undefined {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const image = parseCitedImage(value);
+  if (image === undefined) return undefined;
   const fields = value as Record<string, unknown>;
-  const { src, width, height, kind } = fields;
+  const { kind } = fields;
+  if (kind !== 'photo' && kind !== 'thumbnail') return undefined;
+  return { ...image, kind, ...(fields['video'] === true ? { video: true } : {}) };
+}
+
+export function parseCitedImage(value: unknown): CitedImage | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const { src, width, height } = value as Record<string, unknown>;
   if (
     typeof src !== 'string' ||
     !src.startsWith(CITED_PICTURE_PREFIX) ||
     src.slice(CITED_PICTURE_PREFIX.length).includes('/') ||
     !positiveInteger(width) ||
-    !positiveInteger(height) ||
-    (kind !== 'photo' && kind !== 'thumbnail')
+    !positiveInteger(height)
   ) {
     return undefined;
   }
-  return { src, width, height, kind, ...(fields['video'] === true ? { video: true } : {}) };
+  return { src, width, height };
 }
 
 function positiveInteger(value: unknown): value is number {

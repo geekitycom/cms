@@ -15,6 +15,7 @@ import type { MailService } from './mail/service.ts';
 import type { MaintenanceSwitch } from './maintenance.ts';
 import type { CommentNotifier } from './notifications/comments.ts';
 import type { ReplyContextService } from './webmention/reply-contexts.ts';
+import type { HandleLearner } from './federation/handles.ts';
 import type { WebmentionService } from './webmention/service.ts';
 import type { ConversationReader } from './web/conversation.ts';
 import type { RedirectSource } from './web/redirects.ts';
@@ -106,6 +107,8 @@ export interface GeekityEnv {
      * new post after the page it cites (TASK-250).
      */
     replyContexts: ReplyContextService;
+    /** Resolves the fediverse handles a save names before it is written (TASK-194). */
+    learnHandles: HandleLearner;
     /**
      * The site's outgoing email (TASK-53), so a handler can send one: the
      * settings screen's Send test email button, and the password resets,

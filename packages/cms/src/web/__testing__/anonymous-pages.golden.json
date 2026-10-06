@@ -69,7 +69,8 @@
       "strict-transport-security": "max-age=31536000; includeSubDomains",
       "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
-      "x-frame-options": "SAMEORIGIN"
+      "x-frame-options": "SAMEORIGIN",
+      "x-pingback": "https://blog.example/_geekity/pingback"
     },
     "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Hello world</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Hello world</h1><p>Words about engines.</p>\n</main>\n  </body>\n</html>\n"
   },
@@ -87,7 +88,8 @@
       "strict-transport-security": "max-age=31536000; includeSubDomains",
       "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
-      "x-frame-options": "SAMEORIGIN"
+      "x-frame-options": "SAMEORIGIN",
+      "x-pingback": "https://blog.example/_geekity/pingback"
     },
     "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>Hello world</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>Hello world</h1><p>Words about engines.</p>\n</main>\n  </body>\n</html>\n"
   },
@@ -104,7 +106,8 @@
       "strict-transport-security": "max-age=31536000; includeSubDomains",
       "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
-      "x-frame-options": "SAMEORIGIN"
+      "x-frame-options": "SAMEORIGIN",
+      "x-pingback": "https://blog.example/_geekity/pingback"
     },
     "body": ""
   },
@@ -390,6 +393,7 @@
       "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
       "x-frame-options": "SAMEORIGIN",
+      "x-pingback": "https://blog.example/_geekity/pingback",
       "x-robots-tag": "noindex"
     },
     "body": "{\n  \"schema\": 1,\n  \"url\": \"https://blog.example/2026/09/hello-world/\",\n  \"frontMatter\": {\n    \"title\": \"Hello world\",\n    \"date\": \"2026-09-19T09:00:00Z\",\n    \"permalink\": \"/2026/09/hello-world/\",\n    \"tags\": [\n      \"engines\"\n    ]\n  },\n  \"markdown\": \"Words about engines.\",\n  \"html\": \"<p>Words about engines.</p>\\n\"\n}\n"
@@ -411,6 +415,7 @@
       "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
       "x-frame-options": "SAMEORIGIN",
+      "x-pingback": "https://blog.example/_geekity/pingback",
       "x-robots-tag": "noindex"
     },
     "body": "---\ntitle: Hello world\ndate: '2026-09-19T09:00:00Z'\npermalink: /2026/09/hello-world/\ntags:\n  - engines\n---\n\nWords about engines.\n"

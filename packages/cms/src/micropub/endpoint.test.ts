@@ -84,11 +84,13 @@ describe('q=config', () => {
         { type: 'note', name: 'Note' },
         { type: 'article', name: 'Article' },
         { type: 'reply', name: 'Reply' },
+        { type: 'rsvp', name: 'RSVP' },
         { type: 'photo', name: 'Photo' },
         { type: 'like', name: 'Like' },
         { type: 'repost', name: 'Repost' },
         { type: 'bookmark', name: 'Bookmark' },
         { type: 'read', name: 'Read' },
+        { type: 'event', name: 'Event' },
       ],
     );
     assert.deepEqual(config['q'], ['config', 'syndicate-to', 'category', 'source']);

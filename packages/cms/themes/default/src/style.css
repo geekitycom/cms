@@ -672,6 +672,14 @@
     clip-path: polygon(0 0, 100% 50%, 0 100%);
   }
 
+  .cite-avatar {
+    @apply me-1 inline-block size-5 rounded-full object-cover align-[-0.3em];
+  }
+
+  .cite-handle {
+    @apply text-muted;
+  }
+
   .cite-photo {
     @apply mt-2 block;
   }
@@ -726,6 +734,18 @@
      heading is the hidden one TASK-144 gave it. */
   .blog-post > .screen-reader-text ~ .e-content {
     @apply text-[1.3rem] leading-[1.55];
+  }
+
+  .event-details {
+    @apply mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-sans text-sm;
+  }
+
+  .event-details dt {
+    @apply font-semibold text-muted;
+  }
+
+  .event-details dd {
+    @apply m-0;
   }
 
   .entry-meta,

@@ -265,7 +265,8 @@ export async function handleQuoteRequest(
 }
 
 /**
- * Handle an `Accept`: a relay agreeing to the subscription the site asked for.
+ * Handle an `Accept`: a relay agreeing to the subscription the site asked
+ * for, or somebody going to an event.
  *
  * The site follows nothing but relays (doc-4 keeps its `following` collection
  * empty), so an `Accept` addressed to it is an answer to one of the `Follow`
@@ -274,7 +275,7 @@ export async function handleQuoteRequest(
  */
 export async function handleAccept(context: SiteInboxContext, accept: Accept): Promise<void> {
   await logActivity(context, accept);
-  acceptRelay(context.data.admin, accept);
+  if (!answersPost(context, accept)) acceptRelay(context.data.admin, accept);
 }
 
 /**
@@ -283,7 +284,15 @@ export async function handleAccept(context: SiteInboxContext, accept: Accept): P
  */
 export async function handleReject(context: SiteInboxContext, reject: Reject): Promise<void> {
   await logActivity(context, reject);
-  rejectRelay(context.data.admin, reject);
+  if (!answersPost(context, reject)) rejectRelay(context.data.admin, reject);
+}
+
+function answersPost(context: SiteInboxContext, activity: Accept | Reject): boolean {
+  const { config, store } = context.data;
+  return (
+    activity.objectId !== null &&
+    postByObjectId(store, activity.objectId.href, config.baseUrl) !== undefined
+  );
 }
 
 /**

@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rm } from 'node:fs/promises';
+import { access, mkdir, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { Context, Hono } from 'hono';
@@ -14,6 +14,8 @@ import {
 } from '../content/citation.ts';
 import type { CitationProperty, CitedPageReader } from '../content/citation.ts';
 import type { Document, DocumentContent, DocumentType } from '../content/document.ts';
+import type { HandleLearner } from '../federation/handles.ts';
+import { handleDirectory } from '../content/handles.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { parseDocument } from '../content/parser.ts';
 import { PINNED_FRONT_MATTER_KEY, PINNED_POST_LIMIT, pinnedAt } from '../content/pinned.ts';
@@ -29,6 +31,7 @@ import {
   readWorkFrontMatter,
 } from '../content/read.ts';
 import type { Read } from '../content/read.ts';
+import { RSVP_FRONT_MATTER_KEY, RSVP_LABELS, RSVP_VALUES, rsvpValue } from '../content/rsvp.ts';
 import {
   ENCLOSURE_FRONT_MATTER_KEY,
   enclosureOf,
@@ -117,6 +120,17 @@ import {
   submittedReadOfForm,
 } from './read-field.ts';
 import type { ReadOfForm } from './read-field.ts';
+import {
+  BLANK_EVENT_FORM,
+  EVENT_FIELDS,
+  eventForm,
+  eventFrontMatter,
+  resolveEvent,
+  submittedEventForm,
+} from './event-field.ts';
+import type { EventForm } from './event-field.ts';
+import { eventOf } from '../content/event.ts';
+import type { PostEvent } from '../content/event.ts';
 import {
   SYNDICATE_TO_FRONT_MATTER_KEY,
   syndicateToOf,
@@ -239,6 +253,21 @@ export const PAGE_KIND: DocumentKind = {
 /** The URL of the editor for one document. */
 export function editorPath(kind: DocumentKind, slug: string): string {
   return `${kind.basePath}/${encodeURIComponent(slug)}`;
+}
+
+/**
+ * The URL of the editor for this document.
+ *
+ * A trashed document also names its file, because a live document may have
+ * taken its slug along with its URL (TASK-195).
+ */
+export function documentEditorPath(
+  kind: DocumentKind,
+  document: Pick<Document, 'slug' | 'path'>,
+): string {
+  const address = editorPath(kind, document.slug);
+  if (!isTrashedPath(document.path)) return address;
+  return `${address}?${new URLSearchParams({ path: document.path }).toString()}`;
 }
 
 /** The URL of the editor for a document that does not exist yet. */
@@ -365,7 +394,7 @@ export function mountDocumentScreens(
   );
 
   app.get(`${kind.basePath}/:slug`, (c) => {
-    const document = findBySlug(c.var.store, kind, c.req.param('slug'));
+    const document = findEdited(c.var.store, kind, c.req.param('slug'), c.req.query('path'));
     if (document === undefined) return c.notFound();
     const location = postLocations(c.var.config.dataDir).read(document.permalink);
     return renderEditor(c, {
@@ -377,7 +406,7 @@ export function mountDocumentScreens(
   });
 
   app.post(`${kind.basePath}/:slug`, async (c) => {
-    const document = findBySlug(c.var.store, kind, c.req.param('slug'));
+    const document = findEdited(c.var.store, kind, c.req.param('slug'), c.req.query('path'));
     if (document === undefined) return c.notFound();
 
     const body = await c.req.parseBody();
@@ -422,9 +451,11 @@ async function saveFromForm(
     description: text(body['description']).trim(),
     author: text(body['author']).trim(),
     inReplyTo: text(body['in-reply-to']).trim(),
+    rsvp: kind.type === 'post' ? text(body[RSVP_FRONT_MATTER_KEY]).trim() : '',
     ...citationFields((property) => (kind.type === 'post' ? text(body[property]).trim() : '')),
     readStatus: kind.type === 'post' ? text(body[READ_FIELDS.status]).trim() : '',
     readOf: kind.type === 'post' ? submittedReadOfForm(body) : BLANK_READ_OF_FORM,
+    event: kind.type === 'post' ? submittedEventForm(body) : BLANK_EVENT_FORM,
     lang: text(body['lang']).trim(),
     draft: body['draft'] !== undefined,
     visibility: formVisibility(text(body['visibility'])),
@@ -471,6 +502,7 @@ async function saveFromForm(
       writer: currentUsername(c),
       citedContext: (target) => c.var.replyContexts.describe(target),
       storedContext: (target) => c.var.replyContexts.read(target),
+      learnHandles: c.var.learnHandles,
     },
     { kind, document, form, draft },
   );
@@ -493,7 +525,7 @@ async function saveFromForm(
     savedMessage(document, saved, store.now(), (url) => c.var.replyContexts.read(url)),
   );
   if (undescribed.length > 0) flash(c, 'warning', missingAltText(undescribed));
-  return c.redirect(editorPath(kind, saved.slug), 303);
+  return c.redirect(documentEditorPath(kind, saved), 303);
 }
 
 /** What a write needs from the site, as plain values rather than a request. */
@@ -505,6 +537,7 @@ export interface DocumentSite {
   readonly writer: string | undefined;
   readonly citedContext: (target: string) => Promise<ReplyContext | undefined>;
   readonly storedContext: (target: string) => ReplyContext | undefined;
+  readonly learnHandles: HandleLearner;
 }
 
 /** What {@link writeDocument} is asked to write. */
@@ -575,6 +608,18 @@ export async function writeDocument(
       'In reply to has to be a web address, like https://example.com/a-post/.',
       'editor-in-reply-to',
     );
+  }
+
+  if (kind.type === 'post' && form.rsvp !== '') {
+    if (rsvpValue(form.rsvp) === undefined) {
+      return refused(`RSVP is ${RSVP_VALUES.join(', ')}, not ${form.rsvp}.`, 'editor-rsvp');
+    }
+    if (form.inReplyTo === '') {
+      return refused(
+        'An RSVP answers an event. Put the event’s address in In reply to.',
+        'editor-in-reply-to',
+      );
+    }
   }
 
   let read: Read | undefined;
@@ -667,6 +712,14 @@ export async function writeDocument(
 
   const timezone = readSiteSettings(contentDir).timezone;
 
+  if (kind.type === 'post') {
+    const resolved = resolveEvent(form.event, timezone);
+    if ('error' in resolved) return refused(resolved.error, resolved.field);
+    if (resolved.event !== undefined && form.title === '') {
+      return refused('An event needs a name. Put it in Title.', 'editor-title');
+    }
+  }
+
   // decision-11: what the file gets is a UTC instant, and an offset-less field
   // is the site's own wall clock rather than the server's.
   const typed = kind.dated ? (form.date === '' ? store.now().toISOString() : form.date) : undefined;
@@ -756,6 +809,7 @@ export async function writeDocument(
       store.now(),
       media,
       syndicationTargetsReader(contentDir)(),
+      timezone,
     ),
     body: form.body,
   };
@@ -764,6 +818,8 @@ export async function writeDocument(
   // claiming one permalink, and the index refuses that.
   const renamedFrom = document !== undefined && document.path !== target ? document : undefined;
   if (renamedFrom !== undefined) store.remove(renamedFrom.path);
+
+  await site.learnHandles(content.body);
 
   let saved: Document;
   try {
@@ -854,6 +910,7 @@ const CITED_SLUGS: Partial<
   repost: { prefix: 'reposted', field: 'repostOf' },
   like: { prefix: 'liked', field: 'likeOf' },
   reply: { prefix: 'reply-to', field: 'inReplyTo' },
+  rsvp: { prefix: 'rsvp', field: 'inReplyTo' },
   bookmark: { prefix: 'bookmarked', field: 'bookmarkOf' },
 };
 
@@ -868,6 +925,7 @@ async function typeSlug(
     'repost-of': form.repostOf,
     'like-of': form.likeOf,
     'in-reply-to': form.inReplyTo,
+    rsvp: form.rsvp,
     'bookmark-of': form.bookmarkOf,
     photo: photos.map((photo) => photo.url),
   });
@@ -1129,11 +1187,14 @@ function resolveExtra(
     | 'visibility'
     | 'readStatus'
     | 'readOf'
+    | 'rsvp'
+    | 'event'
     | (typeof CITATION_FIELDS)[CitationProperty]
   >,
   now: Date,
   media: ResolvedMedia,
   declared: readonly SyndicationTarget[],
+  timezone: string,
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
 
@@ -1146,6 +1207,16 @@ function resolveExtra(
       const cited = form[CITATION_FIELDS[property]];
       if (cited === '') delete extra[property];
       else extra[property] = cited;
+    }
+    const rsvp = rsvpValue(form.rsvp);
+    if (rsvp === undefined) delete extra[RSVP_FRONT_MATTER_KEY];
+    else extra[RSVP_FRONT_MATTER_KEY] = rsvp;
+    const event = resolveEvent(form.event, timezone);
+    if ('event' in event && isOrWasEvent(event.event, document)) {
+      for (const [key, value] of Object.entries(eventFrontMatter(event.event))) {
+        if (value === undefined) delete extra[key];
+        else extra[key] = value;
+      }
     }
     if (form.previewHidden) extra[PREVIEW_FRONT_MATTER_KEY] = false;
     else delete extra[PREVIEW_FRONT_MATTER_KEY];
@@ -1215,6 +1286,10 @@ function resolveExtra(
   }
 
   return extra;
+}
+
+function isOrWasEvent(saved: PostEvent | undefined, document: Document | undefined): boolean {
+  return saved !== undefined || (document !== undefined && eventOf(document.extra) !== undefined);
 }
 
 /** The editor checkbox that selects one syndication target. */
@@ -1399,6 +1474,7 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
       c.var.store.now(),
       options.media,
       syndicationTargetsReader(c.var.config.contentDir)(),
+      siteTimezone(c),
     ),
     body: form.body,
   });
@@ -1415,8 +1491,8 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
     freshHash: conflict.hash,
     submitted,
     current: conflict.current,
-    editUrl: editorPath(kind, document.slug),
-    saveUrl: editorPath(kind, document.slug),
+    editUrl: documentEditorPath(kind, document),
+    saveUrl: documentEditorPath(kind, document),
     action: form.draft ? 'save-draft' : 'publish',
   });
 }
@@ -1449,9 +1525,7 @@ async function moveDocument(
     document,
     action,
   );
-  if (moved === undefined) {
-    return backTo(c, options, `Could not move ${document.path}. Is the file still there?`);
-  }
+  if (moved.outcome === 'refused') return backTo(c, options, moved.reason);
 
   const label = postLabel(document, (url) => c.var.replyContexts.read(url));
   const message = action === 'trash' ? `Moved to the trash: ${label}` : `Restored: ${label}`;
@@ -1459,7 +1533,7 @@ async function moveDocument(
 
   return c.redirect(
     returnPath(options.returnTo) ??
-      (action === 'trash' ? kind.basePath : editorPath(kind, document.slug)),
+      (action === 'trash' ? kind.basePath : documentEditorPath(kind, moved.document)),
     303,
   );
 }
@@ -1471,31 +1545,52 @@ export interface MoveSite {
   readonly announce: (change: DocumentChange) => Promise<void>;
 }
 
+/** What {@link moveDocumentFile} did. */
+export type MoveOutcome =
+  | { readonly outcome: 'moved'; readonly document: Document }
+  | { readonly outcome: 'refused'; readonly reason: string };
+
 /**
  * Move a document into `content/_trash/` or back out of it, the move behind
  * the editor's trash and restore and Micropub's delete and undelete
- * (TASK-167). The document is the moved one, or `undefined` when its file
- * could not be moved.
+ * (TASK-167).
  *
  * The trash mirrors the content tree — `posts/2026-03-04-x.md` becomes
  * `_trash/posts/2026-03-04-x.md` — so restoring is the same move backwards and
  * needs to remember nothing. The index is corrected as soon as the file has
  * landed rather than waiting for the watcher, so the public site stops or
  * starts serving the document with this request (doc-1).
+ *
+ * A live document may take a trashed one's URL, and its file name with it
+ * (TASK-195). So a restore that would land on either is refused, and a trashed
+ * file already at the name is kept by numbering the newcomer: the permalink in
+ * the front matter, not the file name, is what the document answers at.
  */
 export async function moveDocumentFile(
   site: MoveSite,
   document: Document,
   action: 'trash' | 'restore',
-): Promise<Document | undefined> {
+): Promise<MoveOutcome> {
   const { store, contentDir } = site;
-  const target =
-    action === 'trash'
-      ? `${TRASH_DIRECTORY}/${document.path}`
-      : document.path
-          .split('/')
-          .filter((segment) => segment !== TRASH_DIRECTORY)
-          .join('/');
+  let target: string;
+  if (action === 'trash') {
+    target = await freeTrashPath(contentDir, document.path);
+  } else {
+    target = document.path
+      .split('/')
+      .filter((segment) => segment !== TRASH_DIRECTORY)
+      .join('/');
+    const holder = store.getByPermalink(document.permalink);
+    if (holder !== undefined && !isTrashedPath(holder.path)) {
+      return refusedMove(
+        `${holder.path} now holds ${document.permalink}, so this cannot go back there. ` +
+          'Change one of their permalinks first.',
+      );
+    }
+    if (await exists(path.join(contentDir, ...target.split('/')))) {
+      return refusedMove(`${target} already exists, so this cannot go back there.`);
+    }
+  }
 
   const from = path.join(contentDir, ...document.path.split('/'));
   const to = path.join(contentDir, ...target.split('/'));
@@ -1506,10 +1601,14 @@ export async function moveDocumentFile(
     await mkdir(path.dirname(to), { recursive: true });
     await rename(from, to);
   } catch {
-    return undefined;
+    return refusedMove(`Could not move ${document.path}. Is the file still there?`);
   }
 
-  const moved = parseDocument(source, { path: target, type: document.type });
+  const moved = parseDocument(source, {
+    path: target,
+    type: document.type,
+    handles: handleDirectory(contentDir),
+  });
   store.remove(document.path);
   store.upsert(moved);
 
@@ -1522,14 +1621,35 @@ export async function moveDocumentFile(
     next: moved,
     origin: 'admin',
   });
-  return moved;
+  return { outcome: 'moved', document: moved };
+}
+
+function refusedMove(reason: string): MoveOutcome {
+  return { outcome: 'refused', reason };
+}
+
+async function freeTrashPath(contentDir: string, relative: string): Promise<string> {
+  const { dir, name, ext } = path.posix.parse(`${TRASH_DIRECTORY}/${relative}`);
+  for (let suffix = 1; ; suffix += 1) {
+    const candidate = `${dir}/${name}${suffix === 1 ? '' : `-${String(suffix)}`}${ext}`;
+    if (!(await exists(path.join(contentDir, ...candidate.split('/'))))) return candidate;
+  }
+}
+
+async function exists(file: string): Promise<boolean> {
+  try {
+    await access(file);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Report a move that did not happen and go back where the form came from. */
 function backTo(c: Context<GeekityEnv>, options: MoveDocumentOptions, message: string): Response {
   flash(c, 'error', message);
   return c.redirect(
-    returnPath(options.returnTo) ?? editorPath(options.kind, options.document.slug),
+    returnPath(options.returnTo) ?? documentEditorPath(options.kind, options.document),
     303,
   );
 }
@@ -1617,6 +1737,11 @@ export interface EditorForm {
   author: string;
   /** The post this one replies to, the mf2 `in-reply-to`. Posts only. */
   inReplyTo: string;
+  /**
+   * Whether the author is going to the event `inReplyTo` names, the mf2
+   * `rsvp` (TASK-198), as the file or the form spells it. Posts only.
+   */
+  rsvp: string;
   /** The post this one reposts, the mf2 `repost-of` (TASK-169). Posts only. */
   repostOf: string;
   /** The post this one likes, the mf2 `like-of` (TASK-169). Posts only. */
@@ -1630,6 +1755,8 @@ export interface EditorForm {
   readStatus: string;
   /** What was read, the mf2 `read-of` (TASK-229). Posts only. */
   readOf: ReadOfForm;
+  /** When and where the post's event is (TASK-200). Posts only. */
+  event: EventForm;
   /** The language it is written in, the `lang` key; empty for the site's. */
   lang: string;
   draft: boolean;
@@ -1705,9 +1832,11 @@ export function blankForm(
     // {@link authorChoices} is where the default is applied.
     author: '',
     inReplyTo: '',
+    rsvp: '',
     ...citationFields(() => ''),
     readStatus: '',
     readOf: BLANK_READ_OF_FORM,
+    event: BLANK_EVENT_FORM,
     lang: '',
     draft: false,
     visibility: 'public',
@@ -1753,6 +1882,10 @@ export function formFor(
     description: document.description ?? '',
     author: document.author ?? '',
     inReplyTo: document.inReplyTo ?? '',
+    rsvp:
+      document.type === 'post' && typeof document.extra[RSVP_FRONT_MATTER_KEY] === 'string'
+        ? document.extra[RSVP_FRONT_MATTER_KEY]
+        : '',
     // As the file spells it, so a save writes back what it read.
     ...citationFields((property) =>
       document.type === 'post' ? citationText(document.extra[property]) : '',
@@ -1764,6 +1897,7 @@ export function formFor(
     readOf: readOfForm(
       document.type === 'post' ? readWork(document.extra[READ_OF_FRONT_MATTER_KEY]) : undefined,
     ),
+    event: document.type === 'post' ? eventForm(document.extra, timezone) : BLANK_EVENT_FORM,
     lang:
       typeof document.extra[LANG_FRONT_MATTER_KEY] === 'string'
         ? document.extra[LANG_FRONT_MATTER_KEY]
@@ -1864,7 +1998,12 @@ async function renderEditor(
           photoChoices: await photoChoices(c.var.config.contentDir),
           locationFields: LOCATION_FIELDS,
           ...citedPreviews(c, form),
+          rsvpChoices: RSVP_VALUES.map((value) => ({ value, label: RSVP_LABELS[value] })),
+          ...(form.rsvp === '' || rsvpValue(form.rsvp) !== undefined
+            ? {}
+            : { unrecognizedRsvp: form.rsvp }),
           readFields: READ_FIELDS,
+          eventFields: EVENT_FIELDS,
           readStatuses: READ_STATUSES.map((value) => ({ value, label: READ_STATUS_LABELS[value] })),
           ...(form.readStatus === '' || isReadStatus(form.readStatus)
             ? {}
@@ -1885,7 +2024,7 @@ async function renderEditor(
       document === undefined
         ? `Add ${kind.singular}`
         : `Edit ${kind.singular}: ${postLabel(document, (url) => c.var.replyContexts.read(url))}`,
-    saveUrl: document === undefined ? newEditorPath(kind) : editorPath(kind, document.slug),
+    saveUrl: document === undefined ? newEditorPath(kind) : documentEditorPath(kind, document),
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
     uploadUrl: UPLOADS_PATH,
@@ -1936,13 +2075,24 @@ function citedPreviews(
   };
 }
 
+function findEdited(
+  store: ContentStore,
+  kind: DocumentKind,
+  slug: string,
+  file: string | undefined,
+): Document | undefined {
+  if (file === undefined) return findBySlug(store, kind, slug);
+  const document = store.getByPath(file);
+  return document?.type === kind.type && document.slug === slug ? document : undefined;
+}
+
 /**
- * The document of this kind with this slug.
+ * The document of this kind with this slug, a live one before a trashed one.
  *
  * The index's slug lookup is across both kinds and is not unique, so a direct
- * hit is only taken when it is of the right kind; otherwise the listing is
- * searched, trash included, because the editor is where a trashed document is
- * restored from.
+ * hit is only taken when it is live and of the right kind; otherwise the
+ * listing is searched, trash included, because the editor is where a trashed
+ * document is restored from.
  */
 export function findBySlug(
   store: ContentStore,
@@ -1950,7 +2100,7 @@ export function findBySlug(
   slug: string,
 ): Document | undefined {
   const direct = store.getBySlug(slug);
-  if (direct?.type === kind.type) return direct;
+  if (direct?.type === kind.type && !isTrashedPath(direct.path)) return direct;
 
   for (const trashed of [false, true]) {
     const found = store
@@ -2034,7 +2184,7 @@ function listRow(
     trashed: isTrashedPath(document.path),
     scheduled: scheduledFor(document, now) !== undefined,
     hidden: typeof visibilityOf(document) !== 'string',
-    editUrl: editorPath(kind, document.slug),
+    editUrl: documentEditorPath(kind, document),
     viewUrl: isPublic ? document.permalink : undefined,
     role,
   };

@@ -9,6 +9,7 @@ import { after, describe, it } from 'node:test';
 
 import sharp from 'sharp';
 
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { createUser, findUser } from '../admin/accounts.ts';
@@ -16,6 +17,8 @@ import { addFollower } from '../federation/records.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+
+remoteHostsDoNotExist();
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -267,6 +270,28 @@ describe('updating a like, a repost and a bookmark (TASK-169)', () => {
     const document = documentAt(cms, url);
     assert.equal(document.extra['bookmark-of'], 'https://peer.example/kept-instead/');
     assert.equal(document.extra['like-of'], undefined);
+  });
+});
+
+describe('an RSVP over q=source and update (TASK-198)', () => {
+  const event = 'https://events.example/2026/10/indieweb-camp';
+
+  it('answers rsvp beside in-reply-to, and changes it on a replace', async () => {
+    const { cms, token } = await site(ALL);
+    const url = await created(cms, token, { 'in-reply-to': [event], rsvp: ['maybe'] });
+
+    const source = await query(cms, token, `q=source&url=${encodeURIComponent(url)}`);
+    const body = (await source.json()) as { properties: Record<string, unknown[]> };
+    assert.deepEqual(body.properties['rsvp'], ['maybe']);
+    assert.deepEqual(body.properties['in-reply-to'], [event]);
+
+    const response = await postJson(cms, token, {
+      action: 'update',
+      url,
+      replace: { rsvp: ['yes'] },
+    });
+    assert.equal(response.status, 204, await response.clone().text());
+    assert.equal(documentAt(cms, url).extra['rsvp'], 'yes');
   });
 });
 

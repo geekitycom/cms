@@ -26,6 +26,8 @@ export interface HtmlElement {
   readonly attributes: Readonly<Record<string, string>>;
   /** What is inside it, in document order. */
   readonly children: HtmlNode[];
+  /** What a JSON-LD script holds, as written; it is data, not text of the page. */
+  readonly data?: string;
 }
 
 /** A run of text between tags, with its character references resolved. */
@@ -157,7 +159,15 @@ export function parseHtml(source: string): HtmlElement {
     }
 
     if (RAW_TEXT.has(tag.name)) {
+      const start = at;
       at = afterElement(source, tag.name, at);
+      if (
+        tag.name === 'script' &&
+        tag.attributes['type']?.trim().toLowerCase() === 'application/ld+json'
+      ) {
+        const data = source.slice(start, at).replace(/<\/script\s*>$/i, '');
+        current().children.push({ name: tag.name, attributes: tag.attributes, children: [], data });
+      }
       continue;
     }
 

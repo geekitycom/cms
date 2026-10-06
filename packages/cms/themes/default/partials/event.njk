@@ -1,0 +1,27 @@
+{#
+  When and where an event is (TASK-200): its `dt-start`, its `dt-end` when it
+  has one, and its `p-location`, the place's words or a link to join it
+  online. `layouts/post.njk` includes it inside the h-event with `event` on
+  the context. The times are the site's clock (decision-11), named with its
+  zone so a reader elsewhere can work out their own; the `datetime` is the
+  instant.
+#}
+{% if event %}
+<dl class="event-details">
+  <dt>When</dt>
+  <dd>
+    <time class="dt-start" datetime="{{ event.start | date("iso") }}">{{ event.start | date("datetime", none, lang) }}</time>
+    {%- if event.end %} to <time class="dt-end" datetime="{{ event.end | date("iso") }}">{{ event.end | date("datetime", none, lang) }}</time>{% endif %}
+  </dd>
+  {% if event.location %}
+  <dt>Where</dt>
+  <dd>
+    {%- if event.location.kind == "virtual" -%}
+    Online at <a class="p-location" href="{{ event.location.url }}">{{ event.location.url | host }}</a>
+    {%- else -%}
+    <span class="p-location">{{ event.location.name }}</span>
+    {%- endif -%}
+  </dd>
+  {% endif %}
+</dl>
+{% endif %}

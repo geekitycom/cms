@@ -4,12 +4,14 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { blankForm, POST_KIND } from './documents.ts';
 import { openGroups } from './editor-layout.ts';
 
 const box = sandbox();
+remoteHostsDoNotExist();
 after(() => box.cleanup());
 
 const MP3 = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09]);
@@ -121,6 +123,7 @@ describe('the post editor’s disclosures (TASK-245)', () => {
       ['Tags and categories', true],
       ['Address', false],
       ['Responding to', false],
+      ['Event', false],
       ['Read', false],
       ['Summary and language', false],
       ['Syndicate to', false],
@@ -157,6 +160,7 @@ describe('the post editor’s disclosures (TASK-245)', () => {
       ['Tags and categories', true],
       ['Address', true],
       ['Responding to', true],
+      ['Event', false],
       ['Read', true],
       ['Summary and language', true],
       ['Syndicate to', true],

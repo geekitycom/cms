@@ -40,6 +40,7 @@ const SINGLE_VALUED = {
   name: 'title',
   summary: 'description',
   'in-reply-to': 'inReplyTo',
+  rsvp: 'rsvp',
   'repost-of': 'repostOf',
   'like-of': 'likeOf',
   'bookmark-of': 'bookmarkOf',
@@ -65,6 +66,8 @@ const MAPPED_ON_THEIR_OWN = [
   'visibility',
   'read-of',
   'read-status',
+  'start',
+  'end',
 ] as const;
 
 export type Property =
@@ -158,12 +161,11 @@ export function fromJson(body: unknown): CreateRequest | { readonly error: strin
   if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) {
     return { error: 'A JSON request carries its properties in an object.' };
   }
-  const entries = Object.entries(properties as Record<string, unknown>);
-  const notLists = entries.filter(([, values]) => !Array.isArray(values)).map(([name]) => name);
-  if (notLists.length > 0) {
-    return { error: `Every property is a list of values; ${notLists.join(', ')} is not.` };
-  }
-  return { type: type[0], properties: new Map(entries as [string, unknown[]][]) };
+  // Quill's event editor sends location, content and end unwrapped.
+  const entries = Object.entries(properties as Record<string, unknown>).map(
+    ([name, values]): [string, unknown[]] => [name, Array.isArray(values) ? values : [values]],
+  );
+  return { type: type[0], properties: new Map(entries) };
 }
 
 /** A photo sent as a file part of a multipart create, for the editor row it fills. */
@@ -206,9 +208,9 @@ export function createForm(
   site: CreateSite,
 ): CreatedForm | { readonly errors: string[] } {
   const { author, timezone, now } = site;
-  if (request.type !== 'h-entry') {
+  if (request.type !== 'h-entry' && request.type !== 'h-event') {
     const named = request.type === '' ? 'no type' : request.type;
-    return { errors: [`This endpoint creates h-entry posts, not ${named}.`] };
+    return { errors: [`This endpoint creates h-entry and h-event posts, not ${named}.`] };
   }
 
   const properties = new Map<string, readonly unknown[]>();
@@ -269,12 +271,32 @@ export function createForm(
     }
     return photo;
   });
-  form.location = locationForm(
-    checkinOverLocation(
-      parsedLocation('location', properties.get('location') ?? [], locationFromMicropub, errors),
-      parsedLocation('checkin', properties.get('checkin') ?? [], checkinFromMicropub, errors),
-    ),
+  const checkin = parsedLocation(
+    'checkin',
+    properties.get('checkin') ?? [],
+    checkinFromMicropub,
+    errors,
   );
+  if (request.type === 'h-event') {
+    form.event = {
+      start: text('start'),
+      end: text('end'),
+      location: eventPlaceText(properties.get('location') ?? [], errors),
+    };
+    if (form.event.start === '') errors.push('An h-event needs a start.');
+    form.location = locationForm(checkin);
+  } else {
+    const eventOnly = (['start', 'end'] as const).filter((name) => properties.has(name));
+    if (eventOnly.length > 0) {
+      errors.push(`${eventOnly.join(' and ')} belong to an event; send it as an h-event.`);
+    }
+    form.location = locationForm(
+      checkinOverLocation(
+        parsedLocation('location', properties.get('location') ?? [], locationFromMicropub, errors),
+        checkin,
+      ),
+    );
+  }
   form.readOf = readOf(properties.get('read-of') ?? [], errors);
   form.readStatus = text('read-status');
   if (form.readStatus !== '' && !isReadStatus(form.readStatus)) {
@@ -353,6 +375,41 @@ function checkinOverLocation(
 ): PostLocation | undefined {
   if (location === undefined || checkin === undefined) return checkin ?? location;
   return postLocation({ ...location, ...checkin, geo: checkin.geo ?? location.geo });
+}
+
+const EVENT_PLACE_REFUSAL =
+  'An event’s location is words, a web address, or an h-card or h-adr naming a place.';
+
+const PLACE_WORDS = ['name', 'street-address', 'locality', 'region', 'country-name'] as const;
+
+function eventPlaceText(values: readonly unknown[], errors: string[]): string {
+  if (values.length > 1) errors.push('location takes one value.');
+  const [value] = values;
+  if (value === undefined) return '';
+  if (typeof value === 'string') {
+    if (!/^geo:/i.test(value.trim())) return value.trim();
+    errors.push(EVENT_PLACE_REFUSAL);
+    return '';
+  }
+  const { type, properties } =
+    typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  const given =
+    typeof properties === 'object' && properties !== null
+      ? (properties as Record<string, unknown>)
+      : {};
+  const first = (name: string): string => {
+    const listed = given[name];
+    const text: unknown = Array.isArray(listed) ? listed[0] : undefined;
+    return typeof text === 'string' ? text.trim() : '';
+  };
+  const words = [...new Set(PLACE_WORDS.map(first).filter((part) => part !== ''))].join(', ');
+  const url = first('url');
+  const place = words !== '' ? words : isWebUrl(url) ? url : '';
+  if (!Array.isArray(type) || !type.some((t) => t === 'h-card' || t === 'h-adr') || place === '') {
+    errors.push(EVENT_PLACE_REFUSAL);
+    return '';
+  }
+  return place;
 }
 
 const READ_OF_PROPERTIES = ['name', 'author', 'uid', 'url'] as const;

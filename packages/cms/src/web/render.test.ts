@@ -173,6 +173,16 @@ describe('the theme filters', () => {
     assert.equal(formatDate('2026-01-01T02:00:00Z', 'year', 'America/Chicago'), '2025');
   });
 
+  it('renders datetime as the day and the time with the zone named (TASK-200)', () => {
+    const instant = '2026-09-02T02:00:00Z';
+
+    assert.equal(
+      formatDate(instant, 'datetime', 'America/Chicago'),
+      '1 September 2026 at 21:00 GMT-5',
+    );
+    assert.equal(formatDate(instant, 'datetime', 'UTC', 'fr'), '2 septembre 2026 à 02:00 UTC');
+  });
+
   it('keeps iso the instant whatever the timezone', () => {
     assert.equal(
       formatDate('2026-09-02T02:00:00Z', 'iso', 'America/Chicago'),

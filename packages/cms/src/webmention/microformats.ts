@@ -1,3 +1,5 @@
+import { rsvpValue } from '../content/rsvp.ts';
+import type { RsvpValue } from '../content/rsvp.ts';
 import { classesOf, elementsIn, innerHtmlOf, isElement, parseHtml, textOf } from './html.ts';
 import type { HtmlElement } from './html.ts';
 
@@ -57,6 +59,8 @@ export interface SourceEntry {
   readonly published: string | null;
   /** Where it lives: its own `u-url`, else the URL it was fetched from. */
   readonly url: string;
+  /** A reply's `p-rsvp`, when it is one of the four values (TASK-198). */
+  readonly rsvp?: RsvpValue;
 }
 
 /** The attributes that make an element a link to somewhere. */
@@ -117,8 +121,12 @@ export function sourceEntry(html: string, sourceUrl: string, target: string): So
   const author = authorOf(chosen, items, sourceUrl);
   const content = contentOf(chosen, root);
 
+  const kind = chosen === undefined ? 'mention' : kindOf(chosen, wanted);
+  const rsvp =
+    chosen === undefined || kind !== 'reply' ? undefined : rsvpValue(first(chosen, 'rsvp')?.text);
   return {
-    kind: chosen === undefined ? 'mention' : kindOf(chosen, wanted),
+    kind,
+    ...(rsvp === undefined ? {} : { rsvp }),
     author,
     content,
     published: chosen === undefined ? null : instantOf(first(chosen, 'published')),
@@ -132,32 +140,86 @@ export interface CitedEntry {
   readonly name: string;
   /** Its `e-content` as text, or its `p-summary`, or empty. */
   readonly text: string;
-  /** Who wrote it, when the entry says, with their page when it gives one. */
-  readonly author: { readonly name: string; readonly url: string | null } | undefined;
+  /** Who wrote it, when the entry says, with their page and avatar when it gives them. */
+  readonly author:
+    | { readonly name: string; readonly url: string | null; readonly photo: string | null }
+    | undefined;
   /** When it says it was published, as an ISO 8601 instant, or `null`. */
   readonly published: string | null;
+  /** Its `u-url` and `u-uid`, which a silo copy points at its original with (TASK-197). */
+  readonly urls: readonly string[];
+  /** Its `u-syndication`: the copies of it elsewhere. */
+  readonly syndication: readonly string[];
 }
 
 /**
  * What the first `h-entry` on a parsed page says about itself, or `undefined`
  * when the page has none. Unlike {@link sourceEntry} nothing is filled in from
  * the page around it: a citation names who wrote a post only when the post
- * does.
+ * does. Only the author's avatar may come from elsewhere on the page, from an
+ * `h-card` that is the same person: the same page, or the same name when the
+ * entry's author has no page.
  */
 export function citedEntry(root: HtmlElement, pageUrl: string): CitedEntry | undefined {
-  const entry = itemsOfType(itemsIn(root, baseOf(root, pageUrl)), 'h-entry')[0];
+  const items = itemsIn(root, baseOf(root, pageUrl));
+  const entry = itemsOfType(items, 'h-entry')[0];
   if (entry === undefined) return undefined;
 
   const author = first(entry, 'author');
   const card = author?.item === undefined ? undefined : cardOf(author.item);
   const authorName = card?.name ?? author?.text ?? '';
+  const authorUrl = card?.url ?? null;
+  const photo =
+    card?.photo ??
+    itemsOfType(items, 'h-card')
+      .map(cardOf)
+      .find(
+        (other) =>
+          other.photo !== null &&
+          (authorUrl === null ? other.name === authorName : other.url === authorUrl),
+      )?.photo ??
+    null;
 
   return {
     name: first(entry, 'name')?.text ?? '',
     text: first(entry, 'content')?.text ?? first(entry, 'summary')?.text ?? '',
-    author: authorName === '' ? undefined : { name: authorName, url: card?.url ?? null },
+    author: authorName === '' ? undefined : { name: authorName, url: authorUrl, photo },
     published: instantOf(first(entry, 'published')),
+    urls: [...valuesOf(entry, 'url'), ...valuesOf(entry, 'uid')],
+    syndication: valuesOf(entry, 'syndication'),
   };
+}
+
+/** The first `h-event` on a page, as the parts an RSVP's citation of it shows (TASK-198). */
+export interface CitedEvent {
+  /** Its `p-name`, or empty. */
+  readonly name: string;
+  /** Its `p-summary`, `p-description` or `e-content` as text, or empty. */
+  readonly text: string;
+  /** Its `dt-start` as written, or empty. */
+  readonly start: string;
+  /** Its `p-location`: a place's name when it is an `h-card` or `h-adr`, else its text. */
+  readonly location: string;
+}
+
+/** What the first `h-event` on a parsed page says about itself, or `undefined`. */
+export function citedEvent(root: HtmlElement, pageUrl: string): CitedEvent | undefined {
+  const event = itemsOfType(itemsIn(root, baseOf(root, pageUrl)), 'h-event')[0];
+  if (event === undefined) return undefined;
+  return {
+    name: first(event, 'name')?.text ?? '',
+    text:
+      first(event, 'summary')?.text ??
+      first(event, 'description')?.text ??
+      first(event, 'content')?.text ??
+      '',
+    start: first(event, 'start')?.text ?? '',
+    location: first(event, 'location')?.text ?? '',
+  };
+}
+
+function valuesOf(item: MicroformatItem, property: string): string[] {
+  return (item.properties[property] ?? []).map((value) => value.text).filter((text) => text !== '');
 }
 
 /** The entry a webmention is about, or `undefined` when the page has none. */

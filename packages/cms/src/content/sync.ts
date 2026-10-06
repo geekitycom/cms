@@ -6,6 +6,7 @@ import { watch as watchPaths } from 'chokidar';
 import type { FSWatcher } from 'chokidar';
 
 import type { Document, DocumentType } from './document.ts';
+import { handleDirectory } from './handles.ts';
 import { parseDocument } from './parser.ts';
 import { replyTarget } from './post-type.ts';
 import { DuplicatePermalinkError, TRASH_DIRECTORY } from './store.ts';
@@ -182,17 +183,17 @@ export interface ContentSync {
  */
 export function createContentSync(options: CreateContentSyncOptions): ContentSync {
   const { store, contentDir } = options;
+  const handles = handleDirectory(contentDir);
   const logger = options.logger ?? console;
   const events = createEmitter(logger);
 
   /**
    * Write a document, giving way to a file that has already gone.
    *
-   * Renaming a file — which is what trashing and restoring are — briefly
-   * leaves two rows claiming one permalink, and the watcher may well see the
-   * new name before the old one disappears. When the conflicting row's file is
-   * no longer on disk the row is stale, so it is dropped (and reported) and
-   * the write retried. A conflict between two files that both exist is a
+   * Renaming a live file briefly leaves two rows claiming one permalink, and
+   * the watcher may well see the new name before the old one disappears. When
+   * the conflicting row's file is no longer on disk the row is stale, so it is
+   * dropped (and reported) and the write retried. A conflict between two files that both exist is a
    * content mistake and is left to the caller to report.
    */
   async function index(document: Document, origin: ChangeOrigin): Promise<void> {
@@ -239,7 +240,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
 
     let document: Document;
     try {
-      document = parseDocument(source, { path: relativePath });
+      document = parseDocument(source, { path: relativePath, handles });
     } catch (error) {
       logger.warn(`Skipping ${relativePath}: ${messageOf(error)}`);
       throw new SkippedFile();

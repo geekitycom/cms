@@ -9,9 +9,13 @@ import { photoAlt, photosOf } from '../content/photo.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { citationsOf } from '../content/citation.ts';
 import { shownInFull } from '../webmention/cited-picture.ts';
-import type { CitedPicture } from '../webmention/cited-picture.ts';
+import type { CitedImage, CitedPicture } from '../webmention/cited-picture.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
 import { READ_STATUS_LABELS, readLine, readOf, uidLabel } from '../content/read.ts';
+import { eventOf } from '../content/event.ts';
+import type { EventLocation } from '../content/event.ts';
+import { RSVP_LABELS, rsvpLine, rsvpOf } from '../content/rsvp.ts';
+import type { RsvpValue } from '../content/rsvp.ts';
 import type { ReadOf, ReadStatus } from '../content/read.ts';
 import { postLabel, postTypeOf, replyTarget, showsTitle } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
@@ -155,9 +159,9 @@ export interface DocumentContext {
   /** Display title. Empty for an untitled post. */
   title: string;
   /**
-   * `repost`, `like`, `reply`, `photo`, `read`, `bookmark`, `note` or `article`,
-   * discovered from the front matter, the title and the body (Post Type
-   * Discovery) on every render rather than read from the file.
+   * `event`, `rsvp`, `repost`, `like`, `reply`, `photo`, `read`, `bookmark`,
+   * `note` or `article`, discovered from the front matter, the title and the
+   * body (Post Type Discovery) on every render rather than read from the file.
    */
   postType: PostType;
   /**
@@ -169,6 +173,19 @@ export interface DocumentContext {
   named: boolean;
   /** The URL a reply answers, present only on a reply. */
   inReplyTo?: string | undefined;
+  /**
+   * What an RSVP says (TASK-198): its `rsvp` value, the words for it, and
+   * `line`, the `p-rsvp` as the HTML its content opens with. Present only on
+   * a post whose front matter names one of the four values.
+   */
+  rsvp?: { value: RsvpValue; label: string; line: string } | undefined;
+  /**
+   * When and where an event is (TASK-200): `start` and, when it has one,
+   * `end`, as instants a theme formats in the site's zone, and `location`,
+   * either `{ kind: 'place', name }` or `{ kind: 'virtual', url }`. Present
+   * only on a post whose front matter has a readable `start`.
+   */
+  event?: { start: Date; end?: Date; location?: EventLocation } | undefined;
   /**
    * What the post reposts, likes or bookmarks (TASK-169): each valid
    * `repost-of`, `like-of` and `bookmark-of`, as its property and its URL, in
@@ -361,9 +378,10 @@ export function documentContext(
 ): DocumentContext {
   const date = toDate(document.date);
   const photos = photoContexts(document, images, loading);
+  const { location: _frontMatterLocation, ...extra } = document.extra;
 
   return {
-    ...document.extra,
+    ...extra,
     permalink: document.permalink,
     slug: document.slug,
     draft: document.draft,
@@ -376,6 +394,8 @@ export function documentContext(
     postType: postTypeOf(document),
     named: showsTitle(document),
     ...optional('inReplyTo', replyTarget(document)),
+    rsvp: rsvpContext(document),
+    event: eventContext(document),
     citations: citationsOf(document.extra),
     read: readContext(document),
     // Over the raw front-matter value the spread above put here.
@@ -612,6 +632,18 @@ function photoContexts(
   });
 }
 
+export interface CitedPhotoContext extends CitedImage {
+  readonly imgHtml: string;
+}
+
+/** A cited author's photo, beside their name: decorative, since the name says who it is. */
+export function citedPhotoContext(photo: CitedImage, images: ImageConfig): CitedPhotoContext {
+  const tag =
+    `<img class="u-photo cite-avatar" src="${escapeAttribute(photo.src)}" alt=""` +
+    ` width="${String(photo.width)}" height="${String(photo.height)}" loading="lazy" decoding="async">`;
+  return { ...photo, imgHtml: siteImageMarkup(images, tag) };
+}
+
 export interface CitedPictureContext extends CitedPicture {
   readonly shownInFull: boolean;
   readonly imgHtml: string;
@@ -651,6 +683,22 @@ function enclosureContext(document: Document): EnclosureContext | undefined {
     ...(transcript === undefined
       ? {}
       : { transcript: { ...transcript, captions: isCaptions(transcript) } }),
+  };
+}
+
+function rsvpContext(document: Document): DocumentContext['rsvp'] {
+  const value = rsvpOf(document.extra);
+  if (value === undefined) return undefined;
+  return { value, label: RSVP_LABELS[value], line: rsvpLine(value) };
+}
+
+function eventContext(document: Document): DocumentContext['event'] {
+  const event = eventOf(document.extra);
+  if (event === undefined) return undefined;
+  return {
+    start: new Date(event.start),
+    ...(event.end === undefined ? {} : { end: new Date(event.end) }),
+    ...(event.location === undefined ? {} : { location: event.location }),
   };
 }
 

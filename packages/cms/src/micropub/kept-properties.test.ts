@@ -3,6 +3,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { findUser } from '../admin/accounts.ts';
@@ -11,6 +12,8 @@ import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
 import { feedPathUnder } from '../web/feed-source.ts';
 import { OEMBED_PATH } from '../web/oembed.ts';
+
+remoteHostsDoNotExist();
 
 const box = sandbox();
 after(() => box.cleanup());

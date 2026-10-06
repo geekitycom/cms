@@ -1,0 +1,7 @@
+{#
+  An RSVP's answer, the `p-rsvp` (TASK-198), as the line its content opens
+  with. An entry includes it with `rsvp` on the context; a listing sets it
+  from the entry it is printing. Nothing is printed for a post that is no
+  RSVP.
+#}
+{% if rsvp %}{{ rsvp.line | safe }}{% endif %}

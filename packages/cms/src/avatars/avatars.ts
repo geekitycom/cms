@@ -294,7 +294,7 @@ async function fetchAvatar(
 ): Promise<AvatarFetch> {
   const fetched = await fetchPublic(source, {
     lookup: config.hostLookup,
-    timeoutMs: AVATAR_FETCH_TIMEOUT_MS,
+    signal: AbortSignal.timeout(AVATAR_FETCH_TIMEOUT_MS),
     maxBytes: AVATAR_MAX_BYTES,
     accept: 'image/avif, image/webp, image/png, image/jpeg, image/gif;q=0.8',
     contentType: { pattern: ACCEPTED_TYPES, name: 'a JPEG, PNG, GIF, WebP or AVIF picture' },

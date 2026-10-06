@@ -1,0 +1,122 @@
+{
+    "@context": [
+        "https://www.w3.org/ns/activitystreams",
+        {
+            "ostatus": "http://ostatus.org#",
+            "atomUri": "ostatus:atomUri",
+            "inReplyToAtomUri": "ostatus:inReplyToAtomUri",
+            "conversation": "ostatus:conversation",
+            "sensitive": "as:sensitive",
+            "toot": "http://joinmastodon.org/ns#",
+            "votersCount": "toot:votersCount",
+            "quote": {
+                "@id": "https://w3id.org/fep/044f#quote",
+                "@type": "@id"
+            },
+            "quoteUri": "http://fedibird.com/ns#quoteUri",
+            "_misskey_quote": "https://misskey-hub.net/ns#_misskey_quote",
+            "quoteAuthorization": {
+                "@id": "https://w3id.org/fep/044f#quoteAuthorization",
+                "@type": "@id"
+            },
+            "gts": "https://gotosocial.org/ns#",
+            "interactionPolicy": {
+                "@id": "gts:interactionPolicy",
+                "@type": "@id"
+            },
+            "canFeature": {
+                "@id": "https://w3id.org/fep/7aa9#canFeature",
+                "@type": "@id"
+            },
+            "canQuote": {
+                "@id": "gts:canQuote",
+                "@type": "@id"
+            },
+            "automaticApproval": {
+                "@id": "gts:automaticApproval",
+                "@type": "@id"
+            },
+            "manualApproval": {
+                "@id": "gts:manualApproval",
+                "@type": "@id"
+            },
+            "blurhash": "toot:blurhash",
+            "focalPoint": {
+                "@container": "@list",
+                "@id": "toot:focalPoint"
+            },
+            "Hashtag": "as:Hashtag"
+        }
+    ],
+    "id": "https://mastodon.social/users/Gargron/statuses/117383656684365550",
+    "type": "Note",
+    "summary": null,
+    "inReplyTo": null,
+    "published": "2026-10-04T16:47:36Z",
+    "url": "https://mastodon.social/@Gargron/117383656684365550",
+    "attributedTo": "https://mastodon.social/users/Gargron",
+    "to": [
+        "https://www.w3.org/ns/activitystreams#Public"
+    ],
+    "cc": [
+        "https://mastodon.social/users/Gargron/followers"
+    ],
+    "sensitive": false,
+    "atomUri": "https://mastodon.social/users/Gargron/statuses/117383656684365550",
+    "inReplyToAtomUri": null,
+    "conversation": "https://mastodon.social/contexts/1-117383656684365550",
+    "context": "https://mastodon.social/contexts/1-117383656684365550",
+    "content": "<p><a href=\"https://mastodon.social/tags/SilentSunday\" class=\"mention hashtag\" rel=\"tag\">#<span>SilentSunday</span></a></p>",
+    "contentMap": {
+        "en": "<p><a href=\"https://mastodon.social/tags/SilentSunday\" class=\"mention hashtag\" rel=\"tag\">#<span>SilentSunday</span></a></p>"
+    },
+    "interactionPolicy": {
+        "canQuote": {
+            "automaticApproval": [
+                "https://www.w3.org/ns/activitystreams#Public"
+            ]
+        }
+    },
+    "attachment": [
+        {
+            "type": "Document",
+            "mediaType": "image/jpeg",
+            "url": "https://files.mastodon.social/media_attachments/files/117/383/653/868/951/382/original/076a61b438462f42.jpeg",
+            "name": "A green landscape with sheep and a mountain covered in fog and clouds under rain. ",
+            "blurhash": "U$GlFqofj[j[_4ofj[j[?ba#fQj[xuWUayjt",
+            "focalPoint": [
+                0.0,
+                0.0
+            ],
+            "width": 2499,
+            "height": 3319
+        }
+    ],
+    "tag": [
+        {
+            "type": "Hashtag",
+            "href": "https://mastodon.social/tags/silentsunday",
+            "name": "#silentsunday"
+        }
+    ],
+    "replies": {
+        "id": "https://mastodon.social/users/Gargron/statuses/117383656684365550/replies",
+        "type": "Collection",
+        "first": {
+            "type": "CollectionPage",
+            "next": "https://mastodon.social/users/Gargron/statuses/117383656684365550/replies?only_other_accounts=true&page=true",
+            "partOf": "https://mastodon.social/users/Gargron/statuses/117383656684365550/replies",
+            "items": []
+        }
+    },
+    "likes": {
+        "id": "https://mastodon.social/users/Gargron/statuses/117383656684365550/likes",
+        "type": "Collection",
+        "totalItems": 270
+    },
+    "shares": {
+        "id": "https://mastodon.social/users/Gargron/statuses/117383656684365550/shares",
+        "type": "Collection",
+        "totalItems": 57
+    }
+}
