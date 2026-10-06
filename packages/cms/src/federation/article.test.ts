@@ -1514,3 +1514,57 @@ describe('an RSVP (TASK-198)', () => {
     );
   });
 });
+
+describe('an event (TASK-200 AC #1)', () => {
+  it('is an Event with its name, its times, its place and its description', async () => {
+    const instance = await site({
+      'posts/2026-09-02-camp.md': rawPost(
+        [
+          'title: IndieWeb Camp',
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/camp/',
+          "start: '2026-10-10T14:00:00Z'",
+          "end: '2026-10-10T22:00:00Z'",
+          'location: Chicago Public Library',
+        ],
+        'Two days of building our own websites.',
+      ),
+    });
+
+    const event = await articleAt(instance, '/2026/09/camp/');
+
+    assert.equal(event['type'], 'Event');
+    assert.equal(event['name'], 'IndieWeb Camp');
+    assert.equal(event['startTime'], '2026-10-10T14:00:00Z');
+    assert.equal(event['endTime'], '2026-10-10T22:00:00Z');
+    assert.deepEqual(event['location'], { type: 'Place', name: 'Chicago Public Library' });
+    assert.equal(event['content'], renderMarkdown('Two days of building our own websites.'));
+    assert.equal(event['summary'], 'Two days of building our own websites.');
+    assert.equal(event['url'], 'https://blog.example/2026/09/camp/');
+  });
+
+  it('names where to join an online event by its address', async () => {
+    const instance = await site({
+      'posts/2026-09-02-club.md': rawPost(
+        [
+          'title: Homebrew Website Club',
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/club/',
+          "start: '2026-10-14T00:30:00Z'",
+          'location: https://meet.example/hwc',
+        ],
+        'Bring a site.',
+      ),
+    });
+
+    const event = await articleAt(instance, '/2026/09/club/');
+
+    assert.equal(event['type'], 'Event');
+    assert.equal(event['endTime'], undefined);
+    assert.deepEqual(event['location'], {
+      type: 'Place',
+      name: 'https://meet.example/hwc',
+      url: 'https://meet.example/hwc',
+    });
+  });
+});

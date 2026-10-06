@@ -736,6 +736,19 @@
     @apply text-[1.3rem] leading-[1.55];
   }
 
+  /* When and where an event is (TASK-200), under its name. */
+  .event-details {
+    @apply mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-sans text-sm;
+  }
+
+  .event-details dt {
+    @apply font-semibold text-muted;
+  }
+
+  .event-details dd {
+    @apply m-0;
+  }
+
   .entry-meta,
   .page-meta {
     @apply mt-8 flex flex-wrap items-center gap-x-2 font-sans text-sm text-muted;

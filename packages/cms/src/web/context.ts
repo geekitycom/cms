@@ -12,6 +12,8 @@ import { shownInFull } from '../webmention/cited-picture.ts';
 import type { CitedImage, CitedPicture } from '../webmention/cited-picture.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
 import { READ_STATUS_LABELS, readLine, readOf, uidLabel } from '../content/read.ts';
+import { eventOf } from '../content/event.ts';
+import type { EventLocation } from '../content/event.ts';
 import { RSVP_LABELS, rsvpLine, rsvpOf } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
 import type { ReadOf, ReadStatus } from '../content/read.ts';
@@ -157,7 +159,7 @@ export interface DocumentContext {
   /** Display title. Empty for an untitled post. */
   title: string;
   /**
-   * `rsvp`, `repost`, `like`, `reply`, `photo`, `read`, `bookmark`, `note` or `article`,
+   * `event`, `rsvp`, `repost`, `like`, `reply`, `photo`, `read`, `bookmark`, `note` or `article`,
    * discovered from the front matter, the title and the body (Post Type
    * Discovery) on every render rather than read from the file.
    */
@@ -177,6 +179,13 @@ export interface DocumentContext {
    * a post whose front matter names one of the four values.
    */
   rsvp?: { value: RsvpValue; label: string; line: string } | undefined;
+  /**
+   * When and where an event is (TASK-200): `start` and, when it has one,
+   * `end`, as instants a theme formats in the site's zone, and `location`,
+   * either `{ kind: 'place', name }` or `{ kind: 'virtual', url }`. Present
+   * only on a post whose front matter has a readable `start`.
+   */
+  event?: { start: Date; end?: Date; location?: EventLocation } | undefined;
   /**
    * What the post reposts, likes or bookmarks (TASK-169): each valid
    * `repost-of`, `like-of` and `bookmark-of`, as its property and its URL, in
@@ -385,6 +394,10 @@ export function documentContext(
     named: showsTitle(document),
     ...optional('inReplyTo', replyTarget(document)),
     rsvp: rsvpContext(document),
+    event: eventContext(document),
+    // An event's `location` is under `event`; this key is the author's own,
+    // which the renderer adds only when it is shared (decision-29).
+    location: undefined,
     citations: citationsOf(document.extra),
     read: readContext(document),
     // Over the raw front-matter value the spread above put here.
@@ -679,6 +692,16 @@ function rsvpContext(document: Document): DocumentContext['rsvp'] {
   const value = rsvpOf(document.extra);
   if (value === undefined) return undefined;
   return { value, label: RSVP_LABELS[value], line: rsvpLine(value) };
+}
+
+function eventContext(document: Document): DocumentContext['event'] {
+  const event = eventOf(document.extra);
+  if (event === undefined) return undefined;
+  return {
+    start: new Date(event.start),
+    ...(event.end === undefined ? {} : { end: new Date(event.end) }),
+    ...(event.location === undefined ? {} : { location: event.location }),
+  };
 }
 
 function readContext(document: Document): DocumentContext['read'] {

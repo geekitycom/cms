@@ -107,6 +107,21 @@
 {% endmacro %}
 
 {#
+  Who is coming to an event (TASK-200): each answer it was given, by a
+  webmention RSVP or a fediverse Accept, TentativeAccept or Reject, as a
+  facepile per answer in the order `conversation.rsvps` gives them, going
+  first. A post that is no event has no groups.
+#}
+{% set rsvpIcons = { yes: "✅", maybe: "🤔", interested: "⭐", no: "❌" } %}
+{% if conversation.rsvps.length %}
+<div class="reactions-section rsvps-section">
+  {%- for answer in conversation.rsvps %}
+  {{- group(answer.people, answer.label, "rsvp-" + answer.value, rsvpIcons[answer.value]) }}
+  {%- endfor %}
+</div>
+{% endif %}
+
+{#
   The reactions, above the thread. A like and a boost come from the fediverse
   and a `repost` from a webmention; the CMS has already put a repost among the
   boosts, which is why there are three groups and not four. `p-like`,

@@ -5,6 +5,7 @@ import {
   Audio,
   Create,
   Delete,
+  Event,
   Hashtag,
   Image,
   InteractionPolicy,
@@ -31,6 +32,8 @@ import type { CitedPageReader } from '../content/citation.ts';
 import { readLine, readOf } from '../content/read.ts';
 import { RSVP_PHRASES, rsvpOf } from '../content/rsvp.ts';
 import type { Document } from '../content/document.ts';
+import { eventOf } from '../content/event.ts';
+import type { PostEvent } from '../content/event.ts';
 import { enclosureOf, isUploadUrl, playsAsVideo } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
 import { placeWordList, shareLocation } from '../content/location.ts';
@@ -190,7 +193,7 @@ export function postByObjectId(
 }
 
 /** The ActivityStreams object types a post can federate as, by name. */
-const OBJECT_TYPES = { Note, Article } as const;
+const OBJECT_TYPES = { Note, Article, Event } as const;
 
 /** The name of an ActivityStreams object type a post can federate as. */
 type PostObjectType = keyof typeof OBJECT_TYPES;
@@ -202,6 +205,7 @@ type PostObjectType = keyof typeof OBJECT_TYPES;
  * is a photo post, whose photos are its attachments (TASK-166).
  */
 const OBJECT_TYPE_OF: Record<PostType, PostObjectType> = {
+  event: 'Event',
   // A like or a repost of a fediverse object goes as a `Like` or an
   // `Announce` instead (decision-28); this is the object its permalink serves.
   rsvp: 'Note',
@@ -240,7 +244,7 @@ function postObjectType(document: Document): PostObjectType {
 }
 
 /**
- * One post as the `Note` or `Article` doc-4 describes, whichever
+ * One post as the `Note`, `Article` or `Event` doc-4 describes, whichever
  * {@link postObjectType} says it is.
  *
  * Its `id` and its `url` are the same URL — the permalink — because
@@ -268,7 +272,7 @@ export function postObject(
   context: Context<FederationContextData>,
   document: Document,
   replyTo?: CitedObject,
-): Article | Note {
+): Article | Note | Event {
   const { baseUrl } = context.data.config;
   const { actor, followers } = attribution(context, document);
   // The archives an activity points at are wherever the site currently serves
@@ -332,6 +336,21 @@ export function postObject(
   }
 
   const summary = feedExcerpt(document);
+  const event = eventOf(document.extra);
+  if (postObjectType(document) === 'Event' && event !== undefined) {
+    // Mastodon shows an Event as its name, its summary and its link, as it
+    // does an Article (decision-32).
+    return new Event({
+      ...common,
+      name: document.title === '' ? null : document.title,
+      summaries: summary === '' ? [] : inLanguage(escapeHtml(summary), language),
+      contents: inLanguage(document.html, language),
+      startTime: toInstant(event.start) ?? null,
+      endTime: toInstant(event.end) ?? null,
+      location: eventPlace(event) ?? common.location,
+    });
+  }
+
   return new Article({
     ...common,
     name: document.title === '' ? null : document.title,
@@ -350,6 +369,17 @@ export function postObject(
  */
 function inLanguage(text: string, language: string): (string | LanguageString)[] {
   return [text, new LanguageString(text, language)];
+}
+
+/**
+ * Where an event is, as a `Place`: named by its words, or by the address to
+ * join it at, which is its `url` too.
+ */
+function eventPlace(event: PostEvent): Place | undefined {
+  const where = event.location;
+  if (where === undefined) return undefined;
+  if (where.kind === 'place') return new Place({ name: where.name });
+  return new Place({ name: where.url, url: new URL(where.url) });
 }
 
 function place(shared: SharedLocation | undefined): Place | null {

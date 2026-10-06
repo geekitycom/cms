@@ -97,7 +97,16 @@ export function useThemeDirs(environment: Environment, dirs: readonly string[]):
 
 /** How `date` renders a value. */
 export type DateFormat =
-  'readable' | 'full' | 'long' | 'medium' | 'short' | 'iso' | 'html' | 'year' | 'month';
+  | 'readable'
+  | 'datetime'
+  | 'full'
+  | 'long'
+  | 'medium'
+  | 'short'
+  | 'iso'
+  | 'html'
+  | 'year'
+  | 'month';
 
 /**
  * The filter set, which is part of the semver contract because site templates
@@ -213,6 +222,14 @@ const INTL_FORMATS: Readonly<Record<string, Intl.DateTimeFormatOptions>> = {
   medium: { dateStyle: 'medium' },
   short: { dateStyle: 'short' },
   readable: { dateStyle: 'long' },
+  datetime: {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  },
   month: { year: 'numeric', month: 'long' },
   year: { year: 'numeric' },
 };
@@ -230,6 +247,9 @@ const formatters = new Map<string, Intl.DateTimeFormat>();
  * that calendar day written in `locale` by Intl, which is what makes a post
  * published at half past midnight in Berlin say 1 October rather than the 30
  * September UTC was still on, and a French site say `1 octobre`.
+ *
+ * `datetime` is the day and the time of day with the zone named, "10 October
+ * 2026 at 09:00 GMT-5", which is how an event says when it starts (TASK-200).
  *
  * `month` is the month that calendar day falls in, "September 2026", which is
  * what heads a group of an archive page (TASK-85). It is a format rather than

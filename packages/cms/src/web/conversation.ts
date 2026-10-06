@@ -1,7 +1,7 @@
 import { avatarHref } from '../avatars/avatars.ts';
 import type { ActorProfile, AdminStore, InboxActivity, PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
-import { postLabel } from '../content/post-type.ts';
+import { postLabel, postTypeOf } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { RSVP_LABELS } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
@@ -117,7 +117,8 @@ export interface Interaction {
   readonly replies: Interaction[];
   /**
    * What a reply that is an RSVP says (TASK-198): its `rsvp` value and the
-   * words for it. Only a webmention carries one.
+   * words for it. A webmention carries one, and so does a fediverse answer
+   * to an event (TASK-200).
    */
   readonly rsvp?: { readonly value: RsvpValue; readonly label: string };
 }
@@ -132,7 +133,9 @@ export interface InteractionCounts {
   readonly boosts: number;
   /** Mentions: pages that linked to this one without answering it. */
   readonly mentions: number;
-  /** All four added up: zero is what "no conversation" means. */
+  /** RSVPs to an event, one per person, in every group. */
+  readonly rsvps: number;
+  /** All of them added up: zero is what "no conversation" means. */
   readonly total: number;
 }
 
@@ -146,9 +149,36 @@ export interface Conversation {
   readonly boosts: Interaction[];
   /** The pages that linked here without answering, oldest first. */
   readonly mentions: Interaction[];
+  /**
+   * The answers to an event (TASK-200), grouped as going, maybe, interested
+   * and not going, each group oldest first and only when it has somebody in
+   * it. Empty on a post that is no event.
+   */
+  readonly rsvps: RsvpGroup[];
   /** How many of each. */
   readonly counts: InteractionCounts;
 }
+
+/** Everybody who gave an event one answer. */
+export interface RsvpGroup {
+  readonly value: RsvpValue;
+  readonly label: string;
+  /** Each person's latest answer, oldest first, each an RSVP interaction. */
+  readonly people: Interaction[];
+}
+
+/** The order an event's answers are shown in: who is coming first. */
+const RSVP_GROUP_ORDER: readonly RsvpValue[] = ['yes', 'maybe', 'interested', 'no'];
+
+/**
+ * The fediverse's answers to an event (decision-32). There is no activity
+ * for `interested`.
+ */
+const RSVP_ACTIVITIES: Readonly<Record<string, RsvpValue | undefined>> = {
+  Accept: 'yes',
+  TentativeAccept: 'maybe',
+  Reject: 'no',
+};
 
 /** One interaction with the post it is about, which a site-wide list needs. */
 export interface SiteInteraction extends Interaction {
@@ -229,7 +259,8 @@ const NOTHING: Conversation = {
   likes: [],
   boosts: [],
   mentions: [],
-  counts: { replies: 0, likes: 0, boosts: 0, mentions: 0, total: 0 },
+  rsvps: [],
+  counts: { replies: 0, likes: 0, boosts: 0, mentions: 0, rsvps: 0, total: 0 },
 };
 
 /**
@@ -261,9 +292,32 @@ function postConversation(context: ConversationContext, document: Document): Con
   const likes: Interaction[] = [];
   const boosts: Interaction[] = [];
   const mentions: Interaction[] = [...quotes];
+  const answers: Interaction[] = [];
   const reacted = new Set<string>();
+  const isEvent = postTypeOf(document) === 'event';
 
   for (const activity of activities) {
+    const answer = isEvent ? RSVP_ACTIVITIES[activity.activityType] : undefined;
+    if (answer !== undefined) {
+      if (activity.objectId !== objectId) continue;
+      if (activity.activityId !== null && withdrawn.has(activity.activityId)) continue;
+      const author = naming(activity.actorId);
+      answers.push({
+        id: activity.activityId ?? `${activity.actorId}#rsvp`,
+        source: 'activitypub',
+        kind: 'reply',
+        author,
+        url: author.url,
+        content: '',
+        published: new Date(activity.receivedAt),
+        inReplyTo: null,
+        status: 'published',
+        replies: [],
+        rsvp: { value: answer, label: RSVP_LABELS[answer] },
+      });
+      continue;
+    }
+
     const kind = REACTIONS[activity.activityType];
     if (kind !== undefined) {
       // Only a reaction to the post itself: a like of one of the replies
@@ -301,14 +355,17 @@ function postConversation(context: ConversationContext, document: Document): Con
     // A repost joins the boosts, because a reader looking at the page is being
     // told the same thing by both; a mention is its own group, because it is
     // neither an answer nor a reaction.
+    // On an event an RSVP is an answer to it rather than a comment on it.
     const group =
-      comment.kind === 'reply'
-        ? written
-        : comment.kind === 'like'
-          ? likes
-          : comment.kind === 'mention'
-            ? mentions
-            : boosts;
+      isEvent && comment.rsvp !== undefined
+        ? answers
+        : comment.kind === 'reply'
+          ? written
+          : comment.kind === 'like'
+            ? likes
+            : comment.kind === 'mention'
+              ? mentions
+              : boosts;
     group.push({ ...comment, replies: [] });
   }
 
@@ -323,20 +380,42 @@ function postConversation(context: ConversationContext, document: Document): Con
   boosts.sort(byPublished);
   mentions.sort(byPublished);
   const counted = countReplies(replies);
+  const rsvps = rsvpGroups(answers);
+  const answered = rsvps.reduce((sum, group) => sum + group.people.length, 0);
 
   return {
     replies,
     likes,
     boosts,
     mentions,
+    rsvps,
     counts: {
       replies: counted,
       likes: likes.length,
       boosts: boosts.length,
       mentions: mentions.length,
-      total: counted + likes.length + boosts.length + mentions.length,
+      rsvps: answered,
+      total: counted + likes.length + boosts.length + mentions.length + answered,
     },
   };
+}
+
+/**
+ * An event's answers in their groups, each person once with the last thing
+ * they said: somebody who accepted and then rejected is not going.
+ */
+function rsvpGroups(answers: readonly Interaction[]): RsvpGroup[] {
+  const latest = new Map<string, Interaction>();
+  for (const answer of [...answers].sort(byPublished)) {
+    const { author } = answer;
+    latest.set(author.actorId ?? author.url ?? answer.id, answer);
+  }
+  const people = [...latest.values()].sort(byPublished);
+  return RSVP_GROUP_ORDER.map((value) => ({
+    value,
+    label: RSVP_LABELS[value],
+    people: people.filter((person) => person.rsvp?.value === value),
+  })).filter((group) => group.people.length > 0);
 }
 
 /**

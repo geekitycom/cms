@@ -304,12 +304,12 @@ reads the same directory, and everything in it is meant to be public:
 `data/` is private. It is never in git, and it is the half that has to be
 copied somewhere safe:
 
-| Path                        | What it holds                                                                                                                              |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `data/users.json`           | Usernames and argon2id password hashes, mode 0600.                                                                                         |
-| `data/keys/`                | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.**                                                         |
-| `data/locations.json`       | Where each post was written, keyed by permalink, mode 0600. Never in `content/`, so a public repository never carries it (decision-29).    |
-| `data/kept-properties.json` | The Micropub properties a post was sent that the site does not understand, such as an `rsvp`, keyed by permalink, mode 0600 (decision-27). |
+| Path                        | What it holds                                                                                                                                   |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data/users.json`           | Usernames and argon2id password hashes, mode 0600.                                                                                              |
+| `data/keys/`                | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.**                                                              |
+| `data/locations.json`       | Where each post was written, keyed by permalink, mode 0600. Never in `content/`, so a public repository never carries it (decision-29).         |
+| `data/kept-properties.json` | The Micropub properties a post was sent that the site does not understand, such as an `itinerary`, keyed by permalink, mode 0600 (decision-27). |
 
 And three things under `data/` may be deleted at any time the site is stopped:
 
@@ -345,7 +345,7 @@ the editor may attach where a post was written; the site keeps it in
 `data/locations.json` and publishes nothing of it until **Settings > Privacy**
 says otherwise. [Location on posts](#location-on-posts) describes the choice.
 A Micropub checkin is a location like any other. A Micropub property the site
-does not understand, such as an RSVP, is kept the same way in `data/kept-properties.json` and published nowhere.
+does not understand, such as an itinerary, is kept the same way in `data/kept-properties.json` and published nowhere.
 
 ### What is in the database, and what a rebuild loses
 
@@ -1777,7 +1777,7 @@ A request whose `Content-Length` is over the larger of `uploadMaxBytes` and
 so several photo files in one create share it, and it applies to JSON and
 form-encoded bodies too. The media endpoint has the same check.
 
-A property not in the table, such as `rsvp`, is kept as it was
+A property not in the table, such as `itinerary`, is kept as it was
 sent and the rest of the post is published. The site keeps it in
 `data/kept-properties.json`, keyed by the post's URL and mode 0600, never in
 the post's file, and shows it nowhere: not on the page, its Markdown or JSON,
@@ -1837,7 +1837,9 @@ no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
   values a post may take, `"visibility": ["public", "unlisted"]`. Each post
   type lists the `properties` a client should offer for it and the
   `required-properties` that make a post that type, so a client that reads
-  the list, such as Micropublish, offers no field the site refuses.
+  the list, such as Micropublish, offers no field the site refuses. An event
+  is not offered: the endpoint creates `h-entry` posts, and an event is an
+  `h-event`, made in the admin editor (decision-32).
 - `?q=syndicate-to` lists the syndication targets on their own. Each is the
   `uid` and `name` of a target in `content/_data/syndicationTargets.json`, with
   its `id` as the `uid`. A site that declares none lists `[]`. The file is read
@@ -1906,8 +1908,8 @@ and repost editors, the location its note editor attaches, its photo uploads
 through the media endpoint, and its last photo offer. Tests replay the
 requests its source builds. On a site with `requireAltText` on, a photo needs
 alt text: type it in Quill's photo dialog, which then sends
-`{"value": "…", "alt": "…"}`, or the post is refused. Quill's RSVP, code,
-event, review, itinerary, exercise and weight posts are not supported yet.
+`{"value": "…", "alt": "…"}`, or the post is refused. Quill's code, event,
+review, itinerary, exercise and weight posts are not supported yet.
 
 ## The theme
 

@@ -952,3 +952,199 @@ Words.
     assert.ok(feed.includes('<link>https://remote.example/@ada/1</link>'), 'and at the note');
   });
 });
+
+describe('the RSVPs to an event (TASK-200 AC #2, AC #3)', () => {
+  const EVENT = 'https://blog.example/2026/09/camp/';
+
+  function camp(): Document {
+    return parseDocument(
+      [
+        '---',
+        'title: IndieWeb Camp',
+        "date: '2026-09-02T09:00:00Z'",
+        'permalink: /2026/09/camp/',
+        "start: '2026-10-10T14:00:00Z'",
+        '---',
+        '',
+      ].join('\n'),
+      { path: 'posts/2026-09-02-camp.md' },
+    );
+  }
+
+  function logAnswer(
+    admin: AdminStore,
+    type: 'Accept' | 'TentativeAccept' | 'Reject' | 'Undo',
+    options: { id: string; actor: string; object?: string; receivedAt: string },
+  ): void {
+    const object = options.object ?? EVENT;
+    admin.logInboxActivity({
+      activityId: options.id,
+      activityType: type,
+      actorId: options.actor,
+      objectId: object,
+      receivedAt: options.receivedAt,
+      json: JSON.stringify({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: options.id,
+        type,
+        actor: options.actor,
+        object,
+      }),
+    });
+  }
+
+  function rsvpComment(
+    admin: AdminStore,
+    values: {
+      id: string;
+      name: string;
+      url: string;
+      rsvp: 'yes' | 'no' | 'maybe' | 'interested';
+      status?: CommentStatus;
+      submitted: string;
+    },
+  ): void {
+    const document = camp();
+    admin.putComment({
+      id: values.id,
+      slug: document.slug,
+      permalink: document.permalink,
+      source: 'webmention',
+      kind: 'reply',
+      status: values.status ?? 'approved',
+      author: { name: values.name, url: values.url, email: null, avatar: null },
+      content: { markdown: '', html: '<p>See you there.</p>' },
+      submitted: values.submitted,
+      addressHash: null,
+      inReplyTo: null,
+      url: `${values.url}rsvp`,
+      notify: false,
+      rsvp: values.rsvp,
+    });
+  }
+
+  function grouped(
+    conversation: ReturnType<ConversationReader['thread']>,
+  ): Record<string, string[]> {
+    return Object.fromEntries(
+      conversation.rsvps.map((group) => [group.label, group.people.map((one) => one.author.name)]),
+    );
+  }
+
+  it('groups webmentions and fediverse answers as going, maybe, interested and not going', async () => {
+    const { admin, conversation: read } = await reader();
+    logAnswer(admin, 'Accept', {
+      id: 'https://remote.example/a/1',
+      actor: 'https://remote.example/users/ada',
+      receivedAt: '2026-09-03T09:00:00Z',
+    });
+    logAnswer(admin, 'TentativeAccept', {
+      id: 'https://remote.example/a/2',
+      actor: 'https://remote.example/users/bob',
+      receivedAt: '2026-09-03T10:00:00Z',
+    });
+    logAnswer(admin, 'Reject', {
+      id: 'https://remote.example/a/3',
+      actor: 'https://remote.example/users/cy',
+      receivedAt: '2026-09-03T11:00:00Z',
+    });
+    rsvpComment(admin, {
+      id: 'wm-1',
+      name: 'Dee',
+      url: 'https://dee.example/',
+      rsvp: 'interested',
+      submitted: '2026-09-03T12:00:00Z',
+    });
+    rsvpComment(admin, {
+      id: 'wm-2',
+      name: 'Eve',
+      url: 'https://eve.example/',
+      rsvp: 'yes',
+      submitted: '2026-09-03T13:00:00Z',
+    });
+
+    const conversation = read.thread(camp());
+
+    assert.deepEqual(
+      conversation.rsvps.map((group) => [group.value, group.label]),
+      [
+        ['yes', 'Going'],
+        ['maybe', 'Maybe'],
+        ['interested', 'Interested'],
+        ['no', 'Not going'],
+      ],
+    );
+    assert.deepEqual(grouped(conversation), {
+      Going: ['@ada@remote.example', 'Eve'],
+      Maybe: ['@bob@remote.example'],
+      Interested: ['Dee'],
+      'Not going': ['@cy@remote.example'],
+    });
+    assert.equal(conversation.counts.rsvps, 5);
+    assert.equal(conversation.counts.total, 5);
+    assert.deepEqual(conversation.replies, [], 'an RSVP is not in the thread as well');
+  });
+
+  it('keeps each person’s latest answer, and drops one they undid', async () => {
+    const { admin, conversation: read } = await reader();
+    const ada = 'https://remote.example/users/ada';
+    logAnswer(admin, 'Accept', {
+      id: 'https://remote.example/a/1',
+      actor: ada,
+      receivedAt: '2026-09-03T09:00:00Z',
+    });
+    logAnswer(admin, 'Reject', {
+      id: 'https://remote.example/a/2',
+      actor: ada,
+      receivedAt: '2026-09-04T09:00:00Z',
+    });
+    const bob = 'https://remote.example/users/bob';
+    logAnswer(admin, 'Accept', {
+      id: 'https://remote.example/b/1',
+      actor: bob,
+      receivedAt: '2026-09-03T09:00:00Z',
+    });
+    logAnswer(admin, 'Undo', {
+      id: 'https://remote.example/b/2',
+      actor: bob,
+      object: 'https://remote.example/b/1',
+      receivedAt: '2026-09-04T09:00:00Z',
+    });
+
+    assert.deepEqual(grouped(read.thread(camp())), { 'Not going': ['@ada@remote.example'] });
+  });
+
+  it('shows no webmention RSVP a moderator has not approved', async () => {
+    const { admin, conversation: read } = await reader();
+    rsvpComment(admin, {
+      id: 'wm-1',
+      name: 'Dee',
+      url: 'https://dee.example/',
+      rsvp: 'yes',
+      status: 'pending',
+      submitted: '2026-09-03T12:00:00Z',
+    });
+
+    assert.deepEqual(read.thread(camp()).rsvps, []);
+  });
+
+  it('takes no Accept of a post that is no event, and no answer to something else', async () => {
+    const { admin, conversation: read } = await reader();
+    logAnswer(admin, 'Accept', {
+      id: 'https://remote.example/a/1',
+      actor: 'https://remote.example/users/ada',
+      object: POST,
+      receivedAt: '2026-09-03T09:00:00Z',
+    });
+    logAnswer(admin, 'Accept', {
+      id: 'https://remote.example/a/2',
+      actor: 'https://remote.example/users/ada',
+      object: 'https://blog.example/other/',
+      receivedAt: '2026-09-03T09:00:00Z',
+    });
+
+    assert.deepEqual(read.thread(hello()).rsvps, []);
+    assert.equal(read.thread(hello()).counts.total, 0);
+    assert.deepEqual(read.thread(camp()).rsvps, []);
+  });
+});

@@ -121,6 +121,16 @@ import {
 } from './read-field.ts';
 import type { ReadOfForm } from './read-field.ts';
 import {
+  BLANK_EVENT_FORM,
+  EVENT_FIELDS,
+  eventForm,
+  eventFrontMatter,
+  resolveEvent,
+  submittedEventForm,
+} from './event-field.ts';
+import type { EventForm } from './event-field.ts';
+import { eventOf } from '../content/event.ts';
+import {
   SYNDICATE_TO_FRONT_MATTER_KEY,
   syndicateToOf,
   syndicationTargetsReader,
@@ -429,6 +439,7 @@ async function saveFromForm(
     ...citationFields((property) => (kind.type === 'post' ? text(body[property]).trim() : '')),
     readStatus: kind.type === 'post' ? text(body[READ_FIELDS.status]).trim() : '',
     readOf: kind.type === 'post' ? submittedReadOfForm(body) : BLANK_READ_OF_FORM,
+    event: kind.type === 'post' ? submittedEventForm(body) : BLANK_EVENT_FORM,
     lang: text(body['lang']).trim(),
     draft: body['draft'] !== undefined,
     visibility: formVisibility(text(body['visibility'])),
@@ -685,6 +696,14 @@ export async function writeDocument(
 
   const timezone = readSiteSettings(contentDir).timezone;
 
+  if (kind.type === 'post') {
+    const resolved = resolveEvent(form.event, timezone);
+    if ('error' in resolved) return refused(resolved.error, resolved.field);
+    if (resolved.event !== undefined && form.title === '') {
+      return refused('An event needs a name. Put it in Title.', 'editor-title');
+    }
+  }
+
   // decision-11: what the file gets is a UTC instant, and an offset-less field
   // is the site's own wall clock rather than the server's.
   const typed = kind.dated ? (form.date === '' ? store.now().toISOString() : form.date) : undefined;
@@ -774,6 +793,7 @@ export async function writeDocument(
       store.now(),
       media,
       syndicationTargetsReader(contentDir)(),
+      timezone,
     ),
     body: form.body,
   };
@@ -1152,11 +1172,13 @@ function resolveExtra(
     | 'readStatus'
     | 'readOf'
     | 'rsvp'
+    | 'event'
     | (typeof CITATION_FIELDS)[CitationProperty]
   >,
   now: Date,
   media: ResolvedMedia,
   declared: readonly SyndicationTarget[],
+  timezone: string,
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
 
@@ -1173,6 +1195,16 @@ function resolveExtra(
     const rsvp = rsvpValue(form.rsvp);
     if (rsvp === undefined) delete extra[RSVP_FRONT_MATTER_KEY];
     else extra[RSVP_FRONT_MATTER_KEY] = rsvp;
+    // A post that was no event and still is keeps whatever `start`, `end` or
+    // `location` somebody wrote into it by hand.
+    const event = resolveEvent(form.event, timezone);
+    const wasEvent = document !== undefined && eventOf(document.extra) !== undefined;
+    if ('event' in event && (event.event !== undefined || wasEvent)) {
+      for (const [key, value] of Object.entries(eventFrontMatter(event.event))) {
+        if (value === undefined) delete extra[key];
+        else extra[key] = value;
+      }
+    }
     if (form.previewHidden) extra[PREVIEW_FRONT_MATTER_KEY] = false;
     else delete extra[PREVIEW_FRONT_MATTER_KEY];
     if (form.citedAlt === '') delete extra[CITED_ALT_FRONT_MATTER_KEY];
@@ -1425,6 +1457,7 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
       c.var.store.now(),
       options.media,
       syndicationTargetsReader(c.var.config.contentDir)(),
+      siteTimezone(c),
     ),
     body: form.body,
   });
@@ -1706,6 +1739,8 @@ export interface EditorForm {
   readStatus: string;
   /** What was read, the mf2 `read-of` (TASK-229). Posts only. */
   readOf: ReadOfForm;
+  /** When and where the post's event is (TASK-200). Posts only. */
+  event: EventForm;
   /** The language it is written in, the `lang` key; empty for the site's. */
   lang: string;
   draft: boolean;
@@ -1785,6 +1820,7 @@ export function blankForm(
     ...citationFields(() => ''),
     readStatus: '',
     readOf: BLANK_READ_OF_FORM,
+    event: BLANK_EVENT_FORM,
     lang: '',
     draft: false,
     visibility: 'public',
@@ -1845,6 +1881,7 @@ export function formFor(
     readOf: readOfForm(
       document.type === 'post' ? readWork(document.extra[READ_OF_FRONT_MATTER_KEY]) : undefined,
     ),
+    event: document.type === 'post' ? eventForm(document.extra, timezone) : BLANK_EVENT_FORM,
     lang:
       typeof document.extra[LANG_FRONT_MATTER_KEY] === 'string'
         ? document.extra[LANG_FRONT_MATTER_KEY]
@@ -1950,6 +1987,7 @@ async function renderEditor(
             ? {}
             : { unrecognizedRsvp: form.rsvp }),
           readFields: READ_FIELDS,
+          eventFields: EVENT_FIELDS,
           readStatuses: READ_STATUSES.map((value) => ({ value, label: READ_STATUS_LABELS[value] })),
           ...(form.readStatus === '' || isReadStatus(form.readStatus)
             ? {}

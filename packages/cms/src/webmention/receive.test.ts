@@ -51,6 +51,19 @@ Who this is.
 `;
 const PAGE_URL = `${BASE_URL}/about/`;
 
+/** An event, which groups the RSVPs it is sent (TASK-200). */
+const EVENT = `---
+title: IndieWeb Camp
+date: '2026-09-19T09:00:00Z'
+permalink: /2026/09/camp/
+start: '2026-10-10T14:00:00Z'
+location: Chicago Public Library
+---
+
+Two days of building.
+`;
+const EVENT_URL = `${BASE_URL}/2026/09/camp/`;
+
 /** The moment the site's clock is stopped at. */
 const NOW = new Date('2026-09-20T12:00:00.000Z');
 
@@ -127,6 +140,7 @@ async function site(
   const file = path.join(contentDir, 'posts', '2026-09-19-hello-world.md');
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, POST, 'utf8');
+  await writeFile(path.join(contentDir, 'posts', '2026-09-19-camp.md'), EVENT, 'utf8');
   await mkdir(path.join(contentDir, 'pages'), { recursive: true });
   await writeFile(path.join(contentDir, 'pages', 'about.md'), PAGE, 'utf8');
 
@@ -661,6 +675,76 @@ describe('an RSVP webmention (TASK-198 AC #4)', () => {
       'utf8',
     );
     assert.doesNotMatch(file, /"rsvp":/);
+  });
+});
+
+describe('RSVP webmentions to an event (TASK-200 AC #2)', () => {
+  function answer(value: string, name: string): string {
+    return `<html><body><article class="h-entry">
+      <a class="p-author h-card" href="https://${name}.example/">${name}</a>
+      <a class="u-in-reply-to" href="${EVENT_URL}">IndieWeb Camp</a>
+      <data class="p-rsvp" value="${value}">${value}</data>
+      <time class="dt-published" datetime="2026-09-20T09:00:00Z">20 September</time>
+    </article></body></html>`;
+  }
+
+  function groups(page: string): Record<string, string[]> {
+    const found: Record<string, string[]> = {};
+    for (const [, kind, body] of page.matchAll(
+      /<div class="reaction-group rsvp-(\w+)">([\s\S]*?)<\/div>\s*<\/div>/g,
+    )) {
+      found[kind ?? ''] = [...(body ?? '').matchAll(/title="([^"]+)"/g)].map((m) => m[1] ?? '');
+    }
+    return found;
+  }
+
+  it('holds each one for the moderator, then shows it in its group once approved', async () => {
+    const cms = await site();
+    const answers = { ada: 'yes', bea: 'maybe', cy: 'interested', dee: 'no' };
+    for (const [name, value] of Object.entries(answers)) {
+      pages.set(`https://${name}.example/rsvp`, { body: answer(value, name) });
+      await sendAndSettle(cms, `https://${name}.example/rsvp`, EVENT_URL);
+    }
+    pages.set('https://eve.example/rsvp', {
+      body: '<html><body><p class="h-entry">Not a link to the event.</p></body></html>',
+    });
+    await sendAndSettle(cms, 'https://eve.example/rsvp', EVENT_URL);
+
+    const held = cms.admin.listCommentsFor('camp');
+    assert.deepEqual(
+      held.map((one) => [one.status, one.rsvp]).sort(),
+      [
+        ['pending', 'interested'],
+        ['pending', 'maybe'],
+        ['pending', 'no'],
+        ['pending', 'yes'],
+      ],
+      'four verified and held; the page that does not link the event is not stored',
+    );
+    assert.deepEqual(groups(await (await cms.app.request('/2026/09/camp/')).text()), {});
+
+    const { updateComment } = await import('../comments/records.ts');
+    for (const one of held) {
+      await updateComment(
+        { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+        one.id,
+        { status: 'approved' },
+      );
+    }
+
+    const page = await (await cms.app.request('/2026/09/camp/')).text();
+    assert.deepEqual(groups(page), {
+      yes: ['ada'],
+      maybe: ['bea'],
+      interested: ['cy'],
+      no: ['dee'],
+    });
+    assert.match(
+      page,
+      /<h2 class="reaction-title">Going <span class="reaction-count">1<\/span><\/h2>/,
+    );
+    assert.match(page, /<h2 class="reaction-title">Not going <span/);
+    assert.doesNotMatch(page, /class="comment h-entry/, 'and none of them is in the thread');
   });
 });
 

@@ -423,3 +423,30 @@ describe('an RSVP (TASK-198 AC #3)', () => {
     assert.equal(postLabel(rsvp), 'Going to a page on events.example');
   });
 });
+
+describe('an event (TASK-200)', () => {
+  it('is a post with a readable start, ahead of everything else the spec types', () => {
+    assert.equal(discoverPostType({ name: 'Camp', start: '2026-10-10T14:00:00Z' }), 'event');
+    assert.equal(
+      discoverPostType({
+        name: 'Camp',
+        start: '2026-10-10T14:00:00Z',
+        rsvp: 'yes',
+        'in-reply-to': 'https://events.example/camp',
+        'like-of': 'https://events.example/camp',
+      }),
+      'event',
+    );
+  });
+
+  it('is not made by a start nobody can read', () => {
+    assert.equal(discoverPostType({ name: 'Camp', start: 'soon', content: 'Hi.' }), 'article');
+    assert.equal(discoverPostType({ start: '', content: 'Hi.' }), 'note');
+  });
+
+  it('reads the start of a document, quoted or as YAML reads a timestamp', () => {
+    assert.equal(postTypeOf(post("title: Camp\nstart: '2026-10-10T14:00:00Z'\n", '')), 'event');
+    assert.equal(postTypeOf(post('title: Camp\nstart: 2026-10-10T14:00:00Z\n', '')), 'event');
+    assert.equal(postTypeOf(post('title: Camp\nstart: whenever\n', 'Words.')), 'article');
+  });
+});

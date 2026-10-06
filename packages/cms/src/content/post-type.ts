@@ -1,6 +1,7 @@
 import { CITATION_VERBS, citationOf, citationsOf, citedPageName } from './citation.ts';
 import type { CitationProperty, CitedPageReader } from './citation.ts';
 import type { Document } from './document.ts';
+import { eventOf, instantOf } from './event.ts';
 import { photosOf } from './photo.ts';
 import { isReadStatus, readLine, readOf } from './read.ts';
 import { RSVP_PHRASES, rsvpOf, rsvpValue } from './rsvp.ts';
@@ -11,10 +12,13 @@ import { htmlToText } from './search.ts';
  * ptd.spec.indieweb.org): what kind of post a post is, inferred from its own
  * properties rather than declared by its author.
  *
- * RSVP, repost, like, reply, photo and the note/article tail of the
+ * Event, RSVP, repost, like, reply, photo and the note/article tail of the
  * algorithm are here. The spec's full order is event, rsvp, repost, like,
  * reply, video, photo, then the tail, and the order matters because the first
- * branch that matches wins: a reply with a photo is a reply. Each new type is a check in
+ * branch that matches wins: a reply with a photo is a reply. The spec's event
+ * is a post of type h-event; a file has no such type, so an event is a post
+ * with a readable `start`, the property an h-event cannot do without
+ * (TASK-200). Each new type is a check in
  * {@link discoverPostType} in that order. granary's `mf2util` diverges from
  * the spec, putting reply ahead of repost and like and having no video
  * branch; this follows the spec.
@@ -26,7 +30,16 @@ import { htmlToText } from './search.ts';
  * the spec would have called a note or an article.
  */
 export type PostType =
-  'rsvp' | 'repost' | 'like' | 'reply' | 'photo' | 'read' | 'bookmark' | 'note' | 'article';
+  | 'event'
+  | 'rsvp'
+  | 'repost'
+  | 'like'
+  | 'reply'
+  | 'photo'
+  | 'read'
+  | 'bookmark'
+  | 'note'
+  | 'article';
 
 /** The mf2 properties the algorithm reads, each as its plain-text value. */
 export interface PostProperties {
@@ -34,6 +47,7 @@ export interface PostProperties {
   content?: string | undefined;
   summary?: string | undefined;
   'in-reply-to'?: string | undefined;
+  start?: string | undefined;
   rsvp?: string | undefined;
   /** Each photo's address. */
   photo?: readonly string[] | undefined;
@@ -46,6 +60,7 @@ export interface PostProperties {
 
 /** The type of a post with these properties. */
 export function discoverPostType(properties: PostProperties): PostType {
+  if (instantOf(properties.start) !== undefined) return 'event';
   if (rsvpValue(properties.rsvp) !== undefined) return 'rsvp';
   if (validUrl(properties['repost-of']) !== undefined) return 'repost';
   if (validUrl(properties['like-of']) !== undefined) return 'like';
@@ -89,6 +104,7 @@ function propertiesOf(document: PostDocument): PostProperties {
     content: htmlToText(document.html),
     summary: document.description,
     'in-reply-to': document.inReplyTo,
+    start: eventOf(document.extra)?.start,
     rsvp: rsvpOf(document.extra),
     // Only addresses {@link photosOf} accepts, the spec's "valid URL" for a
     // file whose uploads are site-relative.
