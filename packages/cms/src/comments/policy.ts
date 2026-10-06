@@ -72,6 +72,19 @@ export function commentsOpen(
   return now.getTime() < closesAt;
 }
 
+/**
+ * Whether what has been said about this document belongs under it: every
+ * post, open or closed, and a page only while it is taking comments.
+ *
+ * A post is answered whether or not it still takes comments, so a closed one
+ * keeps its thread. A page is standing content that opts in, so one that has
+ * not, or has opted back out, shows nothing and advertises nothing that would
+ * invite an answer.
+ */
+export function answerable(document: Document, policy: CommentPolicy, now: Date): boolean {
+  return document.type === 'post' || commentsOpen(document, policy, now);
+}
+
 /** A day, in milliseconds. */
 const DAY_MS = 24 * 60 * 60 * 1000;
 

@@ -31,6 +31,7 @@ import {
   themeName,
 } from './context.ts';
 import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
+import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { ContactFormContext } from '../contact/form.ts';
 import type { Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
@@ -673,8 +674,11 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // `conversation` is what the fediverse said back. It is on the context
     // only when there is something in it, so a theme can ask `{% if
     // conversation %}` and a post nobody has answered renders no empty
-    // section (TASK-49).
-    const said = options.conversation?.(document);
+    // section (TASK-49). A page that does not take comments has none however
+    // much was approved against it (TASK-196).
+    const said = answerable(document, commentPolicyOf(siteData.read()), config.now())
+      ? options.conversation?.(document)
+      : undefined;
     // `commentForm` is on the context only when the post is open, so the
     // theme asks `{% if commentForm %}` rather than working the rules out
     // for itself — and a closed post shows the thread with no form.

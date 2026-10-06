@@ -61,6 +61,15 @@
   {% endif %}
 </article>
 
+{#- What has been said about it, and the form, on a page that takes comments
+    (TASK-196): the CMS puts neither on the context of one that does not. -#}
+{% if conversation %}
+{% include "partials/conversation.njk" %}
+{% endif %}
+{% if commentForm %}
+{% include "partials/comment-form.njk" %}
+{% endif %}
+
 {# Only a page whose front matter says `contact: true` has one (TASK-56). #}
 {% if contactForm %}
 {% include "partials/contact-form.njk" %}

@@ -40,6 +40,17 @@ permalink: /2026/09/hello-world/
 Words.
 `;
 
+/** A page that takes comments, which a webmention can answer as it answers a post. */
+const PAGE = `---
+title: About
+permalink: /about/
+comments: true
+---
+
+Who this is.
+`;
+const PAGE_URL = `${BASE_URL}/about/`;
+
 /** The moment the site's clock is stopped at. */
 const NOW = new Date('2026-09-20T12:00:00.000Z');
 
@@ -116,6 +127,8 @@ async function site(
   const file = path.join(contentDir, 'posts', '2026-09-19-hello-world.md');
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, POST, 'utf8');
+  await mkdir(path.join(contentDir, 'pages'), { recursive: true });
+  await writeFile(path.join(contentDir, 'pages', 'about.md'), PAGE, 'utf8');
 
   await writeSiteJson({
     contentDir,
@@ -551,6 +564,40 @@ describe('a webmention on the page', () => {
       'its permalink is the page it was sent from, not an anchor on this one',
     );
     assert.doesNotMatch(after, /reply_to=/, 'and it offers no Reply link, which would go nowhere');
+  });
+});
+
+describe('a webmention to a page (TASK-196)', () => {
+  it('is held, then shown on the page once a moderator approves it, as on a post', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(
+        `<a class="u-in-reply-to" href="${PAGE_URL}">re</a>` +
+          '<div class="e-content"><p>Good page.</p></div>',
+      ),
+    });
+
+    const response = await sendAndSettle(cms, 'https://them.example/note', PAGE_URL);
+    assert.equal(response.status, 202);
+
+    const held = cms.admin.listCommentsFor('about').filter((one) => one.source === 'webmention');
+    assert.equal(held.length, 1);
+    assert.equal(held[0]?.status, 'pending', 'held for a moderator like one to a post');
+
+    const before = await (await cms.app.request('/about/')).text();
+    assert.doesNotMatch(before, /Good page\./, 'a pending webmention is on no page');
+
+    const { updateComment } = await import('../comments/records.ts');
+    await updateComment(
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
+      held[0]?.id ?? '',
+      { status: 'approved' },
+    );
+
+    const after = await (await cms.app.request('/about/')).text();
+    assert.match(after, /comment-webmention/);
+    assert.match(after, /Good page\./);
+    assert.match(after, /href="https:\/\/them\.example\/note"/);
   });
 });
 

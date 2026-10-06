@@ -31,8 +31,8 @@ themes/default/
     bio.njk           who an entry is by, as an h-card
     menu.njk          one named menu, as a nav of links
     feeds.njk         macros for the feed links in <head>
-    conversation.njk  the replies, likes and boosts under a post
-    comment-form.njk  the form under a post that is taking comments
+    conversation.njk  the replies, likes and boosts under a post or an open page
+    comment-form.njk  the form under a post or page that is taking comments
     contact-form.njk  the form on a page whose front matter says contact: true
     archive.njk       every post by month, on a page that says archive: true
     search-form.njk   the search box, on the search page
@@ -553,8 +553,9 @@ its front matter names no `image`.
 After the entry a post prints `nav.blog-post-nav`: the `previous` and `next`
 posts as two cards, `rel="prev"` and `rel="next"`, each opening on a
 `span.blog-post-nav-label`, and nothing at all at the ends of the archive; then
-the conversation and the comment form. A page prints the contact form when its
-front matter asked for one. A page has no neighbours, no tags and no
+the conversation and the comment form. A page prints the conversation and the
+comment form too when it takes comments, and the contact form when its front
+matter asked for one. A page has no neighbours, no tags and no
 syndication links, because none of those are things a page has.
 
 ### The bio
@@ -1586,7 +1587,17 @@ ask:
 {% endif %}
 ```
 
-That is what `layouts/post.njk` does. `partials/conversation.njk` is the whole
+That is what `layouts/post.njk` does, and `layouts/page.njk` with it.
+
+A page takes part only while it takes comments: when its front matter says
+`comments: true` and the site has not switched comments off. A page is closed
+by default, as WordPress closes them, and the CMS leaves `conversation` off the
+context of a closed page however much has been approved against it, so a page
+that turns comments off shows nothing. A post is different: it keeps its thread
+after it closes. Webmentions to a page are received and moderated either way,
+exactly as webmentions to a post are, and appear once the page opens.
+
+`partials/conversation.njk` is the whole
 section — a `div.reactions-section` of the likes, the boosts and the mentions
 as facepiles grouped by kind, and then the thread as
 `div#comments.comments-area` — and a site replaces it with a
