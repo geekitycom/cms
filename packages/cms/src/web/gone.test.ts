@@ -280,7 +280,11 @@ describe('a deleted post', () => {
     });
     const agent = await signIn(cms, ADA);
 
-    const response = await submit(agent, '/admin/posts/gone', { action: 'restore' });
+    const response = await submit(
+      agent,
+      '/admin/posts/gone?path=_trash%2Fposts%2F2026-09-10-gone.md',
+      { action: 'restore' },
+    );
 
     assert.equal(response.status, 303);
     const editor = await (await agent.get(response.headers.get('location') ?? '')).text();
@@ -305,5 +309,135 @@ describe('a deleted post', () => {
     const cms = await boot(first.contentDir, first.dataDir);
     assert.equal((await get(cms, GONE_URL)).status, 410);
     assert.equal((await get(cms, GONE_URL, ACTIVITY_STREAMS)).status, 410);
+  });
+});
+
+describe('a deleted post whose slug a live post also uses', () => {
+  const LIVE_FILE = 'posts/2026-09-10-gone.md';
+  const LIVE = post('Back again', { date: '2026-09-10T09:00:00Z', permalink: GONE_URL });
+
+  async function trashLink(agent: Browser, title: string): Promise<string> {
+    const list = await (await agent.get('/admin/posts?status=trash')).text();
+    const link = new RegExp(`href="([^"]+)">${title}</a>`).exec(list)?.[1];
+    assert.ok(link !== undefined, `the trash lists ${title}`);
+    return link;
+  }
+
+  async function save(
+    agent: Browser,
+    url: string,
+    changes: Record<string, string>,
+  ): Promise<Response> {
+    const html = await (await agent.get(url)).text();
+    const token = csrfField(html);
+    const hash = /name="hash" value="([^"]+)"/.exec(html)?.[1];
+    assert.ok(token !== undefined && hash !== undefined, `the editor at ${url} carried its form`);
+    return agent.post(url, { csrf_token: token, hash, ...changes });
+  }
+
+  it('opens in the editor from the trash list, not the live post', async () => {
+    const { cms } = await site({ ...GONE, [LIVE_FILE]: LIVE });
+    const agent = await signIn(cms, ADA);
+
+    const editor = await agent.get(await trashLink(agent, 'Gone'));
+
+    assert.equal(editor.status, 200);
+    const html = await editor.text();
+    assert.match(html, /This post is in the trash/);
+    assert.match(html, /Gone, in words\./);
+    assert.ok(!html.includes('Back again, in words.'), 'not the live post');
+  });
+
+  it('is restored from the trash list when its URL is free', async () => {
+    const { cms, contentDir } = await site({
+      '_trash/posts/2026-08-02-gone.md': post('Gone', {
+        date: '2026-08-02T09:00:00Z',
+        permalink: '/2026/08/gone/',
+      }),
+      [LIVE_FILE]: LIVE,
+    });
+    const agent = await signIn(cms, ADA);
+    const link = await trashLink(agent, 'Gone');
+
+    const response = await submit(agent, link, {
+      action: 'restore',
+      return: '/admin/posts?status=trash',
+    });
+
+    assert.equal(response.status, 303);
+    assert.deepEqual(await readdir(path.join(contentDir, 'posts')), [
+      '2026-08-02-gone.md',
+      '2026-09-10-gone.md',
+    ]);
+    const restored = await get(cms, '/2026/08/gone/');
+    assert.equal(restored.status, 200);
+    assert.match(await restored.text(), /Gone, in words\./);
+    assert.equal((await get(cms, GONE_URL)).status, 200, 'the live post still serves');
+  });
+
+  it('refuses a restore from the trash list while the live post holds its URL', async () => {
+    const { cms, contentDir } = await site({ ...GONE, [LIVE_FILE]: LIVE });
+    const agent = await signIn(cms, ADA);
+    const link = await trashLink(agent, 'Gone');
+
+    const response = await submit(agent, link, {
+      action: 'restore',
+      return: '/admin/posts?status=trash',
+    });
+
+    assert.equal(response.status, 303);
+    const list = await (await agent.get(response.headers.get('location') ?? '')).text();
+    assert.match(list, /posts\/2026-09-10-gone\.md now holds \/2026\/09\/gone\//);
+    assert.deepEqual(await readdir(path.join(contentDir, '_trash', 'posts')), [
+      '2026-09-02-gone.md',
+    ]);
+    const served = await get(cms, GONE_URL);
+    assert.equal(served.status, 200);
+    assert.match(await served.text(), /Back again, in words\./);
+  });
+
+  it('keeps the trashed copy where it is when edited from the trash', async () => {
+    const { cms, contentDir } = await site({ ...GONE, [LIVE_FILE]: LIVE });
+    const agent = await signIn(cms, ADA);
+
+    const response = await save(agent, await trashLink(agent, 'Gone'), {
+      title: 'Gone',
+      date: '2026-09-02T09:00:00Z',
+      body: 'Gone, rewritten.',
+      action: 'save-draft',
+    });
+
+    assert.equal(response.status, 303);
+    const editor = await (await agent.get(response.headers.get('location') ?? '')).text();
+    assert.match(editor, /Gone, rewritten\./);
+    assert.match(await readFile(path.join(contentDir, GONE_FILE), 'utf8'), /Gone, rewritten\./);
+    assert.match(await readFile(path.join(contentDir, LIVE_FILE), 'utf8'), /Back again, in words/);
+  });
+
+  it('leaves the live post at its slug in the editor', async () => {
+    const { cms } = await site({
+      '_trash/posts/2026-09-12-gone.md': post('Gone', {
+        date: '2026-09-12T09:00:00Z',
+        permalink: '/2026/09/gone-later/',
+      }),
+      [LIVE_FILE]: LIVE,
+    });
+    const agent = await signIn(cms, ADA);
+
+    const editor = await (await agent.get('/admin/posts/gone')).text();
+    assert.match(editor, /Back again, in words\./);
+    assert.ok(!editor.includes('This post is in the trash'));
+
+    const response = await save(agent, '/admin/posts/gone', {
+      title: 'Back again',
+      slug: 'gone',
+      date: '2026-09-10T09:00:00Z',
+      body: 'Back again, edited.',
+      action: 'publish',
+    });
+
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin/posts/gone');
+    assert.match(await (await get(cms, GONE_URL)).text(), /Back again, edited\./);
   });
 });

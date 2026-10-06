@@ -254,6 +254,21 @@ export function editorPath(kind: DocumentKind, slug: string): string {
   return `${kind.basePath}/${encodeURIComponent(slug)}`;
 }
 
+/**
+ * The URL of the editor for this document.
+ *
+ * A trashed document also names its file, because a live document may have
+ * taken its slug along with its URL (TASK-195).
+ */
+export function documentEditorPath(
+  kind: DocumentKind,
+  document: Pick<Document, 'slug' | 'path'>,
+): string {
+  const address = editorPath(kind, document.slug);
+  if (!isTrashedPath(document.path)) return address;
+  return `${address}?${new URLSearchParams({ path: document.path }).toString()}`;
+}
+
 /** The URL of the editor for a document that does not exist yet. */
 export function newEditorPath(kind: DocumentKind): string {
   return `${kind.basePath}/new`;
@@ -378,7 +393,7 @@ export function mountDocumentScreens(
   );
 
   app.get(`${kind.basePath}/:slug`, (c) => {
-    const document = findBySlug(c.var.store, kind, c.req.param('slug'));
+    const document = findEdited(c.var.store, kind, c.req.param('slug'), c.req.query('path'));
     if (document === undefined) return c.notFound();
     const location = postLocations(c.var.config.dataDir).read(document.permalink);
     return renderEditor(c, {
@@ -390,7 +405,7 @@ export function mountDocumentScreens(
   });
 
   app.post(`${kind.basePath}/:slug`, async (c) => {
-    const document = findBySlug(c.var.store, kind, c.req.param('slug'));
+    const document = findEdited(c.var.store, kind, c.req.param('slug'), c.req.query('path'));
     if (document === undefined) return c.notFound();
 
     const body = await c.req.parseBody();
@@ -509,7 +524,7 @@ async function saveFromForm(
     savedMessage(document, saved, store.now(), (url) => c.var.replyContexts.read(url)),
   );
   if (undescribed.length > 0) flash(c, 'warning', missingAltText(undescribed));
-  return c.redirect(editorPath(kind, saved.slug), 303);
+  return c.redirect(documentEditorPath(kind, saved), 303);
 }
 
 /** What a write needs from the site, as plain values rather than a request. */
@@ -1474,8 +1489,8 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
     freshHash: conflict.hash,
     submitted,
     current: conflict.current,
-    editUrl: editorPath(kind, document.slug),
-    saveUrl: editorPath(kind, document.slug),
+    editUrl: documentEditorPath(kind, document),
+    saveUrl: documentEditorPath(kind, document),
     action: form.draft ? 'save-draft' : 'publish',
   });
 }
@@ -1516,7 +1531,7 @@ async function moveDocument(
 
   return c.redirect(
     returnPath(options.returnTo) ??
-      (action === 'trash' ? kind.basePath : editorPath(kind, document.slug)),
+      (action === 'trash' ? kind.basePath : documentEditorPath(kind, moved.document)),
     303,
   );
 }
@@ -1633,7 +1648,7 @@ async function exists(file: string): Promise<boolean> {
 function backTo(c: Context<GeekityEnv>, options: MoveDocumentOptions, message: string): Response {
   flash(c, 'error', message);
   return c.redirect(
-    returnPath(options.returnTo) ?? editorPath(options.kind, options.document.slug),
+    returnPath(options.returnTo) ?? documentEditorPath(options.kind, options.document),
     303,
   );
 }
@@ -2008,7 +2023,7 @@ async function renderEditor(
       document === undefined
         ? `Add ${kind.singular}`
         : `Edit ${kind.singular}: ${postLabel(document, (url) => c.var.replyContexts.read(url))}`,
-    saveUrl: document === undefined ? newEditorPath(kind) : editorPath(kind, document.slug),
+    saveUrl: document === undefined ? newEditorPath(kind) : documentEditorPath(kind, document),
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
     uploadUrl: UPLOADS_PATH,
@@ -2059,13 +2074,25 @@ function citedPreviews(
   };
 }
 
+/** The document an editor URL from {@link documentEditorPath} names. */
+function findEdited(
+  store: ContentStore,
+  kind: DocumentKind,
+  slug: string,
+  file: string | undefined,
+): Document | undefined {
+  if (file === undefined) return findBySlug(store, kind, slug);
+  const document = store.getByPath(file);
+  return document?.type === kind.type && document.slug === slug ? document : undefined;
+}
+
 /**
- * The document of this kind with this slug.
+ * The document of this kind with this slug, a live one before a trashed one.
  *
  * The index's slug lookup is across both kinds and is not unique, so a direct
- * hit is only taken when it is of the right kind; otherwise the listing is
- * searched, trash included, because the editor is where a trashed document is
- * restored from.
+ * hit is only taken when it is live and of the right kind; otherwise the
+ * listing is searched, trash included, because the editor is where a trashed
+ * document is restored from.
  */
 export function findBySlug(
   store: ContentStore,
@@ -2073,7 +2100,7 @@ export function findBySlug(
   slug: string,
 ): Document | undefined {
   const direct = store.getBySlug(slug);
-  if (direct?.type === kind.type) return direct;
+  if (direct?.type === kind.type && !isTrashedPath(direct.path)) return direct;
 
   for (const trashed of [false, true]) {
     const found = store
@@ -2157,7 +2184,7 @@ function listRow(
     trashed: isTrashedPath(document.path),
     scheduled: scheduledFor(document, now) !== undefined,
     hidden: typeof visibilityOf(document) !== 'string',
-    editUrl: editorPath(kind, document.slug),
+    editUrl: documentEditorPath(kind, document),
     viewUrl: isPublic ? document.permalink : undefined,
     role,
   };
