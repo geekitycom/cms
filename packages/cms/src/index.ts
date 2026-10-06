@@ -1722,6 +1722,10 @@ export function createCms(config: GeekityConfig = {}): Cms {
     ),
     onStored: (target, previous) => {
       delivery.citedPageStored(target, previous);
+      const original = replyContexts.read(target)?.original;
+      if (original !== undefined && original !== previous?.original) {
+        webmentions.originalFound(target, original);
+      }
     },
   });
 
@@ -1905,7 +1909,13 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // And so does the webmention sender: telling the pages a post links to is
   // the same news as telling the followers, and it should not matter which
   // door the post came in by (TASK-51).
-  const webmentions = createWebmentionService({ admin, store, config: resolved, notifications });
+  const webmentions = createWebmentionService({
+    admin,
+    store,
+    config: resolved,
+    notifications,
+    originalOf: (url) => replyContexts.read(url)?.original,
+  });
   content.events.on('change', (change) => {
     webmentions.handle(change);
   });

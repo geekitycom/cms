@@ -138,6 +138,10 @@ export interface CitedEntry {
     | undefined;
   /** When it says it was published, as an ISO 8601 instant, or `null`. */
   readonly published: string | null;
+  /** Its `u-url` and `u-uid`, which a silo copy points at its original with (TASK-197). */
+  readonly urls: readonly string[];
+  /** Its `u-syndication`: the copies of it elsewhere. */
+  readonly syndication: readonly string[];
 }
 
 /**
@@ -173,7 +177,13 @@ export function citedEntry(root: HtmlElement, pageUrl: string): CitedEntry | und
     text: first(entry, 'content')?.text ?? first(entry, 'summary')?.text ?? '',
     author: authorName === '' ? undefined : { name: authorName, url: authorUrl, photo },
     published: instantOf(first(entry, 'published')),
+    urls: [...valuesOf(entry, 'url'), ...valuesOf(entry, 'uid')],
+    syndication: valuesOf(entry, 'syndication'),
   };
+}
+
+function valuesOf(item: MicroformatItem, property: string): string[] {
+  return (item.properties[property] ?? []).map((value) => value.text).filter((text) => text !== '');
 }
 
 /** The entry a webmention is about, or `undefined` when the page has none. */

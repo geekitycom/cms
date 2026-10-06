@@ -419,6 +419,14 @@ title and summary. The same partial cites a reply in a feed. The layouts own
 the placement; the partial owns only what the citation says, and it stays
 inside the `h-entry` wherever it is printed.
 
+**A reply to a silo copy cites the original** (TASK-197). When the post a
+reply answers is a copy of a post on another site, and that post lists the
+copy as its `u-syndication`, `replyContext.original` is the original's URL and
+the rest of `replyContext` describes the original. The `h-cite` links the
+original, and a `p.cite-copy` after it says "Also in reply to its copy on" the
+silo's host, linking the copy as a `u-in-reply-to` of its own, so a parser
+reads both as what the post answers.
+
 **A like, a repost or a bookmark cites what it cites** (TASK-169) with
 `partials/citations.njk`, beside the reply context and drawn the same way: one
 `div.reply-context.cite.h-cite` per entry of `citations`, classed

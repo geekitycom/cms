@@ -299,8 +299,9 @@ function citationLines(
   return cited
     .map(({ property, url }) => {
       const context = replyContext?.(url);
-      const href = escapeXml(url);
-      const name = citedPageName(url, context);
+      const shown = (property === 'in-reply-to' ? context?.original : undefined) ?? url;
+      const href = escapeXml(shown);
+      const name = citedPageName(shown, context);
       const author = context?.author?.name;
       const credit =
         author !== undefined && !name.toLowerCase().endsWith(` by ${author.toLowerCase()}`)

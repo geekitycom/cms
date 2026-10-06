@@ -36,6 +36,7 @@ export function citedPostReader(contextOf: () => Context<FederationContextData>)
     const warning = object.summary?.toString() ?? '';
     const hidden = warning !== '' || object.sensitive === true;
     const image = hidden ? undefined : await firstImage(object, loaders);
+    const shownAt = hrefOf(object.url);
 
     return {
       ...(object.name === null ? {} : { name: object.name.toString() }),
@@ -56,6 +57,7 @@ export function citedPostReader(contextOf: () => Context<FederationContextData>)
           }),
       ...(object.published === null ? {} : { published: object.published.toString() }),
       ...(image === undefined ? {} : { image }),
+      ...(shownAt === undefined ? {} : { url: shownAt }),
     } satisfies FediversePost;
   };
 }

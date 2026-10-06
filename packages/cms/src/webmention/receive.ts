@@ -82,6 +82,8 @@ export interface CheckWebmentionOptions {
   readonly baseUrl: string;
   /** The public document one of this site's paths names, or `undefined`. */
   readonly documentAt: (pathname: string) => Document | undefined;
+  /** The public post a URL elsewhere is one of the syndicated copies of (TASK-197). */
+  readonly syndicatedAt?: ((url: string) => Document | undefined) | undefined;
 }
 
 /**
@@ -117,6 +119,11 @@ export function checkWebmentionRequest(
 
   const site = webUrl(options.baseUrl);
   if (site === undefined || to.origin !== site.origin) {
+    // A response to a copy of a post on a silo belongs to the post itself.
+    const original = options.syndicatedAt?.(to.href);
+    if (original !== undefined) {
+      return { ok: true, source: from.href, target: to.href, document: original };
+    }
     return refuse('elsewhere', 'The target is not a page on this site.');
   }
 

@@ -18,14 +18,21 @@
 
   `replyContext.picture`, when the target has one and the reply shows it, is
   drawn as a thumbnail beside the line, as `citations.njk` draws it (TASK-252).
+
+  `replyContext.original`, when the target is a silo copy of a post that lists
+  the copy as its own (TASK-197), is the post cited: the `h-cite` links the
+  original and describes it, so its site finds the link when it is sent a
+  webmention. The copy follows the citation as a `u-in-reply-to` of its own,
+  outside the `h-cite`, so the silo can thread the reply too.
 #}
 {% import "partials/cited-page.njk" as cited %}
 {% if inReplyTo %}
 {% set picture = replyContext.picture %}
+{% set answered = replyContext.original or inReplyTo %}
 <div class="reply-context cite u-in-reply-to h-cite{% if picture %} cite-with-thumb{% endif %}">
-  {%- if picture %}{{ cited.thumb(inReplyTo, picture) }}{% endif %}
+  {%- if picture %}{{ cited.thumb(answered, picture) }}{% endif %}
   <p class="cite-line small">In reply to
-    {{- cited.page(inReplyTo, replyContext) }}
+    {{- cited.page(answered, replyContext) }}
     {%- if replyContext.published %}, <time class="dt-published" datetime="{{ replyContext.published | date("iso") }}">{{ replyContext.published | date("readable", none, lang) }}</time>
     {%- endif -%}
   </p>
@@ -33,4 +40,7 @@
   <blockquote class="cite-quote p-content">{{ replyContext.text }}</blockquote>
   {% endif %}
 </div>
+{% if replyContext.original %}
+<p class="cite-copy small">Also in reply to <a class="u-in-reply-to" href="{{ inReplyTo }}">its copy on {{ inReplyTo | host }}</a></p>
+{% endif %}
 {% endif %}

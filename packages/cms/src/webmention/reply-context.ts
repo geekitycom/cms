@@ -39,6 +39,12 @@ const EXCERPT_CHARACTERS = 300;
 export interface ReplyContext {
   /** The post answered: the reply's own `in-reply-to`, whatever it redirected to. */
   readonly url: string;
+  /**
+   * The original `url` is a copy of, when the copy names it and it lists the
+   * copy back as its `u-syndication` (TASK-197). Every other field then
+   * describes the original.
+   */
+  readonly original?: string;
   /** Its title, when it has one of its own; a note's name is its text. */
   readonly name?: string;
   /** A short excerpt of what it says, or the page's description. */
@@ -89,6 +95,8 @@ export interface FediversePost {
   readonly published?: string;
   /** Its first image attachment. */
   readonly image?: string;
+  /** Its `url`: the page it is shown at, which a bridged post points at its original with. */
+  readonly url?: string;
 }
 
 /**
@@ -124,7 +132,9 @@ interface Limits {
  * that names nothing. Any other page is read, and when it has no `h-entry` it
  * is also asked about through the ActivityPub object and the oEmbed endpoint
  * it links. Each source fills only what the ones before it left empty:
- * `h-entry`, ActivityPub, oEmbed, JSON-LD, then the page's own metadata.
+ * `h-entry`, ActivityPub, oEmbed, JSON-LD, then the page's own metadata. A
+ * silo copy of a post on another site is described by that original instead,
+ * when the original lists the copy as its own (TASK-197).
  *
  * Only http and https, only public hosts (every redirect hop is checked, and a
  * name is refused when any address it resolves to is private), one timeout
@@ -148,47 +158,149 @@ export async function fetchReplyContext(
     if (found !== undefined) return found;
   }
 
-  const timeoutMs = limits.deadline - Date.now();
-  const fetched =
-    timeoutMs <= 0
-      ? ({ ok: false, reason: 'timed out' } as const)
-      : await fetchPublic(target, {
-          lookup: limits.lookup,
-          timeoutMs,
-          maxBytes: limits.maxBytes,
-          overflow: 'truncate',
-          accept: 'text/html, */*;q=0.8',
-          contentType: {
-            pattern: /^\s*(text\/html|application\/xhtml\+xml)/i,
-            name: 'an HTML page',
-          },
-          headersOnly: IMAGE_TYPE,
-        });
-
-  if (fetched.ok && fetched.read === 'headers') {
-    return { ok: true, context: { url: target }, picture: { url: fetched.url, kind: 'photo' } };
+  const read = await readPage(target, limits);
+  if (!read.ok) return read;
+  if (read.page === undefined) {
+    return { ok: true, context: { url: target }, picture: { url: read.image, kind: 'photo' } };
   }
-  if (!fetched.ok) return fetched;
 
+  const post = await fediversePostOf(read.page, options.fediverse, limits);
+  const original =
+    known === undefined ? await originalOf(target, read.page, post, limits) : undefined;
+  if (original !== undefined) {
+    const found = await describePage(
+      target,
+      original,
+      await fediversePostOf(original, options.fediverse, limits),
+      undefined,
+      limits,
+    );
+    if (found !== undefined) {
+      return { ...found, context: { ...found.context, original: original.url } };
+    }
+  }
+  return (await describePage(target, read.page, post, known, limits)) ?? refuse('nothing to show');
+}
+
+/** A cited page read as HTML, its `h-entry` only when it was read in full. */
+interface HtmlPage {
+  /** Where it was read from, after any redirects. */
+  readonly url: string;
+  readonly root: HtmlElement;
+  readonly entry: CitedEntry | undefined;
+}
+
+type PageRead =
+  | { readonly ok: false; readonly reason: string }
+  | { readonly ok: true; readonly page: HtmlPage }
+  /** A URL that is an image, read no further than its headers. */
+  | { readonly ok: true; readonly page?: undefined; readonly image: string };
+
+async function readPage(url: string, limits: Limits): Promise<PageRead> {
+  const timeoutMs = limits.deadline - Date.now();
+  if (timeoutMs <= 0) return { ok: false, reason: 'timed out' };
+  const fetched = await fetchPublic(url, {
+    lookup: limits.lookup,
+    timeoutMs,
+    maxBytes: limits.maxBytes,
+    overflow: 'truncate',
+    accept: 'text/html, */*;q=0.8',
+    contentType: {
+      pattern: /^\s*(text\/html|application\/xhtml\+xml)/i,
+      name: 'an HTML page',
+    },
+    headersOnly: IMAGE_TYPE,
+  });
+  if (!fetched.ok) return fetched;
+  if (fetched.read === 'headers') return { ok: true, image: fetched.url };
   const root = parseHtml(new TextDecoder().decode(fetched.body));
   const entry = fetched.truncated ? undefined : citedEntry(root, fetched.url);
-  const post =
-    entry === undefined && options.fediverse !== undefined
-      ? await fetchFediversePost(activityLink(root, fetched.url), options.fediverse, limits)
-      : undefined;
-  const endpoint =
-    entry === undefined && known === undefined ? oembedEndpoint(root, fetched.url) : undefined;
-  const oembed = endpoint === undefined ? undefined : await fetchOembed(endpoint, limits);
+  return { ok: true, page: { url: fetched.url, root, entry } };
+}
 
-  return (
-    described(target, [
-      entry === undefined ? undefined : entrySource(entry),
-      post === undefined ? undefined : fediverseSource(post),
-      oembedSource(oembed),
-      jsonLdSource(root, fetched.url),
-      pageSource(root, fetched.url),
-    ]) ?? refuse('nothing to show')
-  );
+/** The ActivityPub object a page with no `h-entry` names, when there is a way to read it. */
+async function fediversePostOf(
+  page: HtmlPage,
+  lookupPost: FediverseLookup | undefined,
+  limits: Limits,
+): Promise<FediversePost | undefined> {
+  if (page.entry !== undefined || lookupPost === undefined) return undefined;
+  return await fetchFediversePost(activityLink(page.root, page.url), lookupPost, limits);
+}
+
+/** Describe an HTML page from its sources, asking its oEmbed endpoint when it has no `h-entry`. */
+async function describePage(
+  target: string,
+  page: HtmlPage,
+  post: FediversePost | undefined,
+  known: KnownEndpoint | undefined,
+  limits: Limits,
+): Promise<Extract<ReplyContextFetch, { ok: true }> | undefined> {
+  const { root, url, entry } = page;
+  const endpoint =
+    entry === undefined && known === undefined ? oembedEndpoint(root, url) : undefined;
+  const oembed = endpoint === undefined ? undefined : await fetchOembed(endpoint, limits);
+  return described(target, [
+    entry === undefined ? undefined : entrySource(entry),
+    post === undefined ? undefined : fediverseSource(post),
+    oembedSource(oembed),
+    jsonLdSource(root, url),
+    pageSource(root, url),
+  ]);
+}
+
+/**
+ * The original a silo copy is of (original-post-discovery, TASK-197): a page
+ * on another host that the copy names, by its `h-entry`'s `u-url` or `u-uid`,
+ * its `rel=canonical` or its ActivityPub object's `url`, and that lists the
+ * copy back as its `u-syndication` or `rel=syndication`. Without that claim
+ * back, any page could pass itself off as a copy of somebody else's post.
+ */
+async function originalOf(
+  target: string,
+  page: HtmlPage,
+  post: FediversePost | undefined,
+  limits: Limits,
+): Promise<HtmlPage | undefined> {
+  const copyHosts = new Set([new URL(target).hostname, new URL(page.url).hostname]);
+  const candidates = new Set<string>();
+  for (const named of [
+    ...(page.entry?.urls ?? []),
+    post?.url,
+    canonicalLink(page.root, page.url),
+  ]) {
+    const url = webUrl(named ?? '');
+    if (url !== undefined && !copyHosts.has(url.hostname)) candidates.add(url.href);
+  }
+
+  const copyUrls = new Set([target, page.url]);
+  for (const candidate of candidates) {
+    const read = await readPage(candidate, limits);
+    if (!read.ok || read.page === undefined) continue;
+    if (syndicationOf(read.page).some((url) => copyUrls.has(url))) return read.page;
+  }
+  return undefined;
+}
+
+/** The copies a page lists of itself: its `h-entry`'s `u-syndication` and its `rel=syndication` links. */
+function syndicationOf(page: HtmlPage): string[] {
+  const listed = [...(page.entry?.syndication ?? [])];
+  for (const element of elementsIn(page.root)) {
+    if ((element.name === 'a' || element.name === 'link') && hasRel(element, 'syndication')) {
+      const url = resolved(element.attributes['href'], page.url);
+      if (url !== undefined) listed.push(url);
+    }
+  }
+  return listed.map((url) => webUrl(url)?.href ?? url);
+}
+
+function canonicalLink(root: HtmlElement, base: string): string | undefined {
+  for (const element of elementsIn(root)) {
+    if (element.name === 'link' && hasRel(element, 'canonical')) {
+      return resolved(element.attributes['href'], base);
+    }
+  }
+  return undefined;
 }
 
 function described(
@@ -528,9 +640,12 @@ const KNOWN_OEMBED_PROVIDERS: readonly {
   },
 ];
 
-function knownEndpoint(
-  target: string,
-): { readonly endpoint: string; readonly titleSuffix?: string | undefined } | undefined {
+interface KnownEndpoint {
+  readonly endpoint: string;
+  readonly titleSuffix?: string | undefined;
+}
+
+function knownEndpoint(target: string): KnownEndpoint | undefined {
   const url = webUrl(target);
   if (url === undefined) return undefined;
   const provider = KNOWN_OEMBED_PROVIDERS.find(

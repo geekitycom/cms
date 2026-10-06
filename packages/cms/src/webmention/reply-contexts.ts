@@ -322,6 +322,7 @@ function parseContexts(text: string): Record<string, ReplyContext> {
     const picture = parseCitedPicture(value['picture']);
     contexts[target] = {
       url: target,
+      ...optional('original', webUrlOf(value['original'])),
       ...optional('name', stringOf(value['name'])),
       ...optional('text', stringOf(value['text'])),
       ...(authorName === undefined

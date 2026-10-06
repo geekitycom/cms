@@ -75,6 +75,11 @@ export interface CreateWebmentionServiceOptions {
    * nobody to tell; the CMS always hands one in.
    */
   notifications?: CommentNotices | undefined;
+  /**
+   * The original a cited silo copy is of, from the stored reply contexts
+   * (TASK-197). A reply to the copy tells the original too.
+   */
+  originalOf?: ((url: string) => string | undefined) | undefined;
 }
 
 /** Sends a site's webmentions, takes the ones sent to it, and remembers both. */
@@ -104,6 +109,12 @@ export interface WebmentionService {
    * that wants to know what became of one; nothing has to look at it.
    */
   receive(incoming: IncomingWebmention): Promise<WebmentionOutcome>;
+  /**
+   * Tell `original` about every public post that replies to `copy`, once its
+   * reply context has found that the copy is of it (TASK-197): the post was
+   * sent before anybody knew.
+   */
+  originalFound(copy: string, original: string): void;
   /** Resolve once every queued send and check has finished, however it finished. */
   settled(): Promise<void>;
 }
@@ -143,6 +154,7 @@ export function createWebmentionService(
   }
 
   const targets = syndicationTargetsReader(config.contentDir);
+  const originalOf = options.originalOf ?? (() => undefined);
   const copies = syndicationCopies(config.contentDir);
 
   /** The language a post that names none is in, as the file says now. */
@@ -264,6 +276,7 @@ export function createWebmentionService(
         targets(),
         config.baseUrl,
         siteLanguage(),
+        originalOf,
       );
       if (links.length === 0) return;
 
@@ -297,7 +310,7 @@ export function createWebmentionService(
       const source = absoluteUrl(document.permalink, config.baseUrl);
       if (!sending()) return { slug, source, sent: [] };
 
-      const links = targetsOf([document], targets(), config.baseUrl, siteLanguage());
+      const links = targetsOf([document], targets(), config.baseUrl, siteLanguage(), originalOf);
 
       return await enqueue(async () => {
         const outcomes = await tellAll(slug, source, links);
@@ -339,6 +352,19 @@ export function createWebmentionService(
       return checked;
     },
 
+    originalFound(copy, original) {
+      const target = externalTarget(original, config.baseUrl);
+      if (target === undefined || !sending()) return;
+      const now = config.now();
+      for (const document of store.listAll()) {
+        if (replyTarget(document) !== copy || !isPublic(document, now)) continue;
+        const source = absoluteUrl(document.permalink, config.baseUrl);
+        enqueue(() => tell(document.slug, source, target)).catch((thrown: unknown) => {
+          logger.warn(`A webmention failed: ${messageOf(thrown)}`);
+        });
+      }
+    },
+
     settled() {
       return Promise.all([chain, checking]).then(ignore);
     },
@@ -353,21 +379,28 @@ interface Told {
 
 /**
  * Every external page any of these versions of a post links to, in order: the
- * post it replies to first, then what it reposts, likes, bookmarks or reads, then the links in its body, then the syndication
- * targets it selects, which the theme links to inside its h-entry.
+ * post it replies to first, and the original that post is a copy of (TASK-197),
+ * then what it reposts, likes, bookmarks or reads, then the links in its body,
+ * then the syndication targets it selects, which the theme links to inside its
+ * h-entry.
  */
 function targetsOf(
   documents: readonly (Document | undefined)[],
   declared: readonly SyndicationTarget[],
   baseUrl: string,
   siteLanguage: string,
+  originalOf: (url: string) => string | undefined,
 ): string[] {
   const targets = new Set<string>();
 
   for (const document of documents) {
     if (document === undefined) continue;
     const reply = externalTarget(replyTarget(document), baseUrl);
-    if (reply !== undefined) targets.add(reply);
+    if (reply !== undefined) {
+      targets.add(reply);
+      const original = externalTarget(originalOf(reply), baseUrl);
+      if (original !== undefined) targets.add(original);
+    }
     const cites = [
       ...citationsOf(document.extra).map(({ url }) => url),
       readOf(document.extra)?.of.url,
