@@ -4,12 +4,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, FIRST_ADMIN, resolveNothing, signedIn } from '../admin/__testing__/harness.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { seedActorKeys } from '../federation/__testing__/keys.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+
+remoteHostsDoNotExist();
 
 /** The site under test. */
 const BASE_URL = 'https://blog.example';

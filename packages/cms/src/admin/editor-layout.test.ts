@@ -4,12 +4,14 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { blankForm, POST_KIND } from './documents.ts';
 import { openGroups } from './editor-layout.ts';
 
 const box = sandbox();
+remoteHostsDoNotExist();
 after(() => box.cleanup());
 
 const MP3 = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09]);

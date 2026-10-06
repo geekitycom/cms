@@ -9,6 +9,7 @@ import { after, describe, it } from 'node:test';
 
 import sharp from 'sharp';
 
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { createUser, findUser } from '../admin/accounts.ts';
@@ -16,6 +17,8 @@ import { addFollower } from '../federation/records.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+
+remoteHostsDoNotExist();
 
 const box = sandbox();
 after(() => box.cleanup());

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, FIRST_ADMIN, signedIn } from '../admin/__testing__/harness.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { updateComment } from '../comments/records.ts';
@@ -14,6 +15,8 @@ import type { HostLookup } from './public-address.ts';
 import { fetchReplyContext } from './reply-context.ts';
 import type { FediverseLookup } from './reply-context.ts';
 import { WEBMENTION_PATH } from './routes.ts';
+
+remoteHostsDoNotExist();
 
 /**
  * Original-post-discovery (TASK-197): a reply to a silo copy of a post answers

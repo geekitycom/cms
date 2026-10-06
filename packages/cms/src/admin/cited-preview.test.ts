@@ -86,6 +86,7 @@ async function site(files: Record<string, string>): Promise<{ cms: Cms; contentD
     contentDir,
     dataDir: await box.dir('geekity-cited-preview-data-'),
     hostLookup: lookup,
+    federation: { allowPrivateAddress: true },
   });
   await cms.replyContexts.settled();
   return { cms, contentDir };

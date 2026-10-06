@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import '../../__testing__/notify-pings.ts';
 import { seedActorKeys } from '../../federation/__testing__/keys.ts';
 import { createCms } from '../../index.ts';
 import { sessionCookieName } from '../session.ts';

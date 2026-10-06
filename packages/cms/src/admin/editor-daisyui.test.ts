@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { citedCard, fieldsOf } from './__testing__/editor-form.ts';
 import { editorScreens } from './__testing__/editor-screens.ts';
 import { sandbox } from './__testing__/harness.ts';
 import { classesOf, classesOutsideTheBar, screenOf } from './__testing__/markup.ts';
 
 const box = sandbox();
+remoteHostsDoNotExist();
 after(() => box.cleanup());
 
 const EDITORS = ['newPost', 'newPage', 'filled', 'refused', 'trashed'] as const;

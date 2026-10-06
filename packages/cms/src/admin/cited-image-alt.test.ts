@@ -4,11 +4,14 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
 import { pngWithMetadata } from '../__testing__/metadata.ts';
+import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import type { Cms } from '../index.ts';
 import type { HostLookup } from '../webmention/public-address.ts';
 import { citedCard } from './__testing__/editor-form.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
+
+remoteHostsDoNotExist();
 
 const box = sandbox();
 

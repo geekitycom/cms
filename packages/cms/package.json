@@ -35,11 +35,11 @@
     "build:theme": "tailwindcss -i themes/default/src/style.css -o themes/default/static/style.css --optimize",
     "dev": "tsc -p tsconfig.build.json --watch",
     "pretest": "pnpm build:theme && pnpm build:admin",
-    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test": "tsx --import ./src/__testing__/offline.ts --test \"src/**/*.test.ts\"",
     "test:11ty": "tsx --test \"test/*.test.ts\"",
     "fed:smoke": "tsx scripts/fed-smoke.ts",
     "pretest:coverage": "pnpm build:theme && pnpm build:admin",
-    "test:coverage": "tsx --test --experimental-test-coverage \"src/**/*.test.ts\"",
+    "test:coverage": "tsx --import ./src/__testing__/offline.ts --test --experimental-test-coverage \"src/**/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p editor/tsconfig.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
