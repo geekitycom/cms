@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-06 12:09'
-updated_date: '2026-10-06 13:45'
+updated_date: '2026-10-06 13:50'
 labels:
   - plugins
   - llm
@@ -28,7 +28,7 @@ ordinal: 239800
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-M31 (decision-33). A plugin declares settings fields (text, url, select, checkbox, secret); core draws them as a form on the plugin screen under Plugins and hands the plugin typed values per request. Public values live under plugins[<package name>] in content/_data/site.json; secrets live in data/plugins/<package name>/secrets.json, mode 0600, written atomically. A secret may come from an environment variable instead, GEEKITY_PLUGIN_ plus the package name and setting upper-cased with other runs of characters as _ (GEEKITY_PLUGIN_GEEKITY_PLUGIN_LLM_API_KEY), so Docker operators can keep keys in .env; the form then shows it as set by the environment and does not edit it. First user: a new package, packages/plugin-llm (@geekity/plugin-llm), with base URL (default https://openrouter.ai/api/v1), API key (secret) and default model, and a Test connection button that makes one tiny call and reports the outcome. Each plugin package added here gets its release-please entry (include-component-in-tag true), its commitlint scope and CLAUDE.md scope row, CI lint, typecheck and tests, the shared bundle build, and a smoke test installing it against the packed @geekity/cms tarball.
+M31 (decision-33). A plugin declares settings fields (text, url, select, checkbox, secret); core draws them as a form on the plugin screen under Plugins and hands the plugin typed values per request. Public values live under plugins[<package name>] in content/_data/site.json; secrets live in data/plugins/<package name>/secrets.json, mode 0600, written atomically. A secret may come from an environment variable instead, GEEKITY_PLUGIN_, the package name without its scope or a leading plugin-, and the setting, upper-cased with other runs of characters as _ (GEEKITY_PLUGIN_LLM_API_KEY for @geekity/plugin-llm), so Docker operators can keep keys in .env; the form then shows it as set by the environment and does not edit it. First user: a new package, packages/plugin-llm (@geekity/plugin-llm), with base URL (default https://openrouter.ai/api/v1), API key (secret) and default model, and a Test connection button that makes one tiny call and reports the outcome. Each plugin package added here gets its release-please entry (include-component-in-tag true), its commitlint scope and CLAUDE.md scope row, CI lint, typecheck and tests, the shared bundle build, and a smoke test installing it against the packed @geekity/cms tarball.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
