@@ -1,11 +1,11 @@
 ---
 id: TASK-200
 title: Event posts that collect RSVPs
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-01 17:02'
-updated_date: '2026-10-06 03:51'
+updated_date: '2026-10-07 10:04'
 labels:
   - indieweb
   - post-types
@@ -32,7 +32,7 @@ IndieMark level 5 asks for event posts that receive and display RSVPs. Add an ev
 - [x] #2 RSVP webmentions to the event are verified, moderated and shown grouped as going, maybe, interested and not going
 - [x] #3 Fediverse Accept, TentativeAccept and Reject of the Event are shown in the same groups
 - [x] #4 The admin editor can create and edit an event
-- [ ] #5 The default theme's JSON-LD (partials/jsonld.njk, decision-16) describes an event post as a schema.org Event with name, startDate, endDate when set, location (Place with address, or VirtualLocation with url), eventAttendanceMode, eventStatus, description, and organizer referencing the author's Person node, and passes Google's Rich Results Test for events
+- [x] #5 The default theme's JSON-LD (partials/jsonld.njk, decision-16) describes an event post as a schema.org Event with name, startDate, endDate when set, location (Place with address, or VirtualLocation with url), eventAttendanceMode, eventStatus, description, and organizer referencing the author's Person node, and passes Google's Rich Results Test for events
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -63,10 +63,12 @@ Editor: Event group (Starts, Ends, Where) via admin/event-field.ts; wall clock i
 Micropub: POST_TYPES is keyed by Exclude<PostType,'event'>; the endpoint creates h-entry only. Follow-up candidates: Micropub h-event create, and q=source returning start/end/location as h-event.
 Validation: pnpm build, pnpm test (4781 + 30 pass), pnpm typecheck, pnpm lint, pnpm format:check all clean. Mutation checks: hiding the RSVP groups in conversation.njk fails the receive and inbox tests; dropping the wasEvent guard fails the hand-written-location test. Served a scratch site from dist on :3919 (no outside hosts) and curled /2026/09/camp/: article.blog-post.h-event; mf2 parse gives h-event name, start, end, location, url; JSON-LD Event with Place+address, Offline mode, EventScheduled, organizer -> /author/ada/#person; Accept: application/activity+json gives type Event with startTime, endTime, Place, summary. Server stopped.
 AC #5 left unchecked: the JSON-LD carries everything the criterion lists and is checked by web/event.test.ts, but 'passes Google's Rich Results Test' needs a page Google can fetch (a deployed site) or a run of Google's tool, which is a third-party service this run does not call. Check it after deploy; location.address is a Text address, which schema.org allows; if Google wants a PostalAddress it will warn there.
+
+AC #5 verified after the 0.23.0 deploy: https://shll.me/2026/10/party/ serves an h-event and one JSON-LD Event node (name, startDate, endDate, Place with a Text address, OfflineEventAttendanceMode, EventScheduled, description, image, organizer -> /author/a/#person in the same graph). The operator ran Google's Rich Results Test on that URL and it passed; the Text address was accepted, so no PostalAddress follow-up is needed.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added event posts. A post whose front matter has a readable start (with optional end and location) is an event under Post Type Discovery, ahead of RSVP. The default theme renders it as an h-event with dt-start, dt-end and p-location, shown in the site's zone through a new 'datetime' date format, and its JSON-LD as a schema.org Event (Place with address or VirtualLocation with url, attendance mode, EventScheduled, description, organizer referencing the author's Person). It federates as an ActivityStreams Event. Approved RSVP webmentions and fediverse Accept, TentativeAccept and Reject of the event are grouped on its page as going, maybe, interested and not going, one face per person with their latest answer, Undo withdrawing it; such answers are never taken for a relay's. The admin editor has an Event group (Starts, Ends, Where) with refusals for bad input, and the preview renders an event. decision-32 records the choices. Verified with new tests (post type, event model, editor, preview, page markup and JSON-LD, federation object, conversation grouping, webmention receive, signed inbox deliveries), the full build/test/typecheck/lint/format:check run, and curl plus an mf2 parse of a served scratch site. AC #5's Rich Results Test is still to be run against a deployed page.
+Added event posts. A post whose front matter has a readable start (with optional end and location) is an event under Post Type Discovery, ahead of RSVP. The default theme renders it as an h-event with dt-start, dt-end and p-location in the site's zone, and its JSON-LD as a schema.org Event (Place with address or VirtualLocation with url, attendance mode, EventScheduled, description, organizer referencing the author's Person). It federates as an ActivityStreams Event. Approved RSVP webmentions and fediverse Accept, TentativeAccept and Reject of the event are grouped on its page as going, maybe, interested and not going, one face per person with their latest answer. The admin editor has an Event group (Starts, Ends, Where). decision-32 records the choices. Verified with tests, the full build/test/typecheck/lint/format:check run, an mf2 parse of a served scratch site, and after the 0.23.0 deploy a passing Google Rich Results Test on https://shll.me/2026/10/party/.
 <!-- SECTION:FINAL_SUMMARY:END -->
