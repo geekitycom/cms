@@ -581,6 +581,45 @@ describe('a listing as Markdown (TASK-289)', () => {
     assert.match(body, /\[Older posts\]\(https:\/\/example\.com\/page\/3\/index\.md\)/);
   });
 
+  it('renders the home listing under the site’s title and tagline, not llms.txt', async () => {
+    const { cms } = await site({
+      ...LONG_ARCHIVE,
+      '_data/site.json': JSON.stringify({
+        title: 'Archive',
+        tagline: 'Notes, mostly',
+        postsPerPage: 2,
+      }),
+      'llms.txt': '# A curated index\n',
+    });
+
+    const response = await cms.app.request('/', { headers: { accept: 'text/markdown' } });
+
+    assert.equal(response.status, 200);
+    assert.equal(
+      await response.text(),
+      [
+        '# Archive',
+        '',
+        '> Notes, mostly',
+        '',
+        '## Posts',
+        '',
+        '- [One](https://example.com/one/index.md)',
+        '- [Two](https://example.com/two/index.md)',
+        '',
+        '## More posts',
+        '',
+        '- [Older posts](https://example.com/page/2/index.md)',
+        '',
+      ].join('\n'),
+    );
+    assert.equal(
+      await (await cms.app.request('/index.md')).text(),
+      await (await cms.app.request('/', { headers: { accept: 'text/markdown' } })).text(),
+      '/index.md is the same listing',
+    );
+  });
+
   it('is served at {listing}/index.md exactly as Accept serves it', async () => {
     const { cms } = await site(LONG_ARCHIVE);
 

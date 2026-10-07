@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-07 22:08'
+updated_date: '2026-10-07 22:49'
 ---
 # Content Negotiation
 
@@ -81,7 +81,7 @@ no taxonomy base can take them.
 Listing URLs (home, tag archives, author archives, paginated archives)
 negotiate too. HTML renders the theme's list template. JSON returns an array of the same document shape with `markdown` and `html` omitted unless `?full=1`.
 
-Markdown, at `{listing}/index.md` or by `Accept`, is the listing in the llms.txt shape. The first page of the site's latest posts at `/` is the site's llms.txt itself: `content/llms.txt` when the site has one, else the generated file, whether or not the `llmsTxt` setting serves `/llms.txt`. Every other listing page, the posts page and its first page included, is a heading with the title its HTML carries, then a `## Posts` list of the posts on that page as `- [title](absolute index.md URL): description`, then a `## More posts` list linking the newer and older pages' `index.md` where they exist:
+Markdown, at `{listing}/index.md` or by `Accept`, is the listing in the llms.txt shape, rendered from the listing itself rather than from `/llms.txt`, which a site may curate by hand. Every listing page, `/` included, is a heading with the title its HTML carries, a `> ` quote with the site's tagline on the latest posts or the posts page's description, then a `## Posts` list of the posts on that page as `- [title](absolute index.md URL): description`, then a `## More posts` list linking the newer and older pages' `index.md` where they exist:
 
 ```
 # notes
@@ -96,7 +96,7 @@ Markdown, at `{listing}/index.md` or by `Accept`, is the listing in the llms.txt
 - [Older posts](https://example.com/tag/notes/page/2/index.md)
 ```
 
-The posts page's `index.md` and `index.json` are the listing's, as `Accept` at its URL is, not the page's own file. Listing Markdown is validated by an `ETag` over its bytes; the llms.txt page is dated by the file, every other page by its newest post.
+The posts page's `index.md` and `index.json` are the listing's, as `Accept` at its URL is, not the page's own file. Listing Markdown is validated by an `ETag` over its bytes and dated by its newest post.
 
 ## Search
 

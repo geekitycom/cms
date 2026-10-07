@@ -57,6 +57,7 @@ export interface LlmsTxtFile {
 
 export interface LlmsListing {
   title: string;
+  description?: string | undefined;
   posts: readonly LlmsEntry[];
   newer?: string | undefined;
   older?: string | undefined;
@@ -78,8 +79,10 @@ export function llmsListingTxt(listing: LlmsListing, baseUrl: string): string {
     ...(listing.newer === undefined ? [] : [{ title: 'Newer posts', href: listing.newer }]),
     ...(listing.older === undefined ? [] : [{ title: 'Older posts', href: listing.older }]),
   ];
+  const description = oneLine(listing.description ?? '');
   return markdownFile([
     `# ${oneLine(listing.title)}`,
+    ...(description === '' ? [] : [`> ${description}`]),
     ...section('Posts', listing.posts, baseUrl),
     ...section('More posts', pager, baseUrl),
   ]);

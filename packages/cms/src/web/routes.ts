@@ -1312,37 +1312,30 @@ function listingMarkdown(
   representation: Representation,
   page: { href: string; title: string; pagination: Pagination; documents: readonly Document[] },
 ): Response {
-  const { contentDir, baseUrl } = c.var.config;
-  const front =
-    request.term === undefined &&
-    request.author === undefined &&
-    request.document === undefined &&
-    request.pageNumber === 0;
   const { next, previous } = page.pagination.href;
   const home = frontPages(c).home;
+  const latestPosts = request.term === undefined && request.author === undefined;
+  const description =
+    request.document?.description ?? (latestPosts ? c.var.renderer.site().tagline : undefined);
 
-  const file = front
-    ? (ownLlmsTxt(contentDir) ?? generatedLlmsTxt(llmsIndex(c), baseUrl))
-    : {
-        body: llmsListingTxt(
-          {
-            title: page.title,
-            posts: page.documents.map((document) => llmsEntry(c, document, home)),
-            newer: previous === null ? undefined : representationHref(previous, 'markdown'),
-            older: next === null ? undefined : representationHref(next, 'markdown'),
-          },
-          baseUrl,
-        ),
-        lastModified: latestModified(page.documents),
-      };
+  const body = llmsListingTxt(
+    {
+      title: page.title,
+      description,
+      posts: page.documents.map((document) => llmsEntry(c, document, home)),
+      newer: previous === null ? undefined : representationHref(previous, 'markdown'),
+      older: next === null ? undefined : representationHref(next, 'markdown'),
+    },
+    c.var.config.baseUrl,
+  );
 
   return representationResponse({
-    body: file.body,
+    body,
     representation,
     href: page.href,
     available: LISTING_REPRESENTATIONS,
-    etag: representationEtag(representation, file.body),
-    lastModified: file.lastModified,
+    etag: representationEtag(representation, body),
+    lastModified: latestModified(page.documents),
     conditional: conditionalHeaders(c),
   });
 }
