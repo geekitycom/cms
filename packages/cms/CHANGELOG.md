@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.23.0](https://github.com/geekitycom/cms/compare/v0.22.0...v0.23.0) (2026-10-06)
+
+
+### Features
+
+* **cms:** answer 410 gone at deleted posts' urls ([6f3de6c](https://github.com/geekitycom/cms/commit/6f3de6c4e593a37f970926a14af40366f88ed670))
+* **cms:** autolink bare URLs and fediverse handles in posts ([47e0631](https://github.com/geekitycom/cms/commit/47e0631391a23d947ee3990740edffa3044d160a))
+* **cms:** create events over micropub ([286bfbd](https://github.com/geekitycom/cms/commit/286bfbdcbe409963e989b587397c7bf22d59d4e1))
+* **cms:** describe cited pages from activitypub, json-ld and their authors' photos ([1ef7d26](https://github.com/geekitycom/cms/commit/1ef7d2696a7da6d538c78bc7a97d9b9e5182d49e))
+* **cms:** publish and receive RSVP posts ([e3a43e4](https://github.com/geekitycom/cms/commit/e3a43e40d23a1a8a8d1134d4b6cc89ad72ba8f65))
+* **cms:** publish events and group the RSVPs they receive ([baf8c73](https://github.com/geekitycom/cms/commit/baf8c730c5584c7a74dc6bb2b45c6109d6e60952))
+* **cms:** reach a trashed post from the trash list when a live post shares its slug ([3a32e43](https://github.com/geekitycom/cms/commit/3a32e4373d2a06effdc54eaa97de037874665e9c))
+* **cms:** receive pingbacks as mentions ([1d6e583](https://github.com/geekitycom/cms/commit/1d6e583ef0573a500ca8737ef1ec1487009e0c37))
+* **cms:** reply to the original of a silo copy and take responses to syndicated copies ([2b41d28](https://github.com/geekitycom/cms/commit/2b41d2817b1c2ff49b3f8df6153f24cc1c9d22d0))
+* **cms:** show the conversation and comment form on pages that take comments ([5a4b2c2](https://github.com/geekitycom/cms/commit/5a4b2c2bfee8eef657bbde7c16a0687a870f5e5e))
+
+
+### Bug Fixes
+
+* **cms:** end a cited page's fetch on one deadline signal ([586a9f9](https://github.com/geekitycom/cms/commit/586a9f9a531bdf01b857445b8034d3eb716d2d3c))
+
 ## [0.22.0](https://github.com/geekitycom/cms/compare/v0.21.0...v0.22.0) (2026-10-05)
 
 
