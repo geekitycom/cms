@@ -268,6 +268,33 @@ describe('the author archive (AC #3)', () => {
   });
 });
 
+describe('the author archive as Markdown (TASK-289)', () => {
+  it('lists their posts under their name, linked to each post’s Markdown', async () => {
+    const cms = await site(CONTENT, { postsPerPage: 1 });
+
+    const response = await cms.app.request('/author/ada/', {
+      headers: { accept: 'text/markdown' },
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(
+      await response.text(),
+      [
+        '# Ada Lovelace',
+        '',
+        '## Posts',
+        '',
+        '- [By Login](http://localhost:3000/2026/09/by-login/index.md)',
+        '',
+        '## More posts',
+        '',
+        '- [Older posts](http://localhost:3000/author/ada/page/2/index.md)',
+        '',
+      ].join('\n'),
+    );
+  });
+});
+
 describe('the author feeds (AC #3)', () => {
   it('serves the three formats over the same posts', async () => {
     const cms = await site();

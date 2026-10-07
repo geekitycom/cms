@@ -55,20 +55,37 @@ export interface LlmsTxtFile {
   lastModified: Date | undefined;
 }
 
+export interface LlmsListing {
+  title: string;
+  description?: string | undefined;
+  posts: readonly LlmsEntry[];
+  newer?: string | undefined;
+  older?: string | undefined;
+}
+
 /** The index as llms.txt Markdown, every link absolute. */
 export function llmsTxt(index: LlmsIndex, baseUrl: string): string {
   const description = oneLine(index.description);
-  const section = (heading: string, entries: readonly LlmsEntry[]): string[] =>
-    entries.length === 0
-      ? []
-      : [`## ${heading}`, entries.map((entry) => entryLine(entry, baseUrl)).join('\n')];
-
-  return `${[
+  return markdownFile([
     `# ${oneLine(index.title)}`,
     ...(description === '' ? [] : [`> ${description}`]),
-    ...section('Pages', index.pages),
-    ...section('Recent posts', index.posts),
-  ].join('\n\n')}\n`;
+    ...section('Pages', index.pages, baseUrl),
+    ...section('Recent posts', index.posts, baseUrl),
+  ]);
+}
+
+export function llmsListingTxt(listing: LlmsListing, baseUrl: string): string {
+  const pager: LlmsEntry[] = [
+    ...(listing.newer === undefined ? [] : [{ title: 'Newer posts', href: listing.newer }]),
+    ...(listing.older === undefined ? [] : [{ title: 'Older posts', href: listing.older }]),
+  ];
+  const description = oneLine(listing.description ?? '');
+  return markdownFile([
+    `# ${oneLine(listing.title)}`,
+    ...(description === '' ? [] : [`> ${description}`]),
+    ...section('Posts', listing.posts, baseUrl),
+    ...section('More posts', pager, baseUrl),
+  ]);
 }
 
 /** A generated file, dated by the newest entry in it. */
@@ -117,6 +134,16 @@ export function llmsTxtResponse(
 
   headers.set('content-type', LLMS_TXT_CONTENT_TYPE);
   return new Response(file.body, { headers });
+}
+
+function markdownFile(blocks: readonly string[]): string {
+  return `${blocks.join('\n\n')}\n`;
+}
+
+function section(heading: string, entries: readonly LlmsEntry[], baseUrl: string): string[] {
+  return entries.length === 0
+    ? []
+    : [`## ${heading}`, entries.map((entry) => entryLine(entry, baseUrl)).join('\n')];
 }
 
 function entryLine(entry: LlmsEntry, baseUrl: string): string {

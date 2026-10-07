@@ -82,6 +82,30 @@ describe('the Markdown representation', () => {
     assert.match(response.headers.get('content-type') ?? '', /^text\/markdown;\s*charset=utf-8$/);
     assert.equal(body, HELLO_FILE);
   });
+
+  it('serves the same file as text/plain to a reader that asks for that', async () => {
+    const { cms } = await site(HELLO);
+
+    const response = await cms.app.request('/2026/09/hello/', {
+      headers: { accept: 'text/plain' },
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'text/plain; charset=utf-8');
+    assert.equal(response.headers.get('content-disposition'), 'inline');
+    assert.equal(await response.text(), HELLO_FILE);
+    assert.doesNotMatch(response.headers.get('link') ?? '', /text\/plain/);
+  });
+
+  it('labels it Markdown when the request ranks text/markdown as high', async () => {
+    const { cms } = await site(HELLO);
+
+    const response = await cms.app.request('/2026/09/hello/', {
+      headers: { accept: 'text/plain, text/markdown' },
+    });
+
+    assert.equal(response.headers.get('content-type'), 'text/markdown; charset=utf-8');
+  });
 });
 
 describe('the JSON representation', () => {
@@ -432,21 +456,29 @@ describe('listings', () => {
     }
   });
 
-  it('offers HTML and JSON only, so Markdown alone is a 406', async () => {
+  it('406s what a listing does not offer, listing the alternates that have a URL', async () => {
     const { cms } = await site(ARCHIVE);
 
-    const response = await cms.app.request('/', { headers: { accept: 'text/markdown' } });
+    const response = await cms.app.request('/', { headers: { accept: 'image/png' } });
     const body = (await response.json()) as { alternates: unknown };
 
     assert.equal(response.status, 406);
     assert.deepEqual(body.alternates, [
       { type: 'text/html', url: '/' },
+      { type: 'text/markdown', url: '/index.md' },
       { type: 'application/json', url: '/index.json' },
     ]);
   });
 
-  it('links only the JSON alternate from a listing, and revalidates', async () => {
+  it('links the Markdown and JSON alternates from a listing, and revalidates', async () => {
     const { cms } = await site(ARCHIVE);
+
+    const html = await cms.app.request('/tag/notes/');
+    assert.equal(
+      html.headers.get('link'),
+      '</tag/notes/index.md>; rel="alternate"; type="text/markdown", ' +
+        '</tag/notes/index.json>; rel="alternate"; type="application/json"',
+    );
 
     const response = await cms.app.request('/tag/notes/', {
       headers: { accept: 'application/json' },
@@ -454,7 +486,11 @@ describe('listings', () => {
     const etag = response.headers.get('etag') ?? '';
 
     assert.equal(response.headers.get('vary'), 'Accept, Accept-Encoding');
-    assert.equal(response.headers.get('link'), '</tag/notes/>; rel="alternate"; type="text/html"');
+    assert.equal(
+      response.headers.get('link'),
+      '</tag/notes/>; rel="alternate"; type="text/html", ' +
+        '</tag/notes/index.md>; rel="alternate"; type="text/markdown"',
+    );
     assert.match(etag, /^"[0-9a-f]{32}"$/);
 
     const again = await cms.app.request('/tag/notes/', {
@@ -471,10 +507,162 @@ describe('listings', () => {
   it('still renders HTML for a listing when nothing else is asked for', async () => {
     const { cms } = await site(ARCHIVE);
 
-    const response = await cms.app.request('/');
+    for (const accept of [undefined, '*/*', 'text/html', 'text/*']) {
+      const response = await cms.app.request(
+        '/tag/notes/',
+        accept === undefined ? {} : { headers: { accept } },
+      );
+      assert.equal(response.status, 200, String(accept));
+      assert.match(response.headers.get('content-type') ?? '', /^text\/html/, String(accept));
+      assert.ok((await response.text()).includes('href="/one/"'));
+    }
+  });
+});
+
+const LONG_ARCHIVE = {
+  ...ARCHIVE,
+  'posts/four.md': post('Four', '2026-08-30T09:00:00Z', '/four/', ['notes']),
+};
+
+describe('a listing as Markdown (TASK-289)', () => {
+  it('lists the page’s posts under its title, with the older page’s Markdown', async () => {
+    const { cms } = await site(LONG_ARCHIVE);
+
+    const response = await cms.app.request('/tag/notes/', {
+      headers: { accept: 'text/markdown' },
+    });
 
     assert.equal(response.status, 200);
-    assert.match(response.headers.get('content-type') ?? '', /^text\/html/);
-    assert.ok((await response.text()).includes('href="/one/"'));
+    assert.equal(response.headers.get('content-type'), 'text/markdown; charset=utf-8');
+    assert.equal(response.headers.get('content-disposition'), 'inline');
+    assert.equal(
+      await response.text(),
+      [
+        '# notes',
+        '',
+        '## Posts',
+        '',
+        '- [One](https://example.com/one/index.md)',
+        '- [Two](https://example.com/two/index.md)',
+        '',
+        '## More posts',
+        '',
+        '- [Older posts](https://example.com/tag/notes/page/2/index.md)',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('links a later page back to the newer one', async () => {
+    const { cms } = await site(LONG_ARCHIVE);
+
+    const body = await (
+      await cms.app.request('/tag/notes/page/2/', { headers: { accept: 'text/markdown' } })
+    ).text();
+
+    assert.match(body, /^- \[Four\]\(https:\/\/example\.com\/four\/index\.md\)$/m);
+    assert.match(body, /^- \[Newer posts\]\(https:\/\/example\.com\/tag\/notes\/index\.md\)$/m);
+    assert.doesNotMatch(body, /Older posts/);
+  });
+
+  it('heads /page/N/ with the site’s title, and links both neighbours', async () => {
+    const { cms } = await site({
+      ...LONG_ARCHIVE,
+      'posts/five.md': post('Five', '2026-08-29T09:00:00Z', '/five/'),
+    });
+
+    const body = await (
+      await cms.app.request('/page/2/', { headers: { accept: 'text/markdown' } })
+    ).text();
+
+    assert.match(body, /^# Archive\n/);
+    assert.match(body, /\[Three\]/);
+    assert.match(body, /\[Newer posts\]\(https:\/\/example\.com\/index\.md\)/);
+    assert.match(body, /\[Older posts\]\(https:\/\/example\.com\/page\/3\/index\.md\)/);
+  });
+
+  it('renders the home listing under the site’s title and tagline, not llms.txt', async () => {
+    const { cms } = await site({
+      ...LONG_ARCHIVE,
+      '_data/site.json': JSON.stringify({
+        title: 'Archive',
+        tagline: 'Notes, mostly',
+        postsPerPage: 2,
+      }),
+      'llms.txt': '# A curated index\n',
+    });
+
+    const response = await cms.app.request('/', { headers: { accept: 'text/markdown' } });
+
+    assert.equal(response.status, 200);
+    assert.equal(
+      await response.text(),
+      [
+        '# Archive',
+        '',
+        '> Notes, mostly',
+        '',
+        '## Posts',
+        '',
+        '- [One](https://example.com/one/index.md)',
+        '- [Two](https://example.com/two/index.md)',
+        '',
+        '## More posts',
+        '',
+        '- [Older posts](https://example.com/page/2/index.md)',
+        '',
+      ].join('\n'),
+    );
+    assert.equal(
+      await (await cms.app.request('/index.md')).text(),
+      await (await cms.app.request('/', { headers: { accept: 'text/markdown' } })).text(),
+      '/index.md is the same listing',
+    );
+  });
+
+  it('is served at {listing}/index.md exactly as Accept serves it', async () => {
+    const { cms } = await site(LONG_ARCHIVE);
+
+    const negotiated = await (
+      await cms.app.request('/tag/notes/', { headers: { accept: 'text/markdown' } })
+    ).text();
+    const extension = await cms.app.request('/tag/notes/index.md');
+
+    assert.equal(extension.status, 200);
+    assert.equal(extension.headers.get('content-type'), 'text/markdown; charset=utf-8');
+    assert.equal(await extension.text(), negotiated);
+  });
+
+  it('answers text/plain with the same body under that label', async () => {
+    const { cms } = await site(LONG_ARCHIVE);
+
+    const markdown = await (
+      await cms.app.request('/tag/notes/', { headers: { accept: 'text/markdown' } })
+    ).text();
+    const plain = await cms.app.request('/tag/notes/', { headers: { accept: 'text/plain' } });
+
+    assert.equal(plain.status, 200);
+    assert.equal(plain.headers.get('content-type'), 'text/plain; charset=utf-8');
+    assert.equal(plain.headers.get('content-disposition'), 'inline');
+    assert.equal(await plain.text(), markdown);
+    assert.doesNotMatch(plain.headers.get('link') ?? '', /text\/plain/);
+  });
+
+  it('revalidates on its own bytes, apart from the text/plain copy', async () => {
+    const { cms } = await site(LONG_ARCHIVE);
+
+    const first = await cms.app.request('/tag/notes/', { headers: { accept: 'text/markdown' } });
+    const etag = first.headers.get('etag') ?? '';
+    assert.match(etag, /^"[0-9a-f]{32}"$/);
+
+    const again = await cms.app.request('/tag/notes/', {
+      headers: { accept: 'text/markdown', 'if-none-match': etag },
+    });
+    assert.equal(again.status, 304);
+
+    const plain = await cms.app.request('/tag/notes/', {
+      headers: { accept: 'text/plain', 'if-none-match': etag },
+    });
+    assert.equal(plain.status, 200, 'a differently labelled body is a different entity');
   });
 });

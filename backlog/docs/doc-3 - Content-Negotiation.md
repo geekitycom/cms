@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-03 12:33'
+updated_date: '2026-10-07 22:49'
 ---
 # Content Negotiation
 
@@ -15,6 +15,7 @@ Every public content URL serves one document in several representations. The rep
 | --- | --- | --- |
 | `text/html` | rendered through the theme | default when nothing else matches |
 | `text/markdown` | the file as stored, front matter included | `Content-Disposition: inline`, charset utf-8 |
+| `text/plain` | the `text/markdown` body, labelled `text/plain; charset=utf-8` | `Content-Disposition: inline`; reached only by `Accept`, so it has no URL and is never advertised |
 | `application/json` | `{ "frontMatter": {...}, "markdown": "...", "html": "...", "url": "..." }` | stable shape, versioned via `"schema": 1` |
 | `application/activity+json` | the post's ActivityStreams `Article` | a published post only; its `id` is this URL (decision-13) |
 | `application/ld+json; profile="https://www.w3.org/ns/activitystreams"` | same | same |
@@ -22,11 +23,11 @@ Every public content URL serves one document in several representations. The rep
 ## Selection
 
 1. If the path ends in `.md` or `.json` and the path without the extension resolves, use that representation and ignore `Accept`.
-2. Otherwise run standard `Accept` matching with q-values against the list above. `*/*` and a missing header mean HTML.
+2. Otherwise run standard `Accept` matching with q-values against the list above. `*/*`, `text/*` and a missing header mean HTML. `text/plain` gets the Markdown under that label, and `text/markdown` wins whenever the request ranks it at least as high as `text/plain`.
 3. ActivityStreams types are claimed before this code runs, so they never reach the negotiator. A post's object id is its permalink, so the permalink itself answers them with the `Article`: one URL, a browser and a peer, decided by `Accept`. A page and a listing federate nothing and fall through to the negotiator, which answers 406 to a request that will take nothing else.
-4. A request whose only acceptable types are unsupported returns 406 with a short JSON body listing the options.
+4. A request whose only acceptable types are unsupported returns 406 with a short JSON body listing the options that have a URL of their own, which leaves out `text/plain`.
 
-Every response includes `Vary: Accept` and a `Link` header advertising the alternates:
+Every response includes `Vary: Accept` and a `Link` header advertising the alternates. `text/plain` is never among them:
 
 ```
 Link: </2026/09/hello-world/index.md>; rel="alternate"; type="text/markdown",
@@ -78,11 +79,28 @@ no taxonomy base can take them.
 ## Collections
 
 Listing URLs (home, tag archives, author archives, paginated archives)
-negotiate too. HTML renders the theme's list template. JSON returns an array of the same document shape with `markdown` and `html` omitted unless `?full=1`. Markdown is not offered for listings.
+negotiate too. HTML renders the theme's list template. JSON returns an array of the same document shape with `markdown` and `html` omitted unless `?full=1`.
+
+Markdown, at `{listing}/index.md` or by `Accept`, is the listing in the llms.txt shape, rendered from the listing itself rather than from `/llms.txt`, which a site may curate by hand. Every listing page, `/` included, is a heading with the title its HTML carries, a `> ` quote with the site's tagline on the latest posts or the posts page's description, then a `## Posts` list of the posts on that page as `- [title](absolute index.md URL): description`, then a `## More posts` list linking the newer and older pages' `index.md` where they exist:
+
+```
+# notes
+
+## Posts
+
+- [One](https://example.com/one/index.md)
+- [Two](https://example.com/two/index.md)
+
+## More posts
+
+- [Older posts](https://example.com/tag/notes/page/2/index.md)
+```
+
+The posts page's `index.md` and `index.json` are the listing's, as `Accept` at its URL is, not the page's own file. Listing Markdown is validated by an `ETag` over its bytes and dated by its newest post.
 
 ## Search
 
-`/search/?q=term` is a route rather than a document, so no permalink can take the URL the theme's search form submits to; `/search?q=term` redirects there with its query kept. It negotiates HTML and JSON like a listing, and `/search/index.json?q=term` is the same escape hatch. The `Link` header advertises the other representation with the query carried over.
+`/search/?q=term` is a route rather than a document, so no permalink can take the URL the theme's search form submits to; `/search?q=term` redirects there with its query kept. It negotiates HTML and JSON only, with no Markdown and no `text/plain`, and `/search/index.json?q=term` is the same escape hatch. The `Link` header advertises the other representation with the query carried over.
 
 HTML renders `layouts/search.njk`. JSON is an object rather than a listing's bare array, because a result means nothing without the query that found it: `{ schema, query, pagination, results }`, where each result is the listing document shape plus a `snippet` of escaped HTML with the matched words in `<mark>`, and `?full=1` adds the bodies as it does on a listing. `?page=N` pages the results at the site's page size; a page past the last, or a `page` that is not a positive integer, is a 404. A missing or empty `q` is the form with nothing found, not an error.
 

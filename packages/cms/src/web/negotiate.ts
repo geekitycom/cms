@@ -11,12 +11,13 @@ import { matchesEtag } from './assets.ts';
  * decide *what* is at a URL; this module decides *which body* to hand back and
  * how to label it, so the two questions never get tangled together.
  */
-export type Representation = 'html' | 'markdown' | 'json';
+export type Representation = 'html' | 'markdown' | 'text' | 'json';
 
 /** The media type each representation is served as. */
 export const MEDIA_TYPES: Readonly<Record<Representation, string>> = {
   html: 'text/html',
   markdown: 'text/markdown',
+  text: 'text/plain',
   json: 'application/json',
 };
 
@@ -27,10 +28,16 @@ export const MEDIA_TYPES: Readonly<Record<Representation, string>> = {
  * `Accept` at all — so HTML comes first: a browser that says nothing gets a
  * page.
  */
-export const DOCUMENT_REPRESENTATIONS: readonly Representation[] = ['html', 'markdown', 'json'];
+export const DOCUMENT_REPRESENTATIONS: readonly Representation[] = [
+  'html',
+  'markdown',
+  'text',
+  'json',
+];
 
-/** What a listing offers. Markdown is not a listing; there is no file to serve. */
-export const LISTING_REPRESENTATIONS: readonly Representation[] = ['html', 'json'];
+export const LISTING_REPRESENTATIONS: readonly Representation[] = DOCUMENT_REPRESENTATIONS;
+
+export const SEARCH_REPRESENTATIONS: readonly Representation[] = ['html', 'json'];
 
 /**
  * The representation a request accepts, or `undefined` when it accepts none of
@@ -268,9 +275,10 @@ export function absoluteUrl(pathname: string, baseUrl: string): string {
 }
 
 /** What each representation is labelled with on the wire. */
-const CONTENT_TYPES: Readonly<Record<Representation, string>> = {
+export const CONTENT_TYPES: Readonly<Record<Representation, string>> = {
   html: 'text/html; charset=utf-8',
   markdown: 'text/markdown; charset=utf-8',
+  text: 'text/plain; charset=utf-8',
   json: 'application/json; charset=utf-8',
 };
 
@@ -373,7 +381,7 @@ export function representationResponse(options: RepresentationResponseOptions): 
   }
 
   headers.set('content-type', CONTENT_TYPES[options.representation]);
-  if (options.representation === 'markdown') {
+  if (options.representation === 'markdown' || options.representation === 'text') {
     // The point of the Markdown representation is to be read, not downloaded.
     headers.set('content-disposition', 'inline');
   }
@@ -409,7 +417,7 @@ export function notAcceptableResponse(
       {
         error: 'not_acceptable',
         message: 'This URL is not available in any of the media types you accept.',
-        alternates: available.map((representation) => ({
+        alternates: available.filter(hasOwnUrl).map((representation) => ({
           type: MEDIA_TYPES[representation],
           url: representationHref(href, representation),
         })),
@@ -438,12 +446,16 @@ export function alternateLinks(
   available: readonly Representation[],
 ): string {
   return available
-    .filter((representation) => representation !== current)
+    .filter((representation) => representation !== current && hasOwnUrl(representation))
     .map(
       (representation) =>
         `<${representationHref(href, representation)}>; rel="alternate"; type="${MEDIA_TYPES[representation]}"`,
     )
     .join(', ');
+}
+
+function hasOwnUrl(representation: Representation): boolean {
+  return representation === 'html' || REPRESENTATION_EXTENSIONS[representation] !== undefined;
 }
 
 /**

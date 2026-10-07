@@ -74,6 +74,7 @@ import {
   DOCUMENT_REPRESENTATIONS,
   documentJson,
   LISTING_REPRESENTATIONS,
+  SEARCH_REPRESENTATIONS,
   lastModifiedOf,
   latestModified,
   MEDIA_TYPES,
@@ -105,6 +106,7 @@ import {
 import type { EmbedSubject } from './oembed.ts';
 import {
   generatedLlmsTxt,
+  llmsListingTxt,
   LLMS_TXT_LINK,
   LLMS_TXT_PATH,
   llmsTxtResponse,
@@ -292,7 +294,7 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // `/search/index.json` is the same escape hatch a listing has. The path
   // without its slash is where a hand-typed URL lands, and keeps its query on
   // the way to the real one.
-  app.get(SEARCH_PATH, (c) => search(c, selectFromAccept(c, LISTING_REPRESENTATIONS)));
+  app.get(SEARCH_PATH, (c) => search(c, selectFromAccept(c, SEARCH_REPRESENTATIONS)));
   app.get(representationHref(SEARCH_PATH, 'json'), (c) => search(c, 'json'));
   app.get(SEARCH_PATH.slice(0, -1), (c) =>
     c.redirect(`${SEARCH_PATH}${new URL(c.req.url).search}`, 301),
@@ -473,7 +475,8 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
       // representations on a site whose `/` is a page: the document is at `/`
       // however it is asked for.
       const found = candidate === '/' ? pages.home : publicDocumentAt(store, candidate);
-      if (found !== undefined) {
+      const servesListing = found !== undefined && found.path === pages.posts?.path;
+      if (found !== undefined && !servesListing) {
         return negotiateDocument(
           c,
           found,
@@ -798,7 +801,7 @@ function negotiateDocument(
       : undefined;
 
   const body =
-    representation === 'markdown'
+    representation === 'markdown' || representation === 'text'
       ? serializeDocument(document)
       : representation === 'json'
         ? documentJson(document, { baseUrl: c.var.config.baseUrl })
@@ -1253,6 +1256,16 @@ function listing(
 
   const paging = { limit: size, offset: offsetForPage(request.pageNumber, size) };
   const documents = listListing(store, request, paging);
+  const title =
+    term?.term ??
+    author?.user.profile?.displayName ??
+    author?.user.username ??
+    request.document?.title ??
+    renderer.site().title;
+
+  if (representation === 'markdown' || representation === 'text') {
+    return listingMarkdown(c, request, representation, { href, title, pagination, documents });
+  }
 
   const full = wantsFullDocuments(c);
   const body =
@@ -1261,15 +1274,7 @@ function listing(
           documentJson(document, { baseUrl: c.var.config.baseUrl, body: full }),
         )
       : renderer.renderListing({
-          // An author archive is headed by the person, a taxonomy archive by
-          // the term, the posts page by its own title the way any page is, and
-          // the home listing by the site's.
-          title:
-            term?.term ??
-            author?.user.profile?.displayName ??
-            author?.user.username ??
-            request.document?.title ??
-            renderer.site().title,
+          title,
           url: href,
           documents,
           pagination,
@@ -1301,6 +1306,40 @@ function listing(
   });
 }
 
+function listingMarkdown(
+  c: Context<GeekityEnv>,
+  request: ListingRequest,
+  representation: Representation,
+  page: { href: string; title: string; pagination: Pagination; documents: readonly Document[] },
+): Response {
+  const { next, previous } = page.pagination.href;
+  const home = frontPages(c).home;
+  const latestPosts = request.term === undefined && request.author === undefined;
+  const description =
+    request.document?.description ?? (latestPosts ? c.var.renderer.site().tagline : undefined);
+
+  const body = llmsListingTxt(
+    {
+      title: page.title,
+      description,
+      posts: page.documents.map((document) => llmsEntry(c, document, home)),
+      newer: previous === null ? undefined : representationHref(previous, 'markdown'),
+      older: next === null ? undefined : representationHref(next, 'markdown'),
+    },
+    c.var.config.baseUrl,
+  );
+
+  return representationResponse({
+    body,
+    representation,
+    href: page.href,
+    available: LISTING_REPRESENTATIONS,
+    etag: representationEtag(representation, body),
+    lastModified: latestModified(page.documents),
+    conditional: conditionalHeaders(c),
+  });
+}
+
 /**
  * One page of search results, in whichever representation the request settled
  * on.
@@ -1328,7 +1367,7 @@ function search(c: Context<GeekityEnv>, representation: Representation | undefin
   if (pageNumber >= pagination.totalPages) return notFound(c);
 
   const href = searchHref(query, pageNumber);
-  if (representation === undefined) return notAcceptableResponse(href, LISTING_REPRESENTATIONS);
+  if (representation === undefined) return notAcceptableResponse(href, SEARCH_REPRESENTATIONS);
 
   const hits = store.search(query, { limit: size, offset: offsetForPage(pageNumber, size) });
   const documents = hits.map((hit) => hit.document);
@@ -1347,7 +1386,7 @@ function search(c: Context<GeekityEnv>, representation: Representation | undefin
     // The alternates are spelled here rather than by the negotiator, because
     // they carry the query and a listing's never have one to carry.
     available: [representation],
-    links: LISTING_REPRESENTATIONS.filter((other) => other !== representation).map(
+    links: SEARCH_REPRESENTATIONS.filter((other) => other !== representation).map(
       (other) =>
         `<${searchHref(query, pageNumber, other)}>; rel="alternate"; type="${MEDIA_TYPES[other]}"`,
     ),
@@ -1594,22 +1633,12 @@ function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
   const now = store.now();
   const home = frontPages(c).home;
 
-  const label = (document: Document): string =>
-    postLabel(document, (url) => c.var.replyContexts.read(url));
-  const entry = (document: Document): LlmsEntry => ({
-    title: label(document),
-    href: representationHref(
-      document.path === home?.path ? '/' : encodePath(document.permalink),
-      'markdown',
-    ),
-    description: document.description,
-    lastModified: lastModifiedOf(document),
-  });
+  const entry = (document: Document): LlmsEntry => llmsEntry(c, document, home);
 
   const pages = store
     .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
     .filter((document) => isListed(document, now))
-    .sort((a, b) => label(a).localeCompare(label(b)));
+    .sort((a, b) => llmsLabel(c, a).localeCompare(llmsLabel(c, b)));
   const posts = store
     .listPosts({ limit: feedSize(site) })
     .filter((document) => isListed(document, now));
@@ -1619,6 +1648,26 @@ function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
     description: site.tagline ?? '',
     pages: pages.map(entry),
     posts: posts.map(entry),
+  };
+}
+
+function llmsLabel(c: Context<GeekityEnv>, document: Document): string {
+  return postLabel(document, (url) => c.var.replyContexts.read(url));
+}
+
+function llmsEntry(
+  c: Context<GeekityEnv>,
+  document: Document,
+  home: Document | undefined,
+): LlmsEntry {
+  return {
+    title: llmsLabel(c, document),
+    href: representationHref(
+      document.path === home?.path ? '/' : encodePath(document.permalink),
+      'markdown',
+    ),
+    description: document.description,
+    lastModified: lastModifiedOf(document),
   };
 }
 
