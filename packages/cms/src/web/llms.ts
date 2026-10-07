@@ -55,18 +55,10 @@ export interface LlmsTxtFile {
   lastModified: Date | undefined;
 }
 
-/**
- * One page of a listing as Markdown (TASK-289): what a listing is, in the
- * shape `/llms.txt` already taught a model to read.
- */
 export interface LlmsListing {
-  /** The heading the listing's HTML carries. */
   title: string;
-  /** The posts on this page, newest first. */
   posts: readonly LlmsEntry[];
-  /** The site-relative URL of the newer page's Markdown, when there is one. */
   newer?: string | undefined;
-  /** The site-relative URL of the older page's Markdown, when there is one. */
   older?: string | undefined;
 }
 
@@ -81,7 +73,6 @@ export function llmsTxt(index: LlmsIndex, baseUrl: string): string {
   ]);
 }
 
-/** A listing page as llms.txt-shaped Markdown, every link absolute. */
 export function llmsListingTxt(listing: LlmsListing, baseUrl: string): string {
   const pager: LlmsEntry[] = [
     ...(listing.newer === undefined ? [] : [{ title: 'Newer posts', href: listing.newer }]),

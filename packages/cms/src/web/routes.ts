@@ -475,9 +475,8 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
       // representations on a site whose `/` is a page: the document is at `/`
       // however it is asked for.
       const found = candidate === '/' ? pages.home : publicDocumentAt(store, candidate);
-      // The posts page's URL is the listing's, so its `.md` and `.json` are
-      // the listing's too, as `Accept` at that URL already decides.
-      if (found !== undefined && found.path !== pages.posts?.path) {
+      const servesListing = found !== undefined && found.path === pages.posts?.path;
+      if (found !== undefined && !servesListing) {
         return negotiateDocument(
           c,
           found,
@@ -1257,9 +1256,6 @@ function listing(
 
   const paging = { limit: size, offset: offsetForPage(request.pageNumber, size) };
   const documents = listListing(store, request, paging);
-  // An author archive is headed by the person, a taxonomy archive by the term,
-  // the posts page by its own title the way any page is, and the home listing
-  // by the site's.
   const title =
     term?.term ??
     author?.user.profile?.displayName ??
@@ -1310,15 +1306,6 @@ function listing(
   });
 }
 
-/**
- * One page of a listing as Markdown (TASK-289).
- *
- * The first page of the site's latest posts is the site's own llms.txt, which
- * is the one document that already describes it for a program, whether or not
- * `/llms.txt` itself is switched on. Every other page lists its posts in the
- * same shape. Both are validated by their bytes, because a title or a reply
- * context can change what a line says without changing any document's hash.
- */
 function listingMarkdown(
   c: Context<GeekityEnv>,
   request: ListingRequest,
@@ -1675,7 +1662,6 @@ function llmsLabel(c: Context<GeekityEnv>, document: Document): string {
   return postLabel(document, (url) => c.var.replyContexts.read(url));
 }
 
-/** One document as a line of llms.txt, linked to its Markdown where it is published. */
 function llmsEntry(
   c: Context<GeekityEnv>,
   document: Document,

@@ -519,7 +519,6 @@ describe('listings', () => {
   });
 });
 
-/** The archive with a third post under `notes`, so its archive has a second page. */
 const LONG_ARCHIVE = {
   ...ARCHIVE,
   'posts/four.md': post('Four', '2026-08-30T09:00:00Z', '/four/', ['notes']),

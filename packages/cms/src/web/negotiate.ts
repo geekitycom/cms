@@ -26,8 +26,7 @@ export const MEDIA_TYPES: Readonly<Record<Representation, string>> = {
  *
  * Order is the tie-break when a request is indifferent — `Accept: *\/*`, or no
  * `Accept` at all — so HTML comes first: a browser that says nothing gets a
- * page. `text` follows `markdown` so a request ranking both the same gets the
- * Markdown labelled as Markdown.
+ * page.
  */
 export const DOCUMENT_REPRESENTATIONS: readonly Representation[] = [
   'html',
@@ -36,15 +35,8 @@ export const DOCUMENT_REPRESENTATIONS: readonly Representation[] = [
   'json',
 ];
 
-/** What a listing offers: its Markdown is the page in the llms.txt shape. */
-export const LISTING_REPRESENTATIONS: readonly Representation[] = [
-  'html',
-  'markdown',
-  'text',
-  'json',
-];
+export const LISTING_REPRESENTATIONS: readonly Representation[] = DOCUMENT_REPRESENTATIONS;
 
-/** What search offers. A result list has no Markdown of its own. */
 export const SEARCH_REPRESENTATIONS: readonly Representation[] = ['html', 'json'];
 
 /**
@@ -151,8 +143,7 @@ function bestOf(
 
 /**
  * The extension that names a representation in a URL. HTML has none: it is
- * what the canonical URL itself serves. `text` has none either: it is the
- * Markdown under another label, and its URL is the Markdown's.
+ * what the canonical URL itself serves.
  */
 export const REPRESENTATION_EXTENSIONS: Readonly<Partial<Record<Representation, string>>> = {
   markdown: '.md',
@@ -463,7 +454,6 @@ export function alternateLinks(
     .join(', ');
 }
 
-/** Whether a representation has a URL to advertise: `text` is reached only by `Accept`. */
 function hasOwnUrl(representation: Representation): boolean {
   return representation === 'html' || REPRESENTATION_EXTENSIONS[representation] !== undefined;
 }
