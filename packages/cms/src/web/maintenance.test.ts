@@ -117,6 +117,11 @@ describe('maintenance mode, on', () => {
     const markdown = await cms.app.request('/2026/09/hello.md');
     assertUnavailable(markdown);
     assert.match(markdown.headers.get('content-type') ?? '', /^text\/markdown/);
+
+    const plain = await cms.app.request('/2026/09/hello/', { headers: { accept: 'text/plain' } });
+    assertUnavailable(plain);
+    assert.equal(plain.headers.get('content-type'), 'text/plain; charset=utf-8');
+    assert.equal(await plain.text(), await markdown.text());
   });
 
   it("still serves the theme's own files, so the maintenance page is styled", async () => {

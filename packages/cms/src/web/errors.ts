@@ -7,6 +7,7 @@ import { ADMIN_PREFIX } from '../admin/session.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from '../admin/templates.ts';
 import type { GeekityEnv } from '../env.ts';
 import {
+  CONTENT_TYPES,
   DOCUMENT_REPRESENTATIONS,
   selectRepresentation,
   splitRepresentationExtension,
@@ -82,15 +83,17 @@ export const serverError: ErrorHandler<GeekityEnv> = (error, c) => {
     );
   }
 
-  switch (representationOf(pathname, c.req.header('accept'))) {
+  const representation = representationOf(pathname, c.req.header('accept'));
+  switch (representation) {
     case 'json':
       return c.body(JSON_BODY, 500, {
         'content-type': 'application/json; charset=utf-8',
         'cache-control': NO_STORE,
       });
     case 'markdown':
+    case 'text':
       return c.body(MARKDOWN_BODY, 500, {
-        'content-type': 'text/markdown; charset=utf-8',
+        'content-type': CONTENT_TYPES[representation],
         'content-disposition': 'inline',
         'cache-control': NO_STORE,
       });

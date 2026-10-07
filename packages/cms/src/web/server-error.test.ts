@@ -189,6 +189,11 @@ describe('an exception behind a JSON or Markdown representation', () => {
     assert.equal(markdown.status, 500);
     assert.match(markdown.headers.get('content-type') ?? '', /^text\/markdown/);
 
+    const plain = await cms.app.request('/broken/', { headers: { accept: 'text/plain' } });
+    assert.equal(plain.status, 500);
+    assert.equal(plain.headers.get('content-type'), 'text/plain; charset=utf-8');
+    assert.equal(await plain.text(), await markdown.text());
+
     const html = await cms.app.request('/broken/', { headers: { accept: 'image/png' } });
     assert.equal(html.status, 500);
     assert.match(html.headers.get('content-type') ?? '', /^text\/html/);

@@ -2,13 +2,16 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  alternateLinks,
   DOCUMENT_REPRESENTATIONS,
   LISTING_REPRESENTATIONS,
   isNotModified,
+  notAcceptableResponse,
   parseAccept,
   prefersActivityStreams,
   representationEtag,
   representationHref,
+  SEARCH_REPRESENTATIONS,
   selectRepresentation,
   splitRepresentationExtension,
 } from './negotiate.ts';
@@ -65,10 +68,53 @@ describe('selectRepresentation', () => {
     assert.equal(selectRepresentation('image/png', DOCUMENT_REPRESENTATIONS), undefined);
     assert.equal(selectRepresentation('*/*;q=0', DOCUMENT_REPRESENTATIONS), undefined);
     assert.equal(
-      selectRepresentation('text/markdown', LISTING_REPRESENTATIONS),
+      selectRepresentation('text/markdown', SEARCH_REPRESENTATIONS),
       undefined,
-      'a listing has no Markdown to give',
+      'search has no Markdown to give',
     );
+    assert.equal(selectRepresentation('text/plain', SEARCH_REPRESENTATIONS), undefined);
+  });
+
+  it('answers text/plain with the Markdown under its own label', () => {
+    for (const available of [DOCUMENT_REPRESENTATIONS, LISTING_REPRESENTATIONS]) {
+      assert.equal(selectRepresentation('text/plain', available), 'text');
+      assert.equal(selectRepresentation('text/markdown', available), 'markdown');
+    }
+  });
+
+  it('gives text/markdown a tie with text/plain, and text/plain only a higher q', () => {
+    for (const accept of ['text/plain, text/markdown', 'text/markdown;q=0.5, text/plain;q=0.5']) {
+      assert.equal(selectRepresentation(accept, LISTING_REPRESENTATIONS), 'markdown', accept);
+    }
+    assert.equal(
+      selectRepresentation('text/markdown;q=0.4, text/plain;q=0.5', LISTING_REPRESENTATIONS),
+      'text',
+    );
+  });
+
+  it('still gives HTML to text/* and */*', () => {
+    for (const accept of ['text/*', '*/*', 'text/html, text/plain;q=0.9']) {
+      assert.equal(selectRepresentation(accept, LISTING_REPRESENTATIONS), 'html', accept);
+    }
+  });
+});
+
+describe('the text/plain representation', () => {
+  it('is never advertised, because it has no URL of its own', async () => {
+    const links = alternateLinks('/tag/x/', 'html', LISTING_REPRESENTATIONS);
+    assert.equal(
+      links,
+      '</tag/x/index.md>; rel="alternate"; type="text/markdown", ' +
+        '</tag/x/index.json>; rel="alternate"; type="application/json"',
+    );
+
+    const refused = notAcceptableResponse('/tag/x/', LISTING_REPRESENTATIONS);
+    const body = (await refused.json()) as { alternates: { type: string }[] };
+    assert.deepEqual(
+      body.alternates.map((alternate) => alternate.type),
+      ['text/html', 'text/markdown', 'application/json'],
+    );
+    assert.doesNotMatch(refused.headers.get('link') ?? '', /text\/plain/);
   });
 });
 

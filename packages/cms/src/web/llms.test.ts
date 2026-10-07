@@ -238,3 +238,68 @@ describe('a site that turns it off or writes its own (AC #4)', () => {
     assert.equal((await cms.app.request('/llms.txt')).status, 404);
   });
 });
+
+describe('the home page as Markdown (TASK-289)', () => {
+  async function home(cms: Cms, accept: string): Promise<Response> {
+    return cms.app.request('/', { headers: { accept } });
+  }
+
+  it('is the generated file, byte for byte', async () => {
+    const { cms } = await site();
+
+    const response = await home(cms, 'text/markdown');
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'text/markdown; charset=utf-8');
+    assert.equal(await response.text(), await llms(cms));
+  });
+
+  it('is the site’s own file when it has one', async () => {
+    const own = '# My own index\n\n> Written by hand.\n';
+    const { cms } = await site({ ownFile: own });
+
+    assert.equal(await (await home(cms, 'text/markdown')).text(), own);
+  });
+
+  it('is the file even with the setting off, which only takes /llms.txt away', async () => {
+    const generated = await llms((await site()).cms);
+    const off = (await site({ siteJson: { llmsTxt: false } })).cms;
+    assert.equal(await (await home(off, 'text/markdown')).text(), generated);
+
+    const own = '# Mine\n';
+    const ownOff = (await site({ siteJson: { llmsTxt: false }, ownFile: own })).cms;
+    assert.equal(await (await home(ownOff, 'text/markdown')).text(), own);
+  });
+
+  it('answers text/plain with the same body under that label', async () => {
+    const { cms } = await site();
+
+    const response = await home(cms, 'text/plain');
+
+    assert.equal(response.headers.get('content-type'), 'text/plain; charset=utf-8');
+    assert.equal(await response.text(), await llms(cms));
+  });
+
+  it('is validated by its bytes and dated by the file', async () => {
+    const { cms } = await site({ ownFile: '# Mine\n' });
+
+    const response = await home(cms, 'text/markdown');
+    const etag = response.headers.get('etag') ?? '';
+    assert.match(etag, /^"[0-9a-f]{32}"$/);
+    assert.ok(response.headers.get('last-modified') !== null, 'dated by the file');
+
+    const again = await cms.app.request('/', {
+      headers: { accept: 'text/markdown', 'if-none-match': etag },
+    });
+    assert.equal(again.status, 304);
+  });
+
+  it('is at /index.md too', async () => {
+    const { cms } = await site();
+
+    const response = await cms.app.request('/index.md');
+
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), await llms(cms));
+  });
+});

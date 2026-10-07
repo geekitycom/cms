@@ -338,6 +338,23 @@ describe('a site with a posts page', () => {
     assert.equal(bare.headers.get('location'), '/news/page/2/');
   });
 
+  it('answers Markdown as its listing, at its URL and at index.md (TASK-289)', async () => {
+    const cms = await withPostsPage();
+
+    const response = await cms.app.request('/news/', { headers: { accept: 'text/markdown' } });
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    assert.match(body, /^# News\n/, 'headed by the page’s title, as its HTML is');
+    assert.match(body, /\[Newest\]\(http:\/\/localhost:3000\/2026\/\d\d\/newest\/index\.md\)/);
+    assert.match(body, /\[Older posts\]\(http:\/\/localhost:3000\/news\/page\/2\/index\.md\)/);
+
+    const extension = await cms.app.request('/news/index.md');
+    assert.equal(await extension.text(), body, 'not the page’s own file');
+
+    const json = (await (await cms.app.request('/news/index.json')).json()) as unknown;
+    assert.ok(Array.isArray(json), 'and its JSON is the listing’s array');
+  });
+
   it('sends the root’s own pagination to it (AC #3)', async () => {
     const cms = await withPostsPage();
 

@@ -6,6 +6,7 @@ import type { GeekityEnv } from '../env.ts';
 import { THEME_ASSET_PREFIX } from './assets.ts';
 import { representationOf } from './errors.ts';
 import { HEALTH_PATH } from './health.ts';
+import { CONTENT_TYPES } from './negotiate.ts';
 import { requestPath } from './routes.ts';
 import { CHANGE_PASSWORD_WELL_KNOWN_PATH, SECURITY_TXT_PATH } from './well-known.ts';
 
@@ -106,16 +107,18 @@ function unavailable(c: Context<GeekityEnv>, pathname: string, until: Date | und
     'cache-control': NO_STORE,
   };
 
-  switch (representationOf(pathname, c.req.header('accept'))) {
+  const representation = representationOf(pathname, c.req.header('accept'));
+  switch (representation) {
     case 'json':
       return c.body(JSON_BODY, 503, {
         ...headers,
         'content-type': 'application/json; charset=utf-8',
       });
     case 'markdown':
+    case 'text':
       return c.body(MARKDOWN_BODY, 503, {
         ...headers,
-        'content-type': 'text/markdown; charset=utf-8',
+        'content-type': CONTENT_TYPES[representation],
         'content-disposition': 'inline',
       });
     case 'html':

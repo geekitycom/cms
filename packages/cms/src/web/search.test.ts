@@ -151,15 +151,22 @@ describe('GET /search/', () => {
       /<\/search\/index\.json\?q=otters>; rel="alternate"; type="application\/json"/,
     );
     assert.equal(html.headers.get('vary'), 'Accept, Accept-Encoding');
+    assert.doesNotMatch(html.headers.get('link') ?? '', /text\/(markdown|plain)/);
   });
 
   it('answers 406 to a client that accepts neither', async () => {
     const cms = await site(corpus());
 
-    const response = await cms.app.request('/search/?q=otters', {
-      headers: { accept: 'text/markdown' },
-    });
-    assert.equal(response.status, 406);
+    for (const accept of ['text/markdown', 'text/plain']) {
+      const response = await cms.app.request('/search/?q=otters', { headers: { accept } });
+      assert.equal(response.status, 406, accept);
+      const body = (await response.json()) as { alternates: { type: string }[] };
+      assert.deepEqual(
+        body.alternates.map((alternate) => alternate.type),
+        ['text/html', 'application/json'],
+      );
+    }
+    assert.equal((await cms.app.request('/search/index.md?q=otters')).status, 404);
   });
 
   it('shows the form and nothing else before a search', async () => {
