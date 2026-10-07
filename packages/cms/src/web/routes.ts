@@ -1653,13 +1653,12 @@ function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
   const now = store.now();
   const home = frontPages(c).home;
 
-  const label = (document: Document): string => llmsLabel(c, document);
   const entry = (document: Document): LlmsEntry => llmsEntry(c, document, home);
 
   const pages = store
     .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
     .filter((document) => isListed(document, now))
-    .sort((a, b) => label(a).localeCompare(label(b)));
+    .sort((a, b) => llmsLabel(c, a).localeCompare(llmsLabel(c, b)));
   const posts = store
     .listPosts({ limit: feedSize(site) })
     .filter((document) => isListed(document, now));
