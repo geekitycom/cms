@@ -55,7 +55,7 @@ import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts'
 import { clientAddress, createLoginThrottle, describeWait, loginKeys } from './throttle.ts';
 import { mountToolsScreen } from './tools.ts';
 import { mountPersonalDataScreen } from './personal-data.ts';
-import { mountPluginsScreen } from './plugins.ts';
+import { mountPluginsScreen, pluginScreens } from './plugins.ts';
 import type { LoginThrottle } from './throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
 import { editUserPath, mountUsers } from './users.ts';
@@ -156,7 +156,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       siteUrl: '/',
       newPostUrl: newEditorPath(POST_KIND),
       assetPrefix: ADMIN_ASSET_PREFIX,
-      navigation: adminMenu({ section: name(context['section']), child: name(context['child']) }),
+      navigation: adminMenu(
+        { section: name(context['section']), child: name(context['child']) },
+        pluginScreens(c),
+      ),
       logoutUrl: LOGOUT_PATH,
       csrfToken: session?.csrfToken ?? '',
       cspNonce: c.var.cspNonce ?? '',

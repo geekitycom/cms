@@ -23,7 +23,7 @@ import {
 import type { TaxonomyRedirect } from './taxonomy.ts';
 
 describe('the default taxonomy bases', () => {
-  it('are the ones WordPress uses, so a migrated site keeps its URLs', () => {
+  it('are the common ones, so a migrated site keeps its URLs', () => {
     assert.deepEqual(DEFAULT_TAXONOMY_BASES, { tag: 'tag', category: 'category' });
   });
 });

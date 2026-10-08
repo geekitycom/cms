@@ -227,7 +227,7 @@ describe('the author archive (AC #3)', () => {
     assert.equal(feed.headers.get('location'), '/author/ada/feed/');
   });
 
-  it('answers WordPress’s older feed spellings the way every listing does', async () => {
+  it('answers the older feed spellings the way every listing does', async () => {
     const cms = await site();
 
     const alias = await cms.app.request('/author/ada/feed/rss/');

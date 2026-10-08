@@ -1,0 +1,51 @@
+{# /admin/plugins/<package name>: a plugin's own screen (decision-33). The
+   plugin hands over cards of paragraphs and tables as data and this draws
+   them, so a plugin writes no markup and everything it says is escaped. #}
+{% extends "layouts/shell.njk" %}
+{% from "components/card.njk" import card %}
+{% from "components/table.njk" import table %}
+
+{% macro text(parts) -%}
+  {%- for part in parts -%}
+    {%- if part.code is defined -%}<code>{{ part.code }}</code>{%- else -%}{{ part }}{%- endif -%}
+  {%- endfor -%}
+{%- endmacro %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">{{ title }}</h1>
+
+  <div class="grid max-w-5xl grid-cols-1 gap-6">
+    {% for entry in cards %}
+      {% call card(title=entry.title) %}
+        {% for block in entry.blocks %}
+          {% if block.table %}
+            {% call table(block.table.caption, inCard=true) %}
+              <thead>
+                <tr>
+                  {% for column in block.table.columns %}<th scope="col">{{ column }}</th>{% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in block.table.rows %}
+                  <tr>
+                    {% for cell in row %}
+                      {% if cell.time is defined %}
+                        <td class="whitespace-nowrap">{% if cell.time %}{{ cell.time | date('readable') }}{% else %}Never{% endif %}</td>
+                      {% else %}
+                        <td>{{ text([cell]) }}</td>
+                      {% endif %}
+                    {% endfor %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            {% endcall %}
+          {% else %}
+            <p class="text-sm">{{ text(block.paragraph) }}</p>
+          {% endif %}
+        {% endfor %}
+      {% endcall %}
+    {% endfor %}
+  </div>
+{% endblock %}

@@ -176,11 +176,21 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
  * a section with no child is a screen that only knows half of where it is, and
  * would render a menu that expands around nothing.
  */
-export function adminMenu(location: AdminScreenLocation = {}): AdminMenuSection[] {
+export function adminMenu(
+  location: AdminScreenLocation = {},
+  pluginScreens: readonly AdminMenuChild[] = [],
+): AdminMenuSection[] {
   const { section: name, child } = location;
+  // The screens of the plugins running for this request go under Plugins,
+  // after the list of plugins itself (decision-33).
+  const sections = ADMIN_SECTIONS.map((entry) =>
+    entry.section === PLUGINS_SECTION && pluginScreens.length > 0
+      ? { ...entry, children: [...entry.children, ...pluginScreens] }
+      : entry,
+  );
 
   if (name !== undefined) {
-    const found = ADMIN_SECTIONS.find((entry) => entry.section === name);
+    const found = sections.find((entry) => entry.section === name);
     if (found === undefined) {
       throw new UnknownAdminScreenError(`The admin menu has no section called ${quoted(name)}.`);
     }
@@ -196,7 +206,7 @@ export function adminMenu(location: AdminScreenLocation = {}): AdminMenuSection[
     }
   }
 
-  return ADMIN_SECTIONS.map((entry) => ({
+  return sections.map((entry) => ({
     ...entry,
     open: entry.section === name,
     children: entry.children.map((item) => ({

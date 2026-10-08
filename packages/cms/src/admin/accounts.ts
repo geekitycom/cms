@@ -117,9 +117,9 @@ export interface User {
    * decision-14 calls this identity rather than cache: a follower's server
    * keys the account by it for as long as the follow lasts, and a document
    * served under it with a different `id` reads as a different person, not as
-   * a moved one. So a site arriving from the WordPress ActivityPub plugin
-   * keeps the `https://example.com/?author=2` its followers already hold, for
-   * the life of the user.
+   * a moved one. So a site arriving from another server keeps the
+   * `https://example.com/?author=2` its followers already hold, for the life
+   * of the user.
    *
    * The CMS never mints one — a user born here is an actor at their author URL
    * and has no second name to keep — and no screen writes one: it arrives with
@@ -127,21 +127,6 @@ export interface User {
    * stored, query string and all, because that is what has to be matched.
    */
   readonly actorId?: string | undefined;
-  /**
-   * The number the WordPress ActivityPub plugin gave this person's actor, when
-   * they had one (TASK-70).
-   *
-   * The WordPress user id, which is what the plugin puts in the paths it
-   * publishes: `/wp-json/activitypub/1.0/actors/2/inbox` is user 2. Unlike
-   * {@link User.actorId} this is cache rather than identity — a follower's
-   * server replaces those paths the next time it refetches the actor — so it
-   * is only ever read behind the `wordpressActivityPub` site setting, and it
-   * is what maps a delivery arriving at one of those paths to a person.
-   *
-   * The CMS never mints one. It arrives with the import (TASK-71) or is typed
-   * into the file by hand, beside the stored actor id the same migration sets.
-   */
-  readonly wordpressActorId?: number | undefined;
   /** When the user was created, as an ISO 8601 instant. */
   readonly createdAt: string;
 }
@@ -585,12 +570,11 @@ export async function setUserAdminTheme(input: {
 }
 
 /**
- * Thrown when the id being imported already belongs to somebody else.
+ * Thrown when the id being set already belongs to somebody else.
  *
- * Two accounts answering to one actor id is two people with one identity, and
- * two carrying one WordPress number is a delivery to the plugin's old inbox
- * that could go to either. Neither is something to pick a winner for, so the
- * import stops and says whose it is.
+ * Two accounts answering to one actor id is two people with one identity,
+ * which is not something to pick a winner for, so the write stops and says
+ * whose it is.
  */
 export class ConflictingActorIdError extends Error {
   override readonly name = 'ConflictingActorIdError';
@@ -604,30 +588,25 @@ export class ConflictingActorIdError extends Error {
 }
 
 /**
- * Write the two ids a site arriving from the WordPress ActivityPub plugin
- * carries: the actor id its followers hold, and the number its paths are built
- * from (TASK-69, TASK-70).
+ * Write the actor id a user was published under elsewhere (TASK-69).
  *
- * The only writer of either field, and it is not a screen: doc-4 makes a
- * stored actor id identity for the life of the account, and identity is not
- * something a form should be able to retype. `geekity import wordpress-actor`
- * is what calls this.
+ * The only writer of the field, and it is not a screen: doc-4 makes a stored
+ * actor id identity for the life of the account, and identity is not
+ * something a form should be able to retype. A plugin's import command is
+ * what calls this.
  *
- * Both ids have to be unique across the file, and the check is inside the
- * write for the reason {@link createUser}'s duplicate check is: it is a rule
- * about the file rather than about one user, so it is read and acted on as one
- * step. Returns whether anything changed — a second run with the same ids
- * writes nothing, which is what makes the import idempotent.
+ * The id has to be unique across the file, and the check is inside the write
+ * for the reason {@link createUser}'s duplicate check is: it is a rule about
+ * the file rather than about one user. Returns whether anything changed, so a
+ * second run with the same id writes nothing.
  */
-export async function setUserWordPressActor(input: {
+export async function setUserActorId(input: {
   /** Which site's users file to write. */
   dataDir: string;
   /** Whose record, by login name. */
   username: string;
-  /** The id WordPress published them under, query string and all. */
+  /** The id they were published under, query string and all. */
   actorId: string;
-  /** The WordPress user id. */
-  wordpressActorId: number;
 }): Promise<boolean> {
   let changed = false;
 
@@ -635,32 +614,20 @@ export async function setUserWordPressActor(input: {
     const mine = contents.users.find((user) => user.username === input.username);
     if (mine === undefined) throw new UnknownUserError(input.username);
 
-    const byActorId = contents.users.find(
+    const holder = contents.users.find(
       (user) => user.id !== mine.id && user.actorId === input.actorId,
     );
-    if (byActorId !== undefined) {
-      throw new ConflictingActorIdError(byActorId.username, `The actor id ${input.actorId}`);
+    if (holder !== undefined) {
+      throw new ConflictingActorIdError(holder.username, `The actor id ${input.actorId}`);
     }
 
-    const byNumber = contents.users.find(
-      (user) => user.id !== mine.id && user.wordpressActorId === input.wordpressActorId,
-    );
-    if (byNumber !== undefined) {
-      throw new ConflictingActorIdError(
-        byNumber.username,
-        `WordPress actor ${String(input.wordpressActorId)}`,
-      );
-    }
-
-    changed = mine.actorId !== input.actorId || mine.wordpressActorId !== input.wordpressActorId;
+    changed = mine.actorId !== input.actorId;
     if (!changed) return contents;
 
     return {
       ...contents,
       users: contents.users.map((user) =>
-        user.id === mine.id
-          ? { ...user, actorId: input.actorId, wordpressActorId: input.wordpressActorId }
-          : user,
+        user.id === mine.id ? { ...user, actorId: input.actorId } : user,
       ),
     };
   });
@@ -775,7 +742,6 @@ function withoutHash(user: StoredUser): User {
     ...(user.adminTheme === undefined ? {} : { adminTheme: user.adminTheme }),
     ...(user.profile === undefined ? {} : { profile: user.profile }),
     ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
-    ...(user.wordpressActorId === undefined ? {} : { wordpressActorId: user.wordpressActorId }),
     createdAt: user.createdAt,
   };
 }
@@ -873,7 +839,6 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   const theme = adminTheme(record['adminTheme']);
   const profile = profileFrom(record['profile']);
   const actorId = storedActorIdFrom(record['actorId']);
-  const wordpressActorId = wordpressActorIdFrom(record['wordpressActorId']);
   const passwordHash = record['passwordHash'];
   const createdAt = record['createdAt'];
 
@@ -915,10 +880,6 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
     // own: an id that is not a URL could never be requested, so keeping it
     // would change nothing except to make a person's actor unreadable.
     ...(actorId === undefined ? {} : { actorId }),
-    // And once more: a WordPress id that is not a whole positive number could
-    // never appear in one of the plugin's paths, so keeping it would only make
-    // the compatibility switch answer for a route nobody asks for.
-    ...(wordpressActorId === undefined ? {} : { wordpressActorId }),
     passwordHash,
     createdAt: typeof createdAt === 'string' ? createdAt : '',
   };
@@ -968,19 +929,6 @@ function storedActorIdFrom(value: unknown): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-/**
- * A stored WordPress actor id as this version reads it, or `undefined`.
- *
- * A whole number above zero, because that is what a WordPress user id is and
- * the only thing that could ever appear in one of the plugin's paths. A string
- * is not accepted even when it reads as a number: the file is written by the
- * import, and a quoted id would be a sign that something else wrote it.
- */
-function wordpressActorIdFrom(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) return undefined;
-  return value;
 }
 
 /** `{ [key]: value }` when the value is a string, and nothing when it is not. */

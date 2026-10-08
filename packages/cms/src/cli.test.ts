@@ -22,7 +22,7 @@ import {
  *
  * Each command has a file of its own beside this one — `cli-init.test.ts`,
  * `cli-sync.test.ts`, `cli-user.test.ts`, `cli-rebuild.test.ts` and
- * `cli-import.test.ts` — because every one of their tests spawns a child
+ * `cli-plugins.test.ts` — because every one of their tests spawns a child
  * process, and `node --test` runs a file at a time per process (TASK-93).
  */
 
@@ -180,35 +180,12 @@ describe('parseArgs', () => {
     assert.deepEqual(parseArgs(['init', 'my-site', '--config=other.ts']).args, ['my-site']);
   });
 
-  it('reads the import command, its subcommand and the flags it carries', () => {
-    const parsed = parseArgs([
-      'import',
-      'wordpress-actor',
-      'ada',
-      '--actor-id',
-      'https://blog.example/?author=2',
-      '--wordpress-id=2',
-      '--force',
-    ]);
-
-    assert.equal(parsed.command, 'import');
-    assert.deepEqual(parsed.args, ['wordpress-actor', 'ada']);
-    assert.deepEqual(parsed.flags, {
-      'actor-id': 'https://blog.example/?author=2',
-      'wordpress-id': '2',
-      force: true,
-    });
-  });
-
   it('rejects an option no command has', () => {
-    assert.throws(() => parseArgs(['import', '--nonsense', 'x']), /--nonsense/);
+    assert.throws(() => parseArgs(['resend', '--nonsense', 'x']), /--nonsense/);
   });
 
   it('rejects a flag that carries no value', () => {
-    assert.throws(
-      () => parseArgs(['import', 'wordpress-actor', 'ada', '--actor-id']),
-      /--actor-id/,
-    );
+    assert.throws(() => parseArgs(['maintenance', 'on', '--until']), /--until/);
   });
 });
 

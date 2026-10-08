@@ -51,6 +51,7 @@ export const ADMIN_TEMPLATES = {
   media: 'pages/media/library.njk',
   themes: 'pages/appearance/themes.njk',
   plugins: 'pages/plugins/installed.njk',
+  pluginScreen: 'pages/plugins/screen.njk',
   comments: 'pages/comments/all.njk',
   messages: 'pages/messages/all.njk',
   settingsGeneral: 'pages/settings/general.njk',

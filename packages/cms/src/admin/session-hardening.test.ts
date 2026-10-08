@@ -158,8 +158,8 @@ describe('Fetch Metadata on a state change', () => {
   });
 });
 
-// The ActivityPub inboxes are covered in federation/inbox.test.ts and
-// federation/wordpress.test.ts, with signed deliveries a junk body cannot fake.
+// The ActivityPub inboxes are covered in federation/inbox.test.ts, with
+// signed deliveries a junk body cannot fake.
 describe('public endpoints that take cross-site POSTs by design', () => {
   const endpoints = [WEBMENTION_PATH, UNSUBSCRIBE_PATH, MODERATE_PATH, CONTACT_POST_PATH];
 

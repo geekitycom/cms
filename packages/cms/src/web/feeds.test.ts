@@ -826,7 +826,7 @@ describe('the taxonomy feeds', () => {
   });
 });
 
-describe('the WordPress feed URLs', () => {
+describe('the migrated feed URLs', () => {
   const files = {
     'posts/2026-09-02-one.md': post('One', {
       date: '2026-09-02T09:00:00Z',
@@ -856,7 +856,7 @@ describe('the WordPress feed URLs', () => {
     );
   });
 
-  it('redirect the older spellings WordPress also served', async () => {
+  it('redirect the older spellings a migrated site was also served at', async () => {
     const { cms } = await site(files);
 
     // `/feed/rss/` was WordPress's RSS 0.92; this site answers RSS 2.0 there.
@@ -1616,7 +1616,7 @@ describe('the site-wide comments feed', () => {
     assert.equal(childrenNamed((await rss(cms, '/2026/09/hello/feed/')).channel, 'item').length, 2);
   });
 
-  it('redirects the unslashed and the WordPress spellings in one hop', async () => {
+  it('redirects the unslashed and the older spellings in one hop', async () => {
     const { cms } = await site(files);
 
     for (const [from, to] of [

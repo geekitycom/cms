@@ -2,19 +2,7 @@ import { createRequire } from 'node:module';
 
 import { createFederation, InProcessMessageQueue, MemoryKvStore } from '@fedify/fedify';
 import type { Context, Federation, FederationOptions, PageItems } from '@fedify/fedify';
-import {
-  Accept,
-  Announce,
-  Create,
-  Delete,
-  Follow,
-  Like,
-  type Object as APObject,
-  QuoteAuthorization,
-  QuoteRequest,
-  Reject,
-  Undo,
-} from '@fedify/vocab';
+import { Create, type Object as APObject, QuoteAuthorization } from '@fedify/vocab';
 
 import { countUsers, listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
@@ -32,15 +20,7 @@ import {
   postCreateActivity,
 } from './article.ts';
 import { followersPage, lastFollowersCursor } from './followers.ts';
-import {
-  handleAccept,
-  handleDelete,
-  handleFollow,
-  handleLoggedActivity,
-  handleQuoteRequest,
-  handleReject,
-  handleUndo,
-} from './inbox.ts';
+import { INBOX_LISTENERS } from './inbox.ts';
 import { loadActorKeyPairs } from './keys.ts';
 import type { ActorProfileService } from './profiles.ts';
 import {
@@ -207,10 +187,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
     .setLastCursor((context, identifier) => {
       const user = actorFor(context, identifier);
       if (user === undefined) return null;
-      const total = context.data.store.countByAuthor(namesOf(context, user));
-      return String(
-        total === 0 ? 0 : Math.floor((total - 1) / OUTBOX_PAGE_SIZE) * OUTBOX_PAGE_SIZE,
-      );
+      return lastOutboxCursor(context.data.store.countByAuthor(namesOf(context, user)));
     });
 
   // One user's followers, straight out of SQLite and paged like the outbox.
@@ -271,23 +248,14 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
   // reaches one — so a handler may trust that the activity's actor really sent
   // it. An activity of a type not listed here is answered 202 and dropped,
   // which is what doc-4 asks for everything past these.
-  federation
+  const inbox = federation
     .setInboxListeners(INBOX_PATH, SHARED_INBOX_PATH)
     // `per-origin` rather than Fedify's default `per-inbox`, which folds the
-    // recipient identifier into the key. The WordPress compatibility switch
-    // (TASK-70) mounts a second set of inboxes over the same KV store, where
-    // the same person is `2` rather than their username, and one `Follow`
-    // redelivered to both would otherwise be handled twice (doc-8).
-    .withIdempotency('per-origin')
-    .on(Follow, handleFollow)
-    .on(Accept, handleAccept)
-    .on(Reject, handleReject)
-    .on(Undo, handleUndo)
-    .on(Delete, handleDelete)
-    .on(Like, handleLoggedActivity)
-    .on(Announce, handleLoggedActivity)
-    .on(Create, handleLoggedActivity)
-    .on(QuoteRequest, handleQuoteRequest);
+    // recipient identifier into the key: one `Follow` delivered to a personal
+    // and a shared inbox, or to a plugin's second federation over the same KV
+    // store, would otherwise be handled twice (doc-8).
+    .withIdempotency('per-origin');
+  for (const { type, handle } of INBOX_LISTENERS) inbox.on(type, handle);
 
   federation.setNodeInfoDispatcher(NODEINFO_PATH, (context) => {
     const counts = context.data.store.counts();
@@ -330,8 +298,8 @@ export function federatedPost(store: ContentStore, slug: string): Document | und
  * from the site's page size would not: the size is a setting somebody may
  * change between two requests.
  *
- * Exported for the WordPress compatibility federation (TASK-70), which serves
- * the same page at the plugin's own outbox path.
+ * Exported for the plugin federation bridge, which hands the same page to a
+ * plugin serving it at a path of its own.
  */
 export function outboxPage(
   context: Context<FederationContextData>,
@@ -349,6 +317,11 @@ export function outboxPage(
     nextCursor: next < total ? String(next) : null,
     prevCursor: offset <= 0 ? null : String(Math.max(0, offset - OUTBOX_PAGE_SIZE)),
   };
+}
+
+/** The cursor of the outbox's last page, and `0` for an empty one. */
+export function lastOutboxCursor(total: number): string {
+  return String(total === 0 ? 0 : Math.floor((total - 1) / OUTBOX_PAGE_SIZE) * OUTBOX_PAGE_SIZE);
 }
 
 /** A cursor as an offset. Anything unreadable starts at the beginning. */

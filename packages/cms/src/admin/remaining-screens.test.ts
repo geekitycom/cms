@@ -110,12 +110,7 @@ const WORDS: Record<RemainingScreen, readonly string[]> = {
     'Send test email',
   ],
   settingsPrivacy: ['Location on posts', 'Uploads'],
-  federationSettings: [
-    'Relays',
-    'WordPress paths',
-    'wp-json/activitypub/1.0/actors/2/inbox',
-    'Never',
-  ],
+  federationSettings: ['Relays'],
   tools: ['Documents', 'Followers', 'Inbox activities', 'Comments', 'Rebuild the index'],
   toolsConfirm: ['Rebuild the index now?', 'Rebuild it', 'Cancel'],
   personalData: ['Email address', 'Look for it'],
@@ -362,7 +357,6 @@ describe('the remaining screens', async () => {
       assert.deepEqual(titles('settingsPermalinks'), ['Archive redirects']);
       assert.deepEqual(titles('settingsDiscussion'), ['Spam checking']);
       assert.deepEqual(titles('settingsEmail'), ['Mail credentials']);
-      assert.deepEqual(titles('federationSettings'), ['WordPress paths']);
     });
 
     it('states the Akismet key and the mail credential with a badge word', () => {

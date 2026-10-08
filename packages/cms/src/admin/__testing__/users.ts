@@ -28,8 +28,6 @@ export function writeUsers(
     profile?: UserProfile;
     /** The id this person was published under elsewhere (TASK-69). */
     actorId?: string;
-    /** The number the WordPress ActivityPub plugin gave their actor (TASK-70). */
-    wordpressActorId?: number;
   }[],
 ): void {
   mkdirSync(dataDir, { recursive: true });
@@ -40,7 +38,6 @@ export function writeUsers(
     ...(user.email === undefined ? {} : { email: user.email }),
     ...(user.profile === undefined ? {} : { profile: user.profile }),
     ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
-    ...(user.wordpressActorId === undefined ? {} : { wordpressActorId: user.wordpressActorId }),
     passwordHash: user.password === undefined ? 'not-a-hash' : hashPassword(user.password),
     createdAt: '2026-01-01T00:00:00.000Z',
   }));

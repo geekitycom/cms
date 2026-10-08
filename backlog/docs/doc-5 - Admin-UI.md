@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-08 14:19'
+updated_date: '2026-10-08 15:02'
 ---
 # Admin UI
 
@@ -98,7 +98,7 @@ faint tint.
 | `/admin/users` | list, edit each user's public profile, set their email, which notices go to it and how often, change your own password (single role: admin) |
 | `/admin/users/new` | the add form, Users > Add new |
 | `/admin/federation` | Federation > Followers: follower list, recent inbox activity, manual re-deliver |
-| `/admin/federation/settings` | Federation > Settings: the relays the site subscribes to, and the WordPress ActivityPub compatibility switch |
+| `/admin/federation/settings` | Federation > Settings: the relays the site subscribes to |
 
 ## Components
 
@@ -400,7 +400,7 @@ What the screens make of the library:
 
 ## Settings
 
-- Settings is six pages, WordPress's own names where the CMS has the same thing: **General** (title, tagline, author, base URL, time zone, language, and the avatar), **Reading** (what the homepage displays, posts per page, the notify server), **Permalinks** (the tag and category bases, with the recorded archive redirects listed under them), **Discussion** (comments and the closing window, webmentions sent and received, and the spam checker), **Email** (the provider, the From line, the reply-to, the contact address, the credential and the test message), and **Privacy** (what the site shares of where a post was written: nothing, the place's words, or the coordinates too, nothing by default; and the home of every later privacy choice. The page also says that location and camera metadata is always removed from uploads). `/admin/settings` is the General page, which is where the Settings heading lands. A seventh page of exactly the same kind, **Federation** (the relays the site subscribes to and the WordPress ActivityPub compatibility switch), is filed under the Federation section at `/admin/federation/settings` rather than here: a screen belongs to the section its subject belongs to, and the admin used to carry two menu entries called Federation with neither saying the other existed (TASK-109).
+- Settings is six pages, WordPress's own names where the CMS has the same thing: **General** (title, tagline, author, base URL, time zone, language, and the avatar), **Reading** (what the homepage displays, posts per page, the notify server), **Permalinks** (the tag and category bases, with the recorded archive redirects listed under them), **Discussion** (comments and the closing window, webmentions sent and received, and the spam checker), **Email** (the provider, the From line, the reply-to, the contact address, the credential and the test message), and **Privacy** (what the site shares of where a post was written: nothing, the place's words, or the coordinates too, nothing by default; and the home of every later privacy choice. The page also says that location and camera metadata is always removed from uploads). `/admin/settings` is the General page, which is where the Settings heading lands. A seventh page of exactly the same kind, **Federation** (the relays the site subscribes to), is filed under the Federation section at `/admin/federation/settings` rather than here: a screen belongs to the section its subject belongs to, and the admin used to carry two menu entries called Federation with neither saying the other existed (TASK-109).
 - Every page is one form of its own with its own POST, and every one of them rewrites `content/_data/site.json` through the same update (decision-9). A page writes the fields it carries and no others, onto the file as re-read inside the write, so two people saving two different pages at the same moment both land and a key the settings do not model is kept. A page validates its own fields and no others: a refused save comes back on the page it was sent from, with the problems on the fields that have them, having written nothing at all.
 - Three things are not fields of any form, and each is its own pair of forms — save and remove — because none can travel in that body and because a rejected one must not lose an edit beside it: the **avatar**, on General; the **Akismet key**, on Discussion; and the **mail credential**, on Email.
 - **Spam checking.** The Akismet key lives in `data/akismet.json` at mode `0600` rather than in `site.json`, which is public and in git. Saving one checks it with Akismet's `verify-key` first; the panel then says connected, "does not recognise this key", "could not be reached", or not connected, and shows the last four characters rather than the key. Remove key turns Akismet off. See doc-6.

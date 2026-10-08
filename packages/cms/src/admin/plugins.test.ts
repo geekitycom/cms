@@ -295,3 +295,75 @@ describe('Admin > Plugins', () => {
     );
   });
 });
+
+describe('a plugin screen (TASK-282)', () => {
+  const SCREENED = '@test/plugin-screened';
+
+  function screened(): Plugin {
+    return definePlugin({
+      name: SCREENED,
+      version: '1.0.0',
+      label: 'Screened',
+      description: 'Has a screen of its own.',
+      hostApi: HOST_API_VERSION,
+      register(host) {
+        host.screen({
+          title: 'Old paths',
+          render: ({ site }) => [
+            {
+              title: 'Paths <asked for>',
+              blocks: [
+                {
+                  table: {
+                    caption: 'Paths',
+                    columns: ['Path', 'Last asked for'],
+                    rows: [
+                      [{ code: '/old/inbox' }, { time: '2026-09-01T10:00:00.000Z' }],
+                      [{ code: '/old/outbox' }, { time: null }],
+                    ],
+                  },
+                },
+                {
+                  paragraph: [
+                    `${String(site.users().length)} users. Run `,
+                    { code: 'geekity old import' },
+                    ' to add one.',
+                  ],
+                },
+              ],
+            },
+          ],
+        });
+      },
+    });
+  }
+
+  const screenPath = `${PLUGINS_PATH}/${SCREENED}`;
+
+  it('draws the cards a plugin renders, under Plugins, while it is enabled', async () => {
+    const { agent } = await site([screened()], [SCREENED]);
+
+    const response = await agent.get(screenPath);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+
+    assert.match(html, /<h1[^>]*>Old paths<\/h1>/);
+    assert.match(html, /Paths &lt;asked for&gt;/, 'plugin text is escaped');
+    assert.match(html, /<code>\/old\/inbox<\/code>/);
+    assert.match(html, /2026/, 'an instant is drawn as a date');
+    assert.match(html, /Never/, 'and a null one as never');
+    assert.match(html, /1 users\. Run <code>geekity old import<\/code> to add one\./);
+    assert.match(
+      html,
+      new RegExp(`href="${screenPath}"[^>]*aria-current="page"[^>]*>\\s*Old paths`),
+      'the menu lists it under Plugins, current',
+    );
+  });
+
+  it('is absent, from the menu and at its URL, while the plugin is disabled', async () => {
+    const { agent } = await site([screened()]);
+
+    assert.equal((await agent.get(screenPath)).status, 404);
+    assert.doesNotMatch(await (await agent.get(PLUGINS_PATH)).text(), /Old paths/);
+  });
+});

@@ -99,7 +99,7 @@ describe('what the homepage displays', () => {
     assert.equal(readSiteSettings(contentDir).homepage, '');
   });
 
-  it('refuses a posts page with no homepage, as WordPress does (AC #1)', async () => {
+  it('refuses a posts page with no homepage (AC #1)', async () => {
     const contentDir = await withPages('about', 'news');
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);

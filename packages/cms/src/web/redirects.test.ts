@@ -107,7 +107,7 @@ describe('a declared redirect', () => {
     assert.equal((await redirectOf(cms, '/tracked/?utm=x')).location, '/about/?from=tracked');
   });
 
-  it('matches a WordPress ?p= link on the query it names, and only that query', async () => {
+  it('matches a ?p= link on the query it names, and only that query', async () => {
     const { cms } = await site({
       ...CONTENT,
       '_data/redirects.json': redirects([

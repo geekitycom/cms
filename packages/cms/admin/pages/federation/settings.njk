@@ -1,13 +1,10 @@
-{# /admin/federation/settings: which relays boost the site, and whether it is
-   still answering the paths a WordPress site arrived with. It is Federation >
+{# /admin/federation/settings: which relays boost the site. It is Federation >
    Settings rather than Settings > Federation (TASK-109): the section holds
    everything about federation, and Followers beside it is where the actors and
    the people following them are. Who the site's people are on the fediverse is
    a user's profile now (decision-14). #}
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
-{% from "components/card.njk" import card %}
-{% from "components/table.njk" import table %}
 
 {% block settingsProblems %}
   {{ field.problem('settings-relays', problems.relays) }}
@@ -23,59 +20,4 @@
   {% endset %}
   {{ field.textarea('settings-relays', fields.relays, 'Relays', form.relays,
        error=problems.relays, hint=relaysHint, rows='3', spellcheck='false', autofocus=true) }}
-
-  <h2 class="mt-6 text-lg font-semibold">WordPress</h2>
-
-  {% set wordpressHint %}
-    Answer the inbox and collection paths the WordPress ActivityPub plugin
-    published, under <code>/wp-json/activitypub/1.0/</code>, for the users
-    carrying its numeric actor id. Only a site that moved here from that plugin
-    needs this: a follower's server keeps delivering to the inbox URL it cached
-    until it next refetches the actor, and this is what catches those
-    deliveries in the meantime.
-  {% endset %}
-  {{ field.checkbox('settings-wordpress-activitypub', fields.wordpressActivityPub,
-       'WordPress ActivityPub compatibility', checked=form.wordpressActivityPub,
-       hint=wordpressHint) }}
-{% endblock %}
-
-{% block settingsPanels %}
-  {# When each compatibility path was last asked for. It is the whole reason
-     the instants are recorded: once every follower's server has refetched the
-     actor, nothing asks any more and the switch can go off. #}
-  {% call card(title='WordPress paths') %}
-    {% if wordpressRoutes.length %}
-      {% call table('WordPress paths', inCard=true) %}
-        <thead>
-          <tr><th scope="col">Path</th><th scope="col">For</th><th scope="col">Last asked for</th></tr>
-        </thead>
-        <tbody>
-          {% for route in wordpressRoutes %}
-            <tr>
-              <td><code>{{ route.path }}</code></td>
-              <td>{{ route.username or 'every user' }}</td>
-              <td class="whitespace-nowrap">
-                {% if route.lastRequestedAt %}
-                  {{ route.lastRequestedAt | date('readable') }}
-                {% else %}
-                  Never
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      {% endcall %}
-      <p class="text-sm">
-        Once every one of these has been quiet for long enough that every
-        follower's server has refetched the actor, turn the switch off: these
-        paths are a cache other servers hold, not this site's identity, and the
-        CMS carries them only until the caches have moved on.
-      </p>
-    {% else %}
-      <p class="text-sm">
-        No user carries a WordPress actor id, so the switch would serve nothing.
-        The <code>geekity import wordpress-actor</code> command sets one.
-      </p>
-    {% endif %}
-  {% endcall %}
 {% endblock %}

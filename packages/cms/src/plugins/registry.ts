@@ -8,8 +8,19 @@
  * the enabled set as an argument rather than holding one.
  */
 
+import path from 'node:path';
+
+import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { HOST_API_VERSION } from '../plugin.ts';
-import type { Plugin, PluginHost, PluginRouteHandler } from '../plugin.ts';
+import type {
+  Plugin,
+  PluginCommand,
+  PluginDataFolder,
+  PluginFederationMiddleware,
+  PluginHost,
+  PluginRouteHandler,
+  PluginScreen,
+} from '../plugin.ts';
 
 /** A plugin as it arrived, and a description of where it came from. */
 export interface InstalledPlugin {
@@ -24,11 +35,18 @@ export interface PluginRoute {
   handler: PluginRouteHandler;
 }
 
+/** What a plugin declared in `register`. */
+export interface PluginContributions {
+  routes: readonly PluginRoute[];
+  federation: readonly PluginFederationMiddleware[];
+  screen: PluginScreen | undefined;
+  commands: readonly PluginCommand[];
+}
+
 /** An installed plugin after registration. */
-export interface RegisteredPlugin extends InstalledPlugin {
+export interface RegisteredPlugin extends InstalledPlugin, PluginContributions {
   /** Why it cannot run, or `undefined` when it can be enabled. */
   problem: string | undefined;
-  routes: readonly PluginRoute[];
 }
 
 /**
@@ -85,7 +103,10 @@ const PACKAGE_NAME_MAX = 214;
  * {@link DuplicatePluginError} when two plugins share a name; every other
  * problem leaves that plugin unavailable and the site booting.
  */
-export function createPluginRegistry(installed: readonly InstalledPlugin[]): PluginRegistry {
+export function createPluginRegistry(
+  installed: readonly InstalledPlugin[],
+  options: { dataDir: string },
+): PluginRegistry {
   const bySource = new Map<string, InstalledPlugin>();
   for (const entry of installed) {
     const earlier = bySource.get(entry.plugin.name);
@@ -96,11 +117,11 @@ export function createPluginRegistry(installed: readonly InstalledPlugin[]): Plu
   }
 
   const own = new Map<string, string | undefined>();
-  const routes = new Map<string, PluginRoute[]>();
+  const contributions = new Map<string, PluginContributions>();
   for (const entry of installed) {
-    const declared: PluginRoute[] = [];
-    routes.set(entry.plugin.name, declared);
-    own.set(entry.plugin.name, register(entry.plugin, declared));
+    const { problem, declared } = register(entry.plugin, options.dataDir);
+    own.set(entry.plugin.name, problem);
+    contributions.set(entry.plugin.name, declared);
   }
 
   const cyclic = cyclicNames(installed.map((entry) => entry.plugin));
@@ -133,8 +154,8 @@ export function createPluginRegistry(installed: readonly InstalledPlugin[]): Plu
 
   const plugins: RegisteredPlugin[] = installed.map((entry) => ({
     ...entry,
+    ...(contributions.get(entry.plugin.name) ?? NOTHING_DECLARED),
     problem: problem(entry.plugin.name),
-    routes: routes.get(entry.plugin.name) ?? [],
   }));
 
   const order = dependencyOrder(plugins.filter((entry) => entry.problem === undefined));
@@ -228,35 +249,100 @@ export function createPluginRegistry(installed: readonly InstalledPlugin[]): Plu
   }
 }
 
-/** Run a plugin's `register`, returning why it cannot run, if it cannot. */
-function register(plugin: Plugin, routes: PluginRoute[]): string | undefined {
+const NOTHING_DECLARED: PluginContributions = {
+  routes: [],
+  federation: [],
+  screen: undefined,
+  commands: [],
+};
+
+/**
+ * Run a plugin's `register`, returning why it cannot run, if it cannot, and
+ * what it declared. A plugin whose register fails declares nothing.
+ */
+function register(
+  plugin: Plugin,
+  dataDir: string,
+): { problem: string | undefined; declared: PluginContributions } {
   const { name } = plugin;
   if (name.length > PACKAGE_NAME_MAX || !PACKAGE_NAME.test(name)) {
-    return `${JSON.stringify(name)} is not an npm package name, which a plugin is named by.`;
+    return {
+      problem: `${JSON.stringify(name)} is not an npm package name, which a plugin is named by.`,
+      declared: NOTHING_DECLARED,
+    };
   }
   if (!Number.isInteger(plugin.hostApi) || plugin.hostApi > HOST_API_VERSION) {
-    return `It targets host API version ${String(plugin.hostApi)}, and this core provides version ${String(HOST_API_VERSION)}.`;
+    return {
+      problem: `It targets host API version ${String(plugin.hostApi)}, and this core provides version ${String(HOST_API_VERSION)}.`,
+      declared: NOTHING_DECLARED,
+    };
   }
 
+  const routes: PluginRoute[] = [];
+  const federation: PluginFederationMiddleware[] = [];
+  const commands: PluginCommand[] = [];
+  let screen: PluginScreen | undefined;
   let registering = true;
+
+  function declaring(what: string): void {
+    if (!registering) throw new Error(`${name} declared ${what} after its register returned.`);
+  }
+
   const host: PluginHost = {
     apiVersion: HOST_API_VERSION,
     name,
+    data: pluginDataFolder(dataDir, name),
     get(path, handler) {
-      if (!registering) throw new Error(`${name} declared a route after its register returned.`);
+      declaring('a route');
       routes.push({ path, handler });
+    },
+    federation(middleware) {
+      declaring('a federation middleware');
+      federation.push(middleware);
+    },
+    screen(declared) {
+      declaring('a screen');
+      if (screen !== undefined) throw new Error('A plugin has at most one screen.');
+      screen = declared;
+    },
+    command(declared) {
+      declaring('a command');
+      commands.push(declared);
     },
   };
 
   try {
     plugin.register(host);
-    return undefined;
+    return { problem: undefined, declared: { routes, federation, screen, commands } };
   } catch (error) {
-    routes.length = 0;
-    return `Its register failed: ${error instanceof Error ? error.message : String(error)}`;
+    return {
+      problem: `Its register failed: ${error instanceof Error ? error.message : String(error)}`,
+      declared: NOTHING_DECLARED,
+    };
   } finally {
     registering = false;
   }
+}
+
+/** A file name a plugin may use in its folder: one segment, not hidden. */
+const DATA_FILE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
+
+/** `data/plugins/<package name>/`, which only its plugin reads and writes. */
+export function pluginDataFolder(dataDir: string, name: string): PluginDataFolder {
+  const folder = path.join(dataDir, 'plugins', ...name.split('/'));
+
+  function fileIn(file: string): string {
+    if (!DATA_FILE_NAME.test(file)) {
+      throw new Error(`${JSON.stringify(file)} is not a file name a plugin can use in its folder.`);
+    }
+    return path.join(folder, file);
+  }
+
+  return {
+    path: folder,
+    read: (file) => readFileIfPresentSync(fileIn(file)),
+    update: (file, change) => updateFileAtomically(fileIn(file), change),
+  };
 }
 
 async function lifecycle(plugin: Plugin, hook: 'start' | 'stop'): Promise<void> {

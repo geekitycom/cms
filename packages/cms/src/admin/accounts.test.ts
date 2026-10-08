@@ -7,6 +7,7 @@ import { after, describe, it } from 'node:test';
 
 import { browser, FIRST_ADMIN, sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import {
+  ConflictingActorIdError,
   countUsers,
   createUser,
   deleteUser,
@@ -15,9 +16,11 @@ import {
   findUserById,
   findUserByIdentifier,
   listUsers,
+  setUserActorId,
   setUserEmail,
   setUserPassword,
   setUserProfile,
+  UnknownUserError,
   usersFile,
   verifyUserPassword,
 } from './accounts.ts';
@@ -347,58 +350,40 @@ describe('a user with a stored actor id (TASK-69)', () => {
   });
 });
 
-describe('a user with a WordPress actor id (TASK-70)', () => {
-  /** One hand-written users file carrying whatever the plugin's id reads as. */
-  async function fileWith(wordpressActorId: unknown): Promise<string> {
+describe('setting a stored actor id', () => {
+  it('writes the id on the user and says whether anything changed', async () => {
     const dataDir = await temporaryDir();
-    await writeFile(
-      usersFile(dataDir),
-      JSON.stringify({
-        nextId: 2,
-        users: [
-          {
-            id: 1,
-            username: 'ada',
-            wordpressActorId,
-            passwordHash: hashPassword('correct horse'),
-            createdAt: '2026-01-01T00:00:00.000Z',
-          },
-        ],
-      }),
-      'utf8',
+    await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+
+    assert.equal(await setUserActorId({ dataDir, username: 'ada', actorId: STORED }), true);
+    assert.equal(findUser(dataDir, 'ada')?.actorId, STORED);
+    assert.equal(
+      await setUserActorId({ dataDir, username: 'ada', actorId: STORED }),
+      false,
+      'the same id again changes nothing',
     );
-    return dataDir;
-  }
-
-  it('is read back as the number the plugin numbered the author', async () => {
-    const dataDir = await fileWith(2);
-
-    assert.equal(findUserById(dataDir, 1)?.wordpressActorId, 2);
-    assert.equal(listUsers(dataDir)[0]?.wordpressActorId, 2);
   });
 
-  it('is dropped rather than refused when it is not a whole positive number', async () => {
-    for (const bad of ['2', 0, -1, 2.5, null, 'two']) {
-      const dataDir = await fileWith(bad);
-      assert.equal(
-        findUserById(dataDir, 1)?.wordpressActorId,
-        undefined,
-        `${JSON.stringify(bad)} is no actor id`,
-      );
-      assert.equal(findUserById(dataDir, 1)?.username, 'ada', 'and the user still loads');
-    }
-  });
+  it('refuses a user the site does not have, and an id another user carries', async () => {
+    const dataDir = await temporaryDir();
+    await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+    await createUser({ dataDir, username: 'grace', password: 'correct horse' });
+    await setUserActorId({ dataDir, username: 'ada', actorId: STORED });
 
-  it('survives a save of something else on the same user', async () => {
-    const dataDir = await fileWith(2);
-    const ada = findUserById(dataDir, 1);
-    assert.ok(ada !== undefined);
-
-    await setUserProfile({ dataDir, userId: ada.id, profile: { displayName: 'Ada Lovelace' } });
-
-    assert.equal(findUserById(dataDir, 1)?.wordpressActorId, 2);
+    await assert.rejects(
+      setUserActorId({ dataDir, username: 'nobody', actorId: STORED }),
+      UnknownUserError,
+    );
+    await assert.rejects(
+      setUserActorId({ dataDir, username: 'grace', actorId: STORED }),
+      (error: unknown) => error instanceof ConflictingActorIdError && error.username === 'ada',
+    );
+    assert.equal(findUser(dataDir, 'grace')?.actorId, undefined);
   });
 });
+
+/** An id somebody was published under before this site. */
+const STORED = 'https://old.example/?author=2';
 
 describe('verifying a password (AC #2)', () => {
   it('accepts the password against the hash in the file and refuses everything else', async () => {

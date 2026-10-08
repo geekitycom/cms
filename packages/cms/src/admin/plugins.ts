@@ -10,7 +10,9 @@ import type { Context, Hono } from 'hono';
 import type { GeekityEnv } from '../env.ts';
 import { readEnabledPlugins, setPluginEnabled } from '../plugins/enabled.ts';
 import type { PluginRegistry, Requirement, RequirementState } from '../plugins/registry.ts';
+import { pluginSite } from '../plugins/site.ts';
 import type { AdminRender } from './documents.ts';
+import type { AdminMenuChild } from './menu.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -43,6 +45,22 @@ const REQUIREMENT_WORDS: Readonly<Record<RequirementState, string>> = {
 /** The id of a plugin's row, which a requirement links to. */
 export function pluginAnchor(name: string): string {
   return `plugin-${name.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+}
+
+/** The screens of the plugins running for this request, as menu entries. */
+export function pluginScreens(c: Context<GeekityEnv>): AdminMenuChild[] {
+  return c.var.plugins.plugins
+    .filter((entry) => entry.screen !== undefined && c.var.activePlugins.has(entry.plugin.name))
+    .map((entry) => ({
+      child: entry.plugin.name,
+      label: entry.screen?.title ?? entry.plugin.label,
+      url: pluginScreenPath(entry.plugin.name),
+    }));
+}
+
+/** Where a plugin's screen is: under Plugins, by package name. */
+export function pluginScreenPath(name: string): string {
+  return `${PLUGINS_PATH}/${name}`;
 }
 
 export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: AdminRender }): void {
@@ -131,6 +149,22 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     await registry.reconcile(readEnabledPlugins(contentDir));
     flash(c, 'notice', `${label} is disabled.`);
     return c.redirect(PLUGINS_PATH, 303);
+  });
+
+  // A plugin's own screen, while it runs. Core draws what the plugin hands
+  // back, so nothing a plugin says reaches the page unescaped.
+  app.get(`${PLUGINS_PATH}/*`, (c) => {
+    const name = decodeURIComponent(new URL(c.req.url).pathname.slice(PLUGINS_PATH.length + 1));
+    const found = c.var.plugins.find(name);
+    const screen = found?.screen;
+    if (screen === undefined || !c.var.activePlugins.has(name)) return c.notFound();
+
+    return render(c, ADMIN_TEMPLATES.pluginScreen, {
+      section: PLUGINS_SECTION,
+      child: name,
+      title: screen.title,
+      cards: screen.render({ site: pluginSite({ admin: c.var.admin, config: c.var.config }) }),
+    });
   });
 
   function refuse(c: Context<GeekityEnv>, message: string): Response {

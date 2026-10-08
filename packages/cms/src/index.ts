@@ -37,7 +37,8 @@ import { createMailService } from './mail/index.ts';
 import type { MailService } from './mail/index.ts';
 import { readEnabledPlugins } from './plugins/enabled.ts';
 import { mountPluginRoutes, pluginLifecycle } from './plugins/mount.ts';
-import { createPluginRegistry } from './plugins/registry.ts';
+import { pluginFederation } from './plugins/federation.ts';
+import { sitePluginRegistry } from './plugins/site.ts';
 import { createCommentDigest, createCommentNotifier } from './notifications/index.ts';
 import type { CommentDigest, CommentNotifier } from './notifications/index.ts';
 import {
@@ -46,7 +47,6 @@ import {
   createDeliveryService,
   createRelayService,
   createSiteFederation,
-  createWordPressFederation,
   migrateActorKeysToFiles,
   migrateFederationToFiles,
   mountFederation,
@@ -320,7 +320,7 @@ export {
   setUserEmail,
   setUserPassword,
   setUserProfile,
-  setUserWordPressActor,
+  setUserActorId,
   ConflictingActorIdError,
   UnknownUserError,
   USER_EMAIL_PATH,
@@ -642,13 +642,35 @@ export type {
 export { DirectoryNotEmptyError, initSite, SITE_TEMPLATE_DIR, siteManifest } from './init.ts';
 export { definePlugin, HOST_API_VERSION } from './plugin.ts';
 export type {
+  JsonLdDocument,
   Plugin,
+  PluginActorKey,
+  PluginCollection,
+  PluginCollectionPage,
+  PluginCommand,
+  PluginCommandContext,
+  PluginCommandOption,
+  PluginDataFolder,
+  PluginFederationContext,
+  PluginFederationMiddleware,
+  PluginFollower,
   PluginHost,
+  PluginKeyAlgorithm,
+  PluginRecipient,
   PluginRequestContext,
   PluginRequirements,
   PluginRouteHandler,
+  PluginScreen,
+  PluginScreenBlock,
+  PluginScreenCard,
+  PluginScreenCell,
+  PluginScreenContext,
+  PluginScreenText,
+  PluginSite,
+  PluginUser,
 } from './plugin.ts';
-export { DuplicatePluginError } from './plugins/registry.ts';
+export { DuplicatePluginError, pluginDataFolder } from './plugins/registry.ts';
+export { pluginSite } from './plugins/site.ts';
 export { PLUGINS_PATH } from './admin/plugins.ts';
 export type { InitSiteOptions, InitSiteResult } from './init.ts';
 
@@ -1598,12 +1620,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
 
   // Before the database opens, so two plugins with one name refuse the boot
   // without leaving a connection behind.
-  const plugins = createPluginRegistry(
-    resolved.plugins.map((plugin, index) => ({
-      plugin,
-      source: `the site config, plugins[${String(index)}]`,
-    })),
-  );
+  const plugins = sitePluginRegistry(resolved);
 
   const { store, admin } = openCache(resolved);
 
@@ -1827,33 +1844,15 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // it (TASK-85).
     archivePosts: () => store.listPosts(),
   });
-  // One KV store for both federations. The compatibility one (TASK-70) shares
-  // it so that the same `Follow` redelivered to a user's own inbox and to the
-  // WordPress path it used to have is recognised as one activity rather than
-  // handled twice; both sets of inbox listeners are `per-origin` for the same
-  // reason (doc-8).
+  // One KV store for the site's federation and every plugin's, so an activity
+  // delivered to a plugin's inbox and to a canonical one is recognised as one
+  // activity rather than handled twice (doc-8).
   const federationKv = resolved.federation.kv ?? new MemoryKvStore();
   const federation = createSiteFederation({
     baseUrl: resolved.baseUrl,
     ...resolved.federation,
     kv: federationKv,
   });
-
-  /**
-   * The WordPress compatibility federation, built the first time a request
-   * actually reaches one of the plugin's paths with the switch on.
-   *
-   * Lazy because almost no site will ever turn the switch on, and a second set
-   * of dispatchers built at every boot for a setting nobody uses is work for
-   * nothing. `mountFederation` keeps whatever this hands back.
-   */
-  const wordpressFederation = (): SiteFederation =>
-    createWordPressFederation({
-      baseUrl: resolved.baseUrl,
-      ...resolved.federation,
-      kv: federationKv,
-      canonical: federation,
-    });
 
   // Federation listens to the index rather than to the admin, so a post edited
   // on disk federates exactly as one saved through the editor does (doc-4).
@@ -2082,7 +2081,14 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // every other, so putting it in front costs the rest of the app nothing and
   // is the only place it can go: the public site claims every unmatched path
   // in its not-found handler.
-  mountFederation(app, federation, { wordpress: wordpressFederation });
+  mountFederation(app, federation, {
+    plugins: pluginFederation({
+      registry: plugins,
+      canonical: federation,
+      kv: federationKv,
+      allowPrivateAddress: resolved.federation.allowPrivateAddress ?? false,
+    }),
+  });
 
   // The admin goes on before the public site, for the same reason.
   mountAdmin(app);
