@@ -3,7 +3,7 @@ id: doc-1
 title: Architecture Overview
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-08 16:11'
+updated_date: '2026-10-08 16:49'
 ---
 # Architecture Overview
 
@@ -31,7 +31,7 @@ packages/cms/                 published as @geekity/cms
     index.ts                  public API: createCms(config) and types
     cache.ts                  the SQLite file: its name, its migration ledgers, and what
                               happens to one this version cannot use
-    cli.ts                    bin: geekity serve | init | sync | rebuild | user add
+    cli.ts                    bin: geekity serve (a supervisor) | init | sync | rebuild | user add
     config.ts                 config schema and defaults
     content/
       parser.ts               front matter + markdown -> Document
@@ -77,7 +77,7 @@ The `geekity` CLI also runs without an entry file (`geekity serve` reads `geekit
 
 ## Public API surface
 
-- `createCms(config): Cms` returning `{ app: Hono, serve(), sync(), close() }`.
+- `createCms(config): Cms` returning `{ app: Hono, serve(), sync(), drain(), resume(), close() }`.
 - `defineConfig(config)` for typed config files.
 - Theme resolution: a template is looked up in the site `theme/` first, then in the package default theme. Sites override one file at a time.
 - Hooks: `onDocumentChange`, `onPublish` for site-specific behaviour.
@@ -131,6 +131,7 @@ Logic that some sites want and others do not lives in plugins rather than in cor
 - **Editor actions (TASK-285).** `host.editorAction({ id, field, label, offers?, suggest })` puts a button beside the editor's title, description or tags field while the plugin runs. Core draws the button, the suggestion and its Accept and Dismiss, and one core script, `admin/static/editor-actions.js`, drives them, so a plugin ships no markup and no browser script (the admin stylesheet is compiled from core's templates alone, and the admin policy stays `script-src 'self'`, `connect-src 'self'`). A press posts the form to `/admin/plugins/<package name>/editor/<id>`, inside the admin guard, so it needs a session and the page's CSRF token. Core reads the form as a save would (`submittedForm`) into a `PluginEditorDraft`: type, the post's kind by Post Type Discovery, whether it is saved, title, body, description, tags and language. It answers JSON, `{ ok, value }` or `{ ok: false, message }`. `offers(draft)` decides whether the button is drawn and is asked again on a press, which answers `withdrawn` when the draft no longer fits. A plugin that is not running, or an unknown id, falls through to a 404. Accepting fills the field (tags merge without duplicates) and saves nothing. The code is `src/admin/editor-actions.ts`. First user: `@geekity/plugin-post-summary`.
 - **Choices and the site's tags (TASK-286).** A tags action may answer `{ ok: true, choices: [{ value, note?, badge? }] }` instead of one value. The editor draws each choice from a `<template>` row in `editor.njk` with a box to tick, its badge and its note, and Accept adds the ticked ones through the same merge. The boxes have no name, so a save never posts them. Choices beside the title or description are a failure. `PluginEditorContext.siteTags` hands the action every tag on a published document, most used first (`store.listTags()`), read when the button is pressed. First user: `@geekity/plugin-tag-suggest`.
 - **Outbound fetch (TASK-286).** `host.fetch(url, { headers, signal })` is a `GET` that answers the `Response` as it came. It follows at most five redirects by hand, and checks every hop with `publicHost` over the config's `hostLookup`: a loopback, private or link-local address, or a name that resolves to one, rejects. `federation.allowPrivateAddress` on the config lifts the check, the same switch the federation's document loader uses. The plugin sets its own User-Agent, timeout and concurrency. A plugin caches in its own `host.data` folder; core adds no cache API. The code is `src/plugins/fetch.ts`. First user: `@geekity/plugin-tag-suggest`, which asks tags.pub for follower counts.
+- **The plugins folder and a supervised reload (TASK-288).** `pluginsDir` on the config (`GEEKITY_PLUGINS_DIR`, no default) names a folder of plugins, `<name>/` or `@scope/<name>/`, each with a bundled `index.js` whose default export is the plugin; `geekity serve` imports them at boot and registers them beside `plugins` (`src/plugins/folder.ts`). `geekity serve` is a `node:cluster` supervisor that owns the port and runs the CMS in one worker (`src/supervisor/`). The Plugins screen fingerprints the folder and offers Reload, a CSRF-guarded POST to `/admin/plugins/reload`, when it differs from what the worker loaded. A reload drains the old worker first (`cms.drain()`): writes other than the reload itself get `503` and `Retry-After`, in-flight writes finish, the timers, the watcher and the plugins stop, the queues empty (the default Fedify queue is wrapped so its in-process messages are waited for), and then both SQLite connections go `query_only` and `src/files/atomic.ts` refuses every write under `dataDir` and `contentDir`. Only then is the new worker forked, so its boot migrations run alone. Once it listens, the old worker stops accepting and lets each open connection end on its own, by `Connection: close` or the keep-alive timeout. A new worker that fails to boot leaves the old one to `cms.resume()`, and the screen shows why. A worker that crashes is respawned with backoff. SIGTERM and SIGINT close every worker and exit 0.
 
 ## Quality and release
 

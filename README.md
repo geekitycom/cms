@@ -159,6 +159,7 @@ directory; absolute ones are used as given.
 | `contentDir`       | `<cwd>/content`                           | `GEEKITY_CONTENT_DIR`        | Markdown content.                                                                                                                                                                                                                                                                                                                                                                          |
 | `dataDir`          | `<cwd>/data`                              | `GEEKITY_DATA_DIR`           | Derived state — the SQLite index, the image variants — and the files that are not derived and must be backed up, such as `users.json`, the actor key pairs under `keys/`, `locations.json` and `kept-properties.json`. [Two directories](#two-directories-content-and-data) lists them.                                                                                                    |
 | `themesDir`        | `<cwd>/themes`                            | `GEEKITY_THEMES_DIR`         | The site's themes, one directory per theme. Which one is in use is the `theme` setting, not a path. Need not exist.                                                                                                                                                                                                                                                                        |
+| `pluginsDir`       | none                                      | `GEEKITY_PLUGINS_DIR`        | A folder of plugins, `<name>/` or `@scope/<name>/`, each with a bundled `index.js` whose default export is the plugin. `geekity serve` loads them beside `plugins`, and Reload on the Plugins screen loads a changed folder without a restart. Unset, no code is loaded from a folder.                                                                                                     |
 | `baseUrl`          | `http://localhost:<port>`                 | `GEEKITY_BASE_URL`           | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                                                                                                                                                                                                                 |
 | `watch`            | `true`                                    | `GEEKITY_WATCH`              | Watch `contentDir` while serving and keep the index in step.                                                                                                                                                                                                                                                                                                                               |
 | `accessLog`        | `false`, but `true` under `geekity serve` | `GEEKITY_ACCESS_LOG`         | Write one line per request to stdout: the method, the path with its query string, the status and how long it took. `geekity serve` and the Docker image turn it on, because a server answering the internet should be able to say what it answered; `createCms` leaves it off, so a CMS embedded in another app never writes to its stdout unasked. See [The access log](#the-access-log). |
@@ -253,6 +254,25 @@ Sites that add nothing of their own can skip the entry file and run the bin:
 ```sh
 geekity serve --config geekity.config.ts
 ```
+
+`geekity serve` runs as a small supervisor. It owns the port and runs the CMS
+in one worker process, which it respawns, with a growing delay, if it crashes.
+When the plugins folder (`pluginsDir`) differs from what the running worker
+loaded, Admin > Plugins names the folders added, removed and updated, and
+offers Reload. Reload works in this order:
+
+1. The running worker stops taking writes. It answers GET and HEAD and answers
+   any other method `503` with `Retry-After: 5`. It lets the writes already in
+   flight finish, then stops its timers, its watcher and its plugins.
+2. The running worker sends what its queues hold and stops writing to the
+   database, `data/` and `content/`.
+3. A new worker boots, runs the boot migrations alone and starts listening.
+4. The old worker stops accepting connections and exits once its open ones end.
+
+The port stays open throughout, so no request is refused. If the new worker
+fails to boot, the old one carries on and the Plugins screen shows why.
+SIGTERM and SIGINT close the worker the way `close()` does, and the supervisor
+exits 0.
 
 ## Content
 

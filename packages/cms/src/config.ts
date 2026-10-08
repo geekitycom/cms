@@ -383,6 +383,15 @@ export interface GeekityConfig {
    * enables it, so installing one here changes nothing until it is enabled.
    */
   plugins?: readonly Plugin[];
+  /**
+   * A folder of plugins, one folder each with a bundled `index.js` whose
+   * default export is the plugin (decision-33): `<name>/` or
+   * `@scope/<name>/`. `geekity serve` loads them at boot beside
+   * {@link GeekityConfig.plugins}, and Reload on the Plugins screen loads a
+   * changed folder without a restart. Overridden by `GEEKITY_PLUGINS_DIR`.
+   * No default: a site loads code from a folder only when it names one.
+   */
+  pluginsDir?: string;
 }
 
 /**
@@ -453,6 +462,8 @@ export interface ResolvedConfig {
   hostLookup: HostLookup;
   /** The installed plugins, empty when the site named none. */
   plugins: readonly Plugin[];
+  /** The folder of plugins `geekity serve` loads, or `undefined` when the site names none. */
+  pluginsDir: string | undefined;
 }
 
 /** Ambient inputs {@link resolveConfig} reads, injectable so the resolution is testable. */
@@ -661,6 +672,7 @@ export function resolveConfig(
     federation: config.federation ?? {},
     hostLookup: config.hostLookup ?? systemHostLookup,
     plugins: config.plugins ?? [],
+    pluginsDir: optionalDir(cwd, env['GEEKITY_PLUGINS_DIR'], config.pluginsDir),
   };
 }
 
@@ -945,6 +957,15 @@ function resolveDir(
 ): string {
   const chosen = firstNonEmpty(fromEnv, configured) ?? fallback;
   return path.resolve(cwd, chosen);
+}
+
+function optionalDir(
+  cwd: string,
+  fromEnv: string | undefined,
+  configured: string | undefined,
+): string | undefined {
+  const chosen = firstNonEmpty(fromEnv, configured);
+  return chosen === undefined ? undefined : path.resolve(cwd, chosen);
 }
 
 /** Which of the two doors named the base URL, if either did. */

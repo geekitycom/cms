@@ -14,6 +14,7 @@ import type { RelayService } from './federation/relays.ts';
 import type { MailService } from './mail/service.ts';
 import type { MaintenanceSwitch } from './maintenance.ts';
 import type { PluginRegistry } from './plugins/registry.ts';
+import type { Supervision } from './supervisor/supervision.ts';
 import type { CommentNotifier } from './notifications/comments.ts';
 import type { ReplyContextService } from './webmention/reply-contexts.ts';
 import type { HandleLearner } from './federation/handles.ts';
@@ -169,6 +170,8 @@ export interface GeekityEnv {
     indieauth: IndieAuthState;
     /** Every installed plugin and its dependency graph (decision-33). */
     plugins: PluginRegistry;
+    /** The supervisor `geekity serve` runs this CMS under, or `undefined` (TASK-288). */
+    supervision: Supervision | undefined;
     /**
      * The plugins running for this request: enabled in `site.json`, available,
      * and with everything they require running.

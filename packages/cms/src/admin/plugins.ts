@@ -9,6 +9,7 @@ import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
 import { readEnabledPlugins, setPluginEnabled } from '../plugins/enabled.ts';
+import { pluginFolderChanges, scanPluginFolders } from '../plugins/folder.ts';
 import type {
   PluginRegistry,
   RegisteredPlugin,
@@ -25,10 +26,14 @@ import { ADMIN_PREFIX } from './session.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 export const PLUGINS_PATH = `${ADMIN_PREFIX}/plugins`;
+export const PLUGINS_RELOAD_PATH = `${PLUGINS_PATH}/reload`;
 export const PLUGINS_SECTION = 'plugins';
 export const PLUGINS_CHILD = 'installed';
 
 const PLUGIN_FIELD = 'plugin';
+
+/** The query the new worker's screen is reached with after a reload. */
+const RELOADED_QUERY = 'reloaded';
 
 /** The form fields of a plugin's screen: which button, each box, each forget switch. */
 const ACTION_FIELD = 'action';
@@ -89,9 +94,18 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     const enabled = readEnabledPlugins(c.var.config.contentDir);
     const running = registry.active(enabled);
 
+    const supervision = c.var.supervision;
+    const changes =
+      supervision === undefined
+        ? undefined
+        : pluginFolderChanges(supervision.loaded, scanPluginFolders(c.var.config.pluginsDir));
+
     return render(c, ADMIN_TEMPLATES.plugins, {
       section: PLUGINS_SECTION,
       child: PLUGINS_CHILD,
+      reload: changes === undefined ? undefined : { url: PLUGINS_RELOAD_PATH, changes },
+      reloaded: c.req.query(RELOADED_QUERY) !== undefined,
+      reloadFailure: supervision?.lastFailure,
       enableUrl: `${PLUGINS_PATH}/enable`,
       disableUrl: `${PLUGINS_PATH}/disable`,
       field: PLUGIN_FIELD,
@@ -126,6 +140,20 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
         };
       }),
     });
+  });
+
+  // Before the plugin screens' catch-all. On success this worker has drained
+  // and is about to retire, so it writes no flash: the redirect says it, and
+  // closes the connection so the browser's next request reaches the new worker.
+  app.post(PLUGINS_RELOAD_PATH, async (c) => {
+    const supervision = c.var.supervision;
+    if (supervision === undefined) {
+      return refuse(c, 'This server is not supervised by geekity serve, so it cannot reload.');
+    }
+    const outcome = await supervision.reload();
+    if (!outcome.ok) return c.redirect(PLUGINS_PATH, 303);
+    c.header('Connection', 'close');
+    return c.redirect(`${PLUGINS_PATH}?${RELOADED_QUERY}=1`, 303);
   });
 
   app.post(`${PLUGINS_PATH}/enable`, async (c) => {

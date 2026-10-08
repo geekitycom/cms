@@ -1215,3 +1215,25 @@ describe('relay subscriptions', () => {
     assert.equal(last?.activityId, 'https://blog.example/2026/03/hello/#create');
   });
 });
+
+describe('setReadOnly', () => {
+  it('refuses every write while on and allows them again when off', async () => {
+    const admin = await store();
+    admin.setState('kept', 'before');
+
+    admin.setReadOnly(true);
+    assert.throws(() => admin.setState('kept', 'after'), /readonly/);
+    assert.equal(admin.getState('kept'), 'before', 'reads still answer');
+
+    admin.setReadOnly(false);
+    admin.setState('kept', 'after');
+    assert.equal(admin.getState('kept'), 'after');
+  });
+
+  it('takes an empty flash without writing, so a read-only admin page still renders', async () => {
+    const admin = await store();
+    const session = admin.createSession({ userId: null, lifetimeSeconds: 60 });
+    admin.setReadOnly(true);
+    assert.deepEqual(admin.takeFlash(session.id), []);
+  });
+});

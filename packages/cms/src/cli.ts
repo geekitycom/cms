@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import cluster from 'node:cluster';
 import { existsSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -20,7 +21,10 @@ import { createCms } from './index.ts';
 import type { GeekityConfig } from './config.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
 import type { PluginCommand } from './plugin.ts';
+import { importPluginFolders, scanPluginFolders } from './plugins/folder.ts';
 import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
+import { superviseCluster } from './supervisor/primary.ts';
+import { processChannel, superviseWorker } from './supervisor/worker.ts';
 import {
   enterMaintenance,
   leaveMaintenance,
@@ -738,34 +742,64 @@ const SQLITE_LOCKED = 6;
 /**
  * `geekity serve`: the default. Runs until it is signalled.
  *
+ * This process is a supervisor (TASK-288): it owns the port and runs the CMS
+ * in a `node:cluster` worker that runs this same command, so Reload on the
+ * Plugins screen can boot a new worker beside the old one and a worker that
+ * crashes is respawned, both without restarting the container.
+ *
  * With `seedContent` on, a missing or empty content directory is given the
- * starter site before the CMS opens it, so a new box boots into something to
- * show and the setup screen. It happens here rather than in `createCms` so a
- * site that builds its own server never has content written for it.
+ * starter site before any worker opens it, so a new box boots into something
+ * to show and the setup screen. It happens here rather than in `createCms` so
+ * a site that builds its own server never has content written for it.
  */
 async function serveCommand(configPath: string | undefined): Promise<number> {
-  const config = await loadConfig(process.cwd(), configPath);
-  const resolved = resolveConfig(config);
+  if (cluster.isWorker) return serveWorker(configPath);
+
+  const resolved = resolveConfig(await loadConfig(process.cwd(), configPath));
   if (
     resolved.seedContent &&
     (await seedStarterContent({ contentDir: resolved.contentDir, baseUrl: resolved.baseUrl }))
   ) {
     process.stdout.write(`Seeded ${resolved.contentDir} with the starter site\n`);
   }
+  superviseCluster();
+  return 0;
+}
 
-  // The access log is on here and off in `createCms`: a server that answers
-  // the internet should be able to say what it answered, while a CMS embedded
-  // in somebody else's app has no business writing to their stdout uninvited.
-  // Named as a config value rather than forced, so `GEEKITY_ACCESS_LOG` still
-  // wins and a site that wrote `accessLog: false` still gets silence.
-  const cms = createCms({ ...config, accessLog: config.accessLog ?? true });
-  const { port } = await cms.serve();
-  process.stdout.write(`Geekity is serving ${cms.config.baseUrl} on port ${String(port)}\n`);
+/**
+ * One worker under the supervisor: the site's config and its plugins folder,
+ * read afresh, so a reload sees what changed. Signals are the supervisor's to
+ * act on; it tells this worker when to close.
+ */
+async function serveWorker(configPath: string | undefined): Promise<number> {
+  const channel = processChannel();
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => undefined);
 
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    process.once(signal, () => {
-      void cms.close().then(() => process.exit(0));
+  try {
+    const config = await loadConfig(process.cwd(), configPath);
+    const loaded = scanPluginFolders(resolveConfig(config).pluginsDir);
+    const worker = superviseWorker({
+      channel,
+      loaded,
+      exit: (code) => process.exit(code),
+      log: (line) => process.stderr.write(`${line}\n`),
     });
+
+    // The access log is on here and off in `createCms`: a server that answers
+    // the internet should be able to say what it answered, while a CMS embedded
+    // in somebody else's app has no business writing to their stdout uninvited.
+    // Named as a config value rather than forced, so `GEEKITY_ACCESS_LOG` still
+    // wins and a site that wrote `accessLog: false` still gets silence.
+    const cms = createCms(
+      { ...config, accessLog: config.accessLog ?? true },
+      { folderPlugins: await importPluginFolders(loaded), supervision: worker.supervision },
+    );
+    const { port } = await cms.serve();
+    process.stdout.write(`Geekity is serving ${cms.config.baseUrl} on port ${String(port)}\n`);
+    worker.serving(cms);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    channel.send({ type: 'boot-failed', error: message }, () => process.exit(1));
   }
   return 0;
 }

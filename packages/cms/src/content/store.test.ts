@@ -1555,3 +1555,16 @@ describe('the served and listed clauses (TASK-227)', () => {
     }
   });
 });
+
+describe('setReadOnly', () => {
+  it('refuses every write while on and allows them again when off', async () => {
+    const index = await store();
+    index.setReadOnly(true);
+    assert.throws(() => index.upsert(post()), /readonly/);
+    assert.equal(index.listAll().length, 0, 'reads still answer');
+
+    index.setReadOnly(false);
+    index.upsert(post());
+    assert.equal(index.listAll().length, 1);
+  });
+});

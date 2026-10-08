@@ -62,6 +62,49 @@ interface FileQueue {
   waiting: number;
 }
 
+/**
+ * A write refused because its directory is read-only for now: a worker that
+ * is handing over to a new one under `geekity serve` (TASK-288) writes
+ * nothing more, so the new worker's boot migrations run alone.
+ */
+export class WritesRefusedError extends Error {
+  constructor(file: string) {
+    super(`${file} was not written: this server is handing over to a new one.`);
+    this.name = 'WritesRefusedError';
+  }
+}
+
+/** The directories no write may touch, each held by however many callers refused it. */
+const refused = new Map<string, number>();
+
+/**
+ * Refuse every write under these directories, in this process, until the
+ * returned function is called. A write already past the check finishes.
+ */
+export function refuseWritesUnder(directories: readonly string[]): () => void {
+  const keys = directories.map((directory) => path.resolve(directory));
+  for (const key of keys) refused.set(key, (refused.get(key) ?? 0) + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    for (const key of keys) {
+      const held = (refused.get(key) ?? 1) - 1;
+      if (held === 0) refused.delete(key);
+      else refused.set(key, held);
+    }
+  };
+}
+
+function assertWritable(file: string): void {
+  const resolved = path.resolve(file);
+  for (const directory of refused.keys()) {
+    if (resolved === directory || resolved.startsWith(directory + path.sep)) {
+      throw new WritesRefusedError(file);
+    }
+  }
+}
+
 /** Every path with a write queued, keyed by its resolved absolute path. */
 const queues = new Map<string, FileQueue>();
 
@@ -141,6 +184,7 @@ export function writeFileAtomicallySync(
   contents: FileContents,
   options: WriteFileAtomicallyOptions = {},
 ): void {
+  assertWritable(file);
   mkdirSync(path.dirname(file), { recursive: true });
   const temporary = temporaryName(file);
 
@@ -199,6 +243,7 @@ async function write(
   contents: FileContents,
   options: WriteFileAtomicallyOptions,
 ): Promise<void> {
+  assertWritable(file);
   await mkdir(path.dirname(file), { recursive: true });
   const temporary = temporaryName(file);
 

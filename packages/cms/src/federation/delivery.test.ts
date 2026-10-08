@@ -285,6 +285,8 @@ async function site(
      * `account`, because a stored id is a field of a user record.
      */
     actorId?: string;
+    /** Fedify's in-process queue, as a site that names none runs, instead of sending inline. */
+    queued?: boolean;
   } = {},
 ): Promise<Site> {
   slowPage = Promise.resolve();
@@ -325,7 +327,10 @@ async function site(
     port: 0,
     watch: options.watch ?? false,
     baseUrl: BASE_URL,
-    federation: { queue: null, allowPrivateAddress: true },
+    federation:
+      options.queued === true
+        ? { allowPrivateAddress: true }
+        : { queue: null, allowPrivateAddress: true },
     hostLookup: (host) =>
       Promise.resolve(host === new URL(REMOTE_ORIGIN).hostname ? ['203.0.113.7'] : []),
     ...(options.now === undefined ? {} : { now: options.now }),
@@ -733,6 +738,35 @@ describe('a scheduled post', () => {
       'Hello, world',
       'the timer fired on its own',
     );
+  });
+});
+
+describe('a reload under geekity serve (TASK-288 AC #4)', () => {
+  it('sends a delivery queued just before the drain once, and the next worker sends it no more', async () => {
+    const { cms, dataDir, contentDir } = await site({ queued: true });
+    const agent = await signedIn(cms);
+
+    const response = await publishNewPost(agent);
+    assert.equal(response.status, 303, await response.text());
+    await cms.drain();
+
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+    await cms.close();
+
+    const next = createCms({
+      dataDir,
+      contentDir,
+      port: 0,
+      watch: false,
+      baseUrl: BASE_URL,
+      federation: { allowPrivateAddress: true },
+    });
+    started.push(next);
+    await next.sync();
+    await next.scheduler.start();
+    await next.close();
+
+    assert.equal(delivered('Create').length, 1, 'the next worker did not send it again');
   });
 });
 

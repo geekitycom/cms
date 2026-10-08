@@ -926,6 +926,12 @@ export interface AdminStore {
    * flash survives exactly one page and no more.
    */
   takeFlash(sessionId: string): FlashMessage[];
+  /**
+   * Refuse every write on this connection while on, with SQLite's
+   * `query_only`. A worker handing over to a new one under `geekity serve`
+   * turns it on, so the new worker's boot migrations run alone (TASK-288).
+   */
+  setReadOnly(readOnly: boolean): void;
   /** Close the database. Safe to call twice. */
   close(): void;
 }
@@ -1820,10 +1826,14 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
 
     takeFlash(sessionId) {
       const queued = readFlash(sessionId);
-      // The clear runs whether or not anything was queued; a row whose column
-      // is already null costs one write and stays simple.
-      statements.writeFlash.run(null, sessionId);
+      // Nothing queued writes nothing, so a page still renders on a worker
+      // that has gone read-only for a reload.
+      if (queued.length > 0) statements.writeFlash.run(null, sessionId);
       return queued;
+    },
+
+    setReadOnly(readOnly) {
+      db.exec(`PRAGMA query_only = ${readOnly ? 'ON' : 'OFF'}`);
     },
 
     close() {

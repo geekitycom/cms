@@ -4,7 +4,7 @@
  * public site answers on the very next request.
  */
 import assert from 'node:assert/strict';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it, mock } from 'node:test';
 
@@ -16,7 +16,9 @@ import { DuplicatePluginError } from '../plugins/registry.ts';
 import { flashes } from './__testing__/flash.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
-import { PLUGINS_PATH } from './plugins.ts';
+import { scanPluginFolders } from '../plugins/folder.ts';
+import type { ReloadOutcome, Supervision } from '../supervisor/supervision.ts';
+import { PLUGINS_PATH, PLUGINS_RELOAD_PATH } from './plugins.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -578,5 +580,127 @@ describe('plugin settings on its screen (TASK-283)', () => {
     assert.ok(
       html.includes('Its environment variables would start A_B_C__, as those of @a/b-c would'),
     );
+  });
+});
+
+describe('Reload (TASK-288)', () => {
+  /** A bundle as a plugins folder holds it. */
+  async function installFolder(pluginsDir: string, name: string, marker = ''): Promise<void> {
+    await mkdir(path.join(pluginsDir, name), { recursive: true });
+    await writeFile(path.join(pluginsDir, name, 'index.js'), `export default {};${marker}\n`);
+  }
+
+  /** A supervisor that answers every reload with `outcome`, counting the asks. */
+  function supervisor(
+    pluginsDir: string,
+    outcome: ReloadOutcome = { ok: true },
+  ): Supervision & { asked: number } {
+    const fake = {
+      asked: 0,
+      loaded: scanPluginFolders(pluginsDir),
+      lastFailure: undefined as string | undefined,
+      reload() {
+        fake.asked += 1;
+        if (!outcome.ok) fake.lastFailure = outcome.error;
+        return Promise.resolve(outcome);
+      },
+    };
+    return fake;
+  }
+
+  async function supervised(
+    outcome?: ReloadOutcome,
+  ): Promise<{ agent: Browser; pluginsDir: string; supervision: Supervision & { asked: number } }> {
+    const pluginsDir = await box.dir('geekity-plugins-folder-');
+    await installFolder(pluginsDir, '@test/plugin-kept');
+    await installFolder(pluginsDir, '@test/plugin-updated');
+    await installFolder(pluginsDir, 'plugin-removed');
+    const supervision = supervisor(pluginsDir, outcome);
+    const cms = await box.open(
+      {
+        contentDir: await box.dir('geekity-plugins-content-'),
+        dataDir: await box.dir('geekity-plugins-data-'),
+        pluginsDir,
+      },
+      { serve: { supervision } },
+    );
+    return { agent: await signedIn(cms), pluginsDir, supervision };
+  }
+
+  async function changeFolder(pluginsDir: string): Promise<void> {
+    await installFolder(pluginsDir, '@test/plugin-added');
+    await installFolder(pluginsDir, '@test/plugin-updated', '// 2');
+    await rm(path.join(pluginsDir, 'plugin-removed'), { recursive: true });
+  }
+
+  it('offers no Reload while the plugins folder is what the running server loaded', async () => {
+    const { agent } = await supervised();
+    assert.ok(!(await screen(agent)).includes(PLUGINS_RELOAD_PATH));
+  });
+
+  it('offers no Reload on a server that is not supervised, whatever the folder holds', async () => {
+    const pluginsDir = await box.dir('geekity-plugins-folder-');
+    const cms = await box.open({
+      contentDir: await box.dir('geekity-plugins-content-'),
+      dataDir: await box.dir('geekity-plugins-data-'),
+      pluginsDir,
+    });
+    await installFolder(pluginsDir, '@test/plugin-added');
+    assert.ok(!(await screen(await signedIn(cms))).includes(PLUGINS_RELOAD_PATH));
+  });
+
+  it('offers Reload naming the folders added, removed and updated since this server loaded them', async () => {
+    const { agent, pluginsDir } = await supervised();
+    await changeFolder(pluginsDir);
+
+    const html = await screen(agent);
+    const start = html.indexOf('id="plugins-reload"');
+    assert.notEqual(start, -1, 'the screen has a Reload card');
+    const card = html.slice(start, html.indexOf('</form>', start));
+    assert.match(card, new RegExp(`action="${PLUGINS_RELOAD_PATH}"`));
+    assert.match(card, /name="csrf_token"/);
+    assert.match(card, /Added:[\s\S]*@test\/plugin-added/);
+    assert.match(card, /Removed:[\s\S]*plugin-removed/);
+    assert.match(card, /Updated:[\s\S]*@test\/plugin-updated/);
+    assert.ok(!card.includes('@test/plugin-kept'), 'an unchanged folder is not named');
+  });
+
+  it('refuses a Reload posted without the form’s CSRF token', async () => {
+    const { agent, pluginsDir, supervision } = await supervised();
+    await changeFolder(pluginsDir);
+
+    const response = await agent.post(PLUGINS_RELOAD_PATH, {});
+    assert.equal(response.status, 403);
+    assert.equal(supervision.asked, 0);
+  });
+
+  it('asks the supervisor for a new server and sends the browser to it on a new connection', async () => {
+    const { agent, pluginsDir, supervision } = await supervised();
+    await changeFolder(pluginsDir);
+    const token = csrfField(await screen(agent)) ?? '';
+
+    const response = await agent.post(PLUGINS_RELOAD_PATH, { csrf_token: token });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), `${PLUGINS_PATH}?reloaded=1`);
+    assert.equal(response.headers.get('connection'), 'close');
+    assert.equal(supervision.asked, 1);
+    assert.match(await (await agent.get(`${PLUGINS_PATH}?reloaded=1`)).text(), /Plugins reloaded/);
+  });
+
+  it('shows why a reload failed, on the server that carried on', async () => {
+    const { agent, pluginsDir } = await supervised({
+      ok: false,
+      error: 'Two plugins are named @test/plugin-added.',
+    });
+    await changeFolder(pluginsDir);
+    const token = csrfField(await screen(agent)) ?? '';
+
+    const response = await agent.post(PLUGINS_RELOAD_PATH, { csrf_token: token });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), PLUGINS_PATH);
+
+    const html = await screen(agent);
+    assert.match(html, /The last reload failed, so this server carried on/);
+    assert.match(html, /Two plugins are named @test\/plugin-added\./);
   });
 });

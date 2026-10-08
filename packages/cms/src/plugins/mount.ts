@@ -9,16 +9,20 @@ const NONE: ReadonlySet<string> = new Set();
 /**
  * Read the enabled set for this request, bring the running plugins into line
  * with it, and put the active set on the context. A site with no plugins
- * reads nothing.
+ * reads nothing. A worker draining for a reload has stopped its plugins and
+ * leaves them stopped.
  */
-export function pluginLifecycle(registry: PluginRegistry): MiddlewareHandler<GeekityEnv> {
+export function pluginLifecycle(
+  registry: PluginRegistry,
+  draining: () => boolean,
+): MiddlewareHandler<GeekityEnv> {
   return async (c, next) => {
     c.set('plugins', registry);
     if (registry.plugins.length === 0) {
       c.set('activePlugins', NONE);
     } else {
       const enabled = readEnabledPlugins(c.var.config.contentDir);
-      await registry.reconcile(enabled);
+      if (!draining()) await registry.reconcile(enabled);
       c.set('activePlugins', registry.active(enabled));
     }
     await next();

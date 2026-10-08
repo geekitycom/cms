@@ -3,7 +3,9 @@
    Enabling writes the plugins key of content/_data/site.json and takes effect
    on the next request. A plugin's row names each plugin it requires with the
    range it needs, linked to that plugin's row when it is installed, because
-   nothing is enabled on the operator's behalf. #}
+   nothing is enabled on the operator's behalf. Under geekity serve, Reload
+   appears when the plugins folder differs from what this worker loaded
+   (TASK-288). #}
 {% extends "layouts/shell.njk" %}
 {% from "components/badge.njk" import status %}
 {% from "components/button.njk" import button %}
@@ -13,6 +15,40 @@
 
 {% block content %}
   <h1 class="mb-6 text-2xl font-bold">Plugins</h1>
+
+  {% if reloaded %}
+    <div role="status" class="alert alert-success mb-6"><span>Plugins reloaded.</span></div>
+  {% endif %}
+
+  {% if reloadFailure %}
+    <div role="alert" class="alert alert-error mb-6">
+      <span>The last reload failed, so this server carried on with the plugins it had. {{ reloadFailure }}</span>
+    </div>
+  {% endif %}
+
+  {% if reload %}
+    <div id="plugins-reload" class="mb-8 max-w-prose">
+      {% call card(title="The plugins folder has changed") %}
+        <p>Reload starts a new server with the plugins folder as it is now, then retires this one. No request is turned away.</p>
+        <dl class="text-sm">
+          {% for heading, names in [["Added", reload.changes.added], ["Removed", reload.changes.removed], ["Updated", reload.changes.updated]] %}
+            {% if names.length %}
+              <dt class="font-semibold">{{ heading }}:</dt>
+              <dd class="mb-2">
+                {% for name in names %}<code class="break-all">{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+              </dd>
+            {% endif %}
+          {% endfor %}
+        </dl>
+        <form method="post" action="{{ reload.url }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          {% call cardActions() %}
+            {{ button('Reload', type='submit', color='primary') }}
+          {% endcall %}
+        </form>
+      {% endcall %}
+    </div>
+  {% endif %}
 
   {% if not plugins.length %}
     <p class="max-w-prose">

@@ -14,15 +14,21 @@ import { actorKeyFile, loadActorKeyPairs, writeActorKeyFile } from '../federatio
 import { addFollower, readFollowers } from '../federation/records.ts';
 import type { PluginSite } from '../plugin.ts';
 import { createPluginRegistry } from './registry.ts';
-import type { PluginRegistry } from './registry.ts';
+import type { InstalledPlugin, PluginRegistry } from './registry.ts';
 
-/** Every plugin the site config installs, registered. */
-export function sitePluginRegistry(config: ResolvedConfig): PluginRegistry {
+/** Every plugin the site config installs, and those from the plugins folder, registered. */
+export function sitePluginRegistry(
+  config: ResolvedConfig,
+  folderPlugins: readonly InstalledPlugin[] = [],
+): PluginRegistry {
   return createPluginRegistry(
-    config.plugins.map((plugin, index) => ({
-      plugin,
-      source: `the site config, plugins[${String(index)}]`,
-    })),
+    [
+      ...config.plugins.map((plugin, index) => ({
+        plugin,
+        source: `the site config, plugins[${String(index)}]`,
+      })),
+      ...folderPlugins,
+    ],
     {
       dataDir: config.dataDir,
       contentDir: config.contentDir,
