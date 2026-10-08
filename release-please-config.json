@@ -5,11 +5,10 @@
   "bump-patch-for-minor-pre-major": false,
   "initial-version": "0.1.0",
   "include-component-in-tag": false,
-  "separate-pull-requests": true,
-  "pull-request-title-pattern": "chore(release): release ${version}",
+  "group-pull-request-title-pattern": "chore(release): release ${branch}",
   "packages": {
     "packages/cms": {
-      "package-name": "@geekity/cms",
+      "package-name": "",
       "changelog-path": "CHANGELOG.md"
     },
     "packages/plugin-wordpress": {
@@ -17,32 +16,28 @@
       "component": "plugin-wordpress",
       "include-component-in-tag": true,
       "changelog-path": "CHANGELOG.md",
-      "extra-files": ["src/version.ts"],
-      "pull-request-title-pattern": "chore(release): release plugin-wordpress ${version}"
+      "extra-files": ["src/version.ts"]
     },
     "packages/plugin-llm": {
       "package-name": "@geekity/plugin-llm",
       "component": "plugin-llm",
       "include-component-in-tag": true,
       "changelog-path": "CHANGELOG.md",
-      "extra-files": ["src/version.ts"],
-      "pull-request-title-pattern": "chore(release): release plugin-llm ${version}"
+      "extra-files": ["src/version.ts"]
     },
     "packages/plugin-post-summary": {
       "package-name": "@geekity/plugin-post-summary",
       "component": "plugin-post-summary",
       "include-component-in-tag": true,
       "changelog-path": "CHANGELOG.md",
-      "extra-files": ["src/version.ts"],
-      "pull-request-title-pattern": "chore(release): release plugin-post-summary ${version}"
+      "extra-files": ["src/version.ts"]
     },
     "packages/plugin-tag-suggest": {
       "package-name": "@geekity/plugin-tag-suggest",
       "component": "plugin-tag-suggest",
       "include-component-in-tag": true,
       "changelog-path": "CHANGELOG.md",
-      "extra-files": ["src/version.ts"],
-      "pull-request-title-pattern": "chore(release): release plugin-tag-suggest ${version}"
+      "extra-files": ["src/version.ts"]
     }
   }
 }

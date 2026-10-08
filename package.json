@@ -20,18 +20,16 @@
     "test:11ty": "pnpm -r --no-bail test:11ty",
     "fed:smoke": "pnpm -r fed:smoke",
     "typecheck": "pnpm build && pnpm -r typecheck",
-    "lint": "eslint --no-error-on-unmatched-pattern *.js && pnpm -r lint",
-    "lint:fix": "eslint --fix --no-error-on-unmatched-pattern *.js && pnpm -r lint:fix",
+    "lint": "eslint --no-error-on-unmatched-pattern *.js scripts/*.ts && pnpm -r lint",
+    "lint:fix": "eslint --fix --no-error-on-unmatched-pattern *.js scripts/*.ts && pnpm -r lint:fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "clean": "pnpm -r exec rm -rf dist *.tsbuildinfo",
     "docker:build-push": "./scripts/docker-build-push.sh",
     "docker:dry-run": "./scripts/docker-build-push.sh --dry-run",
     "docker:smoke": "./scripts/docker-smoke.sh",
-    "npm:publish": "./scripts/npm-publish.sh",
-    "npm:dry-run": "./scripts/npm-publish.sh --dry-run",
-    "release": "./scripts/release.sh",
-    "release:dry-run": "./scripts/release.sh --dry-run"
+    "release": "node scripts/release.ts",
+    "release:dry-run": "node scripts/release.ts --dry-run"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",

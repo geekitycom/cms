@@ -21,6 +21,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "geekity": {
     "plugin": true,
     "hostApi": 1,

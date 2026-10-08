@@ -1,13 +1,13 @@
 # Releasing @geekity/cms and the plugin packages (decision-7, decision-33).
 #
-# Runs on every push to `main` and keeps a release pull request open, its
-# version and CHANGELOG.md derived from the Conventional Commits that have
-# landed since the last release. Merging that pull request tags the commit and
-# creates the GitHub release.
+# Runs on every push to `main` and keeps one release pull request open for
+# every package with releasable changes, each package's version and
+# CHANGELOG.md derived from the Conventional Commits that have landed since its
+# last release. Merging that pull request tags each released package and
+# creates its GitHub release.
 #
-# Publishing to npm is deliberately not automated: a maintainer runs
-# `pnpm publish` from the tagged checkout when they choose to. See "Publishing
-# to npm" in README.md.
+# Publishing is deliberately not automated: a maintainer runs `pnpm release`
+# on main when they choose to. See "Publishing a release" in README.md.
 #
 # `apps/demo` is private and unversioned, so `release-please-config.json` tracks
 # `packages/cms` and each `packages/plugin-*`. A plugin package is versioned on

@@ -22,7 +22,6 @@ import { after, describe, it } from 'node:test';
 import { PACKAGE_ROOT } from './__testing__/cli.ts';
 
 const SCRIPT = path.join(PACKAGE_ROOT, '..', '..', 'scripts', 'docker-build-push.sh');
-const GATES_LIB = path.join(PACKAGE_ROOT, '..', '..', 'scripts', 'lib', 'quality-gates.sh');
 const IMAGE = 'ghcr.io/geekitycom/cms';
 const GATES = ['lint', 'format:check', 'typecheck', 'test'];
 
@@ -70,9 +69,8 @@ function run(args: string[], version = '9.8.7', options: Options = {}): Run {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'geekity-docker-push-'));
   scratch.push(repo);
 
-  fs.mkdirSync(path.join(repo, 'scripts', 'lib'), { recursive: true });
+  fs.mkdirSync(path.join(repo, 'scripts'), { recursive: true });
   fs.copyFileSync(SCRIPT, path.join(repo, 'scripts', 'docker-build-push.sh'));
-  fs.copyFileSync(GATES_LIB, path.join(repo, 'scripts', 'lib', 'quality-gates.sh'));
   fs.writeFileSync(path.join(repo, 'Dockerfile'), 'FROM scratch\n');
   fs.writeFileSync(path.join(repo, 'package.json'), '{ "version": "0.0.0" }\n');
   fs.mkdirSync(path.join(repo, 'packages', 'cms'), { recursive: true });
