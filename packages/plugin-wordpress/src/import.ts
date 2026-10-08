@@ -1,10 +1,8 @@
 import { createPrivateKey, createPublicKey } from 'node:crypto';
 import type { KeyObject } from 'node:crypto';
-
-import { exportJwk } from '@fedify/fedify';
-
 import { readFileSync } from 'node:fs';
 
+import { exportJwk } from '@fedify/fedify';
 import type { PluginFollower, PluginKeyAlgorithm, PluginSite } from '@geekity/cms/plugin';
 
 import { WORDPRESS_ACTIVITYPUB_BASE } from './records.ts';
@@ -155,10 +153,6 @@ export class ExistingKeyPairError extends Error {
 /** Thrown when the PEM is not an RSA private key at all. */
 export class UnusableKeyPemError extends Error {
   override readonly name = 'UnusableKeyPemError';
-
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-  }
 }
 
 /**
@@ -358,12 +352,8 @@ function readJsonFile(file: string): unknown {
 
 /** Whether a `--followers` value is a URL to fetch rather than a file to read. */
 function isUrl(source: string): boolean {
-  try {
-    const url = new URL(source);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
+  const protocol = URL.parse(source)?.protocol;
+  return protocol === 'http:' || protocol === 'https:';
 }
 
 /** What a peer should ask a fediverse server for. */
@@ -427,11 +417,7 @@ function followerFrom(document: unknown): PluginFollower {
 function handleOf(document: Record<string, unknown>, actorId: string): string | null {
   const preferred = textOf(document['preferredUsername']);
   if (preferred === undefined || preferred === '') return actorHandle(actorId) ?? null;
-  try {
-    return `@${preferred.replace(/^@/, '')}@${new URL(actorId).host}`;
-  } catch {
-    return null;
-  }
+  return `@${preferred.replace(/^@/, '')}@${new URL(actorId).host}`;
 }
 
 /** Whether a stored follower already says everything this one does. */
@@ -464,12 +450,7 @@ function textOf(value: unknown): string | undefined {
  * or `undefined` when the segment is a number or missing.
  */
 function actorHandle(actorId: string): string | undefined {
-  let url: URL;
-  try {
-    url = new URL(actorId);
-  } catch {
-    return undefined;
-  }
+  const url = new URL(actorId);
   const last = url.pathname
     .split('/')
     .filter((segment) => segment !== '')
@@ -492,11 +473,7 @@ function uriOf(value: unknown): string | null {
   }
   if (isRecord(value)) return uriOf(value['id'] ?? value['@id'] ?? value['href']);
   if (typeof value !== 'string') return null;
-  try {
-    return new URL(value).href;
-  } catch {
-    return null;
-  }
+  return URL.parse(value)?.href ?? null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -510,8 +487,8 @@ interface PlannedKey extends ImportedKey {
 }
 
 /**
- * Work out what the exported PEM means for
- * the user's RSA key file, without touching it.
+ * Work out what the exported PEM means for the user's RSA key file, without
+ * touching it.
  *
  * A file already holding this very key is left alone and reported unchanged —
  * that is what makes the whole command idempotent — and one holding a
@@ -603,8 +580,9 @@ function assertPairMatches(privateKey: KeyObject, publicKeyPem: string | undefin
  * The private JWK the key file holds, produced the way a generated one is.
  *
  * The PEM goes to DER through node:crypto, into WebCrypto, and out through
- * Fedify's `exportJwk` — the same call the site makes when it mints a pair. Going the long way round rather than asking node:crypto for the JWK
- * directly is what guarantees an imported file and a generated one carry the
+ * Fedify's `exportJwk` — the same call the site makes when it mints a pair.
+ * Going the long way round rather than asking node:crypto for the JWK directly
+ * is what guarantees an imported file and a generated one carry the
  * same members in the same shape, `alg: "RS256"` included, which is what the
  * loader's boot check insists on.
  */

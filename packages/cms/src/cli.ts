@@ -414,7 +414,7 @@ function isModuleNotFound(error: unknown, candidate: string): boolean {
 
 /** Run one command. Resolves with the exit code the process should use. */
 async function main(argv: readonly string[]): Promise<number> {
-  const first = commandWord(argv);
+  const first = leadingWords(argv)[0];
   if (first !== undefined && !isCommand(first) && !argv.some(isHelpOrVersion)) {
     return await pluginCommand(argv);
   }
@@ -961,11 +961,6 @@ function text(flags: Readonly<Record<string, string | true>>, name: string): str
 
 function isHelpOrVersion(arg: string): boolean {
   return arg === '--help' || arg === '-h' || arg === '--version' || arg === '-v';
-}
-
-/** The first bare word, which names the command, skipping `--config <file>`. */
-function commandWord(argv: readonly string[]): string | undefined {
-  return leadingWords(argv)[0];
 }
 
 /** The bare words before the first option other than `--config`. */

@@ -100,45 +100,29 @@ if [[ -z "${tarball}" ]]; then
 fi
 echo "packed ${tarball}"
 
-log "building and packing @geekity/plugin-wordpress"
-pnpm --dir "${ROOT}" --filter @geekity/plugin-wordpress build
-pnpm --dir "${ROOT}" --filter @geekity/plugin-wordpress pack --pack-destination "${scratch}" >/dev/null
-wordpress_tarball="$(find "${scratch}" -maxdepth 1 -name 'geekity-plugin-wordpress-*.tgz' -print -quit)"
-if [[ -z "${wordpress_tarball}" ]]; then
-  echo "pnpm pack wrote no plugin tarball into ${scratch}" >&2
-  exit 1
-fi
-echo "packed ${wordpress_tarball}"
-
-log "building and packing @geekity/plugin-llm"
-pnpm --dir "${ROOT}" --filter @geekity/plugin-llm build
-pnpm --dir "${ROOT}" --filter @geekity/plugin-llm pack --pack-destination "${scratch}" >/dev/null
-llm_tarball="$(find "${scratch}" -maxdepth 1 -name 'geekity-plugin-llm-*.tgz' -print -quit)"
-if [[ -z "${llm_tarball}" ]]; then
-  echo "pnpm pack wrote no plugin-llm tarball into ${scratch}" >&2
-  exit 1
-fi
-echo "packed ${llm_tarball}"
-
-log "building and packing @geekity/plugin-post-summary"
-pnpm --dir "${ROOT}" --filter @geekity/plugin-post-summary build
-pnpm --dir "${ROOT}" --filter @geekity/plugin-post-summary pack --pack-destination "${scratch}" >/dev/null
-summary_tarball="$(find "${scratch}" -maxdepth 1 -name 'geekity-plugin-post-summary-*.tgz' -print -quit)"
-if [[ -z "${summary_tarball}" ]]; then
-  echo "pnpm pack wrote no plugin-post-summary tarball into ${scratch}" >&2
-  exit 1
-fi
-echo "packed ${summary_tarball}"
-
-log "building and packing @geekity/plugin-tag-suggest"
-pnpm --dir "${ROOT}" --filter @geekity/plugin-tag-suggest build
-pnpm --dir "${ROOT}" --filter @geekity/plugin-tag-suggest pack --pack-destination "${scratch}" >/dev/null
-tags_tarball="$(find "${scratch}" -maxdepth 1 -name 'geekity-plugin-tag-suggest-*.tgz' -print -quit)"
-if [[ -z "${tags_tarball}" ]]; then
-  echo "pnpm pack wrote no plugin-tag-suggest tarball into ${scratch}" >&2
-  exit 1
-fi
-echo "packed ${tags_tarball}"
+# Build and pack one plugin package into the scratch directory, leaving the
+# tarball's path in `packed`.
+packed=""
+pack_plugin() {
+  local package="$1"
+  log "building and packing @geekity/${package}"
+  pnpm --dir "${ROOT}" --filter "@geekity/${package}" build
+  pnpm --dir "${ROOT}" --filter "@geekity/${package}" pack --pack-destination "${scratch}" >/dev/null
+  packed="$(find "${scratch}" -maxdepth 1 -name "geekity-${package}-*.tgz" -print -quit)"
+  if [[ -z "${packed}" ]]; then
+    echo "pnpm pack wrote no ${package} tarball into ${scratch}" >&2
+    exit 1
+  fi
+  echo "packed ${packed}"
+}
+pack_plugin plugin-wordpress
+wordpress_tarball="${packed}"
+pack_plugin plugin-llm
+llm_tarball="${packed}"
+pack_plugin plugin-post-summary
+summary_tarball="${packed}"
+pack_plugin plugin-tag-suggest
+tags_tarball="${packed}"
 
 log "geekity init ${site}"
 # The bin is run from dist/ rather than through a workspace link, so this is

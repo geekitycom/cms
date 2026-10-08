@@ -128,7 +128,12 @@ function readCache(data: PluginDataFolder): Cache {
 /** The cache as stored, keeping only well-formed entries; anything else is no cache. */
 function parseCache(text: string | undefined): Cache {
   if (text === undefined) return {};
-  const parsed = JSON.parse(text) as unknown;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return {};
+  }
   if (typeof parsed !== 'object' || parsed === null) return {};
   const cache: Record<string, Cached> = {};
   for (const [key, entry] of Object.entries(parsed)) {
@@ -146,14 +151,8 @@ async function remember(
 ): Promise<void> {
   const at = new Date(now).toISOString();
   await data.update(CACHE_FILE, (current) => {
-    let kept: Cache;
-    try {
-      kept = parseCache(current);
-    } catch {
-      kept = {};
-    }
     const next: Record<string, Cached> = Object.fromEntries(
-      Object.entries(kept).filter(([, entry]) => isFresh(entry, now)),
+      Object.entries(parseCache(current)).filter(([, entry]) => isFresh(entry, now)),
     );
     for (const [key, followers] of learned) next[key] = { followers, at };
     return `${JSON.stringify(next, null, 2)}\n`;

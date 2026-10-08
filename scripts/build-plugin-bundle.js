@@ -62,8 +62,9 @@ if (declared?.plugin !== true || !Number.isInteger(declared.hostApi)) {
 }
 const requires = declared.requires ?? {};
 const peers = manifest.peerDependencies ?? {};
-if (peers[CORE] === undefined)
+if (peers[CORE] === undefined) {
   fail(`${CORE} must be a peer dependency, with the range it targets.`);
+}
 for (const name of Object.keys(requires)) {
   if (peers[name] === undefined) {
     fail(`it requires ${name}, which is not a peer dependency. Add it to peerDependencies.`);

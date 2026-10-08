@@ -236,10 +236,6 @@ function text(options: Readonly<Record<string, string | true>>, name: string): s
 
 /** Whether a value is a URL a peer could fetch. */
 function isAbsoluteHttpUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
+  const protocol = URL.parse(value)?.protocol;
+  return protocol === 'http:' || protocol === 'https:';
 }

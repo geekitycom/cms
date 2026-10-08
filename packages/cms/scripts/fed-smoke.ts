@@ -80,9 +80,8 @@ import {
 } from '@fedify/vocab';
 
 import { writeUsers } from '../src/admin/__testing__/users.ts';
-import { listUsers } from '../src/admin/accounts.ts';
+import { listUsers, setUserActorId } from '../src/admin/accounts.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../src/admin/settings.ts';
-import { setUserActorId } from '../src/admin/accounts.ts';
 import { loadActorKeyPairs, writeActorKeyFile } from '../src/federation/keys.ts';
 import { addFollower, readFollowers, readInboxLog } from '../src/federation/records.ts';
 import { createCms } from '../src/index.ts';
