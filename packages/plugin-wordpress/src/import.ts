@@ -1,15 +1,12 @@
 import { createPrivateKey, createPublicKey } from 'node:crypto';
 import type { KeyObject } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 import { exportJwk } from '@fedify/fedify';
+import type { PluginFollower, PluginKeyAlgorithm, PluginSite } from '@geekity/cms/plugin';
 
-import { setUserWordPressActor } from '../admin/accounts.ts';
-import type { AdminStore, Follower, NewFollower } from '../admin/store.ts';
-import { readFileIfPresentSync } from '../files/atomic.ts';
-import { actorKeyFile, loadActorKeyPairs, writeActorKeyFile } from './keys.ts';
-import type { ActorKeyAlgorithm } from './keys.ts';
-import { addFollower, readFollowers } from './records.ts';
-import { actorHandle, uriOf } from './replies.ts';
+import { WORDPRESS_ACTIVITYPUB_BASE } from './records.ts';
+import type { WordPressRecords } from './records.ts';
 
 /**
  * Bringing one person across from the WordPress ActivityPub plugin
@@ -19,7 +16,7 @@ import { actorHandle, uriOf } from './replies.ts';
  * they arrive: the RSA key pair its followers have cached, the actor id its
  * followers key the account by, and the followers themselves. Everything else
  * about the move — the posts, their ids, the compatibility paths — comes in
- * with the content or is a setting.
+ * with the content or is this plugin.
  *
  * Nothing here is a screen, on purpose. A stored actor id is identity for the
  * life of the account (doc-4), and identity is not something a form should be
@@ -27,16 +24,14 @@ import { actorHandle, uriOf } from './replies.ts';
  */
 
 /** The algorithm the plugin signs with, and the only one it has a key for. */
-const RSA = 'RSASSA-PKCS1-v1_5';
+const RSA = 'RSASSA-PKCS1-v1_5' satisfies PluginKeyAlgorithm;
 
 /** What {@link importWordPressActor} is given. */
 export interface ImportWordPressActorOptions {
-  /** The index the followers are written into as the files are written. */
-  readonly admin: AdminStore;
-  /** Where `users.json` and `keys/` live. */
-  readonly dataDir: string;
-  /** Where `_data/federation/{username}/followers.json` lives. */
-  readonly contentDir: string;
+  /** The site the person arrives on. */
+  readonly site: PluginSite;
+  /** Where the plugin keeps each person's WordPress number. */
+  readonly records: WordPressRecords;
   /** Which account on this site the plugin's actor becomes. */
   readonly username: string;
   /**
@@ -77,7 +72,7 @@ export interface ImportedKey {
   /** The file, absolute. */
   readonly file: string;
   /** Which pair it holds. */
-  readonly algorithm: ActorKeyAlgorithm;
+  readonly algorithm: PluginKeyAlgorithm;
   /** What the run did with it. */
   readonly state: 'imported' | 'generated' | 'unchanged' | 'replaced';
 }
@@ -158,10 +153,6 @@ export class ExistingKeyPairError extends Error {
 /** Thrown when the PEM is not an RSA private key at all. */
 export class UnusableKeyPemError extends Error {
   override readonly name = 'UnusableKeyPemError';
-
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-  }
 }
 
 /**
@@ -173,32 +164,27 @@ export class UnusableKeyPemError extends Error {
 export async function importWordPressActor(
   options: ImportWordPressActorOptions,
 ): Promise<ImportWordPressActorReport> {
-  const { dataDir, username } = options;
+  const { site, records, username } = options;
 
   // Everything that can be refused is decided before anything is written, so a
   // run that is going to stop stops with the disk as it was.
+  assertIdentityFree(options);
   const planned = await planKeyImport(options);
 
-  const identity = (await setUserWordPressActor({
-    dataDir,
-    username,
-    actorId: options.actorId,
-    wordpressActorId: options.wordpressActorId,
-  }))
-    ? 'set'
-    : 'unchanged';
+  const actorIdChanged = await site.setActorId(username, options.actorId);
+  const numberChanged = await records.setNumber(username, options.wordpressActorId);
+  const identity = actorIdChanged || numberChanged ? 'set' : 'unchanged';
 
-  const keys = [applyKeyImport(dataDir, username, planned)];
+  const keys = [applyKeyImport(site, username, planned)];
 
   // The Ed25519 pair is minted here rather than left to the first request,
   // because this is also what proves the file just written imports: Fedify
   // swallows what a key pairs dispatcher throws, so an unusable key found at
   // request time would be found by nobody.
-  const ed25519File = actorKeyFile(dataDir, username, 'Ed25519');
-  const hadEd25519 = readFileIfPresentSync(ed25519File) !== undefined;
-  await loadActorKeyPairs(dataDir, username);
+  const hadEd25519 = site.actorKey(username, 'Ed25519').jwk !== undefined;
+  await site.loadActorKeys(username);
   keys.push({
-    file: ed25519File,
+    file: site.actorKey(username, 'Ed25519').file,
     algorithm: 'Ed25519',
     state: hadEd25519 ? 'unchanged' : 'generated',
   });
@@ -221,6 +207,32 @@ export async function importWordPressActor(
 }
 
 /**
+ * Refuse a user the site does not have, and an id or a number somebody else
+ * already carries: two accounts answering to one identity is not something to
+ * pick a winner for.
+ */
+function assertIdentityFree(options: ImportWordPressActorOptions): void {
+  const { site, records, username } = options;
+  const users = site.users();
+  if (!users.some((user) => user.username === username)) {
+    throw new Error(`This site has no user named "${username}".`);
+  }
+  const byActorId = users.find(
+    (user) => user.username !== username && user.actorId === options.actorId,
+  );
+  if (byActorId !== undefined) {
+    throw new Error(`The actor id ${options.actorId} already belongs to "${byActorId.username}".`);
+  }
+  for (const [other, number] of records.actors()) {
+    if (other !== username && number === options.wordpressActorId) {
+      throw new Error(
+        `WordPress actor ${String(options.wordpressActorId)} already belongs to "${other}".`,
+      );
+    }
+  }
+}
+
+/**
  * Bring the followers across: read the collection, work out who each item is,
  * and put them in the user's `followers.json` and the index.
  *
@@ -230,9 +242,9 @@ export async function importWordPressActor(
  * operation, which is why it can be pointed at a file instead: an owner who
  * saved the collection before the DNS moved has everything they need offline.
  *
- * {@link addFollower} is what writes, so a follower already in the file keeps
- * the place and the follow time it has — running this again after an instance
- * came back adds the missing people and moves nobody.
+ * The site's `addFollower` is what writes, so a follower already in the file
+ * keeps the place and the follow time it has — running this again after an
+ * instance came back adds the missing people and moves nobody.
  */
 async function importFollowers(
   options: ImportWordPressActorOptions,
@@ -246,7 +258,7 @@ async function importFollowers(
   };
   if (options.followers === false) return empty;
 
-  const { admin, contentDir, username } = options;
+  const { site, username } = options;
   const source = options.followers ?? followersCollectionUrl(options);
   const added: string[] = [];
   const unchanged: string[] = [];
@@ -259,10 +271,8 @@ async function importFollowers(
       const document =
         isRecord(item) && uriOf(item['inbox']) !== null ? item : await fetchAs(actor);
       const follower = followerFrom(document);
-      const held = readFollowers(contentDir, username).find(
-        (entry) => entry.actorId === follower.actorId,
-      );
-      await addFollower({ admin, contentDir }, username, follower);
+      const held = site.followers(username).find((entry) => entry.actorId === follower.actorId);
+      await site.addFollower(username, follower);
 
       if (held === undefined) added.push(follower.actorId);
       else if (sameFollower(held, follower)) unchanged.push(follower.actorId);
@@ -284,7 +294,7 @@ async function importFollowers(
  */
 function followersCollectionUrl(options: ImportWordPressActorOptions): string {
   const number = String(options.wordpressActorId);
-  return new URL(`/wp-json/activitypub/1.0/actors/${number}/followers`, options.actorId).href;
+  return new URL(`${WORDPRESS_ACTIVITYPUB_BASE}/actors/${number}/followers`, options.actorId).href;
 }
 
 /**
@@ -327,8 +337,10 @@ async function collectionItems(source: string): Promise<unknown[]> {
 
 /** A saved collection, as the JSON it holds. */
 function readJsonFile(file: string): unknown {
-  const source = readFileIfPresentSync(file);
-  if (source === undefined) {
+  let source: string;
+  try {
+    source = readFileSync(file, 'utf8');
+  } catch {
     throw new Error(`There is no followers collection at ${file}.`);
   }
   try {
@@ -340,12 +352,8 @@ function readJsonFile(file: string): unknown {
 
 /** Whether a `--followers` value is a URL to fetch rather than a file to read. */
 function isUrl(source: string): boolean {
-  try {
-    const url = new URL(source);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
+  const protocol = URL.parse(source)?.protocol;
+  return protocol === 'http:' || protocol === 'https:';
 }
 
 /** What a peer should ask a fediverse server for. */
@@ -374,11 +382,11 @@ async function fetchAs(url: string): Promise<unknown> {
  * One actor document as the follower it stands for.
  *
  * Read straight out of the JSON rather than through Fedify's vocabulary,
- * because this is the one place in the CMS that has a plain document and no
- * federation context to dereference with. The six fields are the ones
- * `followers.json` holds (doc-4): two to deliver with, four to show.
+ * because a command has a plain document and no federation context to
+ * dereference with. The fields are the ones `followers.json` holds (doc-4):
+ * two to deliver with, the rest to show.
  */
-function followerFrom(document: unknown): Omit<NewFollower, 'username'> {
+function followerFrom(document: unknown): PluginFollower {
   if (!isRecord(document)) throw new Error('that is not an actor document');
 
   const actorId = uriOf(document['id']);
@@ -409,15 +417,11 @@ function followerFrom(document: unknown): Omit<NewFollower, 'username'> {
 function handleOf(document: Record<string, unknown>, actorId: string): string | null {
   const preferred = textOf(document['preferredUsername']);
   if (preferred === undefined || preferred === '') return actorHandle(actorId) ?? null;
-  try {
-    return `@${preferred.replace(/^@/, '')}@${new URL(actorId).host}`;
-  } catch {
-    return null;
-  }
+  return `@${preferred.replace(/^@/, '')}@${new URL(actorId).host}`;
 }
 
 /** Whether a stored follower already says everything this one does. */
-function sameFollower(held: Follower, incoming: Omit<NewFollower, 'username'>): boolean {
+function sameFollower(held: PluginFollower, incoming: PluginFollower): boolean {
   return (
     held.inboxId === incoming.inboxId &&
     held.sharedInboxId === incoming.sharedInboxId &&
@@ -441,6 +445,37 @@ function textOf(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
+/**
+ * The handle an actor URL implies, `@name@host` from its last path segment,
+ * or `undefined` when the segment is a number or missing.
+ */
+function actorHandle(actorId: string): string | undefined {
+  const url = new URL(actorId);
+  const last = url.pathname
+    .split('/')
+    .filter((segment) => segment !== '')
+    .pop();
+  if (last === undefined || /^\d+$/.test(last)) return undefined;
+  return `@${last.replace(/^@/, '')}@${url.host}`;
+}
+
+/**
+ * The URL a JSON-LD value names: a string, a node's `id`, a `Link`'s `href`,
+ * or the first of an array that names one.
+ */
+function uriOf(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = uriOf(item);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+  if (isRecord(value)) return uriOf(value['id'] ?? value['@id'] ?? value['href']);
+  if (typeof value !== 'string') return null;
+  return URL.parse(value)?.href ?? null;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -452,21 +487,20 @@ interface PlannedKey extends ImportedKey {
 }
 
 /**
- * Work out what the exported PEM means for
- * `data/keys/{username}.rsassa-pkcs1-v1_5.jwk`, without touching it.
+ * Work out what the exported PEM means for the user's RSA key file, without
+ * touching it.
  *
  * A file already holding this very key is left alone and reported unchanged —
  * that is what makes the whole command idempotent — and one holding a
  * different key is refused unless the run was told to replace it.
  */
 async function planKeyImport(options: ImportWordPressActorOptions): Promise<PlannedKey> {
-  const { dataDir, username } = options;
+  const { site, username } = options;
   const privateKey = privateKeyFrom(options.privateKeyPem);
   assertPairMatches(privateKey, options.publicKeyPem);
 
   const jwk = `${JSON.stringify(await privateJwkOf(privateKey), undefined, 2)}\n`;
-  const file = actorKeyFile(dataDir, username, RSA);
-  const held = readFileIfPresentSync(file);
+  const { file, jwk: held } = site.actorKey(username, RSA);
 
   if (held === undefined) return { file, algorithm: RSA, state: 'imported', jwk };
   if (sameKeyFile(held, jwk)) return { file, algorithm: RSA, state: 'unchanged', jwk: undefined };
@@ -475,9 +509,9 @@ async function planKeyImport(options: ImportWordPressActorOptions): Promise<Plan
 }
 
 /** Carry out what {@link planKeyImport} decided. */
-function applyKeyImport(dataDir: string, username: string, planned: PlannedKey): ImportedKey {
+function applyKeyImport(site: PluginSite, username: string, planned: PlannedKey): ImportedKey {
   const { jwk, ...key } = planned;
-  if (jwk !== undefined) writeActorKeyFile(dataDir, username, key.algorithm, jwk);
+  if (jwk !== undefined) site.writeActorKey(username, key.algorithm, jwk);
   return key;
 }
 
@@ -546,13 +580,13 @@ function assertPairMatches(privateKey: KeyObject, publicKeyPem: string | undefin
  * The private JWK the key file holds, produced the way a generated one is.
  *
  * The PEM goes to DER through node:crypto, into WebCrypto, and out through
- * Fedify's `exportJwk` — the same call `loadActorKeyPairs` makes when it mints
- * a pair. Going the long way round rather than asking node:crypto for the JWK
- * directly is what guarantees an imported file and a generated one carry the
+ * Fedify's `exportJwk` — the same call the site makes when it mints a pair.
+ * Going the long way round rather than asking node:crypto for the JWK directly
+ * is what guarantees an imported file and a generated one carry the
  * same members in the same shape, `alg: "RS256"` included, which is what the
  * loader's boot check insists on.
  */
-async function privateJwkOf(privateKey: KeyObject): Promise<JsonWebKey> {
+async function privateJwkOf(privateKey: KeyObject): ReturnType<typeof exportJwk> {
   const pkcs8 = privateKey.export({ type: 'pkcs8', format: 'der' });
   const key = await crypto.subtle.importKey('pkcs8', pkcs8, { name: RSA, hash: 'SHA-256' }, true, [
     'sign',

@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-29 23:32'
+updated_date: '2026-10-08 15:03'
 ---
 # ActivityPub Federation
 
@@ -38,58 +38,14 @@ The site actor and `/ap/` are gone. A site that federated as the site actor star
 
 ## WordPress ActivityPub compatibility
 
-A site that moved here from the WordPress ActivityPub plugin has followers whose servers still hold the plugin's endpoints: `/wp-json/activitypub/1.0/actors/{n}/inbox`, the shared `/wp-json/activitypub/1.0/inbox`, and the collections beside them. decision-14 calls those **cache rather than identity** — a follower's server replaces them the next time it refetches the actor — so the CMS carries them behind a switch, until the caches have moved on and no longer.
+A site that moved here from the WordPress ActivityPub plugin has followers whose servers still hold the plugin's endpoints: `/wp-json/activitypub/1.0/actors/{n}/inbox`, the shared `/wp-json/activitypub/1.0/inbox`, and the collections beside them. decision-14 calls those **cache rather than identity**: a follower's server replaces them the next time it refetches the actor. Core does not carry them. The `@geekity/plugin-wordpress` plugin does (decision-33, TASK-282), and its README is the reference for the paths, the files it keeps and the cutover.
 
-- The switch is the `wordpressActivityPub` setting, on Federation > Settings (`/admin/federation/settings`). Off by default, and absent from `site.json` until somebody turns it on: a site born here never needs it, and turning it off again takes the key back out.
-- A user is mapped to one of the plugin's numeric actor ids by `wordpressActorId` on their record in `data/users.json` — the WordPress user id, a whole positive number. `geekity import wordpress-actor` sets it beside the stored actor id; no screen writes it. A user without one is not reachable through any of these paths.
-- With the switch on, the CMS serves real inbox routes at `…/actors/{n}/inbox` and `…/1.0/inbox`, signature-verified at the request path exactly as the canonical inboxes are — an unsigned or badly signed delivery is a 401 — and GET routes for the actor and its `outbox`, `followers` and `following` at `…/actors/{n}/`.
-- **What a peer reads back is always the canonical identity.** The `Person` served at `…/actors/{n}` is the same document the author URL serves: the same `id` (the stored actor id, or the author URL), the same `publicKey`, and the *canonical* `inbox`, `outbox`, `followers` and `following`. A peer refetching the actor at the old URL is exactly the peer that should learn the new endpoints, and that is what eventually makes the switch safe to turn off. An `Accept` sent from one of these inboxes comes from the canonical id and is signed with the key under it.
-- Under the hood this is a second Fedify `Federation`, mounted after the canonical middleware behind a per-request gate that reads the setting. One `Federation` may have exactly one pair of inbox listeners, and `ctx.routeActivity` re-verifies in a way a Mastodon or WordPress `Follow` cannot satisfy (doc-8). The two objects share one KV store and both set `withIdempotency('per-origin')`, because Fedify's default key folds the recipient identifier in — so the same `Follow` redelivered to `ada` and to `2` would be handled twice. The second object is built the first time a request reaches one of the paths with the switch on.
-- Because the gate is per request, **turning the switch off takes the paths away on the very next request**, with nothing restarted, and turning it on puts them back.
-- Every one of the paths records the instant it was last asked for, per user, in `data/wordpress-activitypub.json` — a file, so a deleted database (decision-9) does not forget the one question the switch is watched by. Federation > Settings lists each path beside the switch with that instant, or never, and the note that once every follower's server has refetched the actor the switch can come off.
+- Enabling the plugin under `/admin/plugins` serves the old paths: signature-verified inbox routes, and GET routes for the actor and its collections. What a peer reads back is always the canonical document, so a follower refetching the actor at the old URL learns the new endpoints. Disabling it takes the paths away on the next request, with nothing restarted.
+- The plugin runs a second Fedify `Federation` through `host.federation`, mounted after the canonical middleware. Both share one KV store and set `withIdempotency('per-origin')`, so the same `Follow` delivered to the canonical and the old inbox is handled once. A received activity is handed back to core with `receive`, which parses it with core's vocabulary and dispatches through the canonical inbox listeners.
+- Each old path records when it was last asked for in `data/plugins/@geekity/plugin-wordpress/requests.json`, and the plugin's screen at `/admin/plugins/@geekity/plugin-wordpress` lists them. When they go quiet, the plugin can be disabled.
+- `geekity import wordpress-actor <username>` is the plugin's command. It brings one person across: the RSA key pair their followers have cached, the stored actor id, the WordPress number (kept in the plugin's `actors.json`), and the followers. It runs while the plugin is installed, enabled or not. `setUserActorId` in core is the only writer of a stored actor id.
 
-### The cutover, and the command that does it
-
-`geekity import wordpress-actor <username>` brings one person across: the RSA
-key pair their followers have cached, the actor id those followers key the
-account by, the plugin's numeric actor id, and the followers themselves. It
-takes `--actor-id` (the URL WordPress published, query string and all),
-`--wordpress-id`, and the key pair as either `--keypair` (the JSON in the
-plugin's `activitypub_keypair_for_{login}` option) or `--private-key` and
-`--public-key` as PEM (the legacy `magic_sig_private_key` / `magic_sig_public_key`
-user meta); both PEM encodings are read. The public key is checked against the
-private half and then thrown away, because it is derived. `--followers` points
-at a URL, a saved collection file, or `none`; left off it is the plugin's own
-public collection on the actor id's origin, which the plugin answers as an
-`OrderedCollection` whose page lists bare actor URLs, so each follower costs one
-dereference. A follower that cannot be fetched is reported and skipped.
-
-It is idempotent: run twice it writes nothing and says so, because a follower
-already in the file keeps its place and its follow time and a key file already
-holding that key is left alone. A user who already has a *different* key pair is
-refused unless `--force`, since importing over one would change that person's
-identity and every follower has cached the public half of the key that is there.
-No screen writes any of this; `src/federation/import-wordpress.ts` is the only
-door, and `setUserWordPressActor` in `src/admin/accounts.ts` the only writer of
-the two ids.
-
-The checklist for a site leaving the plugin:
-
-1. **Export** while the old site is still up: the key pair, and optionally the
-   followers collection. Note the actor id and the numeric actor id. Bring the
-   content across; the post ids come with it (decision-13).
-2. **Import** with `geekity import wordpress-actor`, then read the report and
-   re-run for any follower whose server did not answer.
-3. **Switch on** the `wordpressActivityPub` setting, then move the DNS, so the
-   deliveries still aimed at the plugin's inbox paths land.
-4. **Watch** Federation > Settings, which dates each compatibility path, and
-   Federation > Followers, which shows each user's actor id and followers. The dates
-   go quiet as each follower's server refetches the actor.
-5. **Switch off** once the paths have been quiet for long enough. It takes
-   effect on the next request, and turning it back on is just as quick.
-
-Retiring the stored actor id by the Move protocol is a later, optional step, and
-is not part of the cutover.
+Retiring the stored actor id by the Move protocol is a later, optional step, and is not part of the cutover.
 
 ## WebFinger
 

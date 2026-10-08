@@ -1,4 +1,4 @@
-# Releasing @geekity/cms (decision-7).
+# Releasing @geekity/cms and the plugin packages (decision-7, decision-33).
 #
 # Runs on every push to `main` and keeps a release pull request open, its
 # version and CHANGELOG.md derived from the Conventional Commits that have
@@ -10,7 +10,9 @@
 # to npm" in README.md.
 #
 # `apps/demo` is private and unversioned, so `release-please-config.json` tracks
-# `packages/cms` and nothing else.
+# `packages/cms` and each `packages/plugin-*`. A plugin package is versioned on
+# its own and tagged with its component, as `plugin-wordpress-v0.1.0`, while
+# @geekity/cms keeps its plain `v0.x.y` tags.
 name: release-please
 
 on:

@@ -79,8 +79,8 @@ function isExempt(pathname: string): boolean {
  * crawlers and fediverse servers all read the outage as temporary: a crawler
  * keeps the page in its index, and a server whose inbox delivery was refused
  * queues it for a retry rather than dropping it. Mounted in front of the
- * federation middleware, so no inbox, Fedify's or the WordPress plugin's, is
- * reached at all.
+ * federation middleware, so no inbox, the site's own or a plugin's, is reached
+ * at all.
  *
  * A signed-in user browses the public site as usual, which is how an admin
  * checks an upgrade before turning maintenance off. The test is the one the

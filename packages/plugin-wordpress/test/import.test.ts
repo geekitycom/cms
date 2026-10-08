@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createPublicKey, generateKeyPairSync } from 'node:crypto';
+import type { webcrypto } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -7,17 +8,18 @@ import { after, before, describe, it } from 'node:test';
 
 import { importJwk } from '@fedify/fedify';
 
-import { writeUsers } from '../admin/__testing__/users.ts';
-import { listUsers } from '../admin/accounts.ts';
-import { openAdminStore } from '../admin/store.ts';
-import type { AdminStore } from '../admin/store.ts';
-import { importWordPressActor } from './import-wordpress.ts';
-import { actorKeyFile } from './keys.ts';
-import { followersFile, readFollowers } from './records.ts';
+import { createCms, listUsers, pluginDataFolder, pluginSite } from '@geekity/cms';
+import type { Cms, PluginFollower } from '@geekity/cms';
+
+import wordpress from '../src/index.ts';
+import { importWordPressActor } from '../src/import.ts';
+import { wordPressRecords } from '../src/records.ts';
+import type { WordPressRecords } from '../src/records.ts';
+import { writeUsers } from './site.ts';
 
 /**
- * `geekity import wordpress-actor` (TASK-71), against a WordPress that only
- * exists in this process.
+ * `geekity import wordpress-actor` (TASK-71, TASK-282), against a WordPress
+ * that only exists in this process.
  *
  * Everything the fake site answers is the shape decision-14 recorded off
  * andrewshell.org on 2026-09-12: an actor id with a query string, a followers
@@ -44,7 +46,7 @@ const WELDON = 'https://mstdn.example/users/weldon';
 const GONE = 'https://gone.example/users/ghost';
 
 const temporaryDirs: string[] = [];
-const stores: AdminStore[] = [];
+const started: Cms[] = [];
 
 /** The RSA pair standing in for the one `wp option get` would have printed. */
 let privateKeyPem: string;
@@ -62,7 +64,7 @@ before(() => {
 
 after(async () => {
   restoreFetch();
-  for (const store of stores) store.close();
+  for (const cms of started) await cms.close();
   await Promise.all(temporaryDirs.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -147,25 +149,38 @@ function serveFakeWordPress(): () => void {
   };
 }
 
-/** A site with one account, ready to be imported into. */
-async function site(): Promise<{ dataDir: string; contentDir: string; admin: AdminStore }> {
+/** A site with one account and the plugin installed, ready to be imported into. */
+interface Where {
+  dataDir: string;
+  contentDir: string;
+  cms: Cms;
+  records: WordPressRecords;
+}
+
+async function site(): Promise<Where> {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-import-data-'));
   const contentDir = await mkdtemp(path.join(tmpdir(), 'geekity-import-content-'));
   temporaryDirs.push(dataDir, contentDir);
 
   writeUsers(dataDir, [{ username: USERNAME }]);
-  const admin = openAdminStore({ dataDir });
-  stores.push(admin);
-  return { dataDir, contentDir, admin };
+  const cms = createCms({ dataDir, contentDir, watch: false, plugins: [wordpress] });
+  started.push(cms);
+  return {
+    dataDir,
+    contentDir,
+    cms,
+    records: wordPressRecords(pluginDataFolder(dataDir, wordpress.name)),
+  };
 }
 
 /** Everything the command is given, with the parts every test repeats filled in. */
 function importing(
-  where: { dataDir: string; contentDir: string; admin: AdminStore },
+  where: Where,
   overrides: Record<string, unknown> = {},
 ): Parameters<typeof importWordPressActor>[0] {
   return {
-    ...where,
+    site: pluginSite({ admin: where.cms.admin, config: where.cms.config }),
+    records: where.records,
     username: USERNAME,
     actorId: STORED_ACTOR_ID,
     wordpressActorId: WORDPRESS_ACTOR_ID,
@@ -176,14 +191,29 @@ function importing(
   } as Parameters<typeof importWordPressActor>[0];
 }
 
+/** One of the user's key files. */
+function keyFile(where: Where, algorithm: 'RSASSA-PKCS1-v1_5' | 'Ed25519'): string {
+  return path.join(where.dataDir, 'keys', `${USERNAME}.${algorithm.toLowerCase()}.jwk`);
+}
+
+/** The user's followers file. */
+function followersFile(where: Where): string {
+  return path.join(where.contentDir, '_data', 'federation', USERNAME, 'followers.json');
+}
+
+/** The followers the site holds for the user, in the file's order. */
+function readFollowers(where: Where): readonly PluginFollower[] {
+  return pluginSite({ admin: where.cms.admin, config: where.cms.config }).followers(USERNAME);
+}
+
 describe('importWordPressActor', () => {
   it("writes the plugin's RSA key as the user's JWK file, and mints the Ed25519 pair beside it", async () => {
     const where = await site();
 
     const report = await importWordPressActor(importing(where));
 
-    const rsaFile = actorKeyFile(where.dataDir, USERNAME, 'RSASSA-PKCS1-v1_5');
-    const jwk = JSON.parse(await readFile(rsaFile, 'utf8')) as JsonWebKey;
+    const rsaFile = keyFile(where, 'RSASSA-PKCS1-v1_5');
+    const jwk = JSON.parse(await readFile(rsaFile, 'utf8')) as webcrypto.JsonWebKey;
     assert.equal(jwk.kty, 'RSA', 'the file holds an RSA key');
     assert.equal(jwk.alg, 'RS256', 'spelled the way the key loader insists on');
     assert.ok(typeof jwk.d === 'string' && jwk.d !== '', 'and it is the private half');
@@ -195,8 +225,8 @@ describe('importWordPressActor', () => {
     await importJwk(jwk, 'private');
 
     const ed25519 = JSON.parse(
-      await readFile(actorKeyFile(where.dataDir, USERNAME, 'Ed25519'), 'utf8'),
-    ) as JsonWebKey;
+      await readFile(keyFile(where, 'Ed25519'), 'utf8'),
+    ) as webcrypto.JsonWebKey;
     assert.equal(ed25519.crv, 'Ed25519', 'the Ed25519 pair WordPress never had is minted');
 
     assert.ok(report.changed, 'the run reports that it changed something');
@@ -214,8 +244,8 @@ describe('importWordPressActor', () => {
     );
 
     const jwk = JSON.parse(
-      await readFile(actorKeyFile(where.dataDir, USERNAME, 'RSASSA-PKCS1-v1_5'), 'utf8'),
-    ) as JsonWebKey;
+      await readFile(keyFile(where, 'RSASSA-PKCS1-v1_5'), 'utf8'),
+    ) as webcrypto.JsonWebKey;
     assert.equal(jwk.n, publicModulus(pkcs1.publicKeyPem));
   });
 
@@ -228,24 +258,44 @@ describe('importWordPressActor', () => {
     );
   });
 
-  it('puts the stored actor id and the WordPress number on the user record', async () => {
+  it('puts the stored actor id on the user and the WordPress number in the plugin’s map', async () => {
     const where = await site();
 
     await importWordPressActor(importing(where));
 
     const user = listUsers(where.dataDir).find((entry) => entry.username === USERNAME);
     assert.equal(user?.actorId, STORED_ACTOR_ID, 'the id its followers hold, query string and all');
-    assert.equal(user?.wordpressActorId, WORDPRESS_ACTOR_ID, 'as a JSON number');
+    assert.equal(where.records.actors().get(USERNAME), WORDPRESS_ACTOR_ID);
+    assert.deepEqual(
+      JSON.parse(
+        await readFile(
+          path.join(where.dataDir, 'plugins', '@geekity', 'plugin-wordpress', 'actors.json'),
+          'utf8',
+        ),
+      ),
+      { [USERNAME]: WORDPRESS_ACTOR_ID },
+      'in the plugin’s own data file, as a JSON number',
+    );
   });
 
-  it('refuses a number another account already carries', async () => {
+  it('refuses a number another account already carries, and writes nothing', async () => {
+    const where = await site();
+    writeUsers(where.dataDir, [{ username: USERNAME }, { username: 'someone-else', id: 9 }]);
+    await where.records.setNumber('someone-else', WORDPRESS_ACTOR_ID);
+
+    await assert.rejects(importWordPressActor(importing(where)), /someone-else/);
+    assert.equal(listUsers(where.dataDir)[0]?.actorId, undefined, 'the stored id is not written');
+  });
+
+  it('refuses an actor id another account already carries', async () => {
     const where = await site();
     writeUsers(where.dataDir, [
       { username: USERNAME },
-      { username: 'someone-else', id: 9, wordpressActorId: WORDPRESS_ACTOR_ID },
+      { username: 'someone-else', id: 9, actorId: STORED_ACTOR_ID },
     ]);
 
     await assert.rejects(importWordPressActor(importing(where)), /someone-else/);
+    assert.equal(where.records.actors().size, 0, 'and no number is written');
   });
 
   it('refuses a username nobody on this site has', async () => {
@@ -264,7 +314,7 @@ describe('importWordPressActor', () => {
       WP_FOLLOWERS,
       'the collection URL is derived from the actor id and the number',
     );
-    const held = readFollowers(where.contentDir, USERNAME);
+    const held = readFollowers(where);
     assert.deepEqual(
       held.map((follower) => follower.actorId),
       [MARIEN, WELDON],
@@ -280,7 +330,7 @@ describe('importWordPressActor', () => {
     assert.equal(marien?.url, 'https://tutut.example/@marien', 'and the profile URL');
 
     // The index the site pages and delivers by has to say the same thing.
-    assert.equal(where.admin.countFollowers(USERNAME), 2);
+    assert.equal(where.cms.admin.countFollowers(USERNAME), 2);
 
     assert.deepEqual(
       report.followers.failed.map((failure) => failure.actor),
@@ -294,7 +344,7 @@ describe('importWordPressActor', () => {
     const where = await site();
 
     await importWordPressActor(importing(where, { followers: undefined }));
-    const before = await readFile(followersFile(where.contentDir, USERNAME), 'utf8');
+    const before = await readFile(followersFile(where), 'utf8');
 
     const again = await importWordPressActor(importing(where, { followers: undefined }));
 
@@ -307,7 +357,7 @@ describe('importWordPressActor', () => {
     assert.deepEqual(again.followers.added, [], 'and added no follower');
     assert.deepEqual(again.followers.unchanged, [MARIEN, WELDON]);
     assert.equal(
-      await readFile(followersFile(where.contentDir, USERNAME), 'utf8'),
+      await readFile(followersFile(where), 'utf8'),
       before,
       'the followers file is byte for byte what it was',
     );
@@ -331,8 +381,8 @@ describe('importWordPressActor', () => {
       publicModulus(publicKeyPem),
       (
         JSON.parse(
-          await readFile(actorKeyFile(where.dataDir, USERNAME, 'RSASSA-PKCS1-v1_5'), 'utf8'),
-        ) as JsonWebKey
+          await readFile(keyFile(where, 'RSASSA-PKCS1-v1_5'), 'utf8'),
+        ) as webcrypto.JsonWebKey
       ).n,
       'and the key that is there is untouched',
     );
@@ -359,7 +409,7 @@ describe('importWordPressActor', () => {
 
     assert.deepEqual(report.followers.added, [WELDON]);
     assert.deepEqual(
-      readFollowers(where.contentDir, USERNAME).map((follower) => follower.inboxId),
+      readFollowers(where).map((follower) => follower.inboxId),
       [`${WELDON}/inbox`],
       'an embedded actor needs no dereferencing at all',
     );

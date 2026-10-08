@@ -20,7 +20,7 @@ export {
   setUserEmail,
   setUserPassword,
   setUserProfile,
-  setUserWordPressActor,
+  setUserActorId,
   ConflictingActorIdError,
   UnknownUserError,
   USERS_FILE,

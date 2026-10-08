@@ -64,6 +64,7 @@ const SEPARATELY: Readonly<Record<string, readonly Record<string, unknown>[]>> =
     syndicationRefused('target-0'),
     syndicationRefused('target-new'),
   ],
+  'pages/plugins/screen.njk': [pluginSettingsRefused()],
   'pages/users/apps.njk': [
     { withoutPkce: { clients: [], field: 'client_id', value: 'x', problem: 'Wrong client.' } },
     {
@@ -76,6 +77,23 @@ const SEPARATELY: Readonly<Record<string, readonly Record<string, unknown>[]>> =
     },
   ],
 };
+
+/** A plugin screen with one field of each kind that can be refused. */
+function pluginSettingsRefused(): Record<string, unknown> {
+  const setting = (type: string, key: string) => ({
+    type,
+    key,
+    id: `plugin-setting-${key}`,
+    name: `setting.${key}`,
+    label: key,
+    value: '',
+    options: [{ value: 'a', label: 'A', selected: true }],
+    error: `Wrong ${key}.`,
+    source: 'default',
+  });
+  const settings = [setting('url', 'base_url'), setting('select', 'tone')];
+  return { settings, problems: settings, actions: [], cards: [] };
+}
 
 /** The Syndication screen with one target and the Add form, `key` the one refused. */
 function syndicationRefused(key: string): Record<string, unknown> {

@@ -249,7 +249,7 @@ describe('WebFinger', () => {
 });
 
 describe('/@{username}', () => {
-  it('redirects to the author archive, as WordPress does', async () => {
+  it('redirects to the author archive', async () => {
     const instance = await site();
 
     const response = await get(instance, `/@${ADA}`);

@@ -7,7 +7,9 @@ import { after, describe, it } from 'node:test';
 
 import {
   readFileIfPresentSync,
+  refuseWritesUnder,
   updateFileAtomically,
+  WritesRefusedError,
   withFileLock,
   writeFileAtomically,
   writeFileAtomicallySync,
@@ -225,5 +227,45 @@ describe('withFileLock', () => {
     assert.equal(started, 2, 'the second path waited for the first');
     release();
     await first;
+  });
+});
+
+describe('refuseWritesUnder', () => {
+  it('refuses every write under the directory until released, and leaves the file as it was', async () => {
+    const dir = await temporaryDir();
+    const outside = await temporaryDir();
+    const file = path.join(dir, 'data', 'site.json');
+    await writeFileAtomically(file, 'before');
+
+    const release = refuseWritesUnder([dir]);
+    await assert.rejects(writeFileAtomically(file, 'after'), WritesRefusedError);
+    await assert.rejects(
+      updateFileAtomically(file, () => 'after'),
+      WritesRefusedError,
+    );
+    assert.throws(() => writeFileAtomicallySync(file, 'after'), WritesRefusedError);
+    assert.throws(
+      () => writeFileAtomicallySync(path.join(dir, 'new', 'file.json'), 'x'),
+      WritesRefusedError,
+    );
+    assert.equal(readFileSync(file, 'utf8'), 'before');
+    assert.equal(readFileIfPresentSync(path.join(dir, 'new', 'file.json')), undefined);
+
+    await writeFileAtomically(path.join(outside, 'free.json'), 'yes');
+    assert.equal(readFileSync(path.join(outside, 'free.json'), 'utf8'), 'yes');
+
+    release();
+    await writeFileAtomically(file, 'after');
+    assert.equal(readFileSync(file, 'utf8'), 'after');
+  });
+
+  it('does not refuse a sibling directory that only shares the prefix', async () => {
+    const dir = await temporaryDir();
+    const release = refuseWritesUnder([path.join(dir, 'data')]);
+    try {
+      await writeFileAtomically(path.join(dir, 'data-old', 'x.json'), 'ok');
+    } finally {
+      release();
+    }
   });
 });

@@ -16,6 +16,7 @@ describe('the admin menu registry', () => {
         'Comments',
         'Messages',
         'Appearance',
+        'Plugins',
         'Users',
         'Tools',
         'Settings',
@@ -31,7 +32,7 @@ describe('the admin menu registry', () => {
     }
   });
 
-  it('files the terms and the add forms where WordPress files them', () => {
+  it('files the terms and the add forms under the content they belong to', () => {
     const posts = ADMIN_SECTIONS.find((section) => section.section === 'posts');
 
     assert.deepEqual(

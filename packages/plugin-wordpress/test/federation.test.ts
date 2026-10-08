@@ -1,28 +1,31 @@
 import assert from 'node:assert/strict';
+import type { webcrypto } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
 import { exportJwk, importJwk, signRequest } from '@fedify/fedify';
-import { CryptographicKey, Endpoints, Follow, Image, Person } from '@fedify/vocab';
+import { CryptographicKey, Endpoints, Follow, Image, Person, Undo } from '@fedify/vocab';
 
-import { writeUsers } from '../admin/__testing__/users.ts';
-import { DEFAULT_SITE_SETTINGS, updateSiteSettings, writeSiteJson } from '../admin/settings.ts';
-import { createCms } from '../index.ts';
-import type { Cms } from '../index.ts';
-import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
-import { readWordPressRequests, wordPressRequestsFile } from './wordpress.ts';
+import { createCms } from '@geekity/cms';
+import type { Cms } from '@geekity/cms';
+
+import wordpress from '../src/index.ts';
+import { ACTORS_FILE, REQUESTS_FILE } from '../src/records.ts';
+import type { WordPressRequests } from '../src/records.ts';
+import { seedActorKeys, testKeyPair, writeSite, writeUsers } from './site.ts';
 
 /**
- * The WordPress ActivityPub compatibility switch (TASK-70).
+ * The WordPress ActivityPub compatibility paths (TASK-70, TASK-282).
  *
  * The paths under test are the ones andrewshell.org publishes today
  * (decision-14): the personal inbox `/wp-json/activitypub/1.0/actors/2/inbox`,
  * the shared `/wp-json/activitypub/1.0/inbox`, and the collections beside
  * them. They are cache rather than identity, which is why every one of them is
- * behind a setting and why the identity a peer reads back is always the
- * canonical one.
+ * served only while the plugin is enabled and why the identity a peer reads
+ * back is always the canonical one.
  */
 
 const BASE_URL = 'https://blog.example';
@@ -57,8 +60,8 @@ const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 const deliveries: { url: string; body: Record<string, unknown> }[] = [];
 
-let remoteKeys: CryptoKeyPair;
-let strangerKeys: CryptoKeyPair;
+let remoteKeys: webcrypto.CryptoKeyPair;
+let strangerKeys: webcrypto.CryptoKeyPair;
 let remoteActorDocument: unknown;
 let restoreFetch: () => void;
 
@@ -125,12 +128,26 @@ async function temporaryDir(prefix: string): Promise<string> {
 
 /** How a site under test is set up. */
 interface SiteOptions {
-  /** Whether the compatibility switch starts on. Off, as a new site's is. */
-  wordpressActivityPub?: boolean;
+  /** Whether the plugin starts enabled. Off, as a new install's is. */
+  enabled?: boolean;
   /** The number the plugin gave this person, or none at all. */
   wordpressActorId?: number | undefined;
   /** The id they were published under, or none at all. */
   actorId?: string | undefined;
+}
+
+/** The plugin's data folder under a site's data directory. */
+function pluginData(dataDir: string): string {
+  return path.join(dataDir, 'plugins', '@geekity', 'plugin-wordpress');
+}
+
+/** The record of when each path was last asked for, as the file says now. */
+function readRequests(dataDir: string): WordPressRequests {
+  try {
+    return JSON.parse(readFileSync(path.join(pluginData(dataDir), REQUESTS_FILE), 'utf8'));
+  } catch {
+    return { users: {} };
+  }
 }
 
 /** A federated CMS with no queue, so an inbox delivery is over when it answers. */
@@ -138,15 +155,10 @@ async function site(options: SiteOptions = {}): Promise<Cms> {
   const dataDir = await temporaryDir('geekity-wp-data-');
   const contentDir = await temporaryDir('geekity-wp-content-');
 
-  await writeSiteJson({
-    contentDir,
-    settings: {
-      ...DEFAULT_SITE_SETTINGS,
-      title: 'Geekity',
-      baseUrl: BASE_URL,
-      author: LOCAL_USER,
-      wordpressActivityPub: options.wordpressActivityPub ?? false,
-    },
+  writeSite(contentDir, {
+    baseUrl: BASE_URL,
+    author: LOCAL_USER,
+    enabled: options.enabled ?? false,
   });
   const actorId = 'actorId' in options ? options.actorId : STORED_ACTOR_ID;
   const wordpressActorId =
@@ -154,11 +166,17 @@ async function site(options: SiteOptions = {}): Promise<Cms> {
   writeUsers(dataDir, [
     {
       username: LOCAL_USER,
-      profile: { displayName: 'Andrew Shell' },
+      displayName: 'Andrew Shell',
       ...(actorId === undefined ? {} : { actorId }),
-      ...(wordpressActorId === undefined ? {} : { wordpressActorId }),
     },
   ]);
+  if (wordpressActorId !== undefined) {
+    mkdirSync(pluginData(dataDir), { recursive: true });
+    writeFileSync(
+      path.join(pluginData(dataDir), ACTORS_FILE),
+      JSON.stringify({ [LOCAL_USER]: wordpressActorId }),
+    );
+  }
   // Before the site boots, so nothing here spends a quarter of a second
   // minting an actor key whose value no test in this file reads.
   seedActorKeys(dataDir, LOCAL_USER);
@@ -170,17 +188,15 @@ async function site(options: SiteOptions = {}): Promise<Cms> {
     watch: false,
     baseUrl: BASE_URL,
     federation: { queue: null, allowPrivateAddress: true },
+    plugins: [wordpress],
   });
   started.push(instance);
   return instance;
 }
 
-/** Turn the switch on or off on a running site, as the settings screen would. */
-async function setSwitch(instance: Cms, on: boolean): Promise<void> {
-  await updateSiteSettings({
-    contentDir: instance.config.contentDir,
-    change: (current) => ({ ...current, wordpressActivityPub: on }),
-  });
+/** Enable or disable the plugin on a running site, as the Plugins screen would. */
+function setEnabled(instance: Cms, on: boolean): void {
+  writeSite(instance.config.contentDir, { baseUrl: BASE_URL, author: LOCAL_USER, enabled: on });
 }
 
 /** How a POST to one of the compatibility inboxes is signed. */
@@ -229,7 +245,7 @@ async function get(instance: Cms, url: string): Promise<Response> {
   );
 }
 
-describe('with the switch off (AC #1)', () => {
+describe('with the plugin disabled', () => {
   it('registers no /wp-json/ path at all', async () => {
     const instance = await site();
 
@@ -246,9 +262,9 @@ describe('with the switch off (AC #1)', () => {
   });
 });
 
-describe('with the switch on (AC #2)', () => {
+describe('with the plugin enabled', () => {
   it('accepts a signed Follow at the plugin’s personal inbox', async () => {
-    const instance = await site({ wordpressActivityPub: true });
+    const instance = await site({ enabled: true });
 
     const response = await deliver(instance, follow());
 
@@ -266,7 +282,7 @@ describe('with the switch on (AC #2)', () => {
   });
 
   it('accepts one at the plugin’s shared inbox', async () => {
-    const instance = await site({ wordpressActivityPub: true });
+    const instance = await site({ enabled: true });
 
     const response = await deliver(instance, follow(), { inbox: WP_SHARED_INBOX });
 
@@ -278,7 +294,7 @@ describe('with the switch on (AC #2)', () => {
     const crossSite = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'cors' };
 
     for (const inbox of [WP_INBOX, WP_SHARED_INBOX]) {
-      const instance = await site({ wordpressActivityPub: true });
+      const instance = await site({ enabled: true });
       const response = await deliver(instance, follow(), { inbox, headers: crossSite });
 
       assert.equal(response.status, 202, await response.text());
@@ -287,7 +303,7 @@ describe('with the switch on (AC #2)', () => {
   });
 
   it('refuses an unsigned or badly signed one', async () => {
-    const instance = await site({ wordpressActivityPub: true });
+    const instance = await site({ enabled: true });
 
     assert.equal((await deliver(instance, follow(), { unsigned: true })).status, 401);
     assert.equal(
@@ -299,7 +315,7 @@ describe('with the switch on (AC #2)', () => {
   });
 
   it('answers the actor and the three collections under actors/{id}', async () => {
-    const instance = await site({ wordpressActivityPub: true });
+    const instance = await site({ enabled: true });
     await deliver(instance, follow());
 
     const actor = await get(instance, WP_ACTOR);
@@ -323,7 +339,7 @@ describe('with the switch on (AC #2)', () => {
   });
 
   it('answers nothing for a number no user carries', async () => {
-    const instance = await site({ wordpressActivityPub: true });
+    const instance = await site({ enabled: true });
 
     assert.equal((await get(instance, `${BASE_URL}${WP_BASE}/actors/9`)).status, 404);
     assert.equal(
@@ -333,9 +349,27 @@ describe('with the switch on (AC #2)', () => {
   });
 });
 
+describe('an Undo of a Follow at the old inbox', () => {
+  it('removes the follower, as the site’s own inbox would', async () => {
+    const instance = await site({ enabled: true });
+    await deliver(instance, follow());
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 1);
+
+    const undo = new Undo({
+      id: new URL(`${REMOTE_ORIGIN}/follows/1/undo`),
+      actor: new URL(REMOTE_ACTOR),
+      object: follow(),
+    });
+    const response = await deliver(instance, undo);
+
+    assert.equal(response.status, 202, await response.text());
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
+  });
+});
+
 describe('one Follow, two inboxes', () => {
   it('is handled once, however many of the paths it is delivered to', async () => {
-    const instance = await site({ wordpressActivityPub: true });
+    const instance = await site({ enabled: true });
 
     // The same activity, redelivered: a peer that holds both the old inbox and
     // the new one, or one retrying after a timeout. The default `per-inbox`
@@ -355,7 +389,7 @@ describe('one Follow, two inboxes', () => {
 
 describe('a user WordPress numbered but never published an id for', () => {
   it('is still followed at the compatibility inbox, under their author URL', async () => {
-    const instance = await site({ wordpressActivityPub: true, actorId: undefined });
+    const instance = await site({ enabled: true, actorId: undefined });
     const authorUrl = `${BASE_URL}/author/${LOCAL_USER}/`;
 
     const response = await deliver(instance, follow(`${REMOTE_ORIGIN}/follows/1`, authorUrl));
@@ -367,27 +401,27 @@ describe('a user WordPress numbered but never published an id for', () => {
   });
 });
 
-describe('turning the switch off (AC #4)', () => {
+describe('disabling the plugin', () => {
   it('takes the paths away on the next request, with nothing restarted', async () => {
-    const instance = await site({ wordpressActivityPub: true });
+    const instance = await site({ enabled: true });
 
     assert.equal((await get(instance, WP_ACTOR)).status, 200);
 
-    await setSwitch(instance, false);
+    setEnabled(instance, false);
     assert.equal((await get(instance, WP_ACTOR)).status, 404, 'gone on the very next request');
     assert.equal((await deliver(instance, follow())).status, 404);
 
-    await setSwitch(instance, true);
+    setEnabled(instance, true);
     assert.equal((await get(instance, WP_ACTOR)).status, 200, 'and back again, both ways');
   });
 });
 
-describe('when each path was last asked for (AC #3)', () => {
+describe('when each path was last asked for', () => {
   it('records every route, per user, in a file under data/', async () => {
-    const instance = await site({ wordpressActivityPub: true });
+    const instance = await site({ enabled: true });
 
     assert.deepEqual(
-      readWordPressRequests(instance.config.dataDir),
+      readRequests(instance.config.dataDir),
       { users: {} },
       'a site nobody has asked has nothing to say',
     );
@@ -399,7 +433,7 @@ describe('when each path was last asked for (AC #3)', () => {
     await deliver(instance, follow());
     await deliver(instance, follow(`${REMOTE_ORIGIN}/follows/2`), { inbox: WP_SHARED_INBOX });
 
-    const requests = readWordPressRequests(instance.config.dataDir);
+    const requests = readRequests(instance.config.dataDir);
     for (const route of ['actor', 'outbox', 'followers', 'following', 'inbox'] as const) {
       assert.match(
         requests.users[LOCAL_USER]?.[route] ?? '',
@@ -409,18 +443,16 @@ describe('when each path was last asked for (AC #3)', () => {
     }
     assert.match(requests.sharedInbox ?? '', /^\d{4}-\d{2}-\d{2}T/, 'and so was the shared inbox');
 
-    // The file, not the database: decision-9 lets a site delete the database,
-    // and the one question the switch is watched by must survive that.
     const onDisk = JSON.parse(
-      await readFile(wordPressRequestsFile(instance.config.dataDir), 'utf8'),
+      await readFile(path.join(pluginData(instance.config.dataDir), REQUESTS_FILE), 'utf8'),
     ) as Record<string, unknown>;
     assert.ok('users' in onDisk && 'sharedInbox' in onDisk);
   });
 
   it('survives a restart and a rebuilt database', async () => {
-    const instance = await site({ wordpressActivityPub: true });
+    const instance = await site({ enabled: true });
     await get(instance, WP_ACTOR);
-    const before = readWordPressRequests(instance.config.dataDir).users[LOCAL_USER]?.actor;
+    const before = readRequests(instance.config.dataDir).users[LOCAL_USER]?.actor;
     assert.ok(before !== undefined);
 
     await instance.close();
@@ -431,17 +463,18 @@ describe('when each path was last asked for (AC #3)', () => {
       watch: false,
       baseUrl: BASE_URL,
       federation: { queue: null, allowPrivateAddress: true },
+      plugins: [wordpress],
     });
     started.push(again);
 
-    assert.equal(readWordPressRequests(again.config.dataDir).users[LOCAL_USER]?.actor, before);
+    assert.equal(readRequests(again.config.dataDir).users[LOCAL_USER]?.actor, before);
   });
 
   it('records nothing for a number no user carries', async () => {
-    const instance = await site({ wordpressActivityPub: true });
+    const instance = await site({ enabled: true });
 
     await get(instance, `${BASE_URL}${WP_BASE}/actors/9`);
 
-    assert.deepEqual(readWordPressRequests(instance.config.dataDir).users, {});
+    assert.deepEqual(readRequests(instance.config.dataDir).users, {});
   });
 });

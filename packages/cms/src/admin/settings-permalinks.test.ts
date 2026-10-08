@@ -16,7 +16,7 @@ const box = sandbox();
 after(() => box.cleanup());
 
 describe('the taxonomy bases', () => {
-  it("default to WordPress's tag and category (AC #1, AC #3)", async () => {
+  it('default to tag and category (AC #1, AC #3)', async () => {
     const cms = await box.site();
     const settings = readSiteSettings(cms.config.contentDir);
 

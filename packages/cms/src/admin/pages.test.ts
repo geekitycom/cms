@@ -158,7 +158,7 @@ describe('the pages listing', () => {
     ]);
   });
 
-  it('marks the homepage and the posts page, the way WordPress does (AC #4)', async () => {
+  it('marks the homepage and the posts page (AC #4)', async () => {
     const contentDir = await seeded([
       { file: 'pages/welcome.md', title: 'Welcome', permalink: '/welcome/' },
       { file: 'pages/news.md', title: 'News', permalink: '/news/' },

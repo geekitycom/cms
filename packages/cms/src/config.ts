@@ -10,6 +10,7 @@ import type { Clock } from './content/store.ts';
 import type { DocumentChange } from './content/sync.ts';
 import type { MailProvider } from './mail/provider.ts';
 import type { MailLogger } from './mail/service.ts';
+import type { Plugin } from './plugin.ts';
 import { systemHostLookup } from './webmention/public-address.ts';
 import type { HostLookup } from './webmention/public-address.ts';
 
@@ -376,6 +377,21 @@ export interface GeekityConfig {
    * a real DNS server.
    */
   hostLookup?: HostLookup;
+  /**
+   * The plugins installed on this site (decision-33). Each is registered at
+   * boot and runs only while the `plugins` key of `content/_data/site.json`
+   * enables it, so installing one here changes nothing until it is enabled.
+   */
+  plugins?: readonly Plugin[];
+  /**
+   * A folder of plugins, one folder each with a bundled `index.js` whose
+   * default export is the plugin (decision-33): `<name>/` or
+   * `@scope/<name>/`. `geekity serve` loads them at boot beside
+   * {@link GeekityConfig.plugins}, and Reload on the Plugins screen loads a
+   * changed folder without a restart. Overridden by `GEEKITY_PLUGINS_DIR`.
+   * No default: a site loads code from a folder only when it names one.
+   */
+  pluginsDir?: string;
 }
 
 /**
@@ -444,6 +460,10 @@ export interface ResolvedConfig {
   federation: FederationOverrides;
   /** How host names are resolved before a stranger's page is fetched. */
   hostLookup: HostLookup;
+  /** The installed plugins, empty when the site named none. */
+  plugins: readonly Plugin[];
+  /** The folder of plugins `geekity serve` loads, or `undefined` when the site names none. */
+  pluginsDir: string | undefined;
 }
 
 /** Ambient inputs {@link resolveConfig} reads, injectable so the resolution is testable. */
@@ -651,6 +671,8 @@ export function resolveConfig(
     now: config.now ?? systemClock,
     federation: config.federation ?? {},
     hostLookup: config.hostLookup ?? systemHostLookup,
+    plugins: config.plugins ?? [],
+    pluginsDir: optionalDir(cwd, env['GEEKITY_PLUGINS_DIR'], config.pluginsDir),
   };
 }
 
@@ -935,6 +957,15 @@ function resolveDir(
 ): string {
   const chosen = firstNonEmpty(fromEnv, configured) ?? fallback;
   return path.resolve(cwd, chosen);
+}
+
+function optionalDir(
+  cwd: string,
+  fromEnv: string | undefined,
+  configured: string | undefined,
+): string | undefined {
+  const chosen = firstNonEmpty(fromEnv, configured);
+  return chosen === undefined ? undefined : path.resolve(cwd, chosen);
 }
 
 /** Which of the two doors named the base URL, if either did. */

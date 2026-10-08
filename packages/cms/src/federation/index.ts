@@ -42,18 +42,6 @@ export type {
   SiteFederation,
 } from './federation.ts';
 export {
-  ExistingKeyPairError,
-  importWordPressActor,
-  UnusableKeyPemError,
-} from './import-wordpress.ts';
-export type {
-  FollowersImportReport,
-  ImportedKey,
-  ImportWordPressActorOptions,
-  ImportWordPressActorReport,
-  UnreachableFollower,
-} from './import-wordpress.ts';
-export {
   followerRecipient,
   followersPage,
   FOLLOWERS_PAGE_SIZE,
@@ -146,25 +134,3 @@ export type {
 } from './profiles.ts';
 export { actorHandle, replyFrom, replyTargetOf, REPLY_ACTIVITY_TYPE } from './replies.ts';
 export type { Reply } from './replies.ts';
-export {
-  createWordPressFederation,
-  readWordPressRequests,
-  recordWordPressRequest,
-  userByWordPressActorId,
-  WORDPRESS_ACTIVITYPUB_BASE,
-  WORDPRESS_ACTOR_PATH,
-  WORDPRESS_FOLLOWERS_PATH,
-  WORDPRESS_FOLLOWING_PATH,
-  WORDPRESS_INBOX_PATH,
-  WORDPRESS_OUTBOX_PATH,
-  WORDPRESS_REQUESTS_FILE,
-  WORDPRESS_SHARED_INBOX_PATH,
-  wordPressRequestsFile,
-  wordPressRequestTarget,
-} from './wordpress.ts';
-export type {
-  CreateWordPressFederationOptions,
-  WordPressRequests,
-  WordPressRequestTarget,
-  WordPressRoute,
-} from './wordpress.ts';

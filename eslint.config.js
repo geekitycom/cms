@@ -134,6 +134,30 @@ export default tseslint.config(
   },
 
   {
+    name: 'geekity/plugin-boundary',
+    files: ['apps/demo/plugins/**/*.ts', 'packages/plugin-*/src/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^@geekity/cms(?!/plugin$)(?:/.*)?$|/packages/cms/',
+              message: 'A plugin imports nothing from core but @geekity/cms/plugin.',
+            },
+            {
+              regex: '^@geekity/plugin-|/packages/plugin-',
+              allowTypeImports: true,
+              message:
+                'Import another plugin with `import type` for its service types, and reach the service with host.use.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
     name: 'geekity/tests',
     files: ['**/*.test.ts', 'packages/cms/test/**/*.ts'],
     rules: {

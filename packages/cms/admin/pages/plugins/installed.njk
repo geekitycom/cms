@@ -1,0 +1,113 @@
+{# /admin/plugins: every installed plugin and where it stands (decision-33).
+
+   Enabling writes the plugins key of content/_data/site.json and takes effect
+   on the next request. A plugin's row names each plugin it requires with the
+   range it needs, linked to that plugin's row when it is installed, because
+   nothing is enabled on the operator's behalf. Under geekity serve, Reload
+   appears when the plugins folder differs from what this worker loaded
+   (TASK-288). #}
+{% extends "layouts/shell.njk" %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
+
+{% block title %}Plugins{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">Plugins</h1>
+
+  {% if reloaded %}
+    <div role="status" class="alert alert-success mb-6"><span>Plugins reloaded.</span></div>
+  {% endif %}
+
+  {% if reloadFailure %}
+    <div role="alert" class="alert alert-error mb-6">
+      <span>The last reload failed, so this server carried on with the plugins it had. {{ reloadFailure }}</span>
+    </div>
+  {% endif %}
+
+  {% if reload %}
+    <div id="plugins-reload" class="mb-8 max-w-prose">
+      {% call card(title="The plugins folder has changed") %}
+        <p>Reload starts a new server with the plugins folder as it is now, then retires this one. No request is turned away.</p>
+        <dl class="text-sm">
+          {% for heading, names in [["Added", reload.changes.added], ["Removed", reload.changes.removed], ["Updated", reload.changes.updated]] %}
+            {% if names.length %}
+              <dt class="font-semibold">{{ heading }}:</dt>
+              <dd class="mb-2">
+                {% for name in names %}<code class="break-all">{{ name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+              </dd>
+            {% endif %}
+          {% endfor %}
+        </dl>
+        <form method="post" action="{{ reload.url }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          {% call cardActions() %}
+            {{ button('Reload', type='submit', color='primary') }}
+          {% endcall %}
+        </form>
+      {% endcall %}
+    </div>
+  {% endif %}
+
+  {% if not plugins.length %}
+    <p class="max-w-prose">
+      No plugins are installed. A site with its own <code>server.ts</code> passes them in
+      <code>plugins</code> on its config.
+    </p>
+  {% endif %}
+
+  <ul class="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
+    {% for plugin in plugins %}
+      <li id="{{ plugin.anchor }}">
+        {% call card(title=plugin.label) %}
+          <p class="flex flex-wrap items-center gap-2">
+            <code class="break-all">{{ plugin.name }}</code>
+            <span>{{ plugin.version }}</span>
+            {{ status(plugin.badge.status, plugin.badge.label) }}
+          </p>
+          <p>{{ plugin.description }}</p>
+          <p class="text-sm">From {{ plugin.source }}.</p>
+
+          {% if plugin.problem %}
+            <p class="text-sm text-error">{{ plugin.problem }}</p>
+          {% endif %}
+
+          {% if plugin.requirements.length %}
+            <div class="text-sm">
+              <p>Requires:</p>
+              <ul class="list-disc ps-5">
+                {% for requirement in plugin.requirements %}
+                  <li>
+                    {% if requirement.satisfied %}
+                      <code>{{ requirement.name }}</code> <code>{{ requirement.range }}</code>, which is enabled.
+                    {% else %}
+                      Needs <code>{{ requirement.name }}</code> <code>{{ requirement.range }}</code>, which is {{ requirement.words }}.
+                      {% if requirement.anchor %}
+                        <a class="link" href="#{{ requirement.anchor }}">Go to it</a>.
+                      {% endif %}
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+
+          {% if plugin.canEnable or plugin.canDisable %}
+            <form method="post" action="{{ enableUrl if plugin.canEnable else disableUrl }}">
+              <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+              <input type="hidden" name="{{ field }}" value="{{ plugin.name }}" />
+              {% call cardActions() %}
+                {% if plugin.canEnable %}
+                  {{ button('Enable', type='submit', color='primary') }}
+                {% else %}
+                  {{ button('Disable', type='submit') }}
+                {% endif %}
+              {% endcall %}
+            </form>
+          {% endif %}
+        {% endcall %}
+      </li>
+    {% endfor %}
+  </ul>
+{% endblock %}

@@ -19,7 +19,6 @@ const LOCAL_USER = 'ada';
 const SITE_ACTOR = `${BASE_URL}/author/${LOCAL_USER}/`;
 const SITE_INBOX = `${SITE_ACTOR}inbox/`;
 const SHARED_INBOX = `${BASE_URL}/inbox/`;
-const WORDPRESS_SHARED_INBOX = `${BASE_URL}/wp-json/activitypub/1.0/inbox`;
 
 const POST = `${BASE_URL}/2026/09/hello/`;
 const DRAFT = `${BASE_URL}/2026/09/secret/`;
@@ -137,9 +136,7 @@ async function site(settings: Partial<typeof DEFAULT_SITE_SETTINGS> = {}): Promi
       ...settings,
     },
   });
-  writeUsers(dataDir, [
-    { username: LOCAL_USER, profile: { displayName: 'Ada' }, wordpressActorId: 2 },
-  ]);
+  writeUsers(dataDir, [{ username: LOCAL_USER, profile: { displayName: 'Ada' } }]);
 
   deliveries.length = 0;
   const instance = createCms({
@@ -237,18 +234,10 @@ describe('a QuoteRequest for a public post (AC #2)', () => {
     );
   });
 
-  it('is answered at the shared inbox and at the WordPress-compatible one too', async () => {
-    const instance = await site({ wordpressActivityPub: true });
+  it('is answered at the shared inbox too', async () => {
+    const instance = await site();
 
     await deliver(instance, quoteRequest(), SHARED_INBOX);
-    assert.equal(answer()['type'], 'Accept');
-
-    deliveries.length = 0;
-    await deliver(
-      instance,
-      quoteRequest({ id: `${REQUEST}-wp`, instrument: `${QUOTE}1` }),
-      WORDPRESS_SHARED_INBOX,
-    );
     const accept = answer();
     assert.equal(accept['type'], 'Accept');
     assert.equal(accept['actor'], SITE_ACTOR);

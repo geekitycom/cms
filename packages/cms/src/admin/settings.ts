@@ -340,19 +340,6 @@ export interface SiteSettings {
    */
   relays: readonly string[];
   /**
-   * Whether the site also answers the WordPress ActivityPub plugin's inbox and
-   * collection paths (TASK-70).
-   *
-   * Off, and never written down until somebody turns it on: a site born here
-   * has no use for it, and decision-14 calls those paths cache rather than
-   * identity. A follower's server delivers to the inbox URL it cached from the
-   * actor document and replaces it only when it next refetches the actor, so a
-   * site arriving from the plugin keeps receiving at `/wp-json/…` for a while.
-   * The CMS carries them until the caches have moved on and no longer, which is
-   * why this is a switch a person turns off rather than a permanent fixture.
-   */
-  wordpressActivityPub: boolean;
-  /**
    * Every menu the site holds, by name: `site.json`'s `menus`, each an ordered
    * list of items a theme renders wherever it declares an area of that name
    * and an Eleventy build reads out of the same file.
@@ -500,7 +487,6 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   securityPolicy: '',
   securityLanguages: '',
   relays: [],
-  wordpressActivityPub: false,
   locationSharing: 'none',
   menus: {},
   taxonomyRedirects: [],
@@ -552,7 +538,6 @@ export const SETTINGS_FIELDS = {
   securityPolicy: 'security_policy',
   securityLanguages: 'security_languages',
   relays: 'relays',
-  wordpressActivityPub: 'wordpress_activitypub',
   locationSharing: 'location_sharing',
 } as const satisfies Record<SettingsField, string>;
 
@@ -708,11 +693,6 @@ export function settingsFromSiteJson(file: Record<string, unknown>): SiteSetting
           relays: relayList(file['relays'].filter((entry) => typeof entry === 'string').join('\n')),
         }
       : {}),
-    // Absent is the ordinary state of this one, like `homepage`: a site that
-    // has never carried WordPress's paths does not write the key at all.
-    ...(typeof file['wordpressActivityPub'] === 'boolean'
-      ? { wordpressActivityPub: file['wordpressActivityPub'] }
-      : {}),
     ...(isLocationSharing(file['locationSharing'])
       ? { locationSharing: file['locationSharing'] }
       : {}),
@@ -833,13 +813,6 @@ export function siteJsonFor(
     if (settings[key] === '') delete file[key];
     else file[key] = settings[key];
   }
-
-  // And the WordPress switch, on the same rule and for a sharper reason: it is
-  // a temporary accommodation for one migrated site (decision-14), so a site
-  // that has never turned it on should have nothing to say about it, and one
-  // that has turned it off again should go back to saying nothing.
-  if (settings.wordpressActivityPub) file['wordpressActivityPub'] = true;
-  else delete file['wordpressActivityPub'];
 
   delete file['licenseName'];
   if (settings.license === '') delete file['license'];
@@ -1242,10 +1215,6 @@ const FIELD_CHECKS: Record<
           `"${bad}" is not one.`;
   },
 
-  // A checkbox is either submitted or not, so there is nothing a person could
-  // get wrong about it.
-  wordpressActivityPub: () => undefined,
-
   locationSharing: (form) =>
     isLocationSharing(form.locationSharing)
       ? undefined
@@ -1413,7 +1382,6 @@ export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = 
     securityPolicy: normalizeSecurityPolicy(form.securityPolicy) ?? '',
     securityLanguages: normalizeLanguageList(form.securityLanguages) ?? '',
     relays: relayList(form.relays),
-    wordpressActivityPub: form.wordpressActivityPub !== '',
     locationSharing: isLocationSharing(form.locationSharing) ? form.locationSharing : 'none',
   };
 }
@@ -1478,7 +1446,6 @@ export function formFromSettings(settings: SiteSettings): SettingsForm {
     securityPolicy: settings.securityPolicy,
     securityLanguages: settings.securityLanguages,
     relays: settings.relays.join('\n'),
-    wordpressActivityPub: settings.wordpressActivityPub ? '1' : '',
     locationSharing: settings.locationSharing,
   };
 }
@@ -1669,7 +1636,7 @@ function readSiteJsonSync(file: string): Record<string, unknown> {
 }
 
 /** The same, from bytes already in hand. */
-function parseSiteJson(source: string): Record<string, unknown> {
+export function parseSiteJson(source: string): Record<string, unknown> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(source);

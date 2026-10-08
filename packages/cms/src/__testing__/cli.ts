@@ -40,15 +40,20 @@ export interface CliRun {
  * Run `geekity` from source, the way a bin shim runs `dist/cli.js`.
  *
  * `stdin`, when given, is written to the child and the pipe is closed, which
- * is how a password reaches `user add` without a terminal.
+ * is how a password reaches `user add` without a terminal. `env` is added to
+ * this process's environment.
  */
 export async function runCli(
   args: readonly string[],
   cwd: string,
   stdin?: string,
+  env: Readonly<Record<string, string>> = {},
 ): Promise<CliRun> {
   try {
-    const running = execFile(process.execPath, ['--import', TSX, CLI, ...args], { cwd });
+    const running = execFile(process.execPath, ['--import', TSX, CLI, ...args], {
+      cwd,
+      env: { ...process.env, ...env },
+    });
     if (stdin !== undefined) running.child.stdin?.end(stdin);
     const { stdout, stderr } = await running;
     return { code: 0, stdout, stderr };

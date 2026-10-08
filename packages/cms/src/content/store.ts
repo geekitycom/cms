@@ -248,6 +248,12 @@ export interface ContentStore {
   search(query: string, options?: ListOptions): SearchHit[];
   /** How many documents {@link ContentStore.search} would find, for the pager. */
   countSearch(query: string): number;
+  /**
+   * Refuse every write on this connection while on, with SQLite's
+   * `query_only`. A worker handing over to a new one under `geekity serve`
+   * turns it on, so the new worker's boot migrations run alone (TASK-288).
+   */
+  setReadOnly(readOnly: boolean): void;
   /** Close the database. Safe to call twice. */
   close(): void;
 }
@@ -991,6 +997,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       if (expression === undefined) return 0;
       const row = statements.countSearch.get(expression, nowKey()) as Record<string, unknown>;
       return Number(row['count']);
+    },
+
+    setReadOnly(readOnly) {
+      db.exec(`PRAGMA query_only = ${readOnly ? 'ON' : 'OFF'}`);
     },
 
     close() {

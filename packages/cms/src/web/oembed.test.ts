@@ -531,7 +531,7 @@ function framedScript(script: string, hash: string) {
   return { posted, fire, click };
 }
 
-describe("the embed view's side of WordPress's embed protocol (TASK-208)", () => {
+describe("the embed view's side of the wp-embed protocol (TASK-208)", () => {
   async function script(): Promise<string> {
     const { html } = await embedViewOf(await site(), 'https://blog.example/2026/09/hello/');
     return inline(html, 'script');

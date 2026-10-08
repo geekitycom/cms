@@ -494,3 +494,59 @@ describe('the demo highlights code where there is code', () => {
     assert.doesNotMatch(await text('/'), /highlight\.js/);
   });
 });
+
+describe('the demo example plugins (decision-33)', () => {
+  const PLUGINS_DIR = fileURLToPath(new URL('../plugins', import.meta.url));
+  const HELLO = '@geekity-demo/plugin-hello';
+  const GREETINGS = '@geekity-demo/plugin-greetings';
+
+  /** Write the enabled set into the running copy's site.json, as a hand edit. */
+  async function enable(names: string[]): Promise<void> {
+    const file = path.join(demo.contentDir, '_data', 'site.json');
+    const settings = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    settings['plugins'] = Object.fromEntries(names.map((name) => [name, { enabled: true }]));
+    await writeFile(file, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  }
+
+  after(() => enable([]));
+
+  it('serves /plugin-hello/ only while hello and what it requires are enabled', async () => {
+    const control = await get('/plugin-hello-was-never-here/');
+    const controlBody = (await control.text()).replaceAll('/plugin-hello-was-never-here/', '');
+
+    const disabled = await get('/plugin-hello/');
+    assert.equal(disabled.status, 404);
+    assert.equal(
+      (await disabled.text()).replaceAll('/plugin-hello/', ''),
+      controlBody,
+      'a disabled plugin route answers what an absent path answers',
+    );
+
+    await enable([HELLO]);
+    assert.equal((await get('/plugin-hello/')).status, 404, 'hello runs without greetings');
+
+    await enable([HELLO, GREETINGS]);
+    assert.equal(
+      await text('/plugin-hello/'),
+      'Hello from a plugin, on host API version 1.\n',
+      'the route is served on the next request, with no restart',
+    );
+
+    await enable([GREETINGS]);
+    assert.equal((await get('/plugin-hello/')).status, 404, 'disabling takes effect at once');
+  });
+
+  it('imports nothing from core but @geekity/cms/plugin', async () => {
+    const specifiers: string[] = [];
+    for (const name of ['hello.ts', 'greetings.ts']) {
+      const source = await readFile(path.join(PLUGINS_DIR, name), 'utf8');
+      for (const [, from, dynamic] of source.matchAll(
+        /\bfrom\s+'([^']+)'|\bimport\s*\(?\s*'([^']+)'/g,
+      )) {
+        const specifier = from ?? dynamic;
+        if (specifier !== undefined) specifiers.push(specifier);
+      }
+    }
+    assert.deepEqual([...new Set(specifiers)], ['@geekity/cms/plugin']);
+  });
+});

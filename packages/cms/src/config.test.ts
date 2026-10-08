@@ -75,6 +75,22 @@ describe('resolveConfig', () => {
     assert.equal(config.baseUrl, 'https://from-env.example');
   });
 
+  it('names no plugins folder unless the config or GEEKITY_PLUGINS_DIR does', () => {
+    const cwd = '/srv/site';
+    assert.equal(resolveConfig({}, { cwd, env: {} }).pluginsDir, undefined);
+    assert.equal(
+      resolveConfig({ pluginsDir: 'plugins' }, { cwd, env: {} }).pluginsDir,
+      path.join(cwd, 'plugins'),
+    );
+    assert.equal(
+      resolveConfig(
+        { pluginsDir: 'plugins' },
+        { cwd, env: { GEEKITY_PLUGINS_DIR: '/site/plugins' } },
+      ).pluginsDir,
+      '/site/plugins',
+    );
+  });
+
   // decision-15 replaced the single `theme/` directory with a `themes/`
   // directory of named themes, and replaced rather than aliased the names: an
   // environment still setting the old one is a deployment that has to be

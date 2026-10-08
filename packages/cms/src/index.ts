@@ -1,8 +1,17 @@
+import type { Server as HttpServer } from 'node:http';
+import { Server as NetServer } from 'node:net';
+
 import { MemoryKvStore } from '@fedify/fedify';
 import { serve as serveNode } from '@hono/node-server';
 import { Hono } from 'hono';
 
 import { createAccessLog } from './access-log.ts';
+import { PLUGINS_RELOAD_PATH } from './admin/plugins.ts';
+import { createWriteGate } from './drain.ts';
+import { createSettlingQueue } from './federation/queue.ts';
+import type { InstalledPlugin } from './plugins/registry.ts';
+import type { Supervision } from './supervisor/supervision.ts';
+import { refuseWritesUnder } from './files/atomic.ts';
 import { compression } from './web/compression.ts';
 import { createAvatarService } from './avatars/index.ts';
 import type { AvatarService } from './avatars/index.ts';
@@ -35,6 +44,10 @@ import type {
 import type { GeekityEnv } from './env.ts';
 import { createMailService } from './mail/index.ts';
 import type { MailService } from './mail/index.ts';
+import { readEnabledPlugins } from './plugins/enabled.ts';
+import { mountPluginRoutes, pluginLifecycle } from './plugins/mount.ts';
+import { pluginFederation } from './plugins/federation.ts';
+import { sitePluginRegistry } from './plugins/site.ts';
 import { createCommentDigest, createCommentNotifier } from './notifications/index.ts';
 import type { CommentDigest, CommentNotifier } from './notifications/index.ts';
 import {
@@ -43,7 +56,6 @@ import {
   createDeliveryService,
   createRelayService,
   createSiteFederation,
-  createWordPressFederation,
   migrateActorKeysToFiles,
   migrateFederationToFiles,
   mountFederation,
@@ -317,7 +329,7 @@ export {
   setUserEmail,
   setUserPassword,
   setUserProfile,
-  setUserWordPressActor,
+  setUserActorId,
   ConflictingActorIdError,
   UnknownUserError,
   USER_EMAIL_PATH,
@@ -637,6 +649,38 @@ export type {
 } from './files/index.ts';
 
 export { DirectoryNotEmptyError, initSite, SITE_TEMPLATE_DIR, siteManifest } from './init.ts';
+export { definePlugin, HOST_API_VERSION } from './plugin.ts';
+export type {
+  JsonLdDocument,
+  Plugin,
+  PluginActorKey,
+  PluginCollection,
+  PluginCollectionPage,
+  PluginCommand,
+  PluginCommandContext,
+  PluginCommandOption,
+  PluginDataFolder,
+  PluginFederationContext,
+  PluginFederationMiddleware,
+  PluginFollower,
+  PluginHost,
+  PluginKeyAlgorithm,
+  PluginRecipient,
+  PluginRequestContext,
+  PluginRequirements,
+  PluginRouteHandler,
+  PluginScreen,
+  PluginScreenBlock,
+  PluginScreenCard,
+  PluginScreenCell,
+  PluginScreenContext,
+  PluginScreenText,
+  PluginSite,
+  PluginUser,
+} from './plugin.ts';
+export { DuplicatePluginError, pluginDataFolder } from './plugins/registry.ts';
+export { pluginSite } from './plugins/site.ts';
+export { PLUGINS_PATH } from './admin/plugins.ts';
 export type { InitSiteOptions, InitSiteResult } from './init.ts';
 
 export {
@@ -1533,10 +1577,31 @@ export interface Cms {
    */
   serve(): Promise<{ port: number }>;
   /**
+   * Hand over to a new server (TASK-288): refuse every request but GET and
+   * HEAD with a 503, let the writes already in flight finish, stop the
+   * timers, the watcher and the plugins, send what the queues hold, and then
+   * write nothing more to the database, `dataDir` or `contentDir`. What
+   * `geekity serve` does to the old worker on a reload, before the new one
+   * boots.
+   */
+  drain(): Promise<void>;
+  /** Undo {@link Cms.drain}: the new server did not boot, so this one carries on. */
+  resume(): Promise<void>;
+  /**
    * Stop watching, stop listening and close the index. Safe to call when not
-   * listening, and safe to call twice.
+   * listening, and safe to call twice. After {@link Cms.drain}, each open
+   * connection is left to finish on its own rather than closed under a client
+   * that may be about to reuse it.
    */
   close(): Promise<void>;
+}
+
+/** What `geekity serve` hands the CMS it runs, beyond the site's config (TASK-288). */
+export interface ServeContext {
+  /** Plugins imported from the plugins folder, registered beside the config's. */
+  readonly folderPlugins?: readonly InstalledPlugin[];
+  /** The supervisor this CMS runs under, which Reload on the Plugins screen asks. */
+  readonly supervision?: Supervision;
 }
 
 /**
@@ -1580,8 +1645,11 @@ function openCache(resolved: ResolvedConfig): { store: ContentStore; admin: Admi
  * database is built and read back out of the files; see {@link openCache} for
  * what happens to one this version cannot use.
  */
-export function createCms(config: GeekityConfig = {}): Cms {
+export function createCms(config: GeekityConfig = {}, context: ServeContext = {}): Cms {
   const resolved = resolveConfig(config);
+
+  const plugins = sitePluginRegistry(resolved, context.folderPlugins);
+
   const { store, admin } = openCache(resolved);
 
   // A site upgrading from the version that kept its settings in SQLite has
@@ -1804,33 +1872,15 @@ export function createCms(config: GeekityConfig = {}): Cms {
     // it (TASK-85).
     archivePosts: () => store.listPosts(),
   });
-  // One KV store for both federations. The compatibility one (TASK-70) shares
-  // it so that the same `Follow` redelivered to a user's own inbox and to the
-  // WordPress path it used to have is recognised as one activity rather than
-  // handled twice; both sets of inbox listeners are `per-origin` for the same
-  // reason (doc-8).
   const federationKv = resolved.federation.kv ?? new MemoryKvStore();
+  const federationQueue =
+    resolved.federation.queue === undefined ? createSettlingQueue() : undefined;
   const federation = createSiteFederation({
     baseUrl: resolved.baseUrl,
     ...resolved.federation,
+    ...(federationQueue === undefined ? {} : { queue: federationQueue }),
     kv: federationKv,
   });
-
-  /**
-   * The WordPress compatibility federation, built the first time a request
-   * actually reaches one of the plugin's paths with the switch on.
-   *
-   * Lazy because almost no site will ever turn the switch on, and a second set
-   * of dispatchers built at every boot for a setting nobody uses is work for
-   * nothing. `mountFederation` keeps whatever this hands back.
-   */
-  const wordpressFederation = (): SiteFederation =>
-    createWordPressFederation({
-      baseUrl: resolved.baseUrl,
-      ...resolved.federation,
-      kv: federationKv,
-      canonical: federation,
-    });
 
   // Federation listens to the index rather than to the admin, so a post edited
   // on disk federates exactly as one saved through the editor does (doc-4).
@@ -1992,6 +2042,9 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // about to get, the error pages and the 503 included (TASK-139).
   if (resolved.compression) app.use('*', compression());
 
+  const writes = createWriteGate({ exempt: (pathname) => pathname === PLUGINS_RELOAD_PATH });
+  app.use('*', writes.middleware);
+
   app.use('*', async (c, next) => {
     c.set('store', store);
     c.set('admin', admin);
@@ -2012,8 +2065,14 @@ export function createCms(config: GeekityConfig = {}): Cms {
     c.set('redirects', redirects);
     c.set('maintenance', maintenance);
     c.set('indieauth', indieauth);
+    c.set('supervision', context.supervision);
     await next();
   });
+
+  app.use(
+    '*',
+    pluginLifecycle(plugins, () => writes.refusing),
+  );
 
   // The baseline on everything the CMS answers, admin and public alike, and
   // outside everything below so redirects, the 503, 404s and the onError 500
@@ -2057,10 +2116,18 @@ export function createCms(config: GeekityConfig = {}): Cms {
   // every other, so putting it in front costs the rest of the app nothing and
   // is the only place it can go: the public site claims every unmatched path
   // in its not-found handler.
-  mountFederation(app, federation, { wordpress: wordpressFederation });
+  mountFederation(app, federation, {
+    plugins: pluginFederation({
+      registry: plugins,
+      canonical: federation,
+      kv: federationKv,
+      allowPrivateAddress: resolved.federation.allowPrivateAddress ?? false,
+    }),
+  });
 
   // The admin goes on before the public site, for the same reason.
   mountAdmin(app);
+  mountPluginRoutes(app, plugins);
   mountPublicSite(app);
 
   /**
@@ -2087,7 +2154,79 @@ export function createCms(config: GeekityConfig = {}): Cms {
   if (resolved.onDocumentChange !== undefined) subscribe('change', resolved.onDocumentChange);
   if (resolved.onPublish !== undefined) subscribe('published', resolved.onPublish);
 
-  let server: { close(cb: (err?: Error) => void): void } | undefined;
+  let server: HttpServer | undefined;
+  let releaseFiles: (() => void) | undefined;
+
+  /** Everything that runs on its own once the site serves, after the scan. */
+  async function startServices(): Promise<void> {
+    // The index is brought up to date before the first request, so a site
+    // never serves a stale document, and the watcher takes over from there.
+    await content.start();
+
+    // After the scan, because the catch-up reads the index: a post whose
+    // date passed while nothing was running is published here, once.
+    await scheduler.start();
+
+    // And a reply whose target the contexts file holds nothing for is
+    // fetched now, in the background, for the same reason (TASK-123).
+    replyContexts.catchUp();
+
+    // And the avatars the conversations show are fetched or refreshed in the
+    // background now and on a timer from here on, so a reader almost never
+    // waits on a stranger's server for one (TASK-134).
+    avatars.start();
+
+    // And the profiles of whoever is in the inbox log without being a
+    // follower: missing ones are fetched now, which is the backfill of a log
+    // written before profiles were kept, and stale ones on a timer (TASK-184).
+    actorProfiles.start();
+
+    // And whatever personal data has outlived its period is removed now and
+    // every few hours from here on (TASK-135).
+    retention.start();
+
+    // The digests tick from here on. Nothing is caught up first: a digest is
+    // whatever is pending when a window comes up, so a site that was down
+    // over one simply sends the next one, with everything still waiting in it.
+    digests.start();
+
+    await plugins.reconcile(readEnabledPlugins(resolved.contentDir));
+  }
+
+  function stopTimers(): void {
+    scheduler.stop();
+    digests.stop();
+    avatars.stop();
+    actorProfiles.stop();
+    retention.stop();
+  }
+
+  /**
+   * Anything already on its way out is allowed to finish, so stopping never
+   * leaves a delivery half recorded or a queued one unsent.
+   */
+  async function settleQueues(): Promise<void> {
+    await scheduler.settled();
+    await digests.settled();
+    await delivery.settled();
+    await relays.settled();
+    await federationQueue?.settled();
+    await webmentions.settled();
+    await replyContexts.settled();
+    await avatars.settled();
+    await actorProfiles.settled();
+    await retention.settled();
+    await notifier.settled();
+  }
+
+  /** What is left once the queues are empty: the mail, the image encodes, the activity log. */
+  async function settleWrites(): Promise<void> {
+    await mail.settled();
+    // A page render derives an upload's variants in the background; the
+    // encode finishes before the directories it writes into can be removed.
+    await settleImageVariants(resolved);
+    await activityLogSettled(resolved.dataDir);
+  }
 
   return {
     app,
@@ -2131,90 +2270,94 @@ export function createCms(config: GeekityConfig = {}): Cms {
         throw new Error('This CMS is already serving; call close() before serving again.');
       }
 
-      // The index is brought up to date before the first request, so a site
-      // never serves a stale document, and the watcher takes over from there.
-      await content.start();
-
-      // After the scan, because the catch-up reads the index: a post whose
-      // date passed while nothing was running is published here, once.
-      await scheduler.start();
-
-      // And a reply whose target the contexts file holds nothing for is
-      // fetched now, in the background, for the same reason (TASK-123).
-      replyContexts.catchUp();
+      await startServices();
 
       // A syndication target the site declares badly is ignored everywhere,
       // and said so once here rather than on every page (TASK-155).
       for (const problem of syndicationTargetProblems(resolved.contentDir)) console.warn(problem);
 
-      // And the avatars the conversations show are fetched or refreshed in the
-      // background now and on a timer from here on, so a reader almost never
-      // waits on a stranger's server for one (TASK-134).
-      avatars.start();
-
-      // And the profiles of whoever is in the inbox log without being a
-      // follower: missing ones are fetched now, which is the backfill of a log
-      // written before profiles were kept, and stale ones on a timer (TASK-184).
-      actorProfiles.start();
-
-      // And whatever personal data has outlived its period is removed now and
-      // every few hours from here on (TASK-135).
-      retention.start();
-
-      // The digests tick from here on. Nothing is caught up first: a digest is
-      // whatever is pending when a window comes up, so a site that was down
-      // over one simply sends the next one, with everything still waiting in it.
-      digests.start();
-
       return new Promise((resolve) => {
         server = serveNode({ fetch: app.fetch, port: resolved.port }, (info) => {
           resolve({ port: info.port });
-        });
+        }) as HttpServer;
       });
+    },
+
+    async drain() {
+      await writes.refuse();
+      await plugins.reconcile(new Set());
+      stopTimers();
+      await content.stop();
+      await settleQueues();
+      await indexNow.settled();
+      await settleWrites();
+      store.setReadOnly(true);
+      admin.setReadOnly(true);
+      releaseFiles ??= refuseWritesUnder([resolved.dataDir, resolved.contentDir]);
+    },
+
+    async resume() {
+      releaseFiles?.();
+      releaseFiles = undefined;
+      store.setReadOnly(false);
+      admin.setReadOnly(false);
+      await startServices();
+      writes.reopen();
     },
 
     async close() {
       const running = server;
       server = undefined;
-      scheduler.stop();
-      digests.stop();
-      avatars.stop();
-      actorProfiles.stop();
-      retention.stop();
+      await plugins.close();
+      stopTimers();
       await content.stop();
-      await scheduler.settled();
-      await digests.settled();
-      // Anything already on its way out is allowed to finish, so closing never
-      // leaves a delivery half recorded.
-      await delivery.settled();
-      await relays.settled();
-      await webmentions.settled();
-      await replyContexts.settled();
-      await avatars.settled();
-      await actorProfiles.settled();
-      await retention.settled();
-      await notifier.settled();
+      await settleQueues();
       // What was gathered and not yet sent is dropped rather than sent on the
       // way down; a batch already going out finishes.
       indexNow.close();
       await indexNow.settled();
-      await mail.settled();
-      // A page render derives an upload's variants in the background; the
-      // encode finishes before the directories it writes into can be removed.
-      await settleImageVariants(resolved);
-      await activityLogSettled(resolved.dataDir);
+      await settleWrites();
+      federationQueue?.close();
 
-      if (running !== undefined) {
-        await new Promise<void>((resolve, reject) => {
-          running.close((err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
-      }
+      if (running !== undefined) await closeServer(running, writes.refusing);
 
+      releaseFiles?.();
+      releaseFiles = undefined;
       admin.close();
       store.close();
     },
   };
+}
+
+/** How long a drained server waits for its connections to end before it closes them. */
+const GENTLE_CLOSE_MS = 30_000;
+
+/**
+ * Stop listening and resolve once every connection has ended.
+ *
+ * A drained server closes gently. `http.Server#close` closes idle keep-alive
+ * connections at once, racing a client that is about to reuse one, which
+ * then sees a reset. `net.Server#close` leaves them: each one either carries
+ * `Connection: close` on its next response or ends on the keep-alive timeout
+ * the client was told, which a client honours by closing first.
+ */
+function closeServer(running: HttpServer, gently: boolean): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const done = (err?: Error) => {
+      if (err) reject(err);
+      else resolve();
+    };
+    if (!gently) {
+      running.close(done);
+      return;
+    }
+    const timer = setTimeout(() => running.closeAllConnections(), GENTLE_CLOSE_MS);
+    NetServer.prototype.close.call(running, (err?: Error) => {
+      clearTimeout(timer);
+      // The http server's own close clears its connection-checking interval;
+      // the listener is already gone, so the error it reports is expected.
+      running.close(() => undefined);
+      done(err);
+    });
+  });
 }

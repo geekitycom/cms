@@ -155,7 +155,6 @@ export async function remainingSite(
       username: 'ada',
       password: 'correct horse battery',
       email: 'ada@blog.example',
-      wordpressActorId: 2,
     },
     { username: 'grace' },
   ]);

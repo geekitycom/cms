@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-05 10:38'
+updated_date: '2026-10-08 17:28'
 ---
 # Admin UI
 
@@ -41,6 +41,7 @@ know whether it is the only one of its kind.
 | Comments   | All comments                                 |
 | Messages   | All messages                                 |
 | Appearance | Themes                                       |
+| Plugins    | Installed plugins                            |
 | Users      | All users, Add new                           |
 | Tools      | Content index                                |
 | Settings   | General, Reading, Permalinks, Discussion, Email, Privacy |
@@ -97,7 +98,7 @@ faint tint.
 | `/admin/users` | list, edit each user's public profile, set their email, which notices go to it and how often, change your own password (single role: admin) |
 | `/admin/users/new` | the add form, Users > Add new |
 | `/admin/federation` | Federation > Followers: follower list, recent inbox activity, manual re-deliver |
-| `/admin/federation/settings` | Federation > Settings: the relays the site subscribes to, and the WordPress ActivityPub compatibility switch |
+| `/admin/federation/settings` | Federation > Settings: the relays the site subscribes to |
 
 ## Components
 
@@ -304,6 +305,7 @@ What the screens make of the library:
   an error alert saying nothing was saved. Discard mine and edit the file on
   disk is a link; Keep mine and overwrite the file posts the refused form
   again with the hash the file has now.
+- **Plugin buttons** (decision-33, TASK-285). A running plugin's editor action is a soft button under the Title, Description or Tags field, drawn `hidden` so that with JavaScript off there is nothing to press and the form posts exactly what it did without plugins. `static/editor-actions.js` shows it, posts the form to the action's endpoint on a click, and puts the answer under it: a bordered box with the suggestion, **Accept** (primary) and **Dismiss** (ghost), or the plain-words error in the status line, in `text-error`. Accept fills the field, fires `input` so the slug follows a title, and saves nothing; a tags suggestion adds only the tags the field lacks. A tags action may answer choices instead (TASK-286): the box then holds a list, one row per choice copied from the `<template data-editor-choice>` beside it, each a small checkbox with the value, a soft primary badge when the plugin gives one (such as Used here) and a muted note (such as 13 followers on tags.pub). Accept adds the ticked values; nothing is ticked at first. A button its plugin does not offer for the draft is not drawn, and a press that finds the draft no longer fits hides it with the reason. With no running plugin action the editor's HTML and scripts are unchanged.
 
 ## Comments
 
@@ -363,6 +365,17 @@ What the screens make of the library:
   what was typed, and nothing is written. Each of the three actions is its own
   POST, so a refused one cannot lose what was typed into another box.
 
+## Plugins
+
+- **Installed plugins** is the one screen under Plugins, at `/admin/plugins`, after Appearance as in WordPress (decision-33). One card per installed plugin shows its label, description, package name, version, source and state: Enabled, Disabled, Enabled but not running, or Unavailable with the reason.
+- Each plugin it requires is listed with the range it needs. A requirement that is missing or disabled reads "Needs ..., which is disabled" and links to that plugin's card when it is installed.
+- **Enable** and **Disable** are POSTs to `/admin/plugins/enable` and `/admin/plugins/disable`, with the session's CSRF token. They write `plugins[<name>].enabled` in `content/_data/site.json` and keep every other key. Enable is offered only when everything the plugin requires is enabled. Disable is refused while enabled plugins require the plugin, and the error names them.
+- **A plugin's screen** is at `/admin/plugins/<package name>` and in the menu under Plugins while the plugin runs. Core draws it: the cards the plugin hands back as data, a **Settings** form when the plugin declared settings, and a button for each of the screen's actions (TASK-283). A plugin with settings and no screen of its own still gets one, titled with its label.
+- The settings form posts to the screen's own URL with `action=save`. Public boxes write the plugin's entry in `site.json`, keeping every key they do not model; an empty box removes the key so the default applies. A refused value comes back on the screen with status 400, the problem on its field and nothing written. A stored value the field does not accept is shown as its default, with a line saying the value in `site.json` was set aside.
+- A secret is never drawn. Its box is a password field showing Set or Not set; a blank box keeps the stored secret, and **Forget the stored ...** removes it. Each secret's hint names its exact environment variable. A secret the environment sets has no box at all and reads "Set by the environment variable ...".
+- An action button posts `action=<id>`. Core runs the plugin's action and shows its outcome as a notice or an error flash, escaped.
+- A plugin's editor actions answer at `/admin/plugins/<package name>/editor/<id>`, JSON behind the guard and the CSRF token. A screen answers only a path that is a package name and none of Plugins’ own (`reload`, `enable`, `disable`), so the routes take their paths in any order. See Editor.
+
 ## Appearance
 
 - **Themes** is the one screen under Appearance, at `/admin/appearance/themes`,
@@ -393,7 +406,7 @@ What the screens make of the library:
 
 ## Settings
 
-- Settings is six pages, WordPress's own names where the CMS has the same thing: **General** (title, tagline, author, base URL, time zone, language, and the avatar), **Reading** (what the homepage displays, posts per page, the notify server), **Permalinks** (the tag and category bases, with the recorded archive redirects listed under them), **Discussion** (comments and the closing window, webmentions sent and received, and the spam checker), **Email** (the provider, the From line, the reply-to, the contact address, the credential and the test message), and **Privacy** (what the site shares of where a post was written: nothing, the place's words, or the coordinates too, nothing by default; and the home of every later privacy choice. The page also says that location and camera metadata is always removed from uploads). `/admin/settings` is the General page, which is where the Settings heading lands. A seventh page of exactly the same kind, **Federation** (the relays the site subscribes to and the WordPress ActivityPub compatibility switch), is filed under the Federation section at `/admin/federation/settings` rather than here: a screen belongs to the section its subject belongs to, and the admin used to carry two menu entries called Federation with neither saying the other existed (TASK-109).
+- Settings is six pages, WordPress's own names where the CMS has the same thing: **General** (title, tagline, author, base URL, time zone, language, and the avatar), **Reading** (what the homepage displays, posts per page, the notify server), **Permalinks** (the tag and category bases, with the recorded archive redirects listed under them), **Discussion** (comments and the closing window, webmentions sent and received, and the spam checker), **Email** (the provider, the From line, the reply-to, the contact address, the credential and the test message), and **Privacy** (what the site shares of where a post was written: nothing, the place's words, or the coordinates too, nothing by default; and the home of every later privacy choice. The page also says that location and camera metadata is always removed from uploads). `/admin/settings` is the General page, which is where the Settings heading lands. A seventh page of exactly the same kind, **Federation** (the relays the site subscribes to), is filed under the Federation section at `/admin/federation/settings` rather than here: a screen belongs to the section its subject belongs to, and the admin used to carry two menu entries called Federation with neither saying the other existed (TASK-109).
 - Every page is one form of its own with its own POST, and every one of them rewrites `content/_data/site.json` through the same update (decision-9). A page writes the fields it carries and no others, onto the file as re-read inside the write, so two people saving two different pages at the same moment both land and a key the settings do not model is kept. A page validates its own fields and no others: a refused save comes back on the page it was sent from, with the problems on the fields that have them, having written nothing at all.
 - Three things are not fields of any form, and each is its own pair of forms — save and remove — because none can travel in that body and because a rejected one must not lose an edit beside it: the **avatar**, on General; the **Akismet key**, on Discussion; and the **mail credential**, on Email.
 - **Spam checking.** The Akismet key lives in `data/akismet.json` at mode `0600` rather than in `site.json`, which is public and in git. Saving one checks it with Akismet's `verify-key` first; the panel then says connected, "does not recognise this key", "could not be reached", or not connected, and shows the last four characters rather than the key. Remove key turns Akismet off. See doc-6.

@@ -59,7 +59,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { generateKeyPairSync } from 'node:crypto';
+import { createPrivateKey, generateKeyPairSync } from 'node:crypto';
 import { cp, mkdtemp, rm } from 'node:fs/promises';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -67,7 +67,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { serve } from '@hono/node-server';
-import { createFederation, generateCryptoKeyPair, MemoryKvStore } from '@fedify/fedify';
+import { createFederation, exportJwk, generateCryptoKeyPair, MemoryKvStore } from '@fedify/fedify';
 import {
   Accept,
   Application,
@@ -80,9 +80,9 @@ import {
 } from '@fedify/vocab';
 
 import { writeUsers } from '../src/admin/__testing__/users.ts';
-import { listUsers } from '../src/admin/accounts.ts';
+import { listUsers, setUserActorId } from '../src/admin/accounts.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../src/admin/settings.ts';
-import { importWordPressActor } from '../src/federation/import-wordpress.ts';
+import { loadActorKeyPairs, writeActorKeyFile } from '../src/federation/keys.ts';
 import { addFollower, readFollowers, readInboxLog } from '../src/federation/records.ts';
 import { createCms } from '../src/index.ts';
 import type { Cms } from '../src/index.ts';
@@ -101,17 +101,14 @@ const PENDING_POST = '2026-03-05-hot-off-the-press.md';
 const USERNAME = 'andrew';
 
 /**
- * A second account, standing in for one that arrived from somewhere else. It
- * is brought across by `geekity import wordpress-actor` part way through the
- * run (TASK-71), which is what gives it the stored actor id (TASK-69), the
- * plugin's numeric id (TASK-70) and the RSA key its followers hold — so every
+ * A second account, standing in for one that arrived from somewhere else. Part
+ * way through the run it is given the stored actor id (TASK-69) and an RSA key
+ * exported elsewhere, the way a migration plugin's import gives them, so every
  * id it answers by is that URL rather than its author URL, and the key a peer
- * verifies with is the one that was imported rather than one this site minted.
+ * verifies with is the one that was brought across rather than one this site
+ * minted.
  */
 const MIGRATED_USERNAME = 'oldblog';
-
-/** The number the plugin gave that person, which its paths are built from. */
-const MIGRATED_WORDPRESS_ACTOR_ID = 2;
 
 /** How long any one wait may take before the run is called a failure. */
 const STEP_TIMEOUT_MS = 30_000;
@@ -170,13 +167,11 @@ async function main(): Promise<void> {
     });
 
     // The actor is a user, so the accounts exist before the site boots. The
-    // second one is the WordPress case decision-14 is built around: a person
+    // second one is the migration case decision-14 is built around: a person
     // whose followers know them as `?author=2` and must go on doing so.
     const storedActorId = `${baseUrl}/?author=2`;
     writeUsers(dataDir, [
       { username: USERNAME, profile: { displayName: 'Andrew Shell' } },
-      // No `actorId` and no key: both arrive with the import below, which is
-      // the only door either of them has.
       { username: MIGRATED_USERNAME, id: 2, profile: { displayName: 'The Old Blog' } },
     ]);
 
@@ -449,50 +444,31 @@ async function main(): Promise<void> {
     // hold. Everything below is that URL doing the work the author URL does
     // for everybody else — served, redirected from, discoverable, and signed
     // with.
-    //
-    // The account gets all of it the way a real cutover does: an RSA pair
-    // exported as PEM from the plugin, the id it published, and its numeric
-    // actor id, through `geekity import wordpress-actor`. The followers step is
-    // skipped — the fake WordPress this run would have to fetch from does not
-    // exist, and `src/federation/import-wordpress.test.ts` covers it in
-    // process.
-    log(`importing ${MIGRATED_USERNAME} from the WordPress ActivityPub plugin`);
+    log(`bringing ${MIGRATED_USERNAME} across with a stored id and an exported key`);
     const exported = generateKeyPairSync('rsa', {
       modulusLength: 2048,
       publicKeyEncoding: { type: 'spki', format: 'pem' },
       privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
     });
-    const imported = await importWordPressActor({
-      admin: cms.admin,
+    const privateKey = await crypto.subtle.importKey(
+      'pkcs8',
+      createPrivateKey(exported.privateKey).export({ type: 'pkcs8', format: 'der' }),
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      true,
+      ['sign'],
+    );
+    writeActorKeyFile(
       dataDir,
-      contentDir,
-      username: MIGRATED_USERNAME,
-      actorId: storedActorId,
-      wordpressActorId: MIGRATED_WORDPRESS_ACTOR_ID,
-      privateKeyPem: exported.privateKey,
-      publicKeyPem: exported.publicKey,
-      followers: false,
-    });
-    assert.ok(imported.changed, 'the import wrote the key and the ids');
-    assert.equal(imported.keys[0]?.state, 'imported', 'the RSA pair came from the PEM');
-    assert.equal(imported.keys[1]?.state, 'generated', 'and the Ed25519 pair was minted');
-    ok(`imported ${MIGRATED_USERNAME}: ${imported.keys.map((key) => key.file).join(', ')}`);
-
-    // Twice changes nothing, which is what makes a cutover a thing you can run
-    // again after an instance that was down comes back.
-    const rerun = await importWordPressActor({
-      admin: cms.admin,
-      dataDir,
-      contentDir,
-      username: MIGRATED_USERNAME,
-      actorId: storedActorId,
-      wordpressActorId: MIGRATED_WORDPRESS_ACTOR_ID,
-      privateKeyPem: exported.privateKey,
-      publicKeyPem: exported.publicKey,
-      followers: false,
-    });
-    assert.equal(rerun.changed, false, 'a second import changes nothing');
-    ok('a second import changed nothing');
+      MIGRATED_USERNAME,
+      'RSASSA-PKCS1-v1_5',
+      JSON.stringify(await exportJwk(privateKey)),
+    );
+    await loadActorKeyPairs(dataDir, MIGRATED_USERNAME);
+    assert.ok(
+      await setUserActorId({ dataDir, username: MIGRATED_USERNAME, actorId: storedActorId }),
+      'the stored id was written',
+    );
+    ok(`${MIGRATED_USERNAME} carries ${storedActorId} and the exported key`);
 
     const migratedArchive = `${baseUrl}/author/${MIGRATED_USERNAME}/`;
     log(`fedify lookup ${storedActorId}`);

@@ -7,7 +7,7 @@ import '../../__testing__/stub-notify-pings.ts';
 import { seedActorKeys } from '../../federation/__testing__/keys.ts';
 import { createCms } from '../../index.ts';
 import { sessionCookieName } from '../session.ts';
-import type { Cms, GeekityConfig } from '../../index.ts';
+import type { Cms, GeekityConfig, ServeContext } from '../../index.ts';
 
 /**
  * The pieces every admin HTTP test needs: a throwaway site, a thing that keeps
@@ -33,6 +33,8 @@ export interface SandboxSiteOptions {
    * rotation or storage of a key passes `[]` and lets the site do its own.
    */
   actorKeys?: readonly string[];
+  /** What `geekity serve` hands the CMS beyond the config: the plugins folder and the supervisor. */
+  serve?: ServeContext;
 }
 
 /** Everything a test opened, so one `after` hook can put it all back. */
@@ -89,7 +91,10 @@ export function sandbox(): Sandbox {
       for (const username of options.actorKeys ?? [FIRST_ADMIN.username]) {
         seedActorKeys(config.dataDir, username);
       }
-      const instance = createCms({ watch: false, hostLookup: resolveNothing, ...config });
+      const instance = createCms(
+        { watch: false, hostLookup: resolveNothing, ...config },
+        options.serve,
+      );
       started.push(instance);
       await instance.sync();
       return instance;

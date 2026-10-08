@@ -735,7 +735,7 @@ describe('a user profile (TASK-67 AC #1)', () => {
 });
 
 describe('a stored actor id (TASK-69 AC #5)', () => {
-  /** What the WordPress ActivityPub plugin published this person as. */
+  /** What another server published this person as. */
   const STORED = 'https://andrewshell.org/?author=2';
 
   /**

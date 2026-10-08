@@ -1,13 +1,57 @@
 import assert from 'node:assert/strict';
+import { generateKeyPairSync } from 'node:crypto';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
-import { generateKeyPairSync } from 'node:crypto';
 
-import { cleanupTemporaryDirs, exists, runCli, temporaryDir } from './__testing__/cli.ts';
-import { listUsers } from './index.ts';
+import { listUsers } from '@geekity/cms';
 
-after(cleanupTemporaryDirs);
+import { runCli, writeConfigWithPlugin } from './site.ts';
+
+const temporaryDirs: string[] = [];
+
+after(async () => {
+  await Promise.all(temporaryDirs.map((dir) => fs.rm(dir, { recursive: true, force: true })));
+});
+
+async function temporaryDir(prefix: string): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  temporaryDirs.push(dir);
+  return dir;
+}
+
+async function exists(file: string): Promise<boolean> {
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+describe('geekity --help', () => {
+  it('lists import wordpress-actor when the plugin is installed', async () => {
+    const directory = await temporaryDir('geekity-help-');
+    writeConfigWithPlugin(directory);
+
+    const run = await runCli(['--help'], directory);
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(run.stdout, /geekity import wordpress-actor <username> --actor-id <url>/);
+    assert.match(run.stdout, /From @geekity\/plugin-wordpress\./);
+    assert.match(run.stdout, /--wordpress-id <n>/);
+  });
+
+  it('does not list it, and refuses it, on a site without the plugin', async () => {
+    const directory = await temporaryDir('geekity-help-bare-');
+
+    assert.doesNotMatch((await runCli(['--help'], directory)).stdout, /wordpress-actor/);
+    const run = await runCli(['import', 'wordpress-actor', 'ada'], directory);
+    assert.equal(run.code, 1);
+    assert.match(run.stderr, /Unknown command "import"/);
+  });
+});
 
 describe('geekity import wordpress-actor', () => {
   /** The plugin's actor and the number its paths are built from (decision-14). */
@@ -21,7 +65,7 @@ describe('geekity import wordpress-actor', () => {
    * collection.
    *
    * The collection is a file rather than a URL on purpose: the command's own
-   * fetch is covered in process by `src/federation/import-wordpress.test.ts`,
+   * fetch is covered in process by `import.test.ts`,
    * and a child process reaching for a socket is the one thing a CLI test
    * must not do.
    */
@@ -33,6 +77,7 @@ describe('geekity import wordpress-actor', () => {
     followers: string;
   }> {
     const directory = await temporaryDir(prefix);
+    writeConfigWithPlugin(directory);
     const dataDir = path.join(directory, 'data');
     const run = await runCli(['user', 'add', 'ada', '--password', 'hunter22'], directory);
     assert.equal(run.code, 0, run.stderr);
@@ -99,7 +144,13 @@ describe('geekity import wordpress-actor', () => {
 
     const user = listUsers(site.dataDir).find((entry) => entry.username === 'ada');
     assert.equal(user?.actorId, STORED_ACTOR_ID);
-    assert.equal(user?.wordpressActorId, 2, 'the WordPress number is stored as a number');
+    const actors = JSON.parse(
+      await fs.readFile(
+        path.join(site.dataDir, 'plugins', '@geekity', 'plugin-wordpress', 'actors.json'),
+        'utf8',
+      ),
+    ) as Record<string, unknown>;
+    assert.deepEqual(actors, { ada: 2 }, 'the WordPress number is stored as a number');
 
     assert.ok(
       await exists(path.join(site.dataDir, 'keys', 'ada.rsassa-pkcs1-v1_5.jwk')),

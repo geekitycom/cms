@@ -1,5 +1,8 @@
 import { defineConfig } from '@geekity/cms';
 
+import greetings from './plugins/greetings.ts';
+import hello from './plugins/hello.ts';
+
 /**
  * Every value here is optional and every value can be overridden by an
  * environment variable at boot. See the README for the full table.
@@ -13,4 +16,5 @@ export default defineConfig({
   dataDir: 'data',
   themesDir: 'themes',
   baseUrl: 'http://localhost:3000',
+  plugins: [hello, greetings],
 });

@@ -7,7 +7,9 @@
 # package.json would have shipped it. This script tests the artefact instead —
 # pack a tarball, scaffold a site with `geekity init`, install the tarball into
 # it, boot it, and ask it for three URLs — which is the last consequence of
-# decision-6 that nothing else covers.
+# decision-6 that nothing else covers. Every plugin package is packed and
+# installed beside it the same way (decision-33), and exercised through the
+# installed bin and the booted site.
 #
 # It is the body of the `pack-install` job in .github/workflows/ci.yml, so CI
 # and a laptop run the same steps. Usage:
@@ -91,30 +93,154 @@ pnpm --dir "${ROOT}" --filter @geekity/cms build
 
 log "packing the tarball into ${scratch}"
 pnpm --dir "${ROOT}" --filter @geekity/cms pack --pack-destination "${scratch}" >/dev/null
-tarball="$(find "${scratch}" -maxdepth 1 -name '*.tgz' -print -quit)"
+tarball="$(find "${scratch}" -maxdepth 1 -name 'geekity-cms-*.tgz' -print -quit)"
 if [[ -z "${tarball}" ]]; then
   echo "pnpm pack wrote no tarball into ${scratch}" >&2
   exit 1
 fi
 echo "packed ${tarball}"
 
+# Build and pack one plugin package into the scratch directory, leaving the
+# tarball's path in `packed`.
+packed=""
+pack_plugin() {
+  local package="$1"
+  log "building and packing @geekity/${package}"
+  pnpm --dir "${ROOT}" --filter "@geekity/${package}" build
+  pnpm --dir "${ROOT}" --filter "@geekity/${package}" pack --pack-destination "${scratch}" >/dev/null
+  packed="$(find "${scratch}" -maxdepth 1 -name "geekity-${package}-*.tgz" -print -quit)"
+  if [[ -z "${packed}" ]]; then
+    echo "pnpm pack wrote no ${package} tarball into ${scratch}" >&2
+    exit 1
+  fi
+  echo "packed ${packed}"
+}
+pack_plugin plugin-wordpress
+wordpress_tarball="${packed}"
+pack_plugin plugin-llm
+llm_tarball="${packed}"
+pack_plugin plugin-post-summary
+summary_tarball="${packed}"
+pack_plugin plugin-tag-suggest
+tags_tarball="${packed}"
+
 log "geekity init ${site}"
 # The bin is run from dist/ rather than through a workspace link, so this is
 # also a check that the compiled CLI resolves its own templates directory.
 node "${ROOT}/packages/cms/dist/cli.js" init "${site}"
 
-log "pointing the new site at the tarball"
+log "pointing the new site at the tarballs"
 node --input-type=commonjs -e '
   const { readFileSync, writeFileSync } = require("node:fs");
-  const [manifestPath, tarball] = process.argv.slice(1);
+  const [manifestPath, tarball, wordpress, llm, summary, tags] = process.argv.slice(1);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   manifest.dependencies["@geekity/cms"] = "file:" + tarball;
+  manifest.dependencies["@geekity/plugin-wordpress"] = "file:" + wordpress;
+  manifest.dependencies["@geekity/plugin-llm"] = "file:" + llm;
+  manifest.dependencies["@geekity/plugin-post-summary"] = "file:" + summary;
+  manifest.dependencies["@geekity/plugin-tag-suggest"] = "file:" + tags;
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-' "${site}/package.json" "${tarball}"
-grep '@geekity/cms' "${site}/package.json"
+' "${site}/package.json" "${tarball}" "${wordpress_tarball}" "${llm_tarball}" "${summary_tarball}" "${tags_tarball}"
+grep '@geekity/' "${site}/package.json"
+
+log "installing the WordPress, LLM, post summary and tag suggestion plugins in the site config"
+node --input-type=commonjs -e '
+  const { readFileSync, writeFileSync } = require("node:fs");
+  const [configPath] = process.argv.slice(1);
+  const config = readFileSync(configPath, "utf8")
+    .replace(/^/, "import wordpress from \"@geekity/plugin-wordpress\";\nimport llm from \"@geekity/plugin-llm\";\nimport postSummary from \"@geekity/plugin-post-summary\";\nimport tagSuggest from \"@geekity/plugin-tag-suggest\";\n")
+    .replace("export default defineConfig({", "export default defineConfig({\n  plugins: [wordpress, llm, postSummary, tagSuggest],");
+  writeFileSync(configPath, config);
+' "${site}/geekity.config.ts"
+grep -n 'wordpress\|llm\|postSummary\|tagSuggest' "${site}/geekity.config.ts"
 
 log "installing"
 pnpm --dir "${site}" install
+
+log "importing @geekity/cms/plugin from the installed tarball"
+(
+  cd "${site}"
+  node --input-type=module -e '
+    const plugin = await import("@geekity/cms/plugin");
+    if (typeof plugin.definePlugin !== "function" || !Number.isInteger(plugin.HOST_API_VERSION)) {
+      console.error("@geekity/cms/plugin resolved without definePlugin and HOST_API_VERSION");
+      process.exit(1);
+    }
+    console.log("ok  @geekity/cms/plugin, host API version " + plugin.HOST_API_VERSION);
+  '
+)
+cat >"${site}/plugin-check.ts" <<'TS'
+import { definePlugin } from '@geekity/cms/plugin';
+import type { Plugin, PluginHost } from '@geekity/cms/plugin';
+import llm from '@geekity/plugin-llm';
+import postSummary from '@geekity/plugin-post-summary';
+import tagSuggest from '@geekity/plugin-tag-suggest';
+import wordpress from '@geekity/plugin-wordpress';
+
+export const installed: readonly Plugin[] = [wordpress, llm, postSummary, tagSuggest];
+
+export const check: Plugin = definePlugin({
+  name: '@scratch/plugin-check',
+  version: '0.0.0',
+  label: 'Check',
+  description: 'Type checks against the published declarations.',
+  hostApi: 1,
+  requires: {},
+  register(host: PluginHost) {
+    host.get('/check/', ({ params }) => new Response(String(Object.keys(params).length)));
+  },
+});
+TS
+
+log "running the plugin's command through the installed bin"
+(
+  cd "${site}"
+  pnpm exec geekity --help | grep -F 'geekity import wordpress-actor <username>'
+  pnpm exec geekity user add ada --password 'correct horse battery' >/dev/null
+  node --input-type=module -e '
+    import { generateKeyPairSync } from "node:crypto";
+    import { writeFileSync } from "node:fs";
+    const pair = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+    writeFileSync("ada.private.pem", pair.privateKey);
+  '
+  pnpm exec geekity import wordpress-actor ada --actor-id 'http://localhost:3000/?author=2' \
+    --wordpress-id 2 --private-key ada.private.pem --followers none
+  node --input-type=commonjs -e '
+    const { readFileSync, writeFileSync } = require("node:fs");
+    const file = "content/_data/site.json";
+    const site = JSON.parse(readFileSync(file, "utf8"));
+    site.plugins = {
+      "@geekity/plugin-wordpress": { enabled: true },
+      "@geekity/plugin-llm": { enabled: true },
+      "@geekity/plugin-post-summary": { enabled: true },
+      "@geekity/plugin-tag-suggest": { enabled: true },
+    };
+    writeFileSync(file, JSON.stringify(site, null, 2) + "\n");
+  '
+)
+
+log "loading each plugin's bundle with no node_modules beside it"
+for package in plugin-wordpress plugin-llm plugin-post-summary plugin-tag-suggest; do
+  bundle_dir="${scratch}/bundle-only-${package}"
+  mkdir -p "${bundle_dir}"
+  cp "${site}/node_modules/@geekity/${package}/dist/bundle/index.js" "${bundle_dir}/index.js"
+  (
+    cd "${bundle_dir}"
+    node --input-type=module -e '
+      const [expected] = process.argv.slice(1);
+      const { default: plugin } = await import("./index.js");
+      if (plugin.name !== expected || typeof plugin.register !== "function") {
+        console.error("the bundle does not export " + expected);
+        process.exit(1);
+      }
+      console.log("ok  the bundle exports " + plugin.name + " " + plugin.version);
+    ' "@geekity/${package}"
+  )
+done
 
 log "booting on port ${PORT}"
 # The site's output goes to a file rather than to this script's stdout. That is
@@ -163,6 +289,61 @@ log "asking the installed site for three URLs"
 check "/" "Hello, world"
 check "/2026/01/hello-world/" "Hello, world"
 check "/hello/" "a route of my own"
+
+log "asking the enabled WordPress plugin for its old actor path"
+actor="$(curl -fsS -H 'accept: application/activity+json' "${BASE}/wp-json/activitypub/1.0/actors/2")"
+if ! grep -qF '"id":"http://localhost:3000/?author=2"' <<<"${actor}"; then
+  echo "the old actor path did not serve the stored id:" >&2
+  echo "${actor}" >&2
+  exit 1
+fi
+echo "ok  GET /wp-json/activitypub/1.0/actors/2"
+
+log "signing in and asking for the LLM plugin's settings screen"
+jar="${scratch}/cookies.txt"
+login="$(curl -fsS -c "${jar}" -b "${jar}" "${BASE}/admin/login")"
+token="$(sed -n 's/.*name="csrf_token" value="\([^"]*\)".*/\1/p' <<<"${login}" | head -n 1)"
+curl -fsS -o /dev/null -c "${jar}" -b "${jar}" \
+  --data-urlencode "csrf_token=${token}" --data-urlencode 'username=ada' \
+  --data-urlencode 'password=correct horse battery' "${BASE}/admin/login"
+llm_screen="$(curl -fsS -b "${jar}" "${BASE}/admin/plugins/@geekity/plugin-llm")"
+for expected in 'Base URL' 'https://openrouter.ai/api/v1' '<code>GEEKITY_PLUGIN_LLM__API_KEY</code>' 'Test connection'; do
+  if ! grep -qF -- "${expected}" <<<"${llm_screen}"; then
+    echo "the LLM screen did not contain \"${expected}\"" >&2
+    exit 1
+  fi
+done
+echo "ok  GET /admin/plugins/@geekity/plugin-llm"
+
+log "pressing Suggest title in the editor with no API key set"
+editor="$(curl -fsS -b "${jar}" "${BASE}/admin/posts/new")"
+for expected in '>Suggest title</button>' '>Suggest description</button>' '>Suggest tags</button>' 'editor-actions.js'; do
+  if ! grep -qF -- "${expected}" <<<"${editor}"; then
+    echo "the editor did not contain \"${expected}\"" >&2
+    exit 1
+  fi
+done
+editor_token="$(sed -n 's/.*name="csrf_token" value="\([^"]*\)".*/\1/p' <<<"${editor}" | head -n 1)"
+suggestion="$(curl -fsS -b "${jar}" --data-urlencode "csrf_token=${editor_token}" \
+  --data-urlencode 'type=post' --data-urlencode 'body=Some words.' \
+  "${BASE}/admin/plugins/@geekity/plugin-post-summary/editor/suggest-title")"
+if ! grep -qF 'Add an API key on Plugins > LLM' <<<"${suggestion}"; then
+  echo "Suggest title did not explain the missing key:" >&2
+  echo "${suggestion}" >&2
+  exit 1
+fi
+echo "ok  POST /admin/plugins/@geekity/plugin-post-summary/editor/suggest-title"
+
+log "pressing Suggest tags in the editor with no API key set"
+tags_suggestion="$(curl -fsS -b "${jar}" --data-urlencode "csrf_token=${editor_token}" \
+  --data-urlencode 'type=post' --data-urlencode 'body=Some words.' \
+  "${BASE}/admin/plugins/@geekity/plugin-tag-suggest/editor/suggest-tags")"
+if ! grep -qF 'Add an API key on Plugins > LLM' <<<"${tags_suggestion}"; then
+  echo "Suggest tags did not explain the missing key:" >&2
+  echo "${tags_suggestion}" >&2
+  exit 1
+fi
+echo "ok  POST /admin/plugins/@geekity/plugin-tag-suggest/editor/suggest-tags"
 
 log "type checking the scratch site against the published declarations"
 (cd "${site}" && npx tsc --noEmit)

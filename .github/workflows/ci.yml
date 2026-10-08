@@ -1,8 +1,10 @@
 # The quality gates of decision-8, one job per gate so each can be named as a
 # required status check on `main`: lint, typecheck, test and build.
 #
-# `pnpm install` runs the root `prepare` script, which builds `packages/cms`, so
-# every job already has `dist/` before its own command runs. The `build` job is
+# `pnpm install` runs the root `prepare` script, which builds every package
+# under `packages/` (core and each `plugin-*`), so every job already has
+# `dist/` before its own command runs. The root scripts run recursively, so
+# each job covers the plugin packages as it covers core. The `build` job is
 # still here on its own: it is the check a branch protection rule points at, and
 # it is the one that fails loudly when the compiler is the problem.
 name: ci
@@ -149,7 +151,9 @@ jobs:
   # other job reaches `@geekity/cms` through a symlink, which shows the whole
   # source tree whether or not `files` in package.json would have shipped it;
   # this one packs a tarball, scaffolds a site with `geekity init`, installs the
-  # tarball into it and asks the booted site for three URLs.
+  # tarball into it and asks the booted site for three URLs. Each plugin
+  # package is packed and installed beside it, and exercised through the
+  # installed bin and the booted site.
   #
   # The steps live in `scripts/pack-install-smoke.sh` rather than in this file,
   # so the sequence can be run on a laptop before it is trusted here.
@@ -170,9 +174,11 @@ jobs:
   # The Docker image. It is published by hand with scripts/docker-build-push.sh,
   # so without this a broken Dockerfile would surface only at release time on a
   # maintainer's workstation. The image is built for linux/amd64 and loaded into
-  # the runner's Docker; then scripts/docker-smoke.sh boots it on empty content
-  # and data volumes, waits for /healthz to answer 200 and checks the home page
-  # is the seeded starter site in the packaged default theme.
+  # the runner's Docker; then scripts/docker-smoke.sh boots it on empty content,
+  # data and plugins volumes, waits for /healthz to answer 200, checks the home
+  # page is the seeded starter site in the packaged default theme, and installs
+  # a plugin with `geekity plugin add` from a registry run inside the container,
+  # then loads it with Reload on the Plugins screen, with no restart.
   #
   # This job pushes nothing: `push: false`, no registry login, and the token
   # stays at `contents: read`. The layer cache is the buildx GitHub Actions
@@ -202,7 +208,7 @@ jobs:
           provenance: false
           cache-from: type=gha,scope=docker-smoke
           cache-to: type=gha,mode=max,scope=docker-smoke
-      - name: Boot it on empty volumes and check /healthz and the home page
+      - name: Boot it on empty volumes, check /healthz and the home page, and add a plugin
         shell: bash
         run: bash scripts/docker-smoke.sh geekity-smoke:ci
 

@@ -732,3 +732,22 @@ describe('the federation files', () => {
     );
   });
 });
+
+describe('one Follow delivered to two inboxes', () => {
+  it('is handled once, because the canonical inbox dedupes per origin', async () => {
+    const instance = await site();
+
+    // Fedify's default idempotence folds the recipient into the key, so the
+    // personal inbox (recipient `blog`) and the shared one (no recipient) would
+    // each handle it, and the follower would be told twice. A plugin's second
+    // federation shares this KV store and relies on the same rule (doc-8).
+    await deliver(instance, follow(), { inbox: SITE_INBOX });
+    await deliver(instance, follow(), { inbox: SHARED_INBOX });
+
+    assert.equal(
+      deliveries.filter((delivery) => delivery.body['type'] === 'Accept').length,
+      1,
+      'the follower is told once',
+    );
+  });
+});

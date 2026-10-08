@@ -1215,3 +1215,32 @@ describe('relay subscriptions', () => {
     assert.equal(last?.activityId, 'https://blog.example/2026/03/hello/#create');
   });
 });
+
+describe('setReadOnly', () => {
+  it('refuses every write while on and allows them again when off', async () => {
+    const admin = await store();
+    admin.setState('kept', 'before');
+
+    admin.setReadOnly(true);
+    assert.throws(() => admin.setState('kept', 'after'), /readonly/);
+    assert.equal(admin.getState('kept'), 'before', 'reads still answer');
+
+    admin.setReadOnly(false);
+    admin.setState('kept', 'after');
+    assert.equal(admin.getState('kept'), 'after');
+  });
+
+  it('shows a flash while read-only and leaves it queued for the next page', async () => {
+    const admin = await store();
+    const session = admin.createSession({ userId: null, lifetimeSeconds: 60 });
+    assert.deepEqual(admin.takeFlash(session.id), []);
+    admin.pushFlash(session.id, { kind: 'notice', message: 'Saved.' });
+
+    admin.setReadOnly(true);
+    assert.deepEqual(admin.takeFlash(session.id), [{ kind: 'notice', message: 'Saved.' }]);
+
+    admin.setReadOnly(false);
+    assert.deepEqual(admin.takeFlash(session.id), [{ kind: 'notice', message: 'Saved.' }]);
+    assert.deepEqual(admin.takeFlash(session.id), []);
+  });
+});

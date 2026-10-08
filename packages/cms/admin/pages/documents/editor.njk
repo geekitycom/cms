@@ -8,6 +8,7 @@
 
 {% import "components/fields.njk" as field %}
 {% from "components/alert.njk" import alert %}
+{% from "components/badge.njk" import badge %}
 {% from "components/button.njk" import button, buttonLink %}
 {% from "components/card.njk" import card, cardActions %}
 {% from "components/collapse.njk" import collapse %}
@@ -29,6 +30,41 @@
   {{ field.text('editor-cited-alt', 'cited-alt', 'Alt text of the reposted image', value=(form.citedAlt or form.title), error=(error if errorField == 'editor-cited-alt' else ''), hint='What the image shows, for readers who cannot see it. It starts as the post’s title.', hintId='editor-cited-alt-hint') }}
   {% endif %}
 {% endcall %}
+{% endif %}
+{% endmacro %}
+
+{% macro pluginActions(fieldId, buttons) %}
+{% if buttons %}
+<div class="flex flex-col gap-2" data-editor-actions="{{ fieldId }}">
+  {% for action in buttons %}
+  <div class="flex flex-col items-start gap-1" data-editor-action="{{ action.url }}">
+    {{ button(action.label, style='soft', hidden=true) }}
+    <p class="text-sm" role="status"></p>
+    <div class="flex w-full flex-col gap-2 rounded-box border border-base-300 p-3" role="group" aria-label="{{ action.label }}" hidden>
+      <p class="whitespace-pre-wrap break-words"></p>
+      <ul class="flex flex-col gap-1" data-editor-choices hidden></ul>
+      <template data-editor-choice>
+        <li>
+          <label class="flex items-start gap-2">
+            <input type="checkbox" class="checkbox checkbox-sm mt-0.5" form="editor-suggestions">
+            <span class="flex flex-col">
+              <span class="flex flex-wrap items-center gap-2">
+                <span class="break-all" data-choice-value></span>
+                {{ badge('', color='primary', style='soft') }}
+              </span>
+              <span class="text-sm text-base-content/70" data-choice-note></span>
+            </span>
+          </label>
+        </li>
+      </template>
+      <div class="flex gap-2">
+        {{ button('Accept', color='primary') }}
+        {{ button('Dismiss', style='ghost') }}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
 {% endif %}
 {% endmacro %}
 
@@ -72,6 +108,7 @@
         {% set titleHint %}{% if kind.type == "post" %}Leave it empty to write a note: the post is then its words, and takes its slug from the first of them.{% endif %}{% endset %}
         {#- A post may go without one, and is then a note; a page is always named. -#}
         {{ field.text('editor-title', 'title', 'Title', value=form.title, required=(kind.type == "page"), autofocus=true, error=(error if errorField == 'editor-title' else ''), hint=titleHint) }}
+        {{ pluginActions('editor-title', editorActions['editor-title']) }}
 
         {{ field.textarea('editor-body', 'body', 'Body', value=form.body, rows=24) }}
 
@@ -242,6 +279,7 @@
         {% call collapse('Tags and categories', open.taxonomy, fields=true) %}
           {% if kind.tagged %}
             {{ field.text('editor-tags', 'tags', 'Tags', value=form.tags, hint='Separated by commas.') }}
+            {{ pluginActions('editor-tags', editorActions['editor-tags']) }}
           {% endif %}
           {% if kind.categorised %}
             {{ field.text('editor-categories', 'categories', 'Categories', value=form.categories, hint='Separated by commas.') }}
@@ -318,6 +356,7 @@
 
       {% call collapse('Summary and language', open.summary, fields=true) %}
         {{ field.text('editor-description', 'description', 'Description', value=form.description, error=(error if errorField == 'editor-description' else '')) }}
+        {{ pluginActions('editor-description', editorActions['editor-description']) }}
 
         {#- The `lang` front matter (TASK-154): a post or page written in another
             language than the site's says so, for screen readers, translation
@@ -367,6 +406,9 @@
       {% endcall %}
     </div>
   </form>
+  {% if editorActions | length %}
+    <form id="editor-suggestions" hidden></form>
+  {% endif %}
 
   {# CodeMirror, the preview tab and the upload control. A module script is
      deferred by definition, so it runs after the form is in the document.
@@ -391,5 +433,8 @@
   <script defer src="{{ assetPrefix }}slug.js"></script>
   {% if kind.type == 'post' %}
     <script defer src="{{ assetPrefix }}location.js"></script>
+  {% endif %}
+  {% if editorActions | length %}
+    <script defer src="{{ assetPrefix }}editor-actions.js"></script>
   {% endif %}
 {% endblock %}

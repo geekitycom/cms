@@ -1,17 +1,19 @@
 import { randomUUID } from 'node:crypto';
 
-import type { InboxContext } from '@fedify/fedify';
-import { Accept, Follow, Reject } from '@fedify/vocab';
-import type {
+import type { Context, InboxContext } from '@fedify/fedify';
+import {
+  Accept,
   Activity,
-  Actor,
   Announce,
   Create,
   Delete,
+  Follow,
   Like,
   QuoteRequest,
+  Reject,
   Undo,
 } from '@fedify/vocab';
+import type { Actor } from '@fedify/vocab';
 
 import { listUsers, primaryUser } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
@@ -378,4 +380,84 @@ function dereference(context: SiteInboxContext): {
   contextLoader: SiteInboxContext['contextLoader'];
 } {
   return { documentLoader: context.documentLoader, contextLoader: context.contextLoader };
+}
+
+/** One activity type the inbox handles, and the handler that does. */
+export interface InboxListener {
+  readonly type: typeof Activity;
+  readonly handle: (context: SiteInboxContext, activity: Activity) => Promise<void>;
+}
+
+function listener<A extends Activity>(
+  type: typeof Activity & (new (...args: never[]) => A),
+  handle: (context: SiteInboxContext, activity: A) => Promise<void>,
+): InboxListener {
+  // Fedify, and receiveActivity below, hand a listener only instances of its
+  // own type, so the activity is always an A.
+  return { type, handle: (context, activity) => handle(context, activity as A) };
+}
+
+/**
+ * What the site's inbox does with each activity type: the canonical inbox
+ * listens with these, and {@link receiveActivity} dispatches through them.
+ */
+export const INBOX_LISTENERS: readonly InboxListener[] = [
+  listener(Follow, handleFollow),
+  listener(Accept, handleAccept),
+  listener(Reject, handleReject),
+  listener(Undo, handleUndo),
+  listener(Delete, handleDelete),
+  listener(Like, handleLoggedActivity),
+  listener(Announce, handleLoggedActivity),
+  listener(Create, handleLoggedActivity),
+  listener(QuoteRequest, handleQuoteRequest),
+];
+
+/**
+ * Handle an activity another inbox has already verified, as the site's own
+ * inbox would: what a plugin's federation hands over (decision-33).
+ *
+ * The activity arrives as JSON-LD and is parsed here with this core's
+ * vocabulary, because the plugin's copy of Fedify is not this one and a type
+ * check across the two would fail. `recipient` is the username of the
+ * personal inbox it arrived at, or `null` for a shared one.
+ */
+export async function receiveActivity(
+  context: Context<FederationContextData>,
+  json: unknown,
+  recipient: string | null,
+): Promise<void> {
+  const activity = await Activity.fromJsonLd(json, {
+    documentLoader: context.documentLoader,
+    contextLoader: context.contextLoader,
+  });
+  const found = INBOX_LISTENERS.find((entry) => activity instanceof entry.type);
+  if (found === undefined) return;
+  await found.handle(withRecipient(context, recipient), activity);
+}
+
+/**
+ * A context wearing one delivery's recipient. A `Proxy` rather than a copy,
+ * because Fedify's context is a class with private state its methods need.
+ * Forwarding needs the bytes that arrived, which only the receiving inbox
+ * holds, so it is refused.
+ */
+function withRecipient(
+  context: Context<FederationContextData>,
+  recipient: string | null,
+): SiteInboxContext {
+  return new Proxy(context as unknown as SiteInboxContext, {
+    get(target, property) {
+      if (property === 'recipient') return recipient;
+      if (property === 'forwardActivity') {
+        return () => {
+          throw new Error('An activity handed over by a plugin cannot be forwarded.');
+        };
+      }
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === 'function'
+        ? (value as (...args: unknown[]) => unknown).bind(target)
+        : value;
+    },
+  });
 }

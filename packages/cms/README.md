@@ -86,21 +86,26 @@ message on a site whose `site.json` has not set a period.
 site (or `npx geekity`, or a `package.json` script, which is how the generated
 `sync` script calls it).
 
-| Command                                   | What it does                                                                                                                                                          |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `geekity serve`                           | Boot from the config file and listen. The default when no command is given.                                                                                           |
-| `geekity init <dir>`                      | Create a new site in `<dir>`. Refuses a directory that is not empty.                                                                                                  |
-| `geekity sync`                            | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed.                                                                              |
-| `geekity rebuild`                         | Delete `data/geekity.db` and build it again from the files.                                                                                                           |
-| `geekity resend --all`, `<slug>...`       | Send announced posts to every follower and relay again, as they now read. See [Quote posts](#quote-posts).                                                            |
-| `geekity maintenance on`, `off`, `status` | Take the public site down on purpose with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` names when it should be back.             |
-| `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`. See [The media library](#the-media-library).                                             |
-| `geekity user add <name>`                 | Create an admin account, so a site can get its first login without the setup screen.                                                                                  |
-| `geekity import wordpress-actor <name>`   | Bring one person across from the WordPress ActivityPub plugin: their key pair, the actor id their followers hold, the plugin's numeric actor id, and their followers. |
-| `geekity --help`, `-h`                    | The same table, on the terminal.                                                                                                                                      |
-| `geekity --version`                       | The installed version.                                                                                                                                                |
+| Command                                   | What it does                                                                                                                                                                       |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `geekity serve`                           | Boot from the config file and listen, in a worker the command supervises: Reload on the Plugins screen replaces it, and a crash respawns it. The default when no command is given. |
+| `geekity init <dir>`                      | Create a new site in `<dir>`. Refuses a directory that is not empty.                                                                                                               |
+| `geekity sync`                            | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed.                                                                                           |
+| `geekity rebuild`                         | Delete `data/geekity.db` and build it again from the files.                                                                                                                        |
+| `geekity resend --all`, `<slug>...`       | Send announced posts to every follower and relay again, as they now read. See [Quote posts](#quote-posts).                                                                         |
+| `geekity maintenance on`, `off`, `status` | Take the public site down on purpose with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` names when it should be back.                          |
+| `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`. See [The media library](#the-media-library).                                                          |
+| `geekity user add <name>`                 | Create an admin account, so a site can get its first login without the setup screen.                                                                                               |
+| `geekity plugin add <package>`, `remove`  | Install a plugin package's bundle from the npm registry into the plugins folder (`GEEKITY_PLUGINS_DIR`), or delete it. Reload on the Plugins screen loads the change.              |
+| `geekity --help`, `-h`                    | The same table, on the terminal.                                                                                                                                                   |
+| `geekity --version`                       | The installed version.                                                                                                                                                             |
 
-`serve`, `sync`, `rebuild`, `resend`, `maintenance`, `strip-metadata`, `user add` and `import wordpress-actor` take
+An installed plugin may add commands of its own, which `geekity --help` lists
+under _Plugin commands_ and which run whether or not the plugin is enabled.
+That includes a plugin in the plugins folder. The repository README's
+_Plugins_ section describes `geekity plugin add` and writing a plugin.
+
+`serve`, `sync`, `rebuild`, `resend`, `maintenance`, `strip-metadata`, `user add`, `plugin` and every plugin command take
 `--config <file>`; without it they look for `geekity.config.ts`, then
 `geekity.config.js`, then `geekity.config.mjs` in the working directory, and run
 on defaults if there is none.
@@ -291,9 +296,28 @@ directory; absolute ones are used as given.
 | `federation`       | `{}`                                  | —                            | Federation stores and guards. See [Federation](#federation).                                                                                                                                                                                                    |
 | `commentChecker`   | Akismet                               | —                            | A spam checker of the site's own, which wins over the key in `data/akismet.json`. See [Akismet](#akismet).                                                                                                                                                      |
 | `mail`             | `{}`                                  | —                            | Mail provider, retries, backoff and logger. See [Email](#email).                                                                                                                                                                                                |
+| `plugins`          | `[]`                                  | —                            | The installed plugins. Which run is the `plugins` key of `site.json`, set under Admin > Plugins. A plugin's secret settings take an environment variable each; see below.                                                                                       |
 
 Precedence is environment variable, then config file, then default, so a host
-can override anything without editing the site. A boolean environment variable
+can override anything without editing the site.
+
+A plugin's secret settings, such as an API key, can come from the environment
+too, which is how a Docker site keeps a key in `.env`. The variable is the
+plugin's package name, then `__`, then the setting's key, each upper-cased with
+every run of other characters, underscores included, written as one `_`:
+
+| Package               | Setting   | Variable                      |
+| --------------------- | --------- | ----------------------------- |
+| `@geekity/plugin-llm` | `api_key` | `GEEKITY_PLUGIN_LLM__API_KEY` |
+| `@acme/plugin-llm`    | `api_key` | `ACME_PLUGIN_LLM__API_KEY`    |
+
+A set variable wins over the value stored in
+`data/plugins/<package name>/secrets.json`, and the plugin's screen shows the
+setting as set by the environment, with no box to change it. The screen prints
+each secret's exact variable name. Only plugin variables contain `__`, so none
+can shadow a core one. Two installed packages whose names convert to the same
+prefix, such as `@a/b-c` and `@a-b/c`, both refuse to load, and Admin > Plugins
+names the two. A boolean environment variable
 takes `true`, `1`, `yes` and `on`, or their opposites; anything else is an error
 rather than a silent `false`.
 
@@ -361,20 +385,20 @@ the same directory reads all of it, and everything in it is meant to be public:
 
 `data/` is private. It is gitignored, and it is the half to copy somewhere safe:
 
-| Path                              | What it holds                                                                                                                   |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `data/users.json`                 | Usernames and argon2id password hashes. Mode `0600`.                                                                            |
-| `data/keys/`                      | Each user's actor key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                      |
-| `data/locations.json`             | Where each post was written, keyed by permalink (decision-29). Mode `0600`.                                                     |
-| `data/comment-salt`               | What hides commenters' addresses in the published comment files. Mode `0600`.                                                   |
-| `data/comments/{slug}.json`       | The emails of that post's commenters, and whether each asked to hear about replies, keyed by comment id. Mode `0600`.           |
-| `data/akismet.json`               | The Akismet key, and what `verify-key` last said about it. Mode `0600`.                                                         |
-| `data/mail.json`                  | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                 |
-| `data/notification-secret`        | What signs the one-click links in a notification. Mode `0600`. Losing it kills every link already in an inbox and nothing else. |
-| `data/comment-optouts.json`       | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                           |
-| `data/indieauth-tokens.json`      | A SHA-256 hash of each IndieAuth access and refresh token, with its user, app, scopes and expiry (decision-24). Mode `0600`.    |
-| `data/notification-digests.json`  | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early and nothing worse.                         |
-| `data/wordpress-activitypub.json` | When each WordPress compatibility path was last asked for. Losing it resets the answer the switch is watched by.                |
+| Path                             | What it holds                                                                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `data/users.json`                | Usernames and argon2id password hashes. Mode `0600`.                                                                            |
+| `data/keys/`                     | Each user's actor key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                      |
+| `data/locations.json`            | Where each post was written, keyed by permalink (decision-29). Mode `0600`.                                                     |
+| `data/comment-salt`              | What hides commenters' addresses in the published comment files. Mode `0600`.                                                   |
+| `data/comments/{slug}.json`      | The emails of that post's commenters, and whether each asked to hear about replies, keyed by comment id. Mode `0600`.           |
+| `data/akismet.json`              | The Akismet key, and what `verify-key` last said about it. Mode `0600`.                                                         |
+| `data/mail.json`                 | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                 |
+| `data/notification-secret`       | What signs the one-click links in a notification. Mode `0600`. Losing it kills every link already in an inbox and nothing else. |
+| `data/comment-optouts.json`      | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                           |
+| `data/indieauth-tokens.json`     | A SHA-256 hash of each IndieAuth access and refresh token, with its user, app, scopes and expiry (decision-24). Mode `0600`.    |
+| `data/notification-digests.json` | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early and nothing worse.                         |
+| `data/plugins/<package name>/`   | Each plugin's private folder. Its secret settings are in `secrets.json`, mode `0600`; the rest is the plugin's to say.          |
 
 Three things under `data/` may be deleted whenever the site is stopped, and
 nothing else in either directory may:
@@ -617,7 +641,8 @@ hand. Pages, drafts, scheduled and trashed posts do not federate, so nobody
 can quote them.
 
 A quoting server sends a `QuoteRequest` to the post's author. The inbox, and
-the WordPress-compatible inbox when that switch is on, answers it:
+any plugin inbox that hands its deliveries to the site's own handlers, answers
+it:
 
 - For a post the site federates, whose quote lives on the requester's own
   server, it stores an approval and replies `Accept` with a
@@ -756,135 +781,48 @@ actor lists it in `alsoKnownAs` beside the archive and `/@{username}`. Nothing
 else moves: `url` is still the archive and the collections are still the
 archive's children, because a peer refetches those.
 
-The CMS never mints one and no screen writes one. It arrives with the WordPress
-import, or is typed into the file by hand; `/admin/users/<id>` shows it
+The CMS never mints one and no screen writes one. It arrives with a plugin's
+import, such as the WordPress plugin's, or is typed into the file by hand; `/admin/users/<id>` shows it
 read-only beside the account, and a value that is not an absolute URL is
 ignored.
 
-### WordPress ActivityPub compatibility
+### Moving a site from the WordPress ActivityPub plugin
 
-A site that moved here from the WordPress ActivityPub plugin has followers
-whose servers still hold the plugin's endpoints — `/wp-json/activitypub/1.0/actors/2/inbox`,
-the shared `/wp-json/activitypub/1.0/inbox`, and the collections beside them.
-Those are cache rather than identity: a follower's server replaces them the
-next time it refetches the actor. So the CMS can carry them for a while, behind
-a switch, and is meant to stop.
-
-Turn **WordPress ActivityPub compatibility** on under
-`/admin/federation/settings`. It is off by default and `site.json` says nothing
-about it until it is on. It needs one thing on the user record in
-`data/users.json` besides the stored actor id above: the number WordPress gave
-that person, which is what its paths are built from.
-
-```json
-{
-  "id": 2,
-  "username": "ada",
-  "actorId": "https://example.com/?author=2",
-  "wordpressActorId": 2
-}
-```
-
-`geekity import wordpress-actor` writes both; no screen does. With the switch
-on, those paths are real inbox routes, signature-verified exactly as the
-canonical ones are — an unsigned or badly signed delivery is refused — plus GET
-routes for the actor, its outbox, its followers and its following. What a peer
-reads back is always the canonical document: the same `id`, the same key, and
-the _canonical_ inbox and collections, so a follower refetching the actor at
-the old URL is the follower that learns the new endpoints. A user with no
-`wordpressActorId` is not reachable through any of it.
-
-Every one of those paths records the instant it was last asked for, per user,
-in `data/wordpress-activitypub.json` — a file, so a deleted database does not
-forget it — and the settings page lists each path beside the switch with that
-instant, or _Never_. That is what the switch is watched by: once every
-follower's server has refetched the actor, nothing asks any more, and the
-switch can go off. Clearing it takes the paths away on the very next request,
-with no restart.
-
-### Moving a site off the WordPress ActivityPub plugin
-
-`geekity import wordpress-actor` brings one person across. It writes the three
-things the CMS cannot mint for itself — the RSA key pair the followers have
-cached, the actor id they key the account by, and the followers — and it is a
-command rather than a screen because a stored actor id is identity for the life
-of the account.
-
-```sh
-geekity import wordpress-actor ada \
-  --actor-id 'https://example.com/?author=2' \
-  --wordpress-id 2 \
-  --keypair ada.keypair.json
-```
-
-It writes `data/keys/ada.rsassa-pkcs1-v1_5.jwk` (and mints the Ed25519 pair
-beside it, which WordPress never had), puts `actorId` and `wordpressActorId` on
-the user in `data/users.json`, and fetches the plugin's public followers
-collection into `content/_data/federation/ada/followers.json`, dereferencing
-each follower for its inbox, shared inbox, handle, name, avatar and profile URL.
-
-| Option                                        | What it is                                                                                                                                            |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--actor-id <url>`                            | The id WordPress published, query string and all. The one thing the import cannot work out for itself.                                                |
-| `--wordpress-id <n>`                          | The WordPress user id, which is the number in the plugin's paths.                                                                                     |
-| `--keypair <file>`                            | The JSON the plugin's option holds: `{"private_key": …, "public_key": …}`.                                                                            |
-| `--private-key <file>`, `--public-key <file>` | The two PEMs instead, for a site still on the legacy user meta. The public key is only checked against the private half; it is derived, never stored. |
-| `--followers <url\|file\|none>`               | Where the followers come from. Left off, the plugin's own collection on the actor id's origin.                                                        |
-| `--force`                                     | Import over a key pair the user already has.                                                                                                          |
-
-**Exporting the key pair with wp-cli.** The plugin keeps a user's pair in a
-WordPress option named after their login:
-
-```sh
-# On the WordPress server. The login, not the user id, is what names the option.
-wp option get activitypub_keypair_for_ada --format=json > ada.keypair.json
-```
-
-A site old enough to still be on the plugin's legacy storage has the pair in
-user meta instead, one PEM per key:
-
-```sh
-wp user meta get 2 magic_sig_private_key > ada.private.pem
-wp user meta get 2 magic_sig_public_key  > ada.public.pem
-```
-
-Either export is accepted, and either PEM encoding — `-----BEGIN PRIVATE
-KEY-----` (PKCS#8) or `-----BEGIN RSA PRIVATE KEY-----` (PKCS#1). Treat the
-files the way you would treat a password: the private key is the account.
-
-**Running it twice changes nothing**, and says so, which is what makes it safe
-to run again after an instance that was down comes back — a follower already in
-the file keeps its place and its follow time. A follower whose server will not
-answer is listed and skipped rather than failing the import. A user who already
-has a _different_ key pair is refused: importing over one would change that
-person's identity, and every follower has cached the public half of the key
-that is there. `--force` is the way past that, and is only right when you are
-certain the pair being imported is the one the followers hold.
+A site that moved here from the WordPress ActivityPub plugin keeps its people's
+actor ids and its posts' object ids, which are identity and are the CMS's own
+(above). What it needs for a while besides is the plugin's old paths, which
+followers' servers keep delivering to until they refetch the actor, and an
+import that brings each person's key pair and followers across. Both are the
+[`@geekity/plugin-wordpress`](../plugin-wordpress/README.md) package, which a
+site born on the CMS never installs. decision-14's switch is that plugin now:
+where the cutover used to say "turn the switch on", it says install and enable
+the WordPress plugin.
 
 #### The cutover, end to end
 
-1. **Export, while the WordPress site is still up.** The key pair, as above.
-   The followers can be saved too — `curl -H 'Accept: application/activity+json'
-'https://example.com/wp-json/activitypub/1.0/actors/2/followers?page=1' >
-followers.json` — which is worth doing if the old site is going away before
-   the import runs. Note the actor id and the numeric actor id off
+1. **Export, while the WordPress site is still up.** Each person's key pair,
+   and the followers if the old site is going away before the import runs. The
+   plugin's README says how. Note the actor id and the numeric actor id off
    `https://example.com/?author=2`, and bring the content across.
-2. **Import.** `geekity import wordpress-actor ada --actor-id … --wordpress-id
-… --keypair ada.keypair.json`, pointing `--followers` at the saved file if
-   you took one. Check the report: every follower should be added, and any that
-   were skipped should be re-run once their servers answer.
-3. **Switch on.** Turn **WordPress ActivityPub compatibility** on under
-   `/admin/federation/settings`, then move the DNS. Followers' servers go on
-   delivering to the plugin's old inbox paths until they next refetch the
-   actor, and the switch is what catches those deliveries.
+2. **Install the WordPress plugin and import.** Add `@geekity/plugin-wordpress`
+   to the site's dependencies and to `plugins` in its config, then run `geekity import
+wordpress-actor ada --actor-id … --wordpress-id … --keypair ada.keypair.json`.
+   The command works before the plugin is enabled. Check the report: every
+   follower should be added, and any that were skipped should be re-run once
+   their servers answer.
+3. **Enable the WordPress plugin.** Enable it under `/admin/plugins`, then move
+   the DNS. Followers' servers go on delivering to
+   the plugin's old inbox paths until they next refetch the actor, and the
+   plugin is what catches those deliveries.
 4. **Watch.** `/admin/federation` lists the users with their actor ids and
-   followers; `/admin/federation/settings` lists each compatibility path with
+   followers; the plugin's own screen under Plugins lists each old path with
    the instant it was last asked for. Deliveries should thin out as each
    follower's server refetches the actor and learns the new endpoints.
-5. **Switch off.** Once every path says _Never_ again for long enough — weeks
-   rather than days, since a quiet instance refetches rarely — clear the switch.
-   The paths go away on the very next request, with nothing restarted, and if
-   something was still using them you can turn it back on just as quickly.
+5. **Disable it.** Once every path says _Never_ again for long enough — weeks
+   rather than days, since a quiet instance refetches rarely — disable the
+   plugin. The paths go away on the very next request, with nothing restarted,
+   and if something was still using them you can enable it again just as
+   quickly.
 
 Retiring the stored actor id itself is a separate, optional step by the Move
 protocol, and is not part of the cutover: not every follower's software honours
@@ -1862,6 +1800,8 @@ shadow the login form.
 | `/admin/messages/read`                           | `POST` only. Marks one message read, or unread again.                                         |
 | `/admin/messages/delete`                         | `POST` only. Deletes one message, and its file with it.                                       |
 | `/admin/appearance/themes`                       | Appearance > Themes: the themes on disk. `POST` activates the one named.                      |
+| `/admin/plugins`                                 | Plugins: every installed plugin, and Enable and Disable.                                      |
+| `/admin/plugins/<package name>`                  | A running plugin's own screen, such as `/admin/plugins/@geekity/plugin-wordpress`.            |
 | `/admin/tools`                                   | Tools > Content index: what the index holds, and the button that rebuilds it.                 |
 | `/admin/tools/rebuild-index`                     | `POST` only. Offers the rebuild, then reads every file again on the live site.                |
 | `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language, locale, site icon. |
@@ -1882,7 +1822,7 @@ shadow the login form.
 | `/admin/users/notifications/mode`                | `POST` only. Sets how often that notice arrives: as they arrive, hourly or daily.             |
 | `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                                 |
 | `/admin/federation`                              | The actors, their followers, the inbox log, and per-post delivery.                            |
-| `/admin/federation/settings`                     | Federation > Settings: the relays the site subscribes to, and the WordPress switch.           |
+| `/admin/federation/settings`                     | Federation > Settings: the relays the site subscribes to.                                     |
 | `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.                    |
 | `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                                |
 | `/admin/login`                                   | Username and password.                                                                        |
@@ -2022,8 +1962,8 @@ pages under `/admin/settings` — General, Reading, Permalinks, Discussion and
 Email — each read that file, validate what was typed and write it back; nothing
 else remembers a setting, and `data/geekity.db` holds none of them. Federation's
 page is a sixth one of exactly the same kind, filed under its own section at
-`/admin/federation/settings` rather than under Settings, because the relays and
-the compatibility switch are about the section that holds the followers.
+`/admin/federation/settings` rather than under Settings, because the relays are
+about the section that holds the followers.
 
 Each page saves its own fields and no others, onto the file as re-read inside
 the write, so two people saving two different pages at the same moment both
@@ -2050,14 +1990,10 @@ and every other key it already had is kept, `feedSize` and anything a site put
 there included. A key it does not carry is the default, and a key of the wrong
 type is the default too: a hand-edited `site.json` cannot take the site down.
 
-`homepage`, `postsPage` and `wordpressActivityPub` are the only three written
-just when they have a value. The first two are WordPress's Reading choice, the
-slug of the page served at `/` and the slug of the page whose own URL carries
-the post listing, absent altogether on a site that shows its latest posts at
-`/`; the third is the
-[WordPress ActivityPub compatibility](#wordpress-activitypub-compatibility)
-switch, absent until somebody turns it on and absent again when they turn it
-off. A `postsPage` without a `homepage` is
+`homepage` and `postsPage` are the only two written just when they have a
+value: the slug of the page served at `/` and the slug of the page whose own
+URL carries the post listing, absent altogether on a site that shows its latest
+posts at `/`. A `postsPage` without a `homepage` is
 ignored, the listing being at `/` already, and a slug naming no published page
 is a site back on its latest posts. See [The front page](#the-front-page).
 

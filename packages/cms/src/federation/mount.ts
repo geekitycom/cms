@@ -4,7 +4,6 @@ import type { Context, Hono, MiddlewareHandler } from 'hono';
 
 import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
-import { readSiteSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
@@ -16,11 +15,6 @@ import { actorAliases, actorId, userActor } from './actor.ts';
 import { isFederatedDocument, postObject, postTombstone } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { accountOf, handleHref } from './paths.ts';
-import {
-  recordWordPressRequest,
-  userByWordPressActorId,
-  wordPressRequestTarget,
-} from './wordpress.ts';
 
 /**
  * Put Fedify in front of the rest of the app.
@@ -136,14 +130,7 @@ export function mountFederation(
 
   app.use('*', federationGate);
 
-  // And then WordPress's, if the site is carrying them (TASK-70). It goes
-  // after the canonical middleware, which has already claimed everything it
-  // answers, and before the stored-id middleware below, which claims paths of
-  // its own: a `/wp-json/` path is served by whichever of the three wants it,
-  // and only this one ever does.
-  if (options.wordpress !== undefined) {
-    app.use('*', wordPressGate(options.wordpress));
-  }
+  if (options.plugins !== undefined) app.use('*', options.plugins);
 
   // Named, and typed as a middleware, so the Hono context arrives with its
   // path parameters resolved rather than as `any`.
@@ -159,60 +146,8 @@ export function mountFederation(
 
 /** What {@link mountFederation} takes beyond the site's own federation. */
 export interface MountFederationOptions {
-  /**
-   * The WordPress compatibility federation, built on demand (TASK-70).
-   *
-   * A factory rather than an object, because most sites will never turn the
-   * switch on and a second `Federation` they never use is a second set of
-   * dispatchers to build at boot. It is called the first time a request
-   * actually reaches one of the plugin's paths with the setting on, and the
-   * result is kept for the life of the site.
-   */
-  wordpress?: (() => SiteFederation) | undefined;
-}
-
-/**
- * The middleware that answers the WordPress ActivityPub plugin's paths, when
- * the site is carrying them.
- *
- * The setting is read per request rather than at boot, which is the whole of
- * AC #4: turning the switch off in the settings screen takes the paths away on
- * the very next request, and turning it on puts them back, with nothing
- * restarted. A request for one of those paths with the switch off falls
- * through to the public site, which answers it as the 404 it is.
- *
- * The instant is recorded before Fedify is asked, because the record is of
- * what the site was *asked for*: a peer still holding the old inbox URL is
- * news whether or not the number in it still names anybody.
- */
-function wordPressGate(build: () => SiteFederation): MiddlewareHandler<GeekityEnv> {
-  let federation: SiteFederation | undefined;
-  let middleware: MiddlewareHandler<GeekityEnv> | undefined;
-
-  return async (c, next) => {
-    const target = wordPressRequestTarget(requestPath(c));
-    if (target === undefined) return await next();
-    if (!readSiteSettings(c.var.config.contentDir).wordpressActivityPub) return await next();
-
-    const user =
-      target.wordpressActorId === undefined
-        ? undefined
-        : userByWordPressActorId(c.var.config.dataDir, target.wordpressActorId);
-    await recordWordPressRequest({
-      dataDir: c.var.config.dataDir,
-      target,
-      username: user?.username,
-      at: c.var.config.now(),
-    });
-
-    if (middleware === undefined) {
-      federation = build();
-      middleware = federationMiddleware(federation, (context) =>
-        contextData(context as unknown as Context<GeekityEnv>),
-      ) as MiddlewareHandler<GeekityEnv>;
-    }
-    return await middleware(c, next);
-  };
+  /** The phase plugins answer federation requests in. */
+  plugins?: MiddlewareHandler<GeekityEnv> | undefined;
 }
 
 /**
@@ -442,7 +377,7 @@ function canonicalResource(resource: string): string {
 }
 
 /** What the dispatchers are handed, off the Hono context. */
-function contextData(c: Context<GeekityEnv>): FederationContextData {
+export function contextData(c: Context<GeekityEnv>): FederationContextData {
   return {
     admin: c.var.admin,
     store: c.var.store,

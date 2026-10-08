@@ -23,6 +23,7 @@ import { FEDERATION_PATH, FEDERATION_SETTINGS_PATH } from './federation.ts';
 import { MEDIA_PATH } from './media.ts';
 import { MESSAGES_PATH } from './messages.ts';
 import { NAVIGATION_PATH } from './navigation.ts';
+import { PLUGINS_CHILD, PLUGINS_PATH, PLUGINS_SECTION } from './plugins.ts';
 import { settingsPagePath } from './settings-page.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { SYNDICATION_TARGETS_CHILD, SYNDICATION_TARGETS_PATH } from './syndication-targets.ts';
@@ -123,6 +124,9 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   // One child, because the rule is uniform: a second kind of theme, or a menu
   // editor, slots in beside Themes without the menu changing shape.
   section('appearance', 'Appearance', [{ child: 'themes', label: 'Themes', url: THEMES_PATH }]),
+  section(PLUGINS_SECTION, 'Plugins', [
+    { child: PLUGINS_CHILD, label: 'Installed plugins', url: PLUGINS_PATH },
+  ]),
   section('users', 'Users', [
     { child: 'all', label: 'All users', url: USERS_PATH },
     { child: 'new', label: 'Add new', url: ADD_USER_PATH },
@@ -171,11 +175,19 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
  * a section with no child is a screen that only knows half of where it is, and
  * would render a menu that expands around nothing.
  */
-export function adminMenu(location: AdminScreenLocation = {}): AdminMenuSection[] {
+export function adminMenu(
+  location: AdminScreenLocation = {},
+  pluginScreens: readonly AdminMenuChild[] = [],
+): AdminMenuSection[] {
   const { section: name, child } = location;
+  const sections = ADMIN_SECTIONS.map((entry) =>
+    entry.section === PLUGINS_SECTION && pluginScreens.length > 0
+      ? { ...entry, children: [...entry.children, ...pluginScreens] }
+      : entry,
+  );
 
   if (name !== undefined) {
-    const found = ADMIN_SECTIONS.find((entry) => entry.section === name);
+    const found = sections.find((entry) => entry.section === name);
     if (found === undefined) {
       throw new UnknownAdminScreenError(`The admin menu has no section called ${quoted(name)}.`);
     }
@@ -191,7 +203,7 @@ export function adminMenu(location: AdminScreenLocation = {}): AdminMenuSection[
     }
   }
 
-  return ADMIN_SECTIONS.map((entry) => ({
+  return sections.map((entry) => ({
     ...entry,
     open: entry.section === name,
     children: entry.children.map((item) => ({
