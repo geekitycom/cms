@@ -22,7 +22,9 @@ import type {
   PluginScreen,
   PluginSettingField,
   PluginSettings,
+  PluginService,
   PluginSettingValues,
+  PluginSiteInfo,
 } from '../plugin.ts';
 import {
   pluginEnvPrefix,
@@ -56,11 +58,12 @@ export interface PluginContributions {
   settings: readonly PluginSettingField[];
 }
 
-/** Where the registry finds what plugins read: the site's folders and its environment. */
+/** What plugins read through the registry: the site's folders, its environment, its base URL and title. */
 export interface PluginRegistryOptions {
   dataDir: string;
   contentDir: string;
   env: Readonly<Record<string, string | undefined>>;
+  siteInfo(): PluginSiteInfo;
 }
 
 /** An installed plugin after registration. */
@@ -140,11 +143,29 @@ export function createPluginRegistry(
 
   const own = new Map<string, string | undefined>();
   const contributions = new Map<string, PluginContributions>();
+  const services = new Map<string, unknown>();
+  let registered = false;
+
+  const serviceFor = (consumer: Plugin, dependency: string): unknown => {
+    if (!Object.hasOwn(consumer.requires ?? {}, dependency)) {
+      throw new Error(`${consumer.name} uses ${dependency}, which is not in its requires.`);
+    }
+    if (!registered) {
+      throw new Error(
+        `${consumer.name} called use(${JSON.stringify(dependency)}) in its register. Call it when handling a request, a command or a job, once every plugin has registered.`,
+      );
+    }
+    if (!services.has(dependency)) throw new Error(`${dependency} provides no service.`);
+    return services.get(dependency);
+  };
+
   for (const entry of installed) {
-    const { problem, declared } = register(entry.plugin, options);
+    const { problem, declared, service } = register(entry.plugin, options, serviceFor);
     own.set(entry.plugin.name, problem);
     contributions.set(entry.plugin.name, declared);
+    if (service !== undefined) services.set(entry.plugin.name, service.value);
   }
+  registered = true;
 
   const cyclic = cyclicNames(installed.map((entry) => entry.plugin));
   const sharedPrefixes = prefixCollisions(installed.map((entry) => entry.plugin.name));
@@ -288,14 +309,27 @@ const NOTHING_DECLARED: PluginContributions = {
   settings: [],
 };
 
+/** What a plugin handed to `host.provide`, boxed so that providing `undefined` still counts. */
+interface ProvidedService {
+  readonly value: unknown;
+}
+
+interface Registration {
+  problem: string | undefined;
+  declared: PluginContributions;
+  service?: ProvidedService | undefined;
+}
+
 /**
- * Run a plugin's `register`, returning why it cannot run, if it cannot, and
- * what it declared. A plugin whose register fails declares nothing.
+ * Run a plugin's `register`, returning why it cannot run, if it cannot, what
+ * it declared and the service it provided. A plugin whose register fails
+ * declares and provides nothing.
  */
 function register(
   plugin: Plugin,
   options: PluginRegistryOptions,
-): { problem: string | undefined; declared: PluginContributions } {
+  serviceFor: (consumer: Plugin, dependency: string) => unknown,
+): Registration {
   const { name } = plugin;
   if (name.length > PACKAGE_NAME_MAX || !PACKAGE_NAME.test(name)) {
     return {
@@ -315,6 +349,7 @@ function register(
   const commands: PluginCommand[] = [];
   let screen: PluginScreen | undefined;
   let settings: readonly PluginSettingField[] | undefined;
+  let service: ProvidedService | undefined;
   let registering = true;
 
   function declaring(what: string): void {
@@ -342,6 +377,19 @@ function register(
       declaring('a command');
       commands.push(declared);
     },
+    siteInfo: () => options.siteInfo(),
+    provide(value) {
+      declaring('a service');
+      if (service !== undefined) {
+        throw new Error(
+          `${name} provides a second service. A plugin provides at most one, named by its package name.`,
+        );
+      }
+      service = { value };
+    },
+    // The provider's `provide` was checked against the same map entry.
+    use: <Dependency extends string>(dependency: Dependency) =>
+      serviceFor(plugin, dependency) as PluginService<Dependency>,
     settings<const Fields extends readonly PluginSettingField[]>(
       fields: Fields,
     ): PluginSettings<Fields> {
@@ -364,6 +412,7 @@ function register(
     return {
       problem: undefined,
       declared: { routes, federation, screen, commands, settings: settings ?? [] },
+      service,
     };
   } catch (error) {
     return {

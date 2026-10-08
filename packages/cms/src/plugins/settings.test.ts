@@ -77,7 +77,12 @@ function site(
         }),
       },
     ],
-    { dataDir, contentDir, env },
+    {
+      dataDir,
+      contentDir,
+      env,
+      siteInfo: () => ({ baseUrl: 'https://example.test/', title: 'Example' }),
+    },
   );
   assert.ok(reader !== undefined);
   const settings = reader;

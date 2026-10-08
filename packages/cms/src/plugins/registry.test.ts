@@ -17,7 +17,12 @@ import type { InstalledPlugin } from './registry.ts';
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), 'geekity-registry-'));
 after(() => rmSync(DATA_DIR, { recursive: true, force: true }));
-const SITE = { dataDir: DATA_DIR, contentDir: path.join(DATA_DIR, 'content'), env: {} };
+const SITE = {
+  dataDir: DATA_DIR,
+  contentDir: path.join(DATA_DIR, 'content'),
+  env: {},
+  siteInfo: () => ({ baseUrl: 'https://example.test/', title: 'Example' }),
+};
 
 /** A plugin with nothing to say beyond its name and what it requires. */
 function plugin(name: string, requires: Record<string, string> = {}, extra: Partial<Plugin> = {}) {
@@ -142,7 +147,7 @@ describe('the plugin registry', () => {
     ]);
   });
 
-  it('gives register a host that reaches no other plugin', () => {
+  it('gives register a host whose only way to another plugin is use, once all have registered', () => {
     let keys: string[] = [];
     createPluginRegistry(
       fromConfig(
@@ -165,8 +170,11 @@ describe('the plugin registry', () => {
       'federation',
       'get',
       'name',
+      'provide',
       'screen',
       'settings',
+      'siteInfo',
+      'use',
     ]);
   });
 

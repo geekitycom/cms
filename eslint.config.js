@@ -134,17 +134,26 @@ export default tseslint.config(
   },
 
   {
-    // A plugin's only door into core is `@geekity/cms/plugin` (decision-33).
+    // A plugin's only door into core is `@geekity/cms/plugin`, and into
+    // another plugin is `host.use` (decision-33). Another plugin's package is
+    // imported for its service types alone: a value import would inline a
+    // second copy of it into the bundle.
     name: 'geekity/plugin-boundary',
     files: ['apps/demo/plugins/**/*.ts', 'packages/plugin-*/src/**/*.ts'],
     rules: {
-      'no-restricted-imports': [
+      '@typescript-eslint/no-restricted-imports': [
         'error',
         {
           patterns: [
             {
               regex: '^@geekity/cms(?!/plugin$)(?:/.*)?$|/packages/cms/',
               message: 'A plugin imports nothing from core but @geekity/cms/plugin.',
+            },
+            {
+              regex: '^@geekity/plugin-|/packages/plugin-',
+              allowTypeImports: true,
+              message:
+                'Import another plugin with `import type` for its service types, and reach the service with host.use.',
             },
           ],
         },

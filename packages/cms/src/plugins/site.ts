@@ -6,6 +6,7 @@
  */
 
 import { listUsers, setUserActorId } from '../admin/accounts.ts';
+import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
@@ -22,7 +23,17 @@ export function sitePluginRegistry(config: ResolvedConfig): PluginRegistry {
       plugin,
       source: `the site config, plugins[${String(index)}]`,
     })),
-    { dataDir: config.dataDir, contentDir: config.contentDir, env: process.env },
+    {
+      dataDir: config.dataDir,
+      contentDir: config.contentDir,
+      env: process.env,
+      // Read when asked: the base URL settles after boot reads the settings,
+      // and the title changes with them.
+      siteInfo: () => ({
+        baseUrl: config.baseUrl,
+        title: readSiteSettings(config.contentDir).title,
+      }),
+    },
   );
 }
 

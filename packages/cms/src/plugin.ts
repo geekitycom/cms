@@ -344,15 +344,48 @@ export interface PluginCommand {
 }
 
 /**
- * A plugin's only door into the CMS, handed to {@link Plugin.register}. It
- * reaches no other plugin: registration order never matters. Everything is
- * declared during `register`; a declaration after it returns throws.
+ * The service each plugin provides, keyed by its package name. Empty here: a
+ * plugin package that provides one adds its entry by declaration merging, and
+ * a consumer that imports the package's types sees it.
+ *
+ * ```ts
+ * declare module '@geekity/cms/plugin' {
+ *   interface PluginServices {
+ *     '@acme/plugin-clock': Clock;
+ *   }
+ * }
+ * ```
  */
-export interface PluginHost {
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- providers fill it by declaration merging.
+export interface PluginServices {}
+
+/** The service a package provides, as {@link PluginServices} says, or `unknown` when it says nothing. */
+export type PluginService<Name extends string> = Name extends keyof PluginServices
+  ? PluginServices[Name]
+  : unknown;
+
+/** What a plugin knows of the site it runs on. */
+export interface PluginSiteInfo {
+  /** The site's public URL. */
+  readonly baseUrl: string;
+  /** The site title, as the site's settings have it now. */
+  readonly title: string;
+}
+
+/**
+ * A plugin's only door into the CMS, handed to {@link Plugin.register}. It
+ * reaches no other plugin during `register`: registration order never
+ * matters. Everything is declared during `register`; a declaration after it
+ * returns throws.
+ */
+export interface PluginHost<
+  Name extends string = string,
+  Requires extends PluginRequirements = PluginRequirements,
+> {
   /** {@link HOST_API_VERSION} of the core running the plugin. */
   readonly apiVersion: number;
   /** The name of the plugin this host belongs to. */
-  readonly name: string;
+  readonly name: Name;
   /** The plugin's private folder under `data/`. */
   readonly data: PluginDataFolder;
   /**
@@ -384,6 +417,21 @@ export interface PluginHost {
    * installed and available, enabled or not.
    */
   command(command: PluginCommand): void;
+  /** The site's base URL and title, read when asked. */
+  siteInfo(): PluginSiteInfo;
+  /**
+   * Offer this plugin's service to the plugins that require it, under the
+   * plugin's own package name. At most once per plugin, during `register`.
+   * Every consumer receives this one instance, so it carries plain data and
+   * the host's types across, never an object built by a library.
+   */
+  provide(service: PluginService<Name>): void;
+  /**
+   * The service a required plugin provides. Only a name in `requires` is
+   * accepted, and only once every plugin has registered: call it when
+   * handling a request, a command or a job, never in `register`.
+   */
+  use<Dependency extends keyof Requires & string>(name: Dependency): PluginService<Dependency>;
 }
 
 /**
@@ -393,13 +441,16 @@ export interface PluginHost {
 export type PluginRequirements = Readonly<Record<string, string>>;
 
 /** A plugin, as a site config or a bundle's default export hands it over. */
-export interface Plugin {
+export interface Plugin<
+  Name extends string = string,
+  Requires extends PluginRequirements = PluginRequirements,
+> {
   /**
    * The npm package name, such as `@geekity/plugin-llm`. A plugin installed by
    * hand still declares a package-style name. It is the key of the plugin
    * everywhere: `requires`, the `plugins` key in `site.json` and its data.
    */
-  readonly name: string;
+  readonly name: Name;
   /** The package version, shown on the Plugins screen. */
   readonly version: string;
   /** What the Plugins screen calls it. */
@@ -409,19 +460,31 @@ export interface Plugin {
   /** The {@link HOST_API_VERSION} it was written against. */
   readonly hostApi: number;
   /** The plugins it needs installed and enabled before it can be enabled. */
-  readonly requires?: PluginRequirements;
+  readonly requires?: Requires;
   /**
    * Called once at boot for every installed plugin, enabled or not, to
    * declare what the plugin contributes.
    */
-  register(host: PluginHost): void;
+  register(host: PluginHost<Name, Requires>): void;
   /** Called when the plugin starts running: at boot when enabled, and on enable. */
   start?(): void | Promise<void>;
   /** Called when it stops: on disable and when the CMS closes. */
   stop?(): void | Promise<void>;
 }
 
-/** Declare a plugin, typed. Returns it unchanged. */
-export function definePlugin(plugin: Plugin): Plugin {
+/**
+ * Declare a plugin, typed. Returns it unchanged. Its name and `requires` are
+ * kept as written, so `host.use` accepts only a required name and
+ * `host.provide` only the service {@link PluginServices} names for the plugin.
+ */
+export function definePlugin<
+  const Name extends string,
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- a plugin that names no requirement may use nothing.
+  const Requires extends PluginRequirements = {},
+>(
+  plugin: Plugin<Name, Requires>,
+  // Without NoInfer, a call inside `plugins: [...]` infers `requires` from the
+  // array's wide type, and `use` would accept any name.
+): Plugin<NoInfer<Name>, NoInfer<Requires>> {
   return plugin;
 }
