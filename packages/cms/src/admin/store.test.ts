@@ -1230,10 +1230,17 @@ describe('setReadOnly', () => {
     assert.equal(admin.getState('kept'), 'after');
   });
 
-  it('takes an empty flash without writing, so a read-only admin page still renders', async () => {
+  it('shows a flash while read-only and leaves it queued for the next page', async () => {
     const admin = await store();
     const session = admin.createSession({ userId: null, lifetimeSeconds: 60 });
+    assert.deepEqual(admin.takeFlash(session.id), []);
+    admin.pushFlash(session.id, { kind: 'notice', message: 'Saved.' });
+
     admin.setReadOnly(true);
+    assert.deepEqual(admin.takeFlash(session.id), [{ kind: 'notice', message: 'Saved.' }]);
+
+    admin.setReadOnly(false);
+    assert.deepEqual(admin.takeFlash(session.id), [{ kind: 'notice', message: 'Saved.' }]);
     assert.deepEqual(admin.takeFlash(session.id), []);
   });
 });

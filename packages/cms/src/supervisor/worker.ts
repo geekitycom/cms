@@ -6,7 +6,7 @@
 
 import type { Cms } from '../index.ts';
 import type { PluginFolder } from '../plugins/folder.ts';
-import { isSupervisorMessage } from './protocol.ts';
+import { EXIT_FOR_REPLACEMENT, isSupervisorMessage } from './protocol.ts';
 import type { SupervisorMessage, WorkerMessage } from './protocol.ts';
 import type { ReloadOutcome, Supervision } from './supervision.ts';
 
@@ -81,7 +81,7 @@ export function superviseWorker(options: {
                 await cms.drain();
               } catch (error) {
                 log(`The server could not drain for a reload: ${messageOf(error)}`);
-                exit(1);
+                exit(EXIT_FOR_REPLACEMENT);
                 return;
               }
               channel.send({ type: 'drained' });

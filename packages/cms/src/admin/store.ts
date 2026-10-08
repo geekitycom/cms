@@ -923,7 +923,8 @@ export interface AdminStore {
   pushFlash(sessionId: string, entry: FlashMessage): void;
   /**
    * Every queued message for a session, in order, removed as it is read, so a
-   * flash survives exactly one page and no more.
+   * flash survives exactly one page and no more. A read-only store leaves them
+   * queued, for the worker that takes over to show again.
    */
   takeFlash(sessionId: string): FlashMessage[];
   /**
@@ -1188,6 +1189,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
   };
 
   let open = true;
+  let readOnly = false;
 
   /**
    * Run a body with every write in it committed together, or none of them.
@@ -1826,12 +1828,13 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
 
     takeFlash(sessionId) {
       const queued = readFlash(sessionId);
-      if (queued.length > 0) statements.writeFlash.run(null, sessionId);
+      if (!readOnly) statements.writeFlash.run(null, sessionId);
       return queued;
     },
 
-    setReadOnly(readOnly) {
-      db.exec(`PRAGMA query_only = ${readOnly ? 'ON' : 'OFF'}`);
+    setReadOnly(on) {
+      db.exec(`PRAGMA query_only = ${on ? 'ON' : 'OFF'}`);
+      readOnly = on;
     },
 
     close() {

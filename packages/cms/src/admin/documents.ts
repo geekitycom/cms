@@ -420,7 +420,10 @@ export function mountDocumentScreens(
   });
 }
 
-/** The editor form as the browser submitted it, read the same way for a save and for an editor action. */
+/**
+ * The editor form as the browser submitted it, read the same way for a save
+ * and for an editor action.
+ */
 export function submittedForm(
   kind: DocumentKind,
   body: Record<string, unknown>,

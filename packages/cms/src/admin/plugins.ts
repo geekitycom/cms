@@ -10,6 +10,7 @@ import type { Context, Hono } from 'hono';
 import type { GeekityEnv } from '../env.ts';
 import { readEnabledPlugins, setPluginEnabled } from '../plugins/enabled.ts';
 import { pluginFolderChanges, scanPluginFolders } from '../plugins/folder.ts';
+import { PACKAGE_NAME } from '../plugins/registry.ts';
 import type {
   PluginRegistry,
   RegisteredPlugin,
@@ -27,6 +28,15 @@ import { ADMIN_TEMPLATES } from './templates.ts';
 
 export const PLUGINS_PATH = `${ADMIN_PREFIX}/plugins`;
 export const PLUGINS_RELOAD_PATH = `${PLUGINS_PATH}/reload`;
+const PLUGINS_ENABLE_PATH = `${PLUGINS_PATH}/enable`;
+const PLUGINS_DISABLE_PATH = `${PLUGINS_PATH}/disable`;
+
+/** The screen's own paths, which no plugin's screen can take. */
+const RESERVED_PATHS: ReadonlySet<string> = new Set([
+  PLUGINS_RELOAD_PATH,
+  PLUGINS_ENABLE_PATH,
+  PLUGINS_DISABLE_PATH,
+]);
 export const PLUGINS_SECTION = 'plugins';
 export const PLUGINS_CHILD = 'installed';
 
@@ -76,6 +86,17 @@ export function pluginScreens(c: Context<GeekityEnv>): AdminMenuChild[] {
     }));
 }
 
+/**
+ * The package name a path under Plugins names a screen of, or `undefined` for
+ * the screen's own paths and anything deeper, such as an editor action's.
+ */
+function screenName(c: Context<GeekityEnv>): string | undefined {
+  const { pathname } = new URL(c.req.url);
+  if (RESERVED_PATHS.has(pathname)) return undefined;
+  const name = decodeURIComponent(pathname.slice(PLUGINS_PATH.length + 1));
+  return PACKAGE_NAME.test(name) ? name : undefined;
+}
+
 /** A plugin has a screen when it draws one or has settings to draw on one. */
 function hasScreen(entry: RegisteredPlugin): boolean {
   return entry.screen !== undefined || entry.settings.length > 0;
@@ -106,8 +127,8 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
       reload: changes === undefined ? undefined : { url: PLUGINS_RELOAD_PATH, changes },
       reloaded: c.req.query(RELOADED_QUERY) !== undefined,
       reloadFailure: supervision?.lastFailure,
-      enableUrl: `${PLUGINS_PATH}/enable`,
-      disableUrl: `${PLUGINS_PATH}/disable`,
+      enableUrl: PLUGINS_ENABLE_PATH,
+      disableUrl: PLUGINS_DISABLE_PATH,
       field: PLUGIN_FIELD,
       plugins: registry.plugins.map(({ plugin, source, problem }) => {
         const requirements = registry.requirements(plugin.name, enabled);
@@ -153,7 +174,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     return c.redirect(`${PLUGINS_PATH}?${RELOADED_QUERY}=1`, 303);
   });
 
-  app.post(`${PLUGINS_PATH}/enable`, async (c) => {
+  app.post(PLUGINS_ENABLE_PATH, async (c) => {
     const registry = c.var.plugins;
     const found = registry.find(await submittedName(c));
     if (found === undefined) return refuse(c, 'No plugin by that name is installed.');
@@ -170,7 +191,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     return c.redirect(PLUGINS_PATH, 303);
   });
 
-  app.post(`${PLUGINS_PATH}/disable`, async (c) => {
+  app.post(PLUGINS_DISABLE_PATH, async (c) => {
     const registry = c.var.plugins;
     const found = registry.find(await submittedName(c));
     if (found === undefined) return refuse(c, 'No plugin by that name is installed.');
@@ -194,14 +215,18 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     return c.redirect(PLUGINS_PATH, 303);
   });
 
-  app.get(`${PLUGINS_PATH}/*`, (c) => {
-    const found = screenedPlugin(c);
+  app.get(`${PLUGINS_PATH}/*`, async (c, next) => {
+    const name = screenName(c);
+    if (name === undefined) return next();
+    const found = screenedPlugin(c, name);
     if (found === undefined) return c.notFound();
     return drawScreen(c, found, {});
   });
 
-  app.post(`${PLUGINS_PATH}/*`, async (c) => {
-    const found = screenedPlugin(c);
+  app.post(`${PLUGINS_PATH}/*`, async (c, next) => {
+    const name = screenName(c);
+    if (name === undefined) return next();
+    const found = screenedPlugin(c, name);
     if (found === undefined) return c.notFound();
     const back = pluginScreenPath(found.plugin.name);
     const body = await c.req.parseBody();
@@ -240,8 +265,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     return c.redirect(back, 303);
   });
 
-  function screenedPlugin(c: Context<GeekityEnv>): RegisteredPlugin | undefined {
-    const name = decodeURIComponent(new URL(c.req.url).pathname.slice(PLUGINS_PATH.length + 1));
+  function screenedPlugin(c: Context<GeekityEnv>, name: string): RegisteredPlugin | undefined {
     const found = c.var.plugins.find(name);
     return found !== undefined && hasScreen(found) && c.var.activePlugins.has(name)
       ? found

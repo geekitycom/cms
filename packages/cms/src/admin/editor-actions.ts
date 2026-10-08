@@ -149,9 +149,8 @@ function offered(action: PluginEditorAction, draft: PluginEditorDraft): boolean 
 }
 
 /**
- * The endpoint. Registered before the plugin screens, whose `/admin/plugins/*`
- * would otherwise take the path for a plugin's name. A plugin that is not
- * running, or has no such action, falls through as if the route were absent.
+ * The endpoint. A plugin that is not running, or has no such action, falls
+ * through as if the route were absent.
  */
 export function mountEditorActions(app: Hono<GeekityEnv>): void {
   app.post(`${PLUGINS_PATH}/*`, async (c, next) => {

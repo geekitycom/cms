@@ -347,6 +347,17 @@ describe('editor actions', () => {
     );
   });
 
+  it('gives each choice box to a form of its own, so saving the draft never posts it', async () => {
+    const { agent } = await site([suggester()], true);
+    const html = await (await agent.get('/admin/posts/new')).text();
+    const box = /<template data-editor-choice>[\s\S]*?(<input type="checkbox"[^>]*>)/.exec(
+      actionsBeside(html, 'editor-tags') ?? '',
+    )?.[1];
+    const owner = /\bform="([^"]+)"/.exec(box ?? '')?.[1];
+    assert.ok(owner !== undefined, 'the choice box names the form it belongs to');
+    assert.match(html, new RegExp(`<form id="${owner}" hidden></form>`));
+  });
+
   it('runs under the admin’s own policy, the script coming from the admin’s origin', async () => {
     const { agent } = await site([suggester()], true);
     const response = await agent.get('/admin/posts/new');

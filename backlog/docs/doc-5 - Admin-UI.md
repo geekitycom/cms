@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-08 16:11'
+updated_date: '2026-10-08 17:28'
 ---
 # Admin UI
 
@@ -374,7 +374,7 @@ What the screens make of the library:
 - The settings form posts to the screen's own URL with `action=save`. Public boxes write the plugin's entry in `site.json`, keeping every key they do not model; an empty box removes the key so the default applies. A refused value comes back on the screen with status 400, the problem on its field and nothing written. A stored value the field does not accept is shown as its default, with a line saying the value in `site.json` was set aside.
 - A secret is never drawn. Its box is a password field showing Set or Not set; a blank box keeps the stored secret, and **Forget the stored ...** removes it. Each secret's hint names its exact environment variable. A secret the environment sets has no box at all and reads "Set by the environment variable ...".
 - An action button posts `action=<id>`. Core runs the plugin's action and shows its outcome as a notice or an error flash, escaped.
-- A plugin's editor actions answer at `/admin/plugins/<package name>/editor/<id>`, JSON behind the guard and the CSRF token, registered before the plugin screens. See Editor.
+- A plugin's editor actions answer at `/admin/plugins/<package name>/editor/<id>`, JSON behind the guard and the CSRF token. A screen answers only a path that is a package name and none of Plugins’ own (`reload`, `enable`, `disable`), so the routes take their paths in any order. See Editor.
 
 ## Appearance
 

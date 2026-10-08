@@ -46,7 +46,7 @@
       <template data-editor-choice>
         <li>
           <label class="flex items-start gap-2">
-            <input type="checkbox" class="checkbox checkbox-sm mt-0.5">
+            <input type="checkbox" class="checkbox checkbox-sm mt-0.5" form="editor-suggestions">
             <span class="flex flex-col">
               <span class="flex flex-wrap items-center gap-2">
                 <span class="break-all" data-choice-value></span>
@@ -406,6 +406,9 @@
       {% endcall %}
     </div>
   </form>
+  {% if editorActions | length %}
+    <form id="editor-suggestions" hidden></form>
+  {% endif %}
 
   {# CodeMirror, the preview tab and the upload control. A module script is
      deferred by definition, so it runs after the form is in the document.

@@ -7,6 +7,13 @@
  * one is told to `resume`, with the reason.
  */
 
+/**
+ * How a worker that cannot carry on gives up: it exits with this code, and the
+ * supervisor boots a replacement, as it does for any serving or draining
+ * worker that exits without being told to.
+ */
+export const EXIT_FOR_REPLACEMENT = 1;
+
 export type WorkerMessage =
   | { readonly type: 'ready' }
   | { readonly type: 'boot-failed'; readonly error: string }

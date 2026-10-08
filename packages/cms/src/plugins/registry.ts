@@ -171,7 +171,10 @@ export function createPluginRegistry(
   const services = new Map<string, unknown>();
   let registered = false;
 
-  const serviceFor = (consumer: Plugin, dependency: string): unknown => {
+  const serviceFor = <Dependency extends string>(
+    consumer: Plugin,
+    dependency: Dependency,
+  ): PluginService<Dependency> => {
     if (!Object.hasOwn(consumer.requires ?? {}, dependency)) {
       throw new Error(`${consumer.name} uses ${dependency}, which is not in its requires.`);
     }
@@ -181,7 +184,7 @@ export function createPluginRegistry(
       );
     }
     if (!services.has(dependency)) throw new Error(`${dependency} provides no service.`);
-    return services.get(dependency);
+    return services.get(dependency) as PluginService<Dependency>;
   };
 
   for (const entry of installed) {
@@ -260,7 +263,7 @@ export function createPluginRegistry(
     return running;
   }
 
-  const started: Plugin[] = [];
+  const startAttempted: Plugin[] = [];
   let closed = false;
   let queue: Promise<void> = Promise.resolve();
 
@@ -270,11 +273,16 @@ export function createPluginRegistry(
   }
 
   async function stopFrom(shouldStop: (name: string) => boolean): Promise<void> {
-    for (const entry of [...started].reverse()) {
+    for (const entry of [...startAttempted].reverse()) {
       if (!shouldStop(entry.name)) continue;
-      started.splice(started.indexOf(entry), 1);
+      startAttempted.splice(startAttempted.indexOf(entry), 1);
       await lifecycle(entry, 'stop');
     }
+  }
+
+  async function attemptStart(plugin: Plugin): Promise<void> {
+    startAttempted.push(plugin);
+    await lifecycle(plugin, 'start');
   }
 
   return {
@@ -306,11 +314,10 @@ export function createPluginRegistry(
         if (closed) return;
         const running = active(enabled);
         await stopFrom((name) => !running.has(name));
-        for (const entry of order) {
-          const { plugin } = entry;
-          if (!running.has(plugin.name) || started.includes(plugin)) continue;
-          started.push(plugin);
-          await lifecycle(plugin, 'start');
+        for (const { plugin } of order) {
+          if (running.has(plugin.name) && !startAttempted.includes(plugin)) {
+            await attemptStart(plugin);
+          }
         }
       });
     },
@@ -363,7 +370,10 @@ interface Registration {
 function register(
   plugin: Plugin,
   options: PluginRegistryOptions,
-  serviceFor: (consumer: Plugin, dependency: string) => unknown,
+  serviceFor: <Dependency extends string>(
+    consumer: Plugin,
+    dependency: Dependency,
+  ) => PluginService<Dependency>,
 ): Registration {
   const { name } = plugin;
   if (name.length > PACKAGE_NAME_MAX || !PACKAGE_NAME.test(name)) {
@@ -438,8 +448,7 @@ function register(
       }
       service = { value };
     },
-    use: <Dependency extends string>(dependency: Dependency) =>
-      serviceFor(plugin, dependency) as PluginService<Dependency>,
+    use: (dependency) => serviceFor(plugin, dependency),
     settings<const Fields extends readonly PluginSettingField[]>(
       fields: Fields,
     ): PluginSettings<Fields> {
@@ -520,11 +529,12 @@ function prefixCollisions(names: readonly string[]): Map<string, string[]> {
   const collisions = new Map<string, string[]>();
   for (const group of byPrefix.values()) {
     if (group.length < 2) continue;
-    for (const name of group)
+    for (const name of group) {
       collisions.set(
         name,
         group.filter((other) => other !== name),
       );
+    }
   }
   return collisions;
 }
