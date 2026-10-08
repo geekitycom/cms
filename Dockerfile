@@ -81,15 +81,17 @@ COPY --from=build /prod/cms ./
 # it the node image's entrypoint would treat `geekity` as a script path.
 RUN chmod +x /app/dist/cli.js \
   && ln -s /app/dist/cli.js /usr/local/bin/geekity \
-  && mkdir -p /site/content /site/data /site/themes \
+  && mkdir -p /site/content /site/data /site/themes /site/plugins \
   && chown -R node:node /site
 
 # One root for everything a site owns. A fresh named volume mounted on any of
 # these starts owned by node; a bind mount has to be owned by uid 1000 on the
-# host.
+# host. The image holds core alone (decision-33): `geekity plugin add` writes a
+# plugin's bundle into /site/plugins, and Reload on the Plugins screen loads it.
 ENV GEEKITY_CONTENT_DIR=/site/content \
   GEEKITY_DATA_DIR=/site/data \
   GEEKITY_THEMES_DIR=/site/themes \
+  GEEKITY_PLUGINS_DIR=/site/plugins \
   GEEKITY_SEED_CONTENT=true
 
 # The working directory holds no geekity.config.*, so serve runs on defaults and

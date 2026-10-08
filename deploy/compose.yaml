@@ -6,10 +6,10 @@
 # pulled from ghcr.io and never built there.
 #
 # Before the first start, in the stack directory (for example
-# /opt/stacks/geekity), create the two directories the site keeps its files in
-# and give them to uid 1000, the user the container runs as:
+# /opt/stacks/geekity), create the three directories the site keeps its files
+# in and give them to uid 1000, the user the container runs as:
 #
-#   mkdir -p content data && sudo chown 1000:1000 content data
+#   mkdir -p content data plugins && sudo chown 1000:1000 content data plugins
 #
 # Docker creates a missing bind-mount source owned by root, and the site then
 # fails to start with EACCES. An empty content/ is filled with the starter
@@ -82,6 +82,11 @@ services:
       # Optional: a directory of site themes, one subdirectory per theme. The
       # site only reads it. Uncomment once ./themes exists.
       # - ./themes:/site/themes:ro
+      # Plugins, one folder per package. Writable, because
+      # `docker compose exec geekity geekity plugin add <package>` writes to it;
+      # Reload on the Plugins screen then loads the change. Must exist and be
+      # owned by uid 1000 before the first start.
+      - ./plugins:/site/plugins
 
     # The image carries the same check. It is repeated here so it is visible in
     # the stack. Only the status code counts: /healthz answers 503 when the

@@ -96,13 +96,16 @@ site (or `npx geekity`, or a `package.json` script, which is how the generated
 | `geekity maintenance on`, `off`, `status` | Take the public site down on purpose with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` names when it should be back.                          |
 | `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`. See [The media library](#the-media-library).                                                          |
 | `geekity user add <name>`                 | Create an admin account, so a site can get its first login without the setup screen.                                                                                               |
+| `geekity plugin add <package>`, `remove`  | Install a plugin package's bundle from the npm registry into the plugins folder (`GEEKITY_PLUGINS_DIR`), or delete it. Reload on the Plugins screen loads the change.              |
 | `geekity --help`, `-h`                    | The same table, on the terminal.                                                                                                                                                   |
 | `geekity --version`                       | The installed version.                                                                                                                                                             |
 
 An installed plugin may add commands of its own, which `geekity --help` lists
 under _Plugin commands_ and which run whether or not the plugin is enabled.
+That includes a plugin in the plugins folder. The repository README's
+_Plugins_ section describes `geekity plugin add` and writing a plugin.
 
-`serve`, `sync`, `rebuild`, `resend`, `maintenance`, `strip-metadata`, `user add` and every plugin command take
+`serve`, `sync`, `rebuild`, `resend`, `maintenance`, `strip-metadata`, `user add`, `plugin` and every plugin command take
 `--config <file>`; without it they look for `geekity.config.ts`, then
 `geekity.config.js`, then `geekity.config.mjs` in the working directory, and run
 on defaults if there is none.

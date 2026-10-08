@@ -8,7 +8,10 @@
  * the enabled set as an argument rather than holding one.
  */
 
+import { createRequire } from 'node:module';
 import path from 'node:path';
+
+import semver from 'semver';
 
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { HOST_API_VERSION } from '../plugin.ts';
@@ -43,6 +46,16 @@ export interface InstalledPlugin {
   plugin: Plugin;
   /** Where it came from, as the Plugins screen and a boot error name it. */
   source: string;
+  /**
+   * Why it could not be loaded, such as a folder whose module failed to
+   * import. Such a plugin is never registered, and `plugin` only names it.
+   */
+  problem?: string | undefined;
+  /**
+   * The ranges a folder install's `plugin.json` names, of `@geekity/cms` and
+   * of each plugin it requires. npm checks them for a package it installs.
+   */
+  peerDependencies?: Readonly<Record<string, string>> | undefined;
 }
 
 /** One public route a plugin declared in `register`. */
@@ -127,8 +140,12 @@ export class DuplicatePluginError extends Error {
   }
 }
 
+const CORE_PACKAGE = '@geekity/cms';
+const CORE_VERSION = (createRequire(import.meta.url)('../../package.json') as { version: string })
+  .version;
+
 /** npm's rule for a package name, scoped or not. */
-const PACKAGE_NAME = /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
+export const PACKAGE_NAME = /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
 const PACKAGE_NAME_MAX = 214;
 
 /**
@@ -168,7 +185,10 @@ export function createPluginRegistry(
   };
 
   for (const entry of installed) {
-    const { problem, declared, service } = register(entry.plugin, options, serviceFor);
+    const { problem, declared, service } =
+      entry.problem === undefined
+        ? register(entry.plugin, options, serviceFor)
+        : { problem: entry.problem, declared: NOTHING_DECLARED, service: undefined };
     own.set(entry.plugin.name, problem);
     contributions.set(entry.plugin.name, declared);
     if (service !== undefined) services.set(entry.plugin.name, service.value);
@@ -197,6 +217,14 @@ export function createPluginRegistry(
     if (intrinsic !== undefined) return intrinsic;
     const cycle = cyclic.get(name);
     if (cycle !== undefined) return `It is in a dependency cycle: ${cycle.join(' → ')}.`;
+    for (const [dependency, range] of Object.entries(entry.peerDependencies ?? {})) {
+      const version =
+        dependency === CORE_PACKAGE ? CORE_VERSION : bySource.get(dependency)?.plugin.version;
+      if (version === undefined || semver.satisfies(version, range)) continue;
+      return dependency === CORE_PACKAGE
+        ? `It needs ${CORE_PACKAGE} ${range}, and this core is ${version}.`
+        : `It needs ${dependency} ${range}, and ${version} is installed.`;
+    }
     for (const [dependency, range] of requirementsOf(entry.plugin)) {
       if (!bySource.has(dependency)) {
         return `It requires ${dependency} ${range}, which is not installed.`;

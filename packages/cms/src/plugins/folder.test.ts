@@ -91,10 +91,51 @@ describe('importPluginFolders', () => {
     assert.equal(installed?.source, 'the plugins folder, @acme/plugin-beta');
   });
 
-  it('refuses a folder whose module exports no plugin, naming it', async () => {
+  it('keeps a folder that fails to import, or exports no plugin, as an unavailable plugin with the reason', async () => {
     const dir = await pluginsDir();
     await install(dir, 'plugin-empty', 'export const nothing = 1;\n');
+    await install(dir, '@acme/plugin-throws', "throw new Error('no network at import');\n");
+    await mkdir(path.join(dir, 'plugin-no-bundle'));
 
-    await assert.rejects(importPluginFolders(scanPluginFolders(dir)), /plugin-empty/);
+    const installed = await importPluginFolders(scanPluginFolders(dir));
+    assert.deepEqual(
+      installed.map(({ plugin, source, problem }) => ({ name: plugin.name, source, problem })),
+      [
+        {
+          name: '@acme/plugin-throws',
+          source: 'the plugins folder, @acme/plugin-throws',
+          problem: 'Its index.js failed to load: no network at import',
+        },
+        {
+          name: 'plugin-empty',
+          source: 'the plugins folder, plugin-empty',
+          problem: 'Its index.js does not export a plugin as its default export.',
+        },
+        {
+          name: 'plugin-no-bundle',
+          source: 'the plugins folder, plugin-no-bundle',
+          problem: 'It has no index.js.',
+        },
+      ],
+    );
+  });
+
+  it('carries the peer ranges a folder’s plugin.json names', async () => {
+    const dir = await pluginsDir();
+    await install(dir, '@acme/plugin-beta');
+    const peers = { '@geekity/cms': '^0.24.0', '@acme/plugin-llm': '^1.0.0' };
+    await writeFile(
+      path.join(dir, '@acme', 'plugin-beta', 'plugin.json'),
+      JSON.stringify({
+        name: '@acme/plugin-beta',
+        version: '1.0.0',
+        hostApi: 1,
+        peerDependencies: peers,
+      }),
+    );
+
+    const [installed] = await importPluginFolders(scanPluginFolders(dir));
+    assert.deepEqual(installed?.peerDependencies, peers);
+    assert.equal(installed?.problem, undefined);
   });
 });

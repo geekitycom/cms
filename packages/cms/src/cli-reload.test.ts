@@ -12,7 +12,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { promisify } from 'node:util';
 
-import { cleanupTemporaryDirs, PACKAGE_ROOT, temporaryDir } from './__testing__/cli.ts';
+import { cleanupTemporaryDirs, PACKAGE_ROOT, runCli, temporaryDir } from './__testing__/cli.ts';
+import { fakeNpmRegistry, pluginFiles } from './__testing__/npm-registry.ts';
 
 after(cleanupTemporaryDirs);
 
@@ -294,6 +295,65 @@ describe('geekity serve, supervised', () => {
       plugin: '@test/plugin-first',
     });
     assert.equal(write.status, 303, 'the running server takes writes again');
+
+    server.child.kill('SIGTERM');
+    assert.equal(await server.exited, 0);
+  });
+
+  it('boots past plugin folders that cannot load or whose ranges are unmet, showing why (TASK-287 AC #4, #8)', async () => {
+    const { site: directory, pluginsDir } = await site();
+    await fs.mkdir(path.join(pluginsDir, '@test', 'plugin-throws'), { recursive: true });
+    await fs.writeFile(
+      path.join(pluginsDir, '@test', 'plugin-throws', 'index.js'),
+      "throw new Error('broken at import');\n",
+    );
+    await installPlugin(pluginsDir, '@test/plugin-later');
+    await fs.writeFile(
+      path.join(pluginsDir, '@test', 'plugin-later', 'plugin.json'),
+      JSON.stringify({
+        name: '@test/plugin-later',
+        version: '1.0.0',
+        hostApi: 1,
+        peerDependencies: { '@geekity/cms': '>=99.0.0', '@test/plugin-first': '^2.0.0' },
+      }),
+    );
+    const server = await serve(directory, pluginsDir);
+    const html = await screen(await signedIn(server));
+
+    assert.match(html, /@test\/plugin-throws/);
+    assert.match(html, /Its index\.js failed to load: broken at import/);
+    assert.match(html, /It needs @geekity\/cms &gt;=99\.0\.0, and this core is /);
+    assert.match(html, /Label of @test\/plugin-first/);
+
+    server.child.kill('SIGTERM');
+    assert.equal(await server.exited, 0);
+  });
+
+  it('loads a plugin geekity plugin add installed, on Reload, with no restart (TASK-287 AC #1)', async () => {
+    const name = '@test/plugin-added';
+    const registry = await fakeNpmRegistry([
+      { name, version: '1.0.0', files: pluginFiles({ name, version: '1.0.0' }) },
+    ]);
+    const { site: directory, pluginsDir } = await site();
+    const server = await serve(directory, pluginsDir);
+    const agent = await signedIn(server);
+
+    const added = await runCli(['plugin', 'add', name], directory, undefined, {
+      GEEKITY_PLUGINS_DIR: pluginsDir,
+      npm_config_registry: registry.url,
+    });
+    await registry.close();
+    assert.equal(added.code, 0, added.stderr);
+    assert.ok((await screen(agent)).includes(RELOAD_PATH), 'the screen offers a reload');
+
+    assert.equal((await reload(agent)).status, 303);
+    // A keep-alive connection may still reach the retiring worker, which
+    // answers reads while it drains.
+    await until(() => /Reloaded/.test(server.output()));
+    await pause(1500);
+    const html = await screen(agent);
+    assert.match(html, /Label of @test\/plugin-added/);
+    assert.ok(!html.includes(RELOAD_PATH), 'the folder is what the new server loaded');
 
     server.child.kill('SIGTERM');
     assert.equal(await server.exited, 0);

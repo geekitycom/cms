@@ -110,6 +110,58 @@ describe('the plugin registry', () => {
     assert.match(registry.problem('@acme/plugin-a') ?? '', /host API version/);
   });
 
+  it('keeps a plugin that could not be loaded unavailable with its reason, never registering it', () => {
+    let registered = false;
+    const registry = createPluginRegistry(
+      [
+        {
+          plugin: plugin('@acme/plugin-broken', {}, { register: () => (registered = true) }),
+          source: 'the plugins folder, @acme/plugin-broken',
+          problem: 'Its index.js failed to load: boom',
+        },
+        ...fromConfig(plugin('@acme/plugin-fine')),
+      ],
+      SITE,
+    );
+    assert.equal(registry.problem('@acme/plugin-broken'), 'Its index.js failed to load: boom');
+    assert.equal(registered, false);
+    assert.equal(registry.problem('@acme/plugin-fine'), undefined);
+  });
+
+  it('marks a folder install whose manifest peer ranges core or an installed plugin misses unavailable', () => {
+    const folder = (name: string, peers: Record<string, string>, requires = {}) => ({
+      plugin: plugin(name, requires),
+      source: `the plugins folder, ${name}`,
+      peerDependencies: peers,
+    });
+    const registry = createPluginRegistry(
+      [
+        ...fromConfig(plugin('@acme/plugin-llm')),
+        folder('@acme/plugin-new-core', { '@geekity/cms': '>=999.0.0' }),
+        folder(
+          '@acme/plugin-new-llm',
+          { '@geekity/cms': '>=0.0.0', '@acme/plugin-llm': '^2.0.0' },
+          { '@acme/plugin-llm': '^2.0.0' },
+        ),
+        folder(
+          '@acme/plugin-fits',
+          { '@geekity/cms': '>=0.0.0', '@acme/plugin-llm': '^1.0.0' },
+          { '@acme/plugin-llm': '^1.0.0' },
+        ),
+      ],
+      SITE,
+    );
+    assert.match(
+      registry.problem('@acme/plugin-new-core') ?? '',
+      /^It needs @geekity\/cms >=999\.0\.0, and this core is \d+\.\d+\.\d+\.$/,
+    );
+    assert.equal(
+      registry.problem('@acme/plugin-new-llm'),
+      'It needs @acme/plugin-llm ^2.0.0, and 1.0.0 is installed.',
+    );
+    assert.equal(registry.problem('@acme/plugin-fits'), undefined);
+  });
+
   it('marks a plugin whose register throws unavailable, and still registers the rest', () => {
     const registry = createPluginRegistry(
       fromConfig(

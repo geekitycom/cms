@@ -116,7 +116,7 @@ else
 fi
 
 log "starting ${image} on empty content and data volumes"
-for role in content data; do
+for role in content data plugins; do
   volume="${NAME}-${role}"
   volumes+=("${volume}")
   docker volume create "${volume}" >/dev/null
@@ -128,6 +128,7 @@ container="$(docker run --detach \
   --publish 127.0.0.1::3000 \
   --volume "${NAME}-content:/site/content" \
   --volume "${NAME}-data:/site/data" \
+  --volume "${NAME}-plugins:/site/plugins" \
   --env GEEKITY_BASE_URL=http://localhost:3000 \
   "${image}")"
 
@@ -175,3 +176,78 @@ if ! cmp -s "${scratch}/packaged.css" "${scratch}/style.css"; then
   fail "GET /theme/style.css is not ${STYLE} from the image"
 fi
 echo "ok  GET /theme/style.css is the default theme's stylesheet"
+
+readonly PLUGIN="@geekity-smoke/plugin-hello"
+readonly REGISTRY_PORT=4873
+
+log "installing ${PLUGIN} with geekity plugin add while the container runs"
+started="$(docker inspect --format '{{.State.StartedAt}}' "${container}")"
+docker cp "${ROOT}/scripts/lib/fake-npm-registry.mjs" "${container}:/tmp/fake-npm-registry.mjs"
+docker exec --detach "${container}" node /tmp/fake-npm-registry.mjs "${REGISTRY_PORT}"
+registry=""
+for _ in $(seq 20); do
+  if docker exec "${container}" node -e "fetch('http://127.0.0.1:${REGISTRY_PORT}/').then(()=>process.exit(0),()=>process.exit(1))"; then
+    registry=1
+    break
+  fi
+  sleep 0.5
+done
+[[ -n "${registry}" ]] || fail "the fake registry did not start in the container"
+
+added="$(docker exec --env "npm_config_registry=http://127.0.0.1:${REGISTRY_PORT}" "${container}" \
+  geekity plugin add "${PLUGIN}")" || fail "geekity plugin add failed"
+echo "${added}"
+grep -qF "Added ${PLUGIN} 1.0.0 to /site/plugins/${PLUGIN}." <<<"${added}" \
+  || fail "geekity plugin add did not say it added ${PLUGIN}"
+docker exec "${container}" test -f "/site/plugins/${PLUGIN}/index.js" \
+  || fail "/site/plugins/${PLUGIN}/index.js is not in the plugins volume"
+echo "ok  geekity plugin add"
+
+# The admin, through the setup form, as a browser would: a cookie jar and the
+# CSRF token each form carries.
+jar="${scratch}/cookies"
+csrf() {
+  sed -n 's/.*name="csrf_token" value="\([^"]*\)".*/\1/p' | head -n 1
+}
+token="$(curl -fsS -c "${jar}" -b "${jar}" "${base}/admin/setup" | csrf)"
+[[ -n "${token}" ]] || fail "the setup form carried no CSRF token"
+curl -fsS -o /dev/null -c "${jar}" -b "${jar}" \
+  --data-urlencode "csrf_token=${token}" \
+  --data-urlencode "username=smoke" \
+  --data-urlencode "password=correct horse battery" \
+  --data-urlencode "password_confirmation=correct horse battery" \
+  "${base}/admin/setup" || fail "the setup form refused the first admin"
+
+screen="$(curl -fsS -b "${jar}" "${base}/admin/plugins")"
+grep -qF 'action="/admin/plugins/reload"' <<<"${screen}" \
+  || fail "the Plugins screen did not offer Reload after plugin add"
+token="$(csrf <<<"${screen}")"
+
+log "pressing Reload on the Plugins screen"
+curl -fsS -o /dev/null -b "${jar}" --data-urlencode "csrf_token=${token}" \
+  "${base}/admin/plugins/reload" || fail "POST /admin/plugins/reload failed"
+loaded=""
+for _ in $(seq 30); do
+  # A fresh connection each time: the retiring worker answers reads while it
+  # drains.
+  screen="$(curl -fsS -b "${jar}" "${base}/admin/plugins")"
+  if grep -qF 'Hello from the smoke registry' <<<"${screen}" \
+    && ! grep -qF 'action="/admin/plugins/reload"' <<<"${screen}"; then
+    loaded=1
+    break
+  fi
+  sleep 1
+done
+[[ -n "${loaded}" ]] || fail "the Plugins screen did not show ${PLUGIN} after Reload"
+[[ "$(docker inspect --format '{{.State.StartedAt}}' "${container}")" == "${started}" ]] \
+  || fail "the container restarted"
+[[ "$(docker inspect --format '{{.RestartCount}}' "${container}")" == "0" ]] \
+  || fail "the container restarted"
+echo "ok  ${PLUGIN} is on the Plugins screen after Reload, with no container restart"
+
+removed="$(docker exec "${container}" geekity plugin remove "${PLUGIN}")" \
+  || fail "geekity plugin remove failed"
+grep -qF "Removed ${PLUGIN}" <<<"${removed}" || fail "geekity plugin remove did not say so"
+docker exec "${container}" test ! -e "/site/plugins/${PLUGIN}" \
+  || fail "/site/plugins/${PLUGIN} is still there"
+echo "ok  geekity plugin remove"

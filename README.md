@@ -274,6 +274,172 @@ fails to boot, the old one carries on and the Plugins screen shows why.
 SIGTERM and SIGINT close the worker the way `close()` does, and the supervisor
 exits 0.
 
+## Plugins
+
+A plugin adds to the CMS what only some sites need, such as the WordPress
+compatibility paths or a language model behind the editor (decision-33). Each
+is an npm package, such as `@geekity/plugin-llm`. Every installed plugin loads
+when the site starts, and Admin > Plugins enables and disables each one for
+the site with no restart.
+
+A site with its own entry file installs a plugin with npm and lists it in
+`plugins` in its config. A site on Docker has no npm and no `package.json`, so
+it installs a plugin into the plugins folder with `geekity plugin add`.
+
+> [!WARNING]
+> A plugin runs inside the site process. It can read and write everything the
+> site can, including every file under `data/`: the accounts, the actor key
+> pairs and other plugins' secrets. Install only plugins you trust.
+
+### Installing a plugin on Docker
+
+The image sets `GEEKITY_PLUGINS_DIR` to `/site/plugins`, and
+[`deploy/compose.yaml`](deploy/compose.yaml) mounts `./plugins` there. The
+folder holds one folder per plugin, named by its package:
+`plugins/@geekity/plugin-llm/`.
+
+1. Install the package into the folder:
+
+   ```sh
+   docker compose exec geekity geekity plugin add @geekity/plugin-llm
+   ```
+
+   `plugin add` fetches the package's tarball from the npm registry, checks it
+   against the integrity hash the registry published, and unpacks its bundle
+   and manifest into the folder. Give a version, a dist-tag or a range after
+   the name to choose one: `@geekity/plugin-llm@0.1.0`. With no version, it
+   takes `latest`. Running it again for the same version changes nothing, and
+   a newer version replaces the old folder in one step. `npm_config_registry`
+   names another registry.
+
+2. Open Admin > Plugins and press **Reload**. The screen offers Reload whenever
+   the folder differs from what the running site loaded. Reload starts a new
+   worker with the folder as it is now and retires the old one, with no
+   container restart and no refused request.
+
+3. Enable the plugin on the same screen.
+
+`plugin add` installs only the package it is given. When that plugin requires
+other plugins, the command names each one that is missing or out of range,
+and so does the plugin's row on the Plugins screen. Add each one the same way.
+Nothing is installed or enabled on your behalf.
+
+`plugin add` refuses, and leaves the folder as it was, when:
+
+- the tarball does not match the registry's integrity hash
+- the package has no bundle (`dist/bundle/index.js` and `plugin.json`). Such a
+  plugin installs only with npm, on a site with its own entry file.
+- the bundle targets a newer host API version than this core provides
+
+To remove a plugin, delete its folder and press Reload:
+
+```sh
+docker compose exec geekity geekity plugin remove @geekity/plugin-llm
+```
+
+A plugin that is not on npm installs the same way by hand: copy its bundle
+folder, `index.js` and `plugin.json`, to `plugins/<package name>/` and press
+Reload.
+
+A folder that cannot load does not stop the site. Its row on the Plugins screen
+says why: the bundle failed to import, it exports no plugin, it targets a
+newer host API, or its manifest names a range of `@geekity/cms` or of a
+required plugin that is not met. The commands a folder plugin adds, such as
+`geekity import wordpress-actor`, run with `docker compose exec` the same way
+as core's.
+
+### Writing a plugin
+
+A plugin package imports only `@geekity/cms/plugin`, and only its types and
+`definePlugin`. Its default export is the plugin:
+
+```ts
+import { definePlugin } from '@geekity/cms/plugin';
+
+export default definePlugin({
+  name: '@acme/plugin-hello',
+  version: '0.1.0',
+  label: 'Hello',
+  description: 'Says hello.',
+  hostApi: 1,
+  requires: {},
+  register(host) {
+    host.get('/hello', () => new Response('hello'));
+  },
+});
+```
+
+`register` runs once when the site starts, enabled or not, and declares what the
+plugin adds through `host`: public routes (`get`), federation middleware, one
+admin screen, commands, editor actions, settings and one service. `start` and
+`stop`, if present, run when the plugin is enabled and disabled. The `host` is
+the plugin's only door into the CMS, so a bundle needs no runtime import of
+`@geekity/cms`.
+
+**The package shape.** `package.json` marks the package a plugin, names the
+host API version it targets and the plugins it requires, in a `geekity` field.
+Each required plugin and `@geekity/cms` are also peer dependencies, with a
+range:
+
+```json
+{
+  "name": "@acme/plugin-hello",
+  "version": "0.1.0",
+  "type": "module",
+  "files": ["dist"],
+  "geekity": {
+    "plugin": true,
+    "hostApi": 1,
+    "requires": { "@geekity/plugin-llm": "^0.1.0" }
+  },
+  "peerDependencies": {
+    "@geekity/cms": "^0.24.0",
+    "@geekity/plugin-llm": "^0.1.0"
+  }
+}
+```
+
+The plugin's `requires` holds the same names and ranges as the `geekity` field.
+
+**Requires and services.** A plugin provides at most one service, named by its
+package name, with `host.provide(service)` in `register`. A plugin that lists
+another in `requires` reaches its service with `host.use('<package name>')`
+when it handles a request, a command or a job. `use` throws during `register`.
+A plugin cannot be enabled until everything it requires is installed, in range
+and enabled. Pass plain data across a service, never an object built by a
+library: each bundle carries its own copy of its dependencies.
+
+**Settings and secrets.** `host.settings([...])` declares fields of type
+`text`, `url`, `select`, `checkbox` and `secret`, and the plugin's admin screen
+draws them as a form. Public values are kept in `site.json` under the
+package's name. A `secret` is kept in `data/plugins/<package name>/secrets.json`,
+mode `0600`, and an environment variable overrides it, as the
+[package README](packages/cms/README.md#configuration) describes.
+`host.data` reads and writes other files in that folder.
+
+**The host API version and the peer range.** `HOST_API_VERSION` in
+`@geekity/cms/plugin` is the version of the host API this core provides. A
+plugin that targets a newer one is unavailable, with the reason on the Plugins
+screen. The peer range of `@geekity/cms` says which releases of core the
+package works with: npm checks it for a site that installs with npm, and the
+registry checks the copy in `plugin.json` for a folder install.
+
+**The bundle.** A folder install has no `node_modules`, so each plugin package
+also ships one self-contained ES module with every dependency inlined. The
+plugin packages in this repository build it with the shared script after `tsc`:
+
+```json
+"build": "tsc -p tsconfig.build.json && node ../../scripts/build-plugin-bundle.js"
+```
+
+It writes `dist/bundle/index.js` and `dist/bundle/plugin.json`, which holds the
+package's name, version, host API version and the peer ranges of
+`@geekity/cms` and of each required plugin. The build fails when the package
+is not marked a plugin, when a required plugin is not a peer dependency, when
+the plugin's name, version, `hostApi` or `requires` differ from `package.json`,
+and on a native module, which a bundle cannot carry. A plugin that needs a
+native module is installed with npm only.
+
 ## Content
 
 A Markdown file and a `Document` convert both ways. The file is the source of
@@ -2061,8 +2227,8 @@ and `c.var.config`.
 
 ## Deploying with Docker
 
-The image `ghcr.io/geekitycom/cms` runs `geekity serve` over three directories
-under `/site`: `content/`, `data/` and, optionally, `themes/`. It runs as uid
+The image `ghcr.io/geekitycom/cms` runs `geekity serve` over four directories
+under `/site`: `content/`, `data/`, `plugins/` and, optionally, `themes/`. It runs as uid
 1000, listens on port 3000 and fills an empty `content/` with the starter site
 on its first start. [`deploy/compose.yaml`](deploy/compose.yaml) runs it as a
 compose stack. It is written for [dockge](https://github.com/louislam/dockge),
@@ -2078,20 +2244,21 @@ machine that terminates TLS.
 In dockge, create a stack called `geekity` and paste in `deploy/compose.yaml`.
 With plain compose, copy the file to `/opt/stacks/geekity/compose.yaml`.
 
-Then, in the stack directory, create `content/` and `data/` and give them to
-uid 1000 before the first start:
+Then, in the stack directory, create `content/`, `data/` and `plugins/` and
+give them to uid 1000 before the first start:
 
 ```sh
 cd /opt/stacks/geekity
-mkdir -p content data
-sudo chown 1000:1000 content data
+mkdir -p content data plugins
+sudo chown 1000:1000 content data plugins
 ```
 
-The container runs as uid 1000 and writes to both directories. If they are
-missing, Docker creates them owned by root and the site fails to start with
+The container runs as uid 1000 and writes to all three directories. If they
+are missing, Docker creates them owned by root and the site fails to start with
 `EACCES`. `content/` must be empty, or already hold a site: an empty one is
 filled with the starter site, and one with anything in it, even a dotfile, is
-left alone.
+left alone. `plugins/` holds the plugins `geekity plugin add` installs; see
+[Installing a plugin on Docker](#installing-a-plugin-on-docker).
 
 To move an existing site in, copy its `content/` and `data/` here instead and
 `chown -R 1000:1000` them.
@@ -2200,11 +2367,12 @@ account can sign in straight away.
 ### 5. Bring a WordPress author across
 
 [Moving a site off the WordPress ActivityPub plugin](packages/cms/README.md#moving-a-site-off-the-wordpress-activitypub-plugin)
-describes the cutover. In a container, the user has to exist first, and the
-exported key pair is read from standard input so no copy of the private key is
-left inside the container:
+describes the cutover. In a container, the WordPress plugin and the user have
+to exist first, and the exported key pair is read from standard input so no
+copy of the private key is left inside the container:
 
 ```sh
+docker compose exec geekity geekity plugin add @geekity/plugin-wordpress
 docker compose exec geekity geekity user add ada
 docker compose exec -T geekity geekity import wordpress-actor ada \
   --actor-id 'https://blog.example.com/?author=2' \

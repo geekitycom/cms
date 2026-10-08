@@ -22,6 +22,14 @@ import type { GeekityConfig } from './config.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
 import type { PluginCommand } from './plugin.ts';
 import { importPluginFolders, scanPluginFolders } from './plugins/folder.ts';
+import {
+  addPlugin,
+  DEFAULT_REGISTRY,
+  installedFolders,
+  parsePackageSpec,
+  removePlugin,
+  requirementNotes,
+} from './plugins/install.ts';
 import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
 import { superviseCluster } from './supervisor/primary.ts';
 import { processChannel, superviseWorker } from './supervisor/worker.ts';
@@ -41,6 +49,7 @@ export type Command =
   | 'user'
   | 'maintenance'
   | 'strip-metadata'
+  | 'plugin'
   | 'help'
   | 'version';
 
@@ -54,6 +63,7 @@ const COMMANDS: readonly Command[] = [
   'user',
   'maintenance',
   'strip-metadata',
+  'plugin',
 ];
 
 /**
@@ -106,6 +116,7 @@ Usage:
   geekity maintenance (on [--until <time>] | off | status) [--config <file>]
   geekity strip-metadata [--config <file>]
   geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
+  geekity plugin (add <package>[@version] | remove <package>) [--config <file>]
 
 Commands:
   serve            Start the CMS (the default when no command is given).
@@ -131,6 +142,13 @@ Commands:
                    as it is.
   user add         Create an admin user, so a site can get its first login
                    without the setup screen.
+  plugin add       Install a plugin package's bundle from the npm registry
+                   (npm_config_registry, or registry.npmjs.org) into the
+                   plugins folder, GEEKITY_PLUGINS_DIR. It installs only the
+                   package named, and names any plugin it requires that is
+                   missing. Reload on the Plugins screen loads it.
+  plugin remove    Delete a plugin's folder from the plugins folder. Reload on
+                   the Plugins screen unloads it.
 
 Options:
   --config <file>  Config file to load. Defaults to the first of
@@ -151,7 +169,7 @@ Options:
 
 Environment overrides:
   GEEKITY_PORT (or PORT), GEEKITY_CONTENT_DIR, GEEKITY_DATA_DIR,
-  GEEKITY_THEMES_DIR, GEEKITY_BASE_URL, GEEKITY_WATCH,
+  GEEKITY_THEMES_DIR, GEEKITY_PLUGINS_DIR, GEEKITY_BASE_URL, GEEKITY_WATCH,
   GEEKITY_MAINTENANCE (on keeps the site in maintenance until a restart)
 `;
 
@@ -420,6 +438,7 @@ async function main(argv: readonly string[]): Promise<number> {
   if (command === 'resend') return resendCommand(args, configPath, flags);
   if (command === 'maintenance') return maintenanceCommand(args, configPath, flags);
   if (command === 'strip-metadata') return stripMetadataCommand(configPath);
+  if (command === 'plugin') return pluginFolderCommand(args, configPath);
 
   return serveCommand(configPath);
 }
@@ -805,6 +824,65 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
 }
 
 /**
+ * `geekity plugin add <package>` and `geekity plugin remove <package>`
+ * (decision-33): change the plugins folder, which Reload on the Plugins
+ * screen then loads. Nothing a plugin requires is installed for it.
+ */
+async function pluginFolderCommand(
+  args: readonly string[],
+  configPath: string | undefined,
+): Promise<number> {
+  const [action, spec, ...rest] = args;
+  if ((action !== 'add' && action !== 'remove') || spec === undefined || rest.length > 0) {
+    throw new Error('geekity plugin needs add <package>[@version] or remove <package>.');
+  }
+  const config = resolveConfig(await loadConfig(process.cwd(), configPath));
+  const { pluginsDir } = config;
+  if (pluginsDir === undefined) {
+    throw new Error(
+      'geekity plugin needs a plugins folder: set GEEKITY_PLUGINS_DIR, or pluginsDir in the config.',
+    );
+  }
+
+  if (action === 'remove') {
+    const directory = await removePlugin(spec, pluginsDir);
+    process.stdout.write(
+      `Removed ${spec} (${directory}). Reload on the Plugins screen to unload it.\n`,
+    );
+    return 0;
+  }
+
+  const registry =
+    firstSet(process.env['npm_config_registry'], process.env['NPM_CONFIG_REGISTRY']) ??
+    DEFAULT_REGISTRY;
+  const { manifest, directory, replaced } = await addPlugin(parsePackageSpec(spec), {
+    pluginsDir,
+    registry,
+  });
+  const installed = new Map<string, string | undefined>([
+    ...config.plugins.map((plugin) => [plugin.name, plugin.version] as const),
+    ...installedFolders(pluginsDir),
+  ]);
+  const done =
+    replaced === undefined || replaced === manifest.version
+      ? `Added ${manifest.name} ${manifest.version} to ${directory}.`
+      : `Replaced ${manifest.name} ${replaced} with ${manifest.version} in ${directory}.`;
+  process.stdout.write(
+    [
+      done,
+      ...requirementNotes(manifest, installed, ownManifest().version),
+      'Reload on the Plugins screen to load it, then enable it there.',
+      '',
+    ].join('\n'),
+  );
+  return 0;
+}
+
+function firstSet(...values: (string | undefined)[]): string | undefined {
+  return values.find((value) => value !== undefined && value !== '');
+}
+
+/**
  * `geekity user add <username>`: create an admin without the setup screen.
  *
  * The other door into `data/users.json` is the first-run setup form, and this
@@ -922,9 +1000,13 @@ interface FoundCommand {
   command: PluginCommand;
 }
 
-/** Every command the site's available plugins add, longest words first. */
-function pluginCommands(config: ResolvedConfig): FoundCommand[] {
-  return sitePluginRegistry(config)
+/**
+ * Every command the site's available plugins add, from its config and its
+ * plugins folder, longest words first.
+ */
+async function pluginCommands(config: ResolvedConfig): Promise<FoundCommand[]> {
+  const folderPlugins = await importPluginFolders(scanPluginFolders(config.pluginsDir));
+  return sitePluginRegistry(config, folderPlugins)
     .plugins.filter((entry) => entry.problem === undefined)
     .flatMap((entry) => entry.commands.map((command) => ({ plugin: entry.plugin.name, command })))
     .sort((a, b) => b.command.words.length - a.command.words.length);
@@ -942,7 +1024,7 @@ async function pluginCommand(argv: readonly string[]): Promise<number> {
   const configPath = configFlag(argv);
   const config = resolveConfig(await loadConfig(process.cwd(), configPath));
   const words = leadingWords(argv);
-  const found = pluginCommands(config).find(({ command }) =>
+  const found = (await pluginCommands(config)).find(({ command }) =>
     command.words.every((word, index) => words[index] === word),
   );
   if (found === undefined) {
@@ -1032,7 +1114,7 @@ function parseCommandArgs(
 async function usage(configPath: string | undefined): Promise<string> {
   let found: FoundCommand[];
   try {
-    found = pluginCommands(resolveConfig(await loadConfig(process.cwd(), configPath)));
+    found = await pluginCommands(resolveConfig(await loadConfig(process.cwd(), configPath)));
   } catch (error) {
     process.stderr.write(
       `Plugin commands are not listed: ${error instanceof Error ? error.message : String(error)}\n`,

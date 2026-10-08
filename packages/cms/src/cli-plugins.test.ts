@@ -104,4 +104,38 @@ describe('a plugin command', () => {
     assert.equal(run.code, 1);
     assert.match(run.stderr, /Unknown command "echo"/);
   });
+
+  it('runs from the plugins folder, where a Docker site installs it', async () => {
+    const directory = await temporaryDir('geekity-cli-folder-plugins-');
+    const folder = path.join(directory, 'plugins', '@acme', 'plugin-hello');
+    await fs.mkdir(folder, { recursive: true });
+    await fs.writeFile(
+      path.join(folder, 'index.js'),
+      `export default {
+  name: '@acme/plugin-hello',
+  version: '1.0.0',
+  label: 'Hello',
+  description: 'Greets.',
+  hostApi: 1,
+  register(host) {
+    host.command({
+      words: ['hello'],
+      usage: '',
+      summary: 'Say hello.',
+      run({ write }) {
+        write('hello from the folder\\n');
+        return 0;
+      },
+    });
+  },
+};
+`,
+    );
+    const env = { GEEKITY_PLUGINS_DIR: path.join(directory, 'plugins') };
+
+    const run = await runCli(['hello'], directory, undefined, env);
+    assert.equal(run.code, 0, run.stderr);
+    assert.equal(run.stdout, 'hello from the folder\n');
+    assert.match((await runCli(['--help'], directory, undefined, env)).stdout, /geekity hello/);
+  });
 });
