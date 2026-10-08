@@ -142,9 +142,6 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     });
   });
 
-  // Before the plugin screens' catch-all. On success this worker has drained
-  // and is about to retire, so it writes no flash: the redirect says it, and
-  // closes the connection so the browser's next request reaches the new worker.
   app.post(PLUGINS_RELOAD_PATH, async (c) => {
     const supervision = c.var.supervision;
     if (supervision === undefined) {
@@ -197,15 +194,12 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     return c.redirect(PLUGINS_PATH, 303);
   });
 
-  // A plugin's own screen, while it runs. Core draws what the plugin hands
-  // back, so nothing a plugin says reaches the page unescaped.
   app.get(`${PLUGINS_PATH}/*`, (c) => {
     const found = screenedPlugin(c);
     if (found === undefined) return c.notFound();
     return drawScreen(c, found, {});
   });
 
-  // Save the settings form, or run one of the screen's actions.
   app.post(`${PLUGINS_PATH}/*`, async (c) => {
     const found = screenedPlugin(c);
     if (found === undefined) return c.notFound();

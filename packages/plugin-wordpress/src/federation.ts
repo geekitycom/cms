@@ -51,9 +51,6 @@ export function wordPressFederation(records: WordPressRecords): PluginFederation
     const target = wordPressRequestTarget(new URL(context.request.url).pathname);
     if (target === undefined) return await next();
 
-    // Recorded before Fedify is asked, because the record is of what the site
-    // was asked for: a peer still holding the old inbox URL is news whether or
-    // not the number in it still names anybody.
     await records.recordRequest({
       target,
       username:
@@ -63,8 +60,6 @@ export function wordPressFederation(records: WordPressRecords): PluginFederation
       at: context.now(),
     });
 
-    // Built on the first request that reaches one of the paths, because the
-    // KV store it shares arrives with the request.
     federation ??= build(context, records);
     return await federation.fetch(context.request, {
       contextData: context,
@@ -110,8 +105,6 @@ function build(
     .setActorDispatcher(WORDPRESS_ACTOR_PATH, async (context, identifier) => {
       const username = userOf(context, identifier);
       if (username === undefined) return null;
-      // The canonical document, verbatim: a peer refetching the actor at the
-      // old URL is exactly the peer that should learn the new inbox.
       const actor = await context.data.actor(username);
       return actor === undefined ? null : await Person.fromJsonLd(actor, loaders(context));
     })
@@ -184,9 +177,6 @@ function build(
     userOf(context, identifier) === undefined ? null : { items: [] },
   );
 
-  // Every activity goes to the site's own inbox handlers, which decide what
-  // each type means. `recipient` arrives here as the WordPress number, straight
-  // off the path, and the site's handlers mean a username by it.
   federation
     .setInboxListeners(WORDPRESS_INBOX_PATH, WORDPRESS_SHARED_INBOX_PATH)
     .withIdempotency('per-origin')

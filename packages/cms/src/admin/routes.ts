@@ -380,9 +380,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // says which of them (decision-15).
   mountAppearanceScreen(app, { render });
 
-  // Every installed plugin, and the switches that enable each (decision-33).
-  // The editor's plugin buttons first, whose endpoints sit under a plugin's
-  // screen path.
   mountEditorActions(app);
   mountPluginsScreen(app, { render });
 

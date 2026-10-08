@@ -2028,7 +2028,6 @@ async function renderEditor(
       : {}),
     // Who this can be attributed to, and who it is attributed to now.
     authors: authorChoices(c, form.author),
-    // Running plugins' buttons beside the title, description and tags.
     editorActions: editorActionViews(c, kind, form),
     // What an empty Language field means.
     siteLanguage: readSiteSettings(c.var.config.contentDir).language,

@@ -1826,8 +1826,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
 
     takeFlash(sessionId) {
       const queued = readFlash(sessionId);
-      // Nothing queued writes nothing, so a page still renders on a worker
-      // that has gone read-only for a reload.
       if (queued.length > 0) statements.writeFlash.run(null, sessionId);
       return queued;
     },

@@ -77,7 +77,6 @@ async function main(): Promise<void> {
     await cms.serve();
     ok(`the site is listening on ${baseUrl}`);
 
-    // ------------------------------------------------------------ the import
     log(`importing ${USERNAME} as WordPress actor ${String(WORDPRESS_ID)}`);
     const exported = generateKeyPairSync('rsa', {
       modulusLength: 2048,
@@ -98,7 +97,6 @@ async function main(): Promise<void> {
     assert.equal(imported.keys[0]?.state, 'imported', 'the RSA pair came from the PEM');
     ok(`imported ${USERNAME}: ${imported.keys.map((key) => key.file).join(', ')}`);
 
-    // ---------------------------------------------------- the old actor path
     log(`fedify lookup ${wpActor}`);
     const actor = await lookup(wpActor);
     assert.equal(actor['id'], storedActorId, 'the identity, not the path it was fetched at');
@@ -117,7 +115,6 @@ async function main(): Promise<void> {
     }
     ok('the outbox, followers and following collections answer under the old path');
 
-    // --------------------------------------------- a Follow at the old inbox
     log('following from a peer built out of Fedify, at the old inbox');
     const peer = await startPeer(await freePort());
     cleanups.push(() => peer.stop());
@@ -134,7 +131,6 @@ async function main(): Promise<void> {
     });
     ok(`accepted a Follow from ${peer.actorId} delivered to ${wpActor}/inbox`);
 
-    // ----------------------------------------------------------- the record
     const requests = JSON.parse(
       await readFile(
         path.join(pluginDataFolder(dataDir, wordpress.name).path, REQUESTS_FILE),
@@ -146,7 +142,6 @@ async function main(): Promise<void> {
     }
     ok('the plugin recorded when each path was last asked for');
 
-    // ----------------------------------------------------------- disabling
     writeSite(contentDir, { baseUrl, author: USERNAME, enabled: false });
     const gone = await fetch(wpActor, { headers: { accept: 'application/activity+json' } });
     assert.equal(gone.status, 404, 'disabled, the old path is gone on the next request');
@@ -224,7 +219,6 @@ interface Peer {
  */
 async function startPeer(port: number): Promise<Peer> {
   const origin = `http://localhost:${String(port)}`;
-  // Typed through node's WebCrypto types, which the linter resolves.
   const keyPair = (await generateCryptoKeyPair('RSASSA-PKCS1-v1_5')) as webcrypto.CryptoKeyPair;
   let accepts = 0;
 

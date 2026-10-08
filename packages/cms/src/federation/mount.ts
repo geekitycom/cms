@@ -130,9 +130,6 @@ export function mountFederation(
 
   app.use('*', federationGate);
 
-  // Then the plugins' federation middleware (decision-33). After the
-  // canonical middleware, which has already claimed everything it answers,
-  // and before the stored-id middleware below, which claims paths of its own.
   if (options.plugins !== undefined) app.use('*', options.plugins);
 
   // Named, and typed as a middleware, so the Hono context arrives with its

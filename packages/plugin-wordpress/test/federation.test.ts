@@ -355,9 +355,6 @@ describe('an Undo of a Follow at the old inbox', () => {
     await deliver(instance, follow());
     assert.equal(instance.admin.countFollowers(LOCAL_USER), 1);
 
-    // The site's handler checks the undone object's type. It parses the
-    // activity with its own copy of the vocabulary, so the check holds even
-    // when this plugin is bundled with a copy of Fedify of its own.
     const undo = new Undo({
       id: new URL(`${REMOTE_ORIGIN}/follows/1/undo`),
       actor: new URL(REMOTE_ACTOR),
@@ -446,8 +443,6 @@ describe('when each path was last asked for', () => {
     }
     assert.match(requests.sharedInbox ?? '', /^\d{4}-\d{2}-\d{2}T/, 'and so was the shared inbox');
 
-    // The file, not the database: decision-9 lets a site delete the database,
-    // and the one question the plugin is watched by must survive that.
     const onDisk = JSON.parse(
       await readFile(path.join(pluginData(instance.config.dataDir), REQUESTS_FILE), 'utf8'),
     ) as Record<string, unknown>;

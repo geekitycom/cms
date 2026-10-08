@@ -64,7 +64,6 @@ const SEPARATELY: Readonly<Record<string, readonly Record<string, unknown>[]>> =
     syndicationRefused('target-0'),
     syndicationRefused('target-new'),
   ],
-  // A plugin's settings form, its fields the plugin's own (TASK-283).
   'pages/plugins/screen.njk': [pluginSettingsRefused()],
   'pages/users/apps.njk': [
     { withoutPkce: { clients: [], field: 'client_id', value: 'x', problem: 'Wrong client.' } },

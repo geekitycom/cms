@@ -347,8 +347,6 @@ describe('geekity serve, supervised', () => {
     assert.ok((await screen(agent)).includes(RELOAD_PATH), 'the screen offers a reload');
 
     assert.equal((await reload(agent)).status, 303);
-    // A keep-alive connection may still reach the retiring worker, which
-    // answers reads while it drains.
     await until(() => /Reloaded/.test(server.output()));
     await pause(1500);
     const html = await screen(agent);
@@ -373,8 +371,6 @@ describe('geekity serve, supervised', () => {
 
     process.kill(worker, 'SIGKILL');
     await until(() => /starting another/.test(server.output()));
-    // A test listens on port 0, which the respawned worker picks afresh: with
-    // no worker listening, the supervisor held no port to hand on.
     await until(() => [...server.output().matchAll(/on port (\d+)/g)].length === 2);
     const port = [...server.output().matchAll(/on port (\d+)/g)][1]?.[1] ?? '';
     assert.equal((await fetch(`http://127.0.0.1:${port}/_geekity/health`)).status, 200);

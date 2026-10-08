@@ -1648,8 +1648,6 @@ function openCache(resolved: ResolvedConfig): { store: ContentStore; admin: Admi
 export function createCms(config: GeekityConfig = {}, context: ServeContext = {}): Cms {
   const resolved = resolveConfig(config);
 
-  // Before the database opens, so two plugins with one name refuse the boot
-  // without leaving a connection behind.
   const plugins = sitePluginRegistry(resolved, context.folderPlugins);
 
   const { store, admin } = openCache(resolved);
@@ -1874,12 +1872,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     // it (TASK-85).
     archivePosts: () => store.listPosts(),
   });
-  // One KV store for the site's federation and every plugin's, so an activity
-  // delivered to a plugin's inbox and to a canonical one is recognised as one
-  // activity rather than handled twice (doc-8).
   const federationKv = resolved.federation.kv ?? new MemoryKvStore();
-  // A queue the site names is its own to drain; the default one lives in this
-  // process, so closing waits for it.
   const federationQueue =
     resolved.federation.queue === undefined ? createSettlingQueue() : undefined;
   const federation = createSiteFederation({
@@ -2049,8 +2042,6 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
   // about to get, the error pages and the 503 included (TASK-139).
   if (resolved.compression) app.use('*', compression());
 
-  // Inside the access log and compression, so a refusal is logged and
-  // compressed like any other answer, and outside everything that writes.
   const writes = createWriteGate({ exempt: (pathname) => pathname === PLUGINS_RELOAD_PATH });
   app.use('*', writes.middleware);
 
@@ -2136,7 +2127,6 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
 
   // The admin goes on before the public site, for the same reason.
   mountAdmin(app);
-  // Before the public site, which claims every unmatched path.
   mountPluginRoutes(app, plugins);
   mountPublicSite(app);
 

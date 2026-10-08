@@ -80,8 +80,6 @@ export function superviseWorker(options: {
               try {
                 await cms.drain();
               } catch (error) {
-                // Half drained is neither serving nor safe to hand over from;
-                // the supervisor respawns a worker that exits.
                 log(`The server could not drain for a reload: ${messageOf(error)}`);
                 exit(1);
                 return;

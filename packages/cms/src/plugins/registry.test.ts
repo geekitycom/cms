@@ -412,7 +412,6 @@ describe('the plugin registry', () => {
           calls.push(`stop ${name}`);
         },
       });
-    // Installed dependents first, so the order cannot be install order.
     const registry = createPluginRegistry(
       fromConfig(
         tracked('@acme/plugin-c', { '@acme/plugin-b': '*' }),

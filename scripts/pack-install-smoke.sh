@@ -174,9 +174,6 @@ log "installing"
 pnpm --dir "${site}" install
 
 log "importing @geekity/cms/plugin from the installed tarball"
-# The subpath export is the boundary every plugin imports (decision-33), so it
-# has to resolve from the artefact, not only through the workspace link. The
-# file below is also type checked with the site at the end.
 (
   cd "${site}"
   node --input-type=module -e '
@@ -354,8 +351,6 @@ fi
 echo "ok  POST /admin/plugins/@geekity/plugin-post-summary/editor/suggest-title"
 
 log "pressing Suggest tags in the editor with no API key set"
-# The key is missing, so the plugin answers before it would ask tags.pub, and
-# the smoke test stays off the network.
 tags_suggestion="$(curl -fsS -b "${jar}" --data-urlencode "csrf_token=${editor_token}" \
   --data-urlencode 'type=post' --data-urlencode 'body=Some words.' \
   "${BASE}/admin/plugins/@geekity/plugin-tag-suggest/editor/suggest-tags")"

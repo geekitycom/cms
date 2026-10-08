@@ -309,8 +309,6 @@ export function createPluginRegistry(
         for (const entry of order) {
           const { plugin } = entry;
           if (!running.has(plugin.name) || started.includes(plugin)) continue;
-          // Counted as started even when start throws, so the next request
-          // does not try again, and stop still gets its chance to clean up.
           started.push(plugin);
           await lifecycle(plugin, 'start');
         }
@@ -440,7 +438,6 @@ function register(
       }
       service = { value };
     },
-    // The provider's `provide` was checked against the same map entry.
     use: <Dependency extends string>(dependency: Dependency) =>
       serviceFor(plugin, dependency) as PluginService<Dependency>,
     settings<const Fields extends readonly PluginSettingField[]>(

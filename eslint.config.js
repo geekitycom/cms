@@ -134,10 +134,6 @@ export default tseslint.config(
   },
 
   {
-    // A plugin's only door into core is `@geekity/cms/plugin`, and into
-    // another plugin is `host.use` (decision-33). Another plugin's package is
-    // imported for its service types alone: a value import would inline a
-    // second copy of it into the bundle.
     name: 'geekity/plugin-boundary',
     files: ['apps/demo/plugins/**/*.ts', 'packages/plugin-*/src/**/*.ts'],
     rules: {

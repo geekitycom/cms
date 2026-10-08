@@ -55,7 +55,6 @@ export function wordPressScreen(records: WordPressRecords): PluginScreen {
         ];
       }
 
-      // The shared inbox last: it belongs to the site rather than to a person.
       rows.push([
         { code: WORDPRESS_SHARED_INBOX_PATH },
         'every user',

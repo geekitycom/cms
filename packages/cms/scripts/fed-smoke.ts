@@ -173,7 +173,6 @@ async function main(): Promise<void> {
     const storedActorId = `${baseUrl}/?author=2`;
     writeUsers(dataDir, [
       { username: USERNAME, profile: { displayName: 'Andrew Shell' } },
-      // No `actorId` and no key yet: both arrive part way through the run.
       { username: MIGRATED_USERNAME, id: 2, profile: { displayName: 'The Old Blog' } },
     ]);
 
@@ -446,11 +445,6 @@ async function main(): Promise<void> {
     // hold. Everything below is that URL doing the work the author URL does
     // for everybody else — served, redirected from, discoverable, and signed
     // with.
-    //
-    // The account gets both the way a migration does: an RSA pair exported as
-    // PEM elsewhere, written as the user's key, and the id it was published
-    // under. Importing them from a real export is a plugin's job and its own
-    // smoke test's (TASK-282).
     log(`bringing ${MIGRATED_USERNAME} across with a stored id and an exported key`);
     const exported = generateKeyPairSync('rsa', {
       modulusLength: 2048,

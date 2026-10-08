@@ -132,8 +132,6 @@ jobs:
   # replaces `fetch`, so a follower's inbox is a function call — and this boots
   # the server on a real port, runs `fedify lookup` from `@fedify/cli` against
   # the actor and a post object, and delivers a `Create` to two real inboxes.
-  # Each plugin package with a federation of its own has a smoke test of its
-  # own, which `pnpm fed:smoke` runs after core's.
   #
   # A job of its own because it spawns processes and binds ports, and because a
   # federation failure should be readable as a federation failure rather than

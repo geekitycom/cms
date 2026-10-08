@@ -203,8 +203,6 @@ docker exec "${container}" test -f "/site/plugins/${PLUGIN}/index.js" \
   || fail "/site/plugins/${PLUGIN}/index.js is not in the plugins volume"
 echo "ok  geekity plugin add"
 
-# The admin, through the setup form, as a browser would: a cookie jar and the
-# CSRF token each form carries.
 jar="${scratch}/cookies"
 csrf() {
   sed -n 's/.*name="csrf_token" value="\([^"]*\)".*/\1/p' | head -n 1
@@ -228,8 +226,6 @@ curl -fsS -o /dev/null -b "${jar}" --data-urlencode "csrf_token=${token}" \
   "${base}/admin/plugins/reload" || fail "POST /admin/plugins/reload failed"
 loaded=""
 for _ in $(seq 30); do
-  # A fresh connection each time: the retiring worker answers reads while it
-  # drains.
   screen="$(curl -fsS -b "${jar}" "${base}/admin/plugins")"
   if grep -qF 'Hello from the smoke registry' <<<"${screen}" \
     && ! grep -qF 'action="/admin/plugins/reload"' <<<"${screen}"; then

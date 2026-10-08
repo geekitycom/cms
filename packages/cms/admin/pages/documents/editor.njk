@@ -33,13 +33,6 @@
 {% endif %}
 {% endmacro %}
 
-{# A running plugin's buttons beside one field (decision-33). Hidden until
-   static/editor-actions.js finds them, so with JavaScript off there is
-   nothing to press. Each has a status line for its errors and a suggestion
-   with Accept, which fills the field and saves nothing, and Dismiss. A
-   suggestion is one value, or choices the script draws from the template
-   row, each with a box to tick, its badge and its note. The boxes have no
-   name, so a save never posts them. #}
 {% macro pluginActions(fieldId, buttons) %}
 {% if buttons %}
 <div class="flex flex-col gap-2" data-editor-actions="{{ fieldId }}">

@@ -124,7 +124,6 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   // One child, because the rule is uniform: a second kind of theme, or a menu
   // editor, slots in beside Themes without the menu changing shape.
   section('appearance', 'Appearance', [{ child: 'themes', label: 'Themes', url: THEMES_PATH }]),
-  // After Appearance, where WordPress keeps it.
   section(PLUGINS_SECTION, 'Plugins', [
     { child: PLUGINS_CHILD, label: 'Installed plugins', url: PLUGINS_PATH },
   ]),
@@ -181,8 +180,6 @@ export function adminMenu(
   pluginScreens: readonly AdminMenuChild[] = [],
 ): AdminMenuSection[] {
   const { section: name, child } = location;
-  // The screens of the plugins running for this request go under Plugins,
-  // after the list of plugins itself (decision-33).
   const sections = ADMIN_SECTIONS.map((entry) =>
     entry.section === PLUGINS_SECTION && pluginScreens.length > 0
       ? { ...entry, children: [...entry.children, ...pluginScreens] }
