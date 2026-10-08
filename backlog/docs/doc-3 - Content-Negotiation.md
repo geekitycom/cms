@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-08 01:57'
+updated_date: '2026-10-08 13:49'
 ---
 # Content Negotiation
 
@@ -22,7 +22,7 @@ Every public content URL serves one document in several representations. The rep
 
 ## Selection
 
-1. If the path ends in `.md` or `.json` and the path without the extension resolves, use that representation and ignore `Accept`.
+1. If the path ends in `.md` or `.json` and the path without the extension resolves, use that representation and ignore `Accept`. Each representation has one URL: `index` before the extension when the resource's URL ends in `/` (`/2026/09/hello-world/index.md`), the extension straight after it otherwise. The other spelling, `/2026/09/hello-world.md`, answers `301` to that URL with its query kept.
 2. Otherwise run standard `Accept` matching with q-values against the list above. `*/*`, `text/*` and a missing header mean HTML. `text/plain` gets the Markdown under that label, and `text/markdown` wins whenever the request ranks it at least as high as `text/plain`.
 3. ActivityStreams types are claimed before this code runs, so they never reach the negotiator. A post's object id is its permalink, so the permalink itself answers them with the `Article`: one URL, a browser and a peer, decided by `Accept`. A page and a listing federate nothing and fall through to the negotiator, which answers 406 to a request that will take nothing else.
 4. A request whose only acceptable types are unsupported returns 406 with a short JSON body listing the options that have a URL of their own, which leaves out `text/plain`.

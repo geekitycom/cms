@@ -468,8 +468,14 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   const hidden = hiddenDocumentForSignedInHtml(c, pathname);
   if (hidden !== undefined) return hidden;
 
+  const { search } = new URL(c.req.url);
   const extension = splitRepresentationExtension(pathname);
   if (extension !== undefined) {
+    const canonicalRedirect = (candidate: string): string | undefined => {
+      const href = representationHref(encodePath(candidate), extension.representation);
+      return href === encodePath(pathname) ? undefined : `${href}${search}`;
+    };
+
     for (const candidate of extension.paths) {
       // `/index.md` and `/index.json` are the front page's own
       // representations on a site whose `/` is a page: the document is at `/`
@@ -477,6 +483,8 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
       const found = candidate === '/' ? pages.home : publicDocumentAt(store, candidate);
       const servesListing = found !== undefined && found.path === pages.posts?.path;
       if (found !== undefined && !servesListing) {
+        const canonical = canonicalRedirect(candidate);
+        if (canonical !== undefined) return c.redirect(canonical, 301);
         return negotiateDocument(
           c,
           found,
@@ -492,7 +500,10 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     if (LISTING_REPRESENTATIONS.includes(extension.representation)) {
       for (const candidate of extension.paths) {
         const request = listingRequestAt(pages, candidate, bases, authors);
-        if (request !== undefined) return listing(c, request, extension.representation);
+        if (request === undefined) continue;
+        const canonical = canonicalRedirect(candidate);
+        if (canonical !== undefined) return c.redirect(canonical, 301);
+        return listing(c, request, extension.representation);
       }
     }
   }
@@ -505,7 +516,6 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     extension?.paths
       .map((candidate) => movedHref(store, pages, candidate, extension.representation))
       .find((href) => href !== undefined);
-  const { search } = new URL(c.req.url);
   if (formerly !== undefined) return c.redirect(`${formerly}${search}`, 301);
 
   const deleted = [pathname, ...(extension?.paths ?? [])].some(

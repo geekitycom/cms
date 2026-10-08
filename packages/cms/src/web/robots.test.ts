@@ -193,7 +193,7 @@ describe('the Markdown and JSON alternates of a page (AC #4)', () => {
   it('ask search engines not to index them, and the HTML does not', async () => {
     const cms = await site();
 
-    for (const url of ['/hello.md', '/hello/index.json']) {
+    for (const url of ['/hello/index.md', '/hello/index.json']) {
       const response = await cms.app.request(url);
       assert.equal(response.status, 200, url);
       assert.equal(response.headers.get('x-robots-tag'), 'noindex', url);
