@@ -19,11 +19,12 @@ export default {
      * - `docs`    README, CLAUDE.md and the docs directory
      * - `release` release-please and publishing
      * - `plugin-wordpress` the published @geekity/plugin-wordpress package
+     * - `plugin-llm` the published @geekity/plugin-llm package
      */
     'scope-enum': [
       2,
       'always',
-      ['cms', 'demo', 'deps', 'ci', 'docs', 'release', 'plugin-wordpress'],
+      ['cms', 'demo', 'deps', 'ci', 'docs', 'release', 'plugin-wordpress', 'plugin-llm'],
     ],
   },
 };

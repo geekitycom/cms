@@ -110,6 +110,16 @@ if [[ -z "${wordpress_tarball}" ]]; then
 fi
 echo "packed ${wordpress_tarball}"
 
+log "building and packing @geekity/plugin-llm"
+pnpm --dir "${ROOT}" --filter @geekity/plugin-llm build
+pnpm --dir "${ROOT}" --filter @geekity/plugin-llm pack --pack-destination "${scratch}" >/dev/null
+llm_tarball="$(find "${scratch}" -maxdepth 1 -name 'geekity-plugin-llm-*.tgz' -print -quit)"
+if [[ -z "${llm_tarball}" ]]; then
+  echo "pnpm pack wrote no plugin-llm tarball into ${scratch}" >&2
+  exit 1
+fi
+echo "packed ${llm_tarball}"
+
 log "geekity init ${site}"
 # The bin is run from dist/ rather than through a workspace link, so this is
 # also a check that the compiled CLI resolves its own templates directory.
@@ -118,24 +128,25 @@ node "${ROOT}/packages/cms/dist/cli.js" init "${site}"
 log "pointing the new site at the tarballs"
 node --input-type=commonjs -e '
   const { readFileSync, writeFileSync } = require("node:fs");
-  const [manifestPath, tarball, wordpress] = process.argv.slice(1);
+  const [manifestPath, tarball, wordpress, llm] = process.argv.slice(1);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   manifest.dependencies["@geekity/cms"] = "file:" + tarball;
   manifest.dependencies["@geekity/plugin-wordpress"] = "file:" + wordpress;
+  manifest.dependencies["@geekity/plugin-llm"] = "file:" + llm;
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-' "${site}/package.json" "${tarball}" "${wordpress_tarball}"
+' "${site}/package.json" "${tarball}" "${wordpress_tarball}" "${llm_tarball}"
 grep '@geekity/' "${site}/package.json"
 
-log "installing the WordPress plugin in the site config"
+log "installing the WordPress and LLM plugins in the site config"
 node --input-type=commonjs -e '
   const { readFileSync, writeFileSync } = require("node:fs");
   const [configPath] = process.argv.slice(1);
   const config = readFileSync(configPath, "utf8")
-    .replace(/^/, "import wordpress from \"@geekity/plugin-wordpress\";\n")
-    .replace("export default defineConfig({", "export default defineConfig({\n  plugins: [wordpress],");
+    .replace(/^/, "import wordpress from \"@geekity/plugin-wordpress\";\nimport llm from \"@geekity/plugin-llm\";\n")
+    .replace("export default defineConfig({", "export default defineConfig({\n  plugins: [wordpress, llm],");
   writeFileSync(configPath, config);
 ' "${site}/geekity.config.ts"
-grep -n 'wordpress' "${site}/geekity.config.ts"
+grep -n 'wordpress\|llm' "${site}/geekity.config.ts"
 
 log "installing"
 pnpm --dir "${site}" install
@@ -158,9 +169,10 @@ log "importing @geekity/cms/plugin from the installed tarball"
 cat >"${site}/plugin-check.ts" <<'TS'
 import { definePlugin } from '@geekity/cms/plugin';
 import type { Plugin, PluginHost } from '@geekity/cms/plugin';
+import llm from '@geekity/plugin-llm';
 import wordpress from '@geekity/plugin-wordpress';
 
-export const installed: Plugin = wordpress;
+export const installed: readonly Plugin[] = [wordpress, llm];
 
 export const check: Plugin = definePlugin({
   name: '@scratch/plugin-check',
@@ -196,26 +208,32 @@ log "running the plugin's command through the installed bin"
     const { readFileSync, writeFileSync } = require("node:fs");
     const file = "content/_data/site.json";
     const site = JSON.parse(readFileSync(file, "utf8"));
-    site.plugins = { "@geekity/plugin-wordpress": { enabled: true } };
+    site.plugins = {
+      "@geekity/plugin-wordpress": { enabled: true },
+      "@geekity/plugin-llm": { enabled: true },
+    };
     writeFileSync(file, JSON.stringify(site, null, 2) + "\n");
   '
 )
 
-log "loading the plugin's bundle with no node_modules beside it"
-bundle_dir="${scratch}/bundle-only"
-mkdir -p "${bundle_dir}"
-cp "${site}/node_modules/@geekity/plugin-wordpress/dist/bundle/index.js" "${bundle_dir}/index.js"
-(
-  cd "${bundle_dir}"
-  node --input-type=module -e '
-    const { default: plugin } = await import("./index.js");
-    if (plugin.name !== "@geekity/plugin-wordpress" || typeof plugin.register !== "function") {
-      console.error("the bundle does not export the plugin");
-      process.exit(1);
-    }
-    console.log("ok  the bundle exports " + plugin.name + " " + plugin.version);
-  '
-)
+log "loading each plugin's bundle with no node_modules beside it"
+for package in plugin-wordpress plugin-llm; do
+  bundle_dir="${scratch}/bundle-only-${package}"
+  mkdir -p "${bundle_dir}"
+  cp "${site}/node_modules/@geekity/${package}/dist/bundle/index.js" "${bundle_dir}/index.js"
+  (
+    cd "${bundle_dir}"
+    node --input-type=module -e '
+      const [expected] = process.argv.slice(1);
+      const { default: plugin } = await import("./index.js");
+      if (plugin.name !== expected || typeof plugin.register !== "function") {
+        console.error("the bundle does not export " + expected);
+        process.exit(1);
+      }
+      console.log("ok  the bundle exports " + plugin.name + " " + plugin.version);
+    ' "@geekity/${package}"
+  )
+done
 
 log "booting on port ${PORT}"
 # The site's output goes to a file rather than to this script's stdout. That is
@@ -273,6 +291,22 @@ if ! grep -qF '"id":"http://localhost:3000/?author=2"' <<<"${actor}"; then
   exit 1
 fi
 echo "ok  GET /wp-json/activitypub/1.0/actors/2"
+
+log "signing in and asking for the LLM plugin's settings screen"
+jar="${scratch}/cookies.txt"
+login="$(curl -fsS -c "${jar}" -b "${jar}" "${BASE}/admin/login")"
+token="$(sed -n 's/.*name="csrf_token" value="\([^"]*\)".*/\1/p' <<<"${login}" | head -n 1)"
+curl -fsS -o /dev/null -c "${jar}" -b "${jar}" \
+  --data-urlencode "csrf_token=${token}" --data-urlencode 'username=ada' \
+  --data-urlencode 'password=correct horse battery' "${BASE}/admin/login"
+llm_screen="$(curl -fsS -b "${jar}" "${BASE}/admin/plugins/@geekity/plugin-llm")"
+for expected in 'Base URL' 'https://openrouter.ai/api/v1' '<code>GEEKITY_PLUGIN_LLM__API_KEY</code>' 'Test connection'; do
+  if ! grep -qF -- "${expected}" <<<"${llm_screen}"; then
+    echo "the LLM screen did not contain \"${expected}\"" >&2
+    exit 1
+  fi
+done
+echo "ok  GET /admin/plugins/@geekity/plugin-llm"
 
 log "type checking the scratch site against the published declarations"
 (cd "${site}" && npx tsc --noEmit)

@@ -52,6 +52,7 @@ imperative, and carries no trailing full stop.
 | `docs`             | README, this file, and the docs directory.         |
 | `release`          | release-please and publishing.                     |
 | `plugin-wordpress` | The published `@geekity/plugin-wordpress` package. |
+| `plugin-llm`       | The published `@geekity/plugin-llm` package.       |
 
 Examples:
 

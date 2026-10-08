@@ -19,6 +19,14 @@
       "changelog-path": "CHANGELOG.md",
       "extra-files": ["src/version.ts"],
       "pull-request-title-pattern": "chore(release): release plugin-wordpress ${version}"
+    },
+    "packages/plugin-llm": {
+      "package-name": "@geekity/plugin-llm",
+      "component": "plugin-llm",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": ["src/version.ts"],
+      "pull-request-title-pattern": "chore(release): release plugin-llm ${version}"
     }
   }
 }
