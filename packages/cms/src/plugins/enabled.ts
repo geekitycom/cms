@@ -25,11 +25,30 @@ export async function setPluginEnabled(options: {
   enabled: boolean;
 }): Promise<void> {
   const { contentDir, name, enabled } = options;
+  await updatePluginEntry(contentDir, name, (entry) => ({ ...entry, enabled }));
+}
+
+/** One plugin's object under `plugins`, empty when it has none. */
+export function readPluginEntry(contentDir: string, name: string): Record<string, unknown> {
+  const entry = pluginsOf(readSiteJson(contentDir))[name];
+  return isRecord(entry) ? entry : {};
+}
+
+/**
+ * Rewrite one plugin's object under `plugins`, keeping every other key in the
+ * file. The only writer of the `plugins` key: enabling and settings both go
+ * through it.
+ */
+export async function updatePluginEntry(
+  contentDir: string,
+  name: string,
+  change: (entry: Record<string, unknown>) => Record<string, unknown>,
+): Promise<void> {
   await updateFileAtomically(siteDataPath(contentDir), (current) => {
     const file = parseSiteJson(current ?? '');
     const plugins = pluginsOf(file);
     const entry = plugins[name];
-    file[PLUGINS_KEY] = { ...plugins, [name]: { ...(isRecord(entry) ? entry : {}), enabled } };
+    file[PLUGINS_KEY] = { ...plugins, [name]: change(isRecord(entry) ? entry : {}) };
     return `${JSON.stringify(file, null, 2)}\n`;
   });
 }

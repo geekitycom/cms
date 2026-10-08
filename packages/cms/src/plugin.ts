@@ -197,9 +197,24 @@ export interface PluginScreenCard {
   readonly blocks: readonly PluginScreenBlock[];
 }
 
-/** What a plugin screen's render is handed. */
+/** What a plugin screen's render and its actions are handed. */
 export interface PluginScreenContext {
   readonly site: PluginSite;
+}
+
+/** What an action reports, which the screen shows as a notice or an error. */
+export interface PluginScreenOutcome {
+  readonly ok: boolean;
+  /** Plain words. Core shows them escaped. */
+  readonly message: string;
+}
+
+/** A button on a plugin's screen, such as Test connection. */
+export interface PluginScreenAction {
+  /** Lower case words joined by `-`, unique on the screen. */
+  readonly id: string;
+  readonly label: string;
+  run(context: PluginScreenContext): PluginScreenOutcome | Promise<PluginScreenOutcome>;
 }
 
 /**
@@ -210,6 +225,86 @@ export interface PluginScreen {
   /** Its heading and its label in the menu. */
   readonly title: string;
   render(context: PluginScreenContext): readonly PluginScreenCard[];
+  /** Buttons core draws under the settings, each run when pressed. */
+  readonly actions?: readonly PluginScreenAction[] | undefined;
+}
+
+/** What every settings field has. */
+interface PluginSettingBase {
+  /**
+   * Lower case words joined by `_`, such as `api_key`. It is the key in
+   * `site.json` or `secrets.json`, and upper-cased it ends the field's
+   * environment variable.
+   */
+  readonly key: string;
+  readonly label: string;
+  /** A sentence under the box. */
+  readonly hint?: string | undefined;
+}
+
+/** A line of text. An empty box stores nothing, so the default applies. */
+export interface PluginTextSetting extends PluginSettingBase {
+  readonly type: 'text';
+  readonly default?: string | undefined;
+}
+
+/** An absolute `http:` or `https:` URL. */
+export interface PluginUrlSetting extends PluginSettingBase {
+  readonly type: 'url';
+  readonly default?: string | undefined;
+}
+
+/** One of a fixed list. */
+export interface PluginSelectSetting extends PluginSettingBase {
+  readonly type: 'select';
+  readonly options: readonly { readonly value: string; readonly label: string }[];
+  readonly default: string;
+}
+
+/** On or off, off unless a default says otherwise. */
+export interface PluginCheckboxSetting extends PluginSettingBase {
+  readonly type: 'checkbox';
+  readonly default?: boolean | undefined;
+}
+
+/**
+ * A credential. It is kept in `secrets.json` in the plugin's data folder at
+ * mode 0600, or set by an environment variable, and is never drawn on a page.
+ */
+export interface PluginSecretSetting extends PluginSettingBase {
+  readonly type: 'secret';
+}
+
+/** One field of a plugin's settings form. */
+export type PluginSettingField =
+  | PluginTextSetting
+  | PluginUrlSetting
+  | PluginSelectSetting
+  | PluginCheckboxSetting
+  | PluginSecretSetting;
+
+/** What one field hands the plugin: a secret may be unset, the rest always have a value. */
+export type PluginSettingValue<Field extends PluginSettingField> =
+  Field extends PluginCheckboxSetting
+    ? boolean
+    : Field extends PluginSecretSetting
+      ? string | undefined
+      : Field extends PluginSelectSetting
+        ? Field['options'][number]['value']
+        : string;
+
+/** Every field's value, keyed by its key. */
+export type PluginSettingValues<Fields extends readonly PluginSettingField[]> = {
+  readonly [Field in Fields[number] as Field['key']]: PluginSettingValue<Field>;
+};
+
+/** A plugin's settings, as {@link PluginHost.settings} hands them back. */
+export interface PluginSettings<Fields extends readonly PluginSettingField[]> {
+  /**
+   * The values now, read from the files and the environment on every call. A
+   * stored value the field does not accept is replaced by the field's default.
+   */
+  current(): PluginSettingValues<Fields>;
 }
 
 /** One option a command takes. */
@@ -274,6 +369,16 @@ export interface PluginHost {
   federation(middleware: PluginFederationMiddleware): void;
   /** Add the plugin's screen under Plugins. At most one per plugin. */
   screen(screen: PluginScreen): void;
+  /**
+   * Declare the plugin's settings, which core draws as a form on its screen.
+   * At most once per plugin. Public values are kept under the plugin's key in
+   * `content/_data/site.json`; secrets in `secrets.json` in its data folder,
+   * or in the environment variable named by the package name, `__` and the
+   * key, upper-cased with every run of other characters as one `_`.
+   */
+  settings<const Fields extends readonly PluginSettingField[]>(
+    fields: Fields,
+  ): PluginSettings<Fields>;
   /**
    * Add a command to the command line. It runs whenever the plugin is
    * installed and available, enabled or not.

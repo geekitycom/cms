@@ -20,7 +20,18 @@ import type {
   PluginHost,
   PluginRouteHandler,
   PluginScreen,
+  PluginSettingField,
+  PluginSettings,
+  PluginSettingValues,
 } from '../plugin.ts';
+import {
+  pluginEnvPrefix,
+  pluginFolderPath,
+  resolvePluginSettings,
+  settingFieldsProblem,
+  settingValues,
+} from './settings.ts';
+import type { PluginSettingsPlace } from './settings.ts';
 
 /** A plugin as it arrived, and a description of where it came from. */
 export interface InstalledPlugin {
@@ -41,12 +52,23 @@ export interface PluginContributions {
   federation: readonly PluginFederationMiddleware[];
   screen: PluginScreen | undefined;
   commands: readonly PluginCommand[];
+  /** The settings fields it declared, empty when it has none. */
+  settings: readonly PluginSettingField[];
+}
+
+/** Where the registry finds what plugins read: the site's folders and its environment. */
+export interface PluginRegistryOptions {
+  dataDir: string;
+  contentDir: string;
+  env: Readonly<Record<string, string | undefined>>;
 }
 
 /** An installed plugin after registration. */
 export interface RegisteredPlugin extends InstalledPlugin, PluginContributions {
   /** Why it cannot run, or `undefined` when it can be enabled. */
   problem: string | undefined;
+  /** Where its settings are read from and written to. */
+  settingsPlace: PluginSettingsPlace;
 }
 
 /**
@@ -105,7 +127,7 @@ const PACKAGE_NAME_MAX = 214;
  */
 export function createPluginRegistry(
   installed: readonly InstalledPlugin[],
-  options: { dataDir: string },
+  options: PluginRegistryOptions,
 ): PluginRegistry {
   const bySource = new Map<string, InstalledPlugin>();
   for (const entry of installed) {
@@ -119,12 +141,13 @@ export function createPluginRegistry(
   const own = new Map<string, string | undefined>();
   const contributions = new Map<string, PluginContributions>();
   for (const entry of installed) {
-    const { problem, declared } = register(entry.plugin, options.dataDir);
+    const { problem, declared } = register(entry.plugin, options);
     own.set(entry.plugin.name, problem);
     contributions.set(entry.plugin.name, declared);
   }
 
   const cyclic = cyclicNames(installed.map((entry) => entry.plugin));
+  const sharedPrefixes = prefixCollisions(installed.map((entry) => entry.plugin.name));
   const problems = new Map<string, string | undefined>();
 
   function problem(name: string): string | undefined {
@@ -137,6 +160,10 @@ export function createPluginRegistry(
   function resolveProblem(name: string): string | undefined {
     const entry = bySource.get(name);
     if (entry === undefined) return 'It is not installed.';
+    const shared = sharedPrefixes.get(name);
+    if (shared !== undefined) {
+      return `Its environment variables would start ${pluginEnvPrefix(name)}__, as those of ${shared.join(' and ')} would, so none of them loads. Rename one package.`;
+    }
     const intrinsic = own.get(name);
     if (intrinsic !== undefined) return intrinsic;
     const cycle = cyclic.get(name);
@@ -152,11 +179,15 @@ export function createPluginRegistry(
     return undefined;
   }
 
-  const plugins: RegisteredPlugin[] = installed.map((entry) => ({
-    ...entry,
-    ...(contributions.get(entry.plugin.name) ?? NOTHING_DECLARED),
-    problem: problem(entry.plugin.name),
-  }));
+  const plugins: RegisteredPlugin[] = installed.map((entry) => {
+    const declared = contributions.get(entry.plugin.name) ?? NOTHING_DECLARED;
+    return {
+      ...entry,
+      ...declared,
+      problem: problem(entry.plugin.name),
+      settingsPlace: { ...options, name: entry.plugin.name, fields: declared.settings },
+    };
+  });
 
   const order = dependencyOrder(plugins.filter((entry) => entry.problem === undefined));
 
@@ -254,6 +285,7 @@ const NOTHING_DECLARED: PluginContributions = {
   federation: [],
   screen: undefined,
   commands: [],
+  settings: [],
 };
 
 /**
@@ -262,7 +294,7 @@ const NOTHING_DECLARED: PluginContributions = {
  */
 function register(
   plugin: Plugin,
-  dataDir: string,
+  options: PluginRegistryOptions,
 ): { problem: string | undefined; declared: PluginContributions } {
   const { name } = plugin;
   if (name.length > PACKAGE_NAME_MAX || !PACKAGE_NAME.test(name)) {
@@ -282,6 +314,7 @@ function register(
   const federation: PluginFederationMiddleware[] = [];
   const commands: PluginCommand[] = [];
   let screen: PluginScreen | undefined;
+  let settings: readonly PluginSettingField[] | undefined;
   let registering = true;
 
   function declaring(what: string): void {
@@ -291,7 +324,7 @@ function register(
   const host: PluginHost = {
     apiVersion: HOST_API_VERSION,
     name,
-    data: pluginDataFolder(dataDir, name),
+    data: pluginDataFolder(options.dataDir, name),
     get(path, handler) {
       declaring('a route');
       routes.push({ path, handler });
@@ -309,11 +342,29 @@ function register(
       declaring('a command');
       commands.push(declared);
     },
+    settings<const Fields extends readonly PluginSettingField[]>(
+      fields: Fields,
+    ): PluginSettings<Fields> {
+      declaring('its settings');
+      if (settings !== undefined) throw new Error('A plugin declares its settings once.');
+      const problem = settingFieldsProblem(fields);
+      if (problem !== undefined) throw new Error(problem);
+      settings = fields;
+      const place = { ...options, name, fields };
+      return {
+        // Each value is built from its field's type, which is what the mapped
+        // type says, but TypeScript cannot follow a map over the fields.
+        current: () => settingValues(resolvePluginSettings(place)) as PluginSettingValues<Fields>,
+      };
+    },
   };
 
   try {
     plugin.register(host);
-    return { problem: undefined, declared: { routes, federation, screen, commands } };
+    return {
+      problem: undefined,
+      declared: { routes, federation, screen, commands, settings: settings ?? [] },
+    };
   } catch (error) {
     return {
       problem: `Its register failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -329,7 +380,7 @@ const DATA_FILE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 
 /** `data/plugins/<package name>/`, which only its plugin reads and writes. */
 export function pluginDataFolder(dataDir: string, name: string): PluginDataFolder {
-  const folder = path.join(dataDir, 'plugins', ...name.split('/'));
+  const folder = pluginFolderPath(dataDir, name);
 
   function fileIn(file: string): string {
     if (!DATA_FILE_NAME.test(file)) {
@@ -352,6 +403,28 @@ async function lifecycle(plugin: Plugin, hook: 'start' | 'stop'): Promise<void> 
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`The ${plugin.name} plugin's ${hook} failed: ${message}`);
   }
+}
+
+/**
+ * Each installed name whose environment variable prefix another installed
+ * name shares, with those others: `@a/b-c` and `@a-b/c` both make `A_B_C`.
+ */
+function prefixCollisions(names: readonly string[]): Map<string, string[]> {
+  const byPrefix = new Map<string, string[]>();
+  for (const name of names) {
+    const prefix = pluginEnvPrefix(name);
+    byPrefix.set(prefix, [...(byPrefix.get(prefix) ?? []), name]);
+  }
+  const collisions = new Map<string, string[]>();
+  for (const group of byPrefix.values()) {
+    if (group.length < 2) continue;
+    for (const name of group)
+      collisions.set(
+        name,
+        group.filter((other) => other !== name),
+      );
+  }
+  return collisions;
 }
 
 function requirementsOf(plugin: Plugin): [string, string][] {

@@ -4,9 +4,9 @@
  * public site answers on the very next request.
  */
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, describe, it, mock } from 'node:test';
 
 import type { Cms } from '../index.ts';
 import { createCms } from '../index.ts';
@@ -65,7 +65,7 @@ function base(calls: string[] = []): Plugin {
 async function site(
   plugins: Plugin[],
   enabled: string[] = [],
-): Promise<{ cms: Cms; agent: Browser; contentDir: string }> {
+): Promise<{ cms: Cms; agent: Browser; contentDir: string; dataDir: string }> {
   const contentDir = await box.dir('geekity-plugins-content-');
   const dataDir = await box.dir('geekity-plugins-data-');
   await mkdir(path.join(contentDir, '_data'), { recursive: true });
@@ -77,7 +77,7 @@ async function site(
     }),
   );
   const cms = await box.open({ contentDir, dataDir, plugins });
-  return { cms, agent: await signedIn(cms), contentDir };
+  return { cms, agent: await signedIn(cms), contentDir, dataDir };
 }
 
 async function siteJson(contentDir: string): Promise<Record<string, unknown>> {
@@ -365,5 +365,218 @@ describe('a plugin screen (TASK-282)', () => {
 
     assert.equal((await agent.get(screenPath)).status, 404);
     assert.doesNotMatch(await (await agent.get(PLUGINS_PATH)).text(), /Old paths/);
+  });
+});
+
+describe('plugin settings on its screen (TASK-283)', () => {
+  const CONFIGURED = '@test/plugin-configured';
+  const VARIABLE = 'TEST_PLUGIN_CONFIGURED__API_KEY';
+  const screenPath = `${PLUGINS_PATH}/${CONFIGURED}`;
+  const SECRET = 'sk-very-secret-4242';
+
+  /** A plugin with every kind of field and a Test button that reports what it was handed. */
+  function configured(): Plugin {
+    return definePlugin({
+      name: CONFIGURED,
+      version: '1.0.0',
+      label: 'Configured',
+      description: 'Has settings.',
+      hostApi: HOST_API_VERSION,
+      register(host) {
+        const settings = host.settings([
+          { type: 'url', key: 'base_url', label: 'Base URL', default: 'https://llm.example/v1' },
+          { type: 'secret', key: 'api_key', label: 'API key' },
+          { type: 'text', key: 'model', label: 'Default model', default: 'small' },
+          {
+            type: 'select',
+            key: 'tone',
+            label: 'Tone',
+            default: 'plain',
+            options: [
+              { value: 'plain', label: 'Plain' },
+              { value: 'warm', label: 'Warm' },
+            ],
+          },
+          { type: 'checkbox', key: 'verbose', label: 'Verbose' },
+        ]);
+        host.screen({
+          title: 'Configured',
+          render: () => [],
+          actions: [
+            {
+              id: 'test',
+              label: 'Test it',
+              run: () => {
+                const { api_key: key, model } = settings.current();
+                return key === undefined
+                  ? { ok: false, message: 'No key <set>.' }
+                  : { ok: true, message: `Answered by ${model}.` };
+              },
+            },
+          ],
+        });
+      },
+    });
+  }
+
+  async function page(agent: Browser): Promise<string> {
+    const response = await agent.get(screenPath);
+    assert.equal(response.status, 200);
+    return response.text();
+  }
+
+  async function save(agent: Browser, fields: Record<string, string>): Promise<Response> {
+    const token = csrfField(await page(agent));
+    assert.ok(token !== undefined);
+    return agent.post(screenPath, { csrf_token: token, action: 'save', ...fields });
+  }
+
+  async function act(agent: Browser, id: string): Promise<string[]> {
+    const token = csrfField(await page(agent));
+    assert.ok(token !== undefined);
+    const response = await agent.post(screenPath, { csrf_token: token, action: id });
+    assert.equal(response.status, 303);
+    return flashes(await page(agent)).map((entry) => entry.message);
+  }
+
+  it('draws every field with its value, and each secret as not set with its variable', async () => {
+    const { agent } = await site([configured()], [CONFIGURED]);
+    const html = await page(agent);
+    for (const label of ['Base URL', 'API key', 'Default model', 'Tone', 'Verbose']) {
+      assert.ok(html.includes(label), `the form has ${label}`);
+    }
+    assert.match(html, /value="https:\/\/llm\.example\/v1"/);
+    assert.match(html, /value="small"/);
+    assert.match(html, /<option value="plain" selected>/);
+    assert.match(html, /Not set/);
+    assert.ok(html.includes(`<code>${VARIABLE}</code>`), 'the variable name is printed');
+    assert.match(html, /type="password"[^>]*value=""/);
+  });
+
+  it('saves public values to site.json and the secret to secrets.json, never drawing it', async () => {
+    const { agent, contentDir, dataDir } = await site([configured()], [CONFIGURED]);
+    const logged: string[] = [];
+    for (const method of ['log', 'info', 'warn', 'error'] as const) {
+      mock.method(console, method, (...args: unknown[]) => {
+        logged.push(args.map(String).join(' '));
+      });
+    }
+    try {
+      const response = await save(agent, {
+        'setting.base_url': 'http://127.0.0.1:9/v1',
+        'setting.api_key': SECRET,
+        'setting.model': 'big',
+        'setting.tone': 'warm',
+        'setting.verbose': '1',
+      });
+      assert.equal(response.status, 303);
+
+      const html = await page(agent);
+      assert.deepEqual(
+        flashes(html).map((entry) => entry.message),
+        ['Settings saved.'],
+      );
+      assert.ok(!html.includes(SECRET), 'the secret is not on the page');
+      assert.match(
+        html,
+        /Set in <code>data\/plugins\/@test\/plugin-configured\/secrets\.json<\/code>/,
+      );
+      assert.deepEqual(await act(agent, 'test'), ['Answered by big.']);
+
+      const file = await siteJson(contentDir);
+      assert.ok(!JSON.stringify(file).includes(SECRET), 'nor in site.json');
+      assert.deepEqual((file['plugins'] as Record<string, unknown>)[CONFIGURED], {
+        enabled: true,
+        base_url: 'http://127.0.0.1:9/v1',
+        model: 'big',
+        tone: 'warm',
+        verbose: true,
+      });
+      const secrets = path.join(dataDir, 'plugins', '@test', 'plugin-configured', 'secrets.json');
+      assert.deepEqual(JSON.parse(await readFile(secrets, 'utf8')), { api_key: SECRET });
+      assert.equal((await stat(secrets)).mode & 0o777, 0o600);
+
+      assert.equal((await save(agent, { 'setting.api_key': '' })).status, 303);
+      assert.deepEqual(JSON.parse(await readFile(secrets, 'utf8')), { api_key: SECRET });
+      assert.deepEqual(await act(agent, 'test'), ['Answered by big.'], 'blank keeps the secret');
+    } finally {
+      mock.restoreAll();
+    }
+    assert.ok(!logged.some((line) => line.includes(SECRET)), 'nor in a log line');
+  });
+
+  it('forgets a stored secret when asked, and reports a failed action as an error', async () => {
+    const { agent } = await site([configured()], [CONFIGURED]);
+    await save(agent, { 'setting.api_key': SECRET });
+    await save(agent, { 'forget.api_key': '1' });
+    assert.match(await page(agent), /Not set/);
+    assert.deepEqual(await act(agent, 'test'), ['No key &lt;set&gt;.']);
+  });
+
+  it('refuses an invalid value, naming the field, and keeps what was typed', async () => {
+    const { agent, contentDir } = await site([configured()], [CONFIGURED]);
+    const response = await save(agent, {
+      'setting.base_url': 'ftp://nope',
+      'setting.model': 'typed',
+    });
+    assert.equal(response.status, 400);
+    const html = await response.text();
+    assert.match(html, /Base URL must be an http:\/\/ or https:\/\/ URL\./);
+    assert.match(html, /value="typed"/);
+    const entry = ((await siteJson(contentDir))['plugins'] as Record<string, unknown>)[CONFIGURED];
+    assert.deepEqual(entry, { enabled: true });
+  });
+
+  it('says when a stored value is invalid and the default is in use', async () => {
+    const { agent, contentDir } = await site([configured()], [CONFIGURED]);
+    const file = await siteJson(contentDir);
+    file['plugins'] = { [CONFIGURED]: { enabled: true, base_url: 'nope', tone: 'shouty' } };
+    await writeFile(path.join(contentDir, '_data', 'site.json'), JSON.stringify(file));
+    const html = await page(agent);
+    assert.equal(
+      [...html.matchAll(/The value in site\.json is not [^<]*, so the default is in use\./g)]
+        .length,
+      2,
+    );
+    assert.match(html, /value="https:\/\/llm\.example\/v1"/);
+  });
+
+  it('shows a secret the environment sets as set there, and the form cannot change it', async () => {
+    process.env[VARIABLE] = 'sk-from-env';
+    try {
+      const { agent, dataDir } = await site([configured()], [CONFIGURED]);
+      const html = await page(agent);
+      assert.ok(html.includes(`Set by the environment variable <code>${VARIABLE}</code>`));
+      assert.doesNotMatch(html, /name="setting\.api_key"/, 'there is no box for it');
+      assert.ok(!html.includes('sk-from-env'));
+
+      await save(agent, { 'setting.api_key': 'sk-typed', 'forget.api_key': '1' });
+      await assert.rejects(
+        stat(path.join(dataDir, 'plugins', '@test', 'plugin-configured', 'secrets.json')),
+      );
+      assert.deepEqual(await act(agent, 'test'), ['Answered by small.']);
+    } finally {
+      delete process.env[VARIABLE];
+    }
+  });
+
+  it('names both packages whose variables would share a prefix, on the Plugins screen', async () => {
+    const twin = (name: string) =>
+      definePlugin({
+        name,
+        version: '1.0.0',
+        label: name,
+        description: 'A twin.',
+        hostApi: HOST_API_VERSION,
+        register() {},
+      });
+    const { agent } = await site([twin('@a/b-c'), twin('@a-b/c')]);
+    const html = await screen(agent);
+    assert.ok(
+      html.includes('Its environment variables would start A_B_C__, as those of @a-b/c would'),
+    );
+    assert.ok(
+      html.includes('Its environment variables would start A_B_C__, as those of @a/b-c would'),
+    );
   });
 });

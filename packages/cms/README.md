@@ -293,9 +293,28 @@ directory; absolute ones are used as given.
 | `federation`       | `{}`                                  | —                            | Federation stores and guards. See [Federation](#federation).                                                                                                                                                                                                    |
 | `commentChecker`   | Akismet                               | —                            | A spam checker of the site's own, which wins over the key in `data/akismet.json`. See [Akismet](#akismet).                                                                                                                                                      |
 | `mail`             | `{}`                                  | —                            | Mail provider, retries, backoff and logger. See [Email](#email).                                                                                                                                                                                                |
+| `plugins`          | `[]`                                  | —                            | The installed plugins. Which run is the `plugins` key of `site.json`, set under Admin > Plugins. A plugin's secret settings take an environment variable each; see below.                                                                                       |
 
 Precedence is environment variable, then config file, then default, so a host
-can override anything without editing the site. A boolean environment variable
+can override anything without editing the site.
+
+A plugin's secret settings, such as an API key, can come from the environment
+too, which is how a Docker site keeps a key in `.env`. The variable is the
+plugin's package name, then `__`, then the setting's key, each upper-cased with
+every run of other characters, underscores included, written as one `_`:
+
+| Package               | Setting   | Variable                      |
+| --------------------- | --------- | ----------------------------- |
+| `@geekity/plugin-llm` | `api_key` | `GEEKITY_PLUGIN_LLM__API_KEY` |
+| `@acme/plugin-llm`    | `api_key` | `ACME_PLUGIN_LLM__API_KEY`    |
+
+A set variable wins over the value stored in
+`data/plugins/<package name>/secrets.json`, and the plugin's screen shows the
+setting as set by the environment, with no box to change it. The screen prints
+each secret's exact variable name. Only plugin variables contain `__`, so none
+can shadow a core one. Two installed packages whose names convert to the same
+prefix, such as `@a/b-c` and `@a-b/c`, both refuse to load, and Admin > Plugins
+names the two. A boolean environment variable
 takes `true`, `1`, `yes` and `on`, or their opposites; anything else is an error
 rather than a silent `false`.
 
@@ -376,7 +395,7 @@ the same directory reads all of it, and everything in it is meant to be public:
 | `data/comment-optouts.json`      | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                           |
 | `data/indieauth-tokens.json`     | A SHA-256 hash of each IndieAuth access and refresh token, with its user, app, scopes and expiry (decision-24). Mode `0600`.    |
 | `data/notification-digests.json` | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early and nothing worse.                         |
-| `data/plugins/<package name>/`   | Each plugin's private folder, such as `data/plugins/@geekity/plugin-wordpress/`. What is in it is the plugin's to say.          |
+| `data/plugins/<package name>/`   | Each plugin's private folder. Its secret settings are in `secrets.json`, mode `0600`; the rest is the plugin's to say.          |
 
 Three things under `data/` may be deleted whenever the site is stopped, and
 nothing else in either directory may:

@@ -1,8 +1,16 @@
 {# /admin/plugins/<package name>: a plugin's own screen (decision-33). The
    plugin hands over cards of paragraphs and tables as data and this draws
-   them, so a plugin writes no markup and everything it says is escaped. #}
+   them, so a plugin writes no markup and everything it says is escaped.
+
+   A plugin with settings gets a form here too (TASK-283). A label or hint
+   from a plugin is escaped before the field macros, which print theirs as
+   markup. A secret is never printed: the form says whether it is set and
+   where, and names the environment variable that would set it. #}
 {% extends "layouts/shell.njk" %}
-{% from "components/card.njk" import card %}
+{% import "components/fields.njk" as field %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
 {% from "components/table.njk" import table %}
 
 {% macro text(parts) -%}
@@ -16,7 +24,77 @@
 {% block content %}
   <h1 class="mb-6 text-2xl font-bold">{{ title }}</h1>
 
+  {% if problems.length %}
+    {% call field.summary('Nothing was saved. Fix the fields marked below.') %}
+      {% for setting in problems %}{{ field.problem(setting.id, setting.error) }}{% endfor %}
+    {% endcall %}
+  {% endif %}
+
   <div class="grid max-w-5xl grid-cols-1 gap-6">
+    {% if settings.length or actions.length %}
+      {% call card(title='Settings' if settings.length else 'Actions') %}
+        {% if settings.length %}
+          <form method="post" action="{{ postUrl }}">
+            <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+            <input type="hidden" name="{{ actionField }}" value="{{ saveAction }}" />
+            {% for setting in settings %}
+              {% set label = setting.label | escape %}
+              {% set error = setting.error or setting.stored %}
+              {% if setting.type == 'secret' %}
+                {% set hint %}{% if setting.hint %}{{ setting.hint }} {% endif %}{% if setting.source == 'environment' %}Set by the environment variable <code>{{ setting.variable }}</code>. Change it there.{% elif setting.source == 'file' %}Set in <code>{{ secretsFile }}</code>. Leave the box blank to keep it. The environment variable <code>{{ setting.variable }}</code> would win over it.{% else %}Not set. Or set the environment variable <code>{{ setting.variable }}</code>.{% endif %}{% endset %}
+                {% if setting.source == 'environment' %}
+                  <div class="fieldset">
+                    <p class="fieldset-legend">{{ label }} {{ status('connected', 'Set') }}</p>
+                    <p class="label block whitespace-normal">{{ hint | safe }}</p>
+                  </div>
+                {% else %}
+                  {{ field.password(setting.id, setting.name,
+                       label ~ ' ' ~ (status('connected', 'Set') if setting.source == 'file' else status('missing', 'Not set')),
+                       hint=hint, error=setting.error, autocomplete='off', spellcheck='false',
+                       placeholder=('Leave blank to keep it' if setting.source == 'file' else '')) }}
+                  {% if setting.source == 'file' %}
+                    {{ field.checkbox(setting.id ~ '-forget', setting.forgetName, 'Forget the stored ' ~ label) }}
+                  {% endif %}
+                {% endif %}
+              {% else %}
+                {% set hint %}{{ setting.hint }}{% endset %}
+                {% if setting.type == 'checkbox' %}
+                  {{ field.checkbox(setting.id, setting.name, label, checked=setting.checked,
+                       hint=hint, error=error) }}
+                {% elif setting.type == 'select' %}
+                  {% call field.select(setting.id, setting.name, label, hint=hint, error=error) %}
+                    {% for option in setting.options %}
+                      <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                  {% endcall %}
+                {% else %}
+                  {{ field.text(setting.id, setting.name, label, setting.value, hint=hint, error=error,
+                       inputmode=('url' if setting.type == 'url' else ''), spellcheck='false') }}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            <div class="mt-2">{{ button('Save settings', type='submit', color='primary') }}</div>
+          </form>
+        {% endif %}
+
+        {% for action in actions %}
+          <form method="post" action="{{ postUrl }}">
+            <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+            <input type="hidden" name="{{ actionField }}" value="{{ action.id }}" />
+            {{ button(action.label, type='submit') }}
+          </form>
+        {% endfor %}
+
+        {% if settings.length %}
+          <p class="text-sm">
+            Settings other than secrets are kept under this plugin's key in
+            <code>content/_data/site.json</code>. Secrets are kept in
+            <code>{{ secretsFile }}</code> at mode <code>0600</code> and are never shown here.
+          </p>
+        {% endif %}
+      {% endcall %}
+    {% endif %}
+
     {% for entry in cards %}
       {% call card(title=entry.title) %}
         {% for block in entry.blocks %}

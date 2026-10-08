@@ -22,7 +22,7 @@ export function sitePluginRegistry(config: ResolvedConfig): PluginRegistry {
       plugin,
       source: `the site config, plugins[${String(index)}]`,
     })),
-    { dataDir: config.dataDir },
+    { dataDir: config.dataDir, contentDir: config.contentDir, env: process.env },
   );
 }
 

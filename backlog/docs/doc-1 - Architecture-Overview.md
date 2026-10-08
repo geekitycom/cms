@@ -3,7 +3,7 @@ id: doc-1
 title: Architecture Overview
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-08 14:19'
+updated_date: '2026-10-08 15:16'
 ---
 # Architecture Overview
 
@@ -126,6 +126,7 @@ Logic that some sites want and others do not lives in plugins rather than in cor
 - **Enable and disable.** Admin > Plugins lists every installed plugin with its package, version, source, dependencies and state. A plugin cannot be enabled until every plugin it requires is installed and enabled. Its row names each one that is missing or disabled, with the range it needs and a link to that plugin's row. Nothing is enabled on the operator's behalf. Disabling a plugin that enabled plugins require is refused, and the refusal names them.
 - **Lifecycle.** `start` runs for each running plugin, dependencies first, when the site serves and when the plugin is enabled. `stop` runs dependents first, on disable and in `close()`. Each request converges the running set on the enabled set, so a hand edit of `site.json` starts and stops plugins as well.
 - **Extension points.** Core grows a host API only alongside the first plugin that uses it. The first one is public `GET` routes (`host.get`), used by the example plugins in `apps/demo/plugins/`.
+- **Settings and secrets (TASK-283).** `host.settings(fields)` declares a plugin's settings as typed fields (text, url, select, checkbox, secret) and returns a reader whose `current()` gives typed values, read from the files and the environment on every call. A stored value a field does not accept falls back to the field's default. Public values sit in the plugin's entry under `plugins` in `site.json`, beside `enabled`, through the one writer of that key in `src/plugins/enabled.ts`. Secrets sit in `data/plugins/<package name>/secrets.json` at mode 0600, written atomically. An environment variable wins over the file: the package name, `__`, then the key, each upper-cased with every run of other characters as one `_` (`GEEKITY_PLUGIN_LLM__API_KEY`). Two installed packages whose names convert to one prefix are both unavailable, each naming the other. The code is `src/plugins/settings.ts`. First user: `@geekity/plugin-llm`.
 
 ## Quality and release
 

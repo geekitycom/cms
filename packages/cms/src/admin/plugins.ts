@@ -9,7 +9,14 @@ import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
 import { readEnabledPlugins, setPluginEnabled } from '../plugins/enabled.ts';
-import type { PluginRegistry, Requirement, RequirementState } from '../plugins/registry.ts';
+import type {
+  PluginRegistry,
+  RegisteredPlugin,
+  Requirement,
+  RequirementState,
+} from '../plugins/registry.ts';
+import { resolvePluginSettings, savePluginSettings, SECRETS_FILE } from '../plugins/settings.ts';
+import type { ResolvedSetting } from '../plugins/settings.ts';
 import { pluginSite } from '../plugins/site.ts';
 import type { AdminRender } from './documents.ts';
 import type { AdminMenuChild } from './menu.ts';
@@ -22,6 +29,12 @@ export const PLUGINS_SECTION = 'plugins';
 export const PLUGINS_CHILD = 'installed';
 
 const PLUGIN_FIELD = 'plugin';
+
+/** The form fields of a plugin's screen: which button, each box, each forget switch. */
+const ACTION_FIELD = 'action';
+const SAVE_ACTION = 'save';
+const SETTING_PREFIX = 'setting.';
+const FORGET_PREFIX = 'forget.';
 
 type PluginState = 'enabled' | 'blocked' | 'disabled' | 'unavailable';
 
@@ -50,12 +63,17 @@ export function pluginAnchor(name: string): string {
 /** The screens of the plugins running for this request, as menu entries. */
 export function pluginScreens(c: Context<GeekityEnv>): AdminMenuChild[] {
   return c.var.plugins.plugins
-    .filter((entry) => entry.screen !== undefined && c.var.activePlugins.has(entry.plugin.name))
+    .filter((entry) => hasScreen(entry) && c.var.activePlugins.has(entry.plugin.name))
     .map((entry) => ({
       child: entry.plugin.name,
       label: entry.screen?.title ?? entry.plugin.label,
       url: pluginScreenPath(entry.plugin.name),
     }));
+}
+
+/** A plugin has a screen when it draws one or has settings to draw on one. */
+function hasScreen(entry: RegisteredPlugin): boolean {
+  return entry.screen !== undefined || entry.settings.length > 0;
 }
 
 /** Where a plugin's screen is: under Plugins, by package name. */
@@ -154,23 +172,129 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
   // A plugin's own screen, while it runs. Core draws what the plugin hands
   // back, so nothing a plugin says reaches the page unescaped.
   app.get(`${PLUGINS_PATH}/*`, (c) => {
+    const found = screenedPlugin(c);
+    if (found === undefined) return c.notFound();
+    return drawScreen(c, found, {});
+  });
+
+  // Save the settings form, or run one of the screen's actions.
+  app.post(`${PLUGINS_PATH}/*`, async (c) => {
+    const found = screenedPlugin(c);
+    if (found === undefined) return c.notFound();
+    const back = pluginScreenPath(found.plugin.name);
+    const body = await c.req.parseBody();
+    const pressed = body[ACTION_FIELD];
+
+    if (pressed === SAVE_ACTION && found.settings.length > 0) {
+      const values: Record<string, string> = {};
+      const forget = new Set<string>();
+      for (const [field, value] of Object.entries(body)) {
+        if (typeof value !== 'string') continue;
+        if (field.startsWith(SETTING_PREFIX)) values[field.slice(SETTING_PREFIX.length)] = value;
+        if (field.startsWith(FORGET_PREFIX)) forget.add(field.slice(FORGET_PREFIX.length));
+      }
+      const { problems } = await savePluginSettings({ ...found.settingsPlace, values, forget });
+      if (Object.keys(problems).length > 0) {
+        return drawScreen(c, found, { problems, submitted: values }, 400);
+      }
+      flash(c, 'notice', 'Settings saved.');
+      return c.redirect(back, 303);
+    }
+
+    const action = found.screen?.actions?.find((entry) => entry.id === pressed);
+    if (action === undefined) {
+      flash(c, 'error', 'That button is not on this screen.');
+      return c.redirect(back, 303);
+    }
+    try {
+      const outcome = await action.run({
+        site: pluginSite({ admin: c.var.admin, config: c.var.config }),
+      });
+      flash(c, outcome.ok ? 'notice' : 'error', outcome.message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      flash(c, 'error', `${action.label} failed: ${message}`);
+    }
+    return c.redirect(back, 303);
+  });
+
+  function screenedPlugin(c: Context<GeekityEnv>): RegisteredPlugin | undefined {
     const name = decodeURIComponent(new URL(c.req.url).pathname.slice(PLUGINS_PATH.length + 1));
     const found = c.var.plugins.find(name);
-    const screen = found?.screen;
-    if (screen === undefined || !c.var.activePlugins.has(name)) return c.notFound();
+    return found !== undefined && hasScreen(found) && c.var.activePlugins.has(name)
+      ? found
+      : undefined;
+  }
 
+  function drawScreen(
+    c: Context<GeekityEnv>,
+    found: RegisteredPlugin,
+    refused: { problems?: Record<string, string>; submitted?: Record<string, string> },
+    status: 200 | 400 = 200,
+  ): Response {
+    const { plugin, screen } = found;
+    const problems = refused.problems ?? {};
+    const settings = resolvePluginSettings(found.settingsPlace).map((entry) =>
+      settingView(entry, refused.submitted, problems[entry.field.key]),
+    );
+    c.status(status);
     return render(c, ADMIN_TEMPLATES.pluginScreen, {
       section: PLUGINS_SECTION,
-      child: name,
-      title: screen.title,
-      cards: screen.render({ site: pluginSite({ admin: c.var.admin, config: c.var.config }) }),
+      child: plugin.name,
+      title: screen?.title ?? plugin.label,
+      cards:
+        screen?.render({ site: pluginSite({ admin: c.var.admin, config: c.var.config }) }) ?? [],
+      postUrl: pluginScreenPath(plugin.name),
+      actionField: ACTION_FIELD,
+      saveAction: SAVE_ACTION,
+      actions: screen?.actions ?? [],
+      settings,
+      problems: settings.filter((entry) => entry.error !== undefined),
+      secretsFile: `data/plugins/${plugin.name}/${SECRETS_FILE}`,
     });
-  });
+  }
 
   function refuse(c: Context<GeekityEnv>, message: string): Response {
     flash(c, 'error', message);
     return c.redirect(PLUGINS_PATH, 303);
   }
+}
+
+/**
+ * One field as the form draws it. A secret carries where it is set and never
+ * its value; a refused form shows what was typed in the public boxes.
+ */
+function settingView(
+  entry: ResolvedSetting,
+  submitted: Record<string, string> | undefined,
+  error: string | undefined,
+) {
+  const { field } = entry;
+  const shown =
+    submitted === undefined
+      ? entry.value
+      : field.type === 'checkbox'
+        ? submitted[field.key] !== undefined
+        : (submitted[field.key] ?? '');
+  return {
+    key: field.key,
+    type: field.type,
+    id: `plugin-setting-${field.key}`,
+    name: `${SETTING_PREFIX}${field.key}`,
+    forgetName: `${FORGET_PREFIX}${field.key}`,
+    label: field.label,
+    hint: field.hint,
+    value: field.type !== 'secret' && typeof shown === 'string' ? shown : '',
+    checked: shown === true,
+    options:
+      field.type === 'select'
+        ? field.options.map((option) => ({ ...option, selected: option.value === shown }))
+        : [],
+    error,
+    stored: entry.problem,
+    source: entry.source,
+    variable: entry.variable,
+  };
 }
 
 /** Why the requirements stop an enable, one sentence each, or `undefined`. */

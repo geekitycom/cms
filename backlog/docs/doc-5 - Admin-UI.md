@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-08 15:02'
+updated_date: '2026-10-08 15:16'
 ---
 # Admin UI
 
@@ -369,6 +369,10 @@ What the screens make of the library:
 - **Installed plugins** is the one screen under Plugins, at `/admin/plugins`, after Appearance as in WordPress (decision-33). One card per installed plugin shows its label, description, package name, version, source and state: Enabled, Disabled, Enabled but not running, or Unavailable with the reason.
 - Each plugin it requires is listed with the range it needs. A requirement that is missing or disabled reads "Needs ..., which is disabled" and links to that plugin's card when it is installed.
 - **Enable** and **Disable** are POSTs to `/admin/plugins/enable` and `/admin/plugins/disable`, with the session's CSRF token. They write `plugins[<name>].enabled` in `content/_data/site.json` and keep every other key. Enable is offered only when everything the plugin requires is enabled. Disable is refused while enabled plugins require the plugin, and the error names them.
+- **A plugin's screen** is at `/admin/plugins/<package name>` and in the menu under Plugins while the plugin runs. Core draws it: the cards the plugin hands back as data, a **Settings** form when the plugin declared settings, and a button for each of the screen's actions (TASK-283). A plugin with settings and no screen of its own still gets one, titled with its label.
+- The settings form posts to the screen's own URL with `action=save`. Public boxes write the plugin's entry in `site.json`, keeping every key they do not model; an empty box removes the key so the default applies. A refused value comes back on the screen with status 400, the problem on its field and nothing written. A stored value the field does not accept is shown as its default, with a line saying the value in `site.json` was set aside.
+- A secret is never drawn. Its box is a password field showing Set or Not set; a blank box keeps the stored secret, and **Forget the stored ...** removes it. Each secret's hint names its exact environment variable. A secret the environment sets has no box at all and reads "Set by the environment variable ...".
+- An action button posts `action=<id>`. Core runs the plugin's action and shows its outcome as a notice or an error flash, escaped.
 
 ## Appearance
 
