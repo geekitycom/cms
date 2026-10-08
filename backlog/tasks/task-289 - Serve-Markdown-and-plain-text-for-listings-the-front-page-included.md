@@ -1,11 +1,11 @@
 ---
 id: TASK-289
 title: 'Serve Markdown and plain text for listings, the front page included'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-07 21:59'
-updated_date: '2026-10-07 22:50'
+updated_date: '2026-10-08 01:58'
 labels: []
 dependencies: []
 references:
@@ -48,6 +48,8 @@ Every listing URL (the home listing, /page/N/, tag and category archives, author
 Posts page: {postsPage}/index.md and index.json now serve the listing, not the page's own file, so the extension and Accept agree at that URL (front-page.test.ts). Search keeps HTML and JSON only (SEARCH_REPRESENTATIONS). Validation: pnpm typecheck, pnpm lint, pnpm test (4838 pass) in packages/cms; live demo on :3999 returned text/markdown and text/plain on /posts/, /posts/page/2/, /category/general/ and a post, index.md equal to Accept, 304 on If-None-Match, search 406. AC#1 is covered by tests; the demo's front page is a page, so the shll.me check (curl -H 'Accept: text/markdown' https://shll.me/ equals /llms.txt) waits on the next release deploy before Done.
 
 Changed after review: the home listing no longer serves llms.txt, because content/llms.txt can be curated differently from the site's posts. / is rendered like every other listing, with the tagline as a quote and pagination. Test: negotiation.test.ts 'renders the home listing under the site's title and tagline, not llms.txt' (with a content/llms.txt present). pnpm test 4833 pass, typecheck and lint clean.
+
+Deployed in 0.24.0: curl -H 'Accept: text/markdown' https://shll.me/ returns 200 text/markdown with '# Shll.me', the tagline quote and the post list; Accept: text/plain returns 200 text/plain.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

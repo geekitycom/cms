@@ -406,7 +406,7 @@
       "content-security-policy": "frame-ancestors 'self'",
       "content-type": "text/markdown; charset=utf-8",
       "cross-origin-opener-policy": "same-origin",
-      "etag": "\"c0346ac16422037fc5114b78928dadc1\"",
+      "etag": "\"223f187fd267c974a1053e9aca3e0108\"",
       "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
       "link": "</2026/09/hello-world/>; rel=\"alternate\"; type=\"text/html\", </2026/09/hello-world/index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
@@ -418,7 +418,7 @@
       "x-pingback": "https://blog.example/_geekity/pingback",
       "x-robots-tag": "noindex"
     },
-    "body": "---\ntitle: Hello world\ndate: '2026-09-19T09:00:00Z'\npermalink: /2026/09/hello-world/\ntags:\n  - engines\n---\n\nWords about engines.\n"
+    "body": "---\ntitle: Hello world\ndate: '2026-09-19T09:00:00Z'\npermalink: /2026/09/hello-world/\ntags:\n  - engines\n---\n\n# Hello world\n\nWords about engines.\n"
   },
   "feed": {
     "status": 200,
