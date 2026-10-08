@@ -35,6 +35,14 @@
       "changelog-path": "CHANGELOG.md",
       "extra-files": ["src/version.ts"],
       "pull-request-title-pattern": "chore(release): release plugin-post-summary ${version}"
+    },
+    "packages/plugin-tag-suggest": {
+      "package-name": "@geekity/plugin-tag-suggest",
+      "component": "plugin-tag-suggest",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": ["src/version.ts"],
+      "pull-request-title-pattern": "chore(release): release plugin-tag-suggest ${version}"
     }
   }
 }

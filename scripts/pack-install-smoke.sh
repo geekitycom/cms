@@ -130,6 +130,16 @@ if [[ -z "${summary_tarball}" ]]; then
 fi
 echo "packed ${summary_tarball}"
 
+log "building and packing @geekity/plugin-tag-suggest"
+pnpm --dir "${ROOT}" --filter @geekity/plugin-tag-suggest build
+pnpm --dir "${ROOT}" --filter @geekity/plugin-tag-suggest pack --pack-destination "${scratch}" >/dev/null
+tags_tarball="$(find "${scratch}" -maxdepth 1 -name 'geekity-plugin-tag-suggest-*.tgz' -print -quit)"
+if [[ -z "${tags_tarball}" ]]; then
+  echo "pnpm pack wrote no plugin-tag-suggest tarball into ${scratch}" >&2
+  exit 1
+fi
+echo "packed ${tags_tarball}"
+
 log "geekity init ${site}"
 # The bin is run from dist/ rather than through a workspace link, so this is
 # also a check that the compiled CLI resolves its own templates directory.
@@ -138,26 +148,27 @@ node "${ROOT}/packages/cms/dist/cli.js" init "${site}"
 log "pointing the new site at the tarballs"
 node --input-type=commonjs -e '
   const { readFileSync, writeFileSync } = require("node:fs");
-  const [manifestPath, tarball, wordpress, llm, summary] = process.argv.slice(1);
+  const [manifestPath, tarball, wordpress, llm, summary, tags] = process.argv.slice(1);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   manifest.dependencies["@geekity/cms"] = "file:" + tarball;
   manifest.dependencies["@geekity/plugin-wordpress"] = "file:" + wordpress;
   manifest.dependencies["@geekity/plugin-llm"] = "file:" + llm;
   manifest.dependencies["@geekity/plugin-post-summary"] = "file:" + summary;
+  manifest.dependencies["@geekity/plugin-tag-suggest"] = "file:" + tags;
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-' "${site}/package.json" "${tarball}" "${wordpress_tarball}" "${llm_tarball}" "${summary_tarball}"
+' "${site}/package.json" "${tarball}" "${wordpress_tarball}" "${llm_tarball}" "${summary_tarball}" "${tags_tarball}"
 grep '@geekity/' "${site}/package.json"
 
-log "installing the WordPress, LLM and post summary plugins in the site config"
+log "installing the WordPress, LLM, post summary and tag suggestion plugins in the site config"
 node --input-type=commonjs -e '
   const { readFileSync, writeFileSync } = require("node:fs");
   const [configPath] = process.argv.slice(1);
   const config = readFileSync(configPath, "utf8")
-    .replace(/^/, "import wordpress from \"@geekity/plugin-wordpress\";\nimport llm from \"@geekity/plugin-llm\";\nimport postSummary from \"@geekity/plugin-post-summary\";\n")
-    .replace("export default defineConfig({", "export default defineConfig({\n  plugins: [wordpress, llm, postSummary],");
+    .replace(/^/, "import wordpress from \"@geekity/plugin-wordpress\";\nimport llm from \"@geekity/plugin-llm\";\nimport postSummary from \"@geekity/plugin-post-summary\";\nimport tagSuggest from \"@geekity/plugin-tag-suggest\";\n")
+    .replace("export default defineConfig({", "export default defineConfig({\n  plugins: [wordpress, llm, postSummary, tagSuggest],");
   writeFileSync(configPath, config);
 ' "${site}/geekity.config.ts"
-grep -n 'wordpress\|llm\|postSummary' "${site}/geekity.config.ts"
+grep -n 'wordpress\|llm\|postSummary\|tagSuggest' "${site}/geekity.config.ts"
 
 log "installing"
 pnpm --dir "${site}" install
@@ -182,9 +193,10 @@ import { definePlugin } from '@geekity/cms/plugin';
 import type { Plugin, PluginHost } from '@geekity/cms/plugin';
 import llm from '@geekity/plugin-llm';
 import postSummary from '@geekity/plugin-post-summary';
+import tagSuggest from '@geekity/plugin-tag-suggest';
 import wordpress from '@geekity/plugin-wordpress';
 
-export const installed: readonly Plugin[] = [wordpress, llm, postSummary];
+export const installed: readonly Plugin[] = [wordpress, llm, postSummary, tagSuggest];
 
 export const check: Plugin = definePlugin({
   name: '@scratch/plugin-check',
@@ -224,13 +236,14 @@ log "running the plugin's command through the installed bin"
       "@geekity/plugin-wordpress": { enabled: true },
       "@geekity/plugin-llm": { enabled: true },
       "@geekity/plugin-post-summary": { enabled: true },
+      "@geekity/plugin-tag-suggest": { enabled: true },
     };
     writeFileSync(file, JSON.stringify(site, null, 2) + "\n");
   '
 )
 
 log "loading each plugin's bundle with no node_modules beside it"
-for package in plugin-wordpress plugin-llm plugin-post-summary; do
+for package in plugin-wordpress plugin-llm plugin-post-summary plugin-tag-suggest; do
   bundle_dir="${scratch}/bundle-only-${package}"
   mkdir -p "${bundle_dir}"
   cp "${site}/node_modules/@geekity/${package}/dist/bundle/index.js" "${bundle_dir}/index.js"
@@ -323,7 +336,7 @@ echo "ok  GET /admin/plugins/@geekity/plugin-llm"
 
 log "pressing Suggest title in the editor with no API key set"
 editor="$(curl -fsS -b "${jar}" "${BASE}/admin/posts/new")"
-for expected in '>Suggest title</button>' '>Suggest description</button>' 'editor-actions.js'; do
+for expected in '>Suggest title</button>' '>Suggest description</button>' '>Suggest tags</button>' 'editor-actions.js'; do
   if ! grep -qF -- "${expected}" <<<"${editor}"; then
     echo "the editor did not contain \"${expected}\"" >&2
     exit 1
@@ -339,6 +352,19 @@ if ! grep -qF 'Add an API key on Plugins > LLM' <<<"${suggestion}"; then
   exit 1
 fi
 echo "ok  POST /admin/plugins/@geekity/plugin-post-summary/editor/suggest-title"
+
+log "pressing Suggest tags in the editor with no API key set"
+# The key is missing, so the plugin answers before it would ask tags.pub, and
+# the smoke test stays off the network.
+tags_suggestion="$(curl -fsS -b "${jar}" --data-urlencode "csrf_token=${editor_token}" \
+  --data-urlencode 'type=post' --data-urlencode 'body=Some words.' \
+  "${BASE}/admin/plugins/@geekity/plugin-tag-suggest/editor/suggest-tags")"
+if ! grep -qF 'Add an API key on Plugins > LLM' <<<"${tags_suggestion}"; then
+  echo "Suggest tags did not explain the missing key:" >&2
+  echo "${tags_suggestion}" >&2
+  exit 1
+fi
+echo "ok  POST /admin/plugins/@geekity/plugin-tag-suggest/editor/suggest-tags"
 
 log "type checking the scratch site against the published declarations"
 (cd "${site}" && npx tsc --noEmit)

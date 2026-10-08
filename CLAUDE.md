@@ -54,6 +54,7 @@ imperative, and carries no trailing full stop.
 | `plugin-wordpress`    | The published `@geekity/plugin-wordpress` package.    |
 | `plugin-llm`          | The published `@geekity/plugin-llm` package.          |
 | `plugin-post-summary` | The published `@geekity/plugin-post-summary` package. |
+| `plugin-tag-suggest`  | The published `@geekity/plugin-tag-suggest` package.  |
 
 Examples:
 

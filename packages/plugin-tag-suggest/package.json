@@ -1,0 +1,51 @@
+{
+  "name": "@geekity/plugin-tag-suggest",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Geekity CMS plugin that suggests tags for a post in the editor, from a language model, ranked by how many people follow each tag on tags.pub.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "geekity": {
+    "plugin": true,
+    "hostApi": 1,
+    "requires": {
+      "@geekity/plugin-llm": "^0.1.0"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node ../../scripts/build-plugin-bundle.js",
+    "pretest": "pnpm --filter @geekity/cms build && pnpm --filter @geekity/plugin-llm build && pnpm build",
+    "test": "tsx --import ../cms/src/__testing__/offline.ts --test \"test/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "peerDependencies": {
+    "@geekity/cms": "workspace:^",
+    "@geekity/plugin-llm": "workspace:^"
+  },
+  "devDependencies": {
+    "@geekity/cms": "workspace:*",
+    "@geekity/plugin-llm": "workspace:*",
+    "@types/node": "^26.6.4",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

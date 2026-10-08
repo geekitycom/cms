@@ -21,6 +21,7 @@ export default {
      * - `plugin-wordpress` the published @geekity/plugin-wordpress package
      * - `plugin-llm` the published @geekity/plugin-llm package
      * - `plugin-post-summary` the published @geekity/plugin-post-summary package
+     * - `plugin-tag-suggest` the published @geekity/plugin-tag-suggest package
      */
     'scope-enum': [
       2,
@@ -35,6 +36,7 @@ export default {
         'plugin-wordpress',
         'plugin-llm',
         'plugin-post-summary',
+        'plugin-tag-suggest',
       ],
     ],
   },
