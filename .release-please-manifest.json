@@ -1,6 +1,6 @@
 {
   "packages/cms": "0.25.0",
-  "packages/plugin-wordpress": "0.0.0",
+  "packages/plugin-wordpress": "0.1.0",
   "packages/plugin-llm": "0.1.0",
   "packages/plugin-post-summary": "0.0.0",
   "packages/plugin-tag-suggest": "0.1.0"
