@@ -10,6 +10,7 @@ import type { Clock } from './content/store.ts';
 import type { DocumentChange } from './content/sync.ts';
 import type { MailProvider } from './mail/provider.ts';
 import type { MailLogger } from './mail/service.ts';
+import type { Plugin } from './plugin.ts';
 import { systemHostLookup } from './webmention/public-address.ts';
 import type { HostLookup } from './webmention/public-address.ts';
 
@@ -376,6 +377,12 @@ export interface GeekityConfig {
    * a real DNS server.
    */
   hostLookup?: HostLookup;
+  /**
+   * The plugins installed on this site (decision-33). Each is registered at
+   * boot and runs only while the `plugins` key of `content/_data/site.json`
+   * enables it, so installing one here changes nothing until it is enabled.
+   */
+  plugins?: readonly Plugin[];
 }
 
 /**
@@ -444,6 +451,8 @@ export interface ResolvedConfig {
   federation: FederationOverrides;
   /** How host names are resolved before a stranger's page is fetched. */
   hostLookup: HostLookup;
+  /** The installed plugins, empty when the site named none. */
+  plugins: readonly Plugin[];
 }
 
 /** Ambient inputs {@link resolveConfig} reads, injectable so the resolution is testable. */
@@ -651,6 +660,7 @@ export function resolveConfig(
     now: config.now ?? systemClock,
     federation: config.federation ?? {},
     hostLookup: config.hostLookup ?? systemHostLookup,
+    plugins: config.plugins ?? [],
   };
 }
 

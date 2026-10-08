@@ -1669,7 +1669,7 @@ function readSiteJsonSync(file: string): Record<string, unknown> {
 }
 
 /** The same, from bytes already in hand. */
-function parseSiteJson(source: string): Record<string, unknown> {
+export function parseSiteJson(source: string): Record<string, unknown> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(source);

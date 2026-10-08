@@ -3,7 +3,7 @@ id: doc-1
 title: Architecture Overview
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-09-12 21:02'
+updated_date: '2026-10-08 14:19'
 ---
 # Architecture Overview
 
@@ -80,7 +80,8 @@ The `geekity` CLI also runs without an entry file (`geekity serve` reads `geekit
 - `createCms(config): Cms` returning `{ app: Hono, serve(), sync(), close() }`.
 - `defineConfig(config)` for typed config files.
 - Theme resolution: a template is looked up in the site `theme/` first, then in the package default theme. Sites override one file at a time.
-- Hooks: `onDocumentChange`, `onPublish` for site-specific behaviour. Kept minimal in phase one.
+- Hooks: `onDocumentChange`, `onPublish` for site-specific behaviour.
+- Plugins: `plugins` on the config, and the `@geekity/cms/plugin` export a plugin builds against. See Plugins below.
 - Semver applies to the config schema, the public API, the JSON representation, the content format, and the template context. Breaking changes to any of these are majors.
 
 ## Request flow
@@ -113,6 +114,19 @@ Database migrations ship inside the package and run on boot, so a site upgrade t
 
 The one capability this design gives up is that a post whose file is gone entirely cannot be tombstoned, because the `activitypub.id` a `Delete` needs was in the file. Trashing a post keeps the file under `_trash/` with its id, so the ordinary way of unpublishing still withdraws it.
 
+## Plugins (decision-33)
+
+Logic that some sites want and others do not lives in plugins rather than in core.
+
+- **A plugin is a named module.** It declares `name`, `version`, `label`, `description`, `hostApi`, `requires` and `register(host)`, with optional `start` and `stop`. Its name is its npm package name, such as `@geekity/plugin-llm`. A plugin installed by hand declares a package-style name too. Two installed plugins with one name refuse the boot, and the error names both sources.
+- **The package boundary.** A plugin imports nothing from core but `@geekity/cms/plugin`, a subpath export that holds the plugin and host types, `HOST_API_VERSION` and `definePlugin`. `definePlugin` returns its argument, so a bundled plugin needs no runtime import of core. The `host` passed to `register` is the plugin's only door into the CMS. It carries `apiVersion`, and a plugin whose `hostApi` is newer than the core's is unavailable. Removing or reshaping anything in the export is a breaking change. An ESLint rule holds the boundary for `apps/demo/plugins/` and `packages/plugin-*/`.
+- **The registry.** Every installed plugin registers once at boot, in any order. No plugin can reach another during `register`. A site with its own `server.ts` installs plugins by passing them in `plugins` on its config. The registry lives in `src/plugins/registry.ts`.
+- **Dependencies.** `requires` maps each required package name to the semver range it needs, the same pairs as the plugin package's peer dependencies. An installed plugin is unavailable, with the reason, when a dependency is missing or unavailable, or when it sits in a dependency cycle. The same applies when its name is not a package name, when it targets a newer host API, or when its `register` throws. The site still boots.
+- **The enabled state.** The enabled set is the `plugins` key of `content/_data/site.json`, an object keyed by package name whose entries carry `"enabled": true`. A plugin's public settings sit beside `enabled` in its entry. The set is read on every request, so enabling and disabling take effect on the next request without a restart, whether made on Admin > Plugins or by editing the file. A plugin runs only while it is enabled, available, and everything it requires is running. A disabled plugin's routes fall through as if absent.
+- **Enable and disable.** Admin > Plugins lists every installed plugin with its package, version, source, dependencies and state. A plugin cannot be enabled until every plugin it requires is installed and enabled. Its row names each one that is missing or disabled, with the range it needs and a link to that plugin's row. Nothing is enabled on the operator's behalf. Disabling a plugin that enabled plugins require is refused, and the refusal names them.
+- **Lifecycle.** `start` runs for each running plugin, dependencies first, when the site serves and when the plugin is enabled. `stop` runs dependents first, on disable and in `close()`. Each request converges the running set on the enabled set, so a hand edit of `site.json` starts and stops plugins as well.
+- **Extension points.** Core grows a host API only alongside the first plugin that uses it. The first one is public `GET` routes (`host.get`), used by the example plugins in `apps/demo/plugins/`.
+
 ## Quality and release
 
 - Every push and pull request runs lint (eslint), typecheck (tsc --noEmit), and tests (node:test) in GitHub Actions.
@@ -125,4 +139,3 @@ The one capability this design gives up is that a post whose file is gone entire
 - Media library beyond a simple upload directory.
 - Comments (ActivityPub replies may be stored later).
 - Multi-site.
-- Plugin system beyond the two hooks above.

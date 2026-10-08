@@ -1,0 +1,254 @@
+/**
+ * The plugin registry (decision-33, TASK-281): who is installed, who can run,
+ * and the order their lifecycle hooks go in. Driven through the registry's own
+ * API, because the questions here are about the dependency graph rather than
+ * about HTTP; `screen.test.ts` covers what the admin shows of it.
+ */
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+
+import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
+import type { Plugin, PluginHost } from '../plugin.ts';
+import { createPluginRegistry, DuplicatePluginError } from './registry.ts';
+import type { InstalledPlugin } from './registry.ts';
+
+/** A plugin with nothing to say beyond its name and what it requires. */
+function plugin(name: string, requires: Record<string, string> = {}, extra: Partial<Plugin> = {}) {
+  return definePlugin({
+    name,
+    version: '1.0.0',
+    label: name,
+    description: `The ${name} plugin.`,
+    hostApi: HOST_API_VERSION,
+    requires,
+    register() {},
+    ...extra,
+  });
+}
+
+/** Plugins as the site config hands them over. */
+function fromConfig(...plugins: Plugin[]): InstalledPlugin[] {
+  return plugins.map((entry, index) => ({
+    plugin: entry,
+    source: `site config, plugins[${String(index)}]`,
+  }));
+}
+
+describe('the plugin registry', () => {
+  it('refuses two plugins with one name, naming both sources', () => {
+    assert.throws(
+      () =>
+        createPluginRegistry([
+          { plugin: plugin('@acme/plugin-a'), source: 'site config, plugins[0]' },
+          { plugin: plugin('@acme/plugin-a'), source: 'site config, plugins[2]' },
+        ]),
+      (error: unknown) =>
+        error instanceof DuplicatePluginError &&
+        error.message.includes('@acme/plugin-a') &&
+        error.message.includes('site config, plugins[0]') &&
+        error.message.includes('site config, plugins[2]'),
+    );
+  });
+
+  it('marks a plugin whose name is not a package name unavailable', () => {
+    const registry = createPluginRegistry(fromConfig(plugin('Not A Package')));
+    assert.match(registry.problem('Not A Package') ?? '', /not an npm package name/);
+  });
+
+  it('marks a plugin with a missing dependency unavailable, naming it and its range', () => {
+    const registry = createPluginRegistry(
+      fromConfig(plugin('@acme/plugin-a', { '@acme/plugin-missing': '^2.0.0' })),
+    );
+    assert.equal(
+      registry.problem('@acme/plugin-a'),
+      'It requires @acme/plugin-missing ^2.0.0, which is not installed.',
+    );
+  });
+
+  it('marks every plugin in a dependency cycle unavailable, and what depends on them', () => {
+    const registry = createPluginRegistry(
+      fromConfig(
+        plugin('@acme/plugin-a', { '@acme/plugin-b': '*' }),
+        plugin('@acme/plugin-b', { '@acme/plugin-a': '*' }),
+        plugin('@acme/plugin-c', { '@acme/plugin-a': '*' }),
+        plugin('@acme/plugin-d'),
+      ),
+    );
+    assert.match(registry.problem('@acme/plugin-a') ?? '', /dependency cycle/);
+    assert.match(registry.problem('@acme/plugin-b') ?? '', /dependency cycle/);
+    assert.equal(
+      registry.problem('@acme/plugin-c'),
+      'It requires @acme/plugin-a *, which is unavailable.',
+    );
+    assert.equal(registry.problem('@acme/plugin-d'), undefined);
+  });
+
+  it('marks a plugin that targets a newer host API unavailable', () => {
+    const registry = createPluginRegistry(
+      fromConfig(plugin('@acme/plugin-a', {}, { hostApi: HOST_API_VERSION + 1 })),
+    );
+    assert.match(registry.problem('@acme/plugin-a') ?? '', /host API version/);
+  });
+
+  it('marks a plugin whose register throws unavailable, and still registers the rest', () => {
+    const registry = createPluginRegistry(
+      fromConfig(
+        plugin(
+          '@acme/plugin-a',
+          {},
+          {
+            register() {
+              throw new Error('no thanks');
+            },
+          },
+        ),
+        plugin('@acme/plugin-b'),
+      ),
+    );
+    assert.equal(registry.problem('@acme/plugin-a'), 'Its register failed: no thanks');
+    assert.equal(registry.problem('@acme/plugin-b'), undefined);
+  });
+
+  it('runs register once per installed plugin, enabled or not, with the host API version', () => {
+    const seen: [string, number][] = [];
+    const record = (name: string) =>
+      plugin(
+        name,
+        {},
+        {
+          register(host: PluginHost) {
+            seen.push([host.name, host.apiVersion]);
+          },
+        },
+      );
+    createPluginRegistry(fromConfig(record('@acme/plugin-b'), record('@acme/plugin-a')));
+    assert.deepEqual(seen, [
+      ['@acme/plugin-b', HOST_API_VERSION],
+      ['@acme/plugin-a', HOST_API_VERSION],
+    ]);
+  });
+
+  it('gives register a host that reaches no other plugin', () => {
+    let keys: string[] = [];
+    createPluginRegistry(
+      fromConfig(
+        plugin(
+          '@acme/plugin-a',
+          {},
+          {
+            register(host: PluginHost) {
+              keys = Object.keys(host).sort();
+            },
+          },
+        ),
+      ),
+    );
+    assert.deepEqual(keys, ['apiVersion', 'get', 'name']);
+  });
+
+  it('counts a plugin active only when it and everything it requires is enabled', () => {
+    const registry = createPluginRegistry(
+      fromConfig(plugin('@acme/plugin-a', { '@acme/plugin-b': '*' }), plugin('@acme/plugin-b')),
+    );
+    assert.deepEqual([...registry.active(new Set(['@acme/plugin-a']))], []);
+    assert.deepEqual([...registry.active(new Set(['@acme/plugin-a', '@acme/plugin-b']))].sort(), [
+      '@acme/plugin-a',
+      '@acme/plugin-b',
+    ]);
+    assert.deepEqual([...registry.active(new Set(['@acme/plugin-x']))], []);
+  });
+
+  it('starts dependencies first and stops dependents first', async () => {
+    const calls: string[] = [];
+    const tracked = (name: string, requires: Record<string, string> = {}) =>
+      plugin(name, requires, {
+        start: () => {
+          calls.push(`start ${name}`);
+        },
+        stop: () => {
+          calls.push(`stop ${name}`);
+        },
+      });
+    // Installed dependents first, so the order cannot be install order.
+    const registry = createPluginRegistry(
+      fromConfig(
+        tracked('@acme/plugin-c', { '@acme/plugin-b': '*' }),
+        tracked('@acme/plugin-b', { '@acme/plugin-a': '*' }),
+        tracked('@acme/plugin-a'),
+      ),
+    );
+    const all = new Set(['@acme/plugin-a', '@acme/plugin-b', '@acme/plugin-c']);
+
+    await registry.reconcile(all);
+    await registry.reconcile(all);
+    assert.deepEqual(calls, [
+      'start @acme/plugin-a',
+      'start @acme/plugin-b',
+      'start @acme/plugin-c',
+    ]);
+
+    calls.length = 0;
+    await registry.reconcile(new Set(['@acme/plugin-b', '@acme/plugin-c']));
+    assert.deepEqual(calls, ['stop @acme/plugin-c', 'stop @acme/plugin-b', 'stop @acme/plugin-a']);
+
+    calls.length = 0;
+    await registry.reconcile(all);
+    await registry.close();
+    assert.deepEqual(calls, [
+      'start @acme/plugin-a',
+      'start @acme/plugin-b',
+      'start @acme/plugin-c',
+      'stop @acme/plugin-c',
+      'stop @acme/plugin-b',
+      'stop @acme/plugin-a',
+    ]);
+
+    calls.length = 0;
+    await registry.reconcile(all);
+    assert.deepEqual(calls, [], 'nothing starts once the registry is closed');
+  });
+
+  it('runs nothing of a plugin before every plugin has registered', () => {
+    const calls: string[] = [];
+    createPluginRegistry(
+      fromConfig(
+        plugin(
+          '@acme/plugin-a',
+          {},
+          {
+            register: () => calls.push('register a'),
+            start: () => {
+              calls.push('start a');
+            },
+          },
+        ),
+        plugin('@acme/plugin-b', {}, { register: () => calls.push('register b') }),
+      ),
+    );
+    assert.deepEqual(calls, ['register a', 'register b']);
+  });
+
+  it('says what stands in the way of enabling a plugin, and of disabling one', () => {
+    const registry = createPluginRegistry(
+      fromConfig(
+        plugin('@acme/plugin-a', { '@acme/plugin-b': '^1.0.0', '@acme/plugin-gone': '^3.0.0' }),
+        plugin('@acme/plugin-b'),
+        plugin('@acme/plugin-c', { '@acme/plugin-b': '*' }),
+      ),
+    );
+    assert.deepEqual(registry.requirements('@acme/plugin-c', new Set()), [
+      { name: '@acme/plugin-b', range: '*', state: 'disabled' },
+    ]);
+    assert.deepEqual(registry.requirements('@acme/plugin-c', new Set(['@acme/plugin-b'])), [
+      { name: '@acme/plugin-b', range: '*', state: 'enabled' },
+    ]);
+    assert.deepEqual(registry.requirements('@acme/plugin-a', new Set()), [
+      { name: '@acme/plugin-b', range: '^1.0.0', state: 'disabled' },
+      { name: '@acme/plugin-gone', range: '^3.0.0', state: 'missing' },
+    ]);
+    assert.deepEqual(
+      registry.enabledDependents('@acme/plugin-b', new Set(['@acme/plugin-b', '@acme/plugin-c'])),
+      ['@acme/plugin-c'],
+    );
+  });
+});

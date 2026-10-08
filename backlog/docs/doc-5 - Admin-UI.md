@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-05 10:38'
+updated_date: '2026-10-08 14:19'
 ---
 # Admin UI
 
@@ -41,6 +41,7 @@ know whether it is the only one of its kind.
 | Comments   | All comments                                 |
 | Messages   | All messages                                 |
 | Appearance | Themes                                       |
+| Plugins    | Installed plugins                            |
 | Users      | All users, Add new                           |
 | Tools      | Content index                                |
 | Settings   | General, Reading, Permalinks, Discussion, Email, Privacy |
@@ -362,6 +363,12 @@ What the screens make of the library:
   that is not an item is refused by name, the box still holding every line of
   what was typed, and nothing is written. Each of the three actions is its own
   POST, so a refused one cannot lose what was typed into another box.
+
+## Plugins
+
+- **Installed plugins** is the one screen under Plugins, at `/admin/plugins`, after Appearance as in WordPress (decision-33). One card per installed plugin shows its label, description, package name, version, source and state: Enabled, Disabled, Enabled but not running, or Unavailable with the reason.
+- Each plugin it requires is listed with the range it needs. A requirement that is missing or disabled reads "Needs ..., which is disabled" and links to that plugin's card when it is installed.
+- **Enable** and **Disable** are POSTs to `/admin/plugins/enable` and `/admin/plugins/disable`, with the session's CSRF token. They write `plugins[<name>].enabled` in `content/_data/site.json` and keep every other key. Enable is offered only when everything the plugin requires is enabled. Disable is refused while enabled plugins require the plugin, and the error names them.
 
 ## Appearance
 

@@ -134,6 +134,25 @@ export default tseslint.config(
   },
 
   {
+    // A plugin's only door into core is `@geekity/cms/plugin` (decision-33).
+    name: 'geekity/plugin-boundary',
+    files: ['apps/demo/plugins/**/*.ts', 'packages/plugin-*/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^@geekity/cms(?!/plugin$)(?:/.*)?$|/packages/cms/',
+              message: 'A plugin imports nothing from core but @geekity/cms/plugin.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
     name: 'geekity/tests',
     files: ['**/*.test.ts', 'packages/cms/test/**/*.ts'],
     rules: {

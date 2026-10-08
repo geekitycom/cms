@@ -23,6 +23,7 @@ import { FEDERATION_PATH, FEDERATION_SETTINGS_PATH } from './federation.ts';
 import { MEDIA_PATH } from './media.ts';
 import { MESSAGES_PATH } from './messages.ts';
 import { NAVIGATION_PATH } from './navigation.ts';
+import { PLUGINS_CHILD, PLUGINS_PATH, PLUGINS_SECTION } from './plugins.ts';
 import { settingsPagePath } from './settings-page.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { SYNDICATION_TARGETS_CHILD, SYNDICATION_TARGETS_PATH } from './syndication-targets.ts';
@@ -123,6 +124,10 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   // One child, because the rule is uniform: a second kind of theme, or a menu
   // editor, slots in beside Themes without the menu changing shape.
   section('appearance', 'Appearance', [{ child: 'themes', label: 'Themes', url: THEMES_PATH }]),
+  // After Appearance, where WordPress keeps it.
+  section(PLUGINS_SECTION, 'Plugins', [
+    { child: PLUGINS_CHILD, label: 'Installed plugins', url: PLUGINS_PATH },
+  ]),
   section('users', 'Users', [
     { child: 'all', label: 'All users', url: USERS_PATH },
     { child: 'new', label: 'Add new', url: ADD_USER_PATH },

@@ -1,0 +1,166 @@
+/**
+ * Admin > Plugins (decision-33): every installed plugin, where it stands, and
+ * the Enable and Disable buttons that write the `plugins` key of
+ * `content/_data/site.json`. The next request runs under the new set; there
+ * is nothing to restart.
+ */
+
+import type { Context, Hono } from 'hono';
+
+import type { GeekityEnv } from '../env.ts';
+import { readEnabledPlugins, setPluginEnabled } from '../plugins/enabled.ts';
+import type { PluginRegistry, Requirement, RequirementState } from '../plugins/registry.ts';
+import type { AdminRender } from './documents.ts';
+import { flash } from './flash.ts';
+import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_TEMPLATES } from './templates.ts';
+
+export const PLUGINS_PATH = `${ADMIN_PREFIX}/plugins`;
+export const PLUGINS_SECTION = 'plugins';
+export const PLUGINS_CHILD = 'installed';
+
+const PLUGIN_FIELD = 'plugin';
+
+type PluginState = 'enabled' | 'blocked' | 'disabled' | 'unavailable';
+
+/** The badge each state draws, from `components/badge.njk`. */
+const STATE_BADGES: Readonly<Record<PluginState, { status: string; label: string }>> = {
+  enabled: { status: 'active', label: 'Enabled' },
+  blocked: { status: 'pending', label: 'Enabled, not running' },
+  disabled: { status: 'hidden', label: 'Disabled' },
+  unavailable: { status: 'failed', label: 'Unavailable' },
+};
+
+/** How a requirement reads after "which is". */
+const REQUIREMENT_WORDS: Readonly<Record<RequirementState, string>> = {
+  enabled: 'enabled',
+  blocked: 'enabled but not running',
+  disabled: 'disabled',
+  unavailable: 'unavailable',
+  missing: 'not installed',
+};
+
+/** The id of a plugin's row, which a requirement links to. */
+export function pluginAnchor(name: string): string {
+  return `plugin-${name.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+}
+
+export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: AdminRender }): void {
+  const { render } = options;
+
+  app.get(PLUGINS_PATH, (c) => {
+    const registry = c.var.plugins;
+    const enabled = readEnabledPlugins(c.var.config.contentDir);
+    const running = registry.active(enabled);
+
+    return render(c, ADMIN_TEMPLATES.plugins, {
+      section: PLUGINS_SECTION,
+      child: PLUGINS_CHILD,
+      enableUrl: `${PLUGINS_PATH}/enable`,
+      disableUrl: `${PLUGINS_PATH}/disable`,
+      field: PLUGIN_FIELD,
+      plugins: registry.plugins.map(({ plugin, source, problem }) => {
+        const requirements = registry.requirements(plugin.name, enabled);
+        const state: PluginState =
+          problem !== undefined
+            ? 'unavailable'
+            : running.has(plugin.name)
+              ? 'enabled'
+              : enabled.has(plugin.name)
+                ? 'blocked'
+                : 'disabled';
+        return {
+          anchor: pluginAnchor(plugin.name),
+          name: plugin.name,
+          label: plugin.label,
+          description: plugin.description,
+          version: plugin.version,
+          source,
+          problem,
+          badge: STATE_BADGES[state],
+          requirements: requirements.map((requirement) => ({
+            ...requirement,
+            words: REQUIREMENT_WORDS[requirement.state],
+            satisfied: requirement.state === 'enabled',
+            anchor: requirement.state === 'missing' ? undefined : pluginAnchor(requirement.name),
+          })),
+          canEnable:
+            state === 'disabled' && requirements.every((entry) => entry.state === 'enabled'),
+          canDisable: state === 'enabled' || state === 'blocked',
+        };
+      }),
+    });
+  });
+
+  app.post(`${PLUGINS_PATH}/enable`, async (c) => {
+    const registry = c.var.plugins;
+    const found = registry.find(await submittedName(c));
+    if (found === undefined) return refuse(c, 'No plugin by that name is installed.');
+
+    const { label, name } = found.plugin;
+    const contentDir = c.var.config.contentDir;
+    const enabled = readEnabledPlugins(contentDir);
+    const reason = found.problem ?? unmet(registry.requirements(name, enabled));
+    if (reason !== undefined) return refuse(c, `${label} was not enabled. ${reason}`);
+
+    await setPluginEnabled({ contentDir, name, enabled: true });
+    await registry.reconcile(readEnabledPlugins(contentDir));
+    flash(c, 'notice', `${label} is enabled.`);
+    return c.redirect(PLUGINS_PATH, 303);
+  });
+
+  app.post(`${PLUGINS_PATH}/disable`, async (c) => {
+    const registry = c.var.plugins;
+    const found = registry.find(await submittedName(c));
+    if (found === undefined) return refuse(c, 'No plugin by that name is installed.');
+
+    const { label, name } = found.plugin;
+    const contentDir = c.var.config.contentDir;
+    const dependents = registry.enabledDependents(name, readEnabledPlugins(contentDir));
+    if (dependents.length > 0) {
+      const named = dependents.map((dependent) => described(registry, dependent));
+      const those = dependents.length === 1 ? 'that' : 'those';
+      const verb = dependents.length === 1 ? 'requires' : 'require';
+      return refuse(
+        c,
+        `${label} was not disabled. ${list(named)} ${verb} it; disable ${those} first.`,
+      );
+    }
+
+    await setPluginEnabled({ contentDir, name, enabled: false });
+    await registry.reconcile(readEnabledPlugins(contentDir));
+    flash(c, 'notice', `${label} is disabled.`);
+    return c.redirect(PLUGINS_PATH, 303);
+  });
+
+  function refuse(c: Context<GeekityEnv>, message: string): Response {
+    flash(c, 'error', message);
+    return c.redirect(PLUGINS_PATH, 303);
+  }
+}
+
+/** Why the requirements stop an enable, one sentence each, or `undefined`. */
+function unmet(requirements: readonly Requirement[]): string | undefined {
+  const sentences = requirements
+    .filter((requirement) => requirement.state !== 'enabled')
+    .map(
+      (requirement) =>
+        `It requires ${requirement.name} ${requirement.range}, which is ${REQUIREMENT_WORDS[requirement.state]}.`,
+    );
+  return sentences.length === 0 ? undefined : sentences.join(' ');
+}
+
+function described(registry: PluginRegistry, name: string): string {
+  const label = registry.find(name)?.plugin.label;
+  return label === undefined ? name : `${label} (${name})`;
+}
+
+function list(items: readonly string[]): string {
+  if (items.length <= 1) return items.join('');
+  return `${items.slice(0, -1).join(', ')} and ${items.at(-1) ?? ''}`;
+}
+
+async function submittedName(c: Context<GeekityEnv>): Promise<string> {
+  const value = (await c.req.parseBody())[PLUGIN_FIELD];
+  return typeof value === 'string' ? value : '';
+}

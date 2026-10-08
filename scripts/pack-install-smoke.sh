@@ -116,6 +116,38 @@ grep '@geekity/cms' "${site}/package.json"
 log "installing"
 pnpm --dir "${site}" install
 
+log "importing @geekity/cms/plugin from the installed tarball"
+# The subpath export is the boundary every plugin imports (decision-33), so it
+# has to resolve from the artefact, not only through the workspace link. The
+# file below is also type checked with the site at the end.
+(
+  cd "${site}"
+  node --input-type=module -e '
+    const plugin = await import("@geekity/cms/plugin");
+    if (typeof plugin.definePlugin !== "function" || !Number.isInteger(plugin.HOST_API_VERSION)) {
+      console.error("@geekity/cms/plugin resolved without definePlugin and HOST_API_VERSION");
+      process.exit(1);
+    }
+    console.log("ok  @geekity/cms/plugin, host API version " + plugin.HOST_API_VERSION);
+  '
+)
+cat >"${site}/plugin-check.ts" <<'TS'
+import { definePlugin } from '@geekity/cms/plugin';
+import type { Plugin, PluginHost } from '@geekity/cms/plugin';
+
+export const check: Plugin = definePlugin({
+  name: '@scratch/plugin-check',
+  version: '0.0.0',
+  label: 'Check',
+  description: 'Type checks against the published declarations.',
+  hostApi: 1,
+  requires: {},
+  register(host: PluginHost) {
+    host.get('/check/', ({ params }) => new Response(String(Object.keys(params).length)));
+  },
+});
+TS
+
 log "booting on port ${PORT}"
 # The site's output goes to a file rather than to this script's stdout. That is
 # not tidiness: a background process holding a CI step's stdout open is how a

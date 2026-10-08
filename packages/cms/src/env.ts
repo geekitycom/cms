@@ -13,6 +13,7 @@ import type { ActorProfileService } from './federation/profiles.ts';
 import type { RelayService } from './federation/relays.ts';
 import type { MailService } from './mail/service.ts';
 import type { MaintenanceSwitch } from './maintenance.ts';
+import type { PluginRegistry } from './plugins/registry.ts';
 import type { CommentNotifier } from './notifications/comments.ts';
 import type { ReplyContextService } from './webmention/reply-contexts.ts';
 import type { HandleLearner } from './federation/handles.ts';
@@ -166,6 +167,13 @@ export interface GeekityEnv {
      * the endpoints that redeem one.
      */
     indieauth: IndieAuthState;
+    /** Every installed plugin and its dependency graph (decision-33). */
+    plugins: PluginRegistry;
+    /**
+     * The plugins running for this request: enabled in `site.json`, available,
+     * and with everything they require running.
+     */
+    activePlugins: ReadonlySet<string>;
     /**
      * What an IndieAuth or Micropub handler adds to the activity log's entry
      * for this request (TASK-221), beyond what its response shows.

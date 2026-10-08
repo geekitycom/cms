@@ -16,6 +16,7 @@ describe('the admin menu registry', () => {
         'Comments',
         'Messages',
         'Appearance',
+        'Plugins',
         'Users',
         'Tools',
         'Settings',

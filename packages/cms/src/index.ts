@@ -35,6 +35,9 @@ import type {
 import type { GeekityEnv } from './env.ts';
 import { createMailService } from './mail/index.ts';
 import type { MailService } from './mail/index.ts';
+import { readEnabledPlugins } from './plugins/enabled.ts';
+import { mountPluginRoutes, pluginLifecycle } from './plugins/mount.ts';
+import { createPluginRegistry } from './plugins/registry.ts';
 import { createCommentDigest, createCommentNotifier } from './notifications/index.ts';
 import type { CommentDigest, CommentNotifier } from './notifications/index.ts';
 import {
@@ -637,6 +640,16 @@ export type {
 } from './files/index.ts';
 
 export { DirectoryNotEmptyError, initSite, SITE_TEMPLATE_DIR, siteManifest } from './init.ts';
+export { definePlugin, HOST_API_VERSION } from './plugin.ts';
+export type {
+  Plugin,
+  PluginHost,
+  PluginRequestContext,
+  PluginRequirements,
+  PluginRouteHandler,
+} from './plugin.ts';
+export { DuplicatePluginError } from './plugins/registry.ts';
+export { PLUGINS_PATH } from './admin/plugins.ts';
 export type { InitSiteOptions, InitSiteResult } from './init.ts';
 
 export {
@@ -1582,6 +1595,16 @@ function openCache(resolved: ResolvedConfig): { store: ContentStore; admin: Admi
  */
 export function createCms(config: GeekityConfig = {}): Cms {
   const resolved = resolveConfig(config);
+
+  // Before the database opens, so two plugins with one name refuse the boot
+  // without leaving a connection behind.
+  const plugins = createPluginRegistry(
+    resolved.plugins.map((plugin, index) => ({
+      plugin,
+      source: `the site config, plugins[${String(index)}]`,
+    })),
+  );
+
   const { store, admin } = openCache(resolved);
 
   // A site upgrading from the version that kept its settings in SQLite has
@@ -2015,6 +2038,8 @@ export function createCms(config: GeekityConfig = {}): Cms {
     await next();
   });
 
+  app.use('*', pluginLifecycle(plugins));
+
   // The baseline on everything the CMS answers, admin and public alike, and
   // outside everything below so redirects, the 503, 404s and the onError 500
   // carry it too. The admin sets stricter values of its own inside it; none of
@@ -2061,6 +2086,8 @@ export function createCms(config: GeekityConfig = {}): Cms {
 
   // The admin goes on before the public site, for the same reason.
   mountAdmin(app);
+  // Before the public site, which claims every unmatched path.
+  mountPluginRoutes(app, plugins);
   mountPublicSite(app);
 
   /**
@@ -2166,6 +2193,8 @@ export function createCms(config: GeekityConfig = {}): Cms {
       // over one simply sends the next one, with everything still waiting in it.
       digests.start();
 
+      await plugins.reconcile(readEnabledPlugins(resolved.contentDir));
+
       return new Promise((resolve) => {
         server = serveNode({ fetch: app.fetch, port: resolved.port }, (info) => {
           resolve({ port: info.port });
@@ -2176,6 +2205,7 @@ export function createCms(config: GeekityConfig = {}): Cms {
     async close() {
       const running = server;
       server = undefined;
+      await plugins.close();
       scheduler.stop();
       digests.stop();
       avatars.stop();
