@@ -825,14 +825,12 @@ function negotiateDocument(
     // post, so nothing shared may hold it and it carries no validator. A page
     // drawn for everybody is exactly what it has always been.
     ...(viewer === undefined ? {} : { private: true }),
-    // The JSON is the file, so the file's hash and dates validate it. The
-    // Markdown adds a heading the file does not have, so its own bytes
-    // validate it and a change in how it is drawn is a new ETag. The HTML
-    // also draws the theme, the conversation, the neighbours and whatever
-    // else the site holds, none of which the file's hash sees, so it is
-    // validated by the page it drew (TASK-181). Nothing
-    // records when a withdrawn reply stopped being shown, so the HTML has no
-    // date that could agree with that ETag and carries no Last-Modified.
+    // The JSON is the file, so the file's hash and dates validate it. The HTML
+    // also draws the theme, the conversation, the neighbours and whatever else
+    // the site holds, none of which the file's hash sees, so it is validated by
+    // the page it drew (TASK-181). Nothing records when a withdrawn reply
+    // stopped being shown, so the HTML has no date that could agree with that
+    // ETag and carries no Last-Modified.
     ...(page === undefined
       ? {
           etag: representationEtag(representation, markdown ?? document.hash),
