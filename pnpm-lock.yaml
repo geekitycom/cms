@@ -329,6 +329,10 @@ importers:
         version: 7.0.2
 
   packages/plugin-llm:
+    dependencies:
+      '@cfworker/json-schema':
+        specifier: ^4.1.1
+        version: 4.1.1
     devDependencies:
       '@geekity/cms':
         specifier: workspace:*

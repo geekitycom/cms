@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createCms, createUser } from '@geekity/cms';
 import type { Cms, Plugin } from '@geekity/cms';
 
-/** A site with the plugin installed and enabled, and an admin signed in to it. */
+/** A site with the plugins installed and enabled, and an admin signed in to it. */
 
 export const SCREEN = '/admin/plugins/@geekity/plugin-llm';
 const ADA = { username: 'ada', password: 'correct horse battery' };
@@ -26,7 +26,7 @@ export async function closeSites(): Promise<void> {
 }
 
 export async function llmSite(
-  plugin: Plugin,
+  ...plugins: Plugin[]
 ): Promise<{ cms: Cms; admin: Admin; contentDir: string; dataDir: string }> {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-llm-data-'));
   const contentDir = await mkdtemp(path.join(tmpdir(), 'geekity-llm-content-'));
@@ -34,10 +34,13 @@ export async function llmSite(
   mkdirSync(path.join(contentDir, '_data'), { recursive: true });
   writeFileSync(
     path.join(contentDir, '_data', 'site.json'),
-    JSON.stringify({ title: 'Geekity', plugins: { [plugin.name]: { enabled: true } } }),
+    JSON.stringify({
+      title: 'Geekity',
+      plugins: Object.fromEntries(plugins.map((plugin) => [plugin.name, { enabled: true }])),
+    }),
   );
   await createUser({ dataDir, ...ADA });
-  const cms = createCms({ dataDir, contentDir, watch: false, plugins: [plugin] });
+  const cms = createCms({ dataDir, contentDir, watch: false, plugins });
   opened.push(cms);
   return { cms, admin: await signIn(cms), contentDir, dataDir };
 }

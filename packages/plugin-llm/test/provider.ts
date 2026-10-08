@@ -9,6 +9,8 @@ import type { AddressInfo } from 'node:net';
 
 export interface ProviderAnswer {
   status: number;
+  /** How long to wait before answering, to outlast a timeout. */
+  delayMs?: number;
   headers?: Record<string, string>;
   body: string;
 }
@@ -26,6 +28,19 @@ export interface FakeProvider {
   received: Received[];
   answer(next: ProviderAnswer): void;
   close(): Promise<void>;
+}
+
+/** A 200 whose message content is `content`, as a provider answers one. */
+export function replying(content: string): ProviderAnswer {
+  return {
+    status: 200,
+    body: JSON.stringify({
+      id: 'gen-2',
+      model: 'acme/tiny-1',
+      choices: [{ index: 0, message: { role: 'assistant', content } }],
+      usage: { prompt_tokens: 40, completion_tokens: 12, total_tokens: 52, cost: 0.00031 },
+    }),
+  };
 }
 
 export const ANSWERED = {
@@ -52,8 +67,12 @@ export async function fakeProvider(): Promise<FakeProvider> {
         headers: request.headers,
         body: text === '' ? undefined : (JSON.parse(text) as unknown),
       });
-      response.writeHead(next.status, { 'content-type': 'application/json', ...next.headers });
-      response.end(next.body);
+      const { status, headers, body, delayMs = 0 } = next;
+      setTimeout(() => {
+        if (response.destroyed) return;
+        response.writeHead(status, { 'content-type': 'application/json', ...headers });
+        response.end(body);
+      }, delayMs);
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

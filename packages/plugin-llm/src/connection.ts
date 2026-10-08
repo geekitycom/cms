@@ -11,6 +11,14 @@ export interface LlmConnection {
   readonly apiKey: string | undefined;
   /** The model asked for when a call names none. */
   readonly model: string;
+  /**
+   * Who is calling, sent to OpenRouter as `HTTP-Referer` and
+   * `X-OpenRouter-Title`, or `undefined` for a provider that is not OpenRouter.
+   * OpenRouter also gets `provider.require_parameters` with a schema.
+   */
+  readonly openRouter: { readonly siteUrl: string; readonly siteTitle: string } | undefined;
+  /** How long a call may take, in milliseconds. */
+  readonly timeoutMs: number;
 }
 
 /** Why a call came to nothing. */
@@ -20,15 +28,29 @@ export type LlmFailure =
   | { readonly kind: 'no-credit' }
   /** `retryAfter` is in seconds, when the provider said. */
   | { readonly kind: 'rate-limited'; readonly retryAfter: number | undefined }
-  /** `message` is the provider's own, with the key taken out. */
+  /**
+   * The provider failed to answer: a 5xx or another status that a later try
+   * may get past. `message` is the provider's own, with the key taken out.
+   */
   | { readonly kind: 'unavailable'; readonly status: number; readonly message: string | undefined }
+  /**
+   * The provider refused the request as asked (400, 404 or 422), such as an
+   * unknown model or one that cannot give structured output. Trying again
+   * will not help; changing the model or the request may.
+   */
+  | { readonly kind: 'rejected'; readonly status: number; readonly message: string | undefined }
+  /** The reply was not what was asked for: no text, not JSON, or not what the schema says. */
+  | { readonly kind: 'invalid-output'; readonly reason: string }
+  | { readonly kind: 'timeout'; readonly seconds: number }
+  /** The caller's signal stopped the call. */
+  | { readonly kind: 'aborted' }
   | { readonly kind: 'network' };
 
 export type LlmOutcome<Value> =
   { readonly ok: true; readonly value: Value } | { readonly ok: false; readonly error: LlmFailure };
 
-/** How long a call may take before it counts as a network failure. */
-const TIMEOUT_MS = 30_000;
+/** Where OpenRouter answers. A connection to any other host gets no OpenRouter extras. */
+export const OPENROUTER_HOST = 'openrouter.ai';
 
 /**
  * POST a chat-completions request and hand back the parsed JSON of a 2xx
@@ -42,7 +64,15 @@ export async function chatCompletion(
   const { apiKey } = connection;
   if (apiKey === undefined || apiKey === '') return failed({ kind: 'unconfigured' });
 
+  const timeout = AbortSignal.timeout(connection.timeoutMs);
+  const stopped = (): LlmFailure => {
+    if (signal?.aborted === true) return { kind: 'aborted' };
+    if (timeout.aborted) return { kind: 'timeout', seconds: connection.timeoutMs / 1000 };
+    return { kind: 'network' };
+  };
+
   let response: Response;
+  let text: string;
   try {
     response = await fetch(`${connection.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
@@ -50,15 +80,21 @@ export async function chatCompletion(
         authorization: `Bearer ${apiKey}`,
         'content-type': 'application/json',
         accept: 'application/json',
+        ...(connection.openRouter === undefined
+          ? {}
+          : {
+              'http-referer': connection.openRouter.siteUrl,
+              'x-openrouter-title': connection.openRouter.siteTitle,
+            }),
       },
       body: JSON.stringify({ model: connection.model, ...body }),
-      signal: AbortSignal.any([AbortSignal.timeout(TIMEOUT_MS), ...(signal ? [signal] : [])]),
+      signal: AbortSignal.any([timeout, ...(signal ? [signal] : [])]),
     });
+    text = await response.text();
   } catch {
-    return failed({ kind: 'network' });
+    return failed(stopped());
   }
 
-  const text = await response.text().catch(() => '');
   if (response.ok) {
     try {
       return { ok: true, value: JSON.parse(text) as unknown };
@@ -71,20 +107,6 @@ export async function chatCompletion(
     }
   }
   return failed(failureFor(response, text, apiKey));
-}
-
-/**
- * The smallest call that proves the connection: one short message, a reply of
- * a few tokens. Succeeds with the model the provider says answered.
- */
-export async function testConnection(connection: LlmConnection): Promise<LlmOutcome<string>> {
-  const outcome = await chatCompletion(connection, {
-    messages: [{ role: 'user', content: 'Reply with the word OK.' }],
-    max_tokens: 16,
-  });
-  if (!outcome.ok) return outcome;
-  const model = isRecord(outcome.value) ? outcome.value['model'] : undefined;
-  return { ok: true, value: typeof model === 'string' && model !== '' ? model : connection.model };
 }
 
 /** A failure in plain words, naming the provider by its host and never the key. */
@@ -103,10 +125,21 @@ export function describeFailure(error: LlmFailure, connection: LlmConnection): s
         : `${host} is limiting requests. Try again in ${String(error.retryAfter)} seconds.`;
     case 'unavailable':
       return `${host} could not answer (status ${String(error.status)})${error.message === undefined ? '.' : `: ${error.message}`}`;
+    case 'rejected':
+      return `${host} refused the request (status ${String(error.status)})${error.message === undefined ? '.' : `: ${error.message}`}`;
+    case 'invalid-output':
+      return `The model's reply was not usable. ${error.reason}`;
+    case 'timeout':
+      return `${host} did not answer within ${String(error.seconds)} seconds.`;
+    case 'aborted':
+      return 'The call was stopped before it finished.';
     case 'network':
       return `${host} could not be reached. Check the base URL.`;
   }
 }
+
+/** Statuses that say the request itself was wrong, which no retry fixes. */
+const REJECTED = new Set([400, 404, 422]);
 
 function failureFor(response: Response, text: string, apiKey: string): LlmFailure {
   switch (response.status) {
@@ -119,7 +152,7 @@ function failureFor(response: Response, text: string, apiKey: string): LlmFailur
       return { kind: 'rate-limited', retryAfter: retryAfter(response.headers.get('retry-after')) };
     default:
       return {
-        kind: 'unavailable',
+        kind: REJECTED.has(response.status) ? 'rejected' : 'unavailable',
         status: response.status,
         message: providerMessage(text)?.replaceAll(apiKey, 'the API key'),
       };
@@ -154,6 +187,6 @@ function failed(error: LlmFailure): { ok: false; error: LlmFailure } {
   return { ok: false, error };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
