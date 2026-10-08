@@ -25,6 +25,13 @@ export default defineConfig({
 });
 ```
 
+On Docker, add the package to the plugins folder instead, then press Reload
+under `/admin/plugins`:
+
+```sh
+docker compose exec geekity geekity plugin add @geekity/plugin-llm
+```
+
 Enable it under `/admin/plugins`. Its screen is
 `/admin/plugins/@geekity/plugin-llm`.
 

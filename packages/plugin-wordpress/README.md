@@ -27,6 +27,13 @@ export default defineConfig({
 });
 ```
 
+On Docker, add the package to the plugins folder instead, then press Reload
+under `/admin/plugins`:
+
+```sh
+docker compose exec geekity geekity plugin add @geekity/plugin-wordpress
+```
+
 `geekity import wordpress-actor` works as soon as the plugin is installed. The
 old paths are served only while the plugin is enabled under `/admin/plugins`,
 and disabling it takes them away on the next request, with nothing restarted.

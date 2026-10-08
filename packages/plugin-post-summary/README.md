@@ -25,6 +25,14 @@ export default defineConfig({
 });
 ```
 
+On Docker, add both packages to the plugins folder instead, then press Reload
+under `/admin/plugins`:
+
+```sh
+docker compose exec geekity geekity plugin add @geekity/plugin-llm
+docker compose exec geekity geekity plugin add @geekity/plugin-post-summary
+```
+
 Enable LLM under `/admin/plugins` and set its API key on its screen. Then
 enable Post summary. It has no settings of its own: it uses the model chosen
 on the LLM screen, which must support structured output.
