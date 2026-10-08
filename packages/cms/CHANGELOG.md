@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.25.0](https://github.com/geekitycom/cms/compare/v0.24.0...v0.25.0) (2026-10-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** the wordpressActivityPub setting, User.wordpressActorId, `geekity import wordpress-actor`, setUserWordPressActor and the WordPress federation exports are removed from @geekity/cms. Install and enable @geekity/plugin-wordpress instead; setUserActorId replaces setUserWordPressActor.
+
+### Features
+
+* **cms:** head a document's markdown with its title ([0e923bf](https://github.com/geekitycom/cms/commit/0e923bf2b699a1d5eba22df63da999b764884573))
+* **cms:** install plugin packages into the plugins folder with geekity plugin add ([696399c](https://github.com/geekitycom/cms/commit/696399c1e659780c0cc331fa122631fe4a6a0fd3))
+* **cms:** let plugins add editor actions beside the title, description and tags fields ([f2d7b82](https://github.com/geekitycom/cms/commit/f2d7b8270af7f1d2b64ed9e6449c4cddaa84ce62))
+* **cms:** let plugins declare settings and secrets, drawn as a form on their screen ([4df98a5](https://github.com/geekitycom/cms/commit/4df98a573a744454619dcf9c3e857564d626d748))
+* **cms:** let plugins fetch public URLs and offer tag choices in the editor ([2e71602](https://github.com/geekitycom/cms/commit/2e71602c2547d6fc8c2e867e80d799578fbb89cf))
+* **cms:** let plugins provide and use services, typed by a map the provider extends ([d2cfc8a](https://github.com/geekitycom/cms/commit/d2cfc8ac90bf19ed7be14ae55fd65876144527b2))
+* **cms:** move the WordPress ActivityPub compatibility out of core ([7dad017](https://github.com/geekitycom/cms/commit/7dad017741033c3ed261964fac7666d820eb2de0))
+* **cms:** register plugins with dependencies and enable them from a plugins screen ([8a5dfd0](https://github.com/geekitycom/cms/commit/8a5dfd0cfc3f7aa27401b1f923b8b3b60fd7adb2))
+* **cms:** supervise geekity serve and reload it without dropping requests ([a2176cd](https://github.com/geekitycom/cms/commit/a2176cd65a49a998b9ea0ce891025b34a62e58b1))
+
+
+### Bug Fixes
+
+* **cms:** keep a flash queued on a draining worker and make plugin route order irrelevant ([459aa01](https://github.com/geekitycom/cms/commit/459aa01693c43b93c840be86dd99d1bd4f6cdded))
+* **cms:** redirect the short .md and .json spelling to index ([43c2261](https://github.com/geekitycom/cms/commit/43c2261f08ecf1ad0e5ae526c4527e63819b35da))
+
 ## [0.24.0](https://github.com/geekitycom/cms/compare/v0.23.0...v0.24.0) (2026-10-07)
 
 
