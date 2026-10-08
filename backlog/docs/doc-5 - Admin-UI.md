@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-08 15:16'
+updated_date: '2026-10-08 15:59'
 ---
 # Admin UI
 
@@ -305,6 +305,7 @@ What the screens make of the library:
   an error alert saying nothing was saved. Discard mine and edit the file on
   disk is a link; Keep mine and overwrite the file posts the refused form
   again with the hash the file has now.
+- **Plugin buttons** (decision-33, TASK-285). A running plugin's editor action is a soft button under the Title, Description or Tags field, drawn `hidden` so that with JavaScript off there is nothing to press and the form posts exactly what it did without plugins. `static/editor-actions.js` shows it, posts the form to the action's endpoint on a click, and puts the answer under it: a bordered box with the suggestion, **Accept** (primary) and **Dismiss** (ghost), or the plain-words error in the status line, in `text-error`. Accept fills the field, fires `input` so the slug follows a title, and saves nothing; a tags suggestion adds only the tags the field lacks. A button its plugin does not offer for the draft is not drawn, and a press that finds the draft no longer fits hides it with the reason. With no running plugin action the editor's HTML and scripts are unchanged.
 
 ## Comments
 
@@ -373,6 +374,7 @@ What the screens make of the library:
 - The settings form posts to the screen's own URL with `action=save`. Public boxes write the plugin's entry in `site.json`, keeping every key they do not model; an empty box removes the key so the default applies. A refused value comes back on the screen with status 400, the problem on its field and nothing written. A stored value the field does not accept is shown as its default, with a line saying the value in `site.json` was set aside.
 - A secret is never drawn. Its box is a password field showing Set or Not set; a blank box keeps the stored secret, and **Forget the stored ...** removes it. Each secret's hint names its exact environment variable. A secret the environment sets has no box at all and reads "Set by the environment variable ...".
 - An action button posts `action=<id>`. Core runs the plugin's action and shows its outcome as a notice or an error flash, escaped.
+- A plugin's editor actions answer at `/admin/plugins/<package name>/editor/<id>`, JSON behind the guard and the CSRF token, registered before the plugin screens. See Editor.
 
 ## Appearance
 

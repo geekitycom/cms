@@ -74,6 +74,7 @@ import { CONTACT_FRONT_MATTER_KEY } from '../contact/form.ts';
 import { authorNames, userForAuthor } from '../web/authors.ts';
 import { findUserById, listUsers } from './accounts.ts';
 import type { User } from './accounts.ts';
+import { editorActionViews } from './editor-actions.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
 import { LANGUAGE_TAG_PATTERN, readSiteSettings } from './settings.ts';
@@ -419,29 +420,13 @@ export function mountDocumentScreens(
   });
 }
 
-/** What a submitted editor form asks for. */
-interface SaveFromFormOptions {
-  kind: DocumentKind;
-  render: AdminRender;
-  /** The document being replaced, or `undefined` when one is being made. */
-  document: Document | undefined;
-  body: Record<string, unknown>;
-}
-
-/**
- * Write what the editor submitted through {@link writeDocument}, and answer
- * with the editor again: the refusal on the form, the conflict side by side,
- * or the saved document under a flash.
- */
-async function saveFromForm(
-  c: Context<GeekityEnv>,
-  options: SaveFromFormOptions,
-): Promise<Response> {
-  const { kind, render, document, body } = options;
-  const store = c.var.store;
-  const contentDir = c.var.config.contentDir;
-
-  const form: EditorForm = {
+/** The editor form as the browser submitted it, read the same way for a save and for an editor action. */
+export function submittedForm(
+  kind: DocumentKind,
+  body: Record<string, unknown>,
+  contentDir: string,
+): EditorForm {
+  return {
     title: text(body['title']).trim(),
     slug: text(body['slug']).trim(),
     permalink: text(body['permalink']).trim(),
@@ -477,6 +462,31 @@ async function saveFromForm(
     body: normalizeBody(text(body['body'])),
     hash: text(body['hash']),
   };
+}
+
+/** What a submitted editor form asks for. */
+interface SaveFromFormOptions {
+  kind: DocumentKind;
+  render: AdminRender;
+  /** The document being replaced, or `undefined` when one is being made. */
+  document: Document | undefined;
+  body: Record<string, unknown>;
+}
+
+/**
+ * Write what the editor submitted through {@link writeDocument}, and answer
+ * with the editor again: the refusal on the form, the conflict side by side,
+ * or the saved document under a flash.
+ */
+async function saveFromForm(
+  c: Context<GeekityEnv>,
+  options: SaveFromFormOptions,
+): Promise<Response> {
+  const { kind, render, document, body } = options;
+  const store = c.var.store;
+  const contentDir = c.var.config.contentDir;
+
+  const form = submittedForm(kind, body, contentDir);
 
   const action = text(body['action']);
   // The buttons doc-5 names are shortcuts past the checkbox: Save draft and
@@ -2018,6 +2028,8 @@ async function renderEditor(
       : {}),
     // Who this can be attributed to, and who it is attributed to now.
     authors: authorChoices(c, form.author),
+    // Running plugins' buttons beside the title, description and tags.
+    editorActions: editorActionViews(c, kind, form),
     // What an empty Language field means.
     siteLanguage: readSiteSettings(c.var.config.contentDir).language,
     heading:

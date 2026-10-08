@@ -364,6 +364,77 @@ export type PluginService<Name extends string> = Name extends keyof PluginServic
   ? PluginServices[Name]
   : unknown;
 
+/** A field of the post and page editor that a plugin's button can sit beside. */
+export type PluginEditorField = 'title' | 'description' | 'tags';
+
+/**
+ * What kind of post a draft is, by Post Type Discovery over what the editor
+ * holds: a post with a `like-of` is a `like`, one with photos a `photo`, an
+ * untitled one a `note` and a titled one an `article`.
+ */
+export type PluginPostType =
+  | 'event'
+  | 'rsvp'
+  | 'repost'
+  | 'like'
+  | 'reply'
+  | 'photo'
+  | 'read'
+  | 'bookmark'
+  | 'note'
+  | 'article';
+
+/** The document in the editor as it stands when a button is pressed, saved or not. */
+export interface PluginEditorDraft {
+  readonly type: 'post' | 'page';
+  /** A post's kind, or `undefined` for a page. */
+  readonly postType: PluginPostType | undefined;
+  /** Whether the document is on disk, rather than new in the editor. */
+  readonly saved: boolean;
+  readonly title: string;
+  /** The Markdown body. */
+  readonly body: string;
+  readonly description: string;
+  readonly tags: readonly string[];
+  /** The language it is written in: its own `lang`, else the site's. */
+  readonly lang: string;
+}
+
+/** What a press of an editor button hands its plugin. */
+export interface PluginEditorContext {
+  readonly draft: PluginEditorDraft;
+  /** Aborts when the author leaves the page before the answer comes. */
+  readonly signal: AbortSignal;
+}
+
+/**
+ * What an editor button answers: a value the author may accept into the
+ * field, or why there is none, in plain words. Core shows either escaped.
+ */
+export type PluginEditorSuggestion =
+  { readonly ok: true; readonly value: string } | { readonly ok: false; readonly message: string };
+
+/**
+ * A button beside an editor field. Core draws it, posts the draft to the
+ * plugin when it is pressed, and shows the suggestion with Accept and
+ * Dismiss. Accepting fills the field and saves nothing; nothing is sent
+ * unless the author presses the button. Without JavaScript there is no
+ * button.
+ */
+export interface PluginEditorAction {
+  /** Lower case words joined by `-`, unique among the plugin's editor actions. */
+  readonly id: string;
+  readonly field: PluginEditorField;
+  /** The button's words, such as `Suggest title`. */
+  readonly label: string;
+  /**
+   * Whether the button is offered for this draft. Asked when the editor opens
+   * and again when the button is pressed. Absent offers it always.
+   */
+  offers?(draft: PluginEditorDraft): boolean;
+  suggest(context: PluginEditorContext): PluginEditorSuggestion | Promise<PluginEditorSuggestion>;
+}
+
 /** What a plugin knows of the site it runs on. */
 export interface PluginSiteInfo {
   /** The site's public URL. */
@@ -417,6 +488,13 @@ export interface PluginHost<
    * installed and available, enabled or not.
    */
   command(command: PluginCommand): void;
+  /**
+   * Add a button beside a field of the post and page editor, drawn while the
+   * plugin is enabled. Pressing it posts the draft to
+   * `/admin/plugins/<package name>/editor/<id>`, which only a signed-in user
+   * with the page's CSRF token reaches.
+   */
+  editorAction(action: PluginEditorAction): void;
   /** The site's base URL and title, read when asked. */
   siteInfo(): PluginSiteInfo;
   /**

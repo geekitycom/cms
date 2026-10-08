@@ -16,6 +16,7 @@ import type {
   Plugin,
   PluginCommand,
   PluginDataFolder,
+  PluginEditorAction,
   PluginFederationMiddleware,
   PluginHost,
   PluginRouteHandler,
@@ -56,6 +57,8 @@ export interface PluginContributions {
   commands: readonly PluginCommand[];
   /** The settings fields it declared, empty when it has none. */
   settings: readonly PluginSettingField[];
+  /** Its buttons beside editor fields, in the order it declared them. */
+  editorActions: readonly PluginEditorAction[];
 }
 
 /** What plugins read through the registry: the site's folders, its environment, its base URL and title. */
@@ -307,6 +310,7 @@ const NOTHING_DECLARED: PluginContributions = {
   screen: undefined,
   commands: [],
   settings: [],
+  editorActions: [],
 };
 
 /** What a plugin handed to `host.provide`, boxed so that providing `undefined` still counts. */
@@ -347,6 +351,7 @@ function register(
   const routes: PluginRoute[] = [];
   const federation: PluginFederationMiddleware[] = [];
   const commands: PluginCommand[] = [];
+  const editorActions: PluginEditorAction[] = [];
   let screen: PluginScreen | undefined;
   let settings: readonly PluginSettingField[] | undefined;
   let service: ProvidedService | undefined;
@@ -376,6 +381,20 @@ function register(
     command(declared) {
       declaring('a command');
       commands.push(declared);
+    },
+    editorAction(declared) {
+      declaring('an editor action');
+      if (!EDITOR_ACTION_ID.test(declared.id)) {
+        throw new Error(
+          `${JSON.stringify(declared.id)} is not an editor action id: use lower case words joined by -.`,
+        );
+      }
+      if (editorActions.some((entry) => entry.id === declared.id)) {
+        throw new Error(
+          `${name} declares two editor actions with the id ${JSON.stringify(declared.id)}.`,
+        );
+      }
+      editorActions.push(declared);
     },
     siteInfo: () => options.siteInfo(),
     provide(value) {
@@ -411,7 +430,7 @@ function register(
     plugin.register(host);
     return {
       problem: undefined,
-      declared: { routes, federation, screen, commands, settings: settings ?? [] },
+      declared: { routes, federation, screen, commands, settings: settings ?? [], editorActions },
       service,
     };
   } catch (error) {
@@ -423,6 +442,9 @@ function register(
     registering = false;
   }
 }
+
+/** An editor action's id, which is the last segment of its endpoint's path. */
+const EDITOR_ACTION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** A file name a plugin may use in its folder: one segment, not hidden. */
 const DATA_FILE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;

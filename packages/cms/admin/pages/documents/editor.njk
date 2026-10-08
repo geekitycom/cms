@@ -32,6 +32,30 @@
 {% endif %}
 {% endmacro %}
 
+{# A running plugin's buttons beside one field (decision-33). Hidden until
+   static/editor-actions.js finds them, so with JavaScript off there is
+   nothing to press. Each has a status line for its errors and a suggestion
+   with Accept, which fills the field and saves nothing, and Dismiss. #}
+{% macro pluginActions(fieldId, buttons) %}
+{% if buttons %}
+<div class="flex flex-col gap-2" data-editor-actions="{{ fieldId }}">
+  {% for action in buttons %}
+  <div class="flex flex-col items-start gap-1" data-editor-action="{{ action.url }}">
+    {{ button(action.label, style='soft', hidden=true) }}
+    <p class="text-sm" role="status"></p>
+    <div class="flex w-full flex-col gap-2 rounded-box border border-base-300 p-3" role="group" aria-label="{{ action.label }}" hidden>
+      <p class="whitespace-pre-wrap break-words"></p>
+      <div class="flex gap-2">
+        {{ button('Accept', color='primary') }}
+        {{ button('Dismiss', style='ghost') }}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
+
 {% block content %}
   <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
 
@@ -72,6 +96,7 @@
         {% set titleHint %}{% if kind.type == "post" %}Leave it empty to write a note: the post is then its words, and takes its slug from the first of them.{% endif %}{% endset %}
         {#- A post may go without one, and is then a note; a page is always named. -#}
         {{ field.text('editor-title', 'title', 'Title', value=form.title, required=(kind.type == "page"), autofocus=true, error=(error if errorField == 'editor-title' else ''), hint=titleHint) }}
+        {{ pluginActions('editor-title', editorActions['editor-title']) }}
 
         {{ field.textarea('editor-body', 'body', 'Body', value=form.body, rows=24) }}
 
@@ -242,6 +267,7 @@
         {% call collapse('Tags and categories', open.taxonomy, fields=true) %}
           {% if kind.tagged %}
             {{ field.text('editor-tags', 'tags', 'Tags', value=form.tags, hint='Separated by commas.') }}
+            {{ pluginActions('editor-tags', editorActions['editor-tags']) }}
           {% endif %}
           {% if kind.categorised %}
             {{ field.text('editor-categories', 'categories', 'Categories', value=form.categories, hint='Separated by commas.') }}
@@ -318,6 +344,7 @@
 
       {% call collapse('Summary and language', open.summary, fields=true) %}
         {{ field.text('editor-description', 'description', 'Description', value=form.description, error=(error if errorField == 'editor-description' else '')) }}
+        {{ pluginActions('editor-description', editorActions['editor-description']) }}
 
         {#- The `lang` front matter (TASK-154): a post or page written in another
             language than the site's says so, for screen readers, translation
@@ -391,5 +418,8 @@
   <script defer src="{{ assetPrefix }}slug.js"></script>
   {% if kind.type == 'post' %}
     <script defer src="{{ assetPrefix }}location.js"></script>
+  {% endif %}
+  {% if editorActions | length %}
+    <script defer src="{{ assetPrefix }}editor-actions.js"></script>
   {% endif %}
 {% endblock %}

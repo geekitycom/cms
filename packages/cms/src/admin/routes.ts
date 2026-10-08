@@ -55,6 +55,7 @@ import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts'
 import { clientAddress, createLoginThrottle, describeWait, loginKeys } from './throttle.ts';
 import { mountToolsScreen } from './tools.ts';
 import { mountPersonalDataScreen } from './personal-data.ts';
+import { mountEditorActions } from './editor-actions.ts';
 import { mountPluginsScreen, pluginScreens } from './plugins.ts';
 import type { LoginThrottle } from './throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
@@ -380,6 +381,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountAppearanceScreen(app, { render });
 
   // Every installed plugin, and the switches that enable each (decision-33).
+  // The editor's plugin buttons first, whose endpoints sit under a plugin's
+  // screen path.
+  mountEditorActions(app);
   mountPluginsScreen(app, { render });
 
   // The jobs a site runs rather than the things it sets: reading every file

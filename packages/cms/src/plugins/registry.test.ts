@@ -167,6 +167,7 @@ describe('the plugin registry', () => {
       'apiVersion',
       'command',
       'data',
+      'editorAction',
       'federation',
       'get',
       'name',
@@ -176,6 +177,42 @@ describe('the plugin registry', () => {
       'siteInfo',
       'use',
     ]);
+  });
+
+  it('fails the register of a plugin whose editor action ids are not usable', () => {
+    const suggest = () => ({ ok: true as const, value: '' });
+    const registry = createPluginRegistry(
+      fromConfig(
+        plugin(
+          '@acme/plugin-shouting',
+          {},
+          {
+            register(host: PluginHost) {
+              host.editorAction({ id: 'Suggest Title', field: 'title', label: 'X', suggest });
+            },
+          },
+        ),
+        plugin(
+          '@acme/plugin-twice',
+          {},
+          {
+            register(host: PluginHost) {
+              host.editorAction({ id: 'suggest', field: 'title', label: 'X', suggest });
+              host.editorAction({ id: 'suggest', field: 'tags', label: 'Y', suggest });
+            },
+          },
+        ),
+      ),
+      SITE,
+    );
+    assert.match(
+      registry.problem('@acme/plugin-shouting') ?? '',
+      /"Suggest Title" is not an editor action id/,
+    );
+    assert.match(
+      registry.problem('@acme/plugin-twice') ?? '',
+      /two editor actions with the id "suggest"/,
+    );
   });
 
   it('refuses two packages whose names make one variable prefix, naming both', () => {
