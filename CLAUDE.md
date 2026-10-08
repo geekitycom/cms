@@ -43,16 +43,17 @@ imperative, and carries no trailing full stop.
 
 `scope` is optional. When a commit names one, it is one of:
 
-| Scope              | What it covers                                     |
-| ------------------ | -------------------------------------------------- |
-| `cms`              | The published `@geekity/cms` package.              |
-| `demo`             | `apps/demo`.                                       |
-| `deps`             | Dependency bumps.                                  |
-| `ci`               | GitHub Actions and other automation.               |
-| `docs`             | README, this file, and the docs directory.         |
-| `release`          | release-please and publishing.                     |
-| `plugin-wordpress` | The published `@geekity/plugin-wordpress` package. |
-| `plugin-llm`       | The published `@geekity/plugin-llm` package.       |
+| Scope                 | What it covers                                        |
+| --------------------- | ----------------------------------------------------- |
+| `cms`                 | The published `@geekity/cms` package.                 |
+| `demo`                | `apps/demo`.                                          |
+| `deps`                | Dependency bumps.                                     |
+| `ci`                  | GitHub Actions and other automation.                  |
+| `docs`                | README, this file, and the docs directory.            |
+| `release`             | release-please and publishing.                        |
+| `plugin-wordpress`    | The published `@geekity/plugin-wordpress` package.    |
+| `plugin-llm`          | The published `@geekity/plugin-llm` package.          |
+| `plugin-post-summary` | The published `@geekity/plugin-post-summary` package. |
 
 Examples:
 

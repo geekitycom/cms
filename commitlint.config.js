@@ -20,11 +20,22 @@ export default {
      * - `release` release-please and publishing
      * - `plugin-wordpress` the published @geekity/plugin-wordpress package
      * - `plugin-llm` the published @geekity/plugin-llm package
+     * - `plugin-post-summary` the published @geekity/plugin-post-summary package
      */
     'scope-enum': [
       2,
       'always',
-      ['cms', 'demo', 'deps', 'ci', 'docs', 'release', 'plugin-wordpress', 'plugin-llm'],
+      [
+        'cms',
+        'demo',
+        'deps',
+        'ci',
+        'docs',
+        'release',
+        'plugin-wordpress',
+        'plugin-llm',
+        'plugin-post-summary',
+      ],
     ],
   },
 };
