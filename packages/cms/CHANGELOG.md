@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.24.0](https://github.com/geekitycom/cms/compare/v0.23.0...v0.24.0) (2026-10-07)
+
+
+### Features
+
+* **cms:** render the home listing as markdown instead of serving llms.txt ([ea6f2d4](https://github.com/geekitycom/cms/commit/ea6f2d449c0008ecc29973f35ebf902866ba25e3))
+* **cms:** serve markdown and text/plain for listings and the front page ([ad47e99](https://github.com/geekitycom/cms/commit/ad47e9914a69daacb94eb1deebf3f537be4e6c6e))
+
 ## [0.23.0](https://github.com/geekitycom/cms/compare/v0.22.0...v0.23.0) (2026-10-06)
 
 
