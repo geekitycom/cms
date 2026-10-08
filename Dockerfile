@@ -33,9 +33,11 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 RUN pnpm fetch
 
 # Every workspace manifest, because a frozen install checks each importer the
-# lockfile names. apps/demo contributes its package.json and nothing else, and
-# only to this stage.
+# lockfile names. apps/demo and the plugin packages contribute their
+# package.json and nothing else, and only to this stage: the image holds core
+# alone (decision-33).
 COPY packages/cms/package.json packages/cms/package.json
+COPY packages/plugin-wordpress/package.json packages/plugin-wordpress/package.json
 COPY apps/demo/package.json apps/demo/package.json
 
 # --ignore-scripts: the root `prepare` is `husky && pnpm build`, and husky has

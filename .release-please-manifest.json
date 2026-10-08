@@ -1,3 +1,4 @@
 {
-  "packages/cms": "0.24.0"
+  "packages/cms": "0.24.0",
+  "packages/plugin-wordpress": "0.0.0"
 }

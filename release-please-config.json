@@ -11,6 +11,14 @@
     "packages/cms": {
       "package-name": "@geekity/cms",
       "changelog-path": "CHANGELOG.md"
+    },
+    "packages/plugin-wordpress": {
+      "package-name": "@geekity/plugin-wordpress",
+      "component": "plugin-wordpress",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": ["src/version.ts"],
+      "pull-request-title-pattern": "chore(release): release plugin-wordpress ${version}"
     }
   }
 }

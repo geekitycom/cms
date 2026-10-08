@@ -18,7 +18,12 @@ export default {
      * - `ci`      GitHub Actions and other automation
      * - `docs`    README, CLAUDE.md and the docs directory
      * - `release` release-please and publishing
+     * - `plugin-wordpress` the published @geekity/plugin-wordpress package
      */
-    'scope-enum': [2, 'always', ['cms', 'demo', 'deps', 'ci', 'docs', 'release']],
+    'scope-enum': [
+      2,
+      'always',
+      ['cms', 'demo', 'deps', 'ci', 'docs', 'release', 'plugin-wordpress'],
+    ],
   },
 };

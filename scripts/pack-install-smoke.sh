@@ -7,7 +7,9 @@
 # package.json would have shipped it. This script tests the artefact instead —
 # pack a tarball, scaffold a site with `geekity init`, install the tarball into
 # it, boot it, and ask it for three URLs — which is the last consequence of
-# decision-6 that nothing else covers.
+# decision-6 that nothing else covers. Every plugin package is packed and
+# installed beside it the same way (decision-33), and exercised through the
+# installed bin and the booted site.
 #
 # It is the body of the `pack-install` job in .github/workflows/ci.yml, so CI
 # and a laptop run the same steps. Usage:
@@ -91,27 +93,49 @@ pnpm --dir "${ROOT}" --filter @geekity/cms build
 
 log "packing the tarball into ${scratch}"
 pnpm --dir "${ROOT}" --filter @geekity/cms pack --pack-destination "${scratch}" >/dev/null
-tarball="$(find "${scratch}" -maxdepth 1 -name '*.tgz' -print -quit)"
+tarball="$(find "${scratch}" -maxdepth 1 -name 'geekity-cms-*.tgz' -print -quit)"
 if [[ -z "${tarball}" ]]; then
   echo "pnpm pack wrote no tarball into ${scratch}" >&2
   exit 1
 fi
 echo "packed ${tarball}"
 
+log "building and packing @geekity/plugin-wordpress"
+pnpm --dir "${ROOT}" --filter @geekity/plugin-wordpress build
+pnpm --dir "${ROOT}" --filter @geekity/plugin-wordpress pack --pack-destination "${scratch}" >/dev/null
+wordpress_tarball="$(find "${scratch}" -maxdepth 1 -name 'geekity-plugin-wordpress-*.tgz' -print -quit)"
+if [[ -z "${wordpress_tarball}" ]]; then
+  echo "pnpm pack wrote no plugin tarball into ${scratch}" >&2
+  exit 1
+fi
+echo "packed ${wordpress_tarball}"
+
 log "geekity init ${site}"
 # The bin is run from dist/ rather than through a workspace link, so this is
 # also a check that the compiled CLI resolves its own templates directory.
 node "${ROOT}/packages/cms/dist/cli.js" init "${site}"
 
-log "pointing the new site at the tarball"
+log "pointing the new site at the tarballs"
 node --input-type=commonjs -e '
   const { readFileSync, writeFileSync } = require("node:fs");
-  const [manifestPath, tarball] = process.argv.slice(1);
+  const [manifestPath, tarball, wordpress] = process.argv.slice(1);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   manifest.dependencies["@geekity/cms"] = "file:" + tarball;
+  manifest.dependencies["@geekity/plugin-wordpress"] = "file:" + wordpress;
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-' "${site}/package.json" "${tarball}"
-grep '@geekity/cms' "${site}/package.json"
+' "${site}/package.json" "${tarball}" "${wordpress_tarball}"
+grep '@geekity/' "${site}/package.json"
+
+log "installing the WordPress plugin in the site config"
+node --input-type=commonjs -e '
+  const { readFileSync, writeFileSync } = require("node:fs");
+  const [configPath] = process.argv.slice(1);
+  const config = readFileSync(configPath, "utf8")
+    .replace(/^/, "import wordpress from \"@geekity/plugin-wordpress\";\n")
+    .replace("export default defineConfig({", "export default defineConfig({\n  plugins: [wordpress],");
+  writeFileSync(configPath, config);
+' "${site}/geekity.config.ts"
+grep -n 'wordpress' "${site}/geekity.config.ts"
 
 log "installing"
 pnpm --dir "${site}" install
@@ -134,6 +158,9 @@ log "importing @geekity/cms/plugin from the installed tarball"
 cat >"${site}/plugin-check.ts" <<'TS'
 import { definePlugin } from '@geekity/cms/plugin';
 import type { Plugin, PluginHost } from '@geekity/cms/plugin';
+import wordpress from '@geekity/plugin-wordpress';
+
+export const installed: Plugin = wordpress;
 
 export const check: Plugin = definePlugin({
   name: '@scratch/plugin-check',
@@ -147,6 +174,48 @@ export const check: Plugin = definePlugin({
   },
 });
 TS
+
+log "running the plugin's command through the installed bin"
+(
+  cd "${site}"
+  pnpm exec geekity --help | grep -F 'geekity import wordpress-actor <username>'
+  pnpm exec geekity user add ada --password 'correct horse battery' >/dev/null
+  node --input-type=module -e '
+    import { generateKeyPairSync } from "node:crypto";
+    import { writeFileSync } from "node:fs";
+    const pair = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+    writeFileSync("ada.private.pem", pair.privateKey);
+  '
+  pnpm exec geekity import wordpress-actor ada --actor-id 'http://localhost:3000/?author=2' \
+    --wordpress-id 2 --private-key ada.private.pem --followers none
+  node --input-type=commonjs -e '
+    const { readFileSync, writeFileSync } = require("node:fs");
+    const file = "content/_data/site.json";
+    const site = JSON.parse(readFileSync(file, "utf8"));
+    site.plugins = { "@geekity/plugin-wordpress": { enabled: true } };
+    writeFileSync(file, JSON.stringify(site, null, 2) + "\n");
+  '
+)
+
+log "loading the plugin's bundle with no node_modules beside it"
+bundle_dir="${scratch}/bundle-only"
+mkdir -p "${bundle_dir}"
+cp "${site}/node_modules/@geekity/plugin-wordpress/dist/bundle/index.js" "${bundle_dir}/index.js"
+(
+  cd "${bundle_dir}"
+  node --input-type=module -e '
+    const { default: plugin } = await import("./index.js");
+    if (plugin.name !== "@geekity/plugin-wordpress" || typeof plugin.register !== "function") {
+      console.error("the bundle does not export the plugin");
+      process.exit(1);
+    }
+    console.log("ok  the bundle exports " + plugin.name + " " + plugin.version);
+  '
+)
 
 log "booting on port ${PORT}"
 # The site's output goes to a file rather than to this script's stdout. That is
@@ -195,6 +264,15 @@ log "asking the installed site for three URLs"
 check "/" "Hello, world"
 check "/2026/01/hello-world/" "Hello, world"
 check "/hello/" "a route of my own"
+
+log "asking the enabled WordPress plugin for its old actor path"
+actor="$(curl -fsS -H 'accept: application/activity+json' "${BASE}/wp-json/activitypub/1.0/actors/2")"
+if ! grep -qF '"id":"http://localhost:3000/?author=2"' <<<"${actor}"; then
+  echo "the old actor path did not serve the stored id:" >&2
+  echo "${actor}" >&2
+  exit 1
+fi
+echo "ok  GET /wp-json/activitypub/1.0/actors/2"
 
 log "type checking the scratch site against the published declarations"
 (cd "${site}" && npx tsc --noEmit)

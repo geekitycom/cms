@@ -328,6 +328,37 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  packages/plugin-wordpress:
+    dependencies:
+      '@fedify/fedify':
+        specifier: ^2.4.0
+        version: 2.4.0
+      '@fedify/vocab':
+        specifier: ^2.4.0
+        version: 2.4.0
+    devDependencies:
+      '@fedify/cli':
+        specifier: 2.4.0
+        version: 2.4.0(@jimp/custom@0.22.12)(@types/node@26.6.4)(supports-color@7.2.0)(typescript@7.0.2)
+      '@geekity/cms':
+        specifier: workspace:*
+        version: link:../cms
+      '@hono/node-server':
+        specifier: ^2.1.3
+        version: 2.1.3(hono@4.13.13)
+      '@types/node':
+        specifier: ^26.6.4
+        version: 26.6.4
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
 packages:
 
   '@11ty/dependency-tree-esm@2.0.4':

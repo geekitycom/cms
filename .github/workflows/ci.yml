@@ -1,8 +1,10 @@
 # The quality gates of decision-8, one job per gate so each can be named as a
 # required status check on `main`: lint, typecheck, test and build.
 #
-# `pnpm install` runs the root `prepare` script, which builds `packages/cms`, so
-# every job already has `dist/` before its own command runs. The `build` job is
+# `pnpm install` runs the root `prepare` script, which builds every package
+# under `packages/` (core and each `plugin-*`), so every job already has
+# `dist/` before its own command runs. The root scripts run recursively, so
+# each job covers the plugin packages as it covers core. The `build` job is
 # still here on its own: it is the check a branch protection rule points at, and
 # it is the one that fails loudly when the compiler is the problem.
 name: ci
@@ -130,6 +132,8 @@ jobs:
   # replaces `fetch`, so a follower's inbox is a function call — and this boots
   # the server on a real port, runs `fedify lookup` from `@fedify/cli` against
   # the actor and a post object, and delivers a `Create` to two real inboxes.
+  # Each plugin package with a federation of its own has a smoke test of its
+  # own, which `pnpm fed:smoke` runs after core's.
   #
   # A job of its own because it spawns processes and binds ports, and because a
   # federation failure should be readable as a federation failure rather than
@@ -149,7 +153,9 @@ jobs:
   # other job reaches `@geekity/cms` through a symlink, which shows the whole
   # source tree whether or not `files` in package.json would have shipped it;
   # this one packs a tarball, scaffolds a site with `geekity init`, installs the
-  # tarball into it and asks the booted site for three URLs.
+  # tarball into it and asks the booted site for three URLs. Each plugin
+  # package is packed and installed beside it, and exercised through the
+  # installed bin and the booted site.
   #
   # The steps live in `scripts/pack-install-smoke.sh` rather than in this file,
   # so the sequence can be run on a laptop before it is trusted here.
