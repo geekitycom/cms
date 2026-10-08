@@ -13,9 +13,9 @@
 # release pull request, `git pull` on main, then run this. `latest` is pushed
 # alongside the version, and so is a custom tag when one is given.
 #
-# A release normally publishes to npm too, and scripts/release.sh does both in
-# one run, with the quality gates run once. This script on its own is for
-# pushing only an image, or for finishing a release whose Docker half failed.
+# A release normally pushes the image as the last step of scripts/release.ts,
+# with the quality gates run once. This script on its own is for pushing only
+# an image, or for finishing a release whose image push failed.
 #
 # Usage (from the repository root):
 #
@@ -34,9 +34,7 @@ readonly PLATFORMS="linux/amd64,linux/arm64"
 readonly BUILDER="multiplatform"
 readonly DOCKERFILE="Dockerfile"
 readonly VERSION_FILE="packages/cms/package.json"
-# shellcheck source=scripts/lib/quality-gates.sh
-source "$(dirname -- "${BASH_SOURCE[0]}")/lib/quality-gates.sh"
-readonly GATES=("${DOCKER_GATES[@]}")
+readonly GATES=(lint format:check typecheck test)
 
 log() {
   printf '\033[1m==> %s\033[0m\n' "$*"
@@ -60,7 +58,7 @@ Options:
   --skip-gates  Build and push without running the quality gates. Warning: it
                 assumes the quality gates just passed on this commit. Use it
                 to finish a release whose gates already ran, as
-                scripts/release.sh does
+                scripts/release.ts does
   -h, --help    Show this help
 
 A normal release publishes to npm and ghcr.io together with pnpm release.
