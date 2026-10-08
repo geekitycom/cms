@@ -30,7 +30,6 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node ../../scripts/build-plugin-bundle.js",
-    "pretest": "pnpm --filter @geekity/cms build && pnpm --filter @geekity/plugin-llm build && pnpm build",
     "test": "tsx --import ../cms/src/__testing__/offline.ts --test \"test/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",

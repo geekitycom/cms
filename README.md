@@ -78,8 +78,8 @@ Run from the repository root.
 | `pnpm start`             | Starts the demo site once, without watching.                                                                                                                                                                                                                                                              |
 | `pnpm demo:reset`        | Replaces the demo's `playground/` with a fresh copy of `content/`.                                                                                                                                                                                                                                        |
 | `pnpm build`             | Compiles `packages/cms`, bundles the editor, compiles theme and admin CSS.                                                                                                                                                                                                                                |
-| `pnpm test`              | Runs the `node:test` suites in every package through `tsx`.                                                                                                                                                                                                                                               |
-| `pnpm test:coverage`     | The same suites with `--experimental-test-coverage`.                                                                                                                                                                                                                                                      |
+| `pnpm test`              | Builds every package once, then runs the `node:test` suites in every package through `tsx`.                                                                                                                                                                                                               |
+| `pnpm test:coverage`     | The same build and suites with `--experimental-test-coverage`.                                                                                                                                                                                                                                            |
 | `pnpm test:11ty`         | Builds the fixtures and the demo content with Eleventy, comparing URLs.                                                                                                                                                                                                                                   |
 | `pnpm typecheck`         | `tsc --noEmit` across the workspace, tests included.                                                                                                                                                                                                                                                      |
 | `pnpm lint`              | Fans out to each package's lint script.                                                                                                                                                                                                                                                                   |
@@ -96,7 +96,8 @@ Run from the repository root.
 | `pnpm release`           | Publishes to npm and pushes the image, with the quality gates run once.                                                                                                                                                                                                                                   |
 
 Package-scoped variants work too, for example
-`pnpm --filter @geekity/cms test` or `pnpm --filter demo dev`.
+`pnpm --filter @geekity/cms test` or `pnpm --filter demo dev`. A plugin package and the demo test against the built `@geekity/cms`,
+so run `pnpm build` before testing one of them on its own.
 
 ## Quality gates
 
