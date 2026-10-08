@@ -47,7 +47,8 @@ apps/demo/             private site that consumes the package via workspace:*
   eleventy.config.js re-exports the documented example config
   test/              boots the demo over HTTP, and builds it with Eleventy
 scripts/               pack-install-smoke.sh and docker-smoke.sh, the bodies of those CI jobs,
-                       and docker-build-push.sh, which publishes the image
+                       release.ts, which publishes a release, and docker-build-push.sh,
+                       which publishes the image
 deploy/compose.yaml    the compose file a Docker deployment starts from
 backlog/               tasks, docs and decisions (Backlog.md)
 ```
@@ -90,10 +91,8 @@ Run from the repository root.
 | `pnpm docker:dry-run`    | Prints the image tags a Docker publish would push, and builds nothing.                                                                                                                                                                                                                                    |
 | `pnpm docker:build-push` | Builds the image for amd64 and arm64 and pushes it to ghcr.io.                                                                                                                                                                                                                                            |
 | `pnpm docker:smoke`      | Builds the image locally, boots it on empty volumes and checks it serves.                                                                                                                                                                                                                                 |
-| `pnpm npm:dry-run`       | Prints the package, version and tag a publish needs, and publishes nothing.                                                                                                                                                                                                                               |
-| `pnpm npm:publish`       | Publishes `@geekity/cms` to npm from the commit carrying its version tag.                                                                                                                                                                                                                                 |
-| `pnpm release:dry-run`   | Prints every step of a release, and checks, publishes and builds nothing.                                                                                                                                                                                                                                 |
-| `pnpm release`           | Publishes to npm and pushes the image, with the quality gates run once.                                                                                                                                                                                                                                   |
+| `pnpm release:dry-run`   | Prints which packages a release would publish and whether it would push the image, and why. Checks no login and runs no gate.                                                                                                                                                                             |
+| `pnpm release`           | Publishes every package whose version is not on npm, then core's image if it has none, with the quality gates run once.                                                                                                                                                                                   |
 
 Package-scoped variants work too, for example
 `pnpm --filter @geekity/cms test` or `pnpm --filter demo dev`. A plugin package and the demo test against the built `@geekity/cms`,
@@ -423,7 +422,11 @@ mode `0600`, and an environment variable overrides it, as the
 plugin that targets a newer one is unavailable, with the reason on the Plugins
 screen. The peer range of `@geekity/cms` says which releases of core the
 package works with: npm checks it for a site that installs with npm, and the
-registry checks the copy in `plugin.json` for a folder install.
+registry checks the copy in `plugin.json` for a folder install. The plugin
+packages in this repository write `workspace:^`, which becomes a caret range on
+the core version they were built with, so before 1.0 each one accepts a single
+core minor. [Core releases and the plugins' core range](#core-releases-and-the-plugins-core-range)
+says what that means for a core release.
 
 **The bundle.** A folder install has no `node_modules`, so each plugin package
 also ships one self-contained ES module with every dependency inlined. The
@@ -2619,18 +2622,24 @@ request.
 
 ## Releasing
 
-`packages/cms` publishes only `dist`, `themes`, `templates`, `README.md` and
-`LICENSE`. Verify with:
+Five packages are released from this repository: `@geekity/cms` in
+`packages/cms` and the four plugin packages in `packages/plugin-*`. Each has
+its own version, changelog and tag. Core's tags read `v0.26.0`, and a plugin's
+tags carry its component, as `plugin-llm-v0.2.0`. `apps/demo` is private and
+unversioned, so it is not tracked.
+
+release-please writes the versions, the changelogs and the tags (decision-7).
+One command, run by a maintainer from main, publishes to npm and pushes the
+image. CI never publishes.
+
+`packages/cms` publishes only `dist`, `admin`, `themes`, `templates`,
+`README.md` and `LICENSE`, and a plugin package only `dist`, `README.md` and
+`LICENSE`. Check what a package would publish with:
 
 ```sh
 pnpm build
 pnpm --filter @geekity/cms pack
 ```
-
-Versions, tags and the changelog are automated by release-please (decision-7).
-Releasing to npm and ghcr.io is one command a maintainer runs from main once the
-release commit is in; CI never publishes. `apps/demo` is private and unversioned, so it is not
-tracked.
 
 ### How a release flows
 
@@ -2638,138 +2647,198 @@ tracked.
    `feat(cms): serve Atom and JSON feeds for posts` is merged into `main` with a
    merge commit, which keeps that commit as it is.
 2. `.github/workflows/release-please.yml` runs on the push. release-please
-   reads every Conventional Commit since the last release, works out the next
-   version, and opens or updates a **release pull request** that bumps
-   `packages/cms/package.json`, writes `packages/cms/CHANGELOG.md` and updates
-   `.release-please-manifest.json`. Nothing is published while it is open.
-3. Merging that release pull request pushes the version bump to `main`.
-   release-please runs again, sees its own release commit, and creates the git
-   tag and the GitHub release.
-4. Nothing is published. When the maintainer wants the release out they
-   follow [Releasing](#releasing) below, which publishes to npm and pushes the
-   Docker image in one run.
+   reads every Conventional Commit since each package's last release and
+   opens or updates **one release pull request**,
+   `chore(release): release main`. It bumps the version in the `package.json`
+   of every package with releasable changes, writes each one's
+   `CHANGELOG.md`, and updates `.release-please-manifest.json`. A package with
+   no releasable changes keeps its version. Nothing is published while the
+   pull request is open.
+3. Merging the release pull request pushes the version bumps to `main`.
+   release-please runs again, sees its own release commit, and creates a git
+   tag and a GitHub release for every package the pull request bumped.
+4. The maintainer pulls main and runs `pnpm release`, as
+   [Publishing a release](#publishing-a-release) describes.
 
 The bumps are the pre-1.0 rules of decision-7, configured in
 `release-please-config.json`: `fix` takes a patch, `feat` takes a minor, and
-`bump-minor-pre-major` keeps a breaking change on a minor until the package
+`bump-minor-pre-major` keeps a breaking change on a minor until a package
 reaches 1.0. `bump-patch-for-minor-pre-major` is off, so a feature really is a
 minor. `initial-version` is `0.1.0`, because release-please otherwise starts a
 package with no prior tag at 1.0.0 whatever the pre-major rules say.
-`include-component-in-tag` is off too, because there is only one package to
-tag, so tags read `v0.2.0` rather than `@geekity/cms-v0.2.0`.
+`include-component-in-tag` is off for core, so its tags stay `v0.x.y`, and on
+for each plugin.
 
-`separate-pull-requests` is on and the release pull request title is pinned to
-`chore(release): release ${version}`. Both matter: with a package under
-`packages/` rather than at the repository root, release-please derives a
-component name (`cms`) from the package name and only recognises a merged
-release pull request whose branch carries that component. Grouped release pull
-requests use a branch without one, so the merge is silently ignored and no
-tag is cut (release-please issue 2214). Separate pull requests put the
-component in the branch.
+Two settings keep the grouped release pull request working:
+
+- `separate-pull-requests` is off, so every package goes in one pull request
+  on the branch `release-please--branches--main`. Its title comes from
+  `group-pull-request-title-pattern`, `chore(release): release ${branch}`,
+  which commitlint accepts and which leaves the changelogs alone, because
+  release-please lists no `chore`.
+- Core's `package-name` is the empty string. release-please names a package's
+  branch component after its package name, here `cms`. A grouped release pull
+  request that bumps only core lists core's release without a component,
+  because core's tags have none. release-please then compares the component of
+  the merged branch, which has none, with `cms`, finds they differ, and cuts
+  no tag (release-please issue 2214). With an empty package name, the two
+  match. A grouped pull request that bumps two or more packages, or only
+  plugins, is tagged either way. The package name `package.json` gives to npm
+  is unaffected: release-please reads `package-name` only to name branches and
+  components.
 
 `.release-please-manifest.json` is the current released version of each tracked
-package and must agree with `packages/cms/package.json`. release-please writes
-both; do not edit either by hand.
+package and must agree with each `package.json`. release-please writes both,
+so do not edit either by hand.
 
-### Releasing
+### After the first grouped release merges
 
-A release goes to npm and to ghcr.io together. `scripts/release.sh` does both
-in one run, after the release pull request is merged:
+Until core 0.25.0 and the first plugin releases, release-please opened one
+release pull request per package. The first grouped release pull request is
+the first to use the settings above, so check its tags before publishing:
+
+```sh
+git pull --prune --tags
+git tag --points-at HEAD
+```
+
+Every package the release pull request bumped needs its tag on that list:
+`v<version>` for core and `<component>-v<version>` for a plugin. The bumped
+packages are the ones the pull request's description lists, and the ones
+whose `CHANGELOG.md` it changed. `pnpm release` refuses to publish a version
+whose tag is missing, and names it.
+
+If release-please did not cut a tag, the Actions log of the
+`release-please` run on the merge commit says why. Tag the release by hand,
+create its GitHub release, and mark the pull request tagged, so that
+release-please does not hold back the next release pull request behind an
+untagged one:
+
+```sh
+git tag v0.26.0 <merge commit>
+git push origin v0.26.0
+gh release create v0.26.0 --verify-tag --notes-file <(sed -n '/^## \[0.26.0\]/,/^## \[/p' packages/cms/CHANGELOG.md | sed '$d')
+gh pr edit <release pull request> --remove-label "autorelease: pending" --add-label "autorelease: tagged"
+```
+
+### Publishing a release
+
+`pnpm release` publishes every package whose version is not on npm yet, and
+then pushes the image of `@geekity/cms` when its version has no image yet. Run
+it on main after merging the release pull request:
 
 ```sh
 git checkout main
-git pull --tags
-pnpm release:dry-run   # print every step first
+git pull --prune --tags
+pnpm release:dry-run   # the plan, and why
 pnpm release           # npm, then <version> and latest on ghcr.io
 pnpm release beta      # the same, plus a custom image tag
 ```
 
-It runs the two scripts described below, in four steps, and stops at the first
-failure:
+`scripts/release.ts` first works out the plan. It reads the packages from
+`release-please-config.json` and asks npm whether each one's version is
+published (`npm view <name>@<version>`). It asks the registry whether
+`ghcr.io/geekitycom/cms:<core version>` exists, with
+`docker manifest inspect`, which pulls nothing. A plugin-only release pushes no
+image. With nothing to publish and the image in place, it says so and exits 0.
 
-1. The preflight checks of both, npm first: `npm-publish.sh --check-only`, then
-   `docker-build-push.sh --check-only`. A dirty tree, a missing login or an
-   untagged `HEAD` turns up here, before minutes of gates, and so does an
-   interactive `docker login` if ghcr.io needs one.
+For every version it will publish, and for core when it will push the image,
+the plan then needs the version's release tag to:
+
+- exist, which is why the pull fetches tags
+- be in the history of HEAD
+- show no change to the package's folder between the tag and HEAD
+  (`git diff <tag> HEAD -- packages/<package>` is empty)
+
+The last rule means what is published is exactly what was released. When
+another change to a package has landed on main after its release, the script
+refuses that package. Merge the next release pull request and publish that.
+`pnpm release:dry-run` prints the plan, each package with the reason it is or
+is not published, and whether the image would be pushed. It checks no login,
+runs no gate, and exits non-zero if the plan refuses a package.
+
+A real run then goes through these steps and stops at the first failure:
+
+1. Preflight checks: HEAD is `main`, the working tree is clean, `main` is level
+   with its upstream, and `npm whoami` names someone (run `npm login` yourself;
+   the script will not). When the image is due,
+   `docker-build-push.sh --check-only` checks Docker is running and that you
+   are logged in to ghcr.io.
 2. The quality gates, once: `pnpm lint`, `pnpm format:check`,
-   `pnpm typecheck`, `pnpm test` and `pnpm test:11ty`. The list is the union of
-   the gates of both scripts, which all three read from
-   `scripts/lib/quality-gates.sh`, so a gate added to either script is run
-   here too.
-3. `npm-publish.sh --skip-gates`, which re-runs its own checks and publishes.
-4. `docker-build-push.sh --skip-gates`, which re-runs its own checks, builds
-   and pushes.
+   `pnpm typecheck`, `pnpm test` and `pnpm test:11ty`. The typecheck and the
+   tests build every package first. A gate that leaves the working tree changed
+   also stops the release.
+3. `pnpm pack` for each package to publish, and a check of each tarball: its
+   `package.json` carries the package's name and version, and a plugin's
+   tarball holds `dist/bundle/index.js` and a `dist/bundle/plugin.json` with
+   the same name and version, which is what `geekity plugin add` installs.
+   Every tarball is checked before anything is published.
+4. `npm publish <tarball> --access public` for each package, dependencies
+   first. The order comes from each package's `dependencies`,
+   `peerDependencies` and `geekity.requires`: core, then `plugin-llm` before
+   the plugins that require it. Every package also sets
+   `publishConfig.access` to `public`, because a scoped package is private by
+   default, and the npm scope `@geekity` must be owned by the project
+   (decision-6).
+5. `docker-build-push.sh --skip-gates`, when the image is due.
 
-If the Docker step fails after npm published, the script says so and prints the
-command that finishes the release, for example
-`pnpm docker:build-push -- --skip-gates beta`. Run that once the problem is
-fixed. Running `pnpm release` again would stop at the npm preflight, because
-the version is already on the registry.
+Publishing the tarball that was checked, rather than letting a publish command
+pack again, keeps the check and the upload on the same bytes. It also leaves
+pnpm's own git checks out of the way.
 
-Each script also runs on its own, for publishing only one half or for
-re-running the half that failed. Both take `--check-only`, which runs the
-preflight checks and nothing else, and `--skip-gates`, which does everything
-except the quality gates. `--skip-gates` assumes the gates just passed on this
-commit, so use it only after a run whose gates passed. The two flags cannot be
-used together.
-
-### Publishing to npm
-
-CI does not publish. `pnpm release` publishes to npm as its third step. To
-publish only to npm, or to re-run that half of a release, use
-`scripts/npm-publish.sh`, the same shape as the Docker script below:
+A failed run is safe to repeat. The plan is read from npm and the registry,
+so `pnpm release` again publishes only what npm does not have yet, then pushes
+the image if it is still missing. It runs the gates again. To push the image
+alone after a run whose gates passed, use the command the script prints:
 
 ```sh
-git checkout main
-git pull --tags
-pnpm npm:dry-run    # check the package, the version and the tag first
-pnpm npm:publish
-pnpm npm:publish -- --skip-gates   # after a release whose gates passed
+pnpm docker:build-push -- --skip-gates
 ```
 
-The version is read from `packages/cms/package.json`, which is why the pull
-comes first: release-please bumps it in the release pull request and tags the
-release commit, so main right after that merge already is `v<version>`.
+The `pack-install` CI job has already proven core's tarball installs and boots,
+and that each plugin installs and loads, so the publish itself is the only
+untested step.
 
-The script refuses to run from anywhere but the repository root. It then
-refuses, before running anything slow, when the working tree is dirty, when
-`HEAD` does not carry the version's tag, when nobody is logged in to npm (run
-`npm login` yourself; the script will not), or when that version is already on
-the registry. Checking the tag at `HEAD` is what replaced the old
-`git checkout v0.1.0` recipe: it proves the commit being published is the
-released one instead of assuming it, with no detached HEAD to strand commits on
-and nothing to undo afterwards. It is also why `--no-git-checks` is gone — pnpm
-is on the publish branch with a clean tree, so its own checks pass.
+### Core releases and the plugins' core range
 
-It then runs the quality gates `pnpm lint`, `pnpm format:check`,
-`pnpm typecheck`, `pnpm test` and `pnpm test:11ty`. A failing gate stops it
-before anything is published. The publish itself is
-`pnpm publish --filter @geekity/cms --access public`; `--access public` matters
-for a scoped package, and the npm scope `@geekity` must be owned by the project
-(decision-6). `--dry-run` prints the package, the version, the tag it needs and
-the gates it would run, and publishes, checks and runs nothing. `--check-only`
-stops after the checks, and `--skip-gates` publishes without running the gates.
+Each plugin package peer-depends on `@geekity/cms` with `workspace:^`. Both the
+published `package.json` and the bundle's `plugin.json` turn that into a caret
+range on the core version the plugin was built with: a plugin built while core
+was 0.25.0 accepts `^0.25.0`. Before 1.0, a caret range accepts patches only,
+so that plugin accepts core 0.25.x and nothing else.
 
-The `pack-install` CI job has already proven the tarball installs and boots, so
-the publish itself is the only untested step.
+A core minor release therefore leaves every plugin that is not released with it
+out of range:
+
+- A folder install, as on Docker, shows the plugin as unavailable on the
+  Plugins screen, with the reason "It needs @geekity/cms ^0.25.0, and this core
+  is 0.26.0". The site boots and the other plugins run.
+- A site that installs with npm gets a peer dependency conflict when it
+  upgrades core past the range.
+
+release-please bumps a plugin only when commits changed that plugin's folder,
+so a core minor release does not re-release the plugins by itself. Until the
+range changes, a core minor release needs a release of every plugin built
+against the new core. Land a commit in each plugin's folder before merging the
+release pull request, so that all of them go out in the same grouped release
+pull request. A plugin released in that pull request is built against the new
+core version, and so accepts it.
 
 ### Publishing the Docker image
 
 The image is `ghcr.io/geekitycom/cms`, built from the `Dockerfile` at the
-repository root for `linux/amd64` and `linux/arm64`. CI never pushes it:
-GitHub's runners are amd64 only and the machine a site runs on may be arm64, so
-a CI publish could ship only half of what is needed. A maintainer publishes it
-from a workstation, normally as the last step of `pnpm release`. To push only
-an image, or to re-run that half of a release, use
+repository root for `linux/amd64` and `linux/arm64`. CI never pushes it.
+GitHub's runners are amd64 only and the machine a site runs on may be arm64,
+so a CI publish could ship only half of what is needed. A maintainer publishes
+it from a workstation as the last step of `pnpm release`. To push only an
+image, or to finish a release whose image push failed, use
 `scripts/docker-build-push.sh`. What CI does do is
 build the amd64 image on every pull request and boot it (the `docker-smoke`
 job), so a broken Dockerfile fails on its pull request rather than at release.
 
-Run it after a release, once the release pull request is merged:
-
 ```sh
 git checkout main
-git pull
+git pull --prune --tags
 pnpm docker:dry-run          # check the version and tags first
 pnpm docker:build-push       # pushes <version> and latest
 pnpm docker:build-push beta  # the same, plus a custom tag
@@ -2777,8 +2846,7 @@ pnpm docker:build-push -- --skip-gates beta  # after a release whose gates passe
 ```
 
 The version tag is read from `packages/cms/package.json`, which is why the
-pull comes first: release-please bumps it in the release pull request, so main
-right after the merge is the tagged commit and carries the new version.
+pull comes first: release-please bumps it in the release pull request.
 
 The script refuses to run from anywhere but the repository root. It checks that
 Docker is running and that you are logged in to ghcr.io (it runs
