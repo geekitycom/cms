@@ -27,6 +27,8 @@ export function sitePluginRegistry(config: ResolvedConfig): PluginRegistry {
       dataDir: config.dataDir,
       contentDir: config.contentDir,
       env: process.env,
+      allowPrivateAddress: config.federation.allowPrivateAddress ?? false,
+      lookup: config.hostLookup,
       // Read when asked: the base URL settles after boot reads the settings,
       // and the title changes with them.
       siteInfo: () => ({

@@ -80,6 +80,14 @@ async function site(
     }),
   );
   await writeFile(
+    path.join(contentDir, 'posts', 'loaf.md'),
+    '---\ntitle: Loaf\ndate: 2026-09-01T09:00:00Z\ntags: [bread, Baking]\n---\n\nRisen.\n',
+  );
+  await writeFile(
+    path.join(contentDir, 'posts', 'rye.md'),
+    '---\ntitle: Rye\ndate: 2026-09-02T09:00:00Z\ntags: [Baking]\n---\n\nDense.\n',
+  );
+  await writeFile(
     path.join(contentDir, 'posts', 'liked.md'),
     '---\ndate: 2026-10-01T09:00:00Z\nlike-of: https://elsewhere.example/post\n---\n\nGood one.\n',
   );
@@ -276,6 +284,67 @@ describe('editor actions', () => {
     const forged = await agent.post(`${ENDPOINT}/suggest-tags`, { body: 'x', csrf_token: 'nope' });
     assert.equal(forged.status, 403);
     assert.deepEqual(pressed.drafts, []);
+  });
+
+  it('hands the plugin the tags the site already uses, most used first', async () => {
+    const seen: (readonly string[])[] = [];
+    const tagger = definePlugin({
+      name: NAME,
+      version: '1.0.0',
+      label: 'Tagger',
+      description: 'Suggests tags.',
+      hostApi: HOST_API_VERSION,
+      register(host) {
+        host.editorAction({
+          id: 'suggest-tags',
+          field: 'tags',
+          label: 'Suggest tags',
+          suggest: ({ siteTags }) => {
+            seen.push(siteTags);
+            return { ok: true, value: '' };
+          },
+        });
+      },
+    });
+    const { agent } = await site([tagger], true);
+    await press(agent, '/admin/posts/new', 'suggest-tags', { body: 'Crumb.' });
+    assert.deepEqual(seen, [['Baking', 'bread']]);
+  });
+
+  it('answers a plugin’s choices as JSON, each with its note and badge', async () => {
+    const choices = [
+      { value: 'bread', note: '120 followers', badge: 'Used here' },
+      { value: 'crumb', note: 'followers unknown' },
+      { value: 'oven' },
+    ];
+    const { agent } = await site([suggester(undefined, () => ({ ok: true, choices }))], true);
+    const response = await press(agent, '/admin/posts/new', 'suggest-tags');
+    assert.deepEqual(await response.json(), { ok: true, choices });
+  });
+
+  it('refuses choices beside a field that holds one value', async () => {
+    const { agent } = await site(
+      [suggester(undefined, () => ({ ok: true, choices: [{ value: 'One' }] }))],
+      true,
+    );
+    const response = await press(agent, '/admin/posts/new', 'suggest-description');
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      ok: false,
+      message:
+        'Suggest description failed: it offered choices for the description, which holds one value',
+    });
+  });
+
+  it('draws a hidden list for choices beside each button, with a row to copy', async () => {
+    const { agent } = await site([suggester()], true);
+    const block = actionsBeside(await (await agent.get('/admin/posts/new')).text(), 'editor-tags');
+    assert.ok(block !== undefined);
+    assert.match(block, /<ul[^>]*data-editor-choices[^>]*>\s*<\/ul>/);
+    assert.match(
+      block,
+      /<template data-editor-choice>[\s\S]*<input type="checkbox"[\s\S]*<\/template>/,
+    );
   });
 
   it('runs under the admin’s own policy, the script coming from the admin’s origin', async () => {

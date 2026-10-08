@@ -82,6 +82,8 @@ function site(
       contentDir,
       env,
       siteInfo: () => ({ baseUrl: 'https://example.test/', title: 'Example' }),
+      allowPrivateAddress: false,
+      lookup: () => Promise.reject(new Error('a test resolves no names')),
     },
   );
   assert.ok(reader !== undefined);

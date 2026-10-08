@@ -1,7 +1,9 @@
 /* The buttons running plugins put beside the editor's title, description and
    tags (decision-33). Each posts the form as it stands to its plugin's
-   endpoint, which answers { ok, value } or { ok: false, message }, and shows
-   the suggestion with Accept and Dismiss. Accept fills the field and saves
+   endpoint, which answers { ok, value }, { ok, choices } or { ok: false,
+   message }, and shows the suggestion with Accept and Dismiss. Choices come
+   only beside the tags field, each drawn from the page's template row with a
+   box to tick, and Accept adds the ticked ones. Accept fills the field and saves
    nothing; a save is still only the form's own buttons.
 
    A file rather than an inline script, loaded from the admin's own origin
@@ -50,11 +52,13 @@
     var press = block.querySelector('button');
     var status = block.querySelector('[role="status"]');
     var suggestion = block.querySelector('[role="group"]');
-    if (!url || !press || !status || !suggestion) return;
-    var text = suggestion.querySelector('p');
-    var choices = suggestion.querySelectorAll('button');
-    var accept = choices[0];
-    var dismiss = choices[1];
+    var text = suggestion && suggestion.querySelector('p');
+    var list = suggestion && suggestion.querySelector('[data-editor-choices]');
+    var row = block.querySelector('template[data-editor-choice]');
+    if (!url || !press || !status || !text || !list || !row) return;
+    var buttons = suggestion.querySelectorAll('button');
+    var accept = buttons[0];
+    var dismiss = buttons[1];
     var pending = null;
     var offered = '';
 
@@ -66,6 +70,30 @@
     function close() {
       suggestion.hidden = true;
       offered = '';
+      list.replaceChildren();
+    }
+
+    function drawChoices(choices) {
+      choices.forEach(function (choice) {
+        var item = row.content.firstElementChild.cloneNode(true);
+        var badge = item.querySelector('.badge');
+        item.querySelector('input').value = String(choice.value);
+        item.querySelector('[data-choice-value]').textContent = String(choice.value);
+        badge.textContent = choice.badge ? String(choice.badge) : '';
+        badge.hidden = !choice.badge;
+        item.querySelector('[data-choice-note]').textContent = choice.note
+          ? String(choice.note)
+          : '';
+        list.appendChild(item);
+      });
+    }
+
+    function ticked() {
+      var values = [];
+      list.querySelectorAll('input:checked').forEach(function (box) {
+        values.push(box.value);
+      });
+      return values.join(', ');
     }
 
     press.hidden = false;
@@ -98,9 +126,24 @@
           return response.json();
         })
         .then(function (answer) {
+          if (answer.ok && Array.isArray(answer.choices)) {
+            if (answer.choices.length === 0) {
+              say('There was nothing to suggest.');
+              return;
+            }
+            text.hidden = true;
+            drawChoices(answer.choices);
+            list.hidden = false;
+            suggestion.hidden = false;
+            say('');
+            list.querySelector('input').focus();
+            return;
+          }
           if (answer.ok) {
             offered = String(answer.value);
             text.textContent = offered;
+            text.hidden = false;
+            list.hidden = true;
             suggestion.hidden = false;
             say('');
             accept.focus();
@@ -125,7 +168,7 @@
     });
 
     accept.addEventListener('click', function () {
-      field.value = accepted(field, offered);
+      field.value = accepted(field, list.hidden ? offered : ticked());
       field.dispatchEvent(new Event('input', { bubbles: true }));
       close();
       say('');

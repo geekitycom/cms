@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-08 15:59'
+updated_date: '2026-10-08 16:11'
 ---
 # Admin UI
 
@@ -305,7 +305,7 @@ What the screens make of the library:
   an error alert saying nothing was saved. Discard mine and edit the file on
   disk is a link; Keep mine and overwrite the file posts the refused form
   again with the hash the file has now.
-- **Plugin buttons** (decision-33, TASK-285). A running plugin's editor action is a soft button under the Title, Description or Tags field, drawn `hidden` so that with JavaScript off there is nothing to press and the form posts exactly what it did without plugins. `static/editor-actions.js` shows it, posts the form to the action's endpoint on a click, and puts the answer under it: a bordered box with the suggestion, **Accept** (primary) and **Dismiss** (ghost), or the plain-words error in the status line, in `text-error`. Accept fills the field, fires `input` so the slug follows a title, and saves nothing; a tags suggestion adds only the tags the field lacks. A button its plugin does not offer for the draft is not drawn, and a press that finds the draft no longer fits hides it with the reason. With no running plugin action the editor's HTML and scripts are unchanged.
+- **Plugin buttons** (decision-33, TASK-285). A running plugin's editor action is a soft button under the Title, Description or Tags field, drawn `hidden` so that with JavaScript off there is nothing to press and the form posts exactly what it did without plugins. `static/editor-actions.js` shows it, posts the form to the action's endpoint on a click, and puts the answer under it: a bordered box with the suggestion, **Accept** (primary) and **Dismiss** (ghost), or the plain-words error in the status line, in `text-error`. Accept fills the field, fires `input` so the slug follows a title, and saves nothing; a tags suggestion adds only the tags the field lacks. A tags action may answer choices instead (TASK-286): the box then holds a list, one row per choice copied from the `<template data-editor-choice>` beside it, each a small checkbox with the value, a soft primary badge when the plugin gives one (such as Used here) and a muted note (such as 13 followers on tags.pub). Accept adds the ticked values; nothing is ticked at first. A button its plugin does not offer for the draft is not drawn, and a press that finds the draft no longer fits hides it with the reason. With no running plugin action the editor's HTML and scripts are unchanged.
 
 ## Comments
 

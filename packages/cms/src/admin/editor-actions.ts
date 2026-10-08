@@ -23,6 +23,7 @@ import type {
   PluginEditorAction,
   PluginEditorDraft,
   PluginEditorField,
+  PluginEditorSuggestion,
   PluginPostType,
 } from '../plugin.ts';
 import { resolveEvent } from './event-field.ts';
@@ -176,16 +177,29 @@ export function mountEditorActions(app: Hono<GeekityEnv>): void {
     }
 
     try {
-      const suggestion = await action.suggest({ draft, signal: c.req.raw.signal });
-      return c.json(
-        suggestion.ok
-          ? { ok: true, value: suggestion.value }
-          : { ok: false, message: suggestion.message },
-      );
+      const suggestion = await action.suggest({
+        draft,
+        siteTags: c.var.store.listTags().map(({ tag }) => tag),
+        signal: c.req.raw.signal,
+      });
+      if ('choices' in suggestion && action.field !== 'tags') {
+        throw new Error(`it offered choices for the ${action.field}, which holds one value`);
+      }
+      return c.json(answerOf(suggestion));
     } catch (error) {
       return c.json({ ok: false, message: `${action.label} failed: ${describe(error)}` }, 500);
     }
   });
+}
+
+/** The suggestion as JSON, carrying only the fields the editor reads. */
+function answerOf(suggestion: PluginEditorSuggestion): object {
+  if (!suggestion.ok) return { ok: false, message: suggestion.message };
+  if ('value' in suggestion) return { ok: true, value: suggestion.value };
+  return {
+    ok: true,
+    choices: suggestion.choices.map(({ value, note, badge }) => ({ value, note, badge })),
+  };
 }
 
 function describe(error: unknown): string {

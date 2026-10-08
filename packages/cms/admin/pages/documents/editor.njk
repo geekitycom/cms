@@ -8,6 +8,7 @@
 
 {% import "components/fields.njk" as field %}
 {% from "components/alert.njk" import alert %}
+{% from "components/badge.njk" import badge %}
 {% from "components/button.njk" import button, buttonLink %}
 {% from "components/card.njk" import card, cardActions %}
 {% from "components/collapse.njk" import collapse %}
@@ -35,7 +36,10 @@
 {# A running plugin's buttons beside one field (decision-33). Hidden until
    static/editor-actions.js finds them, so with JavaScript off there is
    nothing to press. Each has a status line for its errors and a suggestion
-   with Accept, which fills the field and saves nothing, and Dismiss. #}
+   with Accept, which fills the field and saves nothing, and Dismiss. A
+   suggestion is one value, or choices the script draws from the template
+   row, each with a box to tick, its badge and its note. The boxes have no
+   name, so a save never posts them. #}
 {% macro pluginActions(fieldId, buttons) %}
 {% if buttons %}
 <div class="flex flex-col gap-2" data-editor-actions="{{ fieldId }}">
@@ -45,6 +49,21 @@
     <p class="text-sm" role="status"></p>
     <div class="flex w-full flex-col gap-2 rounded-box border border-base-300 p-3" role="group" aria-label="{{ action.label }}" hidden>
       <p class="whitespace-pre-wrap break-words"></p>
+      <ul class="flex flex-col gap-1" data-editor-choices hidden></ul>
+      <template data-editor-choice>
+        <li>
+          <label class="flex items-start gap-2">
+            <input type="checkbox" class="checkbox checkbox-sm mt-0.5">
+            <span class="flex flex-col">
+              <span class="flex flex-wrap items-center gap-2">
+                <span class="break-all" data-choice-value></span>
+                {{ badge('', color='primary', style='soft') }}
+              </span>
+              <span class="text-sm text-base-content/70" data-choice-note></span>
+            </span>
+          </label>
+        </li>
+      </template>
       <div class="flex gap-2">
         {{ button('Accept', color='primary') }}
         {{ button('Dismiss', style='ghost') }}

@@ -22,6 +22,8 @@ const SITE = {
   contentDir: path.join(DATA_DIR, 'content'),
   env: {},
   siteInfo: () => ({ baseUrl: 'https://example.test/', title: 'Example' }),
+  allowPrivateAddress: false,
+  lookup: () => Promise.reject(new Error('a test resolves no names')),
 };
 
 /** A plugin with nothing to say beyond its name and what it requires. */
@@ -169,6 +171,7 @@ describe('the plugin registry', () => {
       'data',
       'editorAction',
       'federation',
+      'fetch',
       'get',
       'name',
       'provide',

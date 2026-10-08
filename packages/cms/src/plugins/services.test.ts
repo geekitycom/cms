@@ -30,6 +30,8 @@ const SITE = {
   contentDir: path.join(DATA_DIR, 'content'),
   env: {},
   siteInfo: () => ({ baseUrl: 'https://example.test/', title: 'Example' }),
+  allowPrivateAddress: false,
+  lookup: () => Promise.reject(new Error('a test resolves no names')),
 };
 
 function registry(...plugins: Plugin[]) {

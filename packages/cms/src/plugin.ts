@@ -403,16 +403,31 @@ export interface PluginEditorDraft {
 /** What a press of an editor button hands its plugin. */
 export interface PluginEditorContext {
   readonly draft: PluginEditorDraft;
+  /** Every tag on the site's published documents, as written, most used first. */
+  readonly siteTags: readonly string[];
   /** Aborts when the author leaves the page before the answer comes. */
   readonly signal: AbortSignal;
 }
 
+/** One of several values an editor button offers, each drawn with a box to tick. */
+export interface PluginEditorChoice {
+  readonly value: string;
+  /** A few words after it, such as `120 followers`. */
+  readonly note?: string | undefined;
+  /** A word or two drawn as a badge, such as `Used here`. */
+  readonly badge?: string | undefined;
+}
+
 /**
  * What an editor button answers: a value the author may accept into the
- * field, or why there is none, in plain words. Core shows either escaped.
+ * field, choices the author ticks before accepting, or why there is none, in
+ * plain words. Core shows each escaped. Choices are for the tags field, and
+ * accepting adds every ticked one; beside another field they are a failure.
  */
 export type PluginEditorSuggestion =
-  { readonly ok: true; readonly value: string } | { readonly ok: false; readonly message: string };
+  | { readonly ok: true; readonly value: string }
+  | { readonly ok: true; readonly choices: readonly PluginEditorChoice[] }
+  | { readonly ok: false; readonly message: string };
 
 /**
  * A button beside an editor field. Core draws it, posts the draft to the
@@ -433,6 +448,13 @@ export interface PluginEditorAction {
    */
   offers?(draft: PluginEditorDraft): boolean;
   suggest(context: PluginEditorContext): PluginEditorSuggestion | Promise<PluginEditorSuggestion>;
+}
+
+/** What a plugin's {@link PluginHost.fetch} sends besides the URL. */
+export interface PluginFetchInit {
+  readonly headers?: Readonly<Record<string, string>> | undefined;
+  /** Ends the request, and any redirect it leads to, when it aborts. */
+  readonly signal?: AbortSignal | undefined;
 }
 
 /** What a plugin knows of the site it runs on. */
@@ -497,6 +519,14 @@ export interface PluginHost<
   editorAction(action: PluginEditorAction): void;
   /** The site's base URL and title, read when asked. */
   siteInfo(): PluginSiteInfo;
+  /**
+   * `GET` another site's URL. Redirects are followed, at most five, and every
+   * address on the way must be public: a loopback, private or link-local
+   * address, or a name that resolves to one, rejects with an error, unless
+   * the site lets its federation reach private addresses. Rejects as `fetch`
+   * does when the host cannot be reached; any status is answered as it came.
+   */
+  fetch(url: string, init?: PluginFetchInit): Promise<Response>;
   /**
    * Offer this plugin's service to the plugins that require it, under the
    * plugin's own package name. At most once per plugin, during `register`.

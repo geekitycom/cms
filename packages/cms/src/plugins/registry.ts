@@ -27,6 +27,8 @@ import type {
   PluginSettingValues,
   PluginSiteInfo,
 } from '../plugin.ts';
+import { pluginFetch } from './fetch.ts';
+import type { PluginFetchOptions } from './fetch.ts';
 import {
   pluginEnvPrefix,
   pluginFolderPath,
@@ -61,8 +63,11 @@ export interface PluginContributions {
   editorActions: readonly PluginEditorAction[];
 }
 
-/** What plugins read through the registry: the site's folders, its environment, its base URL and title. */
-export interface PluginRegistryOptions {
+/**
+ * What plugins read through the registry: the site's folders, its
+ * environment, its base URL and title, and which addresses they may fetch.
+ */
+export interface PluginRegistryOptions extends PluginFetchOptions {
   dataDir: string;
   contentDir: string;
   env: Readonly<Record<string, string | undefined>>;
@@ -397,6 +402,7 @@ function register(
       editorActions.push(declared);
     },
     siteInfo: () => options.siteInfo(),
+    fetch: (url, init = {}) => pluginFetch(url, init, options),
     provide(value) {
       declaring('a service');
       if (service !== undefined) {
