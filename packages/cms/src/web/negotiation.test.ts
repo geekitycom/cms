@@ -69,8 +69,10 @@ const HELLO_FILE = [
 
 const HELLO = { 'posts/2026-09-02-hello.md': HELLO_FILE };
 
+const HELLO_MARKDOWN = HELLO_FILE.replace('---\n\n', '---\n\n# Hello, World!\n\n');
+
 describe('the Markdown representation', () => {
-  it('serves the stored file text, front matter included', async () => {
+  it('serves the stored file under its title as a heading, front matter included', async () => {
     const { cms } = await site(HELLO);
 
     const response = await cms.app.request('/2026/09/hello/', {
@@ -80,7 +82,29 @@ describe('the Markdown representation', () => {
 
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type') ?? '', /^text\/markdown;\s*charset=utf-8$/);
-    assert.equal(body, HELLO_FILE);
+    assert.equal(body, HELLO_MARKDOWN);
+  });
+
+  it('adds no heading to a note, or to a body that already opens with one', async () => {
+    const note = `---\ndate: '2026-09-05T09:00:00Z'\npermalink: /note/\n---\n\nJust a thought.\n`;
+    const headed = `---\ntitle: Headed\ndate: '2026-09-06T09:00:00Z'\npermalink: /headed/\n---\n\n# My own heading\n\nBody.\n`;
+    const { cms } = await site({ 'posts/note.md': note, 'posts/headed.md': headed });
+
+    const markdown = async (url: string): Promise<string> =>
+      (await cms.app.request(url, { headers: { accept: 'text/markdown' } })).text();
+
+    assert.equal(await markdown('/note/'), note);
+    assert.equal(await markdown('/headed/'), headed);
+  });
+
+  it('keeps the stored body in the JSON', async () => {
+    const { cms } = await site(HELLO);
+
+    const json = (await (
+      await cms.app.request('/2026/09/hello/', { headers: { accept: 'application/json' } })
+    ).json()) as { markdown: string };
+
+    assert.equal(json.markdown, 'A *file-first* CMS.');
   });
 
   it('serves the same file as text/plain to a reader that asks for that', async () => {
@@ -93,7 +117,7 @@ describe('the Markdown representation', () => {
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'text/plain; charset=utf-8');
     assert.equal(response.headers.get('content-disposition'), 'inline');
-    assert.equal(await response.text(), HELLO_FILE);
+    assert.equal(await response.text(), HELLO_MARKDOWN);
     assert.doesNotMatch(response.headers.get('link') ?? '', /text\/plain/);
   });
 
@@ -149,7 +173,7 @@ describe('the extension escape hatch', () => {
         /^text\/markdown/,
         `${url} is Markdown despite Accept: text/html`,
       );
-      assert.equal(await response.text(), HELLO_FILE);
+      assert.equal(await response.text(), HELLO_MARKDOWN);
     }
 
     for (const url of ['/2026/09/hello/index.json', '/2026/09/hello.json']) {

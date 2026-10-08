@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-07 22:49'
+updated_date: '2026-10-08 01:57'
 ---
 # Content Negotiation
 
@@ -14,7 +14,7 @@ Every public content URL serves one document in several representations. The rep
 | Media type | Body | Notes |
 | --- | --- | --- |
 | `text/html` | rendered through the theme | default when nothing else matches |
-| `text/markdown` | the file as stored, front matter included | `Content-Disposition: inline`, charset utf-8 |
+| `text/markdown` | the file as stored, front matter included, with `# {title}` between the front matter and the body unless the document has no title or its body already opens with a level-one heading | `Content-Disposition: inline`, charset utf-8; validated by its own bytes |
 | `text/plain` | the `text/markdown` body, labelled `text/plain; charset=utf-8` | `Content-Disposition: inline`; reached only by `Accept`, so it has no URL and is never advertised |
 | `application/json` | `{ "frontMatter": {...}, "markdown": "...", "html": "...", "url": "..." }` | stable shape, versioned via `"schema": 1` |
 | `application/activity+json` | the post's ActivityStreams `Article` | a published post only; its `id` is this URL (decision-13) |
