@@ -162,31 +162,50 @@ describe('the JSON representation', () => {
 });
 
 describe('the extension escape hatch', () => {
-  it('beats Accept, on both the index.ext and the bare .ext spelling', async () => {
+  it('beats Accept', async () => {
     const { cms } = await site(HELLO);
 
-    for (const url of ['/2026/09/hello/index.md', '/2026/09/hello.md']) {
-      const response = await cms.app.request(url, { headers: { accept: 'text/html' } });
-      assert.equal(response.status, 200, `${url} resolves`);
-      assert.match(
-        response.headers.get('content-type') ?? '',
-        /^text\/markdown/,
-        `${url} is Markdown despite Accept: text/html`,
-      );
-      assert.equal(await response.text(), HELLO_MARKDOWN);
-    }
+    const markdown = await cms.app.request('/2026/09/hello/index.md', {
+      headers: { accept: 'text/html' },
+    });
+    assert.equal(markdown.status, 200);
+    assert.match(markdown.headers.get('content-type') ?? '', /^text\/markdown/);
+    assert.equal(await markdown.text(), HELLO_MARKDOWN);
 
-    for (const url of ['/2026/09/hello/index.json', '/2026/09/hello.json']) {
-      const response = await cms.app.request(url, { headers: { accept: 'text/markdown' } });
-      assert.equal(response.status, 200, `${url} resolves`);
-      assert.match(
-        response.headers.get('content-type') ?? '',
-        /^application\/json/,
-        `${url} is JSON despite Accept: text/markdown`,
-      );
-      const body = (await response.json()) as { url: string };
-      assert.equal(body.url, 'https://example.com/2026/09/hello/');
+    const json = await cms.app.request('/2026/09/hello/index.json', {
+      headers: { accept: 'text/markdown' },
+    });
+    assert.equal(json.status, 200);
+    assert.match(json.headers.get('content-type') ?? '', /^application\/json/);
+    const body = (await json.json()) as { url: string };
+    assert.equal(body.url, 'https://example.com/2026/09/hello/');
+  });
+
+  it('redirects the bare .ext spelling to the index.ext one', async () => {
+    const { cms } = await site({ ...HELLO, ...ARCHIVE });
+
+    for (const [url, location] of [
+      ['/2026/09/hello.md', '/2026/09/hello/index.md'],
+      ['/2026/09/hello.json', '/2026/09/hello/index.json'],
+      ['/2026/09/hello.json?full=1', '/2026/09/hello/index.json?full=1'],
+      ['/tag/notes.md', '/tag/notes/index.md'],
+      ['/page/2.json', '/page/2/index.json'],
+    ] as const) {
+      const response = await cms.app.request(url);
+      assert.equal(response.status, 301, `${url} redirects`);
+      assert.equal(response.headers.get('location'), location);
     }
+  });
+
+  it('serves the bare .ext spelling in place when the permalink has no slash', async () => {
+    const { cms } = await site({
+      'pages/colophon.md': '---\ntitle: Colophon\npermalink: /colophon\n---\n\nMade by hand.\n',
+    });
+
+    const response = await cms.app.request('/colophon.md');
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /^text\/markdown/);
   });
 
   it('leaves a path that merely contains a dot alone', async () => {

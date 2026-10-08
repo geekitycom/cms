@@ -162,9 +162,10 @@ export interface RepresentationExtension {
  * A `.md` or `.json` suffix taken off a request path, or `undefined` when the
  * path carries neither.
  *
- * Both spellings work: `/2026/09/hello/index.md` — the one the `Link` header
- * advertises, and the one an Eleventy-style static build would produce — and
- * the shorter `/2026/09/hello.md` that people actually type. The result is a
+ * Both spellings are recognised: `/2026/09/hello/index.md` — the one the `Link`
+ * header advertises, and the one an Eleventy-style static build would produce —
+ * and the shorter `/2026/09/hello.md` that people actually type, which the
+ * router redirects to the first once it has found what it names. The result is a
  * list of candidate paths rather than one, because the trailing slash a
  * permalink carries is exactly what an extension has to displace.
  */
