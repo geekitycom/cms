@@ -142,7 +142,11 @@ async function site(): Promise<Site> {
 }
 
 function rowsFor(rows: readonly ReportRow[], id: number): readonly ReportRow[] {
-  return rows.filter((row) => row.item.id === id);
+  return mediaRows(rows).filter((row) => row.item.id === id);
+}
+
+function mediaRows(rows: readonly ReportRow[]): readonly ReportRow[] {
+  return rows.filter((row) => row.path !== '_data/redirects/wordpress.json');
 }
 
 describe('the media import', () => {
@@ -306,7 +310,7 @@ describe('the media import', () => {
     await where.run(first);
     const before = await where.run(first);
     assert.deepEqual(
-      before.rows.map((row) => row.outcome),
+      mediaRows(before.rows).map((row) => row.outcome),
       ['unchanged', 'unchanged'],
     );
 

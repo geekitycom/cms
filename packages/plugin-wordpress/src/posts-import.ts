@@ -2,6 +2,7 @@ import { dump } from 'js-yaml';
 
 import type { PluginCommandContext } from '@geekity/cms/plugin';
 
+import { IMPORT_REDIRECTS_FILE } from './content-import.ts';
 import type {
   DataEntry,
   ImportedFile,
@@ -135,6 +136,7 @@ function importPostsAndPages(
     const body = convertBody(item.content);
     const front = frontMatter(item, disposition, {
       permalink,
+      formerly: formerPermalinks(item, permalink),
       author,
       inReplyTo: body.inReplyTo,
       home,
@@ -148,16 +150,23 @@ function importPostsAndPages(
     if (frontPage && !disposition.draft) {
       entries.push({ item, file: SITE_JSON, key: 'homepage', value: lastSegment(permalink) });
     }
+    if (item.status === 'publish' && !disposition.draft) {
+      const ids = item.type === 'page' ? ['p', 'page_id'] : ['p'];
+      for (const name of ids) {
+        const from = `${home.pathname}?${name}=${String(item.id)}`;
+        entries.push({ item, file: IMPORT_REDIRECTS_FILE, key: from, value: permalink });
+      }
+    }
   }
   return { files, notes, entries };
 }
 
-interface Home {
+export interface Home {
   readonly href: string;
   readonly pathname: string;
 }
 
-function homeOf(exported: WordPressExport): Home {
+export function homeOf(exported: WordPressExport): Home {
   const base = exported.site.baseBlogUrl || exported.site.link;
   const url = new URL(base.endsWith('/') ? base : `${base}/`);
   return { href: url.href, pathname: url.pathname };
@@ -270,6 +279,39 @@ function inferredPermalinkStructure(
   };
 }
 
+function formerPermalinks(item: WordPressItem, permalink: string): string[] {
+  const date = localDateOf(item);
+  const slug = slugOf(item);
+  const values = [date?.year, date?.month, date?.day, slug];
+  let next = 0;
+  const template = permalink.split('/').map((segment): string | number => {
+    const index = values.findIndex((value, at) => at >= next && value === segment);
+    if (segment === '' || index === -1) return segment;
+    next = index + 1;
+    return index;
+  });
+
+  const metaValues = (key: string) =>
+    item.meta.filter((meta) => meta.key === key).map((meta) => meta.value);
+  const slugs = [slug, ...metaValues('_wp_old_slug').map(decoded)];
+  const dates = [
+    date,
+    ...metaValues('_wp_old_date').map((value) => localDateOf({ ...item, date: value })),
+  ].filter((entry) => entry !== undefined);
+
+  const former = new Set<string>();
+  for (const { year, month, day } of dates) {
+    for (const name of slugs) {
+      const filled = [year, month, day, name];
+      const url = template
+        .map((part) => (typeof part === 'number' ? (filled[part] ?? '') : part))
+        .join('/');
+      if (url !== permalink) former.add(url);
+    }
+  }
+  return [...former];
+}
+
 function fileName(item: WordPressItem): string {
   if (item.type === 'page') return `pages/${slugOf(item)}.md`;
   const date = localDateOf(item);
@@ -294,6 +336,7 @@ function frontMatter(
   disposition: Extract<Disposition, { kind: 'import' }>,
   derived: {
     permalink: string;
+    formerly: readonly string[];
     author: string | undefined;
     inReplyTo: string | undefined;
     home: Home;
@@ -322,6 +365,7 @@ function frontMatter(
     front['updated'] = item.modifiedGmt;
   }
   front['permalink'] = derived.permalink;
+  if (derived.formerly.length > 0) front['redirect_from'] = derived.formerly;
   if (terms('post_tag').length > 0) front['tags'] = terms('post_tag');
   if (terms('category').length > 0) front['categories'] = terms('category');
   if (disposition.draft) front['draft'] = true;

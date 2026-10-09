@@ -108,6 +108,12 @@ export interface ImportReport {
 
 export const IMPORT_RECORD_FILE = 'import.json';
 
+/**
+ * The redirects the import declares, one key per old URL, in a file of their
+ * own beside the site's `_data/redirects.json`, which the import never touches.
+ */
+export const IMPORT_REDIRECTS_FILE = '_data/redirects/wordpress.json';
+
 export async function importWordPressContent(options: {
   exported: WordPressExport;
   context: PluginCommandContext;

@@ -137,6 +137,7 @@ describe('the posts and pages import', () => {
     ]);
 
     assert.deepEqual(await imported.files(), [
+      '_data/redirects/wordpress.json',
       '_data/site.json',
       'pages/about.md',
       'pages/deep.md',
@@ -607,7 +608,9 @@ describe('the posts and pages import', () => {
     ]);
 
     assert.deepEqual(
-      newer.rows.map((row) => [row.item.id, row.outcome, row.why]),
+      newer.rows
+        .filter((row) => row.path !== '_data/redirects/wordpress.json')
+        .map((row) => [row.item.id, row.outcome, row.why]),
       [
         [10, 'written', 'changed on WordPress since the last import'],
         [20, 'unchanged', 'already as WordPress has it'],

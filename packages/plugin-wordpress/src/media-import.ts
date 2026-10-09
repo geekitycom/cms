@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import type { PluginCommandContext } from '@geekity/cms/plugin';
 
+import { IMPORT_REDIRECTS_FILE } from './content-import.ts';
 import type {
   DataEntry,
   ImportedFile,
@@ -11,6 +12,8 @@ import type {
   WordPressImporter,
 } from './content-import.ts';
 import { uploadUrl, wordPressMedia } from './media.ts';
+import { homeOf } from './posts-import.ts';
+import type { Home } from './posts-import.ts';
 import type { UploadPath } from './media.ts';
 import type { WordPressExport, WordPressItem } from './wxr.ts';
 
@@ -49,6 +52,7 @@ async function importAttachments(
   const notes: ItemNote[] = [];
   const entries: DataEntry[] = [];
   const uploadsDir = given === undefined ? undefined : path.resolve(context.cwd, given);
+  const home = homeOf(exported);
 
   for (const [upload, item] of wanted) {
     if (uploadsDir === undefined) {
@@ -75,12 +79,29 @@ async function importAttachments(
     }
     files.push({ item, path: `uploads/${upload}`, contents: check.bytes });
 
+    if (item.type !== 'attachment') continue;
+
     const alt = item.meta.find((meta) => meta.key === '_wp_attachment_image_alt')?.value.trim();
-    if (item.type === 'attachment' && alt !== undefined && alt !== '') {
+    if (alt !== undefined && alt !== '') {
       entries.push({ item, file: MEDIA_FILE, key: upload, value: { alt } });
+    }
+    for (const from of attachmentPages(item, home)) {
+      entries.push({ item, file: IMPORT_REDIRECTS_FILE, key: from, value: uploadUrl(upload) });
     }
   }
   return { files, notes, entries };
+}
+
+function attachmentPages(item: WordPressItem, home: Home): string[] {
+  const pages = new Set([
+    `${home.pathname}?attachment_id=${String(item.id)}`,
+    `${home.pathname}?p=${String(item.id)}`,
+  ]);
+  const link = URL.parse(item.link);
+  if (link !== null && link.host === new URL(home.href).host && link.pathname !== home.pathname) {
+    pages.add(`${link.pathname}${link.search}`);
+  }
+  return [...pages];
 }
 
 async function readIfPresent(file: string): Promise<Uint8Array | undefined> {

@@ -46,11 +46,11 @@ on the next request, with nothing restarted.
 
 The plugin keeps two files in `data/plugins/@geekity/plugin-wordpress/`:
 
-| File            | What it holds                                                                                                                                                                  |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `actors.json`   | Each username and the number WordPress gave that person's actor, which the old paths are built from. Written by the import.                                                    |
-| `requests.json` | When each old path was last asked for, per user, and when the shared inbox was. Losing it resets what the screen says.                                                         |
-| `import.json`   | A hash of every file `geekity import wordpress` wrote, by path, and each `site.json` and `media.json` key it set. Losing it makes every imported file a clash on the next run. |
+| File            | What it holds                                                                                                                                                                            |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `actors.json`   | Each username and the number WordPress gave that person's actor, which the old paths are built from. Written by the import.                                                              |
+| `requests.json` | When each old path was last asked for, per user, and when the shared inbox was. Losing it resets what the screen says.                                                                   |
+| `import.json`   | A hash of every file `geekity import wordpress` wrote, by path, and each `site.json`, `media.json` and redirect key it set. Losing it makes every imported file a clash on the next run. |
 
 ## The old paths
 
@@ -120,19 +120,20 @@ Each post becomes `posts/YYYY-MM-DD-slug.md`, dated by its local publish date,
 and each page becomes `pages/slug.md`. The front matter keeps what readers,
 feed readers and followers already know of it:
 
-| Key           | Where it comes from                                                                                                                                                                              |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `permalink`   | The URL WordPress served, from the export's link. A draft has none yet, so it gets the one the published posts' structure gives it; a page gets its parents' slugs.                              |
-| `date`        | `post_date_gmt`. A draft WordPress never dated has none.                                                                                                                                         |
-| `updated`     | `post_modified_gmt`, when it differs from the date.                                                                                                                                              |
-| `tags`        | The post's tags, by name.                                                                                                                                                                        |
-| `categories`  | The post's categories, by name.                                                                                                                                                                  |
-| `draft`       | `true` for a draft, a pending post, and a private or password-protected one, which the report names. A scheduled post keeps its date and publishes then.                                         |
-| `author`      | The WordPress login, when the site has a user by that name. A post by any other login has no author, and the report names it.                                                                    |
-| `in-reply-to` | The URL an ActivityPub plugin reply block answers.                                                                                                                                               |
-| `activitypub` | On a published post, `id` is `https://example.com/?p=ID`, the object id the ActivityPub plugin served. A post the plugin federated (`activitypub_status` is `federated`) also has `published`.   |
-| `guid`        | The WordPress guid, when it is not the post's `?p=` address, so feed readers see no old post as new.                                                                                             |
-| `migrated`    | `true` on everything but a scheduled post, so its arrival here, or a draft's publication later, sends nothing to anyone. A scheduled post publishes here as news, as it would have on WordPress. |
+| Key             | Where it comes from                                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `permalink`     | The URL WordPress served, from the export's link. A draft has none yet, so it gets the one the published posts' structure gives it; a page gets its parents' slugs.                              |
+| `redirect_from` | The URLs the post had before WordPress renamed or redated it: its permalink with each `_wp_old_slug` in place of its slug, and each `_wp_old_date` in place of its date.                         |
+| `date`          | `post_date_gmt`. A draft WordPress never dated has none.                                                                                                                                         |
+| `updated`       | `post_modified_gmt`, when it differs from the date.                                                                                                                                              |
+| `tags`          | The post's tags, by name.                                                                                                                                                                        |
+| `categories`    | The post's categories, by name.                                                                                                                                                                  |
+| `draft`         | `true` for a draft, a pending post, and a private or password-protected one, which the report names. A scheduled post keeps its date and publishes then.                                         |
+| `author`        | The WordPress login, when the site has a user by that name. A post by any other login has no author, and the report names it.                                                                    |
+| `in-reply-to`   | The URL an ActivityPub plugin reply block answers.                                                                                                                                               |
+| `activitypub`   | On a published post, `id` is `https://example.com/?p=ID`, the object id the ActivityPub plugin served. A post the plugin federated (`activitypub_status` is `federated`) also has `published`.   |
+| `guid`          | The WordPress guid, when it is not the post's `?p=` address, so feed readers see no old post as new.                                                                                             |
+| `migrated`      | `true` on everything but a scheduled post, so its arrival here, or a draft's publication later, sends nothing to anyone. A scheduled post publishes here as news, as it would have on WordPress. |
 
 A post in the status format has no title, so it reads as a note. The page
 WordPress served at the home URL becomes `homepage` in `_data/site.json`. The
@@ -204,6 +205,33 @@ The import merges by comment id. A rerun adds the comments WordPress received
 since and picks up one edited there. It leaves alone a comment this site
 received itself, and an imported one a moderator approved, filed as spam,
 edited or deleted.
+
+### Redirects
+
+Links from elsewhere use URL forms WordPress answered and the site has no
+document at. The import declares a redirect for each in
+`_data/redirects/wordpress.json`, a file of its own, which the site reads beside
+`_data/redirects.json` with no plugin enabled:
+
+| URL                                         | Answers 301 at              |
+| ------------------------------------------- | --------------------------- |
+| `/?p=ID`, for every published post and page | Its permalink.              |
+| `/?page_id=ID`, for every published page    | Its permalink.              |
+| An attachment's page, such as `/photo-jpg/` | Its file under `/uploads/`. |
+| `/?attachment_id=ID` and `/?p=ID`, likewise | Its file under `/uploads/`. |
+
+A draft, a pending, private, password-protected or scheduled post or page gets
+no redirect, so its `?p=` answers as an id WordPress never had. An attachment
+whose file was not copied gets none either, until a run copies it. A post's
+old slugs and dates go into its own `redirect_from`, as
+[Posts and pages](#posts-and-pages) says. A published post's `?p=` is also its
+`activitypub.id`, which the site answers first, at the same permalink.
+
+The import owns each key it set in `wordpress.json`, never the file, and never
+touches `_data/redirects.json`. A key the site added there, or changed, is left
+alone on every rerun. Where both files declare one URL, `redirects.json` wins.
+A link to a comment, `#comment-N`, reaches the post: the fragment never
+reaches the server, so the browser scrolls to it if the comment is there.
 
 ## Bringing a person across
 
