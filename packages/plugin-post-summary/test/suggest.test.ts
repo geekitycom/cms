@@ -66,25 +66,124 @@ interface Sent {
 }
 
 describe('Suggest title and Suggest description', () => {
-  it('asks the model about the draft as the editor holds it and answers the suggestion', async () => {
+  it('asks the model for three titles from the draft and answers them as choices', async () => {
     const { admin } = await site();
-    provider.answer(replying(JSON.stringify({ title: '“Keeping a Starter Alive.”' })));
+    provider.answer(
+      replying(
+        JSON.stringify({
+          titles: ['“Keeping a Starter Alive.”', 'Flour and Water, Daily', 'My Needy Jar of Goo'],
+        }),
+      ),
+    );
     const response = await admin.post(actionUrl('suggest-title'), {
       type: 'post',
       title: '',
       body: 'Feed it flour and water every day.',
       lang: 'fr',
     });
-    assert.deepEqual(await response.json(), { ok: true, value: 'Keeping a Starter Alive' });
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      choices: [
+        { value: 'Keeping a Starter Alive' },
+        { value: 'Flour and Water, Daily' },
+        { value: 'My Needy Jar of Goo' },
+      ],
+    });
 
     const [sent] = provider.received;
     const body = sent?.body as Sent;
     assert.match(body.messages[1]?.content ?? '', /Feed it flour and water every day\./);
     assert.match(body.messages[0]?.content ?? '', /"fr"/);
+    assert.match(body.messages[0]?.content ?? '', /three titles/);
+    assert.match(body.messages[0]?.content ?? '', /one plain, one specific/);
     assert.deepEqual(body.response_format.json_schema.schema, {
       type: 'object',
-      properties: { title: { type: 'string' } },
-      required: ['title'],
+      properties: { titles: { type: 'array', items: { type: 'string' } } },
+      required: ['titles'],
+      additionalProperties: false,
+    });
+  });
+
+  it('hides the current title from the title prompt and shows it to the description prompt', async () => {
+    const { admin } = await site();
+    const draft = {
+      type: 'post',
+      title: 'My experience at WordCamp fo shizzle',
+      body: 'About a month ago, I went to WordCamp US in Phoenix.',
+    };
+    provider.answer(replying(JSON.stringify({ titles: ['WordCamp US in Phoenix'] })));
+    await admin.post(actionUrl('suggest-title'), draft);
+    provider.answer(replying(JSON.stringify({ description: 'A trip to WordCamp US.' })));
+    await admin.post(actionUrl('suggest-description'), draft);
+    const [title, description] = provider.received.map((received) =>
+      (received.body as Sent).messages.map((message) => message.content).join('\n'),
+    );
+    assert.match(title ?? '', /WordCamp US in Phoenix\./);
+    assert.doesNotMatch(title ?? '', /fo shizzle/);
+    assert.match(description ?? '', /^Title: My experience at WordCamp fo shizzle$/m);
+  });
+
+  it('drops a title equal to the current one or to another, ignoring case, spacing and the full stop', async () => {
+    const { admin } = await site();
+    provider.answer(
+      replying(
+        JSON.stringify({
+          titles: ['on  bread!', 'Sourdough at Home', 'sourdough at home.', '  ', 'Bread, Mostly'],
+        }),
+      ),
+    );
+    const response = await admin.post(actionUrl('suggest-title'), {
+      type: 'post',
+      title: 'On Bread',
+      body: 'About sourdough.',
+    });
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      choices: [{ value: 'Sourdough at Home' }, { value: 'Bread, Mostly' }],
+    });
+  });
+
+  it('says the model suggests keeping the title when every title it offers is the current one', async () => {
+    const { admin } = await site();
+    provider.answer(replying(JSON.stringify({ titles: ['On Bread', 'on bread.', 'ON BREAD'] })));
+    const response = await admin.post(actionUrl('suggest-title'), {
+      type: 'post',
+      title: 'On Bread',
+      body: 'About sourdough.',
+    });
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      message: 'The model suggests keeping the current title.',
+    });
+  });
+
+  it('says the model suggests keeping the description when it offers the current one', async () => {
+    const { admin } = await site();
+    provider.answer(replying(JSON.stringify({ description: 'all about  sourdough' })));
+    const response = await admin.post(actionUrl('suggest-description'), {
+      type: 'post',
+      title: 'On Bread',
+      description: 'All about sourdough.',
+      body: 'About sourdough.',
+    });
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      message: 'The model suggests keeping the current description.',
+    });
+  });
+
+  it('suggests a single description', async () => {
+    const { admin } = await site();
+    provider.answer(replying(JSON.stringify({ description: 'Feeding a starter.' })));
+    const response = await admin.post(actionUrl('suggest-description'), {
+      type: 'post',
+      body: 'Feed it flour and water every day.',
+    });
+    assert.deepEqual(await response.json(), { ok: true, value: 'Feeding a starter.' });
+    assert.deepEqual((provider.received[0]?.body as Sent).response_format.json_schema.schema, {
+      type: 'object',
+      properties: { description: { type: 'string' } },
+      required: ['description'],
       additionalProperties: false,
     });
   });
@@ -101,7 +200,7 @@ describe('Suggest title and Suggest description', () => {
         'salt.md': '---\ntitle: Salt Matters\ndate: 2026-10-05T09:00:00Z\n---\n\nSome.\n',
       },
     });
-    provider.answer(replying(JSON.stringify({ title: 'WordCamp US, and maybe not again' })));
+    provider.answer(replying(JSON.stringify({ titles: ['WordCamp US, and maybe not again'] })));
     await admin.post(actionUrl('suggest-title'), {
       type: 'post',
       body: 'About a month ago, I went to WordCamp US in Phoenix.',
@@ -119,7 +218,7 @@ describe('Suggest title and Suggest description', () => {
 
   it('gives no examples on a site with no titled posts, and none to a description', async () => {
     const { admin } = await site({ apiKey: KEY, posts: {} });
-    provider.answer(replying(JSON.stringify({ title: 'Phoenix' })));
+    provider.answer(replying(JSON.stringify({ titles: ['Phoenix'] })));
     await admin.post(actionUrl('suggest-title'), { type: 'post', body: 'Words.' });
     const titled = await site();
     provider.answer(replying(JSON.stringify({ description: 'About bread.' })));
@@ -210,12 +309,15 @@ describe('Suggest title and Suggest description', () => {
         baseUrl: OPENROUTER_BASE_URL,
         model: 'acme/thinker',
       });
-      provider.answer(thinker(JSON.stringify({ title: 'Keeping a Starter Alive' })));
+      provider.answer(thinker(JSON.stringify({ titles: ['Keeping a Starter Alive'] })));
       const response = await admin.post(actionUrl('suggest-title'), {
         type: 'post',
         body: 'Feed it flour and water every day.',
       });
-      assert.deepEqual(await response.json(), { ok: true, value: 'Keeping a Starter Alive' });
+      assert.deepEqual(await response.json(), {
+        ok: true,
+        choices: [{ value: 'Keeping a Starter Alive' }],
+      });
     } finally {
       stop();
     }
@@ -229,7 +331,7 @@ describe('Suggest title and Suggest description', () => {
         baseUrl: OPENROUTER_BASE_URL,
         model: 'acme/unlisted',
       });
-      provider.answer(thinker(JSON.stringify({ title: 'Never written' })));
+      provider.answer(thinker(JSON.stringify({ titles: ['Never written'] })));
       const response = await admin.post(actionUrl('suggest-title'), {
         type: 'post',
         body: 'Feed it flour and water every day.',

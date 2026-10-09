@@ -105,75 +105,122 @@ function draftText(draft: PluginEditorDraft): string {
     .join('\n');
 }
 
-/** A field the model fills, with what it is told about it and how its answer is tidied. */
-interface Ask {
-  readonly key: 'title' | 'description';
-  readonly instruction: string;
-  readonly style: (recentTitles: readonly string[]) => string[];
-  readonly tidy: (text: string) => string;
+/**
+ * Whether two values say the same, ignoring case, spacing and trailing
+ * punctuation, so a suggestion that only re-cases the field is no suggestion.
+ */
+function sameText(a: string, b: string): boolean {
+  const key = (text: string) =>
+    text
+      .replace(/[\s.,;:!?…]+$/u, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  return key(a) === key(b);
 }
 
-const TITLE: Ask = {
-  key: 'title',
-  instruction:
-    'Suggest a title for this blog post, written the way its author would write it: ' +
-    `short, plain and specific, about ${String(TITLE_CHARACTERS)} characters at most. ` +
-    'No quotation marks, no full stop at the end, no clickbait.',
-  style: (recentTitles) => {
-    const examples = recentTitles.slice(0, TITLE_EXAMPLES);
-    return examples.length === 0
-      ? []
-      : [
-          '',
-          'Recent titles on this site, to match their style:',
-          ...examples.map((title) => `- ${title}`),
-        ];
-  },
-  tidy: cleanTitle,
+/** How many titles the author picks from. */
+const TITLES = 3;
+
+const TITLE_INSTRUCTION =
+  'Suggest three titles for this blog post, written the way its author would write them, short: ' +
+  `each about ${String(TITLE_CHARACTERS)} characters at most. ` +
+  'Take a different approach in each: one plain, one specific, one with a little more voice. ' +
+  'No quotation marks, no full stop at the end, no clickbait.';
+
+const DESCRIPTION_INSTRUCTION =
+  'Write the description shown under this post in listings and feeds: one or two plain sentences, ' +
+  `at most ${String(DESCRIPTION_CHARACTERS)} characters and ${String(DESCRIPTION_WORDS)} words, ` +
+  'that say what the post is about. No Markdown, and do not start with "This post".';
+
+const EMPTY_ANSWER: PluginEditorSuggestion = {
+  ok: false,
+  message: 'The model answered with nothing. Try again.',
 };
 
-const DESCRIPTION: Ask = {
-  key: 'description',
-  instruction:
-    'Write the description shown under this post in listings and feeds: one or two plain sentences, ' +
-    `at most ${String(DESCRIPTION_CHARACTERS)} characters and ${String(DESCRIPTION_WORDS)} words, ` +
-    'that say what the post is about. No Markdown, and do not start with "This post".',
-  style: () => [],
-  tidy: fitDescription,
-};
+function system(instruction: string, draft: PluginEditorDraft, style: string[] = []): string {
+  return [
+    `${instruction} Write in the language with the tag "${draft.lang}". ` +
+      'Use only what the post says; invent nothing.',
+    ...style,
+  ].join('\n');
+}
 
-async function suggest(
+function titleStyle(recentTitles: readonly string[]): string[] {
+  const examples = recentTitles.slice(0, TITLE_EXAMPLES);
+  return examples.length === 0
+    ? []
+    : [
+        '',
+        'Recent titles on this site, to match their style:',
+        ...examples.map((title) => `- ${title}`),
+      ];
+}
+
+/**
+ * The model never sees the current title: shown it, a cautious model hands
+ * it back, or an edit of it, instead of a title drawn from the body.
+ */
+async function suggestTitle(
   llm: LlmService,
-  ask: Ask,
   { draft, recentTitles, signal }: PluginEditorContext,
 ): Promise<PluginEditorSuggestion> {
-  if (draft.body.trim() === '' && draft.title.trim() === '') {
+  if (draft.body.trim() === '') {
     return { ok: false, message: 'Write some of the post first. There is nothing to read yet.' };
   }
-  const completion = await llm.complete<Record<typeof ask.key, string>>({
+  const completion = await llm.complete<{ titles: string[] }>({
     messages: [
-      {
-        role: 'system',
-        content: [
-          `${ask.instruction} Write in the language with the tag "${draft.lang}". ` +
-            'Use only what the post says; invent nothing.',
-          ...ask.style(recentTitles),
-        ].join('\n'),
-      },
-      { role: 'user', content: draftText(draft) },
+      { role: 'system', content: system(TITLE_INSTRUCTION, draft, titleStyle(recentTitles)) },
+      { role: 'user', content: draftText({ ...draft, title: '' }) },
     ],
     schema: {
       type: 'object',
-      properties: { [ask.key]: { type: 'string' } },
-      required: [ask.key],
+      properties: { titles: { type: 'array', items: { type: 'string' } } },
+      required: ['titles'],
       additionalProperties: false,
     },
     signal,
   });
   if (!completion.ok) return { ok: false, message: completion.message };
-  const value = ask.tidy(completion.value[ask.key]);
-  return value === ''
-    ? { ok: false, message: 'The model answered with nothing. Try again.' }
+  const offered = completion.value.titles.map(cleanTitle).filter((title) => title !== '');
+  const fresh: string[] = [];
+  for (const title of offered) {
+    if (sameText(title, draft.title) || fresh.some((kept) => sameText(kept, title))) continue;
+    fresh.push(title);
+  }
+  if (fresh.length > 0) {
+    return { ok: true, choices: fresh.slice(0, TITLES).map((value) => ({ value })) };
+  }
+  return offered.length === 0
+    ? EMPTY_ANSWER
+    : { ok: true, message: 'The model suggests keeping the current title.' };
+}
+
+async function suggestDescription(
+  llm: LlmService,
+  { draft, signal }: PluginEditorContext,
+): Promise<PluginEditorSuggestion> {
+  if (draft.body.trim() === '' && draft.title.trim() === '') {
+    return { ok: false, message: 'Write some of the post first. There is nothing to read yet.' };
+  }
+  const completion = await llm.complete<{ description: string }>({
+    messages: [
+      { role: 'system', content: system(DESCRIPTION_INSTRUCTION, draft) },
+      { role: 'user', content: draftText(draft) },
+    ],
+    schema: {
+      type: 'object',
+      properties: { description: { type: 'string' } },
+      required: ['description'],
+      additionalProperties: false,
+    },
+    signal,
+  });
+  if (!completion.ok) return { ok: false, message: completion.message };
+  const value = fitDescription(completion.value.description);
+  if (value === '') return EMPTY_ANSWER;
+  return sameText(value, draft.description)
+    ? { ok: true, message: 'The model suggests keeping the current description.' }
     : { ok: true, value };
 }
 
@@ -192,14 +239,14 @@ export default definePlugin({
       field: 'title',
       label: 'Suggest title',
       offers: offersTitle,
-      suggest: (context) => suggest(host.use(LLM), TITLE, context),
+      suggest: (context) => suggestTitle(host.use(LLM), context),
     });
     host.editorAction({
       id: 'suggest-description',
       field: 'description',
       label: 'Suggest description',
       offers: offersDescription,
-      suggest: (context) => suggest(host.use(LLM), DESCRIPTION, context),
+      suggest: (context) => suggestDescription(host.use(LLM), context),
     });
   },
 });
