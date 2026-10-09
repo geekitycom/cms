@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.1.1...plugin-wordpress-v0.2.0) (2026-10-09)
+
+
+### Features
+
+* **plugin-wordpress:** import a wordpress export into the content directory ([811425d](https://github.com/geekitycom/cms/commit/811425dbb01a1738ca82424f84d6a3249ec588fc))
+* **plugin-wordpress:** import wordpress comments, webmentions and fediverse reactions ([dc5efca](https://github.com/geekitycom/cms/commit/dc5efca2fa022e77f620ecda7ca05dbae9ad20dd))
+* **plugin-wordpress:** import wordpress media to /uploads/ and redirect old media urls ([1e8b033](https://github.com/geekitycom/cms/commit/1e8b0338c2de377699111ea1cd18ed5706b6a43f))
+* **plugin-wordpress:** import wordpress posts and pages with their urls, dates, terms and ids ([ff371e6](https://github.com/geekitycom/cms/commit/ff371e6016728f49f306fe756af6c8b44af93913))
+* **plugin-wordpress:** redirect wordpress ?p=, ?page_id=, old slugs and attachment pages ([cba3915](https://github.com/geekitycom/cms/commit/cba39154a5f81d16c7043267ed3955f2853b1085))
+
 ## [0.1.1](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.1.0...plugin-wordpress-v0.1.1) (2026-10-09)
 
 

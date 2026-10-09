@@ -1,6 +1,6 @@
 {
   "name": "@geekity/plugin-wordpress",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "description": "Geekity CMS plugin for a site that moved from the WordPress ActivityPub plugin: its old inbox and collection paths, and the import that brings each person across.",
   "license": "MIT",
