@@ -316,7 +316,11 @@ export function postObject(
     // each one points at the archive the site serves for it.
     tags: [
       ...mentions(replyTo, mentioned),
-      ...document.tags.map((tag) => hashtag(tag, tagHref(tag, 0, bases), baseUrl)),
+      // In the site's spelling: the document may be a file just read rather than the index's copy.
+      ...document.tags.map((tag) => {
+        const spelled = context.data.store.tagSpelling(tag) ?? tag;
+        return hashtag(spelled, tagHref(spelled, 0, bases), baseUrl);
+      }),
       ...document.categories.map((category) =>
         hashtag(category, categoryHref(category, 0, bases), baseUrl),
       ),

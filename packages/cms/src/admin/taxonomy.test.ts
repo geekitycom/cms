@@ -118,6 +118,18 @@ describe('applyTermChange', () => {
     assert.deepEqual(applyTermChange(terms, 'three', undefined), terms);
   });
 
+  it('matches every casing when given the tag key', () => {
+    const lower = (term: string) => term.toLowerCase();
+    assert.deepEqual(applyTermChange(['OpenSource', 'go'], 'opensource', 'OSS', lower), [
+      'OSS',
+      'go',
+    ]);
+    assert.deepEqual(applyTermChange(['oss', 'OpenSource'], 'OpenSource', 'OSS', lower), ['oss']);
+    assert.deepEqual(applyTermChange(['opensource'], 'OpenSource', 'OpenSource', lower), [
+      'OpenSource',
+    ]);
+  });
+
   it('is a no-op when a term is renamed to itself', () => {
     assert.deepEqual(applyTermChange(['one', 'two'], 'two', 'two'), ['one', 'two']);
   });
@@ -382,5 +394,106 @@ describe('the archive of a renamed term', () => {
     // Nothing carries `11ty` now, and the term `eleventy` was renamed to it,
     // so the old archive URL 404s rather than pointing at a 404.
     assert.equal((await cms.app.request('/tag/11ty/')).status, 404);
+  });
+});
+
+describe('a tag in several casings (TASK-308)', () => {
+  function mixedCase(): Seed[] {
+    return [
+      {
+        file: 'posts/2026-01-01-one.md',
+        title: 'One',
+        permalink: '/one/',
+        date: '2026-01-01T00:00:00Z',
+        tags: ['OpenSource', 'sqlite'],
+      },
+      {
+        file: 'posts/2026-02-01-two.md',
+        title: 'Two',
+        permalink: '/two/',
+        date: '2026-02-01T00:00:00Z',
+        tags: ['opensource'],
+      },
+      {
+        file: 'posts/2026-03-01-three.md',
+        title: 'Three',
+        permalink: '/three/',
+        date: '2026-03-01T00:00:00Z',
+        draft: true,
+        tags: ['OPENSOURCE'],
+      },
+    ];
+  }
+
+  async function tagsOf(cms: Cms, file: string): Promise<string> {
+    const source = await readFile(path.join(cms.config.contentDir, ...file.split('/')), 'utf8');
+    return /tags:\n((?:\s+- .*\n)+)/.exec(source)?.[1]?.replace(/\s+- /g, ' ').trim() ?? '';
+  }
+
+  it('lists the tag once, in the site’s spelling, linked to its lower-case archive', async () => {
+    const cms = await seeded(mixedCase());
+    const agent = await signedIn(cms);
+    const { html } = await screen(agent, '/admin/tags');
+
+    assert.match(html, /href="\/tag\/opensource\/"/);
+    assert.equal([...html.matchAll(/href="\/tag\/opensource\/"/g)].length, 1);
+    assert.doesNotMatch(html, />opensource</);
+    assert.doesNotMatch(html, />OPENSOURCE</);
+  });
+
+  it('renames every casing at once, without asking to merge the tag into itself', async () => {
+    const cms = await seeded(mixedCase());
+    const agent = await signedIn(cms);
+    const { token } = await screen(agent, '/admin/tags');
+
+    const response = await agent.post('/admin/tags/rename', {
+      csrf_token: token,
+      term: 'OpenSource',
+      to: 'OSS',
+    });
+    assert.equal(response.status, 303);
+    assert.equal(await tagsOf(cms, 'posts/2026-01-01-one.md'), 'OSS sqlite');
+    assert.equal(await tagsOf(cms, 'posts/2026-02-01-two.md'), 'OSS');
+    assert.equal(await tagsOf(cms, 'posts/2026-03-01-three.md'), 'OSS');
+
+    const moved = await cms.app.request('/tag/OpenSource/');
+    assert.equal(moved.status, 301);
+    assert.equal(moved.headers.get('location'), '/tag/oss/');
+  });
+
+  it('changes only the case as a rename, and records no redirect for it', async () => {
+    const cms = await seeded(mixedCase());
+    const agent = await signedIn(cms);
+    const { token } = await screen(agent, '/admin/tags');
+
+    const response = await agent.post('/admin/tags/rename', {
+      csrf_token: token,
+      term: 'OpenSource',
+      to: 'Opensource',
+    });
+    assert.equal(response.status, 303, 'a change of case is not a merge to confirm');
+    for (const file of [
+      'posts/2026-01-01-one.md',
+      'posts/2026-02-01-two.md',
+      'posts/2026-03-01-three.md',
+    ]) {
+      assert.match(await tagsOf(cms, file), /^Opensource\b/, file);
+    }
+    const site = JSON.parse(
+      await readFile(path.join(cms.config.contentDir, '_data', 'site.json'), 'utf8'),
+    ) as { taxonomyRedirects?: unknown };
+    assert.deepEqual(site.taxonomyRedirects ?? [], []);
+    assert.equal((await cms.app.request('/tag/opensource/')).status, 200);
+  });
+
+  it('deletes every casing at once', async () => {
+    const cms = await seeded(mixedCase());
+    const agent = await signedIn(cms);
+    const { token } = await screen(agent, '/admin/tags');
+
+    await agent.post('/admin/tags/delete', { csrf_token: token, term: 'opensource' });
+
+    assert.equal(await tagsOf(cms, 'posts/2026-01-01-one.md'), 'sqlite');
+    assert.equal((await cms.app.request('/tag/opensource/')).status, 404);
   });
 });

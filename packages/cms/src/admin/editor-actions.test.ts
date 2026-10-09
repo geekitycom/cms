@@ -315,6 +315,34 @@ describe('editor actions', () => {
     assert.deepEqual(seen, [['Baking', 'bread']]);
   });
 
+  it('hands the plugin each tag once, in the site’s spelling, whatever casings the files use (TASK-308)', async () => {
+    const seen: (readonly string[])[] = [];
+    const tagger = definePlugin({
+      name: NAME,
+      version: '1.0.0',
+      label: 'Tagger',
+      description: 'Suggests tags.',
+      hostApi: HOST_API_VERSION,
+      register(host) {
+        host.editorAction({
+          id: 'suggest-tags',
+          field: 'tags',
+          label: 'Suggest tags',
+          suggest: ({ siteTags }) => {
+            seen.push(siteTags);
+            return { ok: true, value: '' };
+          },
+        });
+      },
+    });
+    const { agent } = await site([tagger], true, {
+      'crust.md':
+        '---\ntitle: Crust\ndate: 2026-09-03T09:00:00Z\ntags: [baking, Bread]\n---\n\nCrisp.\n',
+    });
+    await press(agent, '/admin/posts/new', 'suggest-tags', { body: 'Crumb.' });
+    assert.deepEqual(seen, [['Baking', 'bread']]);
+  });
+
   it('hands the plugin the titles of the site’s latest posts, newest first, the draft’s own left out', async () => {
     const seen: (readonly string[])[] = [];
     const titler = definePlugin({

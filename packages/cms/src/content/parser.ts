@@ -7,6 +7,7 @@ import type { ActivityPubMetadata, Document, DocumentContent, DocumentType } fro
 import type { HandleDirectory } from './handles.ts';
 import { renderMarkdown } from './markdown.ts';
 import { defaultPermalink, slugify } from './slug.ts';
+import { uniqueTags } from './tags.ts';
 import { normalizeBody, serializeDocument } from './writer.ts';
 
 const KNOWN_KEYS = new Set<string>(KNOWN_FRONT_MATTER_KEYS);
@@ -62,7 +63,7 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
   const content: DocumentContent = {
     title,
     permalink,
-    tags: asTerms(data['tags']),
+    tags: uniqueTags(asTerms(data['tags'])),
     categories: asTerms(data['categories']),
     draft: data['draft'] === true,
     extra: extraOf(data),

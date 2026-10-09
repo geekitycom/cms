@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-06 11:41'
+updated_date: '2026-10-09 03:13'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -50,7 +50,7 @@ Keys the CMS reads and writes. Eleventy semantics are preserved.
 | `title` | yes | data | display title |
 | `date` | posts | sets page date | publish date, a UTC ISO 8601 instant ending in `Z` |
 | `permalink` | yes | output URL | canonical URL path; always written explicitly so 11ty and the CMS agree |
-| `tags` | no | collections | taxonomy; `post` tag comes from `posts.json`, not from the file |
+| `tags` | no | collections | taxonomy, matched without regard to case (see Tags below); `post` tag comes from `posts.json`, not from the file |
 | `categories` | no | data | the second taxonomy, archived at `/category/{name}/`; Eleventy reads it as an ordinary data key |
 | `draft` | no | honoured by an 11ty preprocessor | `true` hides from public site and feeds |
 | `visibility` | no | honoured by an 11ty preprocessor | `unlisted` keeps the document's page and drops it from every list; absent is public; any other value hides the document like a draft. See Visibility below |
@@ -76,6 +76,18 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | `activitypub.type` | never written by the CMS. `Note` or `Article`, overriding the ActivityStreams type Post Type Discovery derives for the post (decision-17). Any other value is kept in the file, logged as a warning, and ignored. The `activitypub` block is everything about how a post federates, whether the author set it or the CMS wrote it back, and a save never rewrites what the author set |
 
 Unknown keys are preserved on round trip. The writer emits YAML with a stable key order so diffs stay small.
+
+## Tags
+
+Tags match without regard to case (TASK-308): `WordPress`, `wordpress` and `WORDPRESS` are one tag, with one count, one archive and one feed. Two spellings are the same tag when JavaScript's `toLowerCase()` makes them equal; there is no locale-specific folding and no Unicode normalisation. A file keeps the spelling it was written in: the CMS never rewrites a file only to change a tag's spelling, though a file it saves for another reason (an editor or Micropub save, the `activitypub.published` stamp on a scheduled post coming due) is written with the site's spelling.
+
+- The site shows each tag in one spelling, wherever it prints it: archive titles, a post's tag links, the feeds' categories, ActivityPub hashtags, the admin's tag screens, Micropub's `q=category` and the tags a plugin is handed. That spelling is the one most listed documents use, ties going to the one used earliest; a tag only drafts, scheduled posts or the trash carry is shown in the spelling most of those use. It is worked out from the index, so a rebuild gives the same answer.
+- A tag's archive lives at its lower-case URL, `/{tagBase}/wordpress/`. Any other casing of the archive, its pages and its feeds answers `301` there while something carries the tag. The default theme builds tag links with `tag | lower | urlencode`.
+- A file that lists one tag twice in two casings carries it once, in the first spelling.
+- Saving from the editor or Micropub writes the site's spelling for a tag that matches one ignoring case, leaving the document being saved out of the count, and the editor says when it did. The tag rename, merge and delete screens act on every casing at once; renaming a tag to another casing of itself rewrites every file to that casing and records no redirect.
+- Categories are matched exactly as they are spelled.
+
+An Eleventy build of the same folder treats each casing as a different tag: `collections.WordPress` and `collections.wordpress` are two collections. A tag archive template paginated over the tags and permalinked with `tag | lower` would write both to one URL, which Eleventy refuses as a duplicate permalink. A folder written through the CMS's editor and Micropub keeps one spelling per tag and does not hit this; a file edited by hand in another casing does, until the tag screen renames that tag to one spelling.
 
 ## Author
 

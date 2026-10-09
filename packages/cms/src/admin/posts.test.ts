@@ -2570,3 +2570,56 @@ describe('an event in the editor (TASK-200 AC #4)', () => {
     });
   }
 });
+
+describe('a tag the site already spells another way (TASK-308)', () => {
+  it('takes the site’s spelling, says so, and keeps one of two casings', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-01-earlier.md',
+        title: 'Earlier',
+        permalink: '/earlier/',
+        date: '2026-01-01T00:00:00Z',
+        tags: ['OpenSource'],
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const response = await submit(agent, '/admin/posts/new', {
+      title: 'Later',
+      date: '2026-03-04T10:00:00Z',
+      tags: 'opensource, IndieWeb, indieweb',
+      body: 'More.',
+      action: 'publish',
+    });
+    assert.equal(response.status, 303);
+
+    const written = await readFile(path.join(contentDir, 'posts', '2026-03-04-later.md'), 'utf8');
+    assert.match(written, /^tags:\n {2}- OpenSource\n {2}- IndieWeb\n/m);
+
+    const editor = await (await agent.get(response.headers.get('location') ?? '')).text();
+    assert.match(editor, /Used this site’s spelling of a tag: “OpenSource” for “opensource”\./);
+  });
+
+  it('keeps a new casing of a tag only this post carries', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-01-only.md',
+        title: 'Only',
+        permalink: '/only/',
+        date: '2026-01-01T00:00:00Z',
+        tags: ['opensource'],
+      },
+    ]);
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const response = await submit(agent, '/admin/posts/only', { tags: 'OpenSource' });
+    assert.equal(response.status, 303);
+
+    const written = await readFile(path.join(contentDir, 'posts', '2026-01-01-only.md'), 'utf8');
+    assert.match(written, /^tags:\n {2}- OpenSource\n/m);
+    const editor = await (await agent.get(response.headers.get('location') ?? '')).text();
+    assert.doesNotMatch(editor, /this site’s spelling/);
+  });
+});

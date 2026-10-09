@@ -12,7 +12,7 @@
 {% if tags and tags.length %}
 <p class="post-categories">
   {% for tag in tags %}
-  <a href="{{ ("/" + (site.tagBase or "tag") + "/" + (tag | urlencode) + "/") | url }}" class="p-category" rel="tag">{{ tag }}</a>
+  <a href="{{ ("/" + (site.tagBase or "tag") + "/" + (tag | lower | urlencode) + "/") | url }}" class="p-category" rel="tag">{{ tag }}</a>
   {% endfor %}
 </p>
 {% endif %}

@@ -9,6 +9,8 @@
  * disagree about where an archive is.
  */
 
+import { tagKey } from '../content/tags.ts';
+
 /** Where a paginated listing's later pages live, under any listing root. */
 export const PAGE_SEGMENT = 'page';
 
@@ -113,14 +115,27 @@ export const RESERVED_TOP_LEVEL_PATHS: readonly string[] = [
 ];
 
 /**
- * The URL of a page of either taxonomy's archive, by zero-based index.
+ * What makes two spellings one term: a tag's key, which ignores case
+ * (TASK-308), or a category exactly as it is spelled.
+ */
+export function termKey(taxonomy: Taxonomy, term: string): string {
+  return taxonomy === 'tag' ? tagKey(term) : term;
+}
+
+function sameTerm(taxonomy: Taxonomy, a: string, b: string): boolean {
+  return termKey(taxonomy, a) === termKey(taxonomy, b);
+}
+
+/**
+ * The URL of a page of either taxonomy's archive, by zero-based index. A tag's
+ * archive is at its key, so every casing of it has one URL.
  *
  * This is the one place a taxonomy archive URL is spelled, so the routes, the
  * pager, the canonical redirect, the theme links and the ActivityStreams
  * hashtags cannot disagree about where an archive lives.
  */
 export function termHref(term: TaxonomyTerm, index: number, bases: TaxonomyBases): string {
-  const root = `/${bases[term.taxonomy]}/${encodeURIComponent(term.term)}/`;
+  const root = `/${bases[term.taxonomy]}/${encodeURIComponent(termKey(term.taxonomy, term.term))}/`;
   return index === 0 ? root : `${root}${PAGE_SEGMENT}/${String(index + 1)}/`;
 }
 
@@ -235,12 +250,13 @@ export function recordTermRename(
       recorded.push(entry);
       continue;
     }
-    if (entry.from === change.from || entry.from === change.to) continue;
-    recorded.push(entry.to === change.from ? { ...entry, to: change.to } : entry);
+    const same = (a: string, b: string) => sameTerm(change.taxonomy, a, b);
+    if (same(entry.from, change.from) || same(entry.from, change.to)) continue;
+    recorded.push(same(entry.to, change.from) ? { ...entry, to: change.to } : entry);
   }
 
   recorded.push(change);
-  return recorded.filter((entry) => entry.from !== entry.to);
+  return recorded.filter((entry) => !sameTerm(entry.taxonomy, entry.from, entry.to));
 }
 
 /**
@@ -256,7 +272,9 @@ export function forgetTerm(
   term: string,
 ): TaxonomyRedirect[] {
   return existing.filter(
-    (entry) => entry.taxonomy !== taxonomy || (entry.from !== term && entry.to !== term),
+    (entry) =>
+      entry.taxonomy !== taxonomy ||
+      (!sameTerm(taxonomy, entry.from, term) && !sameTerm(taxonomy, entry.to, term)),
   );
 }
 
@@ -272,7 +290,7 @@ export function redirectedTerm(
   term: TaxonomyTerm,
 ): string | undefined {
   const found = redirects.find(
-    (entry) => entry.taxonomy === term.taxonomy && entry.from === term.term,
+    (entry) => entry.taxonomy === term.taxonomy && sameTerm(term.taxonomy, entry.from, term.term),
   );
   return found?.to;
 }
@@ -297,7 +315,8 @@ export function taxonomyRedirectsOf(value: unknown): TaxonomyRedirect[] {
 
     if (!TAXONOMIES.includes(taxonomy as Taxonomy)) continue;
     if (typeof from !== 'string' || typeof to !== 'string') continue;
-    if (from.trim() === '' || to.trim() === '' || from === to) continue;
+    if (from.trim() === '' || to.trim() === '') continue;
+    if (sameTerm(taxonomy as Taxonomy, from, to)) continue;
 
     redirects.push({ taxonomy: taxonomy as Taxonomy, from, to });
   }

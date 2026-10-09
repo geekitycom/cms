@@ -8,7 +8,7 @@ import { FEED_FORMATS, notifyEndpoints } from './web/feeds.ts';
 import type { NotifyServer } from './web/feeds.ts';
 import { absoluteUrl } from './web/negotiate.ts';
 import { feedHref } from './web/routes.ts';
-import { TAXONOMIES } from './web/taxonomy.ts';
+import { TAXONOMIES, termKey } from './web/taxonomy.ts';
 import type { TaxonomyTerm } from './web/taxonomy.ts';
 
 /**
@@ -214,7 +214,7 @@ function termsOf(before: Document | undefined, after: Document | undefined): Tax
     if (document === undefined) continue;
     for (const taxonomy of TAXONOMIES) {
       for (const term of taxonomy === 'tag' ? document.tags : document.categories) {
-        const key = `${taxonomy}:${term}`;
+        const key = `${taxonomy}:${termKey(taxonomy, term)}`;
         if (seen.has(key)) continue;
         seen.add(key);
         terms.push({ taxonomy, term });

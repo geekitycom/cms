@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import type { Hashtag } from '@fedify/vocab';
+
 import { resolveNothing } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
@@ -11,6 +13,7 @@ import type { SiteSettings } from '../admin/settings.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { postObject } from './article.ts';
 import { OUTBOX_PAGE_SIZE } from './federation.ts';
 import { createActivityId } from './paths.ts';
 
@@ -229,6 +232,52 @@ describe('the post object', () => {
         ['Hashtag', '#general', `${BASE_URL}/category/general/`],
       ],
     );
+  });
+
+  it('names a tag in the site’s spelling and points at its lower-case archive (TASK-308)', async () => {
+    const instance = await site({
+      ...HELLO,
+      'posts/2026-09-01-a.md': post('A', {
+        date: '2026-09-01T09:00:00Z',
+        permalink: '/2026/09/a/',
+        tags: ['Notes'],
+      }),
+      'posts/2026-08-01-b.md': post('B', {
+        date: '2026-08-01T09:00:00Z',
+        permalink: '/2026/08/b/',
+        tags: ['Notes'],
+      }),
+    });
+
+    const article = (await (
+      await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+
+    const list = article['tag'] as { name?: string; href?: string }[];
+    assert.deepEqual(list[0], {
+      type: 'Hashtag',
+      name: '#Notes',
+      href: `${BASE_URL}/tag/notes/`,
+    });
+
+    // What delivery builds from: a file just read, in its own casing.
+    const indexed = instance.store.getByPermalink('/2026/09/hello/');
+    assert.ok(indexed !== undefined);
+    const context = instance.federation.createContext(new URL(BASE_URL), {
+      admin: instance.admin,
+      store: instance.store,
+      config: instance.config,
+      actorProfiles: instance.actorProfiles,
+      cited: () => undefined,
+    });
+    const built = postObject(context, { ...indexed, tags: ['NOTES'] });
+    let first: unknown;
+    for await (const tag of built.getTags()) {
+      first = tag;
+      break;
+    }
+    assert.equal((first as Hashtag | undefined)?.name?.toString(), '#Notes');
+    assert.equal((first as Hashtag | undefined)?.href?.href, `${BASE_URL}/tag/notes/`);
   });
 
   it('points its hashtags at the bases the site is configured with (AC #5)', async () => {
