@@ -38,6 +38,8 @@ themes/default/
     contact-form.njk  the form on a page whose front matter says contact: true
     archive.njk       every post by month, on a page that says archive: true
     search-form.njk   the search box, on the search page
+    head-end.njk      empty: what a site adds to the end of every <head>
+    body-end.njk      empty: what a site adds to the end of every <body>
   mail/
     test.*.njk              the Send test email message
     password-reset.*.njk    the forgot-password link
@@ -186,6 +188,94 @@ There is no posts page layout: a site that sets one gets the listing layout
 until it writes one. On the posts page the page's own front matter and rendered
 body are on the context beside the listing, so `{{ content | safe }}` prints its
 words above the posts; `layouts/home.njk` already does.
+
+## Adding to every page
+
+Analytics, a site verification tag or a chat widget goes on every page, and
+none of them needs a layout copied. `layouts/base.njk` includes two partials
+that this theme ships empty:
+
+| Partial                 | Printed                                            |
+| ----------------------- | -------------------------------------------------- |
+| `partials/head-end.njk` | last in `<head>`, after the cards and the JSON-LD  |
+| `partials/body-end.njk` | last in `<body>`, after the footer and the scripts |
+
+A site theme that holds one of them, and nothing else but its `theme.json`,
+adds that markup to every public HTML page: posts, pages, listings, search, the
+front page, and the 404, 410, 500 and 503 pages. Every other template still
+comes from this directory, so the site keeps receiving updates to them, and
+the two partial names stay as they are. The includes sit outside every block,
+so a layout that overrides `head` or `scripts` without `super()` keeps them.
+
+They are part of the HTML page and nothing else. The Markdown, plain text and
+JSON representations of a page, the feeds, `llms.txt`, mail and the admin do
+not print them. The editor's preview renders the post or page layout in the
+admin, so the context there carries `editorPreview: true` and `layouts/base.njk`
+leaves both partials out. A theme that replaces `layouts/base.njk` and includes
+them itself should test the same key.
+
+Umami and Google Analytics 4, in `themes/analytics/`:
+
+```
+themes/analytics/
+  theme.json
+  partials/head-end.njk
+```
+
+```json
+{ "name": "Analytics", "kind": "site" }
+```
+
+```njk
+<script defer src="https://cloud.umami.is/script.js" data-website-id="your-website-id"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-XXXXXXXXXX');
+</script>
+```
+
+Then wear the theme, either with Activate on **Appearance > Themes** or with
+`"theme": "analytics"` in `content/_data/site.json`. A site that already wears
+a theme of its own puts the partial in that theme instead.
+
+The partial is a template, rendered with the page's context, so it can read a
+value out of `site.json`, as in `data-website-id="{{ site.umamiId }}"`.
+
+**In Docker.** The image reads themes from `/site/themes`. Mount the site's
+`themes/` directory there, read-only, which is the commented line in
+`deploy/compose.yaml`:
+
+```yaml
+volumes:
+  - ./themes:/site/themes:ro
+```
+
+No custom image is needed. A change to the partial shows on the next request.
+
+**Under a Content-Security-Policy.** The default headers set only
+`frame-ancestors`, so they restrict nothing a page loads, and the inline gtag
+configuration runs as it is. A site that sets a policy of its own with
+`securityHeaders` must allow what the snippets load and where they send data:
+
+| Directive     | Umami                      | Google Analytics 4                                                                             |
+| ------------- | -------------------------- | ---------------------------------------------------------------------------------------------- |
+| `script-src`  | `https://cloud.umami.is`   | `https://*.googletagmanager.com`, and the inline configuration (see below)                     |
+| `connect-src` | `https://gateway.umami.is` | `https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com` |
+| `img-src`     | none                       | `https://*.google-analytics.com https://*.googletagmanager.com`                                |
+
+The inline `<script>` that configures gtag needs one of these:
+
+- Move it to a file in the theme, `themes/analytics/static/gtag.js`, and load
+  it with `<script src="{{ "gtag.js" | asset }}"></script>`. It is then served
+  from the site, and `script-src 'self'` covers it.
+- Allow its hash, `'sha256-…'`, in `script-src`. The hash covers every byte
+  between the tags, so it changes when the measurement ID or the whitespace
+  changes.
+- Allow `'unsafe-inline'` in `script-src`. This also allows any injected
+  inline script, so prefer one of the other two.
 
 ## The page shell
 
@@ -386,6 +476,17 @@ syndication target the post selects (`syndicateTo`, TASK-155), which is what
 IndieNews and Bridgy Publish look for on the page, and ends with the post's
 copies elsewhere (`syndication`) after **Also on**. A page never prints either,
 and its line is a `p.page-meta` rather than a `p.entry-meta`.
+
+**A post first published elsewhere says so.** A post whose front matter names
+its original with `canonical_href`, an absolute http or https URL such as a
+Substack essay's, has it on the context as `original` (TASK-293). The line
+then reads **Originally published at** and links the original's host as a
+second `u-url` of the h-entry, after the permalink's. It is no
+`u-syndication`, because the original is not a copy of this post, and
+original-post-discovery reads a copy's off-site `u-url` as its original. The
+same URL is the page's `rel="canonical"` and its `og:url`, so search engines
+credit the original. A value that is not an absolute http or https URL is
+ignored, and `geekity sync` names the file.
 
 **Every post's page has one `h1`.** A post with a name of its own is headed by
 it, as above. So is a post with a title and no words, such as a titled like,
@@ -919,7 +1020,8 @@ mode gets a dark canvas rather than a white flash while the stylesheet loads.
 **The card.** `og:title` is the page's title, or the site's on the front page;
 `og:site_name` is always the site's. `og:type` is `article` on a rendered post
 or page and `website` everywhere else, a listing carrying a page's front matter
-included. `og:url` is the canonical URL. An article also carries
+included. `og:url` is the canonical URL: the page's own, or the `original` a
+post first published elsewhere names. An article also carries
 `article:published_time`, `article:modified_time` (the `updated` date, else the
 publish date), `article:author` (the author's profile URL here, else their
 name) and one `article:tag` per tag.
@@ -1220,6 +1322,54 @@ the `+` and the `-` in the text carry the meaning as well as the colour does.
 {% block scripts %}{% endblock %}
 ```
 
+### Videos
+
+A YouTube or Vimeo URL on a line of its own in a post plays as the video
+(decision-34; doc-2 lists the addresses it knows). The core renders it into the
+body, so it reaches a theme inside `content` as:
+
+```html
+<figure class="video-embed video-embed-youtube">
+  <iframe
+    src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"
+    width="560"
+    height="315"
+    title="YouTube video"
+    loading="lazy"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    referrerpolicy="strict-origin-when-cross-origin"
+    allowfullscreen
+  ></iframe>
+  <figcaption>
+    <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+      >https://www.youtube.com/watch?v=dQw4w9WgXcQ</a
+    >
+  </figcaption>
+</figure>
+```
+
+It is one line in the real output. A Vimeo video is the same with
+`video-embed-vimeo`, a `https://player.vimeo.com/video/ID?dnt=1` player and the
+title `Vimeo video`. The core sets no style on it: with nothing from the theme
+the player is the providers' standard 560 by 315.
+
+**Paper** makes it responsive. `.video-embed iframe` takes the full width of
+the text column at 16:9, with the rounded corners an image has, and the
+figcaption takes the muted caption style every figure in a post has. A theme
+that ships its own `static/style.css` writes that rule itself:
+
+```css
+.video-embed iframe {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+```
+
+The figcaption is the link a feed reader, a fediverse server or the embed view
+keeps when it drops the iframe. A theme that would rather not show it on the
+page can hide `.video-embed figcaption`; the feeds carry it either way.
+
 ## Mail templates
 
 The messages the CMS sends live under `mail/` and resolve the same way, so a
@@ -1328,6 +1478,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `event`                                     | An event's `{ start, end, location }`: `Date`s, and `{ kind: "place", name }` or `{ kind: "virtual", url }`.      |
 | `syndicateTo`                               | On a post's page, the syndication targets it selects, each `{ id, name, url }`. Empty with none.                  |
 | `syndication`                               | Its copies elsewhere, each `{ url, label }`: front matter `syndication`, and on its page the copies targets made. |
+| `original`                                  | Where it was first published, as `{ url, label }`: front matter `canonical_href`. Absent unless http or https.    |
 | `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |
 | `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
 | `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                       |

@@ -246,6 +246,7 @@ export function resendMessage(
 /** What the ActivityPub half of a resend came to. */
 function deliveryMessage(report: DeliveryReport | undefined): string | undefined {
   if (report === undefined) return undefined;
+  if (report.held) return `Dev mode held the ${report.activityType}: nothing was sent.`;
 
   const total = report.deliveries.length;
   if (total === 0) {

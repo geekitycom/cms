@@ -115,7 +115,7 @@ function normalizePath(path: string): string {
  * The slug a permalink implies: its last segment, without any file extension.
  * `/2026/09/hello-world/` is `hello-world`; `/feed.xml` is `feed`.
  */
-function slugForPermalink(permalink: string): string | undefined {
+export function slugForPermalink(permalink: string): string | undefined {
   const segments = permalink.split('/').filter((segment) => segment !== '');
   const last = segments.at(-1);
   if (last === undefined) return undefined;

@@ -4,6 +4,7 @@ import footnote from 'markdown-it-footnote';
 
 import type { HandleDirectory } from './handles.ts';
 import { slugify } from './slug.ts';
+import { videoEmbedHtml, videoOf } from './video.ts';
 
 /**
  * The renderer: markdown-it with Eleventy's default option (`html: true`),
@@ -17,7 +18,8 @@ const markdown: MarkdownItInstance = new MarkdownIt({ html: true, linkify: true 
   .use(focusableCodeBlocks)
   .use(htmlInlineOffsets)
   .use(fediverseHandles)
-  .use(schemedLinksOnly);
+  .use(schemedLinksOnly)
+  .use(videoEmbeds);
 
 function schemedLinksOnly(md: MarkdownItInstance): void {
   md.linkify.set({ fuzzyLink: false, fuzzyEmail: false, fuzzyIP: false });
@@ -72,6 +74,36 @@ function htmlInlineOffsets(md: MarkdownItInstance): void {
     return true;
   };
   md.inline.ruler.before('html_inline', 'geekity_html_inline_offset', rule);
+}
+
+function videoEmbeds(md: MarkdownItInstance): void {
+  md.core.ruler.push('geekity_video_embeds', (state) => {
+    for (let index = state.tokens.length - 2; index > 0; index -= 1) {
+      const open = state.tokens[index - 1];
+      const inline = state.tokens[index];
+      if (open?.type !== 'paragraph_open' || open.level !== 0 || inline === undefined) continue;
+
+      const href = loneAutolinkOf(inline);
+      const video = href === undefined ? undefined : videoOf(href);
+      if (href === undefined || video === undefined) continue;
+
+      const embed = new state.Token('html_block', '', 0);
+      embed.content = `${videoEmbedHtml(video, href)}\n`;
+      embed.map = open.map;
+      state.tokens.splice(index - 1, 3, embed);
+    }
+    return true;
+  });
+}
+
+function loneAutolinkOf(inline: Token): string | undefined {
+  const [open, text, close, ...rest] = inline.children ?? [];
+  if (rest.length > 0 || open?.type !== 'link_open' || close?.type !== 'link_close')
+    return undefined;
+  if (open.markup !== 'linkify' && open.markup !== 'autolink') return undefined;
+  if (text?.type !== 'text') return undefined;
+  const href = open.attrGet('href');
+  return typeof href === 'string' ? href : undefined;
 }
 
 /**

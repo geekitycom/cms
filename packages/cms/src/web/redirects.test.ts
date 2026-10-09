@@ -155,6 +155,80 @@ describe('a declared redirect', () => {
   });
 });
 
+describe('redirects split across files', () => {
+  it('serves every file under _data/redirects/ beside redirects.json, as a list or a map', async () => {
+    const { cms } = await site({
+      ...CONTENT,
+      '_data/redirects.json': redirects([{ from: '/old-hello/', to: '/2026/09/hello/' }]),
+      '_data/redirects/imported.json': redirects({
+        '/?p=12': '/2026/09/hello/',
+        '/?page_id=7': '/about/',
+        '/photo-png/': '/uploads/2024/03/photo.png',
+      }),
+      '_data/redirects/legacy.json': redirects([
+        { from: '/essays/hello/', to: '/2026/09/hello/', status: 308 },
+      ]),
+    });
+
+    assert.deepEqual(await redirectOf(cms, '/old-hello/'), {
+      status: 301,
+      location: '/2026/09/hello/',
+    });
+    assert.deepEqual(await redirectOf(cms, '/?p=12'), {
+      status: 301,
+      location: '/2026/09/hello/',
+    });
+    assert.deepEqual(await redirectOf(cms, '/?page_id=7'), { status: 301, location: '/about/' });
+    assert.deepEqual(await redirectOf(cms, '/photo-png/'), {
+      status: 301,
+      location: '/uploads/2024/03/photo.png',
+    });
+    assert.deepEqual(await redirectOf(cms, '/essays/hello/'), {
+      status: 308,
+      location: '/2026/09/hello/',
+    });
+  });
+
+  it('lets redirects.json win a source another file also declares, and says so', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    const { cms } = await site({
+      ...CONTENT,
+      '_data/redirects.json': redirects([{ from: '/?p=12', to: '/about/' }]),
+      '_data/redirects/imported.json': redirects({ '/?p=12': '/2026/09/hello/' }),
+    });
+
+    assert.deepEqual(await redirectOf(cms, '/?p=12'), { status: 301, location: '/about/' });
+    const reported = warn.mock.calls.map((call) => String(call.arguments[0])).join('\n');
+    assert.match(reported, /imported\.json: "\/\?p=12" is declared more than once/);
+  });
+
+  it('reads a file added under _data/redirects/ on the next request', async () => {
+    const { cms, contentDir } = await site(CONTENT);
+    assert.equal((await cms.app.request('/?p=12')).status, 200);
+
+    await writeTree(contentDir, {
+      '_data/redirects/imported.json': redirects({ '/?p=12': '/2026/09/hello/' }),
+    });
+    assert.deepEqual(await redirectOf(cms, '/?p=12'), {
+      status: 301,
+      location: '/2026/09/hello/',
+    });
+  });
+
+  it('reports a map entry whose target is not a string', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    const { cms } = await site({
+      ...CONTENT,
+      '_data/redirects/imported.json': redirects({ '/a/': 7, '/b/': '/about/' }),
+    });
+
+    const reported = warn.mock.calls.map((call) => String(call.arguments[0])).join('\n');
+    assert.match(reported, /imported\.json: entry 1 \("\/a\/"\) has a "to" of 7/);
+    assert.equal((await cms.app.request('/a/')).status, 404);
+    assert.equal((await redirectOf(cms, '/b/')).status, 301);
+  });
+});
+
 describe('a declared redirect and what lives on the site', () => {
   it('never shadows a live document, a representation of one, or a route', async () => {
     const { cms } = await site({

@@ -90,13 +90,19 @@
       {%- if updated and (not date or (updated | date("html")) != (date | date("html"))) %}
       {% if date %}<span aria-hidden="true">·</span> {% endif %}<time class="small dt-updated" datetime="{{ updated | date("iso") }}">Updated {{ updated | date("readable", none, lang) }}</time>
       {%- endif %}
+      {#- A second `u-url` rather than a `u-syndication`: the original is not
+          a copy of this post, and original-post-discovery reads a copy's
+          off-site `u-url` as the original. -#}
+      {%- if original %}
+      {% if date or updated %} <span aria-hidden="true">·</span> {% endif %}<span class="small">Originally published at <a class="u-url" href="{{ original.url }}">{{ original.label }}</a></span>
+      {%- endif %}
       {#- The post's copies elsewhere: those its targets answered with and
           those its front matter lists by hand. -#}
       {%- if syndication.length %}
-      {% if date or updated %} <span aria-hidden="true">·</span> {% endif %}<span class="small">Also on {% for copy in syndication %}<a class="u-syndication" href="{{ copy.url }}">{{ copy.label }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
+      {% if date or updated or original %} <span aria-hidden="true">·</span> {% endif %}<span class="small">Also on {% for copy in syndication %}<a class="u-syndication" href="{{ copy.url }}">{{ copy.label }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
       {%- endif -%}
       {%- if location %}
-      {% if date or updated or syndication.length %} <span aria-hidden="true">·</span> {% endif %}<span class="small">{% include "partials/location.njk" %}</span>
+      {% if date or updated or original or syndication.length %} <span aria-hidden="true">·</span> {% endif %}<span class="small">{% include "partials/location.njk" %}</span>
       {%- endif -%}
     </p>
   </section>

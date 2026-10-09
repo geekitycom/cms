@@ -21,6 +21,7 @@ import {
 
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
+import { enterDevMode, readDevModeRecord } from '../dev-mode.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
@@ -281,6 +282,23 @@ describe('a Follow', () => {
     const accepted = accept.body['object'] as Record<string, unknown> | string;
     const acceptedId = typeof accepted === 'string' ? accepted : accepted['id'];
     assert.equal(acceptedId, `${REMOTE_ORIGIN}/follows/1`);
+  });
+
+  it('in dev mode, stores the follower and holds the Accept (TASK-295)', async () => {
+    const instance = await site();
+    enterDevMode(instance.config.dataDir, 'command');
+
+    const response = await deliver(instance, follow());
+
+    assert.equal(response.status, 202, await response.text());
+    assert.equal(instance.admin.getFollower(LOCAL_USER, REMOTE_ACTOR)?.inboxId, REMOTE_INBOX);
+    assert.deepEqual(deliveries, [], 'no Accept went out');
+    const held = readDevModeRecord(instance.config.dataDir).filter(
+      (entry) => entry.type === 'held',
+    );
+    assert.equal(held.length, 1);
+    assert.match(held[0]?.type === 'held' ? held[0].what : '', /^Accept /);
+    assert.deepEqual(held[0]?.type === 'held' ? held[0].to : [], [REMOTE_INBOX]);
   });
 
   it('answers from the stored actor id when the user has one (AC #3)', async () => {

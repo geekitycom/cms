@@ -3,7 +3,7 @@ id: doc-4
 title: ActivityPub Federation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-08 15:03'
+updated_date: '2026-10-09 16:09'
 ---
 # ActivityPub Federation
 
@@ -97,6 +97,8 @@ Because the id is the permalink, the permalink is a promise to two audiences at 
 | non-draft post content, title or `activitypub.type` changes | `Update` of its `Note` or `Article` |
 | post becomes draft, is trashed, or file deleted | `Delete` of a `Tombstone` whose `formerType` is the post's object type |
 | a user's profile is saved on the users screen | `Update` of that user's actor |
+
+A post whose front matter says `migrated: true` was public somewhere else before it reached this site (TASK-296, decision-36), and the table applies to it only as far as its followers hold it. With an `activitypub.published` it is an announced post: an edit sends an `Update` and taking it down a `Delete`, but coming into view (its file appearing, a draft published, its date arriving) sends nothing, never a `Create`. Without one, nothing about it is ever delivered: no `Create`, `Update` or `Delete`, no revision when a cited page's context is stored, and a resend sends nothing. Its object is served at its id either way.
 
 The sync layer emits the post events from index diffs, so editing a file on disk federates the same way an admin save does. All three name the same object type for a given post, because each is built from the file through the same rule. Changing the type of a post that has already been announced sends an `Update` carrying the new type; whether a remote server re-renders a status whose object type changed is not established, so for a post already out the override may in practice only count at first publish. A post is delivered to **its author's followers** and to every accepted relay, each recipient grouped into the inbox one POST reaches (shared inbox when available). Nothing on the settings screen is anybody's profile any more, so no save there tells anybody anything. The `activitypub` front-matter block is everything about how a post federates, whether its author set it or the CMS wrote it back. `activitypub.published` records that a post has been announced and when, which is what decides `Create` against `Update` and what a restore reuses. It is the only key a delivery writes. `activitypub.id` and `activitypub.type` are the author's, and neither a delivery nor an admin save ever rewrites them.
 

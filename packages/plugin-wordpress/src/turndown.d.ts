@@ -1,0 +1,48 @@
+/**
+ * Turndown's API as `wordpress-html.ts` uses it. `@types/turndown` is written
+ * against the browser's DOM types, which this package does not load, so the
+ * node a rule receives is described by the parts read of it: in Node it is a
+ * domino node.
+ */
+declare module 'turndown' {
+  export interface TurndownNode {
+    readonly nodeName: string;
+    readonly nodeType: number;
+    nodeValue: string | null;
+    readonly textContent: string | null;
+    readonly parentNode: TurndownNode | null;
+    readonly firstChild: TurndownNode | null;
+    readonly nextSibling: TurndownNode | null;
+    readonly childNodes: ArrayLike<TurndownNode>;
+    readonly children: ArrayLike<TurndownNode>;
+    readonly ownerDocument: { createTextNode(text: string): TurndownNode } | null;
+    readonly outerHTML: string;
+    getAttribute(name: string): string | null;
+    /** domino answers `undefined` when nothing matches. */
+    querySelector(selectors: string): TurndownNode | null | undefined;
+    querySelectorAll(selectors: string): ArrayLike<TurndownNode>;
+    closest(selectors: string): TurndownNode | null | undefined;
+    cloneNode(deep: boolean): TurndownNode;
+    insertBefore(node: TurndownNode, before: TurndownNode): void;
+    appendChild(node: TurndownNode): void;
+  }
+
+  export interface Options {
+    headingStyle?: 'setext' | 'atx';
+    codeBlockStyle?: 'indented' | 'fenced';
+    bulletListMarker?: '-' | '+' | '*';
+    emDelimiter?: '_' | '*';
+  }
+
+  export interface Rule {
+    filter: string | string[] | ((node: TurndownNode) => boolean);
+    replacement: (content: string, node: TurndownNode, options: Options) => string;
+  }
+
+  export default class TurndownService {
+    constructor(options?: Options);
+    addRule(key: string, rule: Rule): this;
+    escape(text: string): string;
+    turndown(html: string): string;
+  }
+}

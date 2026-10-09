@@ -172,6 +172,10 @@ function mountMail(app: Hono<GeekityEnv>, _options: MountSettingsOptions): void 
 
     const result = await c.var.mail.send({ to, template: MAIL_TEST_TEMPLATE });
 
+    if (result.held) {
+      flash(c, 'warning', `Dev mode is on, so the test message to ${to} was held, not sent.`);
+      return c.redirect(here, 303);
+    }
     flash(
       c,
       result.ok && !result.skipped ? 'notice' : 'error',

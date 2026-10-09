@@ -81,9 +81,14 @@ export interface PluginActorKey {
   readonly jwk: string | undefined;
 }
 
-/** The site's accounts, keys and followers, as a plugin may read and change them. */
+/** The site's accounts, keys, followers and content, as a plugin may read and change them. */
 export interface PluginSite {
   readonly baseUrl: string;
+  /**
+   * The content directory, absolute. A file written here is picked up as an
+   * edit by hand is: by the watcher while the site runs, else at the next boot.
+   */
+  readonly contentDir: string;
   /** Every account, in the users file's order. */
   users(): readonly PluginUser[];
   /**
@@ -103,7 +108,58 @@ export interface PluginSite {
   followers(username: string): readonly PluginFollower[];
   /** Add a follower, or refresh the one already held. */
   addFollower(username: string, follower: PluginFollower): Promise<void>;
+  /**
+   * Hold a file to the rules an upload through the editor is held to: the
+   * site's allowed types, its size limit for the file's kind, the format's
+   * leading bytes, and location and camera metadata removed. Answers the
+   * bytes to store under `uploads/`, or why the site refuses the file. It
+   * writes nothing.
+   */
+  checkUpload(name: string, bytes: Uint8Array): PluginUploadCheck;
+  /** The comments on the post at a permalink, as its comment file holds them, emails included. */
+  comments(permalink: string): PluginPostComments;
+  /**
+   * Write comments onto the post at a permalink: each in place of the one
+   * with its id, or after the last. No other comment changes or moves. The
+   * site renders each one's Markdown through its comment profile and keeps an
+   * email only in `data/`. Nobody is told: no notice, digest or delivery.
+   */
+  putComments(permalink: string, comments: readonly PluginComment[]): Promise<void>;
 }
+
+/** What {@link PluginSite.comments} reads. */
+export interface PluginPostComments {
+  /** The comment file, relative to the content directory, such as `_data/comments/hello.json`. */
+  readonly file: string;
+  readonly comments: readonly PluginComment[];
+}
+
+/** One comment, reaction or webmention on a post, as a plugin reads and writes it. */
+export interface PluginComment {
+  /** Unique across the site, and what a reply names in {@link PluginComment.inReplyTo}. */
+  readonly id: string;
+  readonly source: 'comment' | 'webmention' | 'activitypub';
+  readonly kind: 'reply' | 'like' | 'boost' | 'repost' | 'mention';
+  readonly status: 'pending' | 'approved' | 'spam';
+  readonly author: {
+    readonly name: string;
+    readonly url: string | null;
+    /** Never published: the site keeps it in `data/`. */
+    readonly email: string | null;
+    readonly avatar: string | null;
+  };
+  readonly markdown: string;
+  /** An ISO 8601 instant. */
+  readonly submitted: string;
+  readonly inReplyTo: string | null;
+  /** Where it lives when it lives somewhere else, such as a webmention's source page. */
+  readonly url: string | null;
+}
+
+/** What {@link PluginSite.checkUpload} makes of a file. */
+export type PluginUploadCheck =
+  | { readonly accepted: true; readonly bytes: Uint8Array }
+  | { readonly accepted: false; readonly why: string };
 
 /** The plugin's private folder, `data/plugins/<package name>/`. */
 export interface PluginDataFolder {

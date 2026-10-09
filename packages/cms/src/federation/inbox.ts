@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Context, InboxContext } from '@fedify/fedify';
+import type { Context, InboxContext, SenderKeyPair } from '@fedify/fedify';
 import {
   Accept,
   Activity,
@@ -18,6 +18,7 @@ import type { Actor } from '@fedify/vocab';
 import { listUsers, primaryUser } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import type { NewFollower } from '../admin/store.ts';
+import { holdOutbound } from '../dev-mode.ts';
 import { actorId, senderKeyPairs, userByUsername } from './actor.ts';
 import { documentAuthor, isFederatedDocument, postByObjectId } from './article.ts';
 import { postObjectId } from '../web/documents.ts';
@@ -59,7 +60,8 @@ export async function handleFollow(context: SiteInboxContext, follow: Follow): P
 
   await addFollower(recordsOf(context), followed.username, follower);
 
-  await context.sendActivity(
+  await reply(
+    context,
     await senderKeyPairs(context, followed),
     actor,
     new Accept({
@@ -239,7 +241,8 @@ export async function handleQuoteRequest(
   const sender = await senderKeyPairs(context, author);
   const from = actorId(context, author);
   if (!quotable) {
-    await context.sendActivity(
+    await reply(
+      context,
       sender,
       requester,
       new Reject({ id: new URL(`#reject/${randomUUID()}`, from), actor: from, object: request }),
@@ -254,7 +257,8 @@ export async function handleQuoteRequest(
     actor: requester.id.href,
   });
   const stamp = quoteAuthorization(context, author, record);
-  await context.sendActivity(
+  await reply(
+    context,
     sender,
     requester,
     new Accept({
@@ -460,4 +464,18 @@ function withRecipient(
         : value;
     },
   });
+}
+
+async function reply(
+  context: SiteInboxContext,
+  sender: SenderKeyPair[],
+  recipient: Actor,
+  activity: Accept | Reject,
+): Promise<void> {
+  const held = holdOutbound(context.data.config, {
+    kind: 'activitypub',
+    what: `${activity instanceof Accept ? 'Accept' : 'Reject'} ${activity.id?.href ?? ''}`,
+    to: [recipient.inboxId?.href ?? recipient.id?.href ?? ''],
+  });
+  if (!held) await context.sendActivity(sender, recipient, activity);
 }

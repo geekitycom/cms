@@ -43,6 +43,7 @@ import {
   maintenanceFile,
   readMaintenance,
 } from './maintenance.ts';
+import { devModeOn, enterDevMode, leaveDevMode } from './dev-mode.ts';
 
 export type Command =
   | 'serve'
@@ -52,6 +53,7 @@ export type Command =
   | 'resend'
   | 'user'
   | 'maintenance'
+  | 'dev-mode'
   | 'strip-metadata'
   | 'plugin'
   | 'help'
@@ -66,6 +68,7 @@ const COMMANDS: readonly Command[] = [
   'resend',
   'user',
   'maintenance',
+  'dev-mode',
   'strip-metadata',
   'plugin',
 ];
@@ -118,6 +121,7 @@ Usage:
   geekity rebuild [--config <file>]
   geekity resend (--all | <slug>...) [--config <file>]
   geekity maintenance (on [--until <time>] | off | status) [--config <file>]
+  geekity dev-mode (on | off | status) [--config <file>]
   geekity strip-metadata [--config <file>]
   geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
   geekity plugin (add <package>[@version] | remove <package>) [--config <file>]
@@ -140,6 +144,12 @@ Commands:
                    503 with Retry-After; the admin, /healthz and signed-in
                    users are let through. A running site notices within a
                    second, with no restart.
+  dev-mode         Hold everything the site would send to the outside world
+                   (ActivityPub deliveries and relay follows, webmentions,
+                   rssCloud and WebSub pings, IndexNow, email) while it is
+                   built or migrated, and record each one in
+                   data/dev-mode.jsonl. off takes the site live: nothing held
+                   is sent then, and the record says when it went live.
   strip-metadata   Remove location and camera metadata (EXIF, XMP, IPTC, a
                    video's location) from files already in content/uploads.
                    New uploads are stripped as they arrive; this is for the
@@ -183,7 +193,8 @@ Options:
 Environment overrides:
   GEEKITY_PORT (or PORT), GEEKITY_CONTENT_DIR, GEEKITY_DATA_DIR,
   GEEKITY_THEMES_DIR, GEEKITY_PLUGINS_DIR, GEEKITY_BASE_URL, GEEKITY_WATCH,
-  GEEKITY_MAINTENANCE (on keeps the site in maintenance until a restart)
+  GEEKITY_MAINTENANCE (on keeps the site in maintenance until a restart),
+  GEEKITY_DEV_MODE (on starts the site in dev mode; only dev-mode off ends it)
 `;
 
 /** Turn `process.argv.slice(2)` into a command, its options and its arguments. */
@@ -450,6 +461,7 @@ async function main(argv: readonly string[]): Promise<number> {
   if (command === 'rebuild') return rebuildCommand(configPath);
   if (command === 'resend') return resendCommand(args, configPath, flags);
   if (command === 'maintenance') return maintenanceCommand(args, configPath, flags);
+  if (command === 'dev-mode') return devModeCommand(args, configPath);
   if (command === 'strip-metadata') return stripMetadataCommand(configPath);
   if (command === 'plugin') return pluginFolderCommand(args, configPath, flags);
 
@@ -521,6 +533,45 @@ async function maintenanceCommand(
   }
 
   throw new Error('geekity maintenance needs on, off or status.');
+}
+
+async function devModeCommand(
+  args: readonly string[],
+  configPath: string | undefined,
+): Promise<number> {
+  const action = args[0];
+  const config = resolveConfig(await loadConfig(process.cwd(), configPath));
+
+  if (action === 'on') {
+    enterDevMode(config.dataDir, 'command');
+    process.stdout.write(
+      'Dev mode is on: nothing the site does is sent until `geekity dev-mode off`.\n',
+    );
+    return 0;
+  }
+
+  if (action === 'off') {
+    if (config.devMode) {
+      throw new Error(
+        'GEEKITY_DEV_MODE or the devMode setting still asks for dev mode. ' +
+          'Remove it, then run geekity dev-mode off again.',
+      );
+    }
+    const wasOn = leaveDevMode(config.dataDir);
+    process.stdout.write(
+      wasOn
+        ? 'Dev mode is off: the site is live. Nothing held while it was on will be sent.\n'
+        : 'Dev mode was already off: the site is live.\n',
+    );
+    return 0;
+  }
+
+  if (action === 'status') {
+    process.stdout.write(devModeOn(config) ? 'Dev mode is on.\n' : 'Dev mode is off.\n');
+    return 0;
+  }
+
+  throw new Error('geekity dev-mode needs on, off or status.');
 }
 
 function untilFlag(value: string | undefined): Date | undefined {
@@ -640,6 +691,10 @@ async function resendCommand(
       if (report === undefined) {
         process.stderr.write(`${slug}: nothing to resend, no announced post has that slug.\n`);
         failed += 1;
+        continue;
+      }
+      if (report.held) {
+        process.stdout.write(`${slug}: ${report.activityType} held by dev mode, nothing sent\n`);
         continue;
       }
       const reached = report.deliveries.filter((delivery) => delivery.status === 'sent').length;
@@ -831,6 +886,12 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
       { folderPlugins: await importPluginFolders(loaded), supervision: worker.supervision },
     );
     const { port } = await cms.serve();
+    if (devModeOn(cms.config)) {
+      process.stdout.write(
+        'Dev mode is on: ActivityPub, webmentions, feed pings, IndexNow and email are held ' +
+          'and recorded in data/dev-mode.jsonl. `geekity dev-mode off` takes the site live.\n',
+      );
+    }
     process.stdout.write(`Geekity is serving ${cms.config.baseUrl} on port ${String(port)}\n`);
     worker.serving(cms);
   } catch (error) {

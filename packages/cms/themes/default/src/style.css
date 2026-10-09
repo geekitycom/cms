@@ -404,6 +404,10 @@
     @apply h-auto max-w-full rounded-md;
   }
 
+  :is(.e-content, .page-body) .video-embed iframe {
+    @apply aspect-video h-auto w-full rounded-md;
+  }
+
   :is(.e-content, .page-body) figcaption {
     @apply mt-2 font-sans text-sm text-muted;
   }

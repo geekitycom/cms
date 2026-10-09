@@ -70,20 +70,34 @@ function fakeTimers(): ScheduleTimers & {
 }
 
 /** The watermark, in memory. */
-function watermarkAt(initial?: string): ScheduleWatermark & { value(): string | undefined } {
+function watermarkAt(
+  initial: string | undefined,
+  firstRun: string | undefined,
+): ScheduleWatermark & { value(): string | undefined; firstRunValue(): string | undefined } {
   let stored = initial;
+  let first = firstRun;
   return {
     read: () => stored,
     write(instant) {
       stored = instant;
     },
+    readFirstRun: () => first,
+    writeFirstRun(instant) {
+      first = instant;
+    },
     value: () => stored,
+    firstRunValue: () => first,
   };
 }
 
 /** A scheduler over a store this test moves the clock of, recording what it announced. */
 async function harness(
-  options: { now?: string; watermark?: string | null; documents?: Document[] } = {},
+  options: {
+    now?: string;
+    watermark?: string | null;
+    firstRun?: string | null;
+    documents?: Document[];
+  } = {},
 ): Promise<{
   store: ContentStore;
   announced: DocumentChange[];
@@ -102,8 +116,11 @@ async function harness(
 
   const announced: DocumentChange[] = [];
   const timers = fakeTimers();
+  const initial =
+    options.watermark === null ? undefined : (options.watermark ?? '2026-09-03T12:00:00.000Z');
   const watermark = watermarkAt(
-    options.watermark === null ? undefined : (options.watermark ?? '2026-09-03T12:00:00.000Z'),
+    initial,
+    options.firstRun === null ? undefined : (options.firstRun ?? initial),
   );
   const scheduler = createScheduler({
     store,
@@ -195,6 +212,45 @@ describe('the scheduler', () => {
     assert.equal(box.announced.length, 1, 'the watermark moved past it');
   });
 
+  it('announces nothing dated before its first run on a site, however old the watermark (TASK-296 AC #5)', async () => {
+    const box = await harness({
+      now: '2026-09-04T10:00:00Z',
+      watermark: '2026-01-01T00:00:00.000Z',
+      firstRun: '2026-09-04T08:00:00.000Z',
+      documents: [
+        post({ date: '2026-09-04T07:00:00Z' }),
+        post({
+          path: 'posts/2026-09-04-after.md',
+          slug: 'after',
+          permalink: '/2026/09/after/',
+          title: 'After',
+          date: '2026-09-04T09:00:00Z',
+        }),
+      ],
+    });
+
+    await box.scheduler.start();
+
+    assert.deepEqual(
+      box.announced.map((change) => change.next?.title),
+      ['After'],
+      'only the post dated after the scheduler first ran here came due',
+    );
+  });
+
+  it('records its first run on a site whose watermark predates it, and announces nothing older (TASK-296 AC #5)', async () => {
+    const box = await harness({
+      now: '2026-09-04T10:00:00Z',
+      watermark: '2026-01-01T00:00:00.000Z',
+      firstRun: null,
+    });
+
+    await box.scheduler.start();
+
+    assert.deepEqual(box.announced, [], 'the stale watermark announced nothing');
+    assert.equal(box.watermark.firstRunValue(), '2026-09-04T10:00:00.000Z');
+  });
+
   it('announces nothing at all on a site that has never run one', async () => {
     const box = await harness({ now: '2026-09-04T10:00:00Z', watermark: null });
 
@@ -276,7 +332,7 @@ describe('the scheduler', () => {
     const scheduler = createScheduler({
       store,
       timers,
-      watermark: watermarkAt('2026-09-03T12:00:00.000Z'),
+      watermark: watermarkAt('2026-09-03T12:00:00.000Z', '2026-09-03T12:00:00.000Z'),
       logger: { warn: (message) => warnings.push(message) },
       announce: () => Promise.reject(new Error('the subscriber blew up')),
     });

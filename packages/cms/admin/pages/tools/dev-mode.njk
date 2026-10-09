@@ -1,0 +1,47 @@
+{% extends "layouts/shell.njk" %}
+{% from "components/table.njk" import table %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
+
+  <div class="flex flex-col gap-6">
+    <p class="max-w-prose">
+      {% if on %}
+        Dev mode is on. Nothing this site does reaches the outside world: no ActivityPub
+        delivery or relay follow, no webmention, no rssCloud or WebSub ping, no IndexNow
+        submission and no email. Each one is recorded here instead. Run
+        <code>geekity dev-mode off</code> to take the site live; nothing held is sent then.
+      {% else %}
+        Dev mode is off, and the site is live. This is what it held while it was on. To hold
+        everything again, run <code>geekity dev-mode on</code>.
+      {% endif %}
+    </p>
+
+    <p>{{ heldCount }} held in all{% if rows.length >= shown %}; the newest {{ shown }} entries are listed, and <code>data/dev-mode.jsonl</code> has the rest{% endif %}.</p>
+
+    {% if rows.length %}
+      {% call table('What dev mode held') %}
+        <thead>
+          <tr>
+            <th scope="col">When</th>
+            <th scope="col">What</th>
+            <th scope="col">Detail</th>
+            <th scope="col">Would have gone to</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="whitespace-nowrap"><time datetime="{{ row.at }}">{{ row.at }}</time></td>
+              <td class="whitespace-nowrap">{{ row.what }}</td>
+              <td class="break-all">{{ row.detail }}</td>
+              <td class="break-all">{% for to in row.to %}<div>{{ to }}</div>{% endfor %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      {% endcall %}
+    {% endif %}
+  </div>
+{% endblock %}

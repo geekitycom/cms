@@ -1386,6 +1386,86 @@ describe('a reply to a migrated post’s stored object id', () => {
   });
 });
 
+describe('a post’s feed guid (TASK-292)', () => {
+  function migrated(slug: string, front: readonly string[]): Record<string, string> {
+    return {
+      [`posts/2011-06-06-${slug}.md`]: [
+        '---',
+        `title: ${slug}`,
+        "date: '2011-06-06T09:00:00Z'",
+        `permalink: /2011/06/${slug}/`,
+        ...front,
+        '---',
+        '',
+        'Body.',
+        '',
+      ].join('\n'),
+    };
+  }
+
+  const files = {
+    '_data/site.json': JSON.stringify({ title: 'Geekity Demo' }),
+    ...migrated('eleventy', [
+      "guid: 'https://blog.example.com/essays/eleventy/'",
+      'activitypub:',
+      "  id: 'https://example.com/?p=609'",
+    ]),
+    ...migrated('wordcamp', [
+      "guid: 'https://example.com/2011/06/wordcamp/'",
+      'activitypub:',
+      "  id: 'https://example.com/?p=813'",
+    ]),
+    ...migrated('unfederated', ["guid: 'https://blog.example.com/essays/unfederated/'"]),
+    ...migrated('stored', ['activitypub:', "  id: 'https://example.com/?p=42'"]),
+    ...migrated('plain', []),
+    ...migrated('number', ['guid: 77', 'activitypub:', "  id: 'https://example.com/?p=77'"]),
+    ...migrated('words', ["guid: 'not a url'"]),
+  };
+
+  const permalink = (slug: string): string => `https://example.com/2011/06/${slug}/`;
+
+  const expected: Record<string, { guid: string; isPermaLink: string }> = {
+    eleventy: { guid: 'https://blog.example.com/essays/eleventy/', isPermaLink: 'false' },
+    wordcamp: { guid: permalink('wordcamp'), isPermaLink: 'true' },
+    unfederated: { guid: 'https://blog.example.com/essays/unfederated/', isPermaLink: 'false' },
+    stored: { guid: 'https://example.com/?p=42', isPermaLink: 'false' },
+    plain: { guid: permalink('plain'), isPermaLink: 'true' },
+    number: { guid: 'https://example.com/?p=77', isPermaLink: 'false' },
+    words: { guid: permalink('words'), isPermaLink: 'true' },
+  };
+
+  it('names each post by its guid key, else its activitypub.id, else its permalink', async () => {
+    const { cms } = await site(files);
+
+    const { channel } = await rss(cms, '/feed/');
+    const rssItems = childrenNamed(channel, 'item');
+    const { feed } = await atom(cms, '/feed/atom/');
+    const entries = childrenNamed(feed, 'entry');
+    const { items } = await jsonFeedAt(cms, '/feed/json/');
+    assert.equal(rssItems.length, Object.keys(expected).length);
+
+    for (const [slug, { guid, isPermaLink }] of Object.entries(expected)) {
+      const item = rssItems.find((each) => child(each, 'link').text === permalink(slug));
+      assert.ok(item !== undefined, `${slug} is in the RSS feed`);
+      assert.equal(child(item, 'guid').text, guid, `${slug}'s RSS guid`);
+      assert.equal(
+        child(item, 'guid').attributes['isPermaLink'],
+        isPermaLink,
+        `${slug}'s isPermaLink`,
+      );
+
+      const entry = entries.find(
+        (each) => linkWithRel(each, 'alternate').attributes['href'] === permalink(slug),
+      );
+      assert.ok(entry !== undefined, `${slug} is in the Atom feed`);
+      assert.equal(child(entry, 'id').text, guid, `${slug}'s Atom id`);
+
+      const jsonItem = items.find((each) => each['url'] === permalink(slug));
+      assert.equal(jsonItem?.['id'], guid, `${slug}'s JSON Feed id`);
+    }
+  });
+});
+
 describe('a post’s comments feed', () => {
   const files = {
     '_data/site.json': JSON.stringify({ title: 'Geekity Demo', tagline: 'A file-first site' }),

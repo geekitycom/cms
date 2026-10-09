@@ -11,7 +11,9 @@
 import { definePlugin } from '@geekity/cms/plugin';
 
 import { importCommand } from './command.ts';
+import { contentImportCommand } from './content-command.ts';
 import { wordPressFederation } from './federation.ts';
+import { WORDPRESS_UPLOADS_ROUTE, wordPressUploadsRedirect } from './media-redirect.ts';
 import { wordPressRecords } from './records.ts';
 import { wordPressScreen } from './screen.ts';
 import { VERSION } from './version.ts';
@@ -45,12 +47,15 @@ export default definePlugin({
   label: 'WordPress',
   description:
     'Answers the inbox and collection paths the WordPress ActivityPub plugin published, ' +
-    'for a site that moved here from it, until every follower has refetched the actor.',
+    'for a site that moved here from it, until every follower has refetched the actor, ' +
+    'and sends its old /wp-content/uploads/ media URLs to the copies under /uploads/.',
   hostApi: 1,
   register(host) {
     const records = wordPressRecords(host.data);
     host.federation(wordPressFederation(records));
     host.screen(wordPressScreen(records));
     host.command(importCommand(records));
+    host.command(contentImportCommand(host.data));
+    host.get(WORDPRESS_UPLOADS_ROUTE, wordPressUploadsRedirect(host.data));
   },
 });

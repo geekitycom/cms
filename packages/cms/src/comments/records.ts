@@ -79,14 +79,27 @@ export function commentsDirectory(contentDir: string): string {
  * sanitised to one name would silently share a thread.
  */
 export function commentsFile(contentDir: string, slug: string): string {
-  if (!SAFE_SLUG.test(slug)) {
-    throw new Error(`"${slug}" is not a slug a comment file can be named after.`);
-  }
-  return path.join(commentsDirectory(contentDir), `${slug}.json`);
+  return path.join(commentsDirectory(contentDir), `${fileNameOf(slug)}.json`);
 }
 
-/** Slugs a file may be named after: what {@link slugify} produces, and no more. */
-const SAFE_SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+function fileNameOf(slug: string): string {
+  const name = encodeURIComponent(slug);
+  if (!SAFE_NAME.test(name)) {
+    throw new Error(`"${slug}" is not a slug a comment file can be named after.`);
+  }
+  return name;
+}
+
+function slugOfFileName(name: string): string | undefined {
+  try {
+    const slug = decodeURIComponent(name);
+    return encodeURIComponent(slug) === name && SAFE_NAME.test(name) ? slug : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const SAFE_NAME = /^[A-Za-z0-9%][A-Za-z0-9._%-]*$/;
 
 /** Where commenters' emails live, relative to the data directory. */
 export const COMMENT_EMAILS_DIRECTORY = 'comments';
@@ -100,10 +113,7 @@ export const COMMENT_EMAILS_FILE_MODE = 0o600;
  * never published with it.
  */
 export function commentEmailsFile(dataDir: string, slug: string): string {
-  if (!SAFE_SLUG.test(slug)) {
-    throw new Error(`"${slug}" is not a slug a comment file can be named after.`);
-  }
-  return path.join(dataDir, COMMENT_EMAILS_DIRECTORY, `${slug}.json`);
+  return path.join(dataDir, COMMENT_EMAILS_DIRECTORY, `${fileNameOf(slug)}.json`);
 }
 
 /** What `data/` holds about one comment: how to reach whoever wrote it. */
@@ -343,6 +353,29 @@ export async function addComment(
     writePost(records, comment.slug, comment.permalink, [...held, stored]);
     records.admin.putComment(stored);
     return stored;
+  });
+}
+
+export async function putComments(
+  records: CommentRecords,
+  slug: string,
+  permalink: string,
+  comments: readonly CommentRecord[],
+): Promise<void> {
+  if (comments.length === 0) return;
+  const file = commentsFile(records.contentDir, slug);
+
+  await withFileLock(file, () => {
+    const held = readPost(records, slug);
+    const post = held.post === '' ? permalink : held.post;
+    const next = [...held.comments];
+    for (const comment of comments) {
+      const at = next.findIndex((entry) => entry.id === comment.id);
+      if (at === -1) next.push(comment);
+      else next[at] = comment;
+    }
+    writePost(records, slug, post, next);
+    for (const comment of comments) records.admin.putComment({ ...comment, slug, permalink: post });
   });
 }
 
@@ -720,7 +753,9 @@ export async function rewriteComments(
 
 /** The slug of every post that has a comment file, in a stable order. */
 export function commentSlugs(contentDir: string): string[] {
-  return commentFiles(contentDir).map((file) => path.basename(file, '.json'));
+  return commentFiles(contentDir).flatMap(
+    (file) => slugOfFileName(path.basename(file, '.json')) ?? [],
+  );
 }
 
 /** What a rebuild put in the index. */
@@ -842,7 +877,10 @@ function commentFiles(contentDir: string): string[] {
   }
 
   return entries
-    .filter((name) => name.endsWith('.json') && SAFE_SLUG.test(name.slice(0, -'.json'.length)))
+    .filter(
+      (name) =>
+        name.endsWith('.json') && slugOfFileName(name.slice(0, -'.json'.length)) !== undefined,
+    )
     .sort()
     .map((name) => path.join(commentsDirectory(contentDir), name));
 }

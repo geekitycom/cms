@@ -94,6 +94,7 @@ site (or `npx geekity`, or a `package.json` script, which is how the generated
 | `geekity rebuild`                         | Delete `data/geekity.db` and build it again from the files.                                                                                                                           |
 | `geekity resend --all`, `<slug>...`       | Send announced posts to every follower and relay again, as they now read. See [Quote posts](#quote-posts).                                                                            |
 | `geekity maintenance on`, `off`, `status` | Take the public site down on purpose with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` names when it should be back.                             |
+| `geekity dev-mode on`, `off`, `status`    | Hold everything the site would send to the outside world while it is built or migrated, or take it live. See [Dev mode](#dev-mode).                                                   |
 | `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`. See [The media library](#the-media-library).                                                             |
 | `geekity user add <name>`                 | Create an admin account, so a site can get its first login without the setup screen.                                                                                                  |
 | `geekity plugin add <package>`, `remove`  | Install a plugin package's bundle from the npm registry into the plugins folder (`GEEKITY_PLUGINS_DIR`), or delete a disabled one. A running `geekity serve` reloads with the change. |
@@ -105,7 +106,7 @@ under _Plugin commands_ and which run whether or not the plugin is enabled.
 That includes a plugin in the plugins folder. The repository README's
 _Plugins_ section describes `geekity plugin add` and writing a plugin.
 
-`serve`, `sync`, `rebuild`, `resend`, `maintenance`, `strip-metadata`, `user add`, `plugin` and every plugin command take
+`serve`, `sync`, `rebuild`, `resend`, `maintenance`, `dev-mode`, `strip-metadata`, `user add`, `plugin` and every plugin command take
 `--config <file>`; without it they look for `geekity.config.ts`, then
 `geekity.config.js`, then `geekity.config.mjs` in the working directory, and run
 on defaults if there is none.
@@ -289,6 +290,7 @@ directory; absolute ones are used as given.
 | `accessLogAddress` | `false`                               | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address on the end of each access-log line. `trustProxy` decides which address that is.                                                                                                                                                          |
 | `accessLogWriter`  | stdout                                | —                            | Where the lines go instead. See [The access log](#the-access-log).                                                                                                                                                                                              |
 | `maintenance`      | `false`                               | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode, answering 503, until a restart without it.                                                                                                                                                                                   |
+| `devMode`          | `false`                               | `GEEKITY_DEV_MODE`           | Start the site in dev mode, which holds every outbound side effect until `geekity dev-mode off`. See [Dev mode](#dev-mode).                                                                                                                                     |
 | `compression`      | `true`                                | `GEEKITY_COMPRESSION`        | Compress text responses with brotli or gzip. Turn it off behind a proxy that compresses. See [Compression](#compression).                                                                                                                                       |
 | `securityHeaders`  | [see below](#security-headers)        | —                            | Headers every response carries. A string replaces a default or adds a header, `false` removes one.                                                                                                                                                              |
 | `onDocumentChange` | none                                  | —                            | Hook run for every change to the index. See [Hooks](#hooks).                                                                                                                                                                                                    |
@@ -426,7 +428,7 @@ something a site is told it may lose:
 | `ap_deliveries`                                     | Nothing. The federation screen shows its posts with "Nothing recorded."      |
 | `ap_relays`                                         | The relay list in `site.json`: boot sends each of them a fresh `Follow`.     |
 | `password_resets`, `spent_tokens`                   | Nothing. Every reset link and every one-click moderation link stops working. |
-| `cms_state`                                         | Nothing. One key, the scheduler's watermark.                                 |
+| `cms_state`                                         | Nothing. The scheduler's watermark and its first run.                        |
 | `migrations`, `admin_migrations`                    | The package. They record which schema versions have run.                     |
 
 So four things are actually lost:
@@ -790,9 +792,9 @@ ignored.
 
 A site that moved here from the WordPress ActivityPub plugin keeps its people's
 actor ids and its posts' object ids, which are identity and are the CMS's own
-(above). What it needs for a while besides is the plugin's old paths, which
+(above). What it needs besides is its content, the plugin's old paths, which
 followers' servers keep delivering to until they refetch the actor, and an
-import that brings each person's key pair and followers across. Both are the
+import that brings each person's key pair and followers across. All three are the
 [`@geekity/plugin-wordpress`](../plugin-wordpress/README.md) package, which a
 site born on the CMS never installs. decision-14's switch is that plugin now:
 where the cutover used to say "turn the switch on", it says install and enable
@@ -800,27 +802,43 @@ the WordPress plugin.
 
 #### The cutover, end to end
 
-1. **Export, while the WordPress site is still up.** Each person's key pair,
+1. **Start the new site in dev mode.** Set `GEEKITY_DEV_MODE=true` before
+   its first boot (see [Dev mode](#dev-mode)). Followers, relays, links and
+   mail are all real from here on, and dev mode keeps every one of them from
+   hearing about the import, the edits or a scheduled post until step 4.
+2. **Export, while the WordPress site is still up.** Each person's key pair,
    and the followers if the old site is going away before the import runs. The
    plugin's README says how. Note the actor id and the numeric actor id off
-   `https://example.com/?author=2`, and bring the content across.
-2. **Install the WordPress plugin and import.** Add `@geekity/plugin-wordpress`
-   to the site's dependencies and to `plugins` in its config, then run `geekity import
-wordpress-actor ada --actor-id … --wordpress-id … --keypair ada.keypair.json`.
-   The command works before the plugin is enabled. Check the report: every
-   follower should be added, and any that were skipped should be re-run once
-   their servers answer.
-3. **Enable the WordPress plugin.** Enable it under `/admin/plugins`, then move
-   the DNS. Followers' servers go on delivering to
-   the plugin's old inbox paths until they next refetch the actor, and the
-   plugin is what catches those deliveries.
-4. **Watch.** `/admin/federation` lists the users with their actor ids and
+   `https://example.com/?author=2`, take a WXR export under Tools > Export,
+   and copy `wp-content/uploads`, which the export does not carry.
+3. **Install the WordPress plugin and import.** Add `@geekity/plugin-wordpress`
+   to the site's dependencies and to `plugins` in its config, then run
+   `geekity import wordpress example.WordPress.xml --uploads wp-content/uploads`
+   for the content and media, and
+   `geekity import wordpress-actor ada --actor-id … --wordpress-id … --keypair ada.keypair.json`
+   for each person. Both work before the plugin is enabled. Check the reports:
+   every post should be written, every conflict or clash resolved, every
+   follower added, and any follower that was skipped re-run once its server
+   answers. Tools > Dev mode shows that the imports sent nothing. Both imports
+   are safe to run again: run them over a fresh export just before step 4 to
+   pick up what WordPress received in the meantime.
+4. **Enable the WordPress plugin, move the DNS and go live.** Enable it under
+   `/admin/plugins`, then move the DNS. Remove `GEEKITY_DEV_MODE` and run
+   `geekity dev-mode off`: nothing held during the migration is sent.
+   Followers' servers go on delivering to the plugin's old inbox paths until
+   they next refetch the actor, and the plugin is what catches those
+   deliveries. Once WordPress no longer answers, run both imports one last time
+   over its final export: they merge what arrived between the export and the
+   DNS move, and leave alone whatever this site wrote or edited since.
+5. **Watch.** `/admin/federation` lists the users with their actor ids and
    followers; the plugin's own screen under Plugins lists each old path with
    the instant it was last asked for. Deliveries should thin out as each
    follower's server refetches the actor and learns the new endpoints.
-5. **Disable it.** Once every path says _Never_ again for long enough — weeks
+6. **Disable it.** Once every path says _Never_ again for long enough — weeks
    rather than days, since a quiet instance refetches rarely — disable the
-   plugin. The paths go away on the very next request, with nothing restarted,
+   plugin. Disabling it also ends the redirects from the old
+   `/wp-content/uploads/` media URLs, so a site that still gets links to
+   those keeps it enabled. The paths go away on the very next request, with nothing restarted,
    and if something was still using them you can enable it again just as
    quickly.
 
@@ -918,13 +936,95 @@ half is sent by a peer built in the script rather than by `fedify inbox`.
 [Fedify]: https://fedify.dev/
 [`fedify tunnel`]: https://fedify.dev/cli
 
+## Dev mode
+
+Building or migrating a site means running it with production data: the real
+base URL, the real actor and keys, real followers, real links. Dev mode keeps
+that site quiet until you take it live (decision-35). While it is on, nothing
+the site does reaches the outside world:
+
+- No ActivityPub delivery to followers or relays, no relay `Follow` or `Undo`,
+  and no `Accept` or `Reject` answering an inbox. This holds whatever caused
+  the change: the watcher, the admin, the scheduler, `geekity resend` or a
+  reply context arriving.
+- No webmention. Endpoint discovery is skipped too.
+- No rssCloud or WebSub ping.
+- No IndexNow submission.
+- No email.
+
+Reads still go out: reply contexts and cited pages, actor profiles, oEmbed,
+avatars, the check of an incoming webmention, and a plugin's `host.fetch`. A
+read tells nobody about the site, and without them it could not show its
+replies or profiles. Inbound federation is accepted: follows, replies, likes
+and webmentions are stored as on a live site, and the `Accept` a follow would
+get is held. Plugins need no switch of their own. A plugin's federation hands
+what it receives to the site's inbox, so its answers are held the same way.
+
+Each held side effect is a line in `data/dev-mode.jsonl`: when, what kind,
+what would have been sent, and to whom. Tools > Dev mode in the admin lists
+them, newest first. Every admin screen shows a banner while the mode is on,
+and `geekity serve` says so when it boots.
+
+```sh
+$ geekity dev-mode on
+Dev mode is on: nothing the site does is sent until `geekity dev-mode off`.
+$ geekity dev-mode status
+Dev mode is on.
+$ geekity dev-mode off
+Dev mode is off: the site is live. Nothing held while it was on will be sent.
+```
+
+`devMode: true` in the config, or `GEEKITY_DEV_MODE=true`, starts a site in
+dev mode: boot writes `data/dev-mode.json`, and the file keeps the mode on
+from then on. Losing the variable does not take the site live. Only
+`geekity dev-mode off` does, and it refuses while the config or the
+environment still asks for dev mode, because the next boot would turn it on
+again. The running site checks the file before every send, so going live
+needs no restart, unless the server was started with the variable: that
+process stays in dev mode until it restarts without it. Going live is a line
+in the record too.
+
+Going live replays nothing. A held side effect is dropped, not queued, and no
+delivery or webmention is recorded as failed, so neither the Federation screen
+nor `geekity resend` offers it again. A post announced while the mode was on
+counts as announced, so its next edit goes out as an `Update`. A relay listed
+while the mode was on stays pending: press Retry on the Federation screen once
+the site is live.
+
+Password recovery mail is held too, so in dev mode a password is reset from
+the shell. A peer that followed while the mode was on never got its `Accept`,
+and has to follow again.
+
+### Dev mode on Docker
+
+Set the variable in the service's environment before the first boot, so the
+container never starts live:
+
+```yaml
+services:
+  server:
+    environment:
+      GEEKITY_DEV_MODE: 'true'
+```
+
+To go live, remove the variable, recreate the container (the file in the
+`data` volume keeps the mode on through the restart), then run:
+
+```sh
+docker compose exec server geekity dev-mode off
+```
+
+`geekity dev-mode status` in the same container says which state the site is
+in. The record is in the `data` volume at `data/dev-mode.jsonl`.
+
 ## Comments
 
 A reader can answer a post on the page, and what they leave joins the same
 thread as the fediverse replies rather than sitting in a section of its own.
 
 A comment is a file. `content/_data/comments/{slug}.json` holds one post's
-comments — id, source, kind, status, author, the Markdown and the HTML it
+comments (a slug that is not plain ASCII is percent-encoded in the name, so
+`i-♥-rss` is `i-%E2%99%A5-rss.json`) — id, source, kind, status, author, the Markdown and the HTML it
 rendered to, when it was submitted, a salted hash of the address, and what it
 answers — so they are in git beside the posts, an Eleventy build of the same
 directory shows them, and the `comments` table is an index emptied and read
@@ -2439,6 +2539,11 @@ export default defineConfig({
 A name that is not a header name, or a value that is empty or has a line break
 in it, stops the site at boot. There is no environment variable for these.
 
+A policy that limits scripts has to allow whatever the site's theme adds to
+every page. For the Umami and Google Analytics snippets, the theme README's
+[Adding to every page](./themes/default/README.md#adding-to-every-page) lists
+the directives each one needs.
+
 Every response under `/admin`, static files and redirects included, gets three
 stricter values in their place, whatever `securityHeaders` says:
 
@@ -2796,6 +2901,25 @@ first request after the file changes, and it is skipped. The following entries a
 
 A file that is not a JSON list serves no redirects and is reported the same
 way.
+
+#### More than one file
+
+Every `*.json` file in `content/_data/redirects/` is read after
+`redirects.json`, in name order, and served the same way. A tool that generates
+redirects, such as an import, writes a file of its own there and never touches
+the list a person keeps. A file there, or `redirects.json` itself, may also be
+an object that maps each `from` to its `to`, every one a `301`:
+
+```json
+{
+  "/?p=123": "/2026/01/hello/",
+  "/old-section/": "/new-section/"
+}
+```
+
+Where two files declare the same `from`, the one read first wins, so
+`redirects.json` wins over every file in the folder, and the other declaration
+is reported. A loop across files is found and skipped as within one.
 
 Every redirect the CMS sends carries `X-Redirect-By: Geekity CMS`. This
 includes the declared redirects, moved URLs, trailing slashes, feed spellings
@@ -3676,6 +3800,17 @@ can extend a packaged one by name:
 The admin is not themed. Its templates and its static files live in a tree of
 their own with a loader of their own, deliberately off this search path, so no
 theme can shadow the login form or the CSRF field inside it.
+
+Analytics and other markup that goes on every page need no layout at all. The
+packaged `layouts/base.njk` includes `partials/head-end.njk` last in `<head>`
+and `partials/body-end.njk` last in `<body>`, both empty in the package, so a
+theme of `theme.json` and `partials/head-end.njk` holding the Umami or Google
+Analytics snippet adds it to every public HTML page and keeps every other
+packaged template. Neither is printed in a feed, a Markdown, text or JSON
+representation, mail, the admin or the editor's preview. The theme README's
+[Adding to every page](./themes/default/README.md#adding-to-every-page) has the
+Umami and GA4 example, the Docker volume, and what a Content-Security-Policy
+has to allow for them.
 
 The packaged theme is the Paper design (doc-9) on the andrewshell.org shell
 (decision-16). Its stylesheet is written in Tailwind v4 in

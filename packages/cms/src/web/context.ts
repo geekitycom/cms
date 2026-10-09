@@ -8,6 +8,7 @@ import type { Enclosure, Transcript } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { citationsOf } from '../content/citation.ts';
+import { originalUrlOf } from '../content/original.ts';
 import { shownInFull } from '../webmention/cited-picture.ts';
 import type { CitedImage, CitedPicture } from '../webmention/cited-picture.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
@@ -262,6 +263,13 @@ export interface DocumentContext {
    * matter value, so a theme always reads this shape. Empty when there are none.
    */
   syndication: SyndicationLink[];
+  /**
+   * Where the post was first published, when that is elsewhere (TASK-293):
+   * its `canonical_href` when that is an absolute http or https URL, and the
+   * host a link to it says. A theme makes it the page's canonical URL and
+   * links to it.
+   */
+  original?: SyndicationLink | undefined;
   /** Everything else from the front matter, including unmodelled keys. */
   [key: string]: unknown;
 }
@@ -300,10 +308,11 @@ export interface SyndicationLink {
 
 /** Copies as a theme links them, each URL once. */
 export function syndicationLinks(urls: readonly string[]): SyndicationLink[] {
-  return [...new Set(urls)].map((url) => ({
-    url,
-    label: new URL(url).hostname.replace(/^www\./, ''),
-  }));
+  return [...new Set(urls)].map(hostLink);
+}
+
+function hostLink(url: string): SyndicationLink {
+  return { url, label: new URL(url).hostname.replace(/^www\./, '') };
 }
 
 /** A post's recording as a theme plays it. See {@link DocumentContext.enclosure}. */
@@ -379,6 +388,7 @@ export function documentContext(
   const date = toDate(document.date);
   const photos = photoContexts(document, images, loading);
   const { location: _frontMatterLocation, ...extra } = document.extra;
+  const originalUrl = originalUrlOf(document.extra);
 
   return {
     ...extra,
@@ -402,6 +412,7 @@ export function documentContext(
     lang: documentLanguage(document),
     enclosure: enclosureContext(document),
     syndication: syndicationLinks(handSyndicationOf(document.extra)),
+    original: originalUrl === undefined ? undefined : hostLink(originalUrl),
     label: postLabel(document, cited),
     ...optional('date', date),
     tags: document.tags,

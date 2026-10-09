@@ -83,6 +83,7 @@ import {
 import { contactFormFor } from './contact/index.ts';
 import { settleImageVariants } from './images/variants.ts';
 import { createMaintenanceSwitch } from './maintenance.ts';
+import { enterDevMode } from './dev-mode.ts';
 import {
   createConversation,
   createRedirectSource,
@@ -1399,6 +1400,9 @@ export type {
  */
 export const SCHEDULE_WATERMARK_KEY = 'schedule.watermark';
 
+/** Where the instant the scheduler first ran on this site lives in {@link AdminStore.getState}. */
+export const SCHEDULE_FIRST_RUN_KEY = 'schedule.firstRun';
+
 /** A running (or runnable) CMS instance. */
 export interface Cms {
   /**
@@ -1647,6 +1651,7 @@ function openCache(resolved: ResolvedConfig): { store: ContentStore; admin: Admi
  */
 export function createCms(config: GeekityConfig = {}, context: ServeContext = {}): Cms {
   const resolved = resolveConfig(config);
+  if (resolved.devMode) enterDevMode(resolved.dataDir, 'config');
 
   const plugins = sitePluginRegistry(resolved, context.folderPlugins);
 
@@ -1988,6 +1993,10 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
       read: () => admin.getState(SCHEDULE_WATERMARK_KEY),
       write: (instant) => {
         admin.setState(SCHEDULE_WATERMARK_KEY, instant);
+      },
+      readFirstRun: () => admin.getState(SCHEDULE_FIRST_RUN_KEY),
+      writeFirstRun: (instant) => {
+        admin.setState(SCHEDULE_FIRST_RUN_KEY, instant);
       },
     },
   });

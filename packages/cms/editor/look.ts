@@ -8,6 +8,8 @@ export const LOOK = {
   tab: 'tab',
   preview: 'block h-112 w-full rounded-field border border-base-300 bg-base-100',
   uploadButton: 'btn btn-soft btn-sm',
+  videoControl: 'inline-flex flex-wrap items-center gap-2',
+  videoAddress: 'input input-sm w-64',
   status: 'min-h-5 basis-full text-sm text-base-content/70',
   statusError: 'min-h-5 basis-full text-sm text-error',
 } as const;

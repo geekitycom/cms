@@ -9,9 +9,11 @@ import type { User } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore, Delivery, DeliveryStatus, Follower } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
+import { holdOutbound } from '../dev-mode.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { CitedPage } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
+import { isMigrated } from '../content/migrated.ts';
 import { pinnedAt } from '../content/pinned.ts';
 import { replyTarget } from '../content/post-type.ts';
 import { saveDocument } from '../content/save.ts';
@@ -55,6 +57,8 @@ export interface DeliveryReport {
    * author has no followers and the site has no relay.
    */
   readonly deliveries: readonly Delivery[];
+  /** Whether dev mode held it, in which case nobody was sent anything. */
+  readonly held: boolean;
 }
 
 /** Where a delivery service reports what it could not do. `console` will do. */
@@ -223,6 +227,17 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     });
   }
 
+  function requireSender(context: Context<FederationContextData>, document: Document): User {
+    const author = documentAuthor(context, document);
+    if (author === undefined) {
+      throw new Error(
+        `The post "${document.slug}" cannot be delivered: the site has no accounts, ` +
+          'and decision-14 makes a user the actor a post is announced by.',
+      );
+    }
+    return author;
+  }
+
   /**
    * Fan one activity about one post out to the followers.
    *
@@ -241,17 +256,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     if (activityId === undefined) {
       throw new TypeError('An activity cannot be delivered without an id.');
     }
-    const author = documentAuthor(context, about);
-    if (author === undefined) {
-      throw new Error(
-        `The post "${about.slug}" cannot be delivered: the site has no accounts, ` +
-          'and decision-14 makes a user the actor a post is announced by.',
-      );
-    }
-
     return await fanOut(
       context,
-      author,
+      requireSender(context, about),
       activity,
       {
         activityId,
@@ -389,11 +396,26 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     { relays = true }: { relays?: boolean } = {},
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
-    const keys = await senderKeyPairs(context, sender);
     const targets = deliveryTargets(admin, sender.username, { relays });
     // One POST to an inbox the followers already share is enough.
     const reached = new Set(targets.map((target) => target.inboxId));
     targets.push(...also.filter((target) => !reached.has(target.inboxId)));
+    const held =
+      targets.length > 0 &&
+      holdOutbound(config, {
+        kind: 'activitypub',
+        what: `${about.activityType} ${about.objectId}`,
+        to: targets.map((target) => target.inboxId),
+      });
+    const report = {
+      activityId: about.activityId,
+      activityType: about.activityType,
+      objectId: about.objectId,
+      deliveries,
+      held,
+    };
+    if (held) return report;
+    const keys = await senderKeyPairs(context, sender);
 
     for (const target of targets) {
       let status: DeliveryStatus = synchronous ? 'sent' : 'queued';
@@ -428,12 +450,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       }
     }
 
-    return {
-      activityId: about.activityId,
-      activityType: about.activityType,
-      objectId: about.objectId,
-      deliveries,
-    };
+    return report;
   }
 
   /**
@@ -476,8 +493,15 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       const before = federatedOrUndefined(change.previous, now);
       const after = federatedOrUndefined(change.next, now);
       if (before === undefined && after === undefined) return;
+      const subject = change.next ?? change.previous;
+      if (subject !== undefined && isMigrated(subject)) {
+        const followersHoldIt = wasAnnounced(subject);
+        const comingIntoView = before === undefined;
+        if (!followersHoldIt || comingIntoView) return;
+      }
 
       const context = deliveryContext();
+      if (subject === undefined || documentAuthor(context, subject) === undefined) return;
 
       if (after === undefined) {
         // Unpublished, trashed or deleted; `before` is the post as it last
@@ -556,8 +580,8 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       // Read before the queue rather than inside it, so a post with nothing to
       // send answers `undefined` rather than joining a queue to find that out.
       const published = isFederatedDocument(document, store.now());
-      const announced = (document.activitypub?.published ?? '') !== '';
-      if (!published && !announced) return undefined;
+      const announced = wasAnnounced(document);
+      if (!announced && (!published || isMigrated(document))) return undefined;
 
       return await enqueue(async () => {
         const context = deliveryContext();
@@ -569,6 +593,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
           return await withdraw(context, document, await shapeOf(context, document));
         }
 
+        requireSender(context, document);
         const stamped = await stamp(document);
         const shape = await shapeOf(context, stamped);
         // A like or a repost is sent again as it is: its id is one a peer
@@ -590,7 +615,12 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         const before = deliveryContext((url) => (url === target ? previous : options.cited(url)));
         const citing = store
           .listFederated()
-          .filter((document) => isFederatedDocument(document, now) && cites(document, target));
+          .filter(
+            (document) =>
+              isFederatedDocument(document, now) &&
+              cites(document, target) &&
+              documentAuthor(context, document) !== undefined,
+          );
 
         for (const document of citing) {
           const shape = await shapeOf(context, document);
@@ -788,6 +818,10 @@ function postBySlug(store: ContentStore, slug: string): Document | undefined {
   const direct = store.getBySlug(slug);
   if (direct?.type === 'post') return direct;
   return store.listFederated().find((document) => document.slug === slug);
+}
+
+function wasAnnounced(document: Document): boolean {
+  return (document.activitypub?.published ?? '') !== '';
 }
 
 /** The document, when it is one this site federates, and `undefined` otherwise. */

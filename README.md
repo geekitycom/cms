@@ -168,6 +168,7 @@ directory; absolute ones are used as given.
 | `accessLogAddress` | `false`                                   | `GEEKITY_ACCESS_LOG_ADDRESS` | Put the client address at the end of each access-log line. Off unless asked for: an address is personal data and needs a reason and a retention policy. Which address is right is `trustProxy`'s answer.                                                                                                                                                                                   |
 | `seedContent`      | `false`                                   | `GEEKITY_SEED_CONTENT`       | When `geekity serve` starts and `contentDir` is missing or has no entries at all, fill it with the starter site `geekity init` writes, its `site.json` `url` set to the base URL. A directory with anything in it, even a dotfile, is never touched. Off so a site run from npm is never written to unasked.                                                                               |
 | `maintenance`      | `false`                                   | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode until a restart without it. `geekity maintenance on` and `off` are the everyday switch; see [Maintenance mode](#maintenance-mode).                                                                                                                                                                                                                       |
+| `devMode`          | `false`                                   | `GEEKITY_DEV_MODE`           | Start the site in dev mode: nothing it would send to followers, relays, linked sites, feed hubs, search engines or inboxes leaves the process until `geekity dev-mode off`. See the package README's _Dev mode_.                                                                                                                                                                           |
 | `compression`      | `true`                                    | `GEEKITY_COMPRESSION`        | Compress text responses (HTML, CSS, JavaScript, feeds, JSON, Markdown, SVG, sitemaps) with brotli, or gzip for a client without it. Turn it off when a proxy in front already compresses; see [Compression](packages/cms/README.md#compression).                                                                                                                                           |
 
 The admin adds nine more:
@@ -640,7 +641,7 @@ something a site is told it may lose.
 | `sessions`                                          | Nothing. Everybody signed in is signed out.                              |
 | `ap_deliveries`                                     | Nothing. The federation screen shows the posts with "Nothing recorded."  |
 | `ap_relays`                                         | The relay list in `site.json`: boot sends each of them a fresh `Follow`. |
-| `cms_state`                                         | Nothing. It holds one key, the scheduler's watermark.                    |
+| `cms_state`                                         | Nothing. It holds the scheduler's watermark and its first run.           |
 | `migrations`, `admin_migrations`                    | The package. They record which schema versions have run.                 |
 
 Three consequences worth knowing before deleting one:

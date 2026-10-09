@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
+import { enterDevMode } from '../dev-mode.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { startTestSmtpServer } from '../mail/__testing__/smtp-server.ts';
 import type { TestSmtpServer } from '../mail/__testing__/smtp-server.ts';
@@ -294,6 +295,19 @@ describe('the Send test email button with Brevo configured (AC #1)', () => {
 
     assert.match(screen, /test message was sent to ada@example\.com via brevo/);
     assert.match(screen, /queued@brevo/);
+  });
+
+  it('holds the test message in dev mode and says so (TASK-295)', async () => {
+    const { agent, dataDir } = await admin({ mailProvider: 'brevo' });
+    await writeMailCredentials(dataDir, { brevo: { apiKey: 'xkeysib-secret-1234' } });
+    enterDevMode(dataDir, 'command');
+
+    const { screen } = await post(agent, MAIL_TEST_PATH, {
+      [MAIL_TEST_FIELDS.to]: 'ada@example.com',
+    });
+
+    assert.equal(brevo.length, 0, 'Brevo was not called');
+    assert.match(screen, /Dev mode is on, so the test message to ada@example\.com was held/);
   });
 
   it("puts Brevo's own words on the screen when it refuses", async () => {

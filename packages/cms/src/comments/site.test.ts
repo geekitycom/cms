@@ -778,6 +778,33 @@ describe('answering a comment from the page', () => {
     assert.match(replying, new RegExp(`name="in_reply_to" value="${id}"`));
   });
 
+  it('carries an id that is a URL, as an imported comment’s is, whole through the Reply link', async () => {
+    const id = 'https://old.example/?p=7#comment-5';
+    const { cms } = await site({
+      'posts/2026-09-19-hello-world.md': POST,
+      '_data/comments/hello-world.json': JSON.stringify({
+        post: '/2026/09/hello-world/',
+        comments: [
+          {
+            id,
+            source: 'comment',
+            status: 'approved',
+            author: { name: 'Ada Lovelace', url: null, avatar: null },
+            content: { markdown: 'Old words.', html: '<p>Old words.</p>' },
+            submitted: '2026-09-19T10:00:00.000Z',
+          },
+        ],
+      }),
+    });
+
+    const link = /<div class="reply"><a[^>]*href="([^"]*)"/.exec(await postPage(cms))?.[1] ?? '';
+    const query = link.replace('/2026/09/hello-world/', '').replace(/#respond$/, '');
+    const replying = await postPage(cms, query.replaceAll('&amp;', '&'));
+
+    assert.match(replying, /Replying to Ada Lovelace\./);
+    assert.ok(replying.includes(`name="in_reply_to" value="${id}"`), 'the form answers that id');
+  });
+
   it('ignores a reply_to that names nothing on this post', async () => {
     const { cms } = await site();
 

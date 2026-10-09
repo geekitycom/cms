@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-09 03:13'
+updated_date: '2026-10-09 16:08'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -71,9 +71,12 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | `photo` | the post's photos (TASK-166), a list in Micropub's name. Each entry is `url`, an upload's `/uploads/…` path or an http or https URL, and an optional `alt`; a bare URL string reads as an entry without `alt`. An entry with no `alt` takes the media library's alt text for that upload (TASK-141), so a library image is described once. The theme prints each as an `img.u-photo` in the h-entry, the ActivityStreams object attaches each as an `Image` named by its alt text, and the JSON-LD lists each as an `ImageObject`. A post with a photo is a photo post under Post Type Discovery unless it is a reply, which comes first. An entry whose `url` is neither is dropped when read; the admin editor refuses to save one, and refuses an upload that is not an image in the library |
 | `like-of`, `repost-of`, `bookmark-of` | the URL a post likes, reposts or bookmarks (TASK-169), each under its microformats2 name, one URL each; a list of one reads as that URL. An http or https URL makes the post a like, a repost or a bookmark under Post Type Discovery, in the order repost, like, reply, photo, bookmark: the spec's order, with bookmark, which the spec leaves to note and article, just ahead of them. The theme cites each as an embedded `u-like-of`, `u-repost-of` or `u-bookmark-of` `h-cite`, and publishing sends the URL a webmention. A like or repost of a fediverse object federates as a `Like` or `Announce` of it; anything else federates as the note it is, with a line linking the page (decision-28). Any other value is ignored; the admin editor refuses to save one |
 | `read-of`, `read-status` | what a read post read, and how far its author got (TASK-229), as indiebookclub posts it. `read-of` is a map of `name` and, when known, `author`, `uid` (`isbn:…` or `doi:…`) and `url`; a bare string reads as its `name`. `read-status` is `to-read`, `reading` or `finished`. With both, the post is a read under Post Type Discovery, placed after photo and ahead of bookmark. The theme prints a `p-read-status` and a `p-read-of` `h-cite`, and the post federates as a note opening with the same sentence, such as "Want to read: Title by Author". Either without the other is ignored; the admin editor refuses to save one |
-| `activitypub.published` | timestamp of first delivery, a UTC instant. The only key the CMS writes here: it records that the post has been announced and when, which is what decides `Create` against `Update` |
+| `activitypub.published` | timestamp of first delivery, a UTC instant. The only key the CMS writes here: it records that the post has been announced and when, which is what decides `Create` against `Update`. A post migrated from a site that federated it carries the instant that site first delivered it, written by the importer, so its followers are never sent it as new |
 | `activitypub.id` | never written by the CMS. A post's ActivityStreams object id is its permalink (decision-13); this key is read, not minted, so a post migrated from elsewhere keeps the id its followers already hold — `https://example.com/?p=813` — and every `Update` and `Delete` names it |
 | `activitypub.type` | never written by the CMS. `Note` or `Article`, overriding the ActivityStreams type Post Type Discovery derives for the post (decision-17). Any other value is kept in the file, logged as a warning, and ignored. The `activitypub` block is everything about how a post federates, whether the author set it or the CMS wrote it back, and a save never rewrites what the author set |
+| `guid` | the id every feed publishes for the post (TASK-292): RSS's `guid`, Atom's `<id>` and JSON Feed's `id`, in place of the object id decision-12 otherwise prints. A post migrated from elsewhere keeps the guid its feed readers already hold, such as `https://blog.example.com/essays/slug/`, even where it federated as `https://example.com/?p=813`. RSS marks it `isPermaLink="true"` only when it equals the permalink. It changes nothing else: the ActivityStreams object id, the permalink and every redirect stay as they were, and the site answers nothing at the guid's URL. A value that is not an absolute URL is ignored, and the post falls back to `activitypub.id`, else its permalink. The admin editor shows no field for it and keeps it on save |
+| `canonical_href` | where the post was first published, when that is somewhere else (TASK-293), such as a Substack essay republished here. The name is the one an Eleventy site in the wild already used for it, so its files keep their values. An absolute http or https URL becomes the page's `<link rel="canonical">` and `og:url` in place of its own URL, and is on the theme's context as `original` (`{ url, label }`); the default theme prints "Originally published at" and links it as a second `u-url` of the h-entry, after the permalink's. It is no `u-syndication`, which names copies of this post, and original-post-discovery reads a copy's off-site `u-url` as its original. The JSON and Markdown representations carry it in the front matter as written. Any other value is kept in the file, named in a warning by `geekity sync` and when the watcher indexes the file, and ignored. The admin editor shows no field for it and keeps it on save |
+| `migrated` | `true` when the post was public somewhere else before it reached this site (TASK-296, decision-36). An importer writes it on every post it brings over; nothing in the CMS writes it. Its readers have already seen the post, so its arrival is news to nobody: a file appearing, a draft published, or a date passing sends no webmention, feed ping or IndexNow submission. A real edit, a change to a version that was already public, goes out as any edit does. ActivityPub follows `activitypub.published`: with one, the followers hold the post, so it is never sent as a `Create`: its arrival sends nothing, an edit to it once public sends an `Update` and taking it down sends a `Delete`; without one, nothing about the post is ever federated, not a `Create`, an `Update`, a `Delete`, nor a revision when a cited page's context arrives, and a resend sends nothing. Either way the post is on the web at its own date and its object is served to a peer that fetches its id. Any other value is ignored. The admin editor shows no field for it and keeps it on save |
 
 Unknown keys are preserved on round trip. The writer emits YAML with a stable key order so diffs stay small.
 
@@ -184,5 +187,33 @@ markdown-it with the same options 11ty uses by default (`html: true`), plus:
 - footnotes
 - heading anchors
 - fenced code with language class only (no server-side highlighting)
+- videos: a YouTube or Vimeo URL on a line of its own (decision-34)
 
 Anything that must survive an Eleventy build is checked by a test that runs Eleventy against the fixtures directory.
+
+### Videos
+
+A YouTube or Vimeo URL that is a paragraph by itself, with a blank line before and after it, plays as the video. Write it bare or in `<…>`:
+
+```markdown
+The talk I gave in Berlin.
+
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+
+And the follow-up.
+
+<https://vimeo.com/76979871>
+```
+
+The addresses it knows:
+
+| Provider | Addresses                                                                                                                              |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| YouTube  | `youtube.com/watch?v=ID`, `/shorts/ID`, `/embed/ID` and `/live/ID` (with or without `www.` or `m.`), `youtu.be/ID`, `youtube-nocookie.com/embed/ID`. A `t` or `start` of seconds or `1h2m3s` starts the player there. |
+| Vimeo    | `vimeo.com/ID`, `vimeo.com/ID/HASH` for an unlisted video, `vimeo.com/channels/NAME/ID`, `player.vimeo.com/video/ID` with an optional `h=HASH`. |
+
+The page shows the provider's privacy-enhanced player (YouTube's `youtube-nocookie.com`, Vimeo with `dnt=1`), lazily loaded, in a `figure.video-embed` with the URL linked beneath it. The default theme README describes the markup. The Markdown and text/plain representations are the file, so they carry the URL as written; the JSON carries it in `markdown` and the player and link in `html`; the feeds carry the player and the link, so a reader that drops iframes still shows the address.
+
+Anything else stays a link: a URL with words beside it, a `[link](url)` with words of its own (the way to link a video without playing it), a URL inside a list item or a blockquote, and a YouTube or Vimeo address that is not a video, such as a playlist or a channel.
+
+The editor's Add video button asks for the address and puts it on a line of its own at the cursor, so nobody has to remember the blank lines. Eleventy prints the URL as text.

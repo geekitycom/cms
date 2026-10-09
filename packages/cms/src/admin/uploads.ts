@@ -82,7 +82,9 @@ export interface StoreUploadOptions {
 }
 
 /** Whether an upload came to a refusal rather than a stored file. */
-export function refusedUpload(outcome: StoredUpload | UploadRefusal): outcome is UploadRefusal {
+export function refusedUpload<Accepted extends object>(
+  outcome: Accepted | UploadRefusal,
+): outcome is UploadRefusal {
   return 'error' in outcome;
 }
 
@@ -110,55 +112,15 @@ export async function storeUpload(
   }
 
   const original = baseName(file.name);
-  const extension = path.extname(original).toLowerCase();
-
-  if (!config.uploadTypes.includes(extension)) {
-    const allowed = config.uploadTypes.join(', ');
-    return {
-      status: 415,
-      error:
-        extension === ''
-          ? `That file has no extension, so there is no telling what it is. This site accepts ${allowed}.`
-          : `Uploads of ${extension} are not allowed here. This site accepts ${allowed}.`,
-    };
-  }
-
-  // Guaranteed by resolveConfig, which refuses an allowlist naming anything
-  // the table has no entry for.
-  const media = UPLOAD_MEDIA_TYPES.get(extension) as UploadMediaType;
-
-  if (options.imagesOnly === true && media.kind !== 'image') {
-    return { status: 415, error: `A ${extension} is not an image, and this has to be one.` };
-  }
-
-  const declared = declaredType(file.type);
-  if (declared !== '' && !media.declared.includes(declared)) {
-    return {
-      status: 415,
-      error: `That file says it is ${declared}, which is not what a ${extension} is.`,
-    };
-  }
-
-  const limit = uploadLimit(media, config);
-  if (file.size > limit) {
-    return { status: 413, error: tooLargeMessage(limit) };
-  }
-
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (!matchesSignature(media, bytes)) {
-    return { status: 415, error: `That file does not look like a ${extension} inside.` };
-  }
-
-  let clean: Uint8Array;
-  try {
-    clean = stripMetadata(extension, bytes).bytes;
-  } catch (error) {
-    if (!(error instanceof UnreadableMetadataError)) throw error;
-    return {
-      status: 415,
-      error: `${error.message} Its location and camera details could not be removed, so it was not stored.`,
-    };
-  }
+  const accepted = acceptUpload(
+    original,
+    declaredType(file.type),
+    new Uint8Array(await file.arrayBuffer()),
+    config,
+    options,
+  );
+  if (refusedUpload(accepted)) return accepted;
+  const { extension, media, bytes: clean } = accepted;
 
   const now = new Date();
   const month = `${String(now.getUTCFullYear()).padStart(4, '0')}/${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -186,6 +148,67 @@ export async function storeUpload(
     media,
     label: original.slice(0, original.length - extension.length).trim() || name,
   };
+}
+
+export interface AcceptedUpload {
+  extension: string;
+  media: UploadMediaType;
+  bytes: Uint8Array;
+}
+
+export function acceptUpload(
+  name: string,
+  declared: string,
+  bytes: Uint8Array,
+  config: Pick<UploadConfig, 'uploadTypes' | 'uploadMaxBytes' | 'uploadMediaMaxBytes'>,
+  options: StoreUploadOptions = {},
+): AcceptedUpload | UploadRefusal {
+  const extension = path.extname(name).toLowerCase();
+
+  if (!config.uploadTypes.includes(extension)) {
+    const allowed = config.uploadTypes.join(', ');
+    return {
+      status: 415,
+      error:
+        extension === ''
+          ? `That file has no extension, so there is no telling what it is. This site accepts ${allowed}.`
+          : `Uploads of ${extension} are not allowed here. This site accepts ${allowed}.`,
+    };
+  }
+
+  // Guaranteed by resolveConfig, which refuses an allowlist naming anything
+  // the table has no entry for.
+  const media = UPLOAD_MEDIA_TYPES.get(extension) as UploadMediaType;
+
+  if (options.imagesOnly === true && media.kind !== 'image') {
+    return { status: 415, error: `A ${extension} is not an image, and this has to be one.` };
+  }
+
+  if (declared !== '' && !media.declared.includes(declared)) {
+    return {
+      status: 415,
+      error: `That file says it is ${declared}, which is not what a ${extension} is.`,
+    };
+  }
+
+  const limit = uploadLimit(media, config);
+  if (bytes.byteLength > limit) {
+    return { status: 413, error: tooLargeMessage(limit) };
+  }
+
+  if (!matchesSignature(media, bytes)) {
+    return { status: 415, error: `That file does not look like a ${extension} inside.` };
+  }
+
+  try {
+    return { extension, media, bytes: stripMetadata(extension, bytes).bytes };
+  } catch (error) {
+    if (!(error instanceof UnreadableMetadataError)) throw error;
+    return {
+      status: 415,
+      error: `${error.message} Its location and camera details could not be removed, so it was not stored.`,
+    };
+  }
 }
 
 /**

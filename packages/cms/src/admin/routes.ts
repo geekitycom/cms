@@ -54,6 +54,8 @@ import { mountTaxonomyScreens, TAXONOMY_KINDS } from './taxonomy.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
 import { clientAddress, createLoginThrottle, describeWait, loginKeys } from './throttle.ts';
 import { mountToolsScreen } from './tools.ts';
+import { devModeOn } from '../dev-mode.ts';
+import { DEV_MODE_PATH, mountDevModeScreen } from './dev-mode.ts';
 import { mountPersonalDataScreen } from './personal-data.ts';
 import { mountEditorActions } from './editor-actions.ts';
 import { mountPluginsScreen, pluginScreens } from './plugins.ts';
@@ -169,6 +171,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
           ? undefined
           : { name: user.profile?.displayName ?? user.username, url: editUserPath(user.id) },
       flash: takeFlash(c),
+      devModeUrl: devModeOn(c.var.config) ? DEV_MODE_PATH : undefined,
       dataTheme: ACCOUNT_TEMPLATES.has(template) ? undefined : user?.adminTheme,
       barScheme: adminColorScheme(user?.adminTheme),
       ...context,
@@ -387,6 +390,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // back into the index, on a site that is serving.
   mountToolsScreen(app, { render });
   mountPersonalDataScreen(app, { render });
+  mountDevModeScreen(app, { render });
 
   // The site's own settings, which are content/_data/site.json itself: the
   // screen reads that file and writes it back (decision-9).

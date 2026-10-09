@@ -788,6 +788,29 @@ describe('an RSVP in the editor (TASK-198 AC #3)', () => {
   });
 });
 
+describe('a post’s feed guid in the editor (TASK-292 AC #4)', () => {
+  it('keeps the guid key through a save', async () => {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+        extra: ["guid: 'https://blog.example.com/essays/published/'"],
+      },
+    ]);
+    const agent = await signedIn(await box.site({ contentDir }));
+
+    assert.equal((await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status, 303);
+
+    const { data } = matter(
+      await readFile(path.join(contentDir, 'posts', '2026-01-02-published.md'), 'utf8'),
+    );
+    assert.equal(data['title'], 'Renamed');
+    assert.equal(data['guid'], 'https://blog.example.com/essays/published/');
+  });
+});
+
 describe('the post language in the editor (TASK-154 AC #1)', () => {
   const FILE = ['posts', '2026-01-02-published.md'];
 

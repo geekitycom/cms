@@ -9,6 +9,7 @@ import type { User } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore, Relay } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
+import { holdOutbound } from '../dev-mode.ts';
 import type { ContentStore } from '../content/store.ts';
 import { actorId, senderKeyPairs } from './actor.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
@@ -164,7 +165,16 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
     user: User,
     relay: Relay,
     activity: Follow | Undo,
-  ): Promise<void> {
+  ): Promise<'held' | 'sent'> {
+    if (
+      holdOutbound(config, {
+        kind: 'activitypub',
+        what: `${activity instanceof Follow ? 'Follow' : 'Undo'} ${activity.id?.href ?? ''}`,
+        to: [relay.inboxId],
+      })
+    ) {
+      return 'held';
+    }
     await context.sendActivity(
       await senderKeyPairs(context, user),
       relayRecipient(relay),
@@ -176,6 +186,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
         orderingKey: relay.inboxId,
       },
     );
+    return 'sent';
   }
 
   /**
@@ -208,7 +219,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
     });
 
     try {
-      await send(
+      const outcome = await send(
         context,
         user,
         stored,
@@ -221,6 +232,12 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
           object: PUBLIC_COLLECTION,
         }),
       );
+      if (outcome === 'held') {
+        return admin.putRelay({
+          ...stored,
+          reason: 'Not sent: the site is in dev mode. Retry once it is live.',
+        });
+      }
     } catch (thrown) {
       // The record stays pending with the reason on it: the relay may simply
       // have been down, and Retry is what the screen offers for that.

@@ -361,7 +361,8 @@ function guessedNameOf(actorId) {
 
 /**
  * One post's approved comments, as `content/_data/comments/{slug}.json` says
- * them (TASK-50).
+ * them (TASK-50). The file is named by the slug percent-encoded, which is the
+ * slug itself for one that is plain ASCII.
  *
  * Read from disk rather than through Eleventy's data cascade on purpose. A
  * namespaced `_data/comments/` directory would arrive as a global called
@@ -377,7 +378,9 @@ function nativeCommentsFor(slug) {
 
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync(`content/_data/comments/${slug}.json`, 'utf8'));
+    parsed = JSON.parse(
+      readFileSync(`content/_data/comments/${encodeURIComponent(slug)}.json`, 'utf8'),
+    );
   } catch {
     return [];
   }

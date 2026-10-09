@@ -28,6 +28,7 @@ import { settingsPagePath } from './settings-page.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { SYNDICATION_TARGETS_CHILD, SYNDICATION_TARGETS_PATH } from './syndication-targets.ts';
 import { CATEGORY_KIND, TAG_KIND } from './taxonomy.ts';
+import { DEV_MODE_CHILD, DEV_MODE_PATH } from './dev-mode.ts';
 import { PERSONAL_DATA_CHILD, PERSONAL_DATA_PATH } from './personal-data.ts';
 import { TOOLS_PATH } from './tools.ts';
 import {
@@ -142,6 +143,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   section('tools', 'Tools', [
     { child: 'index', label: 'Content index', url: TOOLS_PATH },
     { child: PERSONAL_DATA_CHILD, label: 'Personal data', url: PERSONAL_DATA_PATH },
+    { child: DEV_MODE_CHILD, label: 'Dev mode', url: DEV_MODE_PATH },
   ]),
   // WordPress's own pages, in its own order. General is first because the
   // heading lands on the first child and General is `/admin/settings` itself.
