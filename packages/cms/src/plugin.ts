@@ -15,6 +15,14 @@ import type { KvStore } from '@fedify/fedify';
  * The version of the host API this core provides. A plugin names the version
  * it targets in {@link Plugin.hostApi}, and one that targets a newer version
  * than this is unavailable.
+ *
+ * It is the gate that marks a break for plugins. A plugin accepts every core
+ * from the one it was built against up to 1.0, so a core minor release does
+ * not stop a plugin by itself. Raise this number in the release that changes
+ * this module so a plugin written for the current version would fail on the
+ * new core: a type, method or field removed or renamed, an argument or return
+ * value reshaped, or a behavior a plugin relies on changed. Adding a method, an
+ * optional field or a new extension point keeps the number.
  */
 export const HOST_API_VERSION = 1;
 

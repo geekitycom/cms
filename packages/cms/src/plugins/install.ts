@@ -294,9 +294,13 @@ function stagedManifest(staging: string, label: string, name: string): PluginMan
   if (manifest.name !== name) {
     throw new Error(`${label} was refused: its ${PLUGIN_MANIFEST} names ${manifest.name}.`);
   }
-  if (manifest.hostApi > HOST_API_VERSION) {
+  if (manifest.hostApi !== HOST_API_VERSION) {
     throw new Error(
-      `${label} targets host API version ${String(manifest.hostApi)}, and this core provides version ${String(HOST_API_VERSION)}. Upgrade @geekity/cms, or add an older version of the plugin.`,
+      `${label} targets host API version ${String(manifest.hostApi)}, and this core provides version ${String(HOST_API_VERSION)}. ${
+        manifest.hostApi > HOST_API_VERSION
+          ? 'Upgrade @geekity/cms, or add an older version of the plugin.'
+          : 'Add a newer version of the plugin.'
+      }`,
     );
   }
   return manifest;

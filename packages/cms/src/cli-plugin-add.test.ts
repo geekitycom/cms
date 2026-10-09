@@ -8,6 +8,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import semver from 'semver';
+
 import { cleanupTemporaryDirs, runCli, temporaryDir } from './__testing__/cli.ts';
 import { fakeNpmRegistry, pluginFiles } from './__testing__/npm-registry.ts';
 import type { FakePackage } from './__testing__/npm-registry.ts';
@@ -104,7 +106,7 @@ describe('geekity plugin add', () => {
     assert.equal(await installedVersion(pluginsDir, LLM), '1.1.0');
   });
 
-  it('refuses a bad tarball, a package with no bundle and a newer host API, leaving the folder as it was', async () => {
+  it('refuses a bad tarball, a package with no bundle and a newer or older host API, leaving the folder as it was', async () => {
     const noBundle = pluginFiles({ name: '@acme/plugin-plain', version: '1.0.0' });
     delete noBundle['dist/bundle/index.js'];
     delete noBundle['dist/bundle/plugin.json'];
@@ -119,6 +121,15 @@ describe('geekity plugin add', () => {
           name: '@acme/plugin-future',
           version: '1.0.0',
           hostApi: HOST_API_VERSION + 1,
+        }),
+      },
+      {
+        name: '@acme/plugin-past',
+        version: '1.0.0',
+        files: pluginFiles({
+          name: '@acme/plugin-past',
+          version: '1.0.0',
+          hostApi: HOST_API_VERSION - 1,
         }),
       },
     ]);
@@ -141,6 +152,15 @@ describe('geekity plugin add', () => {
       new RegExp(
         `targets host API version ${String(HOST_API_VERSION + 1)}, and this core provides version ${String(HOST_API_VERSION)}`,
       ),
+    );
+
+    const past = await geekity('add', '@acme/plugin-past');
+    assert.equal(past.code, 1);
+    assert.ok(
+      past.stderr.includes(
+        `targets host API version ${String(HOST_API_VERSION - 1)}, and this core provides version ${String(HOST_API_VERSION)}. Add a newer version of the plugin.`,
+      ),
+      past.stderr,
     );
 
     assert.deepEqual(await tree(pluginsDir), before);
@@ -174,6 +194,36 @@ describe('geekity plugin add', () => {
     assert.match(
       outOfRange.stdout,
       /It requires @acme\/plugin-llm \^2\.0\.0, and 1\.0\.0 is installed\./,
+    );
+  });
+
+  it('installs a plugin built against an older 0.x core without a note, and names a core older than the plugin', async () => {
+    const core = (
+      JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8')) as {
+        version: string;
+      }
+    ).version;
+    const older = `0.${String(semver.minor(core) - 1)}.0`;
+    const newer = `0.${String(semver.minor(core) + 1)}.0`;
+    const built = (version: string) => ({
+      files: pluginFiles({ name: LLM, version, core: `>=${version} <1.0.0` }),
+    });
+    const { geekity } = await setup([
+      release(LLM, older, built(older)),
+      release(LLM, newer, built(newer)),
+    ]);
+
+    const fits = await geekity('add', `${LLM}@${older}`);
+    assert.equal(fits.code, 0, fits.stderr);
+    assert.doesNotMatch(fits.stdout, /It needs/);
+
+    const tooNew = await geekity('add', `${LLM}@${newer}`);
+    assert.equal(tooNew.code, 0, tooNew.stderr);
+    assert.ok(
+      tooNew.stdout.includes(
+        `It needs @geekity/cms >=${newer} <1.0.0, and this core is ${core}, so it will be unavailable.`,
+      ),
+      tooNew.stdout,
     );
   });
 
