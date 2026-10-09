@@ -663,6 +663,7 @@ describe('Reload (TASK-288)', () => {
     assert.match(card, /Removed:[\s\S]*plugin-removed/);
     assert.match(card, /Updated:[\s\S]*@test\/plugin-updated/);
     assert.ok(!card.includes('@test/plugin-kept'), 'an unchanged folder is not named');
+    assert.match(card, /reloads by itself once the folder has stood still/);
   });
 
   it('refuses a Reload posted without the form’s CSRF token', async () => {

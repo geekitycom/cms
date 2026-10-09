@@ -398,6 +398,14 @@ export interface GeekityConfig {
    * `GEEKITY_PLUGIN_INSTALL`.
    */
   pluginInstall?: boolean;
+  /**
+   * Whether `geekity serve` reloads by itself once
+   * {@link GeekityConfig.pluginsDir} has changed and then stood still for
+   * five seconds (TASK-309). On by default. Off leaves Reload on the Plugins
+   * screen and the reload `geekity plugin` and the admin ask for. Overridden
+   * by `GEEKITY_PLUGIN_WATCH`.
+   */
+  pluginWatch?: boolean;
 }
 
 /**
@@ -472,6 +480,8 @@ export interface ResolvedConfig {
   pluginsDir: string | undefined;
   /** Whether Admin > Plugins may change the plugins folder. */
   pluginInstall: boolean;
+  /** Whether `geekity serve` reloads by itself when the plugins folder changes. */
+  pluginWatch: boolean;
 }
 
 /** Ambient inputs {@link resolveConfig} reads, injectable so the resolution is testable. */
@@ -685,6 +695,12 @@ export function resolveConfig(
       'GEEKITY_PLUGIN_INSTALL',
       env['GEEKITY_PLUGIN_INSTALL'],
       config.pluginInstall,
+      true,
+    ),
+    pluginWatch: resolveBoolean(
+      'GEEKITY_PLUGIN_WATCH',
+      env['GEEKITY_PLUGIN_WATCH'],
+      config.pluginWatch,
       true,
     ),
   };

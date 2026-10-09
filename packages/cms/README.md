@@ -86,19 +86,19 @@ message on a site whose `site.json` has not set a period.
 site (or `npx geekity`, or a `package.json` script, which is how the generated
 `sync` script calls it).
 
-| Command                                   | What it does                                                                                                                                                                       |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `geekity serve`                           | Boot from the config file and listen, in a worker the command supervises: Reload on the Plugins screen replaces it, and a crash respawns it. The default when no command is given. |
-| `geekity init <dir>`                      | Create a new site in `<dir>`. Refuses a directory that is not empty.                                                                                                               |
-| `geekity sync`                            | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed.                                                                                           |
-| `geekity rebuild`                         | Delete `data/geekity.db` and build it again from the files.                                                                                                                        |
-| `geekity resend --all`, `<slug>...`       | Send announced posts to every follower and relay again, as they now read. See [Quote posts](#quote-posts).                                                                         |
-| `geekity maintenance on`, `off`, `status` | Take the public site down on purpose with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` names when it should be back.                          |
-| `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`. See [The media library](#the-media-library).                                                          |
-| `geekity user add <name>`                 | Create an admin account, so a site can get its first login without the setup screen.                                                                                               |
-| `geekity plugin add <package>`, `remove`  | Install a plugin package's bundle from the npm registry into the plugins folder (`GEEKITY_PLUGINS_DIR`), or delete a disabled one. Reload on the Plugins screen loads the change.  |
-| `geekity --help`, `-h`                    | The same table, on the terminal.                                                                                                                                                   |
-| `geekity --version`                       | The installed version.                                                                                                                                                             |
+| Command                                   | What it does                                                                                                                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `geekity serve`                           | Boot from the config file and listen, in a worker the command supervises: a change to the plugins folder replaces it, and a crash respawns it. The default when no command is given.  |
+| `geekity init <dir>`                      | Create a new site in `<dir>`. Refuses a directory that is not empty.                                                                                                                  |
+| `geekity sync`                            | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed.                                                                                              |
+| `geekity rebuild`                         | Delete `data/geekity.db` and build it again from the files.                                                                                                                           |
+| `geekity resend --all`, `<slug>...`       | Send announced posts to every follower and relay again, as they now read. See [Quote posts](#quote-posts).                                                                            |
+| `geekity maintenance on`, `off`, `status` | Take the public site down on purpose with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` names when it should be back.                             |
+| `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`. See [The media library](#the-media-library).                                                             |
+| `geekity user add <name>`                 | Create an admin account, so a site can get its first login without the setup screen.                                                                                                  |
+| `geekity plugin add <package>`, `remove`  | Install a plugin package's bundle from the npm registry into the plugins folder (`GEEKITY_PLUGINS_DIR`), or delete a disabled one. A running `geekity serve` reloads with the change. |
+| `geekity --help`, `-h`                    | The same table, on the terminal.                                                                                                                                                      |
+| `geekity --version`                       | The installed version.                                                                                                                                                                |
 
 An installed plugin may add commands of its own, which `geekity --help` lists
 under _Plugin commands_ and which run whether or not the plugin is enabled.

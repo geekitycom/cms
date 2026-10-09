@@ -161,6 +161,7 @@ directory; absolute ones are used as given.
 | `themesDir`        | `<cwd>/themes`                            | `GEEKITY_THEMES_DIR`         | The site's themes, one directory per theme. Which one is in use is the `theme` setting, not a path. Need not exist.                                                                                                                                                                                                                                                                        |
 | `pluginsDir`       | none                                      | `GEEKITY_PLUGINS_DIR`        | A folder of plugins, `<name>/` or `@scope/<name>/`, each with a bundled `index.js` whose default export is the plugin. `geekity serve` loads them beside `plugins`, and Reload on the Plugins screen loads a changed folder without a restart. Unset, no code is loaded from a folder.                                                                                                     |
 | `pluginInstall`    | `true`                                    | `GEEKITY_PLUGIN_INSTALL`     | Let Admin > Plugins add, update and remove plugins in `pluginsDir`. Set it to `off` to keep plugin changes on the command line; see [Installing from the admin](#installing-from-the-admin).                                                                                                                                                                                               |
+| `pluginWatch`      | `true`                                    | `GEEKITY_PLUGIN_WATCH`       | Under `geekity serve`, reload by itself when `pluginsDir` has changed and then stood still for five seconds. Set it to `off` to load changes only with Reload, the admin's changes and `geekity plugin`.                                                                                                                                                                                   |
 | `baseUrl`          | `http://localhost:<port>`                 | `GEEKITY_BASE_URL`           | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                                                                                                                                                                                                                 |
 | `watch`            | `true`                                    | `GEEKITY_WATCH`              | Watch `contentDir` while serving and keep the index in step.                                                                                                                                                                                                                                                                                                                               |
 | `accessLog`        | `false`, but `true` under `geekity serve` | `GEEKITY_ACCESS_LOG`         | Write one line per request to stdout: the method, the path with its query string, the status and how long it took. `geekity serve` and the Docker image turn it on, because a server answering the internet should be able to say what it answered; `createCms` leaves it off, so a CMS embedded in another app never writes to its stdout unasked. See [The access log](#the-access-log). |
@@ -258,9 +259,24 @@ geekity serve --config geekity.config.ts
 
 `geekity serve` runs as a small supervisor. It owns the port and runs the CMS
 in one worker process, which it respawns, with a growing delay, if it crashes.
-When the plugins folder (`pluginsDir`) differs from what the running worker
-loaded, Admin > Plugins names the folders added, removed and updated, and
-offers Reload. Reload works in this order:
+It replaces the worker with a new one, a reload, when one of these happens:
+
+- A change on Admin > Plugins (Add, Update, Update all or Remove) finishes. The
+  screen then shows the change and that the plugins reloaded.
+- `geekity plugin add`, `upgrade` or `remove` finishes a change. The command
+  asks the supervisor over a Unix socket in the system temp folder, named by
+  the site's data folder, and prints how the reload went. When no supervisor
+  answers, it says so.
+- The plugins folder (`pluginsDir`) differs from what the running worker
+  loaded and has not changed for five seconds. The supervisor reads the folder
+  every second, so a copy that takes a while loads once, when it is done. Set
+  `GEEKITY_PLUGIN_WATCH=off` to turn this off.
+- You press **Reload** on Admin > Plugins. The screen offers it, naming the
+  folders added, removed and updated, whenever the folder differs from what
+  the running worker loaded.
+
+One reload runs at a time. A change made during a reload is loaded by another
+reload after it. Each reload works in this order:
 
 1. The running worker stops taking writes. It answers GET and HEAD and answers
    any other method `503` with `Retry-After: 5`. It lets the writes already in
@@ -270,8 +286,12 @@ offers Reload. Reload works in this order:
 3. A new worker boots, runs the boot migrations alone and starts listening.
 4. The old worker stops accepting connections and exits once its open ones end.
 
-The port stays open throughout, so no request is refused. If the new worker
-fails to boot, the old one carries on and the Plugins screen shows why.
+The port stays open throughout, so no request is refused. A reader that still
+reaches the old worker after step 4 is redirected to the same address, which
+the new worker answers. If the new worker fails to boot, the old one carries
+on and the Plugins screen shows why. The supervisor does not try the same
+folder again by itself. It waits for the folder to change, and Reload tries it
+again at once.
 SIGTERM and SIGINT close the worker the way `close()` does, and the supervisor
 exits 0.
 
@@ -313,12 +333,12 @@ folder holds one folder per plugin, named by its package:
    a newer version replaces the old folder in one step. `npm_config_registry`
    names another registry.
 
-2. Open Admin > Plugins and press **Reload**. The screen offers Reload whenever
-   the folder differs from what the running site loaded. Reload starts a new
-   worker with the folder as it is now and retires the old one, with no
-   container restart and no refused request.
+   When it is done, the command asks the running site to reload, and prints
+   how that went. The reload starts a new worker with the folder as it is
+   now and retires the old one, with no container restart and no refused
+   request.
 
-3. Enable the plugin on the same screen.
+2. Enable the plugin on Admin > Plugins.
 
 `plugin add` installs only the package it is given. When that plugin requires
 other plugins, the command names each one that is missing or out of range,
@@ -332,8 +352,7 @@ Nothing is installed or enabled on your behalf.
   plugin installs only with npm, on a site with its own entry file.
 - the bundle targets a host API version other than the one this core provides
 
-To bring every plugin in the folder up to date, run `plugin upgrade`, then
-press Reload:
+To bring every plugin in the folder up to date, run `plugin upgrade`:
 
 ```sh
 docker compose exec geekity geekity plugin upgrade
@@ -350,18 +369,19 @@ installed plugin with a requirement that is not met.
 
 It prints one line per plugin: the versions it upgraded from and to, that the
 version is already the newest, or which version it held back and why. Then it
-names any requirement that is still not met, and asks you to press Reload when
-anything changed. A plugin that is not on the registry, or a registry that
+names any requirement that is still not met, and when anything changed, asks
+the running site to reload. A plugin that is not on the registry, or a registry that
 cannot be reached, is skipped and the others carry on. The command exits
-non-zero only when an install it attempted failed.
+non-zero only when an install it attempted failed, or the site could not start
+with the new versions.
 
 - `geekity plugin upgrade @geekity/plugin-llm @geekity/plugin-post-summary`
   upgrades only the plugins it is given.
 - `geekity plugin upgrade --check` prints the same report and installs
   nothing.
 
-To remove a plugin, disable it on the Plugins screen, delete its folder and
-press Reload:
+To remove a plugin, disable it on the Plugins screen, then delete its folder.
+The site reloads without it:
 
 ```sh
 docker compose exec geekity geekity plugin remove @geekity/plugin-llm
@@ -370,7 +390,8 @@ docker compose exec geekity geekity plugin remove @geekity/plugin-llm
 `plugin remove` refuses a plugin the site has enabled, as WordPress does.
 
 A plugin that is not on npm installs the same way by hand: copy its bundle
-folder, `index.js` and `plugin.json`, to `plugins/<package name>/` and press
+folder, `index.js` and `plugin.json`, to `plugins/<package name>/`. The site
+loads it about five seconds after the copy finishes, or at once when you press
 Reload.
 
 A folder that cannot load does not stop the site. Its row on the Plugins screen
@@ -397,8 +418,9 @@ on a site with a plugins folder:
   first, as in WordPress.
 
 Each change asks for your password, and an update or a removal first shows
-what it will change. One change runs at a time. After a change, press
-**Reload** to load it. Plugins passed in `plugins` on a site's own config are
+what it will change. One change runs at a time. Under `geekity serve`, the
+site reloads as soon as the change is made, and the screen then shows the
+change. On a site you run another way, restart it to load the change. Plugins passed in `plugins` on a site's own config are
 shown as managed in code, with no controls.
 
 Every change made here is recorded in `data/plugin-changes.json`: who made it,

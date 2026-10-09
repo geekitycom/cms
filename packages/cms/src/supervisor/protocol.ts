@@ -5,6 +5,13 @@
  * nothing more; a new worker boots and says `ready`; the old one is told to
  * `retire`. A new worker that does not boot says `boot-failed`, and the old
  * one is told to `resume`, with the reason.
+ *
+ * A worker that has closed says `closed` and exits only when told `exit`.
+ * Under `node:cluster`'s round-robin the supervisor may have handed this
+ * worker a connection just before it stopped listening; the worker sends
+ * such a connection back, but only while it runs. The `exit` comes down the
+ * same channel as those connections, after them, so none is lost with the
+ * process and left unanswered.
  */
 
 /**
@@ -15,19 +22,33 @@
 export const EXIT_FOR_REPLACEMENT = 1;
 
 export type WorkerMessage =
-  | { readonly type: 'ready' }
+  | { readonly type: 'ready'; readonly pluginsFingerprint: string }
   | { readonly type: 'boot-failed'; readonly error: string }
   | { readonly type: 'reload' }
-  | { readonly type: 'drained' };
+  | { readonly type: 'drained' }
+  | { readonly type: 'closed' };
 
 export type SupervisorMessage =
   | { readonly type: 'drain' }
   | { readonly type: 'resume'; readonly error: string }
   | { readonly type: 'retire' }
-  | { readonly type: 'shutdown' };
+  | { readonly type: 'shutdown' }
+  | { readonly type: 'exit' };
 
-const WORKER_TYPES: ReadonlySet<string> = new Set(['ready', 'boot-failed', 'reload', 'drained']);
-const SUPERVISOR_TYPES: ReadonlySet<string> = new Set(['drain', 'resume', 'retire', 'shutdown']);
+const WORKER_TYPES: ReadonlySet<string> = new Set([
+  'ready',
+  'boot-failed',
+  'reload',
+  'drained',
+  'closed',
+]);
+const SUPERVISOR_TYPES: ReadonlySet<string> = new Set([
+  'drain',
+  'resume',
+  'retire',
+  'shutdown',
+  'exit',
+]);
 
 export function isWorkerMessage(value: unknown): value is WorkerMessage {
   return hasType(value, WORKER_TYPES);

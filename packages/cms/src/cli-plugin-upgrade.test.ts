@@ -15,7 +15,8 @@ after(() => Promise.all(registries.map((registry) => registry.close())));
 const LLM = '@acme/plugin-llm';
 const SUMMARY = '@acme/plugin-summary';
 const TAGS = '@acme/plugin-tags';
-const RELOAD = 'Reload on the Plugins screen to load the new versions.';
+const RELOAD =
+  'No running geekity serve answered. A running site loads the change by itself within a few seconds.';
 const CORE = (
   JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8')) as {
     version: string;

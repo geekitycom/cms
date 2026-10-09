@@ -6,10 +6,10 @@ import { serve as serveNode } from '@hono/node-server';
 import { Hono } from 'hono';
 
 import { createAccessLog } from './access-log.ts';
-import { PLUGINS_RELOAD_PATH } from './admin/plugins.ts';
 import { createWriteGate } from './drain.ts';
 import { createSettlingQueue } from './federation/queue.ts';
 import type { InstalledPlugin } from './plugins/registry.ts';
+import { leavingWriteGate } from './supervisor/supervision.ts';
 import type { Supervision } from './supervisor/supervision.ts';
 import { refuseWritesUnder } from './files/atomic.ts';
 import { compression } from './web/compression.ts';
@@ -2042,7 +2042,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
   // about to get, the error pages and the 503 included (TASK-139).
   if (resolved.compression) app.use('*', compression());
 
-  const writes = createWriteGate({ exempt: (pathname) => pathname === PLUGINS_RELOAD_PATH });
+  const writes = createWriteGate();
   app.use('*', writes.middleware);
 
   app.use('*', async (c, next) => {
@@ -2065,7 +2065,10 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     c.set('redirects', redirects);
     c.set('maintenance', maintenance);
     c.set('indieauth', indieauth);
-    c.set('supervision', context.supervision);
+    c.set(
+      'supervision',
+      leavingWriteGate(context.supervision, () => writes.leave(c)),
+    );
     await next();
   });
 
@@ -2308,6 +2311,9 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     async close() {
       const running = server;
       server = undefined;
+      const handingOver =
+        running !== undefined && writes.refusing ? closeServer(running, true) : undefined;
+      if (writes.refusing) writes.handOver();
       await plugins.close();
       stopTimers();
       await content.stop();
@@ -2319,7 +2325,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
       await settleWrites();
       federationQueue?.close();
 
-      if (running !== undefined) await closeServer(running, writes.refusing);
+      if (running !== undefined) await (handingOver ?? closeServer(running, false));
 
       releaseFiles?.();
       releaseFiles = undefined;

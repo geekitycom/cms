@@ -55,13 +55,27 @@ async function installedVersion(pluginsDir: string, name: string): Promise<strin
 }
 
 describe('geekity plugin add', () => {
+  it('says to press Reload when no server answers and the watch is off (TASK-309)', async () => {
+    const { site, pluginsDir, registry } = await setup([release(LLM, '1.0.0')]);
+    const result = await runCli(['plugin', 'add', LLM], site, undefined, {
+      GEEKITY_PLUGINS_DIR: pluginsDir,
+      GEEKITY_PLUGIN_WATCH: 'off',
+      npm_config_registry: registry.url,
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /Press Reload on the Plugins screen to load the change\./);
+  });
+
   it('unpacks the bundle and manifest into plugins/<package name>/ and nothing else', async () => {
     const { pluginsDir, geekity } = await setup([release(LLM, '1.0.0')]);
 
     const result = await geekity('add', LLM);
     assert.equal(result.code, 0, result.stderr);
     assert.match(result.stdout, /Added @acme\/plugin-llm 1\.0\.0/);
-    assert.match(result.stdout, /Reload/);
+    assert.match(
+      result.stdout,
+      /No running geekity serve answered\. A running site loads the change by itself within a few seconds\./,
+    );
     assert.deepEqual(await tree(pluginsDir), [
       '@acme',
       '@acme/plugin-llm',

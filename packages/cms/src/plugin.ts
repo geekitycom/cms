@@ -439,13 +439,17 @@ export interface PluginEditorChoice {
 
 /**
  * What an editor button answers: a value the author may accept into the
- * field, choices the author ticks before accepting, or why there is none, in
- * plain words. Core shows each escaped. Choices are for the tags field, and
- * accepting adds every ticked one; beside another field they are a failure.
+ * field, choices the author picks from before accepting, a note with nothing
+ * to accept (such as that the field is best kept as it is), or why there is
+ * none, in plain words. Core shows each escaped. Choices beside the tags
+ * field are ticked and accepting adds every ticked one; beside the title the
+ * author picks one and accepting fills the title with it; beside the
+ * description they are a failure.
  */
 export type PluginEditorSuggestion =
   | { readonly ok: true; readonly value: string }
   | { readonly ok: true; readonly choices: readonly PluginEditorChoice[] }
+  | { readonly ok: true; readonly message: string }
   | { readonly ok: false; readonly message: string };
 
 /**

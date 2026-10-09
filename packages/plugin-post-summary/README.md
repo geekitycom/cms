@@ -47,10 +47,10 @@ The plugin puts two buttons in the post and page editor:
 - **Suggest description** sits under Description, in Summary and language.
 
 A button sends the draft as it stands: the title, the body, the tags, the kind
-of post and its language. Suggest title also sends the site's latest titles,
-as described below. The suggestion appears under the button. **Accept**
-puts it in the field, and **Dismiss** drops it. Accepting saves nothing; the
-post is saved only by the editor's own buttons.
+of post and its language. Suggest title leaves the current title out and sends
+the site's latest titles instead, as described below. The suggestion appears
+under the button. **Accept** puts it in the field, and **Dismiss** drops it.
+Accepting saves nothing; the post is saved only by the editor's own buttons.
 
 Suggest title is not offered for a like, a reply, a repost, an RSVP, a photo
 post, or a note that was saved without a title, because those posts show no
@@ -58,9 +58,20 @@ title. It is offered for a new post with no title yet, which a title would make
 an article. Suggest description is not offered for a read post, which is
 described by its read line.
 
-A title is asked for in about 60 characters at most, written the way the
-author would write it. Suggest title also sends the titles of the site's five
-latest posts that have one, so the model can match their style.
+Suggest title asks for three titles, each in about 60 characters at most,
+written the way the author would write them: one plain, one specific and one
+with a little more voice. It sends the titles of the site's five latest posts
+that have one, so the model can match their style, but not the post's own
+title: shown it, a model tends to hand it back. The titles are listed with a
+radio button each, the first picked; Accept puts the picked one in Title, and
+the slug follows as usual. A title that is the current one, or repeats
+another, ignoring case, spacing and trailing punctuation, is dropped. When
+none is left, the editor says the model suggests keeping the current title,
+with nothing to accept.
+
+Suggest description gives one description, and it does see the title. When
+the description it gives is the current one, the editor says the model
+suggests keeping it.
 
 A description is at most 280 characters and 55 words: the length the default
 theme's listings print and a feed's excerpt keeps. A longer answer is cut after

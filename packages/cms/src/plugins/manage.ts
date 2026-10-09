@@ -26,13 +26,16 @@ export interface ManageOptions {
   /** The admin making the change, for the record. */
   user: string;
   now: Date;
-  /** What to tell the admin to do once the folder has changed. */
-  next: string;
 }
 
 export interface ManageOutcome {
   kind: FlashKind;
   message: string;
+}
+
+export interface ManageResult {
+  changed: boolean;
+  outcomes: ManageOutcome[];
 }
 
 const ADD_WITH_FORM: AddAdvice = (name) => `Add ${name} with the Add plugin form.`;
@@ -50,7 +53,7 @@ export function lastUpdateCheck(pluginsDir: string): UpdateCheck | undefined {
 
 /** Look for newer versions of every folder plugin, and keep the answer for the screen. */
 export async function checkForUpdates(
-  options: Omit<ManageOptions, 'user' | 'contentDir' | 'dataDir' | 'next'>,
+  options: Omit<ManageOptions, 'user' | 'contentDir' | 'dataDir'>,
   only?: readonly string[],
 ): Promise<UpgradeReport> {
   const report = await upgradePlugins({ ...options, only, check: true, addAdvice: ADD_WITH_FORM });
@@ -63,10 +66,7 @@ export async function checkForUpdates(
   return report;
 }
 
-export async function installPlugin(
-  options: ManageOptions,
-  spec: string,
-): Promise<ManageOutcome[]> {
+export async function installPlugin(options: ManageOptions, spec: string): Promise<ManageResult> {
   const parsed = parsePackageSpec(spec);
   return await serialized(options, async () => {
     const { manifest, replaced } = await addPlugin(parsed, options);
@@ -86,7 +86,6 @@ export async function installPlugin(
         ...requirementNotes(manifest, installed, options.coreVersion, ADD_WITH_FORM).map((note) =>
           warning(`${name}: ${note}`),
         ),
-        notice(options.next),
       ],
     };
   });
@@ -96,7 +95,7 @@ export async function installPlugin(
 export async function updatePlugins(
   options: ManageOptions,
   only: readonly string[] | undefined,
-): Promise<ManageOutcome[]> {
+): Promise<ManageResult> {
   return await serialized(options, async () => {
     const report = await upgradePlugins({ ...options, only, addAdvice: ADD_WITH_FORM });
     const changes: PluginChange[] = report.plugins.flatMap((plugin) =>
@@ -114,13 +113,12 @@ export async function updatePlugins(
         ...report.unmet.flatMap(({ name, notes }) =>
           notes.map((note) => warning(`${name}: ${note}`)),
         ),
-        ...(changes.length > 0 ? [notice(options.next)] : []),
       ],
     };
   });
 }
 
-export async function deletePlugin(options: ManageOptions, name: string): Promise<ManageOutcome[]> {
+export async function deletePlugin(options: ManageOptions, name: string): Promise<ManageResult> {
   return await serialized(options, async () => {
     const version = installedFolders(options.pluginsDir).get(name);
     await removePlugin(name, options);
@@ -128,7 +126,6 @@ export async function deletePlugin(options: ManageOptions, name: string): Promis
       changes: [{ action: 'remove', name, from: version }],
       outcomes: [
         notice(version === undefined ? `Removed ${name}.` : `Removed ${name} ${version}.`),
-        notice(options.next),
       ],
     };
   });
@@ -146,13 +143,13 @@ const UPGRADE_KINDS: Readonly<Record<PluginUpgrade['status'], FlashKind>> = {
 async function serialized(
   options: ManageOptions,
   change: () => Promise<{ changes: readonly PluginChange[]; outcomes: ManageOutcome[] }>,
-): Promise<ManageOutcome[]> {
+): Promise<ManageResult> {
   const folder = path.resolve(options.pluginsDir);
   return await withFileLock(folder, async () => {
     const { changes, outcomes } = await change();
     if (changes.length > 0) updateChecksByPluginsFolder.delete(folder);
     await recordPluginChanges(options.dataDir, { user: options.user, at: options.now }, changes);
-    return outcomes;
+    return { changed: changes.length > 0, outcomes };
   });
 }
 

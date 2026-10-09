@@ -33,8 +33,8 @@ describe('the bundled plugin', () => {
       baseUrl: provider.baseUrl,
       apiKey: 'sk-bundle',
     });
-    provider.answer(replying(JSON.stringify({ title: 'From the Bundle' })));
+    provider.answer(replying(JSON.stringify({ titles: ['From the Bundle'] })));
     const response = await admin.post(actionUrl('suggest-title'), { type: 'post', body: 'Words.' });
-    assert.deepEqual(await response.json(), { ok: true, value: 'From the Bundle' });
+    assert.deepEqual(await response.json(), { ok: true, choices: [{ value: 'From the Bundle' }] });
   });
 });

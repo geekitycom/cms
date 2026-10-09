@@ -32,7 +32,7 @@
   {% if reload %}
     <div id="plugins-reload" class="mb-8 max-w-prose">
       {% call card(title="The plugins folder has changed") %}
-        <p>Reload starts a new server with the plugins folder as it is now, then retires this one. No request is turned away.</p>
+        <p>Reload starts a new server with the plugins folder as it is now, then retires this one. No request is turned away.{% if reload.watching %} The site also reloads by itself once the folder has stood still for a few seconds.{% endif %}</p>
         <dl class="text-sm">
           {% for heading, names in [["Added", reload.changes.added], ["Removed", reload.changes.removed], ["Updated", reload.changes.updated]] %}
             {% if names.length %}
