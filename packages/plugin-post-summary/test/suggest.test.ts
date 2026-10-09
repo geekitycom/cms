@@ -3,17 +3,21 @@ import { readFileSync } from 'node:fs';
 import { after, before, beforeEach, describe, it } from 'node:test';
 
 import llm from '@geekity/plugin-llm';
-import type { LlmFailure } from '@geekity/plugin-llm';
 
 import summary, {
   cleanTitle,
   DESCRIPTION_CHARACTERS,
   DESCRIPTION_WORDS,
-  failureWords,
   fitDescription,
 } from '../src/index.ts';
-import { fakeProvider, replying } from './provider.ts';
-import type { FakeProvider } from './provider.ts';
+import {
+  fakeProvider,
+  OPENROUTER_BASE_URL,
+  replying,
+  standInForOpenRouter,
+  thinker,
+} from '../../plugin-llm/test/provider.ts';
+import type { FakeProvider } from '../../plugin-llm/test/provider.ts';
 import { actionUrl, buttonsOn, closeSites, summarySite } from './site.ts';
 
 /**
@@ -46,8 +50,14 @@ after(async () => {
   await provider.close();
 });
 
-const site = (options: { apiKey?: string | undefined; enabled?: boolean } = { apiKey: KEY }) =>
-  summarySite([llm, summary], { baseUrl: provider.baseUrl, posts: POSTS, ...options });
+const site = (
+  options: {
+    apiKey?: string | undefined;
+    enabled?: boolean;
+    baseUrl?: string;
+    model?: string;
+  } = { apiKey: KEY },
+) => summarySite([llm, summary], { baseUrl: provider.baseUrl, posts: POSTS, ...options });
 
 interface Sent {
   messages: { role: string; content: string }[];
@@ -130,7 +140,7 @@ describe('Suggest title and Suggest description', () => {
     });
     assert.deepEqual(await response.json(), {
       ok: false,
-      message: 'No language model is set up yet. Add an API key on Plugins > LLM, then try again.',
+      message: 'No API key is set on Plugins > LLM, so nothing was sent.',
     });
     assert.equal(provider.received.length, 0);
   });
@@ -144,8 +154,49 @@ describe('Suggest title and Suggest description', () => {
     });
     assert.deepEqual(await response.json(), {
       ok: false,
-      message: 'The language model provider refused the API key. Check the key on Plugins > LLM.',
+      message: `${new URL(provider.baseUrl).host} refused the API key. Check the key on Plugins > LLM.`,
     });
+  });
+
+  it('suggests a title from a reasoning model on OpenRouter, asked to keep its reasoning short', async () => {
+    const stop = standInForOpenRouter(provider);
+    try {
+      const { admin } = await site({
+        apiKey: KEY,
+        baseUrl: OPENROUTER_BASE_URL,
+        model: 'acme/thinker',
+      });
+      provider.answer(thinker(JSON.stringify({ title: 'Keeping a Starter Alive' })));
+      const response = await admin.post(actionUrl('suggest-title'), {
+        type: 'post',
+        body: 'Feed it flour and water every day.',
+      });
+      assert.deepEqual(await response.json(), { ok: true, value: 'Keeping a Starter Alive' });
+    } finally {
+      stop();
+    }
+  });
+
+  it('shows why a reply was cut off, in the words the LLM plugin gives', async () => {
+    const stop = standInForOpenRouter(provider);
+    try {
+      const { admin } = await site({
+        apiKey: KEY,
+        baseUrl: OPENROUTER_BASE_URL,
+        model: 'acme/unlisted',
+      });
+      provider.answer(thinker(JSON.stringify({ title: 'Never written' })));
+      const response = await admin.post(actionUrl('suggest-title'), {
+        type: 'post',
+        body: 'Feed it flour and water every day.',
+      });
+      const { ok, message } = (await response.json()) as { ok: boolean; message: string };
+      assert.equal(ok, false);
+      assert.match(message, /stopped at its limit of 4096 tokens/);
+      assert.match(message, /does not reason by default/);
+    } finally {
+      stop();
+    }
   });
 
   it('asks nothing for an empty draft', async () => {
@@ -175,28 +226,7 @@ describe('Suggest title and Suggest description', () => {
   });
 });
 
-describe('the words and the tidying', () => {
-  it('has plain words for every failure kind', () => {
-    const failures: LlmFailure[] = [
-      { kind: 'unconfigured' },
-      { kind: 'unauthorized' },
-      { kind: 'no-credit' },
-      { kind: 'rate-limited', retryAfter: 30 },
-      { kind: 'rate-limited', retryAfter: undefined },
-      { kind: 'unavailable', status: 503, message: undefined },
-      { kind: 'rejected', status: 400, message: 'response_format' },
-      { kind: 'invalid-output', reason: 'not JSON' },
-      { kind: 'timeout', seconds: 60 },
-      { kind: 'aborted' },
-      { kind: 'network' },
-    ];
-    const words = failures.map(failureWords);
-    assert.equal(new Set(words).size, words.length, 'each says something different');
-    assert.match(failureWords({ kind: 'rate-limited', retryAfter: 30 }), /30 seconds/);
-    assert.match(failureWords({ kind: 'rejected', status: 400, message: undefined }), /structured/);
-    for (const text of words) assert.doesNotMatch(text, /undefined|\{|status \d/);
-  });
-
+describe('the tidying', () => {
   it('cuts a run-on description at a word when no sentence fits', () => {
     const fitted = fitDescription(`${'word '.repeat(80)}end.`);
     assert.ok(fitted.endsWith(' …'));

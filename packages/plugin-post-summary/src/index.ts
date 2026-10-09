@@ -13,7 +13,7 @@ import type {
   PluginEditorSuggestion,
   PluginPostType,
 } from '@geekity/cms/plugin';
-import type { LlmFailure, LlmService } from '@geekity/plugin-llm';
+import type { LlmService } from '@geekity/plugin-llm';
 
 import { VERSION } from './version.ts';
 
@@ -50,34 +50,6 @@ export function offersTitle(draft: PluginEditorDraft): boolean {
 /** A read post is described by its read line, which the editor asks to leave alone. */
 export function offersDescription(draft: PluginEditorDraft): boolean {
   return draft.postType !== 'read';
-}
-
-/** What goes wrong in plain words, with where to put it right. */
-export function failureWords(error: LlmFailure): string {
-  switch (error.kind) {
-    case 'unconfigured':
-      return 'No language model is set up yet. Add an API key on Plugins > LLM, then try again.';
-    case 'unauthorized':
-      return 'The language model provider refused the API key. Check the key on Plugins > LLM.';
-    case 'no-credit':
-      return 'The account behind the API key has no credit left. Add credit with the provider, then try again.';
-    case 'rate-limited':
-      return error.retryAfter === undefined
-        ? 'The provider is limiting requests. Try again shortly.'
-        : `The provider is limiting requests. Try again in ${String(error.retryAfter)} seconds.`;
-    case 'unavailable':
-      return 'The provider could not answer just now. Try again in a while.';
-    case 'rejected':
-      return 'The provider refused the request. The model chosen on Plugins > LLM may not give structured answers; choose another model there.';
-    case 'invalid-output':
-      return 'The model’s answer was not usable. Try again, or choose another model on Plugins > LLM.';
-    case 'timeout':
-      return `The model did not answer within ${String(error.seconds)} seconds. Try again.`;
-    case 'aborted':
-      return 'The request was stopped before the answer came.';
-    case 'network':
-      return 'The language model provider could not be reached. Check the base URL on Plugins > LLM.';
-  }
 }
 
 /**
@@ -180,7 +152,7 @@ async function suggest(
     },
     signal,
   });
-  if (!completion.ok) return { ok: false, message: failureWords(completion.error) };
+  if (!completion.ok) return { ok: false, message: completion.message };
   const value = ask.tidy(completion.value[ask.key]);
   return value === ''
     ? { ok: false, message: 'The model answered with nothing. Try again.' }
@@ -195,7 +167,7 @@ export default definePlugin({
     'Suggests a title and a description for a post in the editor, from the language model ' +
     'the LLM plugin connects to, when the author asks.',
   hostApi: 1,
-  requires: { [LLM]: '^0.1.0' },
+  requires: { [LLM]: '^0.2.0' },
   register(host) {
     host.editorAction({
       id: 'suggest-title',

@@ -327,7 +327,7 @@ editor_token="$(sed -n 's/.*name="csrf_token" value="\([^"]*\)".*/\1/p' <<<"${ed
 suggestion="$(curl -fsS -b "${jar}" --data-urlencode "csrf_token=${editor_token}" \
   --data-urlencode 'type=post' --data-urlencode 'body=Some words.' \
   "${BASE}/admin/plugins/@geekity/plugin-post-summary/editor/suggest-title")"
-if ! grep -qF 'Add an API key on Plugins > LLM' <<<"${suggestion}"; then
+if ! grep -qF 'No API key is set on Plugins > LLM' <<<"${suggestion}"; then
   echo "Suggest title did not explain the missing key:" >&2
   echo "${suggestion}" >&2
   exit 1
@@ -338,7 +338,7 @@ log "pressing Suggest tags in the editor with no API key set"
 tags_suggestion="$(curl -fsS -b "${jar}" --data-urlencode "csrf_token=${editor_token}" \
   --data-urlencode 'type=post' --data-urlencode 'body=Some words.' \
   "${BASE}/admin/plugins/@geekity/plugin-tag-suggest/editor/suggest-tags")"
-if ! grep -qF 'Add an API key on Plugins > LLM' <<<"${tags_suggestion}"; then
+if ! grep -qF 'No API key is set on Plugins > LLM' <<<"${tags_suggestion}"; then
   echo "Suggest tags did not explain the missing key:" >&2
   echo "${tags_suggestion}" >&2
   exit 1
