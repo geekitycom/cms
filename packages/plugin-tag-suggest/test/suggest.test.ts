@@ -230,6 +230,30 @@ describe('Suggest tags', () => {
     );
   });
 
+  it('offers a reach tag in the model’s readable spelling, or else the seed’s, and looks up the folded key', async () => {
+    const { admin } = await site();
+    tagsPub.followers.set('opensource', 300);
+    tagsPub.followers.set('digitalrights', 200);
+    tagsPub.followers.set('hashtaggames', 100);
+    modelSays([], ['OpenSource', 'digital-rights', 'hashtaggames', 'linux']);
+    const answer = await suggest(admin);
+    assert.deepEqual(
+      answer.choices?.map(({ value, group }) => ({ value, group })),
+      [
+        { value: 'OpenSource', group: REACH },
+        { value: 'DigitalRights', group: REACH },
+        { value: 'HashtagGames', group: REACH },
+        { value: 'linux', group: REACH },
+      ],
+    );
+    assert.deepEqual(looked(), [
+      '/user/digitalrights/followers',
+      '/user/hashtaggames/followers',
+      '/user/linux/followers',
+      '/user/opensource/followers',
+    ]);
+  });
+
   it('ranks reach tags by the seed’s count when tags.pub gives none or fewer', async () => {
     const { admin } = await site();
     tagsPub.failWith = 503;
@@ -265,6 +289,10 @@ describe('Suggest tags', () => {
     const system = (provider.received[0]?.body as Sent).messages[0]?.content ?? '';
     assert.match(system, /that this post is genuinely about/);
     assert.match(system, /Never pick one only because many people follow it/);
+    assert.match(
+      system,
+      /written in lower case.*write the ones you pick in CamelCase too, such as OpenSource for opensource/,
+    );
     const listed = /Hashtags people follow, most followed first: (.*)$/
       .exec(system)?.[1]
       ?.split(', ');
