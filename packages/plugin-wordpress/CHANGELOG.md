@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.1.0...plugin-wordpress-v0.1.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **plugin-wordpress:** accept any later 0.x core ([18511bd](https://github.com/geekitycom/cms/commit/18511bdc8d719f82d32cd713e51c408d1049baf5))
+
 ## 0.1.0 (2026-10-08)
 
 

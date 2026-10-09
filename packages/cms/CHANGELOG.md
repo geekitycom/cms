@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.27.0](https://github.com/geekitycom/cms/compare/v0.26.0...v0.27.0) (2026-10-09)
+
+
+### Features
+
+* **cms:** add, update and remove plugins from the Plugins screen ([e655ce6](https://github.com/geekitycom/cms/commit/e655ce664a9838b2c37c67b1e0a9b3cbb4519427))
+* **cms:** match tags without regard to case ([40782b3](https://github.com/geekitycom/cms/commit/40782b3c3ace206015a0602302249790ba4e6943))
+* **cms:** require a plugin to be disabled before it is removed ([0e06a3b](https://github.com/geekitycom/cms/commit/0e06a3bf2df8b02f40524c602365927cf6af7cac))
+* **cms:** upgrade every folder plugin to its newest compatible version ([f190a8f](https://github.com/geekitycom/cms/commit/f190a8f0e0d5ff0e58b5269489fc2271464e1c75))
+
+
+### Bug Fixes
+
+* **cms:** refuse a plugin that targets an older host API ([358ba67](https://github.com/geekitycom/cms/commit/358ba67cf4eb4b741ecde16ab999edecfffd781d))
+* **release:** publish plugin peer ranges as &gt;=built-against &lt;1.0.0 ([d2f7c65](https://github.com/geekitycom/cms/commit/d2f7c653401f68b67607b54c8bfe6a2d15af26fc))
+
 ## [0.26.0](https://github.com/geekitycom/cms/compare/v0.25.0...v0.26.0) (2026-10-09)
 
 
