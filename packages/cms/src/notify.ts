@@ -1,6 +1,7 @@
 import { readSiteSettings, taxonomyBasesFromSettings } from './admin/settings.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
+import { holdOutbound } from './dev-mode.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { isFederatedDocument } from './federation/article.ts';
 import { isListed } from './web/documents.ts';
@@ -49,7 +50,7 @@ export interface CreateFeedNotifierOptions {
    * scheduled post is held against, and the content directory the settings —
    * the notify server and the two archive bases — are read from.
    */
-  config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'now'>;
+  config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'now'>;
   /** Where failures are reported. Defaults to `console`. */
   logger?: NotifyLogger | undefined;
 }
@@ -143,6 +144,11 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
       const endpoint = server();
       const wanted = [...new Set(urls)];
       if (endpoint === undefined || wanted.length === 0) return { pings: [] };
+      if (
+        holdOutbound(config, { kind: 'feed-ping', what: wanted.join(' '), to: [endpoint.ping] })
+      ) {
+        return { server: endpoint.base, pings: [] };
+      }
 
       return await enqueue(async () => {
         const sent: NotifyPing[] = [];

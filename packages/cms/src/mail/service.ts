@@ -1,6 +1,7 @@
 import { readSiteSettings } from '../admin/settings.ts';
 import type { SiteSettings } from '../admin/settings.ts';
 import type { ResolvedConfig } from '../config.ts';
+import { holdOutbound } from '../dev-mode.ts';
 import { createThemeSource } from '../web/themes.ts';
 import type { ThemeSource } from '../web/themes.ts';
 import { createBrevoProvider } from './brevo.ts';
@@ -94,6 +95,8 @@ export interface MailResult {
   readonly ok: boolean;
   /** Whether it was never sent because the site sends no mail. */
   readonly skipped: boolean;
+  /** Whether dev mode held it (decision-35), recorded rather than sent. */
+  readonly held: boolean;
   /** Which provider carried it, or `none`. */
   readonly provider: MailProviderName;
   /** Who it was addressed to. */
@@ -115,7 +118,10 @@ export interface CreateMailServiceOptions {
    * are read from, the data directory the credentials are in, the theme
    * directory the messages are looked up in, and whether templates are cached.
    */
-  config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir' | 'themesDir' | 'watch'>;
+  config: Pick<
+    ResolvedConfig,
+    'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'themesDir' | 'watch'
+  >;
   /**
    * A provider named by the site, which wins outright over the settings and
    * `data/mail.json` — the way a `commentChecker` in the config wins over the
@@ -238,6 +244,18 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
   /** Try one message until it goes or the site runs out of patience. */
   async function deliver(carrier: MailProvider, message: OutgoingMail): Promise<MailResult> {
     const to = message.to.map((recipient) => recipient.address);
+    if (holdOutbound(config, { kind: 'mail', what: message.subject, to })) {
+      logger.info(`Dev mode held "${message.subject}" to ${to.join(', ')}.`);
+      return {
+        ok: true,
+        skipped: false,
+        held: true,
+        provider: carrier.name,
+        to,
+        subject: message.subject,
+        attempts: 0,
+      };
+    }
     const where = `"${message.subject}" to ${to.join(', ')} via ${carrier.name}`;
     let lastError = '';
 
@@ -249,6 +267,7 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
         return {
           ok: true,
           skipped: false,
+          held: false,
           provider: carrier.name,
           to,
           subject: message.subject,
@@ -266,6 +285,7 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
     return {
       ok: false,
       skipped: false,
+      held: false,
       provider: carrier.name,
       to,
       subject: message.subject,
@@ -302,6 +322,7 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
       return Promise.resolve({
         ok: true,
         skipped: true,
+        held: false,
         provider: 'none',
         to: recipients.map((recipient) => recipient.address),
         subject: '',
@@ -326,6 +347,7 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
         return {
           ok: false,
           skipped: false,
+          held: false,
           provider: carrier.name,
           to: recipients.map((recipient) => recipient.address),
           subject: '',

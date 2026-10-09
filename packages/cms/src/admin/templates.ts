@@ -63,6 +63,7 @@ export const ADMIN_TEMPLATES = {
   settingsPrivacy: 'pages/settings/privacy.njk',
   toolsContentIndex: 'pages/tools/content-index.njk',
   toolsPersonalData: 'pages/tools/personal-data.njk',
+  toolsDevMode: 'pages/tools/dev-mode.njk',
   usersList: 'pages/users/list.njk',
   usersNew: 'pages/users/new.njk',
   usersEdit: 'pages/users/edit.njk',

@@ -155,4 +155,25 @@ describe('geekity serve', () => {
 
     assert.doesNotMatch(running.output(), /healthz/);
   });
+
+  it('says at boot that a site started with GEEKITY_DEV_MODE is in dev mode', async () => {
+    const site = await temporaryDir('geekity-serve-dev-mode-');
+    await fs.mkdir(path.join(site, 'content'));
+
+    const running = await serve(site, { GEEKITY_DEV_MODE: 'true' });
+    await running.stop();
+
+    assert.match(running.stdout, /Dev mode is on/, running.stdout);
+    assert.ok(await exists(path.join(site, 'data', 'dev-mode.json')), 'the boot latched it');
+  });
+
+  it('says nothing of dev mode for a site that is live', async () => {
+    const site = await temporaryDir('geekity-serve-live-');
+    await fs.mkdir(path.join(site, 'content'));
+
+    const running = await serve(site, {});
+    await running.stop();
+
+    assert.doesNotMatch(running.stdout, /Dev mode/);
+  });
 });

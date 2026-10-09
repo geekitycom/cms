@@ -3,6 +3,7 @@ import type { AdminStore, SentWebmention, WebmentionSendStatus } from '../admin/
 import type { CommentNotices, CommentRecords } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
+import { holdOutbound } from '../dev-mode.ts';
 import { citationsOf } from '../content/citation.ts';
 import { readOf } from '../content/read.ts';
 import { replyTarget } from '../content/post-type.ts';
@@ -64,7 +65,10 @@ export interface CreateWebmentionServiceOptions {
    * Config after defaults: the base URL, the content and data directories, the
    * clock, and the checker an incoming webmention is put through.
    */
-  config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir' | 'now' | 'commentChecker'>;
+  config: Pick<
+    ResolvedConfig,
+    'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'now' | 'commentChecker'
+  >;
   /** Where failures are reported. Defaults to `console`. */
   logger?: WebmentionLogger | undefined;
   /**
@@ -221,8 +225,15 @@ export function createWebmentionService(
     return selectedTargets(document, targets(), siteLanguage()).map((target) => target.url);
   }
 
+  function held(source: string, links: readonly string[]): boolean {
+    return (
+      links.length > 0 && holdOutbound(config, { kind: 'webmention', what: source, to: links })
+    );
+  }
+
   /** Tell every one of a post's targets, one after another. */
   async function tellAll(slug: string, source: string, links: readonly string[]): Promise<Told[]> {
+    if (held(source, links)) return [];
     const outcomes: Told[] = [];
     for (const target of links) outcomes.push(await tell(slug, source, target));
     return outcomes;
@@ -359,6 +370,7 @@ export function createWebmentionService(
       for (const document of store.listAll()) {
         if (replyTarget(document) !== copy || !isPublic(document, now)) continue;
         const source = absoluteUrl(document.permalink, config.baseUrl);
+        if (held(source, [target])) continue;
         enqueue(() => tell(document.slug, source, target)).catch((thrown: unknown) => {
           logger.warn(`A webmention failed: ${messageOf(thrown)}`);
         });

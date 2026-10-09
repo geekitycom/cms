@@ -1,6 +1,7 @@
 import { readSiteSettings } from './admin/settings.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
+import { holdOutbound } from './dev-mode.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { isPrivateHost } from './webmention/public-address.ts';
 import { isListed } from './web/documents.ts';
@@ -24,7 +25,10 @@ export function defaultIndexNowBackoffMs(attempt: number): number {
 
 /** What {@link createIndexNowNotifier} needs. */
 export interface CreateIndexNowNotifierOptions {
-  config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'now' | 'indexNow'>;
+  config: Pick<
+    ResolvedConfig,
+    'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'now' | 'indexNow'
+  >;
 }
 
 /**
@@ -100,6 +104,9 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
 
     for (let start = 0; start < urls.length; start += MAX_URLS_PER_REQUEST) {
       const urlList = urls.slice(start, start + MAX_URLS_PER_REQUEST);
+      if (holdOutbound(config, { kind: 'indexnow', what: urlList.join(' '), to: [endpoint] })) {
+        continue;
+      }
       const failure = await post({ ...target, urlList });
       if (failure !== undefined) {
         logger.warn(`Could not submit ${String(urlList.length)} URLs to ${endpoint}: ${failure}`);

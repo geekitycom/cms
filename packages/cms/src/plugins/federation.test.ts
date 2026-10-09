@@ -13,6 +13,7 @@ import { CryptographicKey, Endpoints, Follow, Person } from '@fedify/vocab';
 
 import { writeUsers } from '../admin/__testing__/users.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
+import { enterDevMode, readDevModeRecord } from '../dev-mode.ts';
 import { seedActorKeys, testKeyPair } from '../federation/__testing__/keys.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
@@ -212,5 +213,26 @@ describe('what a plugin’s federation reaches', () => {
       { id: REMOTE_ACTOR, inboxId: REMOTE_INBOX, sharedInboxId: `${REMOTE_ORIGIN}/inbox` },
     ]);
     assert.equal(context.outbox(USER)?.totalItems, 0);
+  });
+
+  it('the inbox handlers, held by dev mode with no switch of the plugin’s own (TASK-295)', async () => {
+    const { cms, context } = await contextOf();
+    enterDevMode(cms.config.dataDir, 'command');
+    const follow = await new Follow({
+      id: new URL(`${REMOTE_ORIGIN}/follows/2`),
+      actor: new URL(REMOTE_ACTOR),
+      object: new URL(STORED_ID),
+    }).toJsonLd();
+
+    await context.receive(follow as Record<string, unknown>, USER);
+
+    assert.equal(cms.admin.getFollower(USER, REMOTE_ACTOR)?.inboxId, REMOTE_INBOX);
+    assert.deepEqual(deliveries, [], 'the Accept did not go out');
+    assert.ok(
+      readDevModeRecord(cms.config.dataDir).some(
+        (entry) => entry.type === 'held' && entry.what.startsWith('Accept '),
+      ),
+      'it was recorded as held',
+    );
   });
 });

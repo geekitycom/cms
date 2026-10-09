@@ -32,6 +32,12 @@
     <div class="drawer-content">
       <label for="admin-menu" class="btn btn-sm drawer-button mx-4 mt-4 lg:hidden">Menu</label>
       <main id="main" class="p-4 sm:p-6 lg:p-8">
+        {% if devModeUrl %}
+          {% from "components/alert.njk" import alert %}
+          <div class="mb-6">
+            {% call alert(color='warning', polite=true) %}<span>Dev mode is on: nothing this site does is sent to followers, relays, linked sites, feed hubs, search engines or inboxes. <a class="link" href="{{ devModeUrl }}">See what was held</a>.</span>{% endcall %}
+          </div>
+        {% endif %}
         {% include "components/flash.njk" %}
         {% block content %}{% endblock %}
       </main>

@@ -83,6 +83,7 @@ import {
 import { contactFormFor } from './contact/index.ts';
 import { settleImageVariants } from './images/variants.ts';
 import { createMaintenanceSwitch } from './maintenance.ts';
+import { enterDevMode } from './dev-mode.ts';
 import {
   createConversation,
   createRedirectSource,
@@ -1647,6 +1648,7 @@ function openCache(resolved: ResolvedConfig): { store: ContentStore; admin: Admi
  */
 export function createCms(config: GeekityConfig = {}, context: ServeContext = {}): Cms {
   const resolved = resolveConfig(config);
+  if (resolved.devMode) enterDevMode(resolved.dataDir, 'config');
 
   const plugins = sitePluginRegistry(resolved, context.folderPlugins);
 

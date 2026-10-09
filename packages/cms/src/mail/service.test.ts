@@ -57,7 +57,14 @@ async function site(
   const waited: number[] = [];
 
   const mail = createMailService({
-    config: { baseUrl: 'https://blog.example', contentDir, dataDir, themesDir, watch: false },
+    config: {
+      baseUrl: 'https://blog.example',
+      contentDir,
+      dataDir,
+      devMode: false,
+      themesDir,
+      watch: false,
+    },
     ...(options.provider === undefined ? {} : { provider: options.provider }),
     // Always a logger of the test's own, so a passing run says nothing.
     logger: options.log ?? new Log(),
@@ -198,6 +205,7 @@ describe('sending a templated message', () => {
         baseUrl: 'https://blog.example',
         contentDir,
         dataDir: await dir('geekity-mail-data-'),
+        devMode: false,
         themesDir,
         watch: false,
       },

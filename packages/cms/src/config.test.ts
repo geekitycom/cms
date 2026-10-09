@@ -639,4 +639,17 @@ describe('baseUrlSource', () => {
       /GEEKITY_MAINTENANCE/,
     );
   });
+
+  it('starts a site in dev mode from GEEKITY_DEV_MODE or devMode, and is off by default', () => {
+    assert.equal(resolveConfig({}, { cwd: '/srv/site', env: {} }).devMode, false);
+    assert.equal(resolveConfig({ devMode: true }, { cwd: '/srv/site', env: {} }).devMode, true);
+    assert.equal(
+      resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_DEV_MODE: 'true' } }).devMode,
+      true,
+    );
+    assert.throws(
+      () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_DEV_MODE: 'maybe' } }),
+      /GEEKITY_DEV_MODE/,
+    );
+  });
 });

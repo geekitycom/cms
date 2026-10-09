@@ -289,6 +289,16 @@ export interface GeekityConfig {
    */
   maintenance?: boolean;
   /**
+   * Start the site in dev mode (TASK-295, decision-35): nothing it does is sent
+   * to followers, relays, linked sites, feed hubs, search engines or inboxes,
+   * and each held side effect is recorded in `data/dev-mode.jsonl`. Default
+   * `false`. Overridden by `GEEKITY_DEV_MODE`.
+   *
+   * Boot writes `data/dev-mode.json`, and that file keeps the mode on after
+   * this is gone: only `geekity dev-mode off` takes the site live.
+   */
+  devMode?: boolean;
+  /**
    * Compress text responses (HTML, CSS, JavaScript, feeds, JSON, Markdown,
    * SVG, sitemaps) with brotli, or gzip for a client without it. Default
    * `true`. Overridden by `GEEKITY_COMPRESSION`.
@@ -450,6 +460,7 @@ export interface ResolvedConfig {
   accessLogWriter: AccessLogWriter | undefined;
   seedContent: boolean;
   maintenance: boolean;
+  devMode: boolean;
   compression: boolean;
   /** Header name, lower case, to value: the defaults with the site's changes applied. */
   securityHeaders: Readonly<Record<string, string>>;
@@ -674,6 +685,7 @@ export function resolveConfig(
       config.maintenance,
       false,
     ),
+    devMode: resolveBoolean('GEEKITY_DEV_MODE', env['GEEKITY_DEV_MODE'], config.devMode, false),
     compression: resolveBoolean(
       'GEEKITY_COMPRESSION',
       env['GEEKITY_COMPRESSION'],

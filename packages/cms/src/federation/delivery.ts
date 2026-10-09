@@ -9,6 +9,7 @@ import type { User } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore, Delivery, DeliveryStatus, Follower } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
+import { holdOutbound } from '../dev-mode.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { CitedPage } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
@@ -55,6 +56,8 @@ export interface DeliveryReport {
    * author has no followers and the site has no relay.
    */
   readonly deliveries: readonly Delivery[];
+  /** Whether dev mode held it, in which case nobody was sent anything. */
+  readonly held: boolean;
 }
 
 /** Where a delivery service reports what it could not do. `console` will do. */
@@ -389,11 +392,26 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     { relays = true }: { relays?: boolean } = {},
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
-    const keys = await senderKeyPairs(context, sender);
     const targets = deliveryTargets(admin, sender.username, { relays });
     // One POST to an inbox the followers already share is enough.
     const reached = new Set(targets.map((target) => target.inboxId));
     targets.push(...also.filter((target) => !reached.has(target.inboxId)));
+    const held =
+      targets.length > 0 &&
+      holdOutbound(config, {
+        kind: 'activitypub',
+        what: `${about.activityType} ${about.objectId}`,
+        to: targets.map((target) => target.inboxId),
+      });
+    const report = {
+      activityId: about.activityId,
+      activityType: about.activityType,
+      objectId: about.objectId,
+      deliveries,
+      held,
+    };
+    if (held) return report;
+    const keys = await senderKeyPairs(context, sender);
 
     for (const target of targets) {
       let status: DeliveryStatus = synchronous ? 'sent' : 'queued';
@@ -428,12 +446,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       }
     }
 
-    return {
-      activityId: about.activityId,
-      activityType: about.activityType,
-      objectId: about.objectId,
-      deliveries,
-    };
+    return report;
   }
 
   /**
