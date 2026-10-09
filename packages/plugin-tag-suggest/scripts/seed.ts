@@ -1,19 +1,8 @@
-/**
- * The seed list's filter: hashtags people follow on tags.pub, from a
- * `tag,followers` export, kept when enough people follow them and dropped when
- * they are tags.pub's own service accounts or on the denylist.
- */
-
 import { hashtagKey } from '../src/key.ts';
 
 /** A tag as the export spells it, and how many follow it. */
 export type SeedTag = readonly [name: string, followers: number];
 
-/**
- * The denylist's test for a folded tag. A line is a tag, or a fragment
- * between asterisks that rules out every tag containing it; `#` starts a
- * comment.
- */
 function denied(denylist: string): (key: string) => boolean {
   const names = new Set<string>();
   const fragments: string[] = [];

@@ -3,9 +3,6 @@
  * followed on a Mastodon server:
  *
  *   pnpm --filter @geekity/plugin-tag-suggest seed <export.csv> --source "<where it came from>" --date <YYYY-MM-DD>
- *
- * The export itself is not committed: it holds the adult tags the denylist
- * beside this script drops.
  */
 
 import { execFileSync } from 'node:child_process';

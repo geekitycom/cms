@@ -82,7 +82,6 @@ interface Sent {
 const POST = 'For this post';
 const REACH = 'For reach';
 
-/** The WordCamp US post on shll.me that the plugin once tagged "wordcampus", "introductions" and "experience". */
 const WORDCAMP = {
   title: 'WordCamp US',
   body:

@@ -5,7 +5,6 @@ import type { AddressInfo } from 'node:net';
 /**
  * A chat-completions provider on loopback, so the tests reach no real one
  * (TASK-279). Each test says what it answers; it records what it was sent.
- * Post summary and Tag suggest import it from here rather than keep copies.
  */
 
 export interface ProviderAnswer {
@@ -74,7 +73,6 @@ export const ANSWERED = {
   }),
 } satisfies ProviderAnswer;
 
-/** Efforts at which {@link thinker} keeps its reasoning short. */
 const BRIEF = new Set(['none', 'minimal', 'low']);
 
 /**

@@ -109,7 +109,6 @@ function draftText(draft: PluginEditorDraft): string {
 interface Ask {
   readonly key: 'title' | 'description';
   readonly instruction: string;
-  /** Lines after the instruction showing the site's own style, if any. */
   readonly style: (recentTitles: readonly string[]) => string[];
   readonly tidy: (text: string) => string;
 }

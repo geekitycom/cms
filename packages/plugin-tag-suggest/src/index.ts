@@ -52,12 +52,10 @@ const BODY_CHARACTERS = 24_000;
 const FOR_THIS_POST = 'For this post';
 const FOR_REACH = 'For reach';
 
-/** The seed's tags by the key tags.pub knows them by. */
 const SEED_FOLLOWERS: ReadonlyMap<string, number> = new Map(
   SEED.tags.map(([name, followers]) => [hashtagKey(name), followers]),
 );
 
-/** What the model answers. */
 interface Suggested {
   readonly forThisPost: readonly string[];
   readonly forReach: readonly string[];
@@ -67,18 +65,10 @@ interface Suggested {
 interface Candidate {
   readonly value: string;
   readonly key: string;
-  /** Whether the site already uses it, in which case `value` is the site's spelling. */
   readonly used: boolean;
-  /** Where the model put it among its group, most fitting first. */
   readonly rank: number;
 }
 
-/**
- * Each group's tags, readable and deduplicated, in the model's order. A tag
- * the site already uses keeps the site's spelling, so accepting it files the
- * post with the posts already there. A reach tag must be on the seed list
- * and not already in the post's own group.
- */
 function candidatesFrom(
   suggested: Suggested,
   siteTags: readonly string[],
@@ -119,19 +109,10 @@ function followersOf(candidate: Candidate, counts: Counts): number | undefined {
   return count?.known === true ? count.followers : undefined;
 }
 
-/**
- * The post's own tags: the site's first, then the model's order, which is
- * most fitting first. Followers rank only the reach group.
- */
 function rankForPost(candidates: readonly Candidate[]): Candidate[] {
   return [...candidates].sort((a, b) => Number(b.used) - Number(a.used) || a.rank - b.rank);
 }
 
-/**
- * Reach tags, most followed first. tags.pub's count takes in the seed's
- * server, so the larger of the two is the better one; a lookup that failed
- * leaves the seed's.
- */
 function rankForReach(candidates: readonly Candidate[], counts: Counts): Candidate[] {
   const weight = (candidate: Candidate) =>
     Math.max(followersOf(candidate, counts) ?? 0, SEED_FOLLOWERS.get(candidate.key) ?? 0);
@@ -154,7 +135,6 @@ function noteFor(count: FollowerCount | undefined): string {
   return `${count.followers.toLocaleString('en')} ${count.followers === 1 ? 'follower' : 'followers'} on tags.pub`;
 }
 
-/** What the model is told, the seed list included. */
 const INSTRUCTIONS = [
   'Suggest hashtags for this blog post, in two lists.',
   '',

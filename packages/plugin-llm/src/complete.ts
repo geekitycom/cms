@@ -185,11 +185,6 @@ export async function callModel(
  */
 const SUMMARY_KEYWORDS = new Set(['properties', 'items', 'false', 'allOf', '$ref']);
 
-/**
- * The `reasoning` field to send: only to OpenRouter, only for a model its
- * list says takes it, and not when the call leaves it to the model. `exclude`
- * keeps the reasoning text out of the reply, which no consumer reads.
- */
 async function reasoningFor(
   connection: LlmConnection,
   request: LlmRequest,
@@ -202,7 +197,6 @@ async function reasoningFor(
   return reasoner === undefined ? undefined : { effort: effortFor(asked, reasoner), exclude: true };
 }
 
-/** The first choice's message content, when it is text, and why the model stopped. */
 function firstChoice(answer: Record<string, unknown>): {
   text: string | undefined;
   finishReason: unknown;
