@@ -23,6 +23,15 @@ import { PACKAGE_NAME } from './registry.ts';
 
 export const DEFAULT_REGISTRY = 'https://registry.npmjs.org/';
 
+/** The registry plugins come from: `npm_config_registry`, as npm reads it, or registry.npmjs.org. */
+export function pluginRegistry(env: Readonly<Record<string, string | undefined>>): string {
+  return (
+    [env['npm_config_registry'], env['NPM_CONFIG_REGISTRY']].find(
+      (value) => value !== undefined && value !== '',
+    ) ?? DEFAULT_REGISTRY
+  );
+}
+
 /** The folder in a package that is the plugin's folder once installed. */
 const BUNDLE_PREFIX = 'dist/bundle/';
 

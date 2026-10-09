@@ -158,6 +158,28 @@ export async function upgradePlugins(options: UpgradeOptions): Promise<UpgradeRe
   return { plugins: targets.map((name) => results.get(name) as PluginUpgrade), unmet };
 }
 
+/** What became of one plugin, as a clause after its name. */
+export function describeUpgrade(plugin: PluginUpgrade): string {
+  switch (plugin.status) {
+    case 'upgraded':
+    case 'available': {
+      const done =
+        plugin.status === 'upgraded'
+          ? `upgraded from ${plugin.from} to ${plugin.to}.`
+          : `${plugin.from} can be upgraded to ${plugin.to}.`;
+      return plugin.heldBack === undefined ? done : `${done} ${plugin.heldBack}`;
+    }
+    case 'newest':
+      return `${plugin.version} is the newest.`;
+    case 'held':
+      return `held back at ${plugin.version}: ${plugin.reason}`;
+    case 'skipped':
+      return `skipped: ${plugin.reason}`;
+    case 'failed':
+      return `upgrading from ${plugin.from} to ${plugin.to} failed: ${plugin.reason}`;
+  }
+}
+
 function skipped(name: string, reason: string): PluginUpgrade {
   return { name, status: 'skipped', reason };
 }

@@ -65,6 +65,8 @@ const SEPARATELY: Readonly<Record<string, readonly Record<string, unknown>[]>> =
     syndicationRefused('target-new'),
   ],
   'pages/plugins/screen.njk': [pluginSettingsRefused()],
+  'pages/plugins/installed.njk': [{ installer: 'on', add: {}, plugins: [], changeLog: [] }],
+  'pages/plugins/confirm.njk': [{ ready: true, lines: [] }],
   'pages/users/apps.njk': [
     { withoutPkce: { clients: [], field: 'client_id', value: 'x', problem: 'Wrong client.' } },
     {

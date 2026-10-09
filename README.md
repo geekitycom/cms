@@ -160,6 +160,7 @@ directory; absolute ones are used as given.
 | `dataDir`          | `<cwd>/data`                              | `GEEKITY_DATA_DIR`           | Derived state — the SQLite index, the image variants — and the files that are not derived and must be backed up, such as `users.json`, the actor key pairs under `keys/`, `locations.json` and `kept-properties.json`. [Two directories](#two-directories-content-and-data) lists them.                                                                                                    |
 | `themesDir`        | `<cwd>/themes`                            | `GEEKITY_THEMES_DIR`         | The site's themes, one directory per theme. Which one is in use is the `theme` setting, not a path. Need not exist.                                                                                                                                                                                                                                                                        |
 | `pluginsDir`       | none                                      | `GEEKITY_PLUGINS_DIR`        | A folder of plugins, `<name>/` or `@scope/<name>/`, each with a bundled `index.js` whose default export is the plugin. `geekity serve` loads them beside `plugins`, and Reload on the Plugins screen loads a changed folder without a restart. Unset, no code is loaded from a folder.                                                                                                     |
+| `pluginInstall`    | `true`                                    | `GEEKITY_PLUGIN_INSTALL`     | Let Admin > Plugins add, update and remove plugins in `pluginsDir`. Set it to `off` to keep plugin changes on the command line; see [Installing from the admin](#installing-from-the-admin).                                                                                                                                                                                               |
 | `baseUrl`          | `http://localhost:<port>`                 | `GEEKITY_BASE_URL`           | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                                                                                                                                                                                                                 |
 | `watch`            | `true`                                    | `GEEKITY_WATCH`              | Watch `contentDir` while serving and keep the index in step.                                                                                                                                                                                                                                                                                                                               |
 | `accessLog`        | `false`, but `true` under `geekity serve` | `GEEKITY_ACCESS_LOG`         | Write one line per request to stdout: the method, the path with its query string, the status and how long it took. `geekity serve` and the Docker image turn it on, because a server answering the internet should be able to say what it answered; `createCms` leaves it off, so a CMS embedded in another app never writes to its stdout unasked. See [The access log](#the-access-log). |
@@ -376,6 +377,38 @@ required plugin that is not met. The commands a folder plugin adds, such as
 `geekity import wordpress-actor`, run with `docker compose exec` the same way
 as core's.
 
+### Installing from the admin
+
+Admin > Plugins does the same as `geekity plugin add`, `upgrade` and `remove`
+on a site with a plugins folder:
+
+- **Add plugin** takes a package name and, optionally, a version, a range or a
+  dist-tag. It installs the same way as `plugin add`, with the same checks, and
+  names each requirement that is missing or out of range.
+- **Check for updates** asks the registry for newer versions. A plugin with
+  one shows **Update to** that version on its row.
+- **Update all** brings every folder plugin up to date, the same way as
+  `plugin upgrade`.
+- **Remove** deletes the plugin's folder. Its settings and its folder under
+  `data/plugins/` stay.
+
+Each change asks for your password, and an update or a removal first shows
+what it will change. One change runs at a time. After a change, press
+**Reload** to load it. Plugins passed in `plugins` on a site's own config are
+shown as managed in code, with no controls.
+
+Every change made here is recorded in `data/plugin-changes.json`: who made it,
+when, the package and the versions. The Plugins screen lists them under
+Recent changes.
+
+> [!WARNING]
+> This puts new code on the server from a browser. A plugin runs as the site,
+> with access to everything under `data/`, including the accounts, the actor
+> key pairs and every plugin's secrets. Anyone who can sign in to the admin and
+> knows their password can install one. To keep plugin changes on the command
+> line, set `GEEKITY_PLUGIN_INSTALL=off`. The Plugins screen then shows no add,
+> update or remove controls, and refuses those requests.
+
 ### Writing a plugin
 
 A plugin package imports only `@geekity/cms/plugin`, and only its types and
@@ -531,6 +564,7 @@ copied somewhere safe:
 | `data/keys/`                | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.**                                                              |
 | `data/locations.json`       | Where each post was written, keyed by permalink, mode 0600. Never in `content/`, so a public repository never carries it (decision-29).         |
 | `data/kept-properties.json` | The Micropub properties a post was sent that the site does not understand, such as an `itinerary`, keyed by permalink, mode 0600 (decision-27). |
+| `data/plugin-changes.json`  | Who added, updated and removed which plugin on Admin > Plugins, and when, mode 0600.                                                            |
 
 And three things under `data/` may be deleted at any time the site is stopped:
 

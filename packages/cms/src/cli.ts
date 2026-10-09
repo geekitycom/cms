@@ -24,14 +24,14 @@ import type { PluginCommand } from './plugin.ts';
 import { importPluginFolders, scanPluginFolders } from './plugins/folder.ts';
 import {
   addPlugin,
-  DEFAULT_REGISTRY,
   installedFolders,
   parsePackageSpec,
+  pluginRegistry,
   removePlugin,
   requirementNotes,
 } from './plugins/install.ts';
-import { upgradePlugins } from './plugins/upgrade.ts';
-import type { PluginUpgrade, UpgradeReport } from './plugins/upgrade.ts';
+import { describeUpgrade, upgradePlugins } from './plugins/upgrade.ts';
+import type { UpgradeReport } from './plugins/upgrade.ts';
 import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
 import { superviseCluster } from './supervisor/primary.ts';
 import { processChannel, superviseWorker } from './supervisor/worker.ts';
@@ -850,9 +850,7 @@ async function pluginFolderCommand(
       'geekity plugin needs a plugins folder: set GEEKITY_PLUGINS_DIR, or pluginsDir in the config.',
     );
   }
-  const registry =
-    firstSet(process.env['npm_config_registry'], process.env['NPM_CONFIG_REGISTRY']) ??
-    DEFAULT_REGISTRY;
+  const registry = pluginRegistry(process.env);
 
   if (action === 'upgrade') {
     const report = await upgradePlugins({
@@ -907,7 +905,7 @@ const PLUGIN_USAGE =
   'geekity plugin needs add <package>[@version], remove <package> or upgrade [<package>...].';
 
 function upgradeReportText(report: UpgradeReport): string {
-  const lines = report.plugins.map((plugin) => `${plugin.name}: ${upgradeLine(plugin)}`);
+  const lines = report.plugins.map((plugin) => `${plugin.name}: ${describeUpgrade(plugin)}`);
   for (const { name, notes } of report.unmet) {
     lines.push(...notes.map((note) => `${name}: ${note}`));
   }
@@ -919,31 +917,6 @@ function upgradeReportText(report: UpgradeReport): string {
     lines.push('Run geekity plugin upgrade without --check to install them.');
   }
   return lines.map((line) => `${line}\n`).join('');
-}
-
-function upgradeLine(plugin: PluginUpgrade): string {
-  switch (plugin.status) {
-    case 'upgraded':
-    case 'available': {
-      const done =
-        plugin.status === 'upgraded'
-          ? `upgraded from ${plugin.from} to ${plugin.to}.`
-          : `${plugin.from} can be upgraded to ${plugin.to}.`;
-      return plugin.heldBack === undefined ? done : `${done} ${plugin.heldBack}`;
-    }
-    case 'newest':
-      return `${plugin.version} is the newest.`;
-    case 'held':
-      return `held back at ${plugin.version}: ${plugin.reason}`;
-    case 'skipped':
-      return `skipped: ${plugin.reason}`;
-    case 'failed':
-      return `upgrading from ${plugin.from} to ${plugin.to} failed: ${plugin.reason}`;
-  }
-}
-
-function firstSet(...values: (string | undefined)[]): string | undefined {
-  return values.find((value) => value !== undefined && value !== '');
 }
 
 /**

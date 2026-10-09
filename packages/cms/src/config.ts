@@ -392,6 +392,12 @@ export interface GeekityConfig {
    * No default: a site loads code from a folder only when it names one.
    */
   pluginsDir?: string;
+  /**
+   * Whether Admin > Plugins may add, update and remove plugins in
+   * {@link GeekityConfig.pluginsDir}. On by default. Overridden by
+   * `GEEKITY_PLUGIN_INSTALL`.
+   */
+  pluginInstall?: boolean;
 }
 
 /**
@@ -464,6 +470,8 @@ export interface ResolvedConfig {
   plugins: readonly Plugin[];
   /** The folder of plugins `geekity serve` loads, or `undefined` when the site names none. */
   pluginsDir: string | undefined;
+  /** Whether Admin > Plugins may change the plugins folder. */
+  pluginInstall: boolean;
 }
 
 /** Ambient inputs {@link resolveConfig} reads, injectable so the resolution is testable. */
@@ -673,6 +681,12 @@ export function resolveConfig(
     hostLookup: config.hostLookup ?? systemHostLookup,
     plugins: config.plugins ?? [],
     pluginsDir: optionalDir(cwd, env['GEEKITY_PLUGINS_DIR'], config.pluginsDir),
+    pluginInstall: resolveBoolean(
+      'GEEKITY_PLUGIN_INSTALL',
+      env['GEEKITY_PLUGIN_INSTALL'],
+      config.pluginInstall,
+      true,
+    ),
   };
 }
 

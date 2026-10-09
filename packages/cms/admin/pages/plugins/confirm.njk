@@ -1,0 +1,46 @@
+{# /admin/plugins/confirm: what Update, Update all or Remove is about to do to
+   the plugins folder, and the password that lets it (TASK-306). An update
+   lists each plugin as a check against the registry found it; nothing is
+   offered when no newer version can run here. #}
+{% extends "layouts/shell.njk" %}
+{% from "components/button.njk" import button, buttonLink %}
+{% from "components/card.njk" import card, cardActions %}
+{% import "components/fields.njk" as fields %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">{{ title }}</h1>
+
+  <div class="max-w-prose">
+    {% call card() %}
+      <ul class="list-disc ps-5">
+        {% for line in lines %}<li class="break-words">{{ line }}</li>{% endfor %}
+      </ul>
+
+      {% if ready %}
+        <p class="text-sm">The site keeps running the plugins it has until you reload.</p>
+        {% if problems.password %}
+          {% call fields.summary('Nothing was changed. Fix the field marked below and try again.') %}
+            {{ fields.problem('plugin-confirm-password', problems.password) }}
+          {% endcall %}
+        {% endif %}
+        <form method="post" action="{{ postUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          {% if plugin %}<input type="hidden" name="{{ field }}" value="{{ plugin }}" />{% endif %}
+          {{ fields.password('plugin-confirm-password', passwordField, 'Your password',
+               error=problems.password, autocomplete='current-password', required=true,
+               autofocus=true) }}
+          {% call cardActions() %}
+            {{ buttonLink('Cancel', backUrl, style='ghost') }}
+            {{ button(buttonLabel, type='submit', color='error' if danger else 'primary') }}
+          {% endcall %}
+        </form>
+      {% else %}
+        {% call cardActions() %}
+          {{ buttonLink('Back to Plugins', backUrl) }}
+        {% endcall %}
+      {% endif %}
+    {% endcall %}
+  </div>
+{% endblock %}
