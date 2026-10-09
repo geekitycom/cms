@@ -35,16 +35,22 @@ export interface WriteGate {
   /** Refuse new writes, and resolve once those in flight have finished. */
   refuse(): Promise<void>;
   reopen(): void;
+  /** Stop counting a request as a write in flight, so the drain it is about to wait on does not wait on it. */
+  leave(request: object): void;
+  /**
+   * The new worker serves: answer a GET or HEAD that still reaches this one,
+   * on a keep-alive connection, with a redirect to the same URL on a new
+   * connection, which the new worker takes.
+   */
+  handOver(): void;
 }
 
-export function createWriteGate(options: {
-  /** A write that is not counted as in flight: the reload request, which waits on the drain. */
-  exempt: (pathname: string) => boolean;
-  waitMs?: number;
-}): WriteGate {
+export function createWriteGate(options: { waitMs?: number } = {}): WriteGate {
   let refusing = false;
+  let handedOver = false;
   let inFlight = 0;
   let idle: (() => void)[] = [];
+  const counted = new WeakSet<object>();
 
   function finished(): void {
     inFlight -= 1;
@@ -59,6 +65,7 @@ export function createWriteGate(options: {
 
     if (refusing) {
       if (writing) return refusal(c);
+      if (handedOver) return sentOn(c);
       await next();
       if (c.error !== undefined && isRefusedWrite(c.error)) {
         c.res = refusal(c);
@@ -68,15 +75,16 @@ export function createWriteGate(options: {
       return;
     }
 
-    if (!writing || options.exempt(c.req.path)) {
+    if (!writing) {
       await next();
       return;
     }
     inFlight += 1;
+    counted.add(c);
     try {
       await next();
     } finally {
-      finished();
+      if (counted.delete(c)) finished();
     }
   };
 
@@ -102,12 +110,29 @@ export function createWriteGate(options: {
     reopen() {
       refusing = false;
     },
+
+    leave(request) {
+      if (counted.delete(request)) finished();
+    },
+
+    handOver() {
+      handedOver = true;
+    },
   };
 }
 
 function refusal(c: Context<GeekityEnv>): Response {
   return c.text('This site is reloading. Try again in a few seconds.', 503, {
     'Retry-After': String(DRAIN_RETRY_AFTER_SECONDS),
+    Connection: 'close',
+    'Cache-Control': 'no-store',
+  });
+}
+
+function sentOn(c: Context<GeekityEnv>): Response {
+  const { pathname, search } = new URL(c.req.url);
+  return c.body(null, 307, {
+    Location: `${pathname}${search}`,
     Connection: 'close',
     'Cache-Control': 'no-store',
   });

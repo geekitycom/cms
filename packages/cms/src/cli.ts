@@ -34,6 +34,7 @@ import {
 import { describeUpgrade, upgradePlugins } from './plugins/upgrade.ts';
 import type { UpgradeReport } from './plugins/upgrade.ts';
 import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
+import { askToReload } from './supervisor/control.ts';
 import { superviseCluster } from './supervisor/primary.ts';
 import { processChannel, superviseWorker } from './supervisor/worker.ts';
 import {
@@ -793,7 +794,11 @@ async function serveCommand(configPath: string | undefined): Promise<number> {
   ) {
     process.stdout.write(`Seeded ${resolved.contentDir} with the starter site\n`);
   }
-  superviseCluster();
+  superviseCluster({
+    dataDir: resolved.dataDir,
+    pluginsDir: resolved.pluginsDir,
+    pluginWatch: resolved.pluginWatch,
+  });
   return 0;
 }
 
@@ -869,16 +874,17 @@ async function pluginFolderCommand(
       addAdvice: ADD_WITH_COMMAND,
     });
     process.stdout.write(upgradeReportText(report));
-    return report.plugins.some((plugin) => plugin.status === 'failed') ? 1 : 0;
+    const reloaded = report.plugins.some((plugin) => plugin.status === 'upgraded')
+      ? await reloadRunningSite(config)
+      : true;
+    return reloaded && report.plugins.every((plugin) => plugin.status !== 'failed') ? 0 : 1;
   }
 
   if (spec === undefined) throw new Error(PLUGIN_USAGE);
   if (action === 'remove') {
     const directory = await removePlugin(spec, { pluginsDir, contentDir: config.contentDir });
-    process.stdout.write(
-      `Removed ${spec} (${directory}). Reload on the Plugins screen to unload it.\n`,
-    );
-    return 0;
+    process.stdout.write(`Removed ${spec} (${directory}).\n`);
+    return (await reloadRunningSite(config)) ? 0 : 1;
   }
 
   const { manifest, directory, replaced } = await addPlugin(parsePackageSpec(spec), {
@@ -897,11 +903,32 @@ async function pluginFolderCommand(
     [
       done,
       ...requirementNotes(manifest, installed, ownManifest().version, ADD_WITH_COMMAND),
-      'Reload on the Plugins screen to load it, then enable it there.',
       '',
     ].join('\n'),
   );
-  return 0;
+  const reloaded = await reloadRunningSite(config);
+  process.stdout.write('Enable it on the Plugins screen.\n');
+  return reloaded ? 0 : 1;
+}
+
+async function reloadRunningSite(config: ResolvedConfig): Promise<boolean> {
+  const outcome = await askToReload(config.dataDir);
+  if (outcome === undefined) {
+    process.stdout.write(
+      config.pluginWatch
+        ? 'No running geekity serve answered. A running site loads the change by itself within a few seconds.\n'
+        : 'No running geekity serve answered. Press Reload on the Plugins screen to load the change.\n',
+    );
+    return true;
+  }
+  if (outcome.ok) {
+    process.stdout.write('The running site reloaded with the change.\n');
+    return true;
+  }
+  process.stdout.write(
+    `The running site tried to reload, but the new server did not start, so it carried on with the plugins it had: ${outcome.error}\n`,
+  );
+  return false;
 }
 
 const PLUGIN_USAGE =
@@ -913,9 +940,6 @@ function upgradeReportText(report: UpgradeReport): string {
     lines.push(...notes.map((note) => `${name}: ${note}`));
   }
   const statuses = new Set(report.plugins.map((plugin) => plugin.status));
-  if (statuses.has('upgraded')) {
-    lines.push('Reload on the Plugins screen to load the new versions.');
-  }
   if (statuses.has('available')) {
     lines.push('Run geekity plugin upgrade without --check to install them.');
   }

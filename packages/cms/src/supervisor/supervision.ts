@@ -20,3 +20,20 @@ export interface Supervision {
   /** Why this worker's last reload failed, or `undefined`. */
   readonly lastFailure: string | undefined;
 }
+
+export function leavingWriteGate(
+  supervision: Supervision | undefined,
+  leave: () => void,
+): Supervision | undefined {
+  if (supervision === undefined) return undefined;
+  return {
+    loaded: supervision.loaded,
+    get lastFailure() {
+      return supervision.lastFailure;
+    },
+    reload() {
+      leave();
+      return supervision.reload();
+    },
+  };
+}

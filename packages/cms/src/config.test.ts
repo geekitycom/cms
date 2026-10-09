@@ -91,6 +91,16 @@ describe('resolveConfig', () => {
     );
   });
 
+  it('watches the plugins folder unless the config or GEEKITY_PLUGIN_WATCH turns it off', () => {
+    const cwd = '/srv/site';
+    assert.equal(resolveConfig({}, { cwd, env: {} }).pluginWatch, true);
+    assert.equal(resolveConfig({ pluginWatch: false }, { cwd, env: {} }).pluginWatch, false);
+    assert.equal(
+      resolveConfig({}, { cwd, env: { GEEKITY_PLUGIN_WATCH: 'off' } }).pluginWatch,
+      false,
+    );
+  });
+
   // decision-15 replaced the single `theme/` directory with a `themes/`
   // directory of named themes, and replaced rather than aliased the names: an
   // environment still setting the old one is a deployment that has to be

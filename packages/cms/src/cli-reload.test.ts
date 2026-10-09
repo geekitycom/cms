@@ -36,7 +36,11 @@ after(() => {
   for (const server of running) server.child.kill('SIGKILL');
 });
 
-async function serve(site: string, pluginsDir: string): Promise<Serving> {
+async function serve(
+  site: string,
+  pluginsDir: string,
+  env: Readonly<Record<string, string>> = {},
+): Promise<Serving> {
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !name.startsWith('GEEKITY_') && name !== 'PORT'),
   );
@@ -48,6 +52,8 @@ async function serve(site: string, pluginsDir: string): Promise<Serving> {
       GEEKITY_WATCH: 'false',
       GEEKITY_ACCESS_LOG: 'false',
       GEEKITY_PLUGINS_DIR: pluginsDir,
+      GEEKITY_PLUGIN_WATCH: 'off',
+      ...env,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -147,7 +153,10 @@ async function signedIn(server: Serving): Promise<Browser> {
 }
 
 async function screen(agent: Browser, pathname = PLUGINS_PATH): Promise<string> {
-  const response = await agent.get(pathname);
+  let response = await agent.get(pathname);
+  for (let hops = 0; response.status === 307 && hops < 5; hops += 1) {
+    response = await agent.get(response.headers.get('location') ?? pathname);
+  }
   assert.equal(response.status, 200);
   return response.text();
 }
@@ -168,7 +177,7 @@ function load(server: Serving, clients = 8) {
     while (!stopping) {
       const pathname = index % 2 === 0 ? '/' : '/_geekity/health';
       try {
-        const response = await fetch(server.url(pathname));
+        const response = await fetch(server.url(pathname), { signal: AbortSignal.timeout(20_000) });
         await response.arrayBuffer();
         statuses.set(response.status, (statuses.get(response.status) ?? 0) + 1);
       } catch (error) {
@@ -273,7 +282,7 @@ describe('geekity serve, supervised', () => {
     assert.match(server.output(), /Reloaded/);
 
     server.child.kill('SIGTERM');
-    assert.equal(await server.exited, 0);
+    assert.equal(await server.exited, 0, server.output());
   });
 
   it('keeps the running server when the new one fails to boot, and shows why (AC #6)', async () => {
@@ -297,7 +306,7 @@ describe('geekity serve, supervised', () => {
     assert.equal(write.status, 303, 'the running server takes writes again');
 
     server.child.kill('SIGTERM');
-    assert.equal(await server.exited, 0);
+    assert.equal(await server.exited, 0, server.output());
   });
 
   it('boots past plugin folders that cannot load or whose ranges are unmet, showing why (TASK-287 AC #4, #8)', async () => {
@@ -326,10 +335,10 @@ describe('geekity serve, supervised', () => {
     assert.match(html, /Label of @test\/plugin-first/);
 
     server.child.kill('SIGTERM');
-    assert.equal(await server.exited, 0);
+    assert.equal(await server.exited, 0, server.output());
   });
 
-  it('loads a plugin geekity plugin add installed, on Reload, with no restart (TASK-287 AC #1)', async () => {
+  it('reloads as soon as geekity plugin add has installed a plugin, with no restart (TASK-287 AC #1, TASK-309 AC #3)', async () => {
     const name = '@test/plugin-added';
     const registry = await fakeNpmRegistry([
       { name, version: '1.0.0', files: pluginFiles({ name, version: '1.0.0' }) },
@@ -344,17 +353,117 @@ describe('geekity serve, supervised', () => {
     });
     await registry.close();
     assert.equal(added.code, 0, added.stderr);
-    assert.ok((await screen(agent)).includes(RELOAD_PATH), 'the screen offers a reload');
+    assert.match(added.stdout, /The running site reloaded with the change\./);
+    assert.match(server.output(), /Reloaded/, 'the watch is off: the command asked for it');
 
-    assert.equal((await reload(agent)).status, 303);
-    await until(() => /Reloaded/.test(server.output()));
-    await pause(1500);
     const html = await screen(agent);
     assert.match(html, /Label of @test\/plugin-added/);
     assert.ok(!html.includes(RELOAD_PATH), 'the folder is what the new server loaded');
 
+    const removed = await runCli(['plugin', 'remove', name], directory, undefined, {
+      GEEKITY_PLUGINS_DIR: pluginsDir,
+    });
+    assert.equal(removed.code, 0, removed.stderr);
+    assert.match(removed.stdout, /The running site reloaded with the change\./);
+
     server.child.kill('SIGTERM');
-    assert.equal(await server.exited, 0);
+    assert.equal(await server.exited, 0, server.output());
+  });
+
+  it('reloads as soon as Add on the Plugins screen has installed a plugin (TASK-309 AC #2)', async () => {
+    const name = '@test/plugin-from-admin';
+    const registry = await fakeNpmRegistry([
+      { name, version: '1.0.0', files: pluginFiles({ name, version: '1.0.0' }) },
+    ]);
+    const { site: directory, pluginsDir } = await site();
+    const server = await serve(directory, pluginsDir, { npm_config_registry: registry.url });
+    const agent = await signedIn(server);
+
+    const response = await agent.post('/admin/plugins/add', {
+      csrf_token: csrf(await screen(agent)),
+      package: name,
+      version: '',
+      password: 'correct horse battery',
+    });
+    await registry.close();
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), `${PLUGINS_PATH}?reloaded=1`);
+
+    const html = await screen(agent, `${PLUGINS_PATH}?reloaded=1`);
+    assert.match(html, /Plugins reloaded/);
+    assert.match(html, new RegExp(`Added ${name.replace('/', '\\/')} 1\\.0\\.0`));
+    assert.match(html, /Label of @test\/plugin-from-admin/);
+    assert.ok(!html.includes(RELOAD_PATH), 'the folder is what the new server loaded');
+
+    server.child.kill('SIGTERM');
+    assert.equal(await server.exited, 0, server.output());
+  });
+
+  it('loads a hand-copied plugin by itself once the folder settles, refusing no request (TASK-309 AC #1)', async (t) => {
+    const { site: directory, pluginsDir } = await site();
+    const server = await serve(directory, pluginsDir, { GEEKITY_PLUGIN_WATCH: 'on' });
+    const agent = await signedIn(server);
+    const traffic = load(server);
+
+    const copying = path.join(pluginsDir, 'plugin-copied');
+    await fs.mkdir(copying, { recursive: true });
+    await fs.writeFile(path.join(copying, 'README.md'), 'Copied by hand, slowly.\n');
+    await pause(3000);
+    await installPlugin(pluginsDir, 'plugin-copied');
+    const copied = Date.now();
+    await until(() => /Reloaded/.test(server.output()), 20_000);
+    const took = Date.now() - copied;
+    await pause(1500);
+    const { statuses, failures } = await traffic.stop();
+    t.diagnostic(`reloaded ${String(took)} ms after the copy; answers ${JSON.stringify(statuses)}`);
+
+    assert.ok(took >= 4000, 'not before the folder had stood still');
+    assert.equal([...server.output().matchAll(/Reloading:/g)].length, 1, 'one reload for the copy');
+    assert.deepEqual(failures, [], 'no request failed');
+    assert.deepEqual(Object.keys(statuses), ['200'], 'every request was answered 200');
+
+    const html = await screen(agent);
+    assert.match(html, /Label of plugin-copied/);
+    assert.ok(!html.includes(RELOAD_PATH), 'the folder is what the new server loaded');
+
+    server.child.kill('SIGTERM');
+    assert.equal(await server.exited, 0, server.output());
+  });
+
+  it('tries a folder that will not boot once, and waits for the next change (TASK-309 AC #4)', async () => {
+    const { site: directory, pluginsDir } = await site();
+    const server = await serve(directory, pluginsDir, { GEEKITY_PLUGIN_WATCH: 'on' });
+    const agent = await signedIn(server);
+
+    await installPlugin(pluginsDir, 'plugin-twin', '@test/plugin-first');
+    await until(() => /Reload failed/.test(server.output()), 20_000);
+    await pause(8000);
+    assert.equal([...server.output().matchAll(/Reloading:/g)].length, 1, 'not tried again');
+    const html = await screen(agent);
+    assert.match(html, /The last reload failed, so this server carried on/);
+
+    await fs.rm(path.join(pluginsDir, 'plugin-twin'), { recursive: true });
+    await installPlugin(pluginsDir, 'plugin-fixed');
+    await until(() => /Reloaded/.test(server.output()), 20_000);
+    await pause(1500);
+    assert.match(await screen(agent), /Label of plugin-fixed/);
+
+    server.child.kill('SIGTERM');
+    assert.equal(await server.exited, 0, server.output());
+  });
+
+  it('leaves a changed folder for Reload when GEEKITY_PLUGIN_WATCH is off (TASK-309 AC #5)', async () => {
+    const { site: directory, pluginsDir } = await site();
+    const server = await serve(directory, pluginsDir, { GEEKITY_PLUGIN_WATCH: 'off' });
+    const agent = await signedIn(server);
+
+    await installPlugin(pluginsDir, 'plugin-second');
+    await pause(8000);
+    assert.doesNotMatch(server.output(), /Reloading:/);
+    assert.ok((await screen(agent)).includes(RELOAD_PATH), 'Reload is still offered');
+
+    server.child.kill('SIGTERM');
+    assert.equal(await server.exited, 0, server.output());
   });
 
   it('respawns a worker that dies, without the supervisor restarting', async () => {
@@ -377,14 +486,14 @@ describe('geekity serve, supervised', () => {
     assert.equal(server.child.exitCode, null, 'the supervisor kept running');
 
     server.child.kill('SIGINT');
-    assert.equal(await server.exited, 0);
+    assert.equal(await server.exited, 0, server.output());
   });
 
   it('stops on SIGTERM, leaving nothing listening (AC #8)', async () => {
     const { site: directory, pluginsDir } = await site();
     const server = await serve(directory, pluginsDir);
     server.child.kill('SIGTERM');
-    assert.equal(await server.exited, 0);
+    assert.equal(await server.exited, 0, server.output());
     await assert.rejects(fetch(server.url('/_geekity/health')));
   });
 });

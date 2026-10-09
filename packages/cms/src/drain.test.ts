@@ -133,6 +133,22 @@ describe('cms.drain()', () => {
     assert.equal(accepted.headers.get('connection'), null);
   });
 
+  it('once drained and closing, sends a reader to the same URL on a new connection (TASK-309)', async () => {
+    const { cms } = await serving();
+    cms.app.post('/echo', (c) => c.text('ok'));
+    await cms.serve();
+    await cms.drain();
+
+    const closing = cms.close();
+    const moved = await cms.app.request('/_geekity/health?from=old');
+    assert.equal(moved.status, 307);
+    assert.equal(moved.headers.get('location'), '/_geekity/health?from=old');
+    assert.equal(moved.headers.get('connection'), 'close');
+    const refused = await cms.app.request('/echo', { method: 'POST' });
+    assert.equal(refused.status, 503, 'a write is still refused, to be retried');
+    await closing;
+  });
+
   it('lets a write already in flight finish before it stops anything', async () => {
     const { cms } = await serving();
     const held = deferred();

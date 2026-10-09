@@ -199,6 +199,8 @@ added="$(docker exec --env "npm_config_registry=http://127.0.0.1:${REGISTRY_PORT
 echo "${added}"
 grep -qF "Added ${PLUGIN} 1.0.0 to /site/plugins/${PLUGIN}." <<<"${added}" \
   || fail "geekity plugin add did not say it added ${PLUGIN}"
+grep -qF "The running site reloaded with the change." <<<"${added}" \
+  || fail "geekity plugin add did not reload the running site"
 docker exec "${container}" test -f "/site/plugins/${PLUGIN}/index.js" \
   || fail "/site/plugins/${PLUGIN}/index.js is not in the plugins volume"
 echo "ok  geekity plugin add"
@@ -217,35 +219,25 @@ curl -fsS -o /dev/null -c "${jar}" -b "${jar}" \
   "${base}/admin/setup" || fail "the setup form refused the first admin"
 
 screen="$(curl -fsS -b "${jar}" "${base}/admin/plugins")"
-grep -qF 'action="/admin/plugins/reload"' <<<"${screen}" \
-  || fail "the Plugins screen did not offer Reload after plugin add"
-token="$(csrf <<<"${screen}")"
-
-log "pressing Reload on the Plugins screen"
-curl -fsS -o /dev/null -b "${jar}" --data-urlencode "csrf_token=${token}" \
-  "${base}/admin/plugins/reload" || fail "POST /admin/plugins/reload failed"
 loaded=""
-for _ in $(seq 30); do
-  screen="$(curl -fsS -b "${jar}" "${base}/admin/plugins")"
-  if grep -qF 'Hello from the smoke registry' <<<"${screen}" \
-    && ! grep -qF 'action="/admin/plugins/reload"' <<<"${screen}"; then
-    loaded=1
-    break
-  fi
-  sleep 1
-done
-[[ -n "${loaded}" ]] || fail "the Plugins screen did not show ${PLUGIN} after Reload"
+if grep -qF 'Hello from the smoke registry' <<<"${screen}" \
+  && ! grep -qF 'action="/admin/plugins/reload"' <<<"${screen}"; then
+  loaded=1
+fi
+[[ -n "${loaded}" ]] || fail "the Plugins screen did not show ${PLUGIN} after plugin add"
 [[ "$(docker inspect --format '{{.State.StartedAt}}' "${container}")" == "${started}" ]] \
   || fail "the container restarted"
 [[ "$(docker inspect --format '{{.RestartCount}}' "${container}")" == "0" ]] \
   || fail "the container restarted"
-echo "ok  ${PLUGIN} is on the Plugins screen after Reload, with no container restart"
+echo "ok  ${PLUGIN} is on the Plugins screen after plugin add, with no container restart"
 
 upgraded="$(docker exec --env "npm_config_registry=http://127.0.0.1:${REGISTRY_PORT}" "${container}" \
   geekity plugin upgrade)" || fail "geekity plugin upgrade failed"
 echo "${upgraded}"
 grep -qF "${PLUGIN}: upgraded from 1.0.0 to 1.1.0." <<<"${upgraded}" \
   || fail "geekity plugin upgrade did not upgrade ${PLUGIN} to 1.1.0"
+grep -qF "The running site reloaded with the change." <<<"${upgraded}" \
+  || fail "geekity plugin upgrade did not reload the running site"
 docker exec "${container}" grep -qF '"version":"1.1.0"' "/site/plugins/${PLUGIN}/plugin.json" \
   || fail "/site/plugins/${PLUGIN}/plugin.json is not 1.1.0 after plugin upgrade"
 echo "ok  geekity plugin upgrade"
@@ -253,6 +245,8 @@ echo "ok  geekity plugin upgrade"
 removed="$(docker exec "${container}" geekity plugin remove "${PLUGIN}")" \
   || fail "geekity plugin remove failed"
 grep -qF "Removed ${PLUGIN}" <<<"${removed}" || fail "geekity plugin remove did not say so"
+grep -qF "The running site reloaded with the change." <<<"${removed}" \
+  || fail "geekity plugin remove did not reload the running site"
 docker exec "${container}" test ! -e "/site/plugins/${PLUGIN}" \
   || fail "/site/plugins/${PLUGIN} is still there"
 echo "ok  geekity plugin remove"

@@ -11,7 +11,7 @@ import { addPlugin } from '../plugins/install.ts';
 import { importPluginFolders, scanPluginFolders } from '../plugins/folder.ts';
 import { fakeNpmRegistry, pluginFiles } from '../__testing__/npm-registry.ts';
 import type { FakePackage, FakeRegistry } from '../__testing__/npm-registry.ts';
-import type { Supervision } from '../supervisor/supervision.ts';
+import type { ReloadOutcome, Supervision } from '../supervisor/supervision.ts';
 import { flashes } from './__testing__/flash.ts';
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
@@ -20,7 +20,6 @@ import {
   PLUGINS_CHECK_PATH,
   PLUGINS_CONFIRM_PATH,
   PLUGINS_PATH,
-  PLUGINS_RELOAD_PATH,
   PLUGINS_REMOVE_PATH,
   PLUGINS_UPDATE_ALL_PATH,
   PLUGINS_UPDATE_PATH,
@@ -77,7 +76,12 @@ afterEach(() => {
 });
 
 async function site(
-  options: { config?: GeekityConfig; installed?: string[]; supervised?: boolean } = {},
+  options: {
+    config?: GeekityConfig;
+    installed?: string[];
+    supervised?: boolean;
+    reloadOutcome?: ReloadOutcome;
+  } = {},
 ): Promise<Site> {
   const pluginsDir = await box.dir('geekity-install-plugins-');
   const dataDir = await box.dir('geekity-install-data-');
@@ -91,12 +95,14 @@ async function site(
   const supervision: Supervision = {
     loaded: scanPluginFolders(pluginsDir),
     lastFailure: undefined,
-    reload: () => {
+    reload: async () => {
       current.reloads += 1;
-      return Promise.resolve({ ok: true });
+      await cms.drain();
+      await cms.resume();
+      return options.reloadOutcome ?? { ok: true };
     },
   };
-  const cms = await box.open(
+  const cms: Cms = await box.open(
     {
       contentDir: await box.dir('geekity-install-content-'),
       dataDir,
@@ -158,9 +164,100 @@ function row(html: string, name: string): string {
 
 const PASSWORD = FIRST_ADMIN.password;
 
+describe('a change on a supervised site reloads at once (TASK-309)', () => {
+  it('reloads after Add, then shows what was added on the reloaded screen', async () => {
+    const { agent, pluginsDir } = await site({ supervised: true });
+    const started = Date.now();
+    const response = await agent.post(PLUGINS_ADD_PATH, {
+      csrf_token: await token(agent),
+      package: LLM,
+      version: '1.0.0',
+      password: PASSWORD,
+    });
+    assert.ok(Date.now() - started < 10_000, 'the drain did not wait on the request that asked');
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), `${PLUGINS_PATH}?reloaded=1`);
+    assert.equal(response.headers.get('connection'), 'close');
+    assert.equal(current.reloads, 1);
+    assert.equal(await folderVersion(pluginsDir, LLM), '1.0.0');
+
+    const html = await screen(agent, `${PLUGINS_PATH}?reloaded=1`);
+    assert.match(html, /Plugins reloaded/);
+    const shown = flashes(html).map((entry) => entry.message);
+    assert.ok(
+      shown.some((message) => message.includes(`Added ${LLM} 1.0.0`)),
+      shown.join('|'),
+    );
+    assert.ok(!shown.some((message) => /Reload|Restart/.test(message)), shown.join('|'));
+  });
+
+  it('reloads after Update, Update all and Remove', async () => {
+    const { agent } = await site({
+      installed: [`${LLM}@1.0.0`, `${TAGS}@2.0.0`],
+      supervised: true,
+    });
+    for (const [url, fields] of [
+      [PLUGINS_UPDATE_PATH, { plugin: LLM }],
+      [PLUGINS_UPDATE_ALL_PATH, {}],
+      [PLUGINS_REMOVE_PATH, { plugin: LLM }],
+    ] as const) {
+      const before = current.reloads;
+      const response = await agent.post(url, {
+        csrf_token: await token(agent),
+        ...fields,
+        password: PASSWORD,
+      });
+      assert.equal(response.headers.get('location'), `${PLUGINS_PATH}?reloaded=1`, url);
+      assert.equal(current.reloads, before + 1, url);
+    }
+  });
+
+  it('does not reload when nothing changed', async () => {
+    const { agent } = await site({ installed: [`${LLM}@1.1.0`], supervised: true });
+    const response = await agent.post(PLUGINS_UPDATE_ALL_PATH, {
+      csrf_token: await token(agent),
+      password: PASSWORD,
+    });
+    assert.equal(response.headers.get('location'), PLUGINS_PATH);
+    assert.equal(current.reloads, 0);
+
+    const refused = await submit(agent, PLUGINS_ADD_PATH, { package: SHAKY, password: PASSWORD });
+    assert.ok(refused.flash.some((message) => /integrity hash does not match/.test(message)));
+    assert.equal(current.reloads, 0);
+  });
+
+  it('shows the change and why the reload failed when the new server did not start', async () => {
+    const { agent } = await site({
+      supervised: true,
+      reloadOutcome: { ok: false, error: 'Two plugins share a name.' },
+    });
+    const response = await agent.post(PLUGINS_ADD_PATH, {
+      csrf_token: await token(agent),
+      package: LLM,
+      password: PASSWORD,
+    });
+    assert.equal(response.headers.get('location'), PLUGINS_PATH);
+    assert.equal(current.reloads, 1);
+    const shown = flashes(await screen(agent)).map((entry) => entry.message);
+    assert.ok(
+      shown.some((message) => message.includes(`Added ${LLM}`)),
+      shown.join('|'),
+    );
+  });
+
+  it('says to restart a site that is not supervised', async () => {
+    const { agent } = await site();
+    const result = await submit(agent, PLUGINS_ADD_PATH, { package: LLM, password: PASSWORD });
+    assert.ok(
+      result.flash.includes('Restart the site to load the change.'),
+      result.flash.join('|'),
+    );
+  });
+});
+
 describe('Add plugin (TASK-306)', () => {
-  it('installs the named package at the version asked for, records it and says to Reload', async () => {
-    const { agent, pluginsDir, dataDir } = await site({ supervised: true });
+  it('installs the named package at the version asked for and records it', async () => {
+    const { agent, pluginsDir, dataDir } = await site();
 
     const result = await submit(agent, PLUGINS_ADD_PATH, {
       package: LLM,
@@ -170,7 +267,6 @@ describe('Add plugin (TASK-306)', () => {
     assert.equal(result.status, 303);
     assert.equal(await folderVersion(pluginsDir, LLM), '1.0.0');
     assert.ok(result.flash.some((message) => message.includes(`Added ${LLM} 1.0.0`)));
-    assert.match(result.html, new RegExp(`action="${PLUGINS_RELOAD_PATH}"`));
 
     const [entry] = await record(dataDir);
     assert.deepEqual(
@@ -302,11 +398,8 @@ describe('Update and Remove (TASK-306)', () => {
     assert.ok(!confirm.includes(`action="${PLUGINS_UPDATE_ALL_PATH}"`));
   });
 
-  it('removes a folder plugin after the password, records it and offers Reload', async () => {
-    const { agent, pluginsDir, dataDir } = await site({
-      installed: [`${TAGS}@2.0.0`],
-      supervised: true,
-    });
+  it('removes a folder plugin after the password and records it', async () => {
+    const { agent, pluginsDir, dataDir } = await site({ installed: [`${TAGS}@2.0.0`] });
     const confirm = await screen(
       agent,
       `${PLUGINS_CONFIRM_PATH}?action=remove&plugin=${encodeURIComponent(TAGS)}`,
@@ -321,16 +414,11 @@ describe('Update and Remove (TASK-306)', () => {
     assert.equal(result.status, 303);
     assert.equal(await folderVersion(pluginsDir, TAGS), undefined);
     assert.ok(result.flash.some((message) => message.includes(`Removed ${TAGS} 2.0.0`)));
-    assert.match(result.html, /Removed:[\s\S]*@acme\/plugin-tags/);
     const [entry] = await record(dataDir);
     assert.deepEqual(
       [entry?.['action'], entry?.['name'], entry?.['from']],
       ['remove', TAGS, '2.0.0'],
     );
-
-    const reload = await submit(agent, PLUGINS_RELOAD_PATH, {});
-    assert.equal(reload.status, 303);
-    assert.equal(current.reloads, 1);
   });
 });
 

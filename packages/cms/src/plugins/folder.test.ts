@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { importPluginFolders, pluginFolderChanges, scanPluginFolders } from './folder.ts';
+import {
+  importPluginFolders,
+  pluginFolderChanges,
+  pluginFolderSignature,
+  pluginsFingerprint,
+  scanPluginFolders,
+} from './folder.ts';
 
 const dirs: string[] = [];
 after(async () => {
@@ -78,6 +84,34 @@ describe('pluginFolderChanges', () => {
       removed: ['plugin-removed'],
       updated: ['plugin-updated'],
     });
+  });
+});
+
+describe('what the supervisor watches (TASK-309)', () => {
+  it('changes the signature with any write in a plugin folder, and not in a hidden one', async () => {
+    const dir = await pluginsDir();
+    await install(dir, 'plugin-alpha');
+    const before = pluginFolderSignature(dir);
+    assert.equal(pluginFolderSignature(dir), before, 'reading it again changes nothing');
+
+    await install(dir, '.staging-plugin-beta');
+    assert.equal(pluginFolderSignature(dir), before, 'a folder being staged is not watched');
+
+    await writeFile(path.join(dir, 'plugin-alpha', 'extra.js'), '// more\n');
+    assert.notEqual(pluginFolderSignature(dir), before);
+  });
+
+  it('fingerprints a scan by content, so a folder put back as it was reads as unchanged', async () => {
+    const dir = await pluginsDir();
+    await install(dir, 'plugin-alpha');
+    const loaded = pluginsFingerprint(scanPluginFolders(dir));
+
+    await install(dir, '@acme/plugin-beta');
+    assert.notEqual(pluginsFingerprint(scanPluginFolders(dir)), loaded);
+
+    await rm(path.join(dir, '@acme'), { recursive: true });
+    await install(dir, 'plugin-alpha');
+    assert.equal(pluginsFingerprint(scanPluginFolders(dir)), loaded);
   });
 });
 

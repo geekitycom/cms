@@ -5,6 +5,7 @@
  */
 
 import type { Cms } from '../index.ts';
+import { pluginsFingerprint } from '../plugins/folder.ts';
 import type { PluginFolder } from '../plugins/folder.ts';
 import { EXIT_FOR_REPLACEMENT, isSupervisorMessage } from './protocol.ts';
 import type { SupervisorMessage, WorkerMessage } from './protocol.ts';
@@ -62,14 +63,23 @@ export function superviseWorker(options: {
 
     serving(cms) {
       let closing: Promise<void> | undefined;
+      let exitCode: number | undefined;
+      let disconnected = false;
       const close = (): Promise<void> => {
-        closing ??= cms.close().then(
-          () => exit(0),
-          (error: unknown) => {
-            log(`The server did not close cleanly: ${messageOf(error)}`);
-            exit(1);
-          },
-        );
+        closing ??= cms
+          .close()
+          .then(
+            () => 0,
+            (error: unknown) => {
+              log(`The server did not close cleanly: ${messageOf(error)}`);
+              return 1;
+            },
+          )
+          .then((code) => {
+            exitCode = code;
+            if (disconnected) exit(code);
+            else channel.send({ type: 'closed' });
+          });
         return closing;
       };
 
@@ -91,18 +101,29 @@ export function superviseWorker(options: {
               await cms.resume();
               settle({ ok: false, error: message.error });
               return;
-            case 'retire':
+            case 'retire': {
+              // Close before answering the request that asked for the reload,
+              // so the page it redirects to is asked of the new worker.
+              const closing = close();
               settle({ ok: true });
-              await close();
+              await closing;
               return;
+            }
             case 'shutdown':
               await close();
+              return;
+            case 'exit':
+              exit(exitCode ?? 0);
               return;
           }
         })();
       });
-      channel.onDisconnect(() => void close());
-      channel.send({ type: 'ready' });
+      channel.onDisconnect(() => {
+        disconnected = true;
+        if (exitCode === undefined) void close();
+        else exit(exitCode);
+      });
+      channel.send({ type: 'ready', pluginsFingerprint: pluginsFingerprint(options.loaded) });
     },
   };
 }

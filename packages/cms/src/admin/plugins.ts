@@ -27,8 +27,9 @@ import {
   lastUpdateCheck,
   updatePlugins,
 } from '../plugins/manage.ts';
-import type { ManageOptions, ManageOutcome } from '../plugins/manage.ts';
+import type { ManageOptions, ManageResult } from '../plugins/manage.ts';
 import { describeUpgrade } from '../plugins/upgrade.ts';
+import type { Supervision } from '../supervisor/supervision.ts';
 import { PACKAGE_NAME } from '../plugins/registry.ts';
 import type {
   PluginRegistry,
@@ -174,7 +175,10 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     return render(c, ADMIN_TEMPLATES.plugins, {
       section: PLUGINS_SECTION,
       child: PLUGINS_CHILD,
-      reload: changes === undefined ? undefined : { url: PLUGINS_RELOAD_PATH, changes },
+      reload:
+        changes === undefined
+          ? undefined
+          : { url: PLUGINS_RELOAD_PATH, changes, watching: config.pluginWatch },
       reloaded: c.req.query(RELOADED_QUERY) !== undefined,
       reloadFailure: supervision?.lastFailure,
       enableUrl: PLUGINS_ENABLE_PATH,
@@ -309,7 +313,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
   async function confirmed(
     c: Context<GeekityEnv>,
     action: Confirmable,
-    change: (options: ManageOptions, name: string) => Promise<ManageOutcome[]>,
+    change: (options: ManageOptions, name: string) => Promise<ManageResult>,
   ): Promise<Response> {
     const installer = pluginInstaller(c.var.config);
     if (installer.state !== 'on') return refuse(c, INSTALLER_REFUSALS[installer.state]);
@@ -379,24 +383,28 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     c: Context<GeekityEnv>,
     pluginsDir: string,
     user: string,
-    change: (options: ManageOptions) => Promise<ManageOutcome[]>,
+    change: (options: ManageOptions) => Promise<ManageResult>,
   ): Promise<Response> {
+    let changed = false;
     try {
-      const outcomes = await change({
+      const result = await change({
         ...manageOptions(c, pluginsDir),
         contentDir: c.var.config.contentDir,
         dataDir: c.var.config.dataDir,
         user,
-        next:
-          c.var.supervision === undefined
-            ? 'Restart the site to load the change.'
-            : 'Press Reload to load the change.',
       });
-      for (const outcome of outcomes) flash(c, outcome.kind, outcome.message);
+      changed = result.changed;
+      for (const outcome of result.outcomes) flash(c, outcome.kind, outcome.message);
     } catch (error) {
       flash(c, 'error', messageOf(error));
     }
-    return c.redirect(PLUGINS_PATH, 303);
+    const supervision = c.var.supervision;
+    if (!changed) return c.redirect(PLUGINS_PATH, 303);
+    if (supervision === undefined) {
+      flash(c, 'notice', 'Restart the site to load the change.');
+      return c.redirect(PLUGINS_PATH, 303);
+    }
+    return await reloaded(c, supervision);
   }
 
   function confirmedUser(c: Context<GeekityEnv>, password: string): string | undefined {
@@ -412,11 +420,15 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     if (supervision === undefined) {
       return refuse(c, 'This server is not supervised by geekity serve, so it cannot reload.');
     }
+    return await reloaded(c, supervision);
+  });
+
+  async function reloaded(c: Context<GeekityEnv>, supervision: Supervision): Promise<Response> {
     const outcome = await supervision.reload();
     if (!outcome.ok) return c.redirect(PLUGINS_PATH, 303);
     c.header('Connection', 'close');
     return c.redirect(`${PLUGINS_PATH}?${RELOADED_QUERY}=1`, 303);
-  });
+  }
 
   app.post(PLUGINS_ENABLE_PATH, async (c) => {
     const registry = c.var.plugins;

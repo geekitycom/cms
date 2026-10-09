@@ -8,7 +8,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -49,17 +49,42 @@ export interface PluginFolderChanges {
 /** Every plugin folder, by name. A missing folder, or none named, holds none. */
 export function scanPluginFolders(pluginsDir: string | undefined): PluginFolder[] {
   if (pluginsDir === undefined) return [];
-  const folders: PluginFolder[] = [];
+  return pluginFolderNames(pluginsDir).map((name) => folder(pluginsDir, name));
+}
+
+export function pluginsFingerprint(folders: readonly PluginFolder[]): string {
+  const hash = createHash('sha256');
+  for (const { name, fingerprint } of folders) hash.update(`${name}\0${fingerprint}\n`);
+  return hash.digest('hex');
+}
+
+export function pluginFolderSignature(pluginsDir: string): string {
+  const lines: string[] = [];
+  for (const name of pluginFolderNames(pluginsDir)) {
+    const directory = path.join(pluginsDir, ...name.split('/'));
+    lines.push(name);
+    for (const file of filesUnder(directory)) {
+      const { size, mtimeMs, ctimeMs } = statSync(file);
+      lines.push(
+        `${path.relative(directory, file)} ${String(size)} ${String(mtimeMs)} ${String(ctimeMs)}`,
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+function pluginFolderNames(pluginsDir: string): string[] {
+  const names: string[] = [];
   for (const entry of subdirectories(pluginsDir)) {
     if (!entry.startsWith('@')) {
-      folders.push(folder(pluginsDir, entry));
+      names.push(entry);
       continue;
     }
     for (const scoped of subdirectories(path.join(pluginsDir, entry))) {
-      folders.push(folder(pluginsDir, `${entry}/${scoped}`));
+      names.push(`${entry}/${scoped}`);
     }
   }
-  return folders.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return names.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 /** What changed between two scans, or `undefined` when nothing did. */
