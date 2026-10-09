@@ -94,7 +94,7 @@
       is answered on the page that sent it, so neither gets such a link.
     #}
     {% if commentForm and reply.source == "comment" %}
-    <div class="reply"><a class="comment-reply-link" href="{{ page.url }}?reply_to={{ reply.id }}#respond">Reply</a></div>
+    <div class="reply"><a class="comment-reply-link" href="{{ page.url }}?reply_to={{ reply.id | urlencode }}#respond">Reply</a></div>
     {% endif %}
   </article>
   {% if reply.replies.length %}

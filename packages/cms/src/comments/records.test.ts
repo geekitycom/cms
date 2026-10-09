@@ -211,6 +211,28 @@ describe('a comment file', () => {
     assert.equal(readComments(site, 'hello-world').length, 1);
     assert.equal(readComments(site, 'second-post').length, 1);
   });
+
+  it('names a post whose slug is not ASCII by the slug percent-encoded, and reads it back at boot', async () => {
+    const site = await records();
+
+    await addComment(site, ada({ slug: 'i-♥-rss', permalink: '/2026/07/i-♥-rss/' }));
+
+    assert.deepEqual(Object.keys(await filesUnder(site.contentDir)), [
+      path.join('_data', 'comments', 'i-%E2%99%A5-rss.json'),
+    ]);
+    assert.deepEqual(Object.keys(await filesUnder(site.dataDir)), [
+      path.join('comments', 'i-%E2%99%A5-rss.json'),
+    ]);
+    assert.equal(rebuildCommentIndexes(site).comments, 1);
+    assert.equal(site.admin.listCommentsFor('i-♥-rss').length, 1);
+  });
+
+  it('keeps an ASCII slug’s file name as it was, and refuses one that could leave the directory', () => {
+    assert.equal(path.basename(commentsFile('/c', 'hello-world')), 'hello-world.json');
+    assert.throws(() => commentsFile('/c', '..'));
+    assert.throws(() => commentsFile('/c', '.hidden'));
+    assert.equal(path.dirname(commentsFile('/c', 'a/b')), path.join('/c', '_data', 'comments'));
+  });
 });
 
 describe('the comment index', () => {

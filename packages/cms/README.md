@@ -1023,7 +1023,8 @@ A reader can answer a post on the page, and what they leave joins the same
 thread as the fediverse replies rather than sitting in a section of its own.
 
 A comment is a file. `content/_data/comments/{slug}.json` holds one post's
-comments — id, source, kind, status, author, the Markdown and the HTML it
+comments (a slug that is not plain ASCII is percent-encoded in the name, so
+`i-♥-rss` is `i-%E2%99%A5-rss.json`) — id, source, kind, status, author, the Markdown and the HTML it
 rendered to, when it was submitted, a salted hash of the address, and what it
 answers — so they are in git beside the posts, an Eleventy build of the same
 directory shows them, and the `comments` table is an index emptied and read
