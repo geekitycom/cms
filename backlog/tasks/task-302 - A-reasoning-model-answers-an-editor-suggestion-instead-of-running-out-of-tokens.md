@@ -3,11 +3,11 @@ id: TASK-302
 title: >-
   A reasoning model answers an editor suggestion instead of running out of
   tokens
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-08 23:58'
-updated_date: '2026-10-09 00:11'
+updated_date: '2026-10-09 14:17'
 labels: []
 dependencies: []
 references:
@@ -31,7 +31,7 @@ On shll.me (0.25.0, plugin-llm 0.1.0) with the default model openrouter/auto, Su
 - [x] #1 A reply cut off at the token limit (finish_reason length, or empty content with the reply tokens at the cap) is reported as its own plain-words failure that names the limit and suggests the fix, not "It had no text"
 - [x] #2 By default a call asks a reasoning model to keep its reasoning short (OpenRouter's documented reasoning request field, checked against its docs), and a caller can override it; a model that does not reason is unaffected
 - [x] #3 Test connection and editor suggestions succeed against a fake OpenRouter that reasons until a small budget runs out unless told to keep reasoning short
-- [ ] #4 The reply budget is large enough for a short structured answer after brief reasoning, and the default is documented
+- [x] #4 The reply budget is large enough for a short structured answer after brief reasoning, and the default is documented
 - [x] #5 Post summary and Tag suggest show the failure's reason in the editor, not only a generic message, and share one wording with plugin-llm instead of keeping their own copies
 - [x] #6 The plugin-llm README recommends choosing a model with structured outputs and says what happens with openrouter/auto and reasoning models
 <!-- AC:END -->
@@ -68,4 +68,12 @@ Verification: pnpm build, pnpm test (llm 48, post-summary 15, tag-suggest 16, cm
 
 AC evidence: #1 complete.test 'a reply cut off at the limit' (finish_reason length; empty content at the cap with reasoning tokens), screen.test cut-off flash and Last call 4096. #2 complete.test 'reasoning' (low by default, override high/minimal/none mapped, model-default sends nothing, plain model gets the same keys as before, non-OpenRouter gets nothing and reads no list); request shape from the OpenRouter reasoning-tokens doc. #3 screen.test Test connection and post-summary/tag-suggest 'reasoning model on OpenRouter' tests against thinker() through standInForOpenRouter. #5 post-summary and tag-suggest show completion.message (cut-off words in both editor tests); failureWords copies deleted. #6 README 'Choosing a model' and 'Reasoning models'.
 AC #4 left unchecked: the default (4096) is documented and a fake that reasons 300 or half the budget answers within it, but whether z-ai/glm-5.3-flash at effort low and qwen/qwen3.8-flash (low = ~20% of max_tokens) answer within 4096 can only be seen on a real OpenRouter call. Confirm on shll.me after release: with openrouter/auto and with each of those models set as Default model, press Test connection and Suggest title; Last call should show the model, reply tokens well under 4096, and Answered.
+
+2026-10-09, on shll.me (0.27.0, plugin-llm 0.2.1): with the default model z-ai/glm-5.3-flash (the model that spent all 1024 tokens reasoning before), Test connection passed and Suggest title answered within a couple of seconds with no cut-off. qwen/qwen3.8-flash not retried. The answer echoed the post's current title, a post-summary prompt issue filed as TASK-310.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+On OpenRouter a reasoning model is asked for low effort with its reasoning left out, the default budget is 4096 tokens, Test connection makes the same call as a suggestion, a reply cut off at the limit is its own failure with plain words, and the editor shows the llm service's message. Verified by tests against a reasoning fake and on shll.me with z-ai/glm-5.3-flash.
+<!-- SECTION:FINAL_SUMMARY:END -->
