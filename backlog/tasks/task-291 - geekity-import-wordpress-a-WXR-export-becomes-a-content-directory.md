@@ -1,11 +1,11 @@
 ---
 id: TASK-291
 title: 'geekity import wordpress: a WXR export becomes a content directory'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-08 10:59'
-updated_date: '2026-10-09 18:06'
+updated_date: '2026-10-09 18:37'
 labels: []
 milestone: m-31
 dependencies:
@@ -38,7 +38,7 @@ The subtasks split it by what is imported. This parent holds the command, the re
 - [x] #7 packages/cms/README.md documents the command next to "Moving a site off the WordPress ActivityPub plugin", as one cutover
 - [x] #8 With TASK-295 dev mode on, an import into a running site with followers makes no outbound request, as the suppression record shows
 - [x] #9 The command and everything WordPress-specific in the subtasks ship in @geekity/plugin-wordpress, not in @geekity/cms (TASK-282 #7: nothing in core names WordPress); a generic piece a subtask needs (for example a redirect rule by path prefix) lands in core as the extension point the plugin uses (decision-33)
-- [ ] #10 A rerun against a newer export picks up posts, pages, edits, media and reactions added on WordPress since the last run; a file the import wrote and that has since been edited on Geekity is not overwritten, and the report lists it as a conflict with both versions' dates
+- [x] #10 A rerun against a newer export picks up posts, pages, edits, media and reactions added on WordPress since the last run; a file the import wrote and that has since been edited on Geekity is not overwritten, and the report lists it as a conflict with both versions' dates
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -78,4 +78,12 @@ TASK-291.1 (posts and pages) landed:
 - ImporterOutput gained optional settings (site.json keys), decided per key like a file (decision-39); import.json now holds files and settings.
 
 TASK-291.2 (media) landed. #10 media half holds: media-import.test.ts 'picks up media a newer export carries and leaves the rest byte-identical' (a new attachment and its alt are written, the old one unchanged, the new post points at the original). #10 stays open for reactions (TASK-291.3). ImporterOutput.settings is now entries (file, key, value) for any JSON object file the site also writes (decision-40); import.json holds them under entries by file.
+
+TASK-291.3 (comments and reactions) landed. #10 reactions half holds: comments-import.test.ts 'merges a newer export by comment id, leaving the site's own comments and edits alone (TASK-291 #10)': a like added on WordPress is written new, a reply edited on WordPress is written, a comment a moderator filed as spam is reported as a conflict and kept, a comment the site received itself is untouched and unmoved, and an unchanged one stays unchanged. With the posts/pages and media halves (TASK-291.1, .2) and the conflict half (parent), #10 holds. Real CLI over the andrewshell.org export: a rerun is byte-identical, 273 unchanged. Comments merge per entry through PluginSite.putComments (decision-41), not as whole files. TASK-291.4 (redirects) is still open as its own subtask.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+geekity import wordpress <export.xml> (@geekity/plugin-wordpress) turns a WXR export into the content directory: posts and pages at their WordPress URLs with dates, terms and ?p= ids (291.1), media under /uploads/ with old media URLs redirected (291.2), and comments, webmentions and fediverse reactions as comment records merged by id (291.3). It refuses a non-WXR file naming each problem, prints a row per item, skips WordPress-only types with counts, is byte-identical on rerun, never overwrites or deletes a file it did not write, reports conflicts with both dates, and picks up what a newer export adds. Core gained only generic extension points (PluginSite.contentDir, checkUpload, comments/putComments; decision-33/38/39/40/41). Verified by the plugin's 85 tests, the dev-mode silence test (no outbound request or held entry), geekity sync exiting 0, and real runs over andrewshell.org's export. Redirects for every WordPress URL shape continue in TASK-291.4.
+<!-- SECTION:FINAL_SUMMARY:END -->

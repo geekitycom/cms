@@ -75,6 +75,7 @@ export interface TestUser {
   readonly id?: number;
   readonly displayName?: string;
   readonly actorId?: string;
+  readonly email?: string;
 }
 
 /** Write `data/users.json` straight. */
@@ -85,6 +86,7 @@ export function writeUsers(dataDir: string, users: readonly TestUser[]): void {
     username: user.username,
     ...(user.displayName === undefined ? {} : { profile: { displayName: user.displayName } }),
     ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
+    ...(user.email === undefined ? {} : { email: user.email }),
     passwordHash: 'not-a-hash',
     createdAt: '2026-01-01T00:00:00.000Z',
   }));

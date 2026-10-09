@@ -44,8 +44,8 @@ export interface WordPressMedia {
   originalOf(upload: UploadPath): UploadPath;
   /** Every upload path the text names on one of the site's hosts, in order, once each. */
   references(text: string): UploadPath[];
-  /** The text with each such URL made `/uploads/<original>`. */
-  rewrite(text: string): string;
+  /** The text with each such URL made `/uploads/<original>`, on `origin` when one is given. */
+  rewrite(text: string, origin?: string): string;
 }
 
 /**
@@ -94,7 +94,8 @@ export function wordPressMedia(
       });
       return [...found];
     },
-    rewrite: (text) => each(text, (upload) => uploadUrl(originalOf(upload))),
+    rewrite: (text, origin = '') =>
+      each(text, (upload) => `${origin}${uploadUrl(originalOf(upload))}`),
   };
 }
 

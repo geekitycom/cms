@@ -26,6 +26,8 @@ export interface TestComment {
   readonly type?: string;
   readonly approved?: string;
   readonly author?: string;
+  readonly authorEmail?: string;
+  readonly authorUrl?: string;
   readonly content?: string;
   readonly dateGmt?: string;
   readonly meta?: readonly { key: string; value: string }[];
@@ -106,8 +108,8 @@ function comment(entry: TestComment): string {
   return `		<wp:comment>
 			<wp:comment_id>${String(entry.id)}</wp:comment_id>
 			<wp:comment_author><![CDATA[${entry.author ?? 'Weldon'}]]></wp:comment_author>
-			<wp:comment_author_email><![CDATA[weldon@mstdn.example]]></wp:comment_author_email>
-			<wp:comment_author_url>https://mstdn.example/@weldon</wp:comment_author_url>
+			<wp:comment_author_email><![CDATA[${entry.authorEmail ?? 'weldon@mstdn.example'}]]></wp:comment_author_email>
+			<wp:comment_author_url>${entry.authorUrl ?? 'https://mstdn.example/@weldon'}</wp:comment_author_url>
 			<wp:comment_author_IP><![CDATA[192.0.2.1]]></wp:comment_author_IP>
 			<wp:comment_date><![CDATA[2024-03-06 05:00:00]]></wp:comment_date>
 			<wp:comment_date_gmt><![CDATA[${dateGmt}]]></wp:comment_date_gmt>

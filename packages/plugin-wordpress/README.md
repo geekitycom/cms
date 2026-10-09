@@ -177,6 +177,34 @@ file. A size variant the import did not copy lands on its original, as
 entry is written per file. Keep the plugin enabled for as long as links to the
 old media URLs matter.
 
+### Comments and reactions
+
+Every comment WordPress kept on a post or page the import writes goes into the
+post's comment file, `_data/comments/<slug>.json`, the file the site's own
+comments go to. That covers form comments, and the likes, reposts, replies,
+mentions, bookmarks and pingbacks the ActivityPub and Webmention plugins stored
+as comments. Each lands under the post as one the site received itself would:
+
+| WordPress                                                 | Here                                                           |
+| --------------------------------------------------------- | -------------------------------------------------------------- |
+| `comment`, `like`, `repost` with `protocol` `activitypub` | A fediverse reply, like or boost, linked to the remote post.   |
+| `comment`, `like`, `repost` with `protocol` `webmention`  | A webmention reply, like or repost, linked to its source page. |
+| `mention`, `bookmark`, `webmention`                       | A mention, linked to the page that linked here.                |
+| `pingback`, `trackback`                                   | A mention, linked to the page that pinged.                     |
+| `comment` with no protocol                                | A comment left on the page.                                    |
+
+A reply keeps the comment it answers. An approved comment is approved here,
+and one WordPress held for moderation waits here too. Spam and trash are left
+out and named in the report. Each comment keeps the id WordPress's comments
+feed gave it, `https://example.com/?p=ID#comment-N`, so a feed reader sees
+nothing it has not seen. A commenter's email goes only to `data/comments/`.
+Nothing is announced: no moderator is emailed and nothing is delivered.
+
+The import merges by comment id. A rerun adds the comments WordPress received
+since and picks up one edited there. It leaves alone a comment this site
+received itself, and an imported one a moderator approved, filed as spam,
+edited or deleted.
+
 ## Bringing a person across
 
 `geekity import wordpress-actor` brings one person across. It writes the three

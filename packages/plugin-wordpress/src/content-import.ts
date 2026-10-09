@@ -2,7 +2,12 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { PluginCommandContext, PluginDataFolder } from '@geekity/cms/plugin';
+import type {
+  PluginCommandContext,
+  PluginComment,
+  PluginDataFolder,
+  PluginSite,
+} from '@geekity/cms/plugin';
 
 import type { WordPressExport, WordPressItem } from './wxr.ts';
 
@@ -33,10 +38,18 @@ export interface DataEntry {
   readonly value: unknown;
 }
 
+export interface ImportedComment {
+  readonly item: WordPressItem;
+  readonly permalink: string;
+  readonly comment: PluginComment;
+  readonly label: string;
+}
+
 export interface ImporterOutput {
   readonly files: readonly ImportedFile[];
   readonly notes: readonly ItemNote[];
   readonly entries?: readonly DataEntry[] | undefined;
+  readonly comments?: readonly ImportedComment[] | undefined;
 }
 
 /**
@@ -115,11 +128,13 @@ export async function importWordPressContent(options: {
 
   const files: ImportedFile[] = [];
   const entries: DataEntry[] = [];
+  const comments: ImportedComment[] = [];
   for (const importer of importers) {
     const output = await importer.import(exported, context);
     files.push(...output.files);
     rows.push(...output.notes);
     entries.push(...(output.entries ?? []));
+    comments.push(...(output.comments ?? []));
   }
 
   const record = readRecord(data);
@@ -140,6 +155,13 @@ export async function importWordPressContent(options: {
   for (const [file, inFile] of byFile) {
     rows.push(...(await writeEntries(contentDir, file, inFile, record, data)));
   }
+  const byPost = new Map<string, ImportedComment[]>();
+  for (const comment of comments) {
+    byPost.set(comment.permalink, [...(byPost.get(comment.permalink) ?? []), comment]);
+  }
+  for (const [permalink, onPost] of byPost) {
+    rows.push(...(await writeComments(context.site, permalink, onPost, record, data)));
+  }
 
   const order = new Map(exported.items.map((item, index) => [item, index]));
   rows.sort((a, b) => (order.get(a.item) ?? 0) - (order.get(b.item) ?? 0));
@@ -150,42 +172,44 @@ type ContentPath = string;
 type Sha256 = string;
 type EntryKey = string;
 type JsonText = string;
+type CommentId = string;
 
 interface ImportRecord {
   readonly files: Map<ContentPath, Sha256>;
   readonly entries: Map<ContentPath, Map<EntryKey, JsonText>>;
+  readonly comments: Map<ContentPath, Map<CommentId, Sha256>>;
 }
 
 interface SavedRecord {
   files?: Record<ContentPath, Sha256>;
   entries?: Record<ContentPath, Record<EntryKey, JsonText>>;
+  comments?: Record<ContentPath, Record<CommentId, Sha256>>;
 }
 
 function readRecord(data: PluginDataFolder): ImportRecord {
   const text = data.read(IMPORT_RECORD_FILE);
   const parsed = text === undefined ? {} : (JSON.parse(text) as SavedRecord);
+  const nested = <Value>(saved: Record<string, Record<string, Value>> | undefined) =>
+    new Map(
+      Object.entries(saved ?? {}).map(([file, keys]) => [file, new Map(Object.entries(keys))]),
+    );
   return {
     files: new Map(Object.entries(parsed.files ?? {})),
-    entries: new Map(
-      Object.entries(parsed.entries ?? {}).map(([file, keys]) => [
-        file,
-        new Map(Object.entries(keys)),
-      ]),
-    ),
+    entries: nested(parsed.entries),
+    comments: nested(parsed.comments),
   };
 }
 
 async function saveRecord(data: PluginDataFolder, record: ImportRecord): Promise<void> {
   const sorted = <Value>(map: ReadonlyMap<string, Value>) =>
     Object.fromEntries([...map].sort(([a], [b]) => (a < b ? -1 : 1)));
-  const saved: SavedRecord = { files: sorted(record.files) };
-  if (record.entries.size > 0) {
-    saved.entries = Object.fromEntries(
-      [...record.entries]
-        .sort(([a], [b]) => (a < b ? -1 : 1))
-        .map(([file, keys]) => [file, sorted(keys)]),
+  const nested = <Value>(map: ReadonlyMap<string, ReadonlyMap<string, Value>>) =>
+    Object.fromEntries(
+      [...map].sort(([a], [b]) => (a < b ? -1 : 1)).map(([file, keys]) => [file, sorted(keys)]),
     );
-  }
+  const saved: SavedRecord = { files: sorted(record.files) };
+  if (record.entries.size > 0) saved.entries = nested(record.entries);
+  if (record.comments.size > 0) saved.comments = nested(record.comments);
   await data.update(IMPORT_RECORD_FILE, () => `${JSON.stringify(saved, null, 2)}\n`);
 }
 
@@ -300,6 +324,53 @@ async function writeEntries(
   }
   if (changed) await writeAtomically(absolute, `${JSON.stringify(held, null, 2)}\n`);
   return rows;
+}
+
+async function writeComments(
+  site: PluginSite,
+  permalink: string,
+  comments: readonly ImportedComment[],
+  record: ImportRecord,
+  data: PluginDataFolder,
+): Promise<ReportRow[]> {
+  const held = site.comments(permalink);
+  const current = new Map(held.comments.map((comment) => [comment.id, sha256(canonical(comment))]));
+  const recorded = record.comments.get(held.file) ?? new Map<CommentId, Sha256>();
+
+  const rows: ReportRow[] = [];
+  const writes: PluginComment[] = [];
+  for (const { item, comment, label } of comments) {
+    const now = current.get(comment.id);
+    const before = recorded.get(comment.id);
+    const next = sha256(canonical(comment));
+    const deletedHere = now === undefined && before !== undefined;
+    const decision: Decision = deletedHere
+      ? { action: 'leave', outcome: 'kept', why: 'deleted on this site; left out' }
+      : decide(now, before, next);
+    if (decision.action === 'write') writes.push(comment);
+    if (decision.action !== 'leave') recorded.set(comment.id, next);
+    rows.push({
+      outcome: decision.outcome,
+      item,
+      path: held.file,
+      why: `${label}: ${decision.why}`,
+    });
+  }
+
+  await site.putComments(permalink, writes);
+  if (recorded.size > 0) record.comments.set(held.file, recorded);
+  await saveRecord(data, record);
+  return rows;
+}
+
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, inner: unknown) =>
+    inner !== null && typeof inner === 'object' && !Array.isArray(inner)
+      ? Object.fromEntries(
+          Object.entries(inner as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1)),
+        )
+      : inner,
+  );
 }
 
 function contentPath(given: string): string {

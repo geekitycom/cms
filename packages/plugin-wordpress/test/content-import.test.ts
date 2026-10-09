@@ -52,6 +52,8 @@ function testSite(contentDir: string): PluginSite {
     followers: () => [],
     addFollower: unused,
     checkUpload: unused,
+    comments: unused,
+    putComments: unused,
   };
 }
 

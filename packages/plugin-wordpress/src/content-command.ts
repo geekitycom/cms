@@ -5,12 +5,13 @@ import type { PluginCommand, PluginCommandContext, PluginDataFolder } from '@gee
 
 import { importWordPressContent } from './content-import.ts';
 import type { ImportReport, Outcome, WordPressImporter } from './content-import.ts';
+import { commentsAndReactions } from './comments-import.ts';
 import { attachments } from './media-import.ts';
 import { postsAndPages } from './posts-import.ts';
 import { NotAWordPressExportError, parseWordPressExport } from './wxr.ts';
 import type { WordPressExport } from './wxr.ts';
 
-const IMPORTERS: readonly WordPressImporter[] = [postsAndPages, attachments];
+const IMPORTERS: readonly WordPressImporter[] = [postsAndPages, attachments, commentsAndReactions];
 
 /**
  * `geekity import wordpress <export.xml>`: a WXR export becomes files in the

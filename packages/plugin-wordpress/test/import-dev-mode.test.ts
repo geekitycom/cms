@@ -5,10 +5,16 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import { createCms, pluginDataFolder } from '@geekity/cms';
+import {
+  createCms,
+  createMemoryMailProvider,
+  pluginDataFolder,
+  pluginSite,
+  resolveConfig,
+} from '@geekity/cms';
 import type { Cms } from '@geekity/cms';
-import type { PluginSite } from '@geekity/cms/plugin';
 
+import { commentsAndReactions } from '../src/comments-import.ts';
 import { importWordPressContent } from '../src/content-import.ts';
 import { postsAndPages } from '../src/posts-import.ts';
 import { parseWordPressExport } from '../src/wxr.ts';
@@ -39,10 +45,6 @@ after(async () => {
   restoreFetch();
   await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
 });
-
-function unused(): never {
-  throw new Error('The import does not reach this.');
-}
 
 interface DevSite {
   readonly cms: Cms;
@@ -92,7 +94,7 @@ async function devSite(): Promise<DevSite> {
       2,
     )}\n`,
   );
-  writeUsers(dataDir, [{ username: USER }]);
+  writeUsers(dataDir, [{ username: USER, email: 'ada@blog.example' }]);
   seedActorKeys(dataDir, USER);
 
   const cms = createCms({
@@ -104,6 +106,7 @@ async function devSite(): Promise<DevSite> {
     devMode: true,
     federation: { queue: null, allowPrivateAddress: true },
     indexNow: { batchMs: 0, backoffMs: () => 0 },
+    mail: { provider: createMemoryMailProvider(), backoffMs: () => 0 },
   });
   started.push(cms);
   await cms.serve();
@@ -142,20 +145,12 @@ async function held(dataDir: string): Promise<string[]> {
 }
 
 describe('the WordPress import into a running site in dev mode (TASK-291 #8)', () => {
-  it('makes no outbound request and holds nothing, while a new post would have been sent', async () => {
+  it('makes no outbound request and holds nothing, its comments included, while a new post would have been sent', async () => {
     const { cms, contentDir, dataDir } = await devSite();
-    const site: PluginSite = {
-      baseUrl: SITE,
-      contentDir,
-      users: () => [{ username: USER }],
-      setActorId: unused,
-      actorKey: unused,
-      writeActorKey: unused,
-      loadActorKeys: unused,
-      followers: () => [],
-      addFollower: unused,
-      checkUpload: unused,
-    };
+    const site = pluginSite({
+      admin: cms.admin,
+      config: resolveConfig({ contentDir, dataDir, baseUrl: SITE }, { env: {} }),
+    });
 
     await importWordPressContent({
       exported: parseWordPressExport(
@@ -166,6 +161,26 @@ describe('the WordPress import into a running site in dev mode (TASK-291 #8)', (
             creator: USER,
             meta: [{ key: 'activitypub_status', value: 'federated' }],
             content: '<p>See <a href="https://linked.example/a-page/">a page</a>.</p>',
+            comments: [
+              { id: 1, type: 'like', meta: [{ key: 'protocol', value: 'activitypub' }] },
+              {
+                id: 2,
+                content: 'A reply from the fediverse.',
+                meta: [{ key: 'protocol', value: 'activitypub' }],
+              },
+              { id: 3, content: 'A comment left on WordPress.', authorEmail: 'ada@example.com' },
+              { id: 4, parent: 3, content: 'An answer to it.', authorEmail: 'ada@example.com' },
+              { id: 6, approved: '0', content: 'Held for moderation on WordPress.' },
+              {
+                id: 5,
+                type: 'mention',
+                content: 'A page that linked here.',
+                meta: [
+                  { key: 'protocol', value: 'webmention' },
+                  { key: 'webmention_source_url', value: 'https://linker.example/post/' },
+                ],
+              },
+            ],
           },
           { id: 609, slug: 'never-sent', creator: USER },
           { id: 20, type: 'page', slug: 'about', creator: USER, link: `${SITE}/about/` },
@@ -173,10 +188,11 @@ describe('the WordPress import into a running site in dev mode (TASK-291 #8)', (
       ),
       context: { args: [], options: {}, cwd: contentDir, site, write: () => undefined },
       data: pluginDataFolder(dataDir, '@geekity/plugin-wordpress'),
-      importers: [postsAndPages],
+      importers: [postsAndPages, commentsAndReactions],
     });
     await indexed(cms, ['announced', 'never-sent', 'about']);
 
+    assert.equal(cms.admin.listCommentsFor('announced').length, 6, 'the comments are on the post');
     assert.deepEqual(outbound, [], 'no request left the site');
     assert.deepEqual(await held(dataDir), [], 'nothing was held, since nothing was due');
 

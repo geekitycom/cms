@@ -106,6 +106,8 @@ async function site(): Promise<Site> {
     followers: () => [],
     addFollower: unused,
     checkUpload: (_name, bytes) => ({ accepted: true, bytes }),
+    comments: unused,
+    putComments: unused,
   };
   return {
     root,

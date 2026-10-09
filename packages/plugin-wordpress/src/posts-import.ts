@@ -68,34 +68,25 @@ export const postsAndPages: WordPressImporter = {
   import: importPostsAndPages,
 };
 
-function importPostsAndPages(
-  exported: WordPressExport,
-  context: PluginCommandContext,
-): ImporterOutput {
+export type Placement =
+  | { readonly item: WordPressItem; readonly disposition: Extract<Disposition, { kind: 'skip' }> }
+  | {
+      readonly item: WordPressItem;
+      readonly disposition: Extract<Disposition, { kind: 'import' }>;
+      readonly permalink: string;
+      readonly frontPage: boolean;
+    };
+
+export function placements(exported: WordPressExport): Placement[] {
   const items = exported.items.filter((item) => item.type === 'post' || item.type === 'page');
   const home = homeOf(exported);
   const structure = inferredPermalinkStructure(items, home);
   const pagesById = new Map(
     items.filter((item) => item.type === 'page').map((item) => [item.id, item]),
   );
-  const users = new Set(context.site.users().map((user) => user.username));
-  const media = wordPressMedia(exported, context.options['origins']);
-
-  const files: ImportedFile[] = [];
-  const notes: ItemNote[] = [];
-  const entries: DataEntry[] = [];
-  const taken = new Set<string>();
-
-  for (const item of items) {
+  return items.map((item) => {
     const disposition = dispositionOf(item);
-    if (disposition.kind === 'skip') {
-      notes.push({ item, outcome: 'skipped', why: disposition.why });
-      continue;
-    }
-    if (disposition.warning !== undefined) {
-      notes.push({ item, outcome: 'warned', why: disposition.warning });
-    }
-
+    if (disposition.kind === 'skip') return { item, disposition };
     const frontPage = item.type === 'page' && sameUrl(item.link, home.href);
     const permalink =
       item.type === 'page'
@@ -105,6 +96,32 @@ function importPostsAndPages(
         : isPretty(item.link, home)
           ? decodedPath(item.link)
           : structure(item);
+    return { item, disposition, permalink, frontPage };
+  });
+}
+
+function importPostsAndPages(
+  exported: WordPressExport,
+  context: PluginCommandContext,
+): ImporterOutput {
+  const home = homeOf(exported);
+  const users = new Set(context.site.users().map((user) => user.username));
+  const media = wordPressMedia(exported, context.options['origins']);
+
+  const files: ImportedFile[] = [];
+  const notes: ItemNote[] = [];
+  const entries: DataEntry[] = [];
+  const taken = new Set<string>();
+
+  for (const placement of placements(exported)) {
+    if (!('permalink' in placement)) {
+      notes.push({ item: placement.item, outcome: 'skipped', why: placement.disposition.why });
+      continue;
+    }
+    const { item, disposition, permalink, frontPage } = placement;
+    if (disposition.warning !== undefined) {
+      notes.push({ item, outcome: 'warned', why: disposition.warning });
+    }
 
     const author = users.has(item.creator) ? item.creator : undefined;
     if (author === undefined) {
