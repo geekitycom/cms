@@ -28,7 +28,7 @@
     "plugin": true,
     "hostApi": 1,
     "requires": {
-      "@geekity/plugin-llm": "^0.2.0"
+      "@geekity/plugin-llm": ">=0.2.0 <1.0.0"
     }
   },
   "scripts": {
@@ -40,7 +40,7 @@
   },
   "peerDependencies": {
     "@geekity/cms": "workspace:^",
-    "@geekity/plugin-llm": "workspace:^"
+    "@geekity/plugin-llm": "workspace:>=0.2.0 <1.0.0"
   },
   "devDependencies": {
     "@geekity/cms": "workspace:*",

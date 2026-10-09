@@ -185,7 +185,7 @@ export default definePlugin({
     'Suggests a title and a description for a post in the editor, from the language model ' +
     'the LLM plugin connects to, when the author asks.',
   hostApi: 1,
-  requires: { [LLM]: '^0.2.0' },
+  requires: { [LLM]: '>=0.2.0 <1.0.0' },
   register(host) {
     host.editorAction({
       id: 'suggest-title',

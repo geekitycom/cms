@@ -8,8 +8,10 @@ published.
 
 ## Installing it
 
-It requires `@geekity/plugin-llm`. Add both packages to the site and to
-`plugins` in its config:
+It requires `@geekity/plugin-llm` 0.2.0 or any later 0.x release, and works with
+every 0.x release of `@geekity/cms` from the one it was built against, which
+its peer dependency names. Add both packages to the site and to `plugins` in
+its config:
 
 ```sh
 pnpm add @geekity/plugin-llm @geekity/plugin-post-summary
