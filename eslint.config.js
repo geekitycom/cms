@@ -27,6 +27,9 @@ export default tseslint.config(
       '**/dist/**',
       '**/_site/**',
       '**/data/**',
+      // A maintainer's local scratch folder, kept out of git by a global excludes
+      // file, which eslint does not read.
+      '_local/**',
       // Build products: esbuild's output, written by `pnpm build` from
       // packages/cms/editor/, which is linted as source instead.
       'packages/cms/admin/static/editor.js',

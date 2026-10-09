@@ -28,3 +28,7 @@ packages/cms/templates/site/content/
 
 # Claude Code writes this on the machine it runs on; it is not in the repo.
 .claude/settings.local.json
+
+# A maintainer's local scratch folder. Git ignores it through a global
+# excludes file, which prettier and eslint do not read.
+_local/
