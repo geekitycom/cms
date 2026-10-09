@@ -43,6 +43,21 @@ describe('termHref', () => {
       '/topics/notes/',
     );
   });
+
+  it('puts a tag archive at its lower-case URL and keeps a category as spelled (TASK-308)', () => {
+    assert.equal(
+      termHref({ taxonomy: 'tag', term: 'WordCampUS' }, 1, DEFAULT_TAXONOMY_BASES),
+      '/tag/wordcampus/page/2/',
+    );
+    assert.equal(
+      termHref({ taxonomy: 'tag', term: 'Ärger' }, 0, DEFAULT_TAXONOMY_BASES),
+      `/tag/${encodeURIComponent('ärger')}/`,
+    );
+    assert.equal(
+      termHref({ taxonomy: 'category', term: 'News' }, 0, DEFAULT_TAXONOMY_BASES),
+      '/category/News/',
+    );
+  });
 });
 
 describe('taxonomyForSegment', () => {
@@ -149,6 +164,16 @@ describe('recordTermRename', () => {
     assert.deepEqual(recordTermRename(moved, tag('z', 'a')), [tag('z', 'a')]);
   });
 
+  it('matches tags without regard to case, and drops a rename that only changes the case', () => {
+    assert.deepEqual(recordTermRename([tag('a', 'OpenSource')], tag('opensource', 'OSS')), [
+      tag('a', 'OSS'),
+      tag('opensource', 'OSS'),
+    ]);
+    assert.deepEqual(recordTermRename([], tag('opensource', 'OpenSource')), []);
+    const category: TaxonomyRedirect = { taxonomy: 'category', from: 'news', to: 'News' };
+    assert.deepEqual(recordTermRename([], category), [category]);
+  });
+
   it('leaves the other taxonomy alone', () => {
     const category: TaxonomyRedirect = { taxonomy: 'category', from: 'a', to: 'b' };
     assert.deepEqual(recordTermRename([category], tag('a', 'c')), [category, tag('a', 'c')]);
@@ -168,6 +193,13 @@ describe('forgetTerm', () => {
       { taxonomy: 'tag', from: 'c', to: 'd' },
       { taxonomy: 'category', from: 'a', to: 'gone' },
     ]);
+  });
+});
+
+describe('forgetTerm on a tag', () => {
+  it('forgets every casing of a deleted tag', () => {
+    const redirects: TaxonomyRedirect[] = [{ taxonomy: 'tag', from: 'Old', to: 'Gone' }];
+    assert.deepEqual(forgetTerm(redirects, 'tag', 'gone'), []);
   });
 });
 
@@ -196,5 +228,11 @@ describe('redirectedTerm', () => {
     assert.equal(redirectedTerm(redirects, { taxonomy: 'tag', term: 'a' }), 'b');
     assert.equal(redirectedTerm(redirects, { taxonomy: 'category', term: 'a' }), undefined);
     assert.equal(redirectedTerm(redirects, { taxonomy: 'tag', term: 'b' }), undefined);
+  });
+
+  it('finds a renamed tag in any casing', () => {
+    const redirects: TaxonomyRedirect[] = [{ taxonomy: 'tag', from: 'OpenSource', to: 'OSS' }];
+
+    assert.equal(redirectedTerm(redirects, { taxonomy: 'tag', term: 'opensource' }), 'OSS');
   });
 });

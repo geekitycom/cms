@@ -5,6 +5,7 @@ import type { Migration } from '../cache.ts';
 import type { ActivityPubMetadata, Document, DocumentType } from './document.ts';
 import { featuredPosts, PINNED_FRONT_MATTER_KEY } from './pinned.ts';
 import { searchExpression, searchText, SNIPPET_CLOSE, SNIPPET_OPEN } from './search.ts';
+import { tagKey, uniqueTags } from './tags.ts';
 import { VISIBILITIES, VISIBILITY_FRONT_MATTER_KEY } from './visibility.ts';
 
 export { DATABASE_FILE } from '../cache.ts';
@@ -166,7 +167,13 @@ export interface ContentStore {
    * and a follower should be told about the older post first.
    */
   listDueSince(after: string): Document[];
-  /** Published, untrashed documents carrying a tag, newest first. */
+  /**
+   * Published, untrashed documents carrying a tag in any casing, newest first.
+   *
+   * Tags match without regard to case (TASK-308): a document hydrated from
+   * the index carries each of its tags in the site's spelling, which
+   * {@link ContentStore.tagSpelling} names.
+   */
   listByTag(tag: string, options?: ListByTagOptions): Document[];
   /** Published, untrashed documents filed under a category, newest first. */
   listByCategory(category: string, options?: ListByTagOptions): Document[];
@@ -213,8 +220,18 @@ export interface ContentStore {
   counts(): ContentCounts;
   /** How many published, untrashed documents carry a tag. */
   countByTag(tag: string, options?: ListByTagOptions): number;
-  /** Every tag in use on published, untrashed documents, with its count. */
+  /** Every tag in use on published, untrashed documents, once each in the site's spelling, with its count. */
   listTags(): TagCount[];
+  /**
+   * How the site spells the tag that matches `tag` ignoring case, or
+   * `undefined` when no document carries it.
+   *
+   * The spelling most listed documents use, ties going to the one used
+   * earliest; for a tag only drafts, scheduled posts or the trash carry, the
+   * spelling most of those use. `excluding` leaves one document out of the
+   * count, so a document being saved does not vote for its own spelling.
+   */
+  tagSpelling(tag: string, options?: { excluding?: string | undefined }): string | undefined;
   /** How many published, untrashed documents are filed under a category. */
   countByCategory(category: string, options?: ListByTagOptions): number;
   /** How many published posts one user's archive holds. See {@link ContentStore.listByAuthor}. */
@@ -356,7 +373,7 @@ export type TaxonomyName = 'tag' | 'category';
 
 /** One term, and how much of the site carries it. */
 export interface TermUsage {
-  /** The term itself, as the files spell it. */
+  /** The term itself: a tag in the site's spelling, a category as the files spell it. */
   term: string;
   /** Documents the public site lists under it: published, untrashed, due, listed. */
   published: number;
@@ -522,7 +539,9 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
         hash = excluded.hash
     `),
     deleteTags: db.prepare('DELETE FROM document_tags WHERE path = ?'),
-    insertTag: db.prepare('INSERT INTO document_tags (path, tag, position) VALUES (?, ?, ?)'),
+    insertTag: db.prepare(
+      'INSERT INTO document_tags (path, tag, key, position) VALUES (?, ?, ?, ?)',
+    ),
     deleteCategories: db.prepare('DELETE FROM document_categories WHERE path = ?'),
     insertCategory: db.prepare(
       'INSERT INTO document_categories (path, category, position) VALUES (?, ?, ?)',
@@ -552,7 +571,16 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     bySlug: db.prepare(
       `SELECT * FROM documents WHERE slug = ? ORDER BY date_sort DESC, path DESC LIMIT 1`,
     ),
-    tagsFor: db.prepare('SELECT tag FROM document_tags WHERE path = ? ORDER BY position'),
+    tagsFor: db.prepare('SELECT tag, key FROM document_tags WHERE path = ? ORDER BY position'),
+    keysFor: db.prepare('SELECT key FROM document_tags WHERE path = ?'),
+    spellings: db.prepare(tagSpellingsSql('')),
+    spellingsOfKeys: db.prepare(
+      tagSpellingsSql('WHERE spelled.key IN (SELECT value FROM json_each(:keys))'),
+    ),
+    spellingExcluding: db.prepare(
+      tagSpellingsSql('WHERE spelled.key = :key AND spelled.path <> :excluding'),
+    ),
+    dataVersion: db.prepare('PRAGMA data_version'),
     categoriesFor: db.prepare(
       'SELECT category FROM document_categories WHERE path = ? ORDER BY position',
     ),
@@ -568,12 +596,11 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       FROM documents
     `),
     tagCounts: db.prepare(`
-      SELECT document_tags.tag AS tag, COUNT(*) AS count
+      SELECT document_tags.key AS key, MIN(document_tags.tag) AS tag, COUNT(*) AS count
       FROM document_tags
       JOIN documents ON documents.path = document_tags.path
       WHERE ${LISTED_CLAUSE}
-      GROUP BY document_tags.tag
-      ORDER BY count DESC, tag ASC
+      GROUP BY document_tags.key
     `),
     categoryCounts: db.prepare(`
       SELECT document_categories.category AS category, COUNT(*) AS count
@@ -583,8 +610,8 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       GROUP BY document_categories.category
       ORDER BY count DESC, category ASC
     `),
-    tagUsage: db.prepare(termUsageSql('document_tags', 'tag')),
-    categoryUsage: db.prepare(termUsageSql('document_categories', 'category')),
+    tagUsage: db.prepare(termUsageSql(TERM_TABLES.tag)),
+    categoryUsage: db.prepare(termUsageSql(TERM_TABLES.category)),
     nextDue: db.prepare(`
       SELECT MIN(date_sort) AS due FROM documents
       WHERE draft = 0 AND trashed = 0 AND ${SCHEDULED_CLAUSE}
@@ -611,8 +638,54 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
   let open = true;
 
+  let cachedSpellings: CachedSpellings | undefined;
+  const staleKeys = new Set<string>();
+
+  const MOST_KEYS_REFRESHED = 500;
+
+  function siteSpellings(): ReadonlyMap<string, string> {
+    const now = nowKey();
+    const dataVersion = statements.dataVersion.get()?.['data_version'];
+    const current =
+      cachedSpellings === undefined || outOfDate(cachedSpellings, dataVersion, now)
+        ? undefined
+        : cachedSpellings.byKey;
+
+    if (current !== undefined && staleKeys.size === 0) return current;
+
+    const refreshStaleOnly = current !== undefined && staleKeys.size <= MOST_KEYS_REFRESHED;
+    const byKey = refreshStaleOnly ? current : new Map<string, string>();
+    const rows = refreshStaleOnly
+      ? refreshStaleSpellings(byKey, now)
+      : (statements.spellings.all(now) as Record<string, unknown>[]);
+    for (const row of rows) byKey.set(String(row['key']), String(row['tag']));
+    staleKeys.clear();
+
+    const nextScheduledAt = text((statements.nextDue.get(now) as Record<string, unknown>)['due']);
+    cachedSpellings = { byKey, dataVersion, workedOutAt: now, nextScheduledAt };
+    return byKey;
+  }
+
+  function refreshStaleSpellings(
+    byKey: Map<string, string>,
+    now: string,
+  ): Record<string, unknown>[] {
+    for (const key of staleKeys) byKey.delete(key);
+    return statements.spellingsOfKeys.all({ keys: JSON.stringify([...staleKeys]) }, now) as Record<
+      string,
+      unknown
+    >[];
+  }
+
+  function markTagsStaleBeforeWrite(contentPath: string): void {
+    for (const row of statements.keysFor.all(contentPath)) staleKeys.add(String(row['key']));
+  }
+
   function tagsOf(contentPath: string): string[] {
-    return statements.tagsFor.all(contentPath).map((row) => String(row['tag']));
+    const spellings = siteSpellings();
+    return statements.tagsFor
+      .all(contentPath)
+      .map((row) => spellings.get(String(row['key'])) ?? String(row['tag']));
   }
 
   function categoriesOf(contentPath: string): string[] {
@@ -641,14 +714,16 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
   function writeOne(document: Document): void {
     const contentPath = document.path;
+    markTagsStaleBeforeWrite(contentPath);
+    for (const tag of document.tags) staleKeys.add(tagKey(tag));
     try {
       statements.insert.run(toRow(document));
     } catch (error) {
       throw translateWriteError(error, document, statements.pathForPermalink);
     }
     statements.deleteTags.run(contentPath);
-    document.tags.forEach((tag, position) => {
-      statements.insertTag.run(contentPath, tag, position);
+    uniqueTags(document.tags).forEach((tag, position) => {
+      statements.insertTag.run(contentPath, tag, tagKey(tag), position);
     });
     statements.deleteCategories.run(contentPath);
     document.categories.forEach((category, position) => {
@@ -670,14 +745,9 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
    * holds `term`, newest first. Tags and categories are the same query over two
    * tables, so neither can drift from the other.
    */
-  function selectByTerm(
-    table: 'document_tags' | 'document_categories',
-    column: 'tag' | 'category',
-    term: string,
-    options: ListByTagOptions,
-  ): Document[] {
-    const where = [LISTED_CLAUSE, `path IN (SELECT path FROM ${table} WHERE ${column} = ?)`];
-    const params: unknown[] = [nowKey(), term];
+  function selectByTerm(terms: TermTable, term: string, options: ListByTagOptions): Document[] {
+    const where = [LISTED_CLAUSE, termFilter(terms)];
+    const params: unknown[] = [nowKey(), terms.match(term)];
     if (options.type !== undefined) {
       where.unshift('type = ?');
       params.unshift(options.type);
@@ -686,14 +756,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
   }
 
   /** {@link selectByTerm}'s total, for the pager and the archive's existence. */
-  function countByTerm(
-    table: 'document_tags' | 'document_categories',
-    column: 'tag' | 'category',
-    term: string,
-    options: ListByTagOptions,
-  ): number {
-    const where = [LISTED_CLAUSE, `${table}.${column} = ?`];
-    const params: unknown[] = [nowKey(), term];
+  function countByTerm(terms: TermTable, term: string, options: ListByTagOptions): number {
+    const { table, matchColumn } = terms;
+    const where = [LISTED_CLAUSE, `${table}.${matchColumn} = ?`];
+    const params: unknown[] = [nowKey(), terms.match(term)];
     if (options.type !== undefined) {
       where.push('documents.type = ?');
       params.push(options.type);
@@ -767,12 +833,15 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     },
 
     remove(contentPath) {
+      markTagsStaleBeforeWrite(contentPath);
       // Nothing cascades into a virtual table, so the words go by hand.
       statements.deleteText.run(contentPath);
       return statements.remove.run(contentPath).changes > 0;
     },
 
     clear() {
+      cachedSpellings = undefined;
+      staleKeys.clear();
       db.exec('BEGIN');
       try {
         // All four by name. The two term tables would go with the documents
@@ -859,11 +928,11 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     },
 
     listByTag(tag, options = {}) {
-      return selectByTerm('document_tags', 'tag', tag, options);
+      return selectByTerm(TERM_TABLES.tag, tag, options);
     },
 
     listByCategory(category, options = {}) {
-      return selectByTerm('document_categories', 'category', category, options);
+      return selectByTerm(TERM_TABLES.category, category, options);
     },
 
     listByAuthor(names, options = {}) {
@@ -906,12 +975,12 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       }
 
       if (options.tag !== undefined) {
-        where.push('path IN (SELECT path FROM document_tags WHERE tag = ?)');
-        params.push(options.tag);
+        where.push(termFilter(TERM_TABLES.tag));
+        params.push(TERM_TABLES.tag.match(options.tag));
       }
       if (options.category !== undefined) {
-        where.push('path IN (SELECT path FROM document_categories WHERE category = ?)');
-        params.push(options.category);
+        where.push(termFilter(TERM_TABLES.category));
+        params.push(TERM_TABLES.category.match(options.category));
       }
 
       return select(where, params, options);
@@ -939,11 +1008,11 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     },
 
     countByTag(tag, options = {}) {
-      return countByTerm('document_tags', 'tag', tag, options);
+      return countByTerm(TERM_TABLES.tag, tag, options);
     },
 
     countByCategory(category, options = {}) {
-      return countByTerm('document_categories', 'category', category, options);
+      return countByTerm(TERM_TABLES.category, category, options);
     },
 
     countByAuthor(names) {
@@ -958,10 +1027,23 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     },
 
     listTags() {
-      return statements.tagCounts.all(nowKey()).map((row) => ({
-        tag: String(row['tag']),
-        count: Number(row['count']),
-      }));
+      const spellings = siteSpellings();
+      return statements.tagCounts
+        .all(nowKey())
+        .map((row) => ({
+          tag: spellings.get(String(row['key'])) ?? String(row['tag']),
+          count: Number(row['count']),
+        }))
+        .sort((a, b) => b.count - a.count || compareByUtf16CodeUnit(a.tag, b.tag));
+    },
+
+    tagSpelling(tag, options = {}) {
+      if (options.excluding === undefined) return siteSpellings().get(tagKey(tag));
+      const row = statements.spellingExcluding.get(
+        { key: tagKey(tag), excluding: options.excluding },
+        nowKey(),
+      );
+      return text(row?.['tag']);
     },
 
     listCategories() {
@@ -973,11 +1055,16 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
     listTermUsage(taxonomy) {
       const query = taxonomy === 'tag' ? statements.tagUsage : statements.categoryUsage;
-      return query.all(nowKey()).map((row) => ({
-        term: String(row['term']),
-        published: Number(row['published']),
-        total: Number(row['total']),
-      }));
+      const spellings: ReadonlyMap<string, string> =
+        taxonomy === 'tag' ? siteSpellings() : new Map();
+      return query
+        .all(nowKey())
+        .map((row) => ({
+          term: spellings.get(String(row['key'])) ?? String(row['term']),
+          published: Number(row['published']),
+          total: Number(row['total']),
+        }))
+        .sort((a, b) => compareByUtf16CodeUnit(a.term, b.term));
     },
 
     search(query, options = {}) {
@@ -1011,23 +1098,91 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
   };
 }
 
-/**
- * The query behind {@link ContentStore.listTermUsage} for one of the two join
- * tables: every term, the public count and the total, in one pass.
- *
- * The table and column names are the module's own literals rather than
- * anything a caller supplies, so there is nothing here to interpolate from
- * outside; the clock is the one bound parameter.
- */
-function termUsageSql(table: 'document_tags' | 'document_categories', column: string): string {
+interface TermTable {
+  readonly table: 'document_tags' | 'document_categories';
+  readonly matchColumn: 'key' | 'category';
+  readonly column: 'tag' | 'category';
+  readonly match: (term: string) => string;
+}
+
+const TERM_TABLES: Readonly<Record<TaxonomyName, TermTable>> = {
+  tag: { table: 'document_tags', matchColumn: 'key', column: 'tag', match: tagKey },
+  category: {
+    table: 'document_categories',
+    matchColumn: 'category',
+    column: 'category',
+    match: (category) => category,
+  },
+};
+
+interface CachedSpellings {
+  readonly byKey: Map<string, string>;
+  readonly dataVersion: unknown;
+  readonly workedOutAt: string;
+  readonly nextScheduledAt: string | undefined;
+}
+
+function outOfDate(cache: CachedSpellings, dataVersion: unknown, now: string): boolean {
+  return (
+    anotherConnectionWrote(cache, dataVersion) ||
+    scheduledPostCameDue(cache, now) ||
+    clockWentBack(cache, now)
+  );
+}
+
+function anotherConnectionWrote(cache: CachedSpellings, dataVersion: unknown): boolean {
+  return cache.dataVersion !== dataVersion;
+}
+
+function scheduledPostCameDue(cache: CachedSpellings, now: string): boolean {
+  return cache.nextScheduledAt !== undefined && now >= cache.nextScheduledAt;
+}
+
+function clockWentBack(cache: CachedSpellings, now: string): boolean {
+  return now < cache.workedOutAt;
+}
+
+function compareByUtf16CodeUnit(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+function termFilter({ table, matchColumn }: TermTable): string {
+  return `path IN (SELECT path FROM ${table} WHERE ${matchColumn} = ?)`;
+}
+
+function tagSpellingsSql(where: string): string {
   return `
-    SELECT ${table}.${column} AS term,
+    SELECT key, tag FROM (
+      SELECT key, tag, ROW_NUMBER() OVER (
+        PARTITION BY key
+        ORDER BY SUM(listed) DESC,
+          MIN(CASE WHEN listed THEN date_sort END) ASC NULLS LAST,
+          COUNT(*) DESC,
+          MIN(date_sort) ASC NULLS LAST,
+          tag ASC
+      ) AS rank
+      FROM (
+        SELECT spelled.key AS key, spelled.tag AS tag,
+          ${LISTED_CLAUSE} AS listed, spelled_in.date_sort AS date_sort
+        FROM document_tags AS spelled
+        JOIN documents AS spelled_in ON spelled_in.path = spelled.path
+        ${where}
+      )
+      GROUP BY key, tag
+    )
+    WHERE rank = 1
+  `;
+}
+
+function termUsageSql({ table, matchColumn, column }: TermTable): string {
+  return `
+    SELECT ${table}.${matchColumn} AS key, MIN(${table}.${column}) AS term,
       COALESCE(SUM(${LISTED_CLAUSE}), 0) AS published,
       COUNT(*) AS total
     FROM ${table}
     JOIN documents ON documents.path = ${table}.path
-    GROUP BY ${table}.${column}
-    ORDER BY term ASC
+    GROUP BY ${table}.${matchColumn}
   `;
 }
 
@@ -1282,6 +1437,27 @@ const MIGRATIONS: readonly Migration[] = [
       DROP INDEX documents_permalink;
       CREATE UNIQUE INDEX documents_permalink_live ON documents (permalink) WHERE trashed = 0;
       CREATE INDEX documents_permalink ON documents (permalink);
+    `,
+  },
+  {
+    version: 8,
+    sql: `
+      -- Tags match without regard to case (TASK-308): each row carries its
+      -- key, the tag in lower case, which JavaScript works out because
+      -- SQLite's lower() folds ASCII only. A document carries a tag once
+      -- whatever its casing. The rows already here have no key, and their
+      -- files hash the same, so emptying the index is what makes the next
+      -- scan write them again; the files are the source of truth (decision-1).
+      DROP TABLE document_tags;
+      CREATE TABLE document_tags (
+        path     TEXT NOT NULL REFERENCES documents (path) ON DELETE CASCADE,
+        tag      TEXT NOT NULL,
+        key      TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY (path, key)
+      );
+      CREATE INDEX document_tags_key ON document_tags (key);
+      DELETE FROM documents;
     `,
   },
 ];

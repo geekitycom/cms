@@ -38,8 +38,8 @@ const PACKAGE_JSON = {
   name: NAME,
   version: '1.2.3',
   type: 'module',
-  geekity: { plugin: true, hostApi: 1, requires: { [BASE]: '^1.0.0' } },
-  peerDependencies: { '@geekity/cms': 'workspace:^', [BASE]: 'workspace:^' },
+  geekity: { plugin: true, hostApi: 1, requires: { [BASE]: '>=0.3.0 <1.0.0' } },
+  peerDependencies: { '@geekity/cms': 'workspace:^', [BASE]: 'workspace:>=0.3.0 <1.0.0' },
 };
 
 const SOURCE = `import { shout } from 'tiny-shout';
@@ -50,7 +50,7 @@ export default {
   label: shout('echo'),
   description: 'Echoes.',
   hostApi: 1,
-  requires: { '${BASE}': '^1.0.0' },
+  requires: { '${BASE}': '>=0.3.0 <1.0.0' },
   register() {},
 };
 `;
@@ -74,7 +74,7 @@ async function fixture(options: Fixture = {}): Promise<string> {
   await fs.symlink(PACKAGE_ROOT, path.join(dir, 'node_modules', '@geekity', 'cms'));
   const modules = {
     'tiny-shout': TINY_SHOUT,
-    [BASE]: { 'package.json': JSON.stringify({ name: BASE, version: '1.4.0' }) },
+    [BASE]: { 'package.json': JSON.stringify({ name: BASE, version: '0.4.0' }) },
     ...options.modules,
   };
   for (const [name, files] of Object.entries(modules)) {
@@ -124,7 +124,7 @@ describe('the plugin bundle build', () => {
         name: NAME,
         version: '1.2.3',
         hostApi: 1,
-        peerDependencies: { '@geekity/cms': `^${CORE_VERSION}`, [BASE]: '^1.0.0' },
+        peerDependencies: { '@geekity/cms': `>=${CORE_VERSION} <1.0.0`, [BASE]: '>=0.3.0 <1.0.0' },
       },
     );
   });
@@ -174,9 +174,27 @@ describe('the plugin bundle build', () => {
   });
 
   it('fails when the plugin object’s requires differ from package.json', async () => {
-    const result = await build(await fixture({ source: SOURCE.replace("'^1.0.0'", "'^2.0.0'") }));
+    const result = await build(
+      await fixture({ source: SOURCE.replace("'>=0.3.0 <1.0.0'", "'>=0.4.0 <1.0.0'") }),
+    );
     assert.notEqual(result.code, 0);
     assert.match(result.output, /requires/);
-    assert.match(result.output, /\^2\.0\.0/);
+    assert.match(result.output, />=0\.4\.0 <1\.0\.0/);
+  });
+
+  it('fails when a required plugin’s peer range differs from its range in requires', async () => {
+    const result = await build(
+      await fixture({
+        packageJson: {
+          ...PACKAGE_JSON,
+          peerDependencies: { '@geekity/cms': 'workspace:^', [BASE]: 'workspace:^' },
+        },
+      }),
+    );
+    assert.notEqual(result.code, 0);
+    assert.match(
+      result.output,
+      /requires @fixture\/plugin-base >=0\.3\.0 <1\.0\.0, and its peer dependency publishes >=0\.4\.0 <1\.0\.0/,
+    );
   });
 });

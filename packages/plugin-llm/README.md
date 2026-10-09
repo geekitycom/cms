@@ -10,6 +10,9 @@ its own (decision-33).
 
 ## Installing it
 
+It works with every 0.x release of `@geekity/cms` from the one it was built
+against, which its peer dependency names.
+
 Add the package to the site and to `plugins` in its config:
 
 ```sh
@@ -88,7 +91,7 @@ export default definePlugin({
   label: 'Titles',
   description: 'Suggests a title for a post.',
   hostApi: 1,
-  requires: { '@geekity/plugin-llm': '^0.2.0' },
+  requires: { '@geekity/plugin-llm': '>=0.2.0 <1.0.0' },
   register(host) {
     host.get('/suggest-title', async () => {
       const llm = host.use('@geekity/plugin-llm');

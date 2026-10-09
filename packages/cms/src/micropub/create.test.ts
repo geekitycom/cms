@@ -899,3 +899,31 @@ describe('an oversized create (TASK-216)', () => {
     assert.equal(response.status, 201);
   });
 });
+
+describe('a category the site already tags in another casing (TASK-308)', () => {
+  it('writes the site’s spelling, and lists each tag once for q=category', async () => {
+    const { cms, token } = await site();
+    await postForm(cms, token, [
+      ['h', 'entry'],
+      ['content', 'First.'],
+      ['category[]', 'OpenSource'],
+    ]);
+    const response = await postForm(cms, token, [
+      ['h', 'entry'],
+      ['content', 'Second.'],
+      ['category[]', 'opensource'],
+      ['category[]', 'OPENSOURCE'],
+    ]);
+    assert.equal(response.status, 201);
+
+    const file = matter(await fileAt(cms, 'posts/2026-09-20-second.md'));
+    assert.deepEqual(file.data['tags'], ['OpenSource']);
+
+    const listed = await cms.app.request(`${ENDPOINT}?q=category`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.deepEqual(((await listed.json()) as { categories: string[] }).categories, [
+      'OpenSource',
+    ]);
+  });
+});

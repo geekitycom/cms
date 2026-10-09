@@ -7,9 +7,28 @@
 
 import type { Context, Hono } from 'hono';
 
+import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
+import { ownManifest } from '../init.ts';
+import { readPluginChanges } from '../plugins/changes.ts';
+import type { PluginChangeEntry } from '../plugins/changes.ts';
 import { readEnabledPlugins, setPluginEnabled } from '../plugins/enabled.ts';
 import { pluginFolderChanges, scanPluginFolders } from '../plugins/folder.ts';
+import {
+  enabledRefusal,
+  installedFolders,
+  parsePackageSpec,
+  pluginRegistry,
+} from '../plugins/install.ts';
+import {
+  checkForUpdates,
+  deletePlugin,
+  installPlugin,
+  lastUpdateCheck,
+  updatePlugins,
+} from '../plugins/manage.ts';
+import type { ManageOptions, ManageOutcome } from '../plugins/manage.ts';
+import { describeUpgrade } from '../plugins/upgrade.ts';
 import { PACKAGE_NAME } from '../plugins/registry.ts';
 import type {
   PluginRegistry,
@@ -20,22 +39,37 @@ import type {
 import { resolvePluginSettings, savePluginSettings, SECRETS_FILE } from '../plugins/settings.ts';
 import type { ResolvedSetting } from '../plugins/settings.ts';
 import { pluginSite } from '../plugins/site.ts';
+import { findUserById, verifyUserPassword } from './accounts.ts';
 import type { AdminRender } from './documents.ts';
+import { formatInTimezone } from './formatting.ts';
 import type { AdminMenuChild } from './menu.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
+import { readSiteSettings } from './settings.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 export const PLUGINS_PATH = `${ADMIN_PREFIX}/plugins`;
 export const PLUGINS_RELOAD_PATH = `${PLUGINS_PATH}/reload`;
 const PLUGINS_ENABLE_PATH = `${PLUGINS_PATH}/enable`;
 const PLUGINS_DISABLE_PATH = `${PLUGINS_PATH}/disable`;
+export const PLUGINS_ADD_PATH = `${PLUGINS_PATH}/add`;
+export const PLUGINS_CHECK_PATH = `${PLUGINS_PATH}/check`;
+export const PLUGINS_CONFIRM_PATH = `${PLUGINS_PATH}/confirm`;
+export const PLUGINS_UPDATE_PATH = `${PLUGINS_PATH}/update`;
+export const PLUGINS_UPDATE_ALL_PATH = `${PLUGINS_PATH}/update-all`;
+export const PLUGINS_REMOVE_PATH = `${PLUGINS_PATH}/remove`;
 
 /** The screen's own paths, which no plugin's screen can take. */
 const RESERVED_PATHS: ReadonlySet<string> = new Set([
   PLUGINS_RELOAD_PATH,
   PLUGINS_ENABLE_PATH,
   PLUGINS_DISABLE_PATH,
+  PLUGINS_ADD_PATH,
+  PLUGINS_CHECK_PATH,
+  PLUGINS_CONFIRM_PATH,
+  PLUGINS_UPDATE_PATH,
+  PLUGINS_UPDATE_ALL_PATH,
+  PLUGINS_REMOVE_PATH,
 ]);
 export const PLUGINS_SECTION = 'plugins';
 export const PLUGINS_CHILD = 'installed';
@@ -110,17 +144,33 @@ export function pluginScreenPath(name: string): string {
 export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: AdminRender }): void {
   const { render } = options;
 
-  app.get(PLUGINS_PATH, (c) => {
+  app.get(PLUGINS_PATH, (c) => drawPluginsScreen(c, {}));
+
+  function drawPluginsScreen(
+    c: Context<GeekityEnv>,
+    addForm: { package?: string; version?: string; problems?: AddProblems },
+    status: 200 | 400 = 200,
+  ): Response {
     const registry = c.var.plugins;
-    const enabled = readEnabledPlugins(c.var.config.contentDir);
+    const { config } = c.var;
+    const enabled = readEnabledPlugins(config.contentDir);
     const running = registry.active(enabled);
+    const installer = pluginInstaller(config);
+    const inCode = new Set(config.plugins.map((plugin) => plugin.name));
+    const inFolder =
+      installer.state === 'on'
+        ? installedFolders(installer.pluginsDir)
+        : new Map<string, unknown>();
+    const check = installer.state === 'on' ? lastUpdateCheck(installer.pluginsDir) : undefined;
+    const timezone = readSiteSettings(config.contentDir).timezone;
 
     const supervision = c.var.supervision;
     const changes =
       supervision === undefined
         ? undefined
-        : pluginFolderChanges(supervision.loaded, scanPluginFolders(c.var.config.pluginsDir));
+        : pluginFolderChanges(supervision.loaded, scanPluginFolders(config.pluginsDir));
 
+    c.status(status);
     return render(c, ADMIN_TEMPLATES.plugins, {
       section: PLUGINS_SECTION,
       child: PLUGINS_CHILD,
@@ -130,6 +180,18 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
       enableUrl: PLUGINS_ENABLE_PATH,
       disableUrl: PLUGINS_DISABLE_PATH,
       field: PLUGIN_FIELD,
+      installer: installer.state,
+      add: {
+        url: PLUGINS_ADD_PATH,
+        package: addForm.package ?? '',
+        version: addForm.version ?? '',
+      },
+      addProblems: addForm.problems ?? {},
+      checkUrl: PLUGINS_CHECK_PATH,
+      checkedAt:
+        check === undefined ? undefined : formatInTimezone(check.at.toISOString(), timezone),
+      updateAllUrl: inFolder.size > 0 ? confirmPath('update-all') : undefined,
+      changeLog: readPluginChanges(config.dataDir).map((entry) => changeView(entry, timezone)),
       plugins: registry.plugins.map(({ plugin, source, problem }) => {
         const requirements = registry.requirements(plugin.name, enabled);
         const state: PluginState =
@@ -140,6 +202,8 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
               : enabled.has(plugin.name)
                 ? 'blocked'
                 : 'disabled';
+        const checked = check?.plugins.find((entry) => entry.name === plugin.name);
+        const manageable = inFolder.has(plugin.name) && !inCode.has(plugin.name);
         return {
           anchor: pluginAnchor(plugin.name),
           name: plugin.name,
@@ -149,6 +213,22 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
           source,
           problem,
           badge: STATE_BADGES[state],
+          inCode: inCode.has(plugin.name),
+          update:
+            manageable && checked?.status === 'available'
+              ? { to: checked.to, url: confirmPath('update', plugin.name) }
+              : undefined,
+          checkNote:
+            manageable &&
+            checked !== undefined &&
+            checked.status !== 'available' &&
+            checked.status !== 'newest'
+              ? describeUpgrade(checked)
+              : undefined,
+          removeUrl:
+            manageable && !enabled.has(plugin.name)
+              ? confirmPath('remove', plugin.name)
+              : undefined,
           requirements: requirements.map((requirement) => ({
             ...requirement,
             words: REQUIREMENT_WORDS[requirement.state],
@@ -161,7 +241,171 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
         };
       }),
     });
+  }
+
+  app.post(PLUGINS_ADD_PATH, async (c) => {
+    const installer = pluginInstaller(c.var.config);
+    if (installer.state !== 'on') return refuse(c, INSTALLER_REFUSALS[installer.state]);
+    const body = await c.req.parseBody();
+    const name = field(body[PACKAGE_FIELD]).trim();
+    const version = field(body[VERSION_FIELD]).trim();
+    const typed = { package: name, version };
+    const user = confirmedUser(c, field(body[PASSWORD_FIELD]));
+    if (user === undefined) {
+      return drawPluginsScreen(
+        c,
+        { ...typed, problems: { password: `${WRONG_PASSWORD} installed.` } },
+        400,
+      );
+    }
+    const spec = version === '' ? name : `${name}@${version}`;
+    try {
+      parsePackageSpec(spec);
+    } catch (error) {
+      return drawPluginsScreen(c, { ...typed, problems: { package: messageOf(error) } }, 400);
+    }
+    return await manage(c, installer.pluginsDir, user, (options) => installPlugin(options, spec));
   });
+
+  app.post(PLUGINS_CHECK_PATH, async (c) => {
+    const installer = pluginInstaller(c.var.config);
+    if (installer.state !== 'on') return refuse(c, INSTALLER_REFUSALS[installer.state]);
+    try {
+      const report = await checkForUpdates(manageOptions(c, installer.pluginsDir));
+      const available = report.plugins.filter((plugin) => plugin.status === 'available').length;
+      flash(
+        c,
+        'notice',
+        available === 0
+          ? 'No plugin in the plugins folder has a newer version this site can run.'
+          : `${available === 1 ? 'One plugin has' : `${String(available)} plugins have`} a newer version.`,
+      );
+    } catch (error) {
+      flash(c, 'error', `Checking for updates failed: ${messageOf(error)}`);
+    }
+    return c.redirect(PLUGINS_PATH, 303);
+  });
+
+  app.get(PLUGINS_CONFIRM_PATH, async (c) => {
+    const installer = pluginInstaller(c.var.config);
+    if (installer.state !== 'on') return refuse(c, INSTALLER_REFUSALS[installer.state]);
+    const action = c.req.query('action');
+    if (!isConfirmable(action)) return c.notFound();
+    return await drawConfirm(c, installer.pluginsDir, action, c.req.query(PLUGIN_FIELD) ?? '');
+  });
+
+  app.post(PLUGINS_UPDATE_PATH, async (c) => {
+    return await confirmed(c, 'update', (options, name) => updatePlugins(options, [name]));
+  });
+
+  app.post(PLUGINS_UPDATE_ALL_PATH, async (c) => {
+    return await confirmed(c, 'update-all', (options) => updatePlugins(options, undefined));
+  });
+
+  app.post(PLUGINS_REMOVE_PATH, async (c) => {
+    return await confirmed(c, 'remove', (options, name) => deletePlugin(options, name));
+  });
+
+  async function confirmed(
+    c: Context<GeekityEnv>,
+    action: Confirmable,
+    change: (options: ManageOptions, name: string) => Promise<ManageOutcome[]>,
+  ): Promise<Response> {
+    const installer = pluginInstaller(c.var.config);
+    if (installer.state !== 'on') return refuse(c, INSTALLER_REFUSALS[installer.state]);
+    const body = await c.req.parseBody();
+    const name = field(body[PLUGIN_FIELD]);
+    const user = confirmedUser(c, field(body[PASSWORD_FIELD]));
+    if (user === undefined) {
+      const verb = action === 'remove' ? 'removed' : 'updated';
+      return await drawConfirm(c, installer.pluginsDir, action, name, `${WRONG_PASSWORD} ${verb}.`);
+    }
+    return await manage(c, installer.pluginsDir, user, (options) => change(options, name));
+  }
+
+  async function drawConfirm(
+    c: Context<GeekityEnv>,
+    pluginsDir: string,
+    action: Confirmable,
+    name: string,
+    error?: string,
+  ): Promise<Response> {
+    let lines: string[];
+    let ready: boolean;
+    if (action === 'remove') {
+      const folders = installedFolders(pluginsDir);
+      const enabled = readEnabledPlugins(c.var.config.contentDir).has(name);
+      ready = folders.has(name) && !enabled;
+      const version = folders.get(name);
+      lines = !folders.has(name)
+        ? [`${name} is not in the plugins folder.`]
+        : enabled
+          ? [enabledRefusal(name)]
+          : [
+              `${name}${version === undefined ? '' : ` ${version}`} is deleted from the plugins folder. Its settings in site.json and its folder under data/plugins stay.`,
+            ];
+    } else {
+      try {
+        const report = await checkForUpdates(
+          manageOptions(c, pluginsDir),
+          action === 'update' ? [name] : undefined,
+        );
+        lines = report.plugins.map((plugin) => `${plugin.name}: ${describeUpgrade(plugin)}`);
+        ready = report.plugins.some((plugin) => plugin.status === 'available');
+      } catch (error) {
+        lines = [`Checking for updates failed: ${messageOf(error)}`];
+        ready = false;
+      }
+    }
+    c.status(error === undefined ? 200 : 400);
+    return render(c, ADMIN_TEMPLATES.pluginConfirm, {
+      section: PLUGINS_SECTION,
+      child: PLUGINS_CHILD,
+      title: CONFIRM_TITLES[action],
+      lines,
+      ready,
+      problems: error === undefined ? {} : { password: error },
+      postUrl: CONFIRM_POSTS[action],
+      field: PLUGIN_FIELD,
+      plugin: action === 'update-all' ? undefined : name,
+      passwordField: PASSWORD_FIELD,
+      buttonLabel: CONFIRM_BUTTONS[action],
+      danger: action === 'remove',
+      backUrl: PLUGINS_PATH,
+    });
+  }
+
+  async function manage(
+    c: Context<GeekityEnv>,
+    pluginsDir: string,
+    user: string,
+    change: (options: ManageOptions) => Promise<ManageOutcome[]>,
+  ): Promise<Response> {
+    try {
+      const outcomes = await change({
+        ...manageOptions(c, pluginsDir),
+        contentDir: c.var.config.contentDir,
+        dataDir: c.var.config.dataDir,
+        user,
+        next:
+          c.var.supervision === undefined
+            ? 'Restart the site to load the change.'
+            : 'Press Reload to load the change.',
+      });
+      for (const outcome of outcomes) flash(c, outcome.kind, outcome.message);
+    } catch (error) {
+      flash(c, 'error', messageOf(error));
+    }
+    return c.redirect(PLUGINS_PATH, 303);
+  }
+
+  function confirmedUser(c: Context<GeekityEnv>, password: string): string | undefined {
+    const userId = c.var.session?.userId;
+    if (userId == null || password === '') return undefined;
+    const user = findUserById(c.var.config.dataDir, userId);
+    if (user === undefined) return undefined;
+    return verifyUserPassword(c.var.config.dataDir, user.username, password)?.username;
+  }
 
   app.post(PLUGINS_RELOAD_PATH, async (c) => {
     const supervision = c.var.supervision;
@@ -367,4 +611,104 @@ function list(items: readonly string[]): string {
 async function submittedName(c: Context<GeekityEnv>): Promise<string> {
   const value = (await c.req.parseBody())[PLUGIN_FIELD];
   return typeof value === 'string' ? value : '';
+}
+
+type PluginInstaller =
+  | { readonly state: 'on'; readonly pluginsDir: string }
+  | { readonly state: 'off' }
+  | { readonly state: 'no-folder' };
+
+function pluginInstaller(config: ResolvedConfig): PluginInstaller {
+  if (config.pluginsDir === undefined) return { state: 'no-folder' };
+  return config.pluginInstall ? { state: 'on', pluginsDir: config.pluginsDir } : { state: 'off' };
+}
+
+const INSTALLER_REFUSALS: Readonly<Record<'off' | 'no-folder', string>> = {
+  off: 'Adding, updating and removing plugins from the admin is turned off on this site (GEEKITY_PLUGIN_INSTALL=off). Use geekity plugin on the command line instead.',
+  'no-folder':
+    'This site has no plugins folder (GEEKITY_PLUGINS_DIR), so plugins cannot be added from the admin.',
+};
+
+type Confirmable = 'update' | 'update-all' | 'remove';
+
+interface AddProblems {
+  package?: string;
+  password?: string;
+}
+
+const CONFIRM_POSTS: Readonly<Record<Confirmable, string>> = {
+  update: PLUGINS_UPDATE_PATH,
+  'update-all': PLUGINS_UPDATE_ALL_PATH,
+  remove: PLUGINS_REMOVE_PATH,
+};
+
+const CONFIRM_TITLES: Readonly<Record<Confirmable, string>> = {
+  update: 'Update plugin',
+  'update-all': 'Update all plugins',
+  remove: 'Remove plugin',
+};
+
+const CONFIRM_BUTTONS: Readonly<Record<Confirmable, string>> = {
+  update: 'Update',
+  'update-all': 'Update all',
+  remove: 'Remove',
+};
+
+function isConfirmable(action: string | undefined): action is Confirmable {
+  return action !== undefined && Object.hasOwn(CONFIRM_POSTS, action);
+}
+
+function confirmPath(action: Confirmable, name?: string): string {
+  const query = new URLSearchParams({ action });
+  if (name !== undefined) query.set(PLUGIN_FIELD, name);
+  return `${PLUGINS_CONFIRM_PATH}?${query.toString()}`;
+}
+
+const PACKAGE_FIELD = 'package';
+const VERSION_FIELD = 'version';
+const PASSWORD_FIELD = 'password';
+const WRONG_PASSWORD = 'Your password was not right, so nothing was';
+
+function manageOptions(c: Context<GeekityEnv>, pluginsDir: string) {
+  return {
+    pluginsDir,
+    registry: pluginRegistry(process.env),
+    coreVersion: ownManifest().version,
+    configured: c.var.config.plugins.map((plugin) => ({
+      name: plugin.name,
+      version: plugin.version,
+      peerDependencies: plugin.requires ?? {},
+    })),
+    now: c.var.config.now(),
+  };
+}
+
+const CHANGE_WORDS: Readonly<Record<PluginChangeEntry['action'], string>> = {
+  add: 'Added',
+  update: 'Updated',
+  remove: 'Removed',
+};
+
+function changeView(entry: PluginChangeEntry, timezone: string) {
+  const versions =
+    entry.action === 'remove'
+      ? (entry.from ?? '')
+      : entry.from === undefined || entry.from === entry.to
+        ? entry.to
+        : `${entry.from} to ${entry.to}`;
+  return {
+    when: formatInTimezone(entry.at, timezone),
+    user: entry.user,
+    action: CHANGE_WORDS[entry.action],
+    name: entry.name,
+    versions,
+  };
+}
+
+function field(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

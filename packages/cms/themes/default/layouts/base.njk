@@ -65,7 +65,7 @@
 {% if pagination and category %}
 {% set _ = crumbs.push({ "name": category, "url": "/" + (site.categoryBase or "category") + "/" + (category | urlencode) + "/" }) %}
 {% elif pagination and tag %}
-{% set _ = crumbs.push({ "name": tag, "url": "/" + (site.tagBase or "tag") + "/" + (tag | urlencode) + "/" }) %}
+{% set _ = crumbs.push({ "name": tag, "url": "/" + (site.tagBase or "tag") + "/" + (tag | lower | urlencode) + "/" }) %}
 {% elif isAuthorArchive %}
 {% set _ = crumbs.push({ "name": author.name, "url": author.url }) %}
 {% elif type == "post" and isEntry and categories.length %}

@@ -26,6 +26,7 @@ import {
   TAXONOMIES,
   TAXONOMY_LABELS,
   termHref,
+  termKey,
 } from '../web/taxonomy.ts';
 import type { Taxonomy, TaxonomyRedirect } from '../web/taxonomy.ts';
 import type { AdminRender } from './documents.ts';
@@ -143,7 +144,8 @@ export function mountTaxonomyScreens(
     // A rename onto a term that already exists is a merge, and a merge is not
     // undoable: it is offered rather than done, with both counts on the screen,
     // and only a form that says it has been seen goes through.
-    const target = carriers(c, kind, to);
+    const target =
+      termKey(kind.taxonomy, to) === termKey(kind.taxonomy, from) ? [] : carriers(c, kind, to);
     if (target.length > 0 && field(body[TAXONOMY_FIELDS.confirm]) === '') {
       return render(
         c,
@@ -376,7 +378,7 @@ export function changedTerms(
   to: string | undefined,
 ): string[] | undefined {
   const before = taxonomy === 'tag' ? document.tags : document.categories;
-  const after = applyTermChange(before, from, to);
+  const after = applyTermChange(before, from, to, (term) => termKey(taxonomy, term));
   if (after.length === before.length && after.every((term, index) => term === before[index])) {
     return undefined;
   }
@@ -391,22 +393,27 @@ export function changedTerms(
  * merge, and then `from` is simply dropped and the target keeps the place it
  * already had rather than jumping to the source's; a `to` of `undefined` is a
  * delete. A list that does not carry `from` comes back as it was.
+ *
+ * `keyOf` says which spellings are one term: every casing of a tag is one
+ * (TASK-308), so a rename reaches all of them.
  */
 export function applyTermChange(
   terms: readonly string[],
   from: string,
   to: string | undefined,
+  keyOf: (term: string) => string = (term) => term,
 ): string[] {
+  const is = (a: string, b: string) => keyOf(a) === keyOf(b);
   // A merge is a removal rather than a substitution: the target is already in
   // the list somewhere, and moving it to where the source stood would reorder
   // a file for no reason anybody asked for.
-  const merging = to !== undefined && to !== from && terms.includes(to);
+  const merging = to !== undefined && !is(to, from) && terms.some((term) => is(term, to));
 
   const changed: string[] = [];
   for (const term of terms) {
-    const next = term === from ? (merging ? undefined : to) : term;
+    const next = is(term, from) ? (merging ? undefined : to) : term;
     if (next === undefined) continue;
-    if (!changed.includes(next)) changed.push(next);
+    if (!changed.some((kept) => is(kept, next))) changed.push(next);
   }
 
   return changed;

@@ -55,18 +55,28 @@ const FOR_REACH = 'For reach';
 const SEED_FOLLOWERS: ReadonlyMap<string, number> = new Map(
   SEED.tags.map(([name, followers]) => [hashtagKey(name), followers]),
 );
+const SEED_NAMES: ReadonlyMap<string, string> = new Map(
+  SEED.tags.map(([name]) => [hashtagKey(name), name]),
+);
 
 interface Suggested {
   readonly forThisPost: readonly string[];
   readonly forReach: readonly string[];
 }
 
-/** One candidate: the key tags.pub knows it by, and how the model and this site spell it. */
+/**
+ * One candidate: the key tags.pub knows it by, the spelling to offer when the
+ * site has none, and how this site spells it.
+ */
 interface Candidate {
   readonly key: string;
-  readonly modelSpelling: string;
+  readonly spelling: string;
   readonly siteSpelling: string | undefined;
   readonly modelOrder: number;
+}
+
+function seedNameWhenCopiedFolded(modelSpelling: string, key: string): string {
+  return modelSpelling === key ? (SEED_NAMES.get(key) ?? modelSpelling) : modelSpelling;
 }
 
 function usedHere(candidate: Candidate): boolean {
@@ -82,7 +92,12 @@ function candidatesFrom(
     const key = hashtagKey(tag);
     if (key !== '' && !ours.has(key)) ours.set(key, tag);
   }
-  const group = (tags: readonly string[], most: number, admits: (key: string) => boolean) => {
+  const group = (
+    tags: readonly string[],
+    most: number,
+    admits: (key: string) => boolean,
+    spell: (modelSpelling: string, key: string) => string,
+  ) => {
     const candidates: Candidate[] = [];
     for (const tag of tags) {
       const modelSpelling = readableTag(tag);
@@ -91,19 +106,25 @@ function candidatesFrom(
       if (candidates.length === most) break;
       candidates.push({
         key,
-        modelSpelling,
+        spelling: spell(modelSpelling, key),
         siteSpelling: ours.get(key),
         modelOrder: candidates.length,
       });
     }
     return candidates;
   };
-  const forThisPost = group(suggested.forThisPost, FOR_POST.most, () => true);
+  const forThisPost = group(
+    suggested.forThisPost,
+    FOR_POST.most,
+    () => true,
+    (modelSpelling) => modelSpelling,
+  );
   const postKeys = new Set(forThisPost.map((c) => c.key));
   const forReach = group(
     suggested.forReach,
     FOR_REACH_MOST,
     (key) => SEED_FOLLOWERS.has(key) && !postKeys.has(key),
+    seedNameWhenCopiedFolded,
   );
   return { forThisPost, forReach };
 }
@@ -129,7 +150,7 @@ function rankForReach(candidates: readonly Candidate[], counts: Counts): Candida
 
 function choice(candidate: Candidate, counts: Counts, group: string): PluginEditorChoice {
   return {
-    value: candidate.siteSpelling ?? candidate.modelSpelling,
+    value: candidate.siteSpelling ?? candidate.spelling,
     note: noteFor(counts.get(candidate.key)),
     ...(usedHere(candidate) ? { badge: 'Used here' } : {}),
     group,
@@ -155,7 +176,9 @@ const INSTRUCTIONS = [
   '',
   `forReach: up to ${String(FOR_REACH_MOST)} tags from the hashtags people follow, listed below, ` +
     'that this post is genuinely about, most fitting first. ' +
-    'Leave it empty when none fit. Never pick one only because many people follow it.',
+    'Leave it empty when none fit. Never pick one only because many people follow it. ' +
+    'The list is written in lower case, as tags.pub names its accounts; ' +
+    'write the ones you pick in CamelCase too, such as OpenSource for opensource.',
   '',
   'Write each tag as one word with no # and no spaces. ' +
     'Join several words in CamelCase, each word capitalised, such as WordCampUS, IndieWeb or OpenSource. ' +
@@ -237,7 +260,7 @@ export default definePlugin({
     'Suggests tags for a post in the editor, from the language model the LLM plugin connects to, ' +
     'ranked by how many people follow each tag on tags.pub, when the author asks.',
   hostApi: 1,
-  requires: { [LLM]: '^0.2.0' },
+  requires: { [LLM]: '>=0.2.0 <1.0.0' },
   register(host) {
     const settings = host.settings(SETTINGS);
     host.editorAction({

@@ -169,14 +169,14 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7, 8]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7, 8]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
@@ -205,7 +205,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
       // The hash of a file with no categories has not changed, so a sync would
       // leave a surviving row alone and never learn its categories. The row
       // has to go; the file it was derived from is still on disk.
@@ -234,8 +234,29 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
       assert.equal(upgraded.counts().total, 0, 'the stale HTML survived the upgrade');
+    } finally {
+      upgraded.close();
+    }
+  });
+
+  it('empties an index whose tags predate the case-insensitive key (TASK-308)', async () => {
+    const dir = await dataDir();
+    const before = openContentStore({ dataDir: dir });
+    before.upsert(post({ tags: ['OpenSource'] }));
+    before.close();
+
+    const legacy = new DatabaseSync(path.join(dir, 'geekity.db'));
+    legacy.exec('DELETE FROM migrations WHERE version = 8');
+    legacy.close();
+
+    const upgraded = openContentStore({ dataDir: dir });
+    try {
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
+      assert.equal(upgraded.counts().total, 0, 'a row without tag keys survived the upgrade');
+      upgraded.upsert(post({ tags: ['OpenSource'] }));
+      assert.equal(upgraded.countByTag('opensource'), 1);
     } finally {
       upgraded.close();
     }
@@ -270,7 +291,7 @@ describe('a reply target', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
       assert.equal(upgraded.counts().total, 0, 'a row with in-reply-to in extra survived');
     } finally {
       upgraded.close();
@@ -319,7 +340,7 @@ describe('former permalinks (TASK-127)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
       assert.equal(upgraded.counts().total, 0, 'a row with redirect_from in extra survived');
     } finally {
       upgraded.close();
@@ -651,6 +672,137 @@ describe('listByTag', () => {
       { tag: 'eleventy', count: 4 },
       { tag: 'sqlite', count: 2 },
     ]);
+  });
+});
+
+describe('tags without regard to case (TASK-308)', () => {
+  function tagged(day: number, tags: string[], overrides: Partial<Document> = {}): Document {
+    const date = `2026-09-${String(day).padStart(2, '0')}`;
+    return post({
+      path: `posts/${date}-day-${String(day)}.md`,
+      slug: `day-${String(day)}`,
+      permalink: `/day-${String(day)}/`,
+      title: `Day ${String(day)}`,
+      date: `${date}T09:00:00Z`,
+      tags,
+      categories: [],
+      ...overrides,
+    });
+  }
+
+  async function mixed(): Promise<ContentStore> {
+    const index = await store();
+    index.upsertAll([
+      tagged(1, ['OpenSource']),
+      tagged(2, ['opensource']),
+      tagged(3, ['opensource', 'IndieWeb']),
+      tagged(4, ['OPENSOURCE'], { draft: true }),
+    ]);
+    return index;
+  }
+
+  it('lists, counts and filters every casing as one tag', async () => {
+    const index = await mixed();
+
+    assert.deepEqual(titles(index.listByTag('OPENSOURCE')), ['Day 3', 'Day 2', 'Day 1']);
+    assert.equal(index.countByTag('OpenSource'), 3);
+    assert.deepEqual(titles(index.listAll({ tag: 'openSource' })), [
+      'Day 4',
+      'Day 3',
+      'Day 2',
+      'Day 1',
+    ]);
+  });
+
+  it('reports one entry per tag, in the spelling most listed documents use', async () => {
+    const index = await mixed();
+
+    assert.deepEqual(index.listTags(), [
+      { tag: 'opensource', count: 3 },
+      { tag: 'IndieWeb', count: 1 },
+    ]);
+    assert.deepEqual(index.listTermUsage('tag'), [
+      { term: 'IndieWeb', published: 1, total: 1 },
+      { term: 'opensource', published: 3, total: 4 },
+    ]);
+    assert.equal(index.tagSpelling('OPENSOURCE'), 'opensource');
+    assert.equal(index.tagSpelling('indieweb'), 'IndieWeb');
+    assert.equal(index.tagSpelling('nothing-uses-this'), undefined);
+  });
+
+  it('breaks a tie by the earliest use, and can leave one document out of the count', async () => {
+    const index = await mixed();
+
+    assert.equal(
+      index.tagSpelling('opensource', { excluding: 'posts/2026-09-03-day-3.md' }),
+      'OpenSource',
+    );
+    index.remove('posts/2026-09-03-day-3.md');
+    assert.equal(index.tagSpelling('opensource'), 'OpenSource');
+  });
+
+  it('gives a document the site’s spelling of each of its tags', async () => {
+    const index = await mixed();
+
+    assert.deepEqual(index.getByPath('posts/2026-09-01-day-1.md')?.tags, ['opensource']);
+    assert.deepEqual(titles(index.listByTag('indieweb')), ['Day 3']);
+    assert.deepEqual(index.listByTag('indieweb')[0]?.tags, ['opensource', 'IndieWeb']);
+  });
+
+  it('spells a tag only drafts carry as they spell it', async () => {
+    const index = await store();
+    index.upsert(tagged(5, ['Drafty'], { draft: true }));
+
+    assert.deepEqual(index.listTermUsage('tag'), [{ term: 'Drafty', published: 0, total: 1 }]);
+    assert.equal(index.tagSpelling('drafty'), 'Drafty');
+  });
+
+  it('keeps one of two casings a document carries twice', async () => {
+    const index = await store();
+    index.upsert(tagged(6, ['Go', 'go']));
+
+    assert.deepEqual(index.getByPath('posts/2026-09-06-day-6.md')?.tags, ['Go']);
+    assert.equal(index.countByTag('GO'), 1);
+  });
+
+  it('follows a scheduled post coming due, and a write from another connection', async () => {
+    const dir = await dataDir();
+    let now = new Date('2026-09-10T00:00:00Z');
+    const index = openContentStore({ dataDir: dir, now: () => now });
+    openStores.push(index);
+    index.upsertAll([
+      tagged(1, ['Foo']),
+      tagged(20, ['FOO'], { title: 'Later' }),
+      tagged(21, ['FOO'], { title: 'Later still' }),
+    ]);
+    assert.equal(index.tagSpelling('foo'), 'Foo', 'the scheduled posts are not listed yet');
+
+    now = new Date('2026-09-25T00:00:00Z');
+    assert.equal(index.tagSpelling('foo'), 'FOO', 'they are once they come due');
+
+    const other = openContentStore({ dataDir: dir, now: () => now });
+    try {
+      other.upsertAll([tagged(2, ['fOO']), tagged(3, ['fOO']), tagged(4, ['fOO'])]);
+    } finally {
+      other.close();
+    }
+    assert.equal(index.tagSpelling('foo'), 'fOO');
+    assert.deepEqual(index.getByPath('posts/2026-09-01-day-1.md')?.tags, ['fOO']);
+
+    index.upsert(tagged(1, ['Bar']));
+    assert.equal(index.tagSpelling('BAR'), 'Bar');
+    assert.deepEqual(index.listTags(), [
+      { tag: 'fOO', count: 5 },
+      { tag: 'Bar', count: 1 },
+    ]);
+  });
+
+  it('leaves categories matched exactly', async () => {
+    const index = await store();
+    index.upsert(tagged(7, [], { categories: ['News'] }));
+
+    assert.equal(index.countByCategory('News'), 1);
+    assert.equal(index.countByCategory('news'), 0);
   });
 });
 
@@ -1214,7 +1366,7 @@ describe('the permalink of a trashed document (TASK-195)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
       upgraded.upsert(again);
       assert.equal(upgraded.getByPermalink('/2026/09/hello-world/')?.title, 'Again');
       assert.throws(() => {
@@ -1444,7 +1596,7 @@ describe('the search index migration (TASK-22 AC #2)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
       assert.equal(upgraded.counts().total, 0, 'a row survived with no words indexed for it');
 
       upgraded.upsert(post());

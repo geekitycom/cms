@@ -27,6 +27,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 export const IMAGE = 'ghcr.io/geekitycom/cms';
 const CORE = '@geekity/cms';
@@ -188,8 +189,8 @@ export function planRelease(packages: readonly WorkspacePackage[], facts: Facts)
 
 /**
  * What is wrong with a packed tarball, unpacked into `dir`: a manifest for
- * another version, or a plugin with no bundle for `geekity plugin add` to
- * install.
+ * another version, a plugin with no bundle for `geekity plugin add` to
+ * install, or a plugin.json whose peer ranges are not the ones npm will see.
  */
 export function tarballProblems(pkg: WorkspacePackage, dir: string): string[] {
   const problems: string[] = [];
@@ -205,7 +206,16 @@ export function tarballProblems(pkg: WorkspacePackage, dir: string): string[] {
   for (const file of ['dist/bundle/index.js', 'dist/bundle/plugin.json']) {
     if (!fs.existsSync(path.join(dir, file))) problems.push(`it has no ${file}`);
   }
-  if (fs.existsSync(path.join(dir, 'dist/bundle/plugin.json'))) mismatch('dist/bundle/plugin.json');
+  if (!fs.existsSync(path.join(dir, 'dist/bundle/plugin.json'))) return problems;
+  mismatch('dist/bundle/plugin.json');
+  const packed = (readJson(path.join(dir, 'package.json')) as Partial<Manifest>).peerDependencies;
+  const bundled = (readJson(path.join(dir, 'dist/bundle/plugin.json')) as Partial<Manifest>)
+    .peerDependencies;
+  if (!isDeepStrictEqual(packed, bundled)) {
+    problems.push(
+      `dist/bundle/plugin.json has peer ranges ${JSON.stringify(bundled)}, and package.json has ${JSON.stringify(packed)}`,
+    );
+  }
   return problems;
 }
 

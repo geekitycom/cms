@@ -3,7 +3,7 @@
 {% block title %}Tagged &ldquo;{{ tag }}&rdquo;{% if pagination.pageNumber > 0 %}, page {{ pagination.pageNumber + 1 }}{% endif %} &middot; {{ site.title }}{% endblock %}
 
 {% import "partials/feeds.njk" as feeds %}
-{% set tagRoot = "/" + (site.tagBase or "tag") + "/" + (tag | urlencode) + "/" %}
+{% set tagRoot = "/" + (site.tagBase or "tag") + "/" + (tag | lower | urlencode) + "/" %}
 {% block alternates %}
 {{ super() }}
 {{ feeds.feedLinks(tagRoot, site.title + ": " + tag) }}

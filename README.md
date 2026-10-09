@@ -160,6 +160,7 @@ directory; absolute ones are used as given.
 | `dataDir`          | `<cwd>/data`                              | `GEEKITY_DATA_DIR`           | Derived state — the SQLite index, the image variants — and the files that are not derived and must be backed up, such as `users.json`, the actor key pairs under `keys/`, `locations.json` and `kept-properties.json`. [Two directories](#two-directories-content-and-data) lists them.                                                                                                    |
 | `themesDir`        | `<cwd>/themes`                            | `GEEKITY_THEMES_DIR`         | The site's themes, one directory per theme. Which one is in use is the `theme` setting, not a path. Need not exist.                                                                                                                                                                                                                                                                        |
 | `pluginsDir`       | none                                      | `GEEKITY_PLUGINS_DIR`        | A folder of plugins, `<name>/` or `@scope/<name>/`, each with a bundled `index.js` whose default export is the plugin. `geekity serve` loads them beside `plugins`, and Reload on the Plugins screen loads a changed folder without a restart. Unset, no code is loaded from a folder.                                                                                                     |
+| `pluginInstall`    | `true`                                    | `GEEKITY_PLUGIN_INSTALL`     | Let Admin > Plugins add, update and remove plugins in `pluginsDir`. Set it to `off` to keep plugin changes on the command line; see [Installing from the admin](#installing-from-the-admin).                                                                                                                                                                                               |
 | `baseUrl`          | `http://localhost:<port>`                 | `GEEKITY_BASE_URL`           | Public origin for canonical URLs, feeds and ActivityPub ids. A trailing slash is stripped.                                                                                                                                                                                                                                                                                                 |
 | `watch`            | `true`                                    | `GEEKITY_WATCH`              | Watch `contentDir` while serving and keep the index in step.                                                                                                                                                                                                                                                                                                                               |
 | `accessLog`        | `false`, but `true` under `geekity serve` | `GEEKITY_ACCESS_LOG`         | Write one line per request to stdout: the method, the path with its query string, the status and how long it took. `geekity serve` and the Docker image turn it on, because a server answering the internet should be able to say what it answered; `createCms` leaves it off, so a CMS embedded in another app never writes to its stdout unasked. See [The access log](#the-access-log). |
@@ -329,24 +330,88 @@ Nothing is installed or enabled on your behalf.
 - the tarball does not match the registry's integrity hash
 - the package has no bundle (`dist/bundle/index.js` and `plugin.json`). Such a
   plugin installs only with npm, on a site with its own entry file.
-- the bundle targets a newer host API version than this core provides
+- the bundle targets a host API version other than the one this core provides
 
-To remove a plugin, delete its folder and press Reload:
+To bring every plugin in the folder up to date, run `plugin upgrade`, then
+press Reload:
+
+```sh
+docker compose exec geekity geekity plugin upgrade
+```
+
+For each plugin, it installs the newest version that this core and the other
+installed plugins can run. It checks each release's `@geekity/cms` range and
+the ranges between plugins, and installs the same way as `plugin add`. It does
+not install a prerelease, or a version newer than the `latest` dist-tag. When
+two plugins must move together, such as a plugin that needs a newer
+`@geekity/plugin-llm`, it upgrades both, the required one first. When only one
+of them can move, it holds that one back and says why. It does not leave an
+installed plugin with a requirement that is not met.
+
+It prints one line per plugin: the versions it upgraded from and to, that the
+version is already the newest, or which version it held back and why. Then it
+names any requirement that is still not met, and asks you to press Reload when
+anything changed. A plugin that is not on the registry, or a registry that
+cannot be reached, is skipped and the others carry on. The command exits
+non-zero only when an install it attempted failed.
+
+- `geekity plugin upgrade @geekity/plugin-llm @geekity/plugin-post-summary`
+  upgrades only the plugins it is given.
+- `geekity plugin upgrade --check` prints the same report and installs
+  nothing.
+
+To remove a plugin, disable it on the Plugins screen, delete its folder and
+press Reload:
 
 ```sh
 docker compose exec geekity geekity plugin remove @geekity/plugin-llm
 ```
+
+`plugin remove` refuses a plugin the site has enabled, as WordPress does.
 
 A plugin that is not on npm installs the same way by hand: copy its bundle
 folder, `index.js` and `plugin.json`, to `plugins/<package name>/` and press
 Reload.
 
 A folder that cannot load does not stop the site. Its row on the Plugins screen
-says why: the bundle failed to import, it exports no plugin, it targets a
-newer host API, or its manifest names a range of `@geekity/cms` or of a
+says why: the bundle failed to import, it exports no plugin, it targets
+another host API version, or its manifest names a range of `@geekity/cms` or of a
 required plugin that is not met. The commands a folder plugin adds, such as
 `geekity import wordpress-actor`, run with `docker compose exec` the same way
 as core's.
+
+### Installing from the admin
+
+Admin > Plugins does the same as `geekity plugin add`, `upgrade` and `remove`
+on a site with a plugins folder:
+
+- **Add plugin** takes a package name and, optionally, a version, a range or a
+  dist-tag. It installs the same way as `plugin add`, with the same checks, and
+  names each requirement that is missing or out of range.
+- **Check for updates** asks the registry for newer versions. A plugin with
+  one shows **Update to** that version on its row.
+- **Update all** brings every folder plugin up to date, the same way as
+  `plugin upgrade`.
+- **Remove** deletes the plugin's folder. Its settings and its folder under
+  `data/plugins/` stay. Only a disabled plugin has Remove: disable a plugin
+  first, as in WordPress.
+
+Each change asks for your password, and an update or a removal first shows
+what it will change. One change runs at a time. After a change, press
+**Reload** to load it. Plugins passed in `plugins` on a site's own config are
+shown as managed in code, with no controls.
+
+Every change made here is recorded in `data/plugin-changes.json`: who made it,
+when, the package and the versions. The Plugins screen lists them under
+Recent changes.
+
+> [!WARNING]
+> This puts new code on the server from a browser. A plugin runs as the site,
+> with access to everything under `data/`, including the accounts, the actor
+> key pairs and every plugin's secrets. Anyone who can sign in to the admin and
+> knows their password can install one. To keep plugin changes on the command
+> line, set `GEEKITY_PLUGIN_INSTALL=off`. The Plugins screen then shows no add,
+> update or remove controls, and refuses those requests.
 
 ### Writing a plugin
 
@@ -390,11 +455,11 @@ range:
   "geekity": {
     "plugin": true,
     "hostApi": 1,
-    "requires": { "@geekity/plugin-llm": "^0.1.0" }
+    "requires": { "@geekity/plugin-llm": ">=0.2.0 <1.0.0" }
   },
   "peerDependencies": {
-    "@geekity/cms": "^0.24.0",
-    "@geekity/plugin-llm": "^0.1.0"
+    "@geekity/cms": ">=0.26.0 <1.0.0",
+    "@geekity/plugin-llm": ">=0.2.0 <1.0.0"
   }
 }
 ```
@@ -419,14 +484,16 @@ mode `0600`, and an environment variable overrides it, as the
 
 **The host API version and the peer range.** `HOST_API_VERSION` in
 `@geekity/cms/plugin` is the version of the host API this core provides. A
-plugin that targets a newer one is unavailable, with the reason on the Plugins
-screen. The peer range of `@geekity/cms` says which releases of core the
-package works with: npm checks it for a site that installs with npm, and the
-registry checks the copy in `plugin.json` for a folder install. The plugin
-packages in this repository write `workspace:^`, which becomes a caret range on
-the core version they were built with, so before 1.0 each one accepts a single
-core minor. [Core releases and the plugins' core range](#core-releases-and-the-plugins-core-range)
-says what that means for a core release.
+plugin that targets another version is unavailable, with the reason on the
+Plugins screen. The peer range of `@geekity/cms` says which releases of core
+the package works with: npm checks it for a site that installs with npm, and
+the registry checks the copy in `plugin.json` for a folder install. Before 1.0,
+write it as `>=<the core you built against> <1.0.0`, and write the range of a
+required plugin the same way. The host API version, not the core minor, is what
+marks a break.
+[Core releases and the plugins' core range](#core-releases-and-the-plugins-core-range)
+says how the packages in this repository get those ranges, and when the host
+API version goes up.
 
 **The bundle.** A folder install has no `node_modules`, so each plugin package
 also ships one self-contained ES module with every dependency inlined. The
@@ -438,8 +505,9 @@ plugin packages in this repository build it with the shared script after `tsc`:
 
 It writes `dist/bundle/index.js` and `dist/bundle/plugin.json`, which holds the
 package's name, version, host API version and the peer ranges of
-`@geekity/cms` and of each required plugin. The build fails when the package
-is not marked a plugin, when a required plugin is not a peer dependency, when
+`@geekity/cms` and of each required plugin, as the packed `package.json`
+publishes them. The build fails when the package is not marked a plugin, when
+a required plugin is not a peer dependency with the same range, when
 the plugin's name, version, `hostApi` or `requires` differ from `package.json`,
 and on a native module, which a bundle cannot carry. A plugin that needs a
 native module is installed with npm only.
@@ -500,6 +568,7 @@ copied somewhere safe:
 | `data/keys/`                | Each user's key pairs as JWK files, mode 0600. **Losing these breaks federation.**                                                              |
 | `data/locations.json`       | Where each post was written, keyed by permalink, mode 0600. Never in `content/`, so a public repository never carries it (decision-29).         |
 | `data/kept-properties.json` | The Micropub properties a post was sent that the site does not understand, such as an `itinerary`, keyed by permalink, mode 0600 (decision-27). |
+| `data/plugin-changes.json`  | Who added, updated and removed which plugin on Admin > Plugins, and when, mode 0600.                                                            |
 
 And three things under `data/` may be deleted at any time the site is stopped:
 
@@ -2801,28 +2870,44 @@ untested step.
 
 ### Core releases and the plugins' core range
 
-Each plugin package peer-depends on `@geekity/cms` with `workspace:^`. Both the
-published `package.json` and the bundle's `plugin.json` turn that into a caret
-range on the core version the plugin was built with: a plugin built while core
-was 0.25.0 accepts `^0.25.0`. Before 1.0, a caret range accepts patches only,
-so that plugin accepts core 0.25.x and nothing else.
+A plugin accepts every core from the one it was built against up to 1.0. A
+plugin package built while core was 0.26.0 publishes the peer range
+`>=0.26.0 <1.0.0`, in its `package.json` and in its bundle's `plugin.json`.
+It stays available on core 0.27.0 and every later 0.x release, so a core minor
+release does not need a release of every plugin. A core older than the one the
+plugin was built against is refused. A folder install shows the plugin as
+unavailable, with the reason, and `geekity plugin add` says so when it
+installs it. npm reports a peer dependency conflict.
 
-A core minor release therefore leaves every plugin that is not released with it
-out of range:
+Each plugin package writes its core peer dependency as `workspace:^`. pnpm
+publishes that as a caret range, and before 1.0 a caret range accepts a single
+core minor. The `beforePacking` hook in `.pnpmfile.mjs` replaces it with
+`>=<core version> <1.0.0` on every `pnpm pack`, which is how `pnpm release`
+builds the tarballs it publishes.
+`scripts/build-plugin-bundle.js` writes the same range into `plugin.json`, and
+`pnpm release` refuses a plugin tarball whose `plugin.json` ranges differ from
+its `package.json`. The lower bound is the core version in the workspace when
+the plugin is packed. release-please bumps that version in the release pull
+request, so a plugin released with core is built against the new core.
 
-- A folder install, as on Docker, shows the plugin as unavailable on the
-  Plugins screen, with the reason "It needs @geekity/cms ^0.25.0, and this core
-  is 0.26.0". The site boots and the other plugins run.
-- A site that installs with npm gets a peer dependency conflict when it
-  upgrades core past the range.
+A plugin's range of another plugin is written out in full, the same in
+`geekity.requires`, in the plugin's `requires` and in the peer dependency as
+`workspace:>=0.2.0 <1.0.0`. pnpm publishes the range after `workspace:` as it
+is. The bundle build refuses a peer range that differs from `geekity.requires`.
+Raise the lower bound when the plugin starts to use something that a later
+release of the required plugin added.
 
-release-please bumps a plugin only when commits changed that plugin's folder,
-so a core minor release does not re-release the plugins by itself. Until the
-range changes, a core minor release needs a release of every plugin built
-against the new core. Land a commit in each plugin's folder before merging the
-release pull request, so that all of them go out in the same grouped release
-pull request. A plugin released in that pull request is built against the new
-core version, and so accepts it.
+The host API version is the gate that marks a break. `HOST_API_VERSION` in
+`packages/cms/src/plugin.ts` goes up in the core release that changes
+`@geekity/cms/plugin` so a plugin written for the current version would fail:
+a type, method or field removed or renamed, an argument or return value
+reshaped, or a behavior a plugin relies on changed. Adding a method, an
+optional field or an extension point keeps the number. A plugin runs only on a
+core that provides exactly the host API version it targets. A release that
+raises the number therefore needs a release of every plugin, built against the
+new host API. Land a commit in each plugin's folder before merging the release
+pull request, so that all of them go out in the same grouped release pull
+request.
 
 ### Publishing the Docker image
 

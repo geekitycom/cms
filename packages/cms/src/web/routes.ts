@@ -125,7 +125,7 @@ import {
 } from './search.ts';
 import { findQueryRedirect, redirectLocation } from './redirects.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
-import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
+import type { Taxonomy, TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
 /**
  * Register the public site on a Hono app.
@@ -432,7 +432,13 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   const feedRequest = parseFeedPath(store, pathname, bases, authors);
   if (feedRequest !== undefined) {
     const { target, format } = feedRequest;
-    if (!feedRequest.canonical) return c.redirect(feedTargetHref(target, format, bases), 301);
+    const canonical = feedTargetHref(target, format, bases);
+    if (
+      !feedRequest.canonical ||
+      isCarriedTagFeedInAnotherCasing(store, target, canonical, pathname)
+    ) {
+      return c.redirect(canonical, 301);
+    }
     return target.kind === 'listing'
       ? feed(c, format, target.subject)
       : comments(c, target.document);
@@ -499,7 +505,7 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     // representations a listing has.
     if (LISTING_REPRESENTATIONS.includes(extension.representation)) {
       for (const candidate of extension.paths) {
-        const request = listingRequestAt(pages, candidate, bases, authors);
+        const request = listingRequestAt(store, pages, candidate, bases, authors);
         if (request === undefined) continue;
         const canonical = canonicalRedirect(candidate);
         if (canonical !== undefined) return c.redirect(canonical, 301);
@@ -574,7 +580,7 @@ function taxonomyArchive(
 ): Response | undefined {
   if (!pathname.endsWith('/')) return undefined;
 
-  const request = parseListingPath(pathname, bases, authors);
+  const request = parseListingPath(c.var.store, pathname, bases, authors);
   if (request?.term === undefined) return undefined;
 
   // An archive that answers is served; only once nothing carries the term is
@@ -627,7 +633,7 @@ function authorArchive(
 ): Response | undefined {
   if (!pathname.endsWith('/')) return undefined;
 
-  const request = parseListingPath(pathname, bases, authors);
+  const request = parseListingPath(c.var.store, pathname, bases, authors);
   if (request?.author === undefined) return undefined;
 
   const canonical = authorHref(request.author.user.username, request.pageNumber);
@@ -685,7 +691,7 @@ function parseFeedPath(
       : undefined;
   }
 
-  const root = parseListingPath(split.root, bases, authors);
+  const root = parseListingPath(store, split.root, bases, authors);
   // Only a listing root has a feed, and only its first page: a feed is not
   // paginated, so `/{base}/x/page/2/feed/` names nothing.
   if (root !== undefined) {
@@ -939,7 +945,7 @@ function canonicalTarget(
   const moved = movedHref(store, pages, pathname, undefined);
   if (moved !== undefined) return moved;
 
-  const listing = listingRequestAt(pages, pathname, bases, authors);
+  const listing = listingRequestAt(store, pages, pathname, bases, authors);
   if (listing === undefined) return undefined;
 
   // The home listing and an author archive both exist with nothing on them; a
@@ -1058,6 +1064,7 @@ function frontPages(c: Context<GeekityEnv>): FrontPages {
  * listing at all, so nothing under the root is one either.
  */
 function listingRequestAt(
+  store: ContentStore,
   pages: FrontPages,
   pathname: string,
   bases: TaxonomyBases,
@@ -1067,7 +1074,7 @@ function listingRequestAt(
     pages.posts === undefined ? undefined : postsPageRequest(pages.posts, pathname);
   if (onPostsPage !== undefined) return onPostsPage;
 
-  const request = parseListingPath(pathname, bases, authors);
+  const request = parseListingPath(store, pathname, bases, authors);
   if (request === undefined) return undefined;
   // Only the home listing can be homeless. A tag archive and a person's
   // archive have URLs of their own, whatever the Reading setting says `/` is.
@@ -1129,6 +1136,7 @@ function postsPageRequest(document: Document, pathname: string): ListingRequest 
  * check.
  */
 function parseListingPath(
+  store: ContentStore,
   pathname: string,
   bases: TaxonomyBases,
   authors: AuthorLookup,
@@ -1152,8 +1160,9 @@ function parseListingPath(
   }
 
   const taxonomy = taxonomyForSegment(segments[0], bases);
-  if (taxonomy === undefined || segments[1] === undefined) return undefined;
-  const term: TaxonomyTerm = { taxonomy, term: segments[1] };
+  const named = segments[1];
+  if (taxonomy === undefined || named === undefined) return undefined;
+  const term: TaxonomyTerm = { taxonomy, term: asTheSiteSpellsIt(store, taxonomy, named) };
 
   if (segments.length === 2) return { term, pageNumber: 0 };
   if (segments.length === 4 && segments[2] === PAGE_SEGMENT) {
@@ -1161,6 +1170,24 @@ function parseListingPath(
     return page === undefined ? undefined : { term, pageNumber: page };
   }
   return undefined;
+}
+
+function asTheSiteSpellsIt(store: ContentStore, taxonomy: Taxonomy, term: string): string {
+  return taxonomy === 'tag' ? (store.tagSpelling(term) ?? term) : term;
+}
+
+function isCarriedTagFeedInAnotherCasing(
+  store: ContentStore,
+  target: FeedTarget,
+  canonical: string,
+  pathname: string,
+): boolean {
+  return (
+    target.kind === 'listing' &&
+    target.subject.term?.taxonomy === 'tag' &&
+    canonical !== encodePath(pathname) &&
+    countListing(store, target.subject) > 0
+  );
 }
 
 /** How many published documents a listing holds. */

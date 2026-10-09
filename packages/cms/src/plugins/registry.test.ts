@@ -10,6 +10,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import semver from 'semver';
+
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { Plugin, PluginFederationMiddleware, PluginHost } from '../plugin.ts';
 import { createPluginRegistry, DuplicatePluginError } from './registry.ts';
@@ -102,12 +104,24 @@ describe('the plugin registry', () => {
     assert.equal(registry.problem('@acme/plugin-d'), undefined);
   });
 
-  it('marks a plugin that targets a newer host API unavailable', () => {
+  it('marks a plugin that targets a newer or an older host API unavailable', () => {
     const registry = createPluginRegistry(
-      fromConfig(plugin('@acme/plugin-a', {}, { hostApi: HOST_API_VERSION + 1 })),
+      fromConfig(
+        plugin('@acme/plugin-newer', {}, { hostApi: HOST_API_VERSION + 1 }),
+        plugin('@acme/plugin-older', {}, { hostApi: HOST_API_VERSION - 1 }),
+        plugin('@acme/plugin-current'),
+      ),
       SITE,
     );
-    assert.match(registry.problem('@acme/plugin-a') ?? '', /host API version/);
+    assert.equal(
+      registry.problem('@acme/plugin-newer'),
+      `It targets host API version ${String(HOST_API_VERSION + 1)}, and this core provides version ${String(HOST_API_VERSION)}.`,
+    );
+    assert.equal(
+      registry.problem('@acme/plugin-older'),
+      `It targets host API version ${String(HOST_API_VERSION - 1)}, and this core provides version ${String(HOST_API_VERSION)}.`,
+    );
+    assert.equal(registry.problem('@acme/plugin-current'), undefined);
   });
 
   it('keeps a plugin that could not be loaded unavailable with its reason, never registering it', () => {
@@ -160,6 +174,35 @@ describe('the plugin registry', () => {
       'It needs @acme/plugin-llm ^2.0.0, and 1.0.0 is installed.',
     );
     assert.equal(registry.problem('@acme/plugin-fits'), undefined);
+  });
+
+  it('keeps a folder install built against an older 0.x core available, and refuses one built against a newer core', () => {
+    const core = (
+      JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {
+        version: string;
+      }
+    ).version;
+    const older = `0.${String(semver.minor(core) - 1)}.0`;
+    const newer = `0.${String(semver.minor(core) + 1)}.0`;
+    const folder = (name: string, builtAgainst: string) => ({
+      plugin: plugin(name),
+      source: `the plugins folder, ${name}`,
+      peerDependencies: { '@geekity/cms': `>=${builtAgainst} <1.0.0` },
+    });
+    const registry = createPluginRegistry(
+      [
+        folder('@acme/plugin-same', core),
+        folder('@acme/plugin-older', older),
+        folder('@acme/plugin-newer', newer),
+      ],
+      SITE,
+    );
+    assert.equal(registry.problem('@acme/plugin-same'), undefined);
+    assert.equal(registry.problem('@acme/plugin-older'), undefined);
+    assert.equal(
+      registry.problem('@acme/plugin-newer'),
+      `It needs @geekity/cms >=${newer} <1.0.0, and this core is ${core}.`,
+    );
   });
 
   it('marks a plugin whose register throws unavailable, and still registers the rest', () => {

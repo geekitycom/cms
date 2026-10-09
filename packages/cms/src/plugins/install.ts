@@ -17,11 +17,21 @@ import { gunzipSync } from 'node:zlib';
 import semver from 'semver';
 
 import { HOST_API_VERSION } from '../plugin.ts';
+import { readEnabledPlugins } from './enabled.ts';
 import { PLUGIN_ENTRY, PLUGIN_MANIFEST, readPluginManifest, scanPluginFolders } from './folder.ts';
 import type { PluginManifest } from './folder.ts';
 import { PACKAGE_NAME } from './registry.ts';
 
 export const DEFAULT_REGISTRY = 'https://registry.npmjs.org/';
+
+/** The registry plugins come from: `npm_config_registry`, as npm reads it, or registry.npmjs.org. */
+export function pluginRegistry(env: Readonly<Record<string, string | undefined>>): string {
+  return (
+    [env['npm_config_registry'], env['NPM_CONFIG_REGISTRY']].find(
+      (value) => value !== undefined && value !== '',
+    ) ?? DEFAULT_REGISTRY
+  );
+}
 
 /** The folder in a package that is the plugin's folder once installed. */
 const BUNDLE_PREFIX = 'dist/bundle/';
@@ -97,17 +107,36 @@ export async function addPlugin(
   }
 }
 
-/** Delete a plugin's folder. Throws when there is none. */
-export async function removePlugin(name: string, pluginsDir: string): Promise<string> {
+/**
+ * Delete a plugin's folder. Throws when there is none, and when the site has
+ * the plugin enabled: as in WordPress, a plugin is disabled before it is removed.
+ */
+export async function removePlugin(
+  name: string,
+  site: { pluginsDir: string; contentDir: string },
+): Promise<string> {
+  const { pluginsDir } = site;
   const directory = path.join(pluginsDir, ...name.split('/'));
   if (!PACKAGE_NAME.test(name) || !existsSync(directory)) {
     throw new Error(`${name} is not in the plugins folder, ${pluginsDir}.`);
   }
+  if (readEnabledPlugins(site.contentDir).has(name)) throw new Error(enabledRefusal(name));
   const doomed = path.join(path.dirname(directory), hidden('removing', directory));
   await rename(directory, doomed);
   await rm(doomed, { recursive: true, force: true });
   return directory;
 }
+
+/** Why an enabled plugin is not removed. */
+export function enabledRefusal(name: string): string {
+  return `${name} is enabled. Disable it first.`;
+}
+
+/** The sentence that tells the reader how to add a missing plugin. */
+export type AddAdvice = (name: string) => string;
+
+/** What the command line tells its reader to run. */
+export const ADD_WITH_COMMAND: AddAdvice = (name) => `Add it with: geekity plugin add ${name}`;
 
 /**
  * A line for each plugin the manifest requires that is not installed or not
@@ -115,9 +144,10 @@ export async function removePlugin(name: string, pluginsDir: string): Promise<st
  * plugin to its version, or to `undefined` when that is not known.
  */
 export function requirementNotes(
-  manifest: PluginManifest,
+  manifest: Pick<PluginManifest, 'peerDependencies'>,
   installed: ReadonlyMap<string, string | undefined>,
   coreVersion: string,
+  addAdvice: AddAdvice,
 ): string[] {
   const notes: string[] = [];
   for (const [dependency, range] of Object.entries(manifest.peerDependencies)) {
@@ -131,7 +161,7 @@ export function requirementNotes(
     }
     if (!installed.has(dependency)) {
       notes.push(
-        `It requires ${dependency} ${range}, which is not installed. Add it with: geekity plugin add ${dependency}`,
+        `It requires ${dependency} ${range}, which is not installed. ${addAdvice(dependency)}`,
       );
       continue;
     }
@@ -143,7 +173,7 @@ export function requirementNotes(
   return notes;
 }
 
-const CORE_PACKAGE = '@geekity/cms';
+export const CORE_PACKAGE = '@geekity/cms';
 
 interface Release {
   version: string;
@@ -152,31 +182,42 @@ interface Release {
   shasum: string | undefined;
 }
 
-interface PackageDocument {
+export interface PackageDocument {
   'dist-tags'?: Record<string, string>;
   versions?: Record<
     string,
-    { dist?: { tarball?: string; integrity?: string; shasum?: string } } | undefined
+    | {
+        peerDependencies?: Record<string, string>;
+        dist?: { tarball?: string; integrity?: string; shasum?: string };
+      }
+    | undefined
   >;
 }
 
-async function resolveRelease(spec: PackageSpec, registry: string): Promise<Release> {
-  const url = new URL(
-    spec.name.replace('/', '%2f'),
-    registry.endsWith('/') ? registry : `${registry}/`,
-  );
-  const response = await fetch(url, {
-    headers: { accept: 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8' },
-  });
-  if (response.status === 404) {
-    throw new Error(`${spec.name} is not on the registry at ${registry}.`);
-  }
-  if (!response.ok) {
+export async function fetchPackument(name: string, registry: string): Promise<PackageDocument> {
+  const url = new URL(name.replace('/', '%2f'), registry.endsWith('/') ? registry : `${registry}/`);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { accept: 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8' },
+    });
+  } catch (error) {
     throw new Error(
-      `The registry at ${registry} answered ${String(response.status)} for ${spec.name}.`,
+      `The registry at ${registry} could not be reached: ${error instanceof Error ? error.message : String(error)}.`,
+      { cause: error },
     );
   }
-  const document = (await response.json()) as PackageDocument;
+  if (response.status === 404) {
+    throw new Error(`${name} is not on the registry at ${registry}.`);
+  }
+  if (!response.ok) {
+    throw new Error(`The registry at ${registry} answered ${String(response.status)} for ${name}.`);
+  }
+  return (await response.json()) as PackageDocument;
+}
+
+async function resolveRelease(spec: PackageSpec, registry: string): Promise<Release> {
+  const document = await fetchPackument(spec.name, registry);
   const versions = Object.keys(document.versions ?? {});
   const version =
     document['dist-tags']?.[spec.wanted] ??
@@ -294,9 +335,13 @@ function stagedManifest(staging: string, label: string, name: string): PluginMan
   if (manifest.name !== name) {
     throw new Error(`${label} was refused: its ${PLUGIN_MANIFEST} names ${manifest.name}.`);
   }
-  if (manifest.hostApi > HOST_API_VERSION) {
+  if (manifest.hostApi !== HOST_API_VERSION) {
     throw new Error(
-      `${label} targets host API version ${String(manifest.hostApi)}, and this core provides version ${String(HOST_API_VERSION)}. Upgrade @geekity/cms, or add an older version of the plugin.`,
+      `${label} targets host API version ${String(manifest.hostApi)}, and this core provides version ${String(HOST_API_VERSION)}. ${
+        manifest.hostApi > HOST_API_VERSION
+          ? 'Upgrade @geekity/cms, or add an older version of the plugin.'
+          : 'Add a newer version of the plugin.'
+      }`,
     );
   }
   return manifest;

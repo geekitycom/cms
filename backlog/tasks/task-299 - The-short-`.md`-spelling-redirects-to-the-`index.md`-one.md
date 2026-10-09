@@ -1,11 +1,11 @@
 ---
 id: TASK-299
 title: The short `.md` spelling redirects to the `index.md` one
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-08 13:46'
-updated_date: '2026-10-08 13:50'
+updated_date: '2026-10-09 01:32'
 labels: []
 dependencies: []
 ordinal: 259800
@@ -39,4 +39,12 @@ A post at `/2026/01/hello-world/` answers its Markdown at both `/2026/01/hello-w
 
 <!-- SECTION:NOTES:BEGIN -->
 Redirect lives in resolveRequest: once a .md/.json candidate resolves (document or listing), the request is compared with representationHref(candidate) and answers 301 there when they differ. robots.test.ts asked for /hello.md expecting 200; switched it to /hello/index.md. Verified: negotiation.test.ts covers post, json+query, /tag/notes.md, /page/2.json, slashless /colophon.md (200); index.md/index.json still 200; robots test covers Accept: text/markdown at the permalink. Full suite 4837/4837, tsc and prettier clean.
+
+2026-10-08: verified on shll.me after the 0.25.0 deploy: /2026/01/hello-world.md answers 301 to /2026/01/hello-world/index.md (200), /2026/01/hello-world.json answers 301 to .../index.json, and the permalink with Accept: text/markdown answers 200 text/markdown in place.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The short '/x.md' and '/x.json' spellings answer 301 to '/x/index.md' and '/x/index.json', while Accept negotiation at the permalink still serves in place (PR #140). Verified by negotiation and robots tests and on shll.me after the 0.25.0 deploy.
+<!-- SECTION:FINAL_SUMMARY:END -->

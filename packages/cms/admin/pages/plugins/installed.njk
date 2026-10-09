@@ -10,6 +10,9 @@
 {% from "components/badge.njk" import status %}
 {% from "components/button.njk" import button %}
 {% from "components/card.njk" import card, cardActions %}
+{% from "components/button.njk" import buttonLink %}
+{% import "components/fields.njk" as fields %}
+{% from "components/table.njk" import table %}
 
 {% block title %}Plugins{% endblock %}
 
@@ -50,6 +53,57 @@
     </div>
   {% endif %}
 
+  {% if installer == 'on' %}
+    <div class="mb-8 grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+      {% call card(title="Add plugin") %}
+        <p class="text-sm">
+          A plugin runs as the site, with access to everything under <code>data/</code>,
+          the accounts and keys and other plugins' secrets. Add only plugins you trust.
+        </p>
+        {% if addProblems.package or addProblems.password %}
+          {% call fields.summary('Nothing was installed. Fix the fields marked below and try again.') %}
+            {{ fields.problem('plugin-package', addProblems.package) }}
+            {{ fields.problem('plugin-add-password', addProblems.password) }}
+          {% endcall %}
+        {% endif %}
+        <form id="plugin-add" method="post" action="{{ add.url }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          {{ fields.text('plugin-package', 'package', 'Package', value=add.package,
+               hint='An npm package name, such as @geekity/plugin-llm.', error=addProblems.package,
+               required=true,
+               spellcheck='false', autocomplete='off') }}
+          {{ fields.text('plugin-version', 'version', 'Version (optional)', value=add.version,
+               hint='A version, a range or a dist-tag. Empty takes latest.', spellcheck='false',
+               autocomplete='off') }}
+          {{ fields.password('plugin-add-password', 'password', 'Your password',
+               error=addProblems.password, autocomplete='current-password', required=true) }}
+          {% call cardActions() %}
+            {{ button('Add plugin', type='submit', color='primary') }}
+          {% endcall %}
+        </form>
+      {% endcall %}
+
+      {% call card(title="Updates") %}
+        <p class="text-sm">
+          {% if checkedAt %}Last checked {{ checkedAt }}.{% else %}Not checked since this server started.{% endif %}
+          Update installs the newest version this site can run.
+        </p>
+        <form method="post" action="{{ checkUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          {% call cardActions() %}
+            {{ button('Check for updates', type='submit') }}
+            {% if updateAllUrl %}{{ buttonLink('Update all', updateAllUrl, color='primary') }}{% endif %}
+          {% endcall %}
+        </form>
+      {% endcall %}
+    </div>
+  {% elif installer == 'off' %}
+    <p class="mb-6 max-w-prose text-sm">
+      Adding, updating and removing plugins here is turned off on this site
+      (<code>GEEKITY_PLUGIN_INSTALL=off</code>). Use <code>geekity plugin</code> on the command line.
+    </p>
+  {% endif %}
+
   {% if not plugins.length %}
     <p class="max-w-prose">
       No plugins are installed. A site with its own <code>server.ts</code> passes them in
@@ -67,7 +121,13 @@
             {{ status(plugin.badge.status, plugin.badge.label) }}
           </p>
           <p>{{ plugin.description }}</p>
-          <p class="text-sm">From {{ plugin.source }}.</p>
+          <p class="text-sm">From {{ plugin.source }}.{% if plugin.inCode %} Managed in code: change it in the site's own code, not here.{% endif %}</p>
+
+          {% if plugin.update %}
+            <p class="text-sm">{{ plugin.update.to }} is available.</p>
+          {% elif plugin.checkNote %}
+            <p class="text-sm">{{ plugin.checkNote }}</p>
+          {% endif %}
 
           {% if plugin.problem %}
             <p class="text-sm text-error">{{ plugin.problem }}</p>
@@ -93,14 +153,16 @@
             </div>
           {% endif %}
 
-          {% if plugin.canEnable or plugin.canDisable %}
+          {% if plugin.canEnable or plugin.canDisable or plugin.update or plugin.removeUrl %}
             <form method="post" action="{{ enableUrl if plugin.canEnable else disableUrl }}">
               <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
               <input type="hidden" name="{{ field }}" value="{{ plugin.name }}" />
               {% call cardActions() %}
+                {% if plugin.update %}{{ buttonLink('Update to ' + plugin.update.to, plugin.update.url, color='primary', style='soft') }}{% endif %}
+                {% if plugin.removeUrl %}{{ buttonLink('Remove', plugin.removeUrl, color='error', style='ghost') }}{% endif %}
                 {% if plugin.canEnable %}
                   {{ button('Enable', type='submit', color='primary') }}
-                {% else %}
+                {% elif plugin.canDisable %}
                   {{ button('Disable', type='submit') }}
                 {% endif %}
               {% endcall %}
@@ -110,4 +172,24 @@
       </li>
     {% endfor %}
   </ul>
+
+  {% if changeLog.length %}
+    <h2 class="mb-4 text-xl font-bold">Recent changes</h2>
+    {% call table('Plugins added, updated and removed here, newest first') %}
+      <thead>
+        <tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">What</th><th scope="col">Plugin</th><th scope="col">Version</th></tr>
+      </thead>
+      <tbody>
+        {% for change in changeLog %}
+          <tr>
+            <td class="whitespace-nowrap">{{ change.when }}</td>
+            <td>{{ change.user }}</td>
+            <td>{{ change.action }}</td>
+            <td><code class="break-all">{{ change.name }}</code></td>
+            <td>{{ change.versions }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    {% endcall %}
+  {% endif %}
 {% endblock %}

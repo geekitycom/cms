@@ -31,6 +31,8 @@ import {
   readWorkFrontMatter,
 } from '../content/read.ts';
 import type { Read } from '../content/read.ts';
+import { respellTags } from '../content/tags.ts';
+import type { Respelling } from '../content/tags.ts';
 import { RSVP_FRONT_MATTER_KEY, RSVP_LABELS, RSVP_VALUES, rsvpValue } from '../content/rsvp.ts';
 import {
   ENCLOSURE_FRONT_MATTER_KEY,
@@ -530,13 +532,14 @@ async function saveFromForm(
       conflict: written.conflict,
     });
   }
-  const { saved, undescribed } = written;
+  const { saved, undescribed, respelled } = written;
 
   flash(
     c,
     'notice',
     savedMessage(document, saved, store.now(), (url) => c.var.replyContexts.read(url)),
   );
+  if (respelled.length > 0) flash(c, 'notice', respelledMessage(respelled));
   if (undescribed.length > 0) flash(c, 'warning', missingAltText(undescribed));
   return c.redirect(documentEditorPath(kind, saved), 303);
 }
@@ -571,6 +574,8 @@ export type WriteOutcome =
       readonly saved: Document;
       /** Images published without alt text, which the editor warns about. */
       readonly undescribed: readonly UndescribedImage[];
+      /** Tags written in the site's spelling rather than as typed, which the editor says. */
+      readonly respelled: readonly Respelling[];
     }
   | ({ readonly outcome: 'refused' } & Refusal)
   | {
@@ -802,13 +807,17 @@ export async function writeDocument(
     return refused(`Another ${kind.singular} already lives in ${target}.`, 'editor-slug');
   }
 
+  const tags = respellTags(kind.tagged ? splitTags(form.tags) : [], (tag) =>
+    store.tagSpelling(tag, { excluding: document?.path }),
+  );
+
   const content: DocumentContent = {
     title: form.title,
     ...(date === undefined ? {} : { date }),
     updated: store.now().toISOString(),
     permalink,
     ...optional('redirectFrom', formerPermalinks(document, promised, permalink)),
-    tags: kind.tagged ? splitTags(form.tags) : [],
+    tags: tags.tags,
     categories: kind.categorised ? splitTags(form.categories) : [],
     draft,
     ...(form.description === '' ? {} : { description: form.description }),
@@ -875,7 +884,7 @@ export async function writeDocument(
     origin: 'admin',
   });
 
-  return { outcome: 'saved', saved, undescribed };
+  return { outcome: 'saved', saved, undescribed, respelled: tags.respelled };
 }
 
 async function citesUndescribedImage(
@@ -970,6 +979,12 @@ function decodedSegment(segment: string): string {
   } catch {
     return segment;
   }
+}
+
+function respelledMessage(respelled: readonly Respelling[]): string {
+  const pairs = respelled.map(({ given, site }) => `“${site}” for “${given}”`);
+  const noun = respelled.length === 1 ? 'a tag' : `${String(respelled.length)} tags`;
+  return `Used this site’s spelling of ${noun}: ${pairs.join(', ')}.`;
 }
 
 /** What the flash says after a save, which depends on what the save did. */

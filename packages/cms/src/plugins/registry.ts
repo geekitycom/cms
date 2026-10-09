@@ -382,7 +382,7 @@ function register(
       declared: NOTHING_DECLARED,
     };
   }
-  if (!Number.isInteger(plugin.hostApi) || plugin.hostApi > HOST_API_VERSION) {
+  if (plugin.hostApi !== HOST_API_VERSION) {
     return {
       problem: `It targets host API version ${String(plugin.hostApi)}, and this core provides version ${String(HOST_API_VERSION)}.`,
       declared: NOTHING_DECLARED,

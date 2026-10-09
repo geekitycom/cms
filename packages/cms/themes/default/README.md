@@ -1634,7 +1634,7 @@ and add the archive's own three feeds:
 
 ```njk
 {% import "partials/feeds.njk" as feeds %}
-{% set tagRoot = "/" + (site.tagBase or "tag") + "/" + (tag | urlencode) + "/" %}
+{% set tagRoot = "/" + (site.tagBase or "tag") + "/" + (tag | lower | urlencode) + "/" %}
 {% block alternates %}
 {{ super() }}
 {{ feeds.feedLinks(tagRoot, site.title + ": " + tag) }}
@@ -1979,7 +1979,7 @@ under, categories first:
 {{ taxonomy.list(tags) }}
 ```
 
-`list` links to `/{{ site.tagBase }}/{tag}/` and `categories` to
+`list` links to `/{{ site.tagBase }}/{tag}/`, the tag in lower case, and `categories` to
 `/{{ site.categoryBase }}/{category}/`, which is where the CMS serves each
 archive. Both bases are settings — `tag` and `category` until the settings
 screen says otherwise — and they reach a template through `site`, which is why
