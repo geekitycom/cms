@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/geekitycom/cms/compare/plugin-llm-v0.1.0...plugin-llm-v0.2.0) (2026-10-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **plugin-llm:** LlmFailure gains the cut-off kind, a failed completion carries message, and describeFailure and LlmConnection are no longer exported. A consumer shows completion.message instead of its own words.
+
+### Features
+
+* **plugin-llm:** ask reasoning models for brief reasoning and report replies cut off at the limit ([a8eebd7](https://github.com/geekitycom/cms/commit/a8eebd7cb56e8d3d3361a188aed26017c86be74f))
+
 ## 0.1.0 (2026-10-08)
 
 

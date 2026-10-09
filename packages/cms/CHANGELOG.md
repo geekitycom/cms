@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/geekitycom/cms/compare/v0.25.0...v0.26.0) (2026-10-09)
+
+
+### Features
+
+* **cms:** give editor actions the site's recent titles and grouped choices ([cd01ac7](https://github.com/geekitycom/cms/commit/cd01ac7e41ad35a671ec6347390b221f6b4af988))
+
 ## [0.25.0](https://github.com/geekitycom/cms/compare/v0.24.0...v0.25.0) (2026-10-08)
 
 
