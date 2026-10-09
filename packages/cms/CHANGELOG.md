@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.28.0](https://github.com/geekitycom/cms/compare/v0.27.0...v0.28.0) (2026-10-09)
+
+
+### Features
+
+* **cms:** give plugins the content directory on PluginSite ([10eb2c5](https://github.com/geekitycom/cms/commit/10eb2c5c9dc3e437376774aef9a52f371a2af0b2))
+* **cms:** hold every outbound side effect in dev mode until the site goes live ([3b973e5](https://github.com/geekitycom/cms/commit/3b973e504f8d4cd801ef2c677f4e5044d27d6161))
+* **cms:** let a plugin check a file against the site's upload rules ([3eb3456](https://github.com/geekitycom/cms/commit/3eb345651c0477e6dfdd778d21fdf9eda615bf7d))
+* **cms:** let a plugin read and write a post's comments ([b7e0d42](https://github.com/geekitycom/cms/commit/b7e0d42645b20e2eef850cb3d77bdaf5f6262ec6))
+* **cms:** let a post name the canonical url it was first published at ([a50e2ab](https://github.com/geekitycom/cms/commit/a50e2abe0c5305cc9d0c45778ef6f7bec39bcbe2))
+* **cms:** let a post set the guid its feeds publish apart from its activitypub id ([a9ddfc5](https://github.com/geekitycom/cms/commit/a9ddfc59d6257e0fc03c75946bfc973d91f95f83))
+* **cms:** let a site theme add markup to every page through head-end and body-end partials ([e172ff7](https://github.com/geekitycom/cms/commit/e172ff75a645353e67900367d1218891e41c8d5a))
+* **cms:** let an editor action offer title choices and a note with nothing to accept ([cc16b8c](https://github.com/geekitycom/cms/commit/cc16b8c2ed83fc35cfd3aa8c14136a90e7231e1e))
+* **cms:** never announce a post that was public before it reached the site ([0d9fe2d](https://github.com/geekitycom/cms/commit/0d9fe2db726edaff0bc7239f819086f3a7b623f7))
+* **cms:** play a youtube or vimeo url on a line of its own as the video ([b3d9854](https://github.com/geekitycom/cms/commit/b3d98542ec727c242c3364321b228b94123871ae))
+* **cms:** read redirects from every file in _data/redirects/, as a list or a from-to map ([b8bb60c](https://github.com/geekitycom/cms/commit/b8bb60c4de034afc1d8a94a43fcb72c50eeeafa3))
+* **cms:** reload the site by itself when the plugins folder changes ([e4ee555](https://github.com/geekitycom/cms/commit/e4ee5550f34b827052eb81040dba018e716e74e0))
+* **plugin-wordpress:** import a wordpress export into the content directory ([811425d](https://github.com/geekitycom/cms/commit/811425dbb01a1738ca82424f84d6a3249ec588fc))
+* **plugin-wordpress:** import wordpress media to /uploads/ and redirect old media urls ([1e8b033](https://github.com/geekitycom/cms/commit/1e8b0338c2de377699111ea1cd18ed5706b6a43f))
+
+
+### Bug Fixes
+
+* **cms:** index a document written into a directory created under a running watch ([398e7b3](https://github.com/geekitycom/cms/commit/398e7b34e19aa3a41c4b51fccf87c9019899a028))
+* **cms:** let a post whose slug is not ascii hold comments, and encode the reply link's id ([9e29772](https://github.com/geekitycom/cms/commit/9e297728e7db8850d721969a786556569de64778))
+* **cms:** skip cited-page revisions for posts with no account to send them ([4eef52f](https://github.com/geekitycom/cms/commit/4eef52f496d4dbd8e35876ab6396a52fd894490a))
+* **cms:** stop serving a draft, scheduled or non-public post at its stored activitypub id ([9249f0b](https://github.com/geekitycom/cms/commit/9249f0b3fefa69f15dc7c7099437610fb62d1545))
+* **cms:** stop stamping posts as announced on a site with no accounts ([3e1ea2e](https://github.com/geekitycom/cms/commit/3e1ea2e02d18057f8fd943d44d6d6e8b2a5116d8))
+
 ## [0.27.0](https://github.com/geekitycom/cms/compare/v0.26.0...v0.27.0) (2026-10-09)
 
 

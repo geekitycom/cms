@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/geekitycom/cms/compare/plugin-post-summary-v0.2.1...plugin-post-summary-v0.3.0) (2026-10-09)
+
+
+### Features
+
+* **plugin-post-summary:** suggest three fresh titles without showing the current one ([768d10c](https://github.com/geekitycom/cms/commit/768d10c3d1787f3114ea97e30f469e98f26b29a2))
+
 ## [0.2.1](https://github.com/geekitycom/cms/compare/plugin-post-summary-v0.2.0...plugin-post-summary-v0.2.1) (2026-10-09)
 
 
