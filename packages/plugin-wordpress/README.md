@@ -12,6 +12,9 @@ WebFinger aliases and the feed and archive layout are the site's own and are in
 
 ## Installing it
 
+It works with every 0.x release of `@geekity/cms` from the one it was built
+against, which its peer dependency names.
+
 Add the package to the site and to `plugins` in its config:
 
 ```sh
