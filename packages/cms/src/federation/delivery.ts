@@ -13,6 +13,7 @@ import { holdOutbound } from '../dev-mode.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { CitedPage } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
+import { isMigrated } from '../content/migrated.ts';
 import { pinnedAt } from '../content/pinned.ts';
 import { replyTarget } from '../content/post-type.ts';
 import { saveDocument } from '../content/save.ts';
@@ -489,6 +490,12 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       const before = federatedOrUndefined(change.previous, now);
       const after = federatedOrUndefined(change.next, now);
       if (before === undefined && after === undefined) return;
+      const subject = change.next ?? change.previous;
+      if (subject !== undefined && isMigrated(subject)) {
+        const followersHoldIt = wasAnnounced(subject);
+        const comingIntoView = before === undefined;
+        if (!followersHoldIt || comingIntoView) return;
+      }
 
       const context = deliveryContext();
 
@@ -569,8 +576,8 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       // Read before the queue rather than inside it, so a post with nothing to
       // send answers `undefined` rather than joining a queue to find that out.
       const published = isFederatedDocument(document, store.now());
-      const announced = (document.activitypub?.published ?? '') !== '';
-      if (!published && !announced) return undefined;
+      const announced = wasAnnounced(document);
+      if (!announced && (!published || isMigrated(document))) return undefined;
 
       return await enqueue(async () => {
         const context = deliveryContext();
@@ -801,6 +808,10 @@ function postBySlug(store: ContentStore, slug: string): Document | undefined {
   const direct = store.getBySlug(slug);
   if (direct?.type === 'post') return direct;
   return store.listFederated().find((document) => document.slug === slug);
+}
+
+function wasAnnounced(document: Document): boolean {
+  return (document.activitypub?.published ?? '') !== '';
 }
 
 /** The document, when it is one this site federates, and `undefined` otherwise. */

@@ -641,7 +641,7 @@ something a site is told it may lose.
 | `sessions`                                          | Nothing. Everybody signed in is signed out.                              |
 | `ap_deliveries`                                     | Nothing. The federation screen shows the posts with "Nothing recorded."  |
 | `ap_relays`                                         | The relay list in `site.json`: boot sends each of them a fresh `Follow`. |
-| `cms_state`                                         | Nothing. It holds one key, the scheduler's watermark.                    |
+| `cms_state`                                         | Nothing. It holds the scheduler's watermark and its first run.           |
 | `migrations`, `admin_migrations`                    | The package. They record which schema versions have run.                 |
 
 Three consequences worth knowing before deleting one:

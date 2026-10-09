@@ -5,6 +5,7 @@ import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import { citationsOf } from '../content/citation.ts';
+import { isMigrated, isMigratedArrival } from '../content/migrated.ts';
 import { readOf } from '../content/read.ts';
 import { replyTarget } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
@@ -269,7 +270,7 @@ export function createWebmentionService(
 
       const now = config.now();
       const document = change.next ?? change.previous;
-      if (document === undefined) return;
+      if (document === undefined || isMigratedArrival(change, now)) return;
 
       // Nothing goes out about a post the outside world has never been able to
       // read: a draft edited into another draft is not news.
@@ -368,7 +369,9 @@ export function createWebmentionService(
       if (target === undefined || !sending()) return;
       const now = config.now();
       for (const document of store.listAll()) {
-        if (replyTarget(document) !== copy || !isPublic(document, now)) continue;
+        if (replyTarget(document) !== copy || !isPublic(document, now) || isMigrated(document)) {
+          continue;
+        }
         const source = absoluteUrl(document.permalink, config.baseUrl);
         if (held(source, [target])) continue;
         enqueue(() => tell(document.slug, source, target)).catch((thrown: unknown) => {

@@ -1,6 +1,7 @@
 import { readSiteSettings } from './admin/settings.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
+import { isMigratedArrival } from './content/migrated.ts';
 import { holdOutbound } from './dev-mode.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { isPrivateHost } from './webmention/public-address.ts';
@@ -144,6 +145,7 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
       if (change.origin === 'scan' || sending() === undefined) return [];
 
       const now = config.now();
+      if (isMigratedArrival(change, now)) return [];
       const urls = new Set<string>();
       for (const document of [change.previous, change.next]) {
         const url = publicUrl(document, now, config.baseUrl);

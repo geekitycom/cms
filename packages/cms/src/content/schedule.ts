@@ -59,6 +59,13 @@ export interface ScheduleWatermark {
   read(): string | undefined;
   /** Move it forward. */
   write(instant: string): void;
+  /**
+   * When the scheduler first ran on this site, or `undefined` before it has.
+   * Nothing dated earlier is ever announced, whatever the watermark says.
+   */
+  readFirstRun(): string | undefined;
+  /** Record it, once. */
+  writeFirstRun(instant: string): void;
 }
 
 /**
@@ -207,7 +214,7 @@ export function createScheduler(options: CreateSchedulerOptions): Scheduler {
    * to wait for it would otherwise sit unannounced until the next restart.
    */
   function delayUntil(due: string | undefined): number | undefined {
-    const since = watermark.read();
+    const since = windowStart();
     if (since !== undefined && store.listDueSince(since).length > 0) return 1;
     if (due === undefined) return undefined;
     return Math.min(MAXIMUM_DELAY_MS, Math.max(1, new Date(due).getTime() - store.now().getTime()));
@@ -222,9 +229,17 @@ export function createScheduler(options: CreateSchedulerOptions): Scheduler {
     arm();
   }
 
+  function windowStart(): string | undefined {
+    const since = watermark.read();
+    const firstRun = watermark.readFirstRun();
+    if (since === undefined || firstRun === undefined) return since;
+    return since > firstRun ? since : firstRun;
+  }
+
   async function release(): Promise<number> {
     const now = store.now().toISOString();
-    const since = watermark.read();
+    if (watermark.readFirstRun() === undefined) watermark.writeFirstRun(now);
+    const since = windowStart();
 
     // Nothing to catch up on, because nothing has ever been watched. Start
     // from here rather than announcing an archive whose database was deleted.

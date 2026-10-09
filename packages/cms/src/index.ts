@@ -1400,6 +1400,9 @@ export type {
  */
 export const SCHEDULE_WATERMARK_KEY = 'schedule.watermark';
 
+/** Where the instant the scheduler first ran on this site lives in {@link AdminStore.getState}. */
+export const SCHEDULE_FIRST_RUN_KEY = 'schedule.firstRun';
+
 /** A running (or runnable) CMS instance. */
 export interface Cms {
   /**
@@ -1990,6 +1993,10 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
       read: () => admin.getState(SCHEDULE_WATERMARK_KEY),
       write: (instant) => {
         admin.setState(SCHEDULE_WATERMARK_KEY, instant);
+      },
+      readFirstRun: () => admin.getState(SCHEDULE_FIRST_RUN_KEY),
+      writeFirstRun: (instant) => {
+        admin.setState(SCHEDULE_FIRST_RUN_KEY, instant);
       },
     },
   });

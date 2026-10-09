@@ -280,6 +280,41 @@ describe('replying to a silo copy that links to its original (TASK-197)', () => 
   });
 });
 
+describe('a migrated reply to a silo copy (TASK-296 AC #7)', () => {
+  const reply = (extra: string): string => `---
+title: Re beans
+date: '2025-10-04T09:00:00Z'
+permalink: /2025/10/re-beans/
+in-reply-to: ${SILO}
+${extra}---
+
+Mine climb too.
+`;
+
+  it('tells the original about a reply first published here once its context is read', async () => {
+    pages = { [SILO]: siloPage(ORIGINAL, 'Beans climb poles.'), [ORIGINAL]: originalPage([SILO]) };
+    const cms = await site({ 'posts/2025-10-04-re-beans.md': reply('') });
+
+    await cms.replyContexts.settled();
+    await cms.webmentions.settled();
+
+    assert.deepEqual(
+      sent.map((one) => one.target),
+      [ORIGINAL],
+    );
+  });
+
+  it('tells the original nothing about a reply that was public before it reached this site', async () => {
+    pages = { [SILO]: siloPage(ORIGINAL, 'Beans climb poles.'), [ORIGINAL]: originalPage([SILO]) };
+    const cms = await site({ 'posts/2025-10-04-re-beans.md': reply('migrated: true\n') });
+
+    await cms.replyContexts.settled();
+    await cms.webmentions.settled();
+
+    assert.deepEqual(sent, []);
+  });
+});
+
 const POST = (extra: string): string => `---
 title: Hello world
 date: '2026-09-19T09:00:00Z'

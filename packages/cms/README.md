@@ -428,7 +428,7 @@ something a site is told it may lose:
 | `ap_deliveries`                                     | Nothing. The federation screen shows its posts with "Nothing recorded."      |
 | `ap_relays`                                         | The relay list in `site.json`: boot sends each of them a fresh `Follow`.     |
 | `password_resets`, `spent_tokens`                   | Nothing. Every reset link and every one-click moderation link stops working. |
-| `cms_state`                                         | Nothing. One key, the scheduler's watermark.                                 |
+| `cms_state`                                         | Nothing. The scheduler's watermark and its first run.                        |
 | `migrations`, `admin_migrations`                    | The package. They record which schema versions have run.                     |
 
 So four things are actually lost:

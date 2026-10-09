@@ -1,6 +1,7 @@
 import { readSiteSettings, taxonomyBasesFromSettings } from './admin/settings.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
+import { isMigratedArrival } from './content/migrated.ts';
 import { holdOutbound } from './dev-mode.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { isFederatedDocument } from './federation/article.ts';
@@ -171,6 +172,7 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
       if (change.origin === 'scan') return [];
 
       const now = config.now();
+      if (isMigratedArrival(change, now)) return [];
       const before = inFeeds(change.previous, now);
       const after = inFeeds(change.next, now);
       if (before === undefined && after === undefined) return [];
