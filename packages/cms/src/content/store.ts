@@ -574,7 +574,12 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     tagsFor: db.prepare('SELECT tag, key FROM document_tags WHERE path = ? ORDER BY position'),
     keysFor: db.prepare('SELECT key FROM document_tags WHERE path = ?'),
     spellings: db.prepare(tagSpellingsSql('')),
-    spellingExcluding: db.prepare(tagSpellingsSql('WHERE spelled.key = ? AND spelled.path <> ?')),
+    spellingsOfKeys: db.prepare(
+      tagSpellingsSql('WHERE spelled.key IN (SELECT value FROM json_each(:keys))'),
+    ),
+    spellingExcluding: db.prepare(
+      tagSpellingsSql('WHERE spelled.key = :key AND spelled.path <> :excluding'),
+    ),
     dataVersion: db.prepare('PRAGMA data_version'),
     categoriesFor: db.prepare(
       'SELECT category FROM document_categories WHERE path = ? ORDER BY position',
@@ -633,52 +638,46 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
   let open = true;
 
-  let spelled:
-    | { version: unknown; from: string; until: string | undefined; keys: Map<string, string> }
-    | undefined;
+  let cachedSpellings: CachedSpellings | undefined;
   const staleKeys = new Set<string>();
 
   const MOST_KEYS_REFRESHED = 500;
 
   function siteSpellings(): ReadonlyMap<string, string> {
     const now = nowKey();
-    const version = statements.dataVersion.get()?.['data_version'];
-    const cached =
-      spelled !== undefined &&
-      spelled.version === version &&
-      spelled.from <= now &&
-      (spelled.until === undefined || now < spelled.until)
-        ? spelled.keys
-        : undefined;
+    const dataVersion = statements.dataVersion.get()?.['data_version'];
+    const current =
+      cachedSpellings === undefined || outOfDate(cachedSpellings, dataVersion, now)
+        ? undefined
+        : cachedSpellings.byKey;
 
-    if (cached !== undefined && staleKeys.size === 0) return cached;
+    if (current !== undefined && staleKeys.size === 0) return current;
 
-    const refreshing = cached !== undefined && staleKeys.size <= MOST_KEYS_REFRESHED;
-    const keys = refreshing ? cached : new Map<string, string>();
-    const rows = refreshing
-      ? refreshSpellings(keys, [...staleKeys], now)
+    const refreshStaleOnly = current !== undefined && staleKeys.size <= MOST_KEYS_REFRESHED;
+    const byKey = refreshStaleOnly ? current : new Map<string, string>();
+    const rows = refreshStaleOnly
+      ? refreshStaleSpellings(byKey, now)
       : (statements.spellings.all(now) as Record<string, unknown>[]);
-    for (const row of rows) keys.set(String(row['key']), String(row['tag']));
+    for (const row of rows) byKey.set(String(row['key']), String(row['tag']));
     staleKeys.clear();
 
-    const until = text((statements.nextDue.get(now) as Record<string, unknown>)['due']);
-    spelled = { version, from: now, until, keys };
-    return keys;
+    const nextScheduledAt = text((statements.nextDue.get(now) as Record<string, unknown>)['due']);
+    cachedSpellings = { byKey, dataVersion, workedOutAt: now, nextScheduledAt };
+    return byKey;
   }
 
-  function refreshSpellings(
-    keys: Map<string, string>,
-    stale: readonly string[],
+  function refreshStaleSpellings(
+    byKey: Map<string, string>,
     now: string,
   ): Record<string, unknown>[] {
-    for (const key of stale) keys.delete(key);
-    const placeholders = stale.map(() => '?').join(', ');
-    return db
-      .prepare(tagSpellingsSql(`WHERE spelled.key IN (${placeholders})`))
-      .all(now, ...stale) as Record<string, unknown>[];
+    for (const key of staleKeys) byKey.delete(key);
+    return statements.spellingsOfKeys.all({ keys: JSON.stringify([...staleKeys]) }, now) as Record<
+      string,
+      unknown
+    >[];
   }
 
-  function tagsChanging(contentPath: string): void {
+  function markTagsStaleBeforeWrite(contentPath: string): void {
     for (const row of statements.keysFor.all(contentPath)) staleKeys.add(String(row['key']));
   }
 
@@ -715,7 +714,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
   function writeOne(document: Document): void {
     const contentPath = document.path;
-    tagsChanging(contentPath);
+    markTagsStaleBeforeWrite(contentPath);
     for (const tag of document.tags) staleKeys.add(tagKey(tag));
     try {
       statements.insert.run(toRow(document));
@@ -834,14 +833,14 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     },
 
     remove(contentPath) {
-      tagsChanging(contentPath);
+      markTagsStaleBeforeWrite(contentPath);
       // Nothing cascades into a virtual table, so the words go by hand.
       statements.deleteText.run(contentPath);
       return statements.remove.run(contentPath).changes > 0;
     },
 
     clear() {
-      spelled = undefined;
+      cachedSpellings = undefined;
       staleKeys.clear();
       db.exec('BEGIN');
       try {
@@ -1035,12 +1034,15 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
           tag: spellings.get(String(row['key'])) ?? String(row['tag']),
           count: Number(row['count']),
         }))
-        .sort((a, b) => b.count - a.count || compareText(a.tag, b.tag));
+        .sort((a, b) => b.count - a.count || compareByUtf16CodeUnit(a.tag, b.tag));
     },
 
     tagSpelling(tag, options = {}) {
       if (options.excluding === undefined) return siteSpellings().get(tagKey(tag));
-      const row = statements.spellingExcluding.get(nowKey(), tagKey(tag), options.excluding);
+      const row = statements.spellingExcluding.get(
+        { key: tagKey(tag), excluding: options.excluding },
+        nowKey(),
+      );
       return text(row?.['tag']);
     },
 
@@ -1062,7 +1064,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
           published: Number(row['published']),
           total: Number(row['total']),
         }))
-        .sort((a, b) => compareText(a.term, b.term));
+        .sort((a, b) => compareByUtf16CodeUnit(a.term, b.term));
     },
 
     search(query, options = {}) {
@@ -1113,7 +1115,34 @@ const TERM_TABLES: Readonly<Record<TaxonomyName, TermTable>> = {
   },
 };
 
-function compareText(a: string, b: string): number {
+interface CachedSpellings {
+  readonly byKey: Map<string, string>;
+  readonly dataVersion: unknown;
+  readonly workedOutAt: string;
+  readonly nextScheduledAt: string | undefined;
+}
+
+function outOfDate(cache: CachedSpellings, dataVersion: unknown, now: string): boolean {
+  return (
+    anotherConnectionWrote(cache, dataVersion) ||
+    scheduledPostCameDue(cache, now) ||
+    clockWentBack(cache, now)
+  );
+}
+
+function anotherConnectionWrote(cache: CachedSpellings, dataVersion: unknown): boolean {
+  return cache.dataVersion !== dataVersion;
+}
+
+function scheduledPostCameDue(cache: CachedSpellings, now: string): boolean {
+  return cache.nextScheduledAt !== undefined && now >= cache.nextScheduledAt;
+}
+
+function clockWentBack(cache: CachedSpellings, now: string): boolean {
+  return now < cache.workedOutAt;
+}
+
+function compareByUtf16CodeUnit(a: string, b: string): number {
   if (a === b) return 0;
   return a < b ? -1 : 1;
 }

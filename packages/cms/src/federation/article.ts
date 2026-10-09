@@ -46,6 +46,7 @@ import type { ContentStore } from '../content/store.ts';
 import { postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
+import { respellTags } from '../content/tags.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { userForAuthor } from '../web/authors.ts';
 import { isServed, permalinkOfObjectId, postObjectId } from '../web/documents.ts';
@@ -284,6 +285,9 @@ export function postObject(
   const language =
     documentLanguage(document) ?? canonicalLocale(settings.language) ?? DEFAULT_LOCALE;
 
+  const siteSpelledTags = respellTags(document.tags, (tag) =>
+    context.data.store.tagSpelling(tag),
+  ).tags;
   const inReplyTo = replyTarget(document);
   const mentioned = mentionedAccounts(document.body, context.data.config.contentDir);
   const common = {
@@ -316,10 +320,7 @@ export function postObject(
     // each one points at the archive the site serves for it.
     tags: [
       ...mentions(replyTo, mentioned),
-      ...document.tags.map((tag) => {
-        const spelled = context.data.store.tagSpelling(tag) ?? tag;
-        return hashtag(spelled, tagHref(spelled, 0, bases), baseUrl);
-      }),
+      ...siteSpelledTags.map((tag) => hashtag(tag, tagHref(tag, 0, bases), baseUrl)),
       ...document.categories.map((category) =>
         hashtag(category, categoryHref(category, 0, bases), baseUrl),
       ),

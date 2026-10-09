@@ -125,7 +125,7 @@ import {
 } from './search.ts';
 import { findQueryRedirect, redirectLocation } from './redirects.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
-import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
+import type { Taxonomy, TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
 /**
  * Register the public site on a Hono app.
@@ -433,12 +433,9 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   if (feedRequest !== undefined) {
     const { target, format } = feedRequest;
     const canonical = feedTargetHref(target, format, bases);
-    if (!feedRequest.canonical) return c.redirect(canonical, 301);
     if (
-      target.kind === 'listing' &&
-      target.subject.term?.taxonomy === 'tag' &&
-      canonical !== encodePath(pathname) &&
-      countListing(store, target.subject) > 0
+      !feedRequest.canonical ||
+      isCarriedTagFeedInAnotherCasing(store, target, canonical, pathname)
     ) {
       return c.redirect(canonical, 301);
     }
@@ -1165,10 +1162,7 @@ function parseListingPath(
   const taxonomy = taxonomyForSegment(segments[0], bases);
   const named = segments[1];
   if (taxonomy === undefined || named === undefined) return undefined;
-  const term: TaxonomyTerm = {
-    taxonomy,
-    term: taxonomy === 'tag' ? (store.tagSpelling(named) ?? named) : named,
-  };
+  const term: TaxonomyTerm = { taxonomy, term: asTheSiteSpellsIt(store, taxonomy, named) };
 
   if (segments.length === 2) return { term, pageNumber: 0 };
   if (segments.length === 4 && segments[2] === PAGE_SEGMENT) {
@@ -1176,6 +1170,24 @@ function parseListingPath(
     return page === undefined ? undefined : { term, pageNumber: page };
   }
   return undefined;
+}
+
+function asTheSiteSpellsIt(store: ContentStore, taxonomy: Taxonomy, term: string): string {
+  return taxonomy === 'tag' ? (store.tagSpelling(term) ?? term) : term;
+}
+
+function isCarriedTagFeedInAnotherCasing(
+  store: ContentStore,
+  target: FeedTarget,
+  canonical: string,
+  pathname: string,
+): boolean {
+  return (
+    target.kind === 'listing' &&
+    target.subject.term?.taxonomy === 'tag' &&
+    canonical !== encodePath(pathname) &&
+    countListing(store, target.subject) > 0
+  );
 }
 
 /** How many published documents a listing holds. */
