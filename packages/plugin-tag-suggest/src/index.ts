@@ -237,7 +237,7 @@ export default definePlugin({
     'Suggests tags for a post in the editor, from the language model the LLM plugin connects to, ' +
     'ranked by how many people follow each tag on tags.pub, when the author asks.',
   hostApi: 1,
-  requires: { [LLM]: '^0.2.0' },
+  requires: { [LLM]: '>=0.2.0 <1.0.0' },
   register(host) {
     const settings = host.settings(SETTINGS);
     host.editorAction({
