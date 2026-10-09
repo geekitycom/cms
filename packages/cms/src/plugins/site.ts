@@ -8,6 +8,7 @@
 import { listUsers, setUserActorId } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore } from '../admin/store.ts';
+import { acceptUpload, refusedUpload } from '../admin/uploads.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
 import { actorKeyFile, loadActorKeyPairs, writeActorKeyFile } from '../federation/keys.ts';
@@ -85,6 +86,13 @@ export function pluginSite(options: { admin: AdminStore; config: ResolvedConfig 
 
     async addFollower(username, follower) {
       await addFollower({ admin, contentDir }, username, follower);
+    },
+
+    checkUpload(name, bytes) {
+      const outcome = acceptUpload(name, '', bytes, config);
+      return refusedUpload(outcome)
+        ? { accepted: false, why: outcome.error }
+        : { accepted: true, bytes: outcome.bytes };
     },
   };
 }

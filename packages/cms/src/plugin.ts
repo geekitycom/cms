@@ -108,7 +108,20 @@ export interface PluginSite {
   followers(username: string): readonly PluginFollower[];
   /** Add a follower, or refresh the one already held. */
   addFollower(username: string, follower: PluginFollower): Promise<void>;
+  /**
+   * Hold a file to the rules an upload through the editor is held to: the
+   * site's allowed types, its size limit for the file's kind, the format's
+   * leading bytes, and location and camera metadata removed. Answers the
+   * bytes to store under `uploads/`, or why the site refuses the file. It
+   * writes nothing.
+   */
+  checkUpload(name: string, bytes: Uint8Array): PluginUploadCheck;
 }
+
+/** What {@link PluginSite.checkUpload} makes of a file. */
+export type PluginUploadCheck =
+  | { readonly accepted: true; readonly bytes: Uint8Array }
+  | { readonly accepted: false; readonly why: string };
 
 /** The plugin's private folder, `data/plugins/<package name>/`. */
 export interface PluginDataFolder {
