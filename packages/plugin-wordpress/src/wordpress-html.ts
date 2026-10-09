@@ -1,9 +1,8 @@
 import TurndownService from 'turndown';
 import type { TurndownNode } from 'turndown';
 
-export interface ConvertedBody {
+interface ConvertedBody {
   readonly markdown: string;
-  /** The URL an ActivityPub plugin reply block answered. */
   readonly inReplyTo?: string | undefined;
 }
 
@@ -72,7 +71,7 @@ function escapeAttribute(text: string): string {
 const YOUTUBE_PAGES = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'];
 const VIMEO_PAGES = ['vimeo.com', 'www.vimeo.com'];
 
-export function videoPageUrl(source: string): string | undefined {
+function videoPageUrl(source: string): string | undefined {
   const href = source.startsWith('//') ? `https:${source}` : source;
   if (!URL.canParse(href)) return undefined;
   const url = new URL(href);
@@ -104,7 +103,7 @@ const ALL_BLOCKS =
  * paragraphs and its single line breaks into `<br />` when the post is shown.
  * A block post carries its own `<p>` and is shown without it.
  */
-export function wpautop(input: string): string {
+function wpautop(input: string): string {
   if (input.trim() === '') return '';
   const pres: string[] = [];
   let text = `${input}\n`.replace(/<pre[\s\S]*?<\/pre>/g, (pre) => {

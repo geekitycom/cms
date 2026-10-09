@@ -1,12 +1,9 @@
 import type { WordPressExport, WordPressItem } from './wxr.ts';
 
-/** Where WordPress kept uploads, under the site's own path. */
 export const WORDPRESS_UPLOADS = '/wp-content/uploads/';
 
-/** Where the site serves an upload kept in `content/uploads/`. */
-export const UPLOADS = '/uploads/';
+const UPLOADS = '/uploads/';
 
-/** A path under `wp-content/uploads/`, such as `2024/03/photo.png`, decoded. */
 export type UploadPath = string;
 
 /**
@@ -15,10 +12,6 @@ export type UploadPath = string;
  */
 const VARIANT = /^(.*)-(?:\d+x\d+|scaled)(\.[^./]+)$/i;
 
-/**
- * The path itself, then each name it could be a size variant of, the
- * barest last: `a-scaled-300x200.png`, `a-scaled.png`, `a.png`.
- */
 export function variantCandidates(upload: UploadPath): UploadPath[] {
   const candidates = [upload];
   for (
@@ -31,27 +24,17 @@ export function variantCandidates(upload: UploadPath): UploadPath[] {
   return candidates;
 }
 
-/** The root-relative URL of an upload, encoded. */
 export function uploadUrl(upload: UploadPath): string {
   return `${UPLOADS}${encodeURI(upload)}`;
 }
 
-/** A WordPress site's media: its attachments, and the hosts its upload URLs were written on. */
 export interface WordPressMedia {
-  /** Each attachment, by the path of its original. */
   readonly originals: ReadonlyMap<UploadPath, WordPressItem>;
-  /** An attachment original, or the original of a size variant of one; any other path as it is. */
   originalOf(upload: UploadPath): UploadPath;
-  /** Every upload path the text names on one of the site's hosts, in order, once each. */
   references(text: string): UploadPath[];
-  /** The text with each such URL made `/uploads/<original>`, on `origin` when one is given. */
   rewrite(text: string, origin?: string): string;
 }
 
-/**
- * The media of an export. `origins` are further hosts the site's upload URLs
- * were written on, such as the staging host it was built on, comma-separated.
- */
 export function wordPressMedia(
   exported: WordPressExport,
   origins: string | true | undefined,
@@ -109,7 +92,6 @@ function attachedFile(item: WordPressItem): UploadPath | undefined {
   return at === -1 ? undefined : decoded(pathname.slice(at + WORDPRESS_UPLOADS.length));
 }
 
-/** The original WordPress kept beside the `-scaled` copy it made of a very large upload. */
 function withoutScaled(upload: UploadPath): UploadPath {
   return upload.replace(/-scaled(\.[^./]+)$/i, '$1');
 }

@@ -12,18 +12,13 @@ import type {
   WordPressImporter,
 } from './content-import.ts';
 import { uploadUrl, wordPressMedia } from './media.ts';
+import type { UploadPath } from './media.ts';
 import { homeOf } from './posts-import.ts';
 import type { Home } from './posts-import.ts';
-import type { UploadPath } from './media.ts';
 import type { WordPressExport, WordPressItem } from './wxr.ts';
 
 const MEDIA_FILE = '_data/media.json';
 
-/**
- * Each attachment's original, copied from a local copy of `wp-content/uploads`
- * into `content/uploads/` at the same path, with its alt text. An upload a
- * post or page shows that is no attachment is copied too, for that post.
- */
 export const attachments: WordPressImporter = {
   postTypes: ['attachment'],
   import: importAttachments,

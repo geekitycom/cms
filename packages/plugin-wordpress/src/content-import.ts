@@ -13,26 +13,18 @@ import type { WordPressExport, WordPressItem } from './wxr.ts';
 
 export interface ImportedFile {
   readonly item: WordPressItem;
-  /** Relative to the content directory, with `/` between segments, such as `posts/2024-03-05-hello.md`. */
   readonly path: string;
   readonly contents: string | Uint8Array;
 }
 
-/** Why an importer left an item out, or what the operator should know about one it took. */
 export interface ItemNote {
   readonly item: WordPressItem;
   readonly outcome: 'skipped' | 'warned';
   readonly why: string;
 }
 
-/**
- * One key of a JSON object file the site also writes, such as `homepage` in
- * `_data/site.json` or an upload's alt text in `_data/media.json`. The import
- * owns the key, never the file.
- */
 export interface DataEntry {
   readonly item: WordPressItem;
-  /** Relative to the content directory, like {@link ImportedFile.path}. */
   readonly file: string;
   readonly key: string;
   readonly value: unknown;
@@ -52,13 +44,7 @@ export interface ImporterOutput {
   readonly comments?: readonly ImportedComment[] | undefined;
 }
 
-/**
- * One kind of thing the import brings across. It sees the whole export, since
- * a post's body needs the attachments and a redirect needs every permalink,
- * and the command's context, for the site's users and the options it takes.
- */
 export interface WordPressImporter {
-  /** The post types it handles. An item whose type no importer claims is skipped. */
   readonly postTypes: readonly string[];
   import(
     exported: WordPressExport,
@@ -66,7 +52,7 @@ export interface WordPressImporter {
   ): ImporterOutput | Promise<ImporterOutput>;
 }
 
-export const SKIPPED_POST_TYPES: Readonly<Record<string, string>> = {
+const SKIPPED_POST_TYPES: Readonly<Record<string, string>> = {
   revision: 'an earlier version of a post; the import takes the current one',
   oembed_cache: "WordPress's cache of embed answers; Geekity fetches its own",
   nav_menu_item: 'a navigation menu entry; a Geekity theme draws its own menu',
@@ -90,7 +76,6 @@ export const SKIPPED_POST_TYPES: Readonly<Record<string, string>> = {
   feedback: 'a contact form submission; Geekity keeps its own',
 };
 
-/** What happened to one item, or to one file an item produced. */
 export type Outcome =
   'written' | 'unchanged' | 'kept' | 'conflict' | 'clash' | 'skipped' | 'warned';
 
@@ -102,16 +87,11 @@ export interface ReportRow {
 }
 
 export interface ImportReport {
-  /** In the export's order, each item's rows together. */
   readonly rows: readonly ReportRow[];
 }
 
 export const IMPORT_RECORD_FILE = 'import.json';
 
-/**
- * The redirects the import declares, one key per old URL, in a file of their
- * own beside the site's `_data/redirects.json`, which the import never touches.
- */
 export const IMPORT_REDIRECTS_FILE = '_data/redirects/wordpress.json';
 
 export async function importWordPressContent(options: {

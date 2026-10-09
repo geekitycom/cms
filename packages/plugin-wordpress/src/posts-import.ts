@@ -69,7 +69,7 @@ export const postsAndPages: WordPressImporter = {
   import: importPostsAndPages,
 };
 
-export type Placement =
+type Placement =
   | { readonly item: WordPressItem; readonly disposition: Extract<Disposition, { kind: 'skip' }> }
   | {
       readonly item: WordPressItem;
@@ -185,10 +185,10 @@ function isPretty(link: string, home: Home): boolean {
 }
 
 function decodedPath(link: string): string {
-  return new URL(link).pathname.split('/').map(decoded).join('/');
+  return new URL(link).pathname.split('/').map(decodedSegment).join('/');
 }
 
-function decoded(slug: string): string {
+function decodedSegment(slug: string): string {
   try {
     return decodeURIComponent(slug);
   } catch {
@@ -197,7 +197,7 @@ function decoded(slug: string): string {
 }
 
 function slugOf(item: WordPressItem): string {
-  const slug = decoded(item.slug).replaceAll('/', '-');
+  const slug = decodedSegment(item.slug).replaceAll('/', '-');
   if (slug !== '') return slug;
   const fromTitle = item.title
     .toLowerCase()
@@ -293,7 +293,7 @@ function formerPermalinks(item: WordPressItem, permalink: string): string[] {
 
   const metaValues = (key: string) =>
     item.meta.filter((meta) => meta.key === key).map((meta) => meta.value);
-  const slugs = [slug, ...metaValues('_wp_old_slug').map(decoded)];
+  const slugs = [slug, ...metaValues('_wp_old_slug').map(decodedSegment)];
   const dates = [
     date,
     ...metaValues('_wp_old_date').map((value) => localDateOf({ ...item, date: value })),

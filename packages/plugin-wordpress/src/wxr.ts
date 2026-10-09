@@ -57,7 +57,6 @@ export interface WordPressItem {
   readonly menuOrder: number;
   readonly password: string;
   readonly sticky: boolean;
-  /** An attachment's file URL. */
   readonly attachmentUrl: string | undefined;
   readonly terms: readonly WordPressTerm[];
   readonly meta: readonly WordPressMeta[];
@@ -82,7 +81,6 @@ export interface WordPressComment {
   readonly meta: readonly WordPressMeta[];
 }
 
-/** The file is not an export this import can read. Each problem is a sentence. */
 export class NotAWordPressExportError extends Error {
   constructor(readonly problems: readonly string[]) {
     super(problems.join('\n'));

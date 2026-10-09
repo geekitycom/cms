@@ -6,7 +6,6 @@ export interface TestItem {
   readonly slug?: string;
   readonly link?: string;
   readonly content?: string;
-  /** `post_date`, in the site's zone. */
   readonly date?: string;
   readonly dateGmt?: string;
   readonly modifiedGmt?: string;

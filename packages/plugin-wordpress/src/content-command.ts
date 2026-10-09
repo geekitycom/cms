@@ -13,12 +13,6 @@ import type { WordPressExport } from './wxr.ts';
 
 const IMPORTERS: readonly WordPressImporter[] = [postsAndPages, attachments, commentsAndReactions];
 
-/**
- * `geekity import wordpress <export.xml>`: a WXR export becomes files in the
- * content directory. Like `import wordpress-actor` it runs whether or not the
- * plugin is enabled, and it is meant to be run again: before the cutover to
- * check the result and after it to pick up what arrived in between.
- */
 export function contentImportCommand(data: PluginDataFolder): PluginCommand {
   return {
     words: ['import', 'wordpress'],
