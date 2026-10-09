@@ -112,8 +112,11 @@ export async function callModel(
   const asked = request.model ?? connection.model;
   const maxTokens = request.maxTokens ?? DEFAULT_MAX_TOKENS;
   const reasoning = await reasoningFor(connection, request, asked, catalog);
-  const failure = (error: LlmFailure) =>
-    ({ ok: false, error, message: describeFailure(error, connection) }) as const;
+  const failure = (error: LlmFailure): ModelCall['completion'] => ({
+    ok: false,
+    error,
+    message: describeFailure(error, connection),
+  });
 
   const outcome = await chatCompletion(
     connection,

@@ -61,12 +61,16 @@ interface Suggested {
   readonly forReach: readonly string[];
 }
 
-/** One candidate: what goes in the field, and the key tags.pub knows it by. */
+/** One candidate: the key tags.pub knows it by, and how the model and this site spell it. */
 interface Candidate {
-  readonly value: string;
   readonly key: string;
-  readonly used: boolean;
-  readonly rank: number;
+  readonly modelSpelling: string;
+  readonly siteSpelling: string | undefined;
+  readonly modelOrder: number;
+}
+
+function usedHere(candidate: Candidate): boolean {
+  return candidate.siteSpelling !== undefined;
 }
 
 function candidatesFrom(
@@ -78,28 +82,30 @@ function candidatesFrom(
     const key = hashtagKey(tag);
     if (key !== '' && !ours.has(key)) ours.set(key, tag);
   }
-  const seen = new Set<string>();
   const group = (tags: readonly string[], most: number, admits: (key: string) => boolean) => {
     const candidates: Candidate[] = [];
     for (const tag of tags) {
-      const value = readableTag(tag);
-      const key = hashtagKey(value);
-      if (key === '' || seen.has(key) || !admits(key) || candidates.length === most) continue;
-      seen.add(key);
-      const own = ours.get(key);
+      const modelSpelling = readableTag(tag);
+      const key = hashtagKey(modelSpelling);
+      if (key === '' || !admits(key) || candidates.some((c) => c.key === key)) continue;
+      if (candidates.length === most) break;
       candidates.push({
-        value: own ?? value,
         key,
-        used: own !== undefined,
-        rank: candidates.length,
+        modelSpelling,
+        siteSpelling: ours.get(key),
+        modelOrder: candidates.length,
       });
     }
     return candidates;
   };
-  return {
-    forThisPost: group(suggested.forThisPost, FOR_POST.most, () => true),
-    forReach: group(suggested.forReach, FOR_REACH_MOST, (key) => SEED_FOLLOWERS.has(key)),
-  };
+  const forThisPost = group(suggested.forThisPost, FOR_POST.most, () => true);
+  const postKeys = new Set(forThisPost.map((c) => c.key));
+  const forReach = group(
+    suggested.forReach,
+    FOR_REACH_MOST,
+    (key) => SEED_FOLLOWERS.has(key) && !postKeys.has(key),
+  );
+  return { forThisPost, forReach };
 }
 
 type Counts = ReadonlyMap<string, FollowerCount>;
@@ -110,20 +116,22 @@ function followersOf(candidate: Candidate, counts: Counts): number | undefined {
 }
 
 function rankForPost(candidates: readonly Candidate[]): Candidate[] {
-  return [...candidates].sort((a, b) => Number(b.used) - Number(a.used) || a.rank - b.rank);
+  return [...candidates].sort(
+    (a, b) => Number(usedHere(b)) - Number(usedHere(a)) || a.modelOrder - b.modelOrder,
+  );
 }
 
 function rankForReach(candidates: readonly Candidate[], counts: Counts): Candidate[] {
   const weight = (candidate: Candidate) =>
     Math.max(followersOf(candidate, counts) ?? 0, SEED_FOLLOWERS.get(candidate.key) ?? 0);
-  return [...candidates].sort((a, b) => weight(b) - weight(a) || a.rank - b.rank);
+  return [...candidates].sort((a, b) => weight(b) - weight(a) || a.modelOrder - b.modelOrder);
 }
 
 function choice(candidate: Candidate, counts: Counts, group: string): PluginEditorChoice {
   return {
-    value: candidate.value,
+    value: candidate.siteSpelling ?? candidate.modelSpelling,
     note: noteFor(counts.get(candidate.key)),
-    ...(candidate.used ? { badge: 'Used here' } : {}),
+    ...(usedHere(candidate) ? { badge: 'Used here' } : {}),
     group,
   };
 }
