@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-08 10:59'
-updated_date: '2026-10-09 17:11'
+updated_date: '2026-10-09 17:43'
 labels: []
 milestone: m-31
 dependencies:
@@ -34,9 +34,9 @@ The subtasks split it by what is imported. This parent holds the command, the re
 - [x] #3 A file the import did not write is never overwritten or deleted; the clash is listed in the report
 - [x] #4 The import prints a report with one row per item imported, skipped or warned about, and why
 - [x] #5 Items that have no Geekity counterpart (revisions, oembed_cache, nav menus, global styles, ActivityPub plugin internals such as ap_actor/ap_inbox/ap_outbox, contact form feedback) are skipped and counted in the report
-- [ ] #6 geekity sync over the imported directory exits 0
+- [x] #6 geekity sync over the imported directory exits 0
 - [x] #7 packages/cms/README.md documents the command next to "Moving a site off the WordPress ActivityPub plugin", as one cutover
-- [ ] #8 With TASK-295 dev mode on, an import into a running site with followers makes no outbound request, as the suppression record shows
+- [x] #8 With TASK-295 dev mode on, an import into a running site with followers makes no outbound request, as the suppression record shows
 - [x] #9 The command and everything WordPress-specific in the subtasks ship in @geekity/plugin-wordpress, not in @geekity/cms (TASK-282 #7: nothing in core names WordPress); a generic piece a subtask needs (for example a redirect rule by path prefix) lands in core as the extension point the plugin uses (decision-33)
 - [ ] #10 A rerun against a newer export picks up posts, pages, edits, media and reactions added on WordPress since the last run; a file the import wrote and that has since been edited on Geekity is not overwritten, and the report lists it as a conflict with both versions' dates
 <!-- AC:END -->
@@ -70,4 +70,10 @@ Left open:
 - #8 (dev mode, no outbound request) needs posts written into a running site. The parent itself makes no network call. TASK-291.1 proves it with migrated: true posts.
 - #10: the conflict half is proved, the pickup half is not. A newer export picks up edits and new files for any importer, and a file edited here is kept and reported with both dates. Picking up posts, pages, media and reactions needs TASK-291.1, .2 and .3. Reactions merge into a shared comments file, so TASK-291.3 must add a merge write beside the whole-file one (decision-38 consequences).
 Task stays In Progress until the subtasks land.
+
+TASK-291.1 (posts and pages) landed:
+- #6 checked: geekity sync over the real andrewshell.org import (161 posts, 17 pages) exits 0, 'Scanned 178: 178 created, 0 failed'.
+- #8 checked: test/import-dev-mode.test.ts boots a site with GEEKITY dev mode on, a follower, webmentions, rssCloud and IndexNow, imports a federated post with a link, a never-federated post and a page while the watcher runs, and finds no outbound fetch and no held entry in data/dev-mode.jsonl; a post first published there afterwards is held as a Create. Real run: the full import into a running dev-mode site with a follower held nothing.
+- #10 still open: the posts and pages half holds (posts-import.test.ts 'picks up the posts, pages and edits a newer export carries': an edited post is written as changed on WordPress, a new post and a new page are written new, an untouched page stays unchanged). Media and reactions wait on TASK-291.2 and TASK-291.3.
+- ImporterOutput gained optional settings (site.json keys), decided per key like a file (decision-39); import.json now holds files and settings.
 <!-- SECTION:NOTES:END -->

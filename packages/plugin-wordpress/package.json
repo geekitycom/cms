@@ -41,7 +41,9 @@
   "dependencies": {
     "@fedify/fedify": "^2.4.0",
     "@fedify/vocab": "^2.4.0",
-    "sax": "^1.6.1"
+    "js-yaml": "^5.4.2",
+    "sax": "^1.6.1",
+    "turndown": "^7.2.4"
   },
   "peerDependencies": {
     "@geekity/cms": "workspace:^"

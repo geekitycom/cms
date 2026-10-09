@@ -45,11 +45,11 @@ and disabling it takes them away on the next request, with nothing restarted.
 
 The plugin keeps two files in `data/plugins/@geekity/plugin-wordpress/`:
 
-| File            | What it holds                                                                                                                |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `actors.json`   | Each username and the number WordPress gave that person's actor, which the old paths are built from. Written by the import.  |
-| `requests.json` | When each old path was last asked for, per user, and when the shared inbox was. Losing it resets what the screen says.       |
-| `import.json`   | A hash of every file `geekity import wordpress` wrote, by path. Losing it makes every imported file a clash on the next run. |
+| File            | What it holds                                                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `actors.json`   | Each username and the number WordPress gave that person's actor, which the old paths are built from. Written by the import.                                   |
+| `requests.json` | When each old path was last asked for, per user, and when the shared inbox was. Losing it resets what the screen says.                                        |
+| `import.json`   | A hash of every file `geekity import wordpress` wrote, by path, and each `site.json` key it set. Losing it makes every imported file a clash on the next run. |
 
 ## The old paths
 
@@ -105,6 +105,38 @@ what was added or edited on WordPress since. The import never writes over a file
 it did not write, and never deletes one, so a site can layer its own fixes on
 top of an import. To take WordPress's side of a conflict, remove the file and
 run the import again.
+
+### Posts and pages
+
+Each post becomes `posts/YYYY-MM-DD-slug.md`, dated by its local publish date,
+and each page becomes `pages/slug.md`. The front matter keeps what readers,
+feed readers and followers already know of it:
+
+| Key           | Where it comes from                                                                                                                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `permalink`   | The URL WordPress served, from the export's link. A draft has none yet, so it gets the one the published posts' structure gives it; a page gets its parents' slugs.                              |
+| `date`        | `post_date_gmt`. A draft WordPress never dated has none.                                                                                                                                         |
+| `updated`     | `post_modified_gmt`, when it differs from the date.                                                                                                                                              |
+| `tags`        | The post's tags, by name.                                                                                                                                                                        |
+| `categories`  | The post's categories, by name.                                                                                                                                                                  |
+| `draft`       | `true` for a draft, a pending post, and a private or password-protected one, which the report names. A scheduled post keeps its date and publishes then.                                         |
+| `author`      | The WordPress login, when the site has a user by that name. A post by any other login has no author, and the report names it.                                                                    |
+| `in-reply-to` | The URL an ActivityPub plugin reply block answers.                                                                                                                                               |
+| `activitypub` | On a published post, `id` is `https://example.com/?p=ID`, the object id the ActivityPub plugin served. A post the plugin federated (`activitypub_status` is `federated`) also has `published`.   |
+| `guid`        | The WordPress guid, when it is not the post's `?p=` address, so feed readers see no old post as new.                                                                                             |
+| `migrated`    | `true` on everything but a scheduled post, so its arrival here, or a draft's publication later, sends nothing to anyone. A scheduled post publishes here as news, as it would have on WordPress. |
+
+A post in the status format has no title, so it reads as a note. The page
+WordPress served at the home URL becomes `homepage` in `_data/site.json`. The
+import sets that key only while the site has not set it, or still holds what
+the import last set.
+
+The body becomes Markdown. Block comments go, a classic post's line breaks
+become paragraphs as WordPress showed them, and a YouTube or Vimeo iframe or
+embed becomes the video's URL on a line of its own, which the site plays.
+What Markdown cannot say stays HTML: other iframes, a figure with a caption, a
+table with spans, and an element carrying a `style` or microformats class.
+`<!--more-->` stays where it was. Media URLs are left as WordPress wrote them.
 
 ## Bringing a person across
 

@@ -1,11 +1,11 @@
 ---
 id: TASK-296
 title: A post that was public before it reached Geekity is never announced as new
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-08 11:15'
-updated_date: '2026-10-09 16:16'
+updated_date: '2026-10-09 17:43'
 labels: []
 milestone: m-31
 dependencies: []
@@ -32,7 +32,7 @@ A migrated site knows which posts its followers already saw. On andrewshell.org 
 - [x] #7 The same rule keeps webmentions and feed pings quiet for posts that were public before the migration, until a real edit
 - [x] #8 doc-2 documents the front matter that records it; tests cover each path above
 - [x] #9 A draft imported from content that was public before the migration (andrewshell.org restores 63 such essays) stays quiet when it is published later. It appears on the web and in listings at its original date, and sends no ActivityPub activity, webmention, feed ping or IndexNow submission
-- [ ] #10 The rule lives in core and names no CMS a post came from; the WordPress importer only writes the front matter
+- [x] #10 The rule lives in core and names no CMS a post came from; the WordPress importer only writes the front matter
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -66,10 +66,12 @@ Verification: pnpm build, test (cms 5137 pass), typecheck, lint, format:check al
 AC #10 left unchecked: the core half holds (no CMS is named anywhere in the rule, and plugin-wordpress contains nothing about it), but 'the WordPress importer only writes the front matter' can only be shown by TASK-291.1, which does not exist yet.
 
 Added an admin-path test for an announced migrated draft published from the editor (silent). After the comment review, isQuietMigration was inlined into handle() as two named conditions (followersHoldIt, comingIntoView).
+
+AC #10 proved by TASK-291.1: the importer (packages/plugin-wordpress/src/posts-import.ts) only writes front matter (migrated: true, activitypub.id, activitypub.published); it calls no federation, webmention, ping or IndexNow code, and packages/cms is untouched by it (git status clean under packages/cms). The quiet is core's: plugin-wordpress test/import-dev-mode.test.ts imports into a running dev-mode site with a follower and finds no outbound request and nothing held, and the same test with migrated removed from the importer lists held webmention, feed-ping, Create and IndexNow entries. A real run over andrewshell.org's export into a running dev-mode site held nothing. src/plugin-boundary.test.ts still passes (core names no WordPress).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-A top-level front matter key, migrated: true, records that a post was public before it reached the site. The rule lives in core (content/migrated.ts) and names no CMS. When a migrated post comes into view, whether as a new file, a published draft or a date passing, it sends no ActivityPub activity, webmention, feed ping or IndexNow submission. A migrated post with activitypub.published gets an Update on a real edit and a Delete when it is withdrawn. One without it is never federated, and its object is still served at its stored id. The scheduler keeps schedule.firstRun and never releases a post dated before it. Posts without migrated behave as before. decision-36, doc-2 and doc-4 updated. Verified with src/migrated-site.test.ts, the schedule and original-post-discovery tests, and a full pnpm build/test/typecheck/lint/format:check. A curl of a running site showed a 200 object at /?p=42. AC #10 stays open until the WordPress importer (TASK-291.1) shows it writes only front matter.
+A top-level front matter key, migrated: true, records that a post was public before it reached the site. The rule lives in core (content/migrated.ts) and names no CMS. When a migrated post comes into view, whether as a new file, a published draft or a date passing, it sends no ActivityPub activity, webmention, feed ping or IndexNow submission. A migrated post with activitypub.published gets an Update on a real edit and a Delete when it is withdrawn. One without it is never federated, and its object is still served at its stored id. The scheduler keeps schedule.firstRun and never releases a post dated before it. Posts without migrated behave as before. decision-36, doc-2 and doc-4 updated. Verified with src/migrated-site.test.ts, the schedule and original-post-discovery tests, and a full pnpm build/test/typecheck/lint/format:check. A curl of a running site showed a 200 object at /?p=42. AC #10 closed by TASK-291.1: the WordPress importer writes only front matter, and its import into a running dev-mode site with a follower sends and holds nothing.
 <!-- SECTION:FINAL_SUMMARY:END -->

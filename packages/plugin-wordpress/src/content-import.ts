@@ -20,9 +20,16 @@ export interface ItemNote {
   readonly why: string;
 }
 
+export interface SiteSetting {
+  readonly item: WordPressItem;
+  readonly key: string;
+  readonly value: string;
+}
+
 export interface ImporterOutput {
   readonly files: readonly ImportedFile[];
   readonly notes: readonly ItemNote[];
+  readonly settings?: readonly SiteSetting[] | undefined;
 }
 
 /**
@@ -100,10 +107,12 @@ export async function importWordPressContent(options: {
     }));
 
   const files: ImportedFile[] = [];
+  const settings: SiteSetting[] = [];
   for (const importer of importers) {
     const output = await importer.import(exported, context);
     files.push(...output.files);
     rows.push(...output.notes);
+    settings.push(...(output.settings ?? []));
   }
 
   const record = readRecord(data);
@@ -116,6 +125,7 @@ export async function importWordPressContent(options: {
     seen.add(relative);
     rows.push(await writeOne(contentDir, relative, file, record, data));
   }
+  rows.push(...(await writeSettings(contentDir, settings, record, data)));
 
   const order = new Map(exported.items.map((item, index) => [item, index]));
   rows.sort((a, b) => (order.get(a.item) ?? 0) - (order.get(b.item) ?? 0));
@@ -124,24 +134,33 @@ export async function importWordPressContent(options: {
 
 type ContentPath = string;
 type Sha256 = string;
-type ImportRecord = Map<ContentPath, Sha256>;
+type SettingKey = string;
+
+interface ImportRecord {
+  readonly files: Map<ContentPath, Sha256>;
+  readonly settings: Map<SettingKey, string>;
+}
 
 function readRecord(data: PluginDataFolder): ImportRecord {
   const text = data.read(IMPORT_RECORD_FILE);
-  if (text === undefined) return new Map();
-  const parsed = JSON.parse(text) as { files?: Record<string, string> };
-  return new Map(Object.entries(parsed.files ?? {}));
+  const parsed =
+    text === undefined
+      ? {}
+      : (JSON.parse(text) as { files?: Record<string, string>; settings?: Record<string, string> });
+  return {
+    files: new Map(Object.entries(parsed.files ?? {})),
+    settings: new Map(Object.entries(parsed.settings ?? {})),
+  };
 }
 
-async function remember(
-  data: PluginDataFolder,
-  record: ImportRecord,
-  relative: ContentPath,
-  hash: Sha256,
-): Promise<void> {
-  record.set(relative, hash);
-  const files = Object.fromEntries([...record].sort(([a], [b]) => (a < b ? -1 : 1)));
-  await data.update(IMPORT_RECORD_FILE, () => `${JSON.stringify({ files }, null, 2)}\n`);
+async function saveRecord(data: PluginDataFolder, record: ImportRecord): Promise<void> {
+  const sorted = (map: Map<string, string>) =>
+    Object.fromEntries([...map].sort(([a], [b]) => (a < b ? -1 : 1)));
+  const saved =
+    record.settings.size === 0
+      ? { files: sorted(record.files) }
+      : { files: sorted(record.files), settings: sorted(record.settings) };
+  await data.update(IMPORT_RECORD_FILE, () => `${JSON.stringify(saved, null, 2)}\n`);
 }
 
 interface Decision {
@@ -193,13 +212,14 @@ async function writeOne(
 ): Promise<ReportRow> {
   const absolute = path.join(contentDir, relative);
   const current = await readIfPresent(absolute);
-  const recorded = record.get(relative);
+  const recorded = record.files.get(relative);
   const next = sha256(file.contents);
   const decision = decide(current === undefined ? undefined : sha256(current), recorded, next);
 
   if (decision.action === 'write') await writeAtomically(absolute, file.contents);
   if (decision.action !== 'leave' && recorded !== next) {
-    await remember(data, record, relative, next);
+    record.files.set(relative, next);
+    await saveRecord(data, record);
   }
 
   let why = decision.why;
@@ -212,6 +232,48 @@ async function writeOne(
         : `edited on this site at ${editedAt}, and changed on WordPress at ${changedAt}; ${why}`;
   }
   return { outcome: decision.outcome, item: file.item, path: relative, why };
+}
+
+const SITE_JSON = '_data/site.json';
+
+async function writeSettings(
+  contentDir: string,
+  settings: readonly SiteSetting[],
+  record: ImportRecord,
+  data: PluginDataFolder,
+): Promise<ReportRow[]> {
+  if (settings.length === 0) return [];
+  const absolute = path.join(contentDir, SITE_JSON);
+  const text = await readIfPresent(absolute);
+  const site =
+    text === undefined ? {} : (JSON.parse(text.toString('utf8')) as Record<string, unknown>);
+
+  const rows: ReportRow[] = [];
+  let changed = false;
+  for (const { item, key, value } of settings) {
+    const held = site[key];
+    const current =
+      held === undefined ? undefined : typeof held === 'string' ? held : JSON.stringify(held);
+    const recorded = record.settings.get(key);
+    const decision = decide(current, recorded, value);
+    if (decision.action === 'write') {
+      site[key] = value;
+      changed = true;
+    }
+    if (decision.action !== 'leave' && recorded !== value) {
+      record.settings.set(key, value);
+      await saveRecord(data, record);
+    }
+    let why = `${key} is ${JSON.stringify(value)}`;
+    if (decision.outcome === 'clash') {
+      why = `site.json already sets ${key} to ${JSON.stringify(current)}; it was left alone`;
+    } else if (decision.action === 'leave') {
+      why = `${key} was changed on this site to ${JSON.stringify(current)}; it was left alone`;
+    }
+    rows.push({ outcome: decision.outcome, item, path: SITE_JSON, why });
+  }
+  if (changed) await writeAtomically(absolute, `${JSON.stringify(site, null, 2)}\n`);
+  return rows;
 }
 
 function contentPath(given: string): string {

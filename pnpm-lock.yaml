@@ -408,9 +408,15 @@ importers:
       '@fedify/vocab':
         specifier: ^2.4.0
         version: 2.4.0
+      js-yaml:
+        specifier: ^5.4.2
+        version: 5.4.2
       sax:
         specifier: ^1.6.1
         version: 1.6.1
+      turndown:
+        specifier: ^7.2.4
+        version: 7.2.4
     devDependencies:
       '@fedify/cli':
         specifier: 2.4.0

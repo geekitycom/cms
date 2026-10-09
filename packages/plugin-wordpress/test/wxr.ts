@@ -6,8 +6,14 @@ export interface TestItem {
   readonly slug?: string;
   readonly link?: string;
   readonly content?: string;
+  /** `post_date`, in the site's zone. */
+  readonly date?: string;
   readonly dateGmt?: string;
   readonly modifiedGmt?: string;
+  readonly guid?: string;
+  readonly creator?: string;
+  readonly password?: string;
+  readonly parent?: number;
   readonly terms?: readonly { taxonomy: string; slug: string; name: string }[];
   readonly meta?: readonly { key: string; value: string }[];
   readonly comments?: readonly TestComment[];
@@ -58,13 +64,13 @@ function item(entry: TestItem): string {
 		<title><![CDATA[${entry.title ?? `Item ${String(entry.id)}`}]]></title>
 		<link>${entry.link ?? `${SITE}/2024/03/${slug}/`}</link>
 		<pubDate>Tue, 05 Mar 2024 14:30:00 +0000</pubDate>
-		<dc:creator><![CDATA[ada]]></dc:creator>
-		<guid isPermaLink="false">${SITE}/?p=${String(entry.id)}</guid>
+		<dc:creator><![CDATA[${entry.creator ?? 'ada'}]]></dc:creator>
+		<guid isPermaLink="false">${entry.guid ?? `${SITE}/?p=${String(entry.id)}`}</guid>
 		<description></description>
 		<content:encoded><![CDATA[${entry.content ?? `<p>Body of ${String(entry.id)}.</p>`}]]></content:encoded>
 		<excerpt:encoded><![CDATA[]]></excerpt:encoded>
 		<wp:post_id>${String(entry.id)}</wp:post_id>
-		<wp:post_date><![CDATA[2024-03-05 09:30:00]]></wp:post_date>
+		<wp:post_date><![CDATA[${entry.date ?? '2024-03-05 09:30:00'}]]></wp:post_date>
 		<wp:post_date_gmt><![CDATA[${dateGmt}]]></wp:post_date_gmt>
 		<wp:post_modified><![CDATA[2024-03-05 09:30:00]]></wp:post_modified>
 		<wp:post_modified_gmt><![CDATA[${entry.modifiedGmt ?? dateGmt}]]></wp:post_modified_gmt>
@@ -72,10 +78,10 @@ function item(entry: TestItem): string {
 		<wp:ping_status><![CDATA[open]]></wp:ping_status>
 		<wp:post_name><![CDATA[${slug}]]></wp:post_name>
 		<wp:status><![CDATA[${entry.status ?? 'publish'}]]></wp:status>
-		<wp:post_parent>0</wp:post_parent>
+		<wp:post_parent>${String(entry.parent ?? 0)}</wp:post_parent>
 		<wp:menu_order>0</wp:menu_order>
 		<wp:post_type><![CDATA[${type}]]></wp:post_type>
-		<wp:post_password><![CDATA[]]></wp:post_password>
+		<wp:post_password><![CDATA[${entry.password ?? ''}]]></wp:post_password>
 		<wp:is_sticky>0</wp:is_sticky>
 ${(entry.terms ?? [])
   .map(
