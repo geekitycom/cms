@@ -8,15 +8,16 @@
  *
  * `plugin.json` is written from the `geekity` field of package.json:
  *
- *   "geekity": { "plugin": true, "hostApi": 1, "requires": { "@geekity/plugin-llm": "^0.1.0" } }
+ *   "geekity": { "plugin": true, "hostApi": 1, "requires": { "@geekity/plugin-llm": ">=0.2.0 <1.0.0" } }
  *
  * It carries the package's name and version, the host API version, and the
  * ranges of `@geekity/cms` and of each required plugin, which the registry
- * checks for a folder install as npm checks peer dependencies. The build
- * fails when the package is not marked a plugin, when a required package is
- * not also a peer dependency, when the bundled plugin's name, version, host
- * API or requires differ from package.json, and on a native module, which a
- * bundle cannot carry.
+ * checks for a folder install as npm checks peer dependencies. Each range is
+ * the one the packed package.json publishes, from the workspace's
+ * .pnpmfile.mjs. The build fails when the package is not marked a plugin, when
+ * a required package is not also a peer dependency with the same range, when
+ * the bundled plugin's name, version, host API or requires differ from
+ * package.json, and on a native module, which a bundle cannot carry.
  *
  * Run from the plugin package's directory, as its `build` script does:
  *
@@ -32,6 +33,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { pathToFileURL } from 'node:url';
+
+import { publishedPeerDependencies } from '../.pnpmfile.mjs';
 
 const CORE = '@geekity/cms';
 
@@ -62,12 +65,18 @@ if (declared?.plugin !== true || !Number.isInteger(declared.hostApi)) {
 }
 const requires = declared.requires ?? {};
 const peers = manifest.peerDependencies ?? {};
+const published = publishedPeerDependencies(packageDir);
 if (peers[CORE] === undefined) {
   fail(`${CORE} must be a peer dependency, with the range it targets.`);
 }
-for (const name of Object.keys(requires)) {
+for (const [name, range] of Object.entries(requires)) {
   if (peers[name] === undefined) {
     fail(`it requires ${name}, which is not a peer dependency. Add it to peerDependencies.`);
+  }
+  if (published[name] !== range) {
+    fail(
+      `it requires ${name} ${range}, and its peer dependency publishes ${published[name]}. Write the peer as "workspace:${range}".`,
+    );
   }
 }
 
@@ -119,7 +128,7 @@ await writeFile(
       name: manifest.name,
       version: manifest.version,
       hostApi: declared.hostApi,
-      peerDependencies: { [CORE]: publishedRange(CORE, peers[CORE]), ...requires },
+      peerDependencies: { [CORE]: published[CORE], ...requires },
     },
     null,
     2,
@@ -127,16 +136,6 @@ await writeFile(
 );
 
 console.log(`bundled ${path.relative(packageDir, outdir)}/index.js and plugin.json`);
-
-/** A `workspace:` range as `pnpm publish` writes it into the published package.json. */
-function publishedRange(name, range) {
-  if (!range.startsWith('workspace:')) return range;
-  const version = JSON.parse(readFileSync(require.resolve(`${name}/package.json`), 'utf8')).version;
-  const wanted = range.slice('workspace:'.length);
-  if (wanted === '^' || wanted === '~') return `${wanted}${version}`;
-  if (wanted === '*') return version;
-  return wanted;
-}
 
 /** Fail the build on a compiled addon, or on a package that exists to load one. */
 function refuseNativeModules() {

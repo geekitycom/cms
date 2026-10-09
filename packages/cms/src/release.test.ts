@@ -76,18 +76,15 @@ function writeWorkspace(repo: string, versions: Versions): void {
     version: versions.cms,
     publishConfig: { access: 'public' },
   });
-  writeJson(path.join(repo, 'packages', 'plugin-a', 'package.json'), plugin(A, versions.a));
-  writeJson(
-    path.join(repo, 'packages', 'plugin-b', 'package.json'),
-    plugin(B, versions.b, { [A]: `^${versions.a}` }),
-  );
-  for (const [dir, name, version] of [
-    ['plugin-a', A, versions.a],
-    ['plugin-b', B, versions.b],
+  for (const [dir, manifest] of [
+    ['plugin-a', plugin(A, versions.a)],
+    ['plugin-b', plugin(B, versions.b, { [A]: `>=${versions.a} <1.0.0` })],
   ] as const) {
+    writeJson(path.join(repo, 'packages', dir, 'package.json'), manifest);
     writeJson(path.join(repo, 'packages', dir, 'dist', 'bundle', 'plugin.json'), {
-      name,
-      version,
+      name: manifest.name,
+      version: manifest.version,
+      peerDependencies: manifest.peerDependencies,
     });
     fs.writeFileSync(
       path.join(repo, 'packages', dir, 'dist', 'bundle', 'index.js'),
@@ -326,6 +323,18 @@ describe('tarballProblems', () => {
 
     assert.deepEqual(tarballProblems(a, dir), [
       'dist/bundle/plugin.json is @geekity/plugin-a@0.1.0',
+    ]);
+  });
+
+  it('names a plugin.json whose peer ranges differ from the packed package.json', () => {
+    const dir = unpacked({
+      'package.json': { ...manifest, peerDependencies: { [CORE]: '^0.26.0' } },
+      'dist/bundle/index.js': 'export default {};',
+      'dist/bundle/plugin.json': { ...manifest, peerDependencies: { [CORE]: '>=0.26.0 <1.0.0' } },
+    });
+
+    assert.deepEqual(tarballProblems(a, dir), [
+      'dist/bundle/plugin.json has peer ranges {"@geekity/cms":">=0.26.0 <1.0.0"}, and package.json has {"@geekity/cms":"^0.26.0"}',
     ]);
   });
 

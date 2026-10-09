@@ -28,8 +28,9 @@ RUN corepack enable
 
 # The dependency layer. `pnpm fetch` reads only the lockfile, so this layer, and
 # the store it fills, is reused by every build until pnpm-lock.yaml changes, even
-# when release-please bumps a version in a package.json.
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+# when release-please bumps a version in a package.json. The lockfile records
+# the checksum of .pnpmfile.mjs, and a frozen install refuses to run without it.
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .pnpmfile.mjs ./
 RUN pnpm fetch
 
 # Every workspace manifest, because a frozen install checks each importer the
