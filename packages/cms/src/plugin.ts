@@ -81,9 +81,14 @@ export interface PluginActorKey {
   readonly jwk: string | undefined;
 }
 
-/** The site's accounts, keys and followers, as a plugin may read and change them. */
+/** The site's accounts, keys, followers and content, as a plugin may read and change them. */
 export interface PluginSite {
   readonly baseUrl: string;
+  /**
+   * The content directory, absolute. A file written here is picked up as an
+   * edit by hand is: by the watcher while the site runs, else at the next boot.
+   */
+  readonly contentDir: string;
   /** Every account, in the users file's order. */
   users(): readonly PluginUser[];
   /**

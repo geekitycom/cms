@@ -49,6 +49,7 @@ export function pluginSite(options: { admin: AdminStore; config: ResolvedConfig 
 
   return {
     baseUrl: config.baseUrl,
+    contentDir,
 
     users: () =>
       listUsers(dataDir).map((user) => ({
