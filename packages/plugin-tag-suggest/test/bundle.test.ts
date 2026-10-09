@@ -40,11 +40,16 @@ describe('the bundled plugin', () => {
       apiKey: 'sk-bundle',
     });
     tagsPub.followers.set('bundled', 3);
-    provider.answer(replying(JSON.stringify({ tags: ['Bundled'] })));
+    provider.answer(
+      replying(JSON.stringify({ forThisPost: ['Bundled'], forReach: ['Fediverse'] })),
+    );
     const response = await admin.post(actionUrl('suggest-tags'), { type: 'post', body: 'Words.' });
     assert.deepEqual(await response.json(), {
       ok: true,
-      choices: [{ value: 'bundled', note: '3 followers on tags.pub' }],
+      choices: [
+        { value: 'Bundled', note: '3 followers on tags.pub', group: 'For this post' },
+        { value: 'Fediverse', note: 'No followers on tags.pub', group: 'For reach' },
+      ],
     });
   });
 });

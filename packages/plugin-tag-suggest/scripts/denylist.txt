@@ -1,0 +1,139 @@
+# Sexual and adult tags left out of the seed list, curated from the
+# 2026-10-08 mastodon.social export and widened with common slang and
+# variants. A line is a tag, matched however it is spelled or cased; a
+# fragment between asterisks rules out every tag that contains it. When a tag
+# is unclear, it is listed: leaving out a fitting tag costs little, offering a
+# porn tag on a post costs a lot.
+
+# Fragments that only ever mean porn
+*porn*
+*nsfw*
+*xxx*
+*hentai*
+*onlyfans*
+*blowjob*
+*handjob*
+*cumshot*
+*sextape*
+*gaysex*
+*barelylegal*
+
+# Nudity and sexy
+nude
+nudes
+nudity
+naked
+nakedmen
+nakedwomen
+sexy
+sexymen
+sexywomen
+sex
+sexting
+erotic
+erotica
+lewd
+horny
+naughty
+kink
+kinky
+fetish
+bdsm
+bondage
+femdom
+striptease
+stripper
+escort
+camgirl
+lingerie
+panties
+underwear
+boobs
+boobies
+tits
+titties
+nipples
+ass
+asstodon
+butt
+booty
+feet
+footfetish
+amateur
+petite
+girl
+gothgirl
+teen
+teens
+teenagers
+milf
+
+# Body parts and acts
+penis
+dick
+cock
+hardcock
+bigcock
+blackcock
+cutcock
+gaycock
+bigballs
+erection
+uncut
+circumcised
+circumsexual
+pussy
+anal
+facial
+fisting
+frotting
+cum
+gaycum
+creampie
+squirt
+squirting
+squirter
+masturbation
+masturbate
+jerkoff
+wank
+wanking
+stroking
+threesome
+orgy
+publicsex
+spycam
+voyeur
+bareback
+goldenshower
+piss
+pissplay
+gaypiss
+gaycest
+incest
+
+# Gay and trans porn tags (the identity tags gay, lesbian, queer, trans and
+# transgender stay)
+gaynsfw
+gaymen
+gaybear
+hairymen
+tranny
+trannymilk
+shemale
+ladyboy
+
+# Malay and Indonesian porn tags: bokep is slang for porn, bogel means naked,
+# and in this export melayu, tudung and jilbab ran with them
+bokep
+bogel
+melayubogel
+melayuboleh
+
+# Unclear names that ran with the porn tags in this export
+brandtboys
+bunnyalice
+poledance
+
+# Abuse material, whatever the poster meant by it
+csam

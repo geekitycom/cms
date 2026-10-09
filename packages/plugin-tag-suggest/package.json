@@ -33,6 +33,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node ../../scripts/build-plugin-bundle.js",
+    "seed": "tsx scripts/build-seed.ts",
     "test": "tsx --import ../cms/src/__testing__/offline.ts --test \"test/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
