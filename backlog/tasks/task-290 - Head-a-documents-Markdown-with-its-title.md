@@ -1,11 +1,11 @@
 ---
 id: TASK-290
 title: Head a document's Markdown with its title
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-08 01:49'
-updated_date: '2026-10-08 01:58'
+updated_date: '2026-10-09 01:32'
 labels: []
 dependencies:
   - TASK-289
@@ -36,4 +36,12 @@ documentMarkdown() in routes.ts adds '# {title}' via serializeDocument unless th
 
 <!-- SECTION:NOTES:BEGIN -->
 Validation: pnpm typecheck, lint clean; pnpm test 4835 pass; golden diff is the heading plus the post Markdown ETag. Demo on :3999 showed '# One URL, many representations' after the front matter for text/markdown and text/plain, and the JSON markdown field unchanged.
+
+2026-10-08: verified on shll.me after the 0.25.0 deploy: https://shll.me/2026/01/hello-world/index.md opens with the front matter then '# Understanding the structure and content organization in Geekity blog posts'.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+A document's Markdown representation now opens with '# {title}' after its front matter, and its ETag hashes the Markdown bytes (PR #138). Verified by the test suite and on shll.me after the 0.25.0 deploy, where the hello-world post's index.md shows the heading.
+<!-- SECTION:FINAL_SUMMARY:END -->
