@@ -68,6 +68,7 @@ export async function fakeNpmRegistry(packages: readonly FakePackage[]): Promise
     (document.versions as Record<string, unknown>)[entry.version] = {
       name: entry.name,
       version: entry.version,
+      peerDependencies: peerDependencies(entry.files),
       dist: {
         tarball: `${url}${tarballPath}`,
         integrity:
@@ -82,6 +83,12 @@ export async function fakeNpmRegistry(packages: readonly FakePackage[]): Promise
     requests,
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
+}
+
+function peerDependencies(files: Record<string, string>): Record<string, string> | undefined {
+  const manifest = files['package.json'];
+  if (manifest === undefined) return undefined;
+  return (JSON.parse(manifest) as { peerDependencies?: Record<string, string> }).peerDependencies;
 }
 
 /** A gzipped ustar archive with each file under `package/`. */
@@ -118,8 +125,9 @@ export function pluginFiles(options: {
   core?: string;
 }): Record<string, string> {
   const { name, version, hostApi = 1, requires = {}, core = '>=0.0.0' } = options;
+  const peerDependencies = { '@geekity/cms': core, ...requires };
   return {
-    'package.json': JSON.stringify({ name, version }),
+    'package.json': JSON.stringify({ name, version, peerDependencies }),
     'dist/index.js': 'export {};\n',
     'dist/bundle/index.js': `export default {
   name: ${JSON.stringify(name)},
@@ -135,7 +143,7 @@ export function pluginFiles(options: {
       name,
       version,
       hostApi,
-      peerDependencies: { '@geekity/cms': core, ...requires },
+      peerDependencies,
     }),
   };
 }

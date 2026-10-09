@@ -115,7 +115,7 @@ export async function removePlugin(name: string, pluginsDir: string): Promise<st
  * plugin to its version, or to `undefined` when that is not known.
  */
 export function requirementNotes(
-  manifest: PluginManifest,
+  manifest: Pick<PluginManifest, 'peerDependencies'>,
   installed: ReadonlyMap<string, string | undefined>,
   coreVersion: string,
 ): string[] {
@@ -143,7 +143,7 @@ export function requirementNotes(
   return notes;
 }
 
-const CORE_PACKAGE = '@geekity/cms';
+export const CORE_PACKAGE = '@geekity/cms';
 
 interface Release {
   version: string;
@@ -152,31 +152,42 @@ interface Release {
   shasum: string | undefined;
 }
 
-interface PackageDocument {
+export interface PackageDocument {
   'dist-tags'?: Record<string, string>;
   versions?: Record<
     string,
-    { dist?: { tarball?: string; integrity?: string; shasum?: string } } | undefined
+    | {
+        peerDependencies?: Record<string, string>;
+        dist?: { tarball?: string; integrity?: string; shasum?: string };
+      }
+    | undefined
   >;
 }
 
-async function resolveRelease(spec: PackageSpec, registry: string): Promise<Release> {
-  const url = new URL(
-    spec.name.replace('/', '%2f'),
-    registry.endsWith('/') ? registry : `${registry}/`,
-  );
-  const response = await fetch(url, {
-    headers: { accept: 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8' },
-  });
-  if (response.status === 404) {
-    throw new Error(`${spec.name} is not on the registry at ${registry}.`);
-  }
-  if (!response.ok) {
+export async function fetchPackument(name: string, registry: string): Promise<PackageDocument> {
+  const url = new URL(name.replace('/', '%2f'), registry.endsWith('/') ? registry : `${registry}/`);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { accept: 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8' },
+    });
+  } catch (error) {
     throw new Error(
-      `The registry at ${registry} answered ${String(response.status)} for ${spec.name}.`,
+      `The registry at ${registry} could not be reached: ${error instanceof Error ? error.message : String(error)}.`,
+      { cause: error },
     );
   }
-  const document = (await response.json()) as PackageDocument;
+  if (response.status === 404) {
+    throw new Error(`${name} is not on the registry at ${registry}.`);
+  }
+  if (!response.ok) {
+    throw new Error(`The registry at ${registry} answered ${String(response.status)} for ${name}.`);
+  }
+  return (await response.json()) as PackageDocument;
+}
+
+async function resolveRelease(spec: PackageSpec, registry: string): Promise<Release> {
+  const document = await fetchPackument(spec.name, registry);
   const versions = Object.keys(document.versions ?? {});
   const version =
     document['dist-tags']?.[spec.wanted] ??

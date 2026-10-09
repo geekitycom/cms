@@ -30,6 +30,8 @@ import {
   removePlugin,
   requirementNotes,
 } from './plugins/install.ts';
+import { upgradePlugins } from './plugins/upgrade.ts';
+import type { PluginUpgrade, UpgradeReport } from './plugins/upgrade.ts';
 import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
 import { superviseCluster } from './supervisor/primary.ts';
 import { processChannel, superviseWorker } from './supervisor/worker.ts';
@@ -73,7 +75,7 @@ const COMMANDS: readonly Command[] = [
 const VALUE_FLAGS = ['until'] as const;
 
 /** The options that are simply on or off. */
-const SWITCH_FLAGS = ['all'] as const;
+const SWITCH_FLAGS = ['all', 'check'] as const;
 
 export interface ParsedArgs {
   command: Command;
@@ -117,6 +119,7 @@ Usage:
   geekity strip-metadata [--config <file>]
   geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
   geekity plugin (add <package>[@version] | remove <package>) [--config <file>]
+  geekity plugin upgrade [<package>...] [--check] [--config <file>]
 
 Commands:
   serve            Start the CMS (the default when no command is given).
@@ -149,6 +152,12 @@ Commands:
                    missing. Reload on the Plugins screen loads it.
   plugin remove    Delete a plugin's folder from the plugins folder. Reload on
                    the Plugins screen unloads it.
+  plugin upgrade   Bring each plugin in the plugins folder, or only the ones
+                   named, up to its newest version that this core and the
+                   other installed plugins can run, installed as plugin add
+                   installs one. Plugins that must move together do. It says,
+                   for each plugin, what it upgraded, or why it held a newer
+                   version back. --check reports and installs nothing.
 
 Options:
   --config <file>  Config file to load. Defaults to the first of
@@ -164,6 +173,7 @@ Options:
                    Retry-After a client is sent, and the maintenance page
                    says it.
   --all            With resend: every announced post rather than named ones.
+  --check          With plugin upgrade: say what would change, install nothing.
   -h, --help       Show this help.
   -v, --version    Show the installed version.
 
@@ -438,7 +448,7 @@ async function main(argv: readonly string[]): Promise<number> {
   if (command === 'resend') return resendCommand(args, configPath, flags);
   if (command === 'maintenance') return maintenanceCommand(args, configPath, flags);
   if (command === 'strip-metadata') return stripMetadataCommand(configPath);
-  if (command === 'plugin') return pluginFolderCommand(args, configPath);
+  if (command === 'plugin') return pluginFolderCommand(args, configPath, flags);
 
   return serveCommand(configPath);
 }
@@ -823,18 +833,15 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
   return 0;
 }
 
-/**
- * `geekity plugin add <package>` and `geekity plugin remove <package>`
- * (decision-33): change the plugins folder, which Reload on the Plugins
- * screen then loads. Nothing a plugin requires is installed for it.
- */
 async function pluginFolderCommand(
   args: readonly string[],
   configPath: string | undefined,
+  flags: Readonly<Record<string, string | true>>,
 ): Promise<number> {
-  const [action, spec, ...rest] = args;
-  if ((action !== 'add' && action !== 'remove') || spec === undefined || rest.length > 0) {
-    throw new Error('geekity plugin needs add <package>[@version] or remove <package>.');
+  const [action, ...names] = args;
+  const spec = names.length === 1 ? names[0] : undefined;
+  if (action !== 'upgrade' && action !== 'add' && action !== 'remove') {
+    throw new Error(PLUGIN_USAGE);
   }
   const config = resolveConfig(await loadConfig(process.cwd(), configPath));
   const { pluginsDir } = config;
@@ -843,7 +850,28 @@ async function pluginFolderCommand(
       'geekity plugin needs a plugins folder: set GEEKITY_PLUGINS_DIR, or pluginsDir in the config.',
     );
   }
+  const registry =
+    firstSet(process.env['npm_config_registry'], process.env['NPM_CONFIG_REGISTRY']) ??
+    DEFAULT_REGISTRY;
 
+  if (action === 'upgrade') {
+    const report = await upgradePlugins({
+      pluginsDir,
+      registry,
+      coreVersion: ownManifest().version,
+      configured: config.plugins.map((plugin) => ({
+        name: plugin.name,
+        version: plugin.version,
+        peerDependencies: plugin.requires ?? {},
+      })),
+      only: names.length === 0 ? undefined : names,
+      check: flags['check'] === true,
+    });
+    process.stdout.write(upgradeReportText(report));
+    return report.plugins.some((plugin) => plugin.status === 'failed') ? 1 : 0;
+  }
+
+  if (spec === undefined) throw new Error(PLUGIN_USAGE);
   if (action === 'remove') {
     const directory = await removePlugin(spec, pluginsDir);
     process.stdout.write(
@@ -852,9 +880,6 @@ async function pluginFolderCommand(
     return 0;
   }
 
-  const registry =
-    firstSet(process.env['npm_config_registry'], process.env['NPM_CONFIG_REGISTRY']) ??
-    DEFAULT_REGISTRY;
   const { manifest, directory, replaced } = await addPlugin(parsePackageSpec(spec), {
     pluginsDir,
     registry,
@@ -876,6 +901,45 @@ async function pluginFolderCommand(
     ].join('\n'),
   );
   return 0;
+}
+
+const PLUGIN_USAGE =
+  'geekity plugin needs add <package>[@version], remove <package> or upgrade [<package>...].';
+
+function upgradeReportText(report: UpgradeReport): string {
+  const lines = report.plugins.map((plugin) => `${plugin.name}: ${upgradeLine(plugin)}`);
+  for (const { name, notes } of report.unmet) {
+    lines.push(...notes.map((note) => `${name}: ${note}`));
+  }
+  const statuses = new Set(report.plugins.map((plugin) => plugin.status));
+  if (statuses.has('upgraded')) {
+    lines.push('Reload on the Plugins screen to load the new versions.');
+  }
+  if (statuses.has('available')) {
+    lines.push('Run geekity plugin upgrade without --check to install them.');
+  }
+  return lines.map((line) => `${line}\n`).join('');
+}
+
+function upgradeLine(plugin: PluginUpgrade): string {
+  switch (plugin.status) {
+    case 'upgraded':
+    case 'available': {
+      const done =
+        plugin.status === 'upgraded'
+          ? `upgraded from ${plugin.from} to ${plugin.to}.`
+          : `${plugin.from} can be upgraded to ${plugin.to}.`;
+      return plugin.heldBack === undefined ? done : `${done} ${plugin.heldBack}`;
+    }
+    case 'newest':
+      return `${plugin.version} is the newest.`;
+    case 'held':
+      return `held back at ${plugin.version}: ${plugin.reason}`;
+    case 'skipped':
+      return `skipped: ${plugin.reason}`;
+    case 'failed':
+      return `upgrading from ${plugin.from} to ${plugin.to} failed: ${plugin.reason}`;
+  }
 }
 
 function firstSet(...values: (string | undefined)[]): string | undefined {

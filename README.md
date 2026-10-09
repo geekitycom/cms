@@ -331,6 +331,34 @@ Nothing is installed or enabled on your behalf.
   plugin installs only with npm, on a site with its own entry file.
 - the bundle targets a host API version other than the one this core provides
 
+To bring every plugin in the folder up to date, run `plugin upgrade`, then
+press Reload:
+
+```sh
+docker compose exec geekity geekity plugin upgrade
+```
+
+For each plugin, it installs the newest version that this core and the other
+installed plugins can run. It checks each release's `@geekity/cms` range and
+the ranges between plugins, and installs the same way as `plugin add`. It does
+not install a prerelease, or a version newer than the `latest` dist-tag. When
+two plugins must move together, such as a plugin that needs a newer
+`@geekity/plugin-llm`, it upgrades both, the required one first. When only one
+of them can move, it holds that one back and says why. It does not leave an
+installed plugin with a requirement that is not met.
+
+It prints one line per plugin: the versions it upgraded from and to, that the
+version is already the newest, or which version it held back and why. Then it
+names any requirement that is still not met, and asks you to press Reload when
+anything changed. A plugin that is not on the registry, or a registry that
+cannot be reached, is skipped and the others carry on. The command exits
+non-zero only when an install it attempted failed.
+
+- `geekity plugin upgrade @geekity/plugin-llm @geekity/plugin-post-summary`
+  upgrades only the plugins it is given.
+- `geekity plugin upgrade --check` prints the same report and installs
+  nothing.
+
 To remove a plugin, delete its folder and press Reload:
 
 ```sh

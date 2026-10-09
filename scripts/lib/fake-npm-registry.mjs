@@ -5,10 +5,6 @@
  * without Node or pnpm on the machine running it:
  *
  *   node fake-npm-registry.mjs <port>
- *
- * It publishes @geekity-smoke/plugin-hello 1.0.0, packed as `npm pack` lays a
- * plugin package out: package.json, and the bundle and manifest the bundle
- * build writes under dist/bundle/.
  */
 
 import { createHash } from 'node:crypto';
@@ -16,14 +12,16 @@ import { createServer } from 'node:http';
 import { gzipSync } from 'node:zlib';
 
 const NAME = '@geekity-smoke/plugin-hello';
-const VERSION = '1.0.0';
+const VERSIONS = ['1.0.0', '1.1.0'];
 const port = Number(process.argv[2] ?? '4873');
+const peerDependencies = { '@geekity/cms': '>=0.0.0' };
 
-const files = {
-  'package.json': JSON.stringify({ name: NAME, version: VERSION, type: 'module' }),
-  'dist/bundle/index.js': `export default {
+function files(version) {
+  return {
+    'package.json': JSON.stringify({ name: NAME, version, type: 'module', peerDependencies }),
+    'dist/bundle/index.js': `export default {
   name: '${NAME}',
-  version: '${VERSION}',
+  version: '${version}',
   label: 'Hello from the smoke registry',
   description: 'Installed by geekity plugin add in the Docker smoke test.',
   hostApi: 1,
@@ -31,13 +29,14 @@ const files = {
   register() {},
 };
 `,
-  'dist/bundle/plugin.json': JSON.stringify({
-    name: NAME,
-    version: VERSION,
-    hostApi: 1,
-    peerDependencies: { '@geekity/cms': '>=0.0.0' },
-  }),
-};
+    'dist/bundle/plugin.json': JSON.stringify({
+      name: NAME,
+      version,
+      hostApi: 1,
+      peerDependencies,
+    }),
+  };
+}
 
 function tarball(entries) {
   const blocks = [];
@@ -63,26 +62,36 @@ function tarball(entries) {
   return gzipSync(Buffer.concat(blocks));
 }
 
-const bytes = tarball(files);
-const tarballPath = `/tarballs/plugin-hello-${VERSION}.tgz`;
+const tarballs = new Map(
+  VERSIONS.map((version) => [`/tarballs/plugin-hello-${version}.tgz`, tarball(files(version))]),
+);
 const document = JSON.stringify({
   name: NAME,
-  'dist-tags': { latest: VERSION },
-  versions: {
-    [VERSION]: {
-      name: NAME,
-      version: VERSION,
-      dist: {
-        tarball: `http://127.0.0.1:${String(port)}${tarballPath}`,
-        integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
-      },
-    },
-  },
+  'dist-tags': { latest: VERSIONS.at(-1) },
+  versions: Object.fromEntries(
+    VERSIONS.map((version) => {
+      const tarballPath = `/tarballs/plugin-hello-${version}.tgz`;
+      const bytes = tarballs.get(tarballPath);
+      return [
+        version,
+        {
+          name: NAME,
+          version,
+          peerDependencies,
+          dist: {
+            tarball: `http://127.0.0.1:${String(port)}${tarballPath}`,
+            integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
+          },
+        },
+      ];
+    }),
+  ),
 });
 
 createServer((request, response) => {
   const pathname = decodeURIComponent(new URL(request.url ?? '/', 'http://x').pathname);
-  if (pathname === tarballPath) {
+  const bytes = tarballs.get(pathname);
+  if (bytes !== undefined) {
     response.writeHead(200, { 'content-type': 'application/octet-stream' });
     response.end(bytes);
   } else if (pathname === `/${NAME}`) {

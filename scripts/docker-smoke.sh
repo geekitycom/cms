@@ -195,7 +195,7 @@ done
 [[ -n "${registry}" ]] || fail "the fake registry did not start in the container"
 
 added="$(docker exec --env "npm_config_registry=http://127.0.0.1:${REGISTRY_PORT}" "${container}" \
-  geekity plugin add "${PLUGIN}")" || fail "geekity plugin add failed"
+  geekity plugin add "${PLUGIN}@1.0.0")" || fail "geekity plugin add failed"
 echo "${added}"
 grep -qF "Added ${PLUGIN} 1.0.0 to /site/plugins/${PLUGIN}." <<<"${added}" \
   || fail "geekity plugin add did not say it added ${PLUGIN}"
@@ -240,6 +240,15 @@ done
 [[ "$(docker inspect --format '{{.RestartCount}}' "${container}")" == "0" ]] \
   || fail "the container restarted"
 echo "ok  ${PLUGIN} is on the Plugins screen after Reload, with no container restart"
+
+upgraded="$(docker exec --env "npm_config_registry=http://127.0.0.1:${REGISTRY_PORT}" "${container}" \
+  geekity plugin upgrade)" || fail "geekity plugin upgrade failed"
+echo "${upgraded}"
+grep -qF "${PLUGIN}: upgraded from 1.0.0 to 1.1.0." <<<"${upgraded}" \
+  || fail "geekity plugin upgrade did not upgrade ${PLUGIN} to 1.1.0"
+docker exec "${container}" grep -qF '"version":"1.1.0"' "/site/plugins/${PLUGIN}/plugin.json" \
+  || fail "/site/plugins/${PLUGIN}/plugin.json is not 1.1.0 after plugin upgrade"
+echo "ok  geekity plugin upgrade"
 
 removed="$(docker exec "${container}" geekity plugin remove "${PLUGIN}")" \
   || fail "geekity plugin remove failed"
