@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-09 01:56'
-updated_date: '2026-10-09 02:42'
+updated_date: '2026-10-09 03:29'
 labels: []
 dependencies:
   - TASK-305
@@ -52,6 +52,12 @@ Today a Docker site adds, upgrades and removes plugins with `geekity plugin add|
 <!-- SECTION:NOTES:BEGIN -->
 Built: config pluginInstall (GEEKITY_PLUGIN_INSTALL, default on) and pluginRegistry(env) in install.ts, shared with cli.ts; describeUpgrade moved from cli.ts into upgrade.ts so the CLI and the screen word an upgrade the same way; src/plugins/manage.ts runs add/update/remove one at a time per plugins folder (withFileLock on the folder path) and records each change in data/plugin-changes.json via src/plugins/changes.ts (newest 200, mode 0600); src/plugins/manage.ts also keeps the last Check for updates per folder in the worker, dropped when the folder changes. Admin routes in src/admin/plugins.ts: POST add, check, update, update-all, remove and GET confirm, all reserved from plugin screens. Add is inline with its password; Update, Update all and Remove go through a confirm screen that lists what will change (a live check) and asks for the password. Wrong password: 400 on the same form with the error-summary convention (form-errors.test.ts now covers both templates). Config plugins say Managed in code and get no controls. Remove is offered on every folder plugin, enabled or not, as the CLI does.
 Verification: new src/admin/plugins-install.test.ts (14 tests, fake npm registry), with mutants (no password check, no record, switch ignored on POST, config plugins manageable) each failing at least one test; pnpm build/test (cms 5001 pass)/typecheck/lint/format:check green; scripts/pack-install-smoke.sh passed; Playwright (playwright-core 1.48.2 driving Chrome headless) against a scratch site under geekity serve with the fake registry: add refused on a wrong password with the package kept, add llm 1.0.0 and tags 2.0.0, Reload, Check for updates, row Update llm to 1.1.0, Update all tags to 2.1.0, Remove refused then done, Reload, Recent changes lists all five; restarted with GEEKITY_PLUGIN_INSTALL=off: no controls, the switch named, a forged add refused with the reason. Phone width 390 has no horizontal overflow. Servers and the registry stopped afterwards.
+
+Follow-ups Andrew accepted after review (2026-10-08):
+- Remove now needs the plugin disabled first, as WordPress does. An enabled plugin's row has no Remove; the confirm screen shows "<name> is enabled. Disable it first." with nothing to press; the POST refuses with that flash; and `geekity plugin remove` exits 1 with the same message (removePlugin in src/plugins/install.ts reads the enabled set from site.json, so the screen and the CLI share the rule). This replaces "Remove is offered on every folder plugin, enabled or not, as the CLI does" above. Tests: plugins-install.test.ts (row, confirm, POST, then Remove back after Disable) and cli-plugin-add.test.ts (CLI refusal, folder kept).
+- A missing requirement flashed on the screen says "Add <package> with the Add plugin form." instead of the command line; the CLI keeps "Add it with: geekity plugin add <package>". requirementNotes and upgradePlugins take the advice as an AddAdvice (ADD_WITH_COMMAND in install.ts, ADD_WITH_FORM in manage.ts). Test: the Add plugin requirement test asserts the form wording and that no flash names geekity plugin add.
+- Update checks stay manual (Check for updates), and a failed check is still not recorded: no change.
+- README (Docker and Installing from the admin), packages/cms/README.md, the CLI help and doc-5 now say Remove needs a disabled plugin.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
