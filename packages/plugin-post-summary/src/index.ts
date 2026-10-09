@@ -28,8 +28,11 @@ export const DESCRIPTION_CHARACTERS = 280;
 /** The longest description, in words: where a feed cuts an excerpt (WordPress's 55). */
 export const DESCRIPTION_WORDS = 55;
 
-/** The longest title asked for, in characters. */
-const TITLE_CHARACTERS = 90;
+/** About the longest title asked for, in characters. */
+const TITLE_CHARACTERS = 60;
+
+/** How many of the site's latest titles the model sees as examples of its style. */
+const TITLE_EXAMPLES = 5;
 
 /** How much of the body goes to the model; a longer one is cut there. */
 const BODY_CHARACTERS = 24_000;
@@ -106,14 +109,27 @@ function draftText(draft: PluginEditorDraft): string {
 interface Ask {
   readonly key: 'title' | 'description';
   readonly instruction: string;
+  /** Lines after the instruction showing the site's own style, if any. */
+  readonly style: (recentTitles: readonly string[]) => string[];
   readonly tidy: (text: string) => string;
 }
 
 const TITLE: Ask = {
   key: 'title',
   instruction:
-    `Suggest a title for this blog post: specific, plain and under ${String(TITLE_CHARACTERS)} characters, ` +
-    'in the words a reader would search for. No quotation marks, no full stop at the end, no clickbait.',
+    'Suggest a title for this blog post, written the way its author would write it: ' +
+    `short, plain and specific, about ${String(TITLE_CHARACTERS)} characters at most. ` +
+    'No quotation marks, no full stop at the end, no clickbait.',
+  style: (recentTitles) => {
+    const examples = recentTitles.slice(0, TITLE_EXAMPLES);
+    return examples.length === 0
+      ? []
+      : [
+          '',
+          'Recent titles on this site, to match their style:',
+          ...examples.map((title) => `- ${title}`),
+        ];
+  },
   tidy: cleanTitle,
 };
 
@@ -123,13 +139,14 @@ const DESCRIPTION: Ask = {
     'Write the description shown under this post in listings and feeds: one or two plain sentences, ' +
     `at most ${String(DESCRIPTION_CHARACTERS)} characters and ${String(DESCRIPTION_WORDS)} words, ` +
     'that say what the post is about. No Markdown, and do not start with "This post".',
+  style: () => [],
   tidy: fitDescription,
 };
 
 async function suggest(
   llm: LlmService,
   ask: Ask,
-  { draft, signal }: PluginEditorContext,
+  { draft, recentTitles, signal }: PluginEditorContext,
 ): Promise<PluginEditorSuggestion> {
   if (draft.body.trim() === '' && draft.title.trim() === '') {
     return { ok: false, message: 'Write some of the post first. There is nothing to read yet.' };
@@ -138,9 +155,11 @@ async function suggest(
     messages: [
       {
         role: 'system',
-        content:
+        content: [
           `${ask.instruction} Write in the language with the tag "${draft.lang}". ` +
-          'Use only what the post says; invent nothing.',
+            'Use only what the post says; invent nothing.',
+          ...ask.style(recentTitles),
+        ].join('\n'),
       },
       { role: 'user', content: draftText(draft) },
     ],

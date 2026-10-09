@@ -56,6 +56,7 @@ const site = (
     enabled?: boolean;
     baseUrl?: string;
     model?: string;
+    posts?: Record<string, string>;
   } = { apiKey: KEY },
 ) => summarySite([llm, summary], { baseUrl: provider.baseUrl, posts: POSTS, ...options });
 
@@ -86,6 +87,49 @@ describe('Suggest title and Suggest description', () => {
       required: ['title'],
       additionalProperties: false,
     });
+  });
+
+  it('asks for a short title in the author’s own way, with the site’s latest titles as examples', async () => {
+    const { admin } = await site({
+      apiKey: KEY,
+      posts: {
+        ...POSTS,
+        'oldest.md': '---\ntitle: Hello World\ndate: 2026-01-01T09:00:00Z\n---\n\nHi.\n',
+        'rye.md': '---\ntitle: Rye, Again\ndate: 2026-10-02T09:00:00Z\n---\n\nDense.\n',
+        'oven.md': '---\ntitle: A New Oven\ndate: 2026-10-03T09:00:00Z\n---\n\nHot.\n',
+        'flour.md': '---\ntitle: Which Flour\ndate: 2026-10-04T09:00:00Z\n---\n\nBread.\n',
+        'salt.md': '---\ntitle: Salt Matters\ndate: 2026-10-05T09:00:00Z\n---\n\nSome.\n',
+      },
+    });
+    provider.answer(replying(JSON.stringify({ title: 'WordCamp US, and maybe not again' })));
+    await admin.post(actionUrl('suggest-title'), {
+      type: 'post',
+      body: 'About a month ago, I went to WordCamp US in Phoenix.',
+    });
+    const system = (provider.received[0]?.body as Sent).messages[0]?.content ?? '';
+    assert.match(system, /the way its author would/);
+    assert.match(system, /about 60 characters at most/);
+    assert.doesNotMatch(system, /search for/);
+    assert.match(
+      system,
+      /Recent titles on this site, to match their style:\n- Salt Matters\n- Which Flour\n- A New Oven\n- Rye, Again\n- On Bread$/,
+    );
+    assert.doesNotMatch(system, /Hello World/, 'five examples at most');
+  });
+
+  it('gives no examples on a site with no titled posts, and none to a description', async () => {
+    const { admin } = await site({ apiKey: KEY, posts: {} });
+    provider.answer(replying(JSON.stringify({ title: 'Phoenix' })));
+    await admin.post(actionUrl('suggest-title'), { type: 'post', body: 'Words.' });
+    const titled = await site();
+    provider.answer(replying(JSON.stringify({ description: 'About bread.' })));
+    await titled.admin.post(actionUrl('suggest-description'), { type: 'post', body: 'Words.' });
+    const [title, description] = provider.received.map(
+      (received) => (received.body as Sent).messages[0]?.content ?? '',
+    );
+    assert.match(title ?? '', /about 60 characters at most/);
+    assert.doesNotMatch(title ?? '', /Recent titles/);
+    assert.doesNotMatch(description ?? '', /Recent titles|On Bread/);
   });
 
   it('keeps a description within the 280 characters and 55 words listings and feeds use', async () => {
