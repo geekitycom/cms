@@ -1,6 +1,6 @@
 {
   "name": "@geekity/plugin-tag-suggest",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Geekity CMS plugin that suggests tags for a post in the editor, from a language model, ranked by how many people follow each tag on tags.pub.",
   "license": "MIT",

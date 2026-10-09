@@ -1,6 +1,6 @@
 {
   "name": "@geekity/plugin-llm",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Geekity CMS plugin that connects the site to a language model through the OpenAI chat-completions API, OpenRouter by default.",
   "license": "MIT",
