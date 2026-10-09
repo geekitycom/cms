@@ -1,11 +1,13 @@
 /* The buttons running plugins put beside the editor's title, description and
    tags (decision-33). Each posts the form as it stands to its plugin's
-   endpoint, which answers { ok, value }, { ok, choices } or { ok: false,
-   message }, and shows the suggestion with Accept and Dismiss. Choices come
-   only beside the tags field, each drawn from the page's template row with a
-   box to tick, under a heading row wherever its group changes, and Accept
-   adds the ticked ones. Accept fills the field and saves nothing; a save is
-   still only the form's own buttons.
+   endpoint, which answers { ok, value }, { ok, choices }, { ok, message }
+   or { ok: false, message }, and shows a value or choices with Accept and
+   Dismiss, and a message in the status line alone. Choices come beside the
+   tags field, each drawn from the page's template row with a box to tick,
+   under a heading row wherever its group changes, and Accept adds the ticked
+   ones; or beside the title, as radio buttons with the first picked, and
+   Accept puts the picked one in the title. Accept fills the field and saves
+   nothing; a save is still only the form's own buttons.
 
    A file rather than an inline script, loaded from the admin's own origin
    like slug.js, so the admin's policy stays `script-src 'self'` and
@@ -146,10 +148,12 @@
             list.hidden = false;
             suggestion.hidden = false;
             say('');
-            list.querySelector('input').focus();
+            var first = list.querySelector('input');
+            if (first.type === 'radio') first.checked = true;
+            first.focus();
             return;
           }
-          if (answer.ok) {
+          if (answer.ok && typeof answer.value === 'string') {
             offered = String(answer.value);
             text.textContent = offered;
             text.hidden = false;
@@ -159,7 +163,7 @@
             accept.focus();
             return;
           }
-          say(String(answer.message), true);
+          say(String(answer.message), !answer.ok);
           if (answer.withdrawn) press.hidden = true;
         })
         .catch(function (error) {

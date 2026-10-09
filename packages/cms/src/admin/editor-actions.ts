@@ -182,7 +182,7 @@ export function mountEditorActions(app: Hono<GeekityEnv>): void {
         recentTitles: recentTitles(c, draft.title),
         signal: c.req.raw.signal,
       });
-      if ('choices' in suggestion && action.field !== 'tags') {
+      if ('choices' in suggestion && action.field === 'description') {
         throw new Error(`it offered choices for the ${action.field}, which holds one value`);
       }
       return c.json(answerOf(suggestion));
@@ -196,6 +196,7 @@ export function mountEditorActions(app: Hono<GeekityEnv>): void {
 function answerOf(suggestion: PluginEditorSuggestion): object {
   if (!suggestion.ok) return { ok: false, message: suggestion.message };
   if ('value' in suggestion) return { ok: true, value: suggestion.value };
+  if ('message' in suggestion) return { ok: true, message: suggestion.message };
   return {
     ok: true,
     choices: suggestion.choices.map(({ value, note, badge, group }) => ({

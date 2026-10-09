@@ -401,7 +401,22 @@ describe('editor actions', () => {
     assert.deepEqual(await response.json(), { ok: true, choices });
   });
 
-  it('refuses choices beside a field that holds one value', async () => {
+  it('answers choices beside the title, for the author to pick one', async () => {
+    const choices = [{ value: 'Plain Bread' }, { value: 'Rye in Phoenix' }];
+    const { agent } = await site([suggester(undefined, () => ({ ok: true, choices }))], true);
+    const response = await press(agent, '/admin/posts/new', 'suggest-title');
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, choices });
+  });
+
+  it('answers a note with nothing to accept, such as keeping the field as it is', async () => {
+    const message = 'The model suggests keeping the current title.';
+    const { agent } = await site([suggester(undefined, () => ({ ok: true, message }))], true);
+    const response = await press(agent, '/admin/posts/new', 'suggest-title');
+    assert.deepEqual(await response.json(), { ok: true, message });
+  });
+
+  it('refuses choices beside the description, which holds one value', async () => {
     const { agent } = await site(
       [suggester(undefined, () => ({ ok: true, choices: [{ value: 'One' }] }))],
       true,
@@ -425,6 +440,21 @@ describe('editor actions', () => {
       /<template data-editor-choice>[\s\S]*<input type="checkbox"[\s\S]*<\/template>/,
     );
     assert.match(block, /<template data-editor-choice-group>\s*<li[^>]*data-choice-group[^>]*>/);
+  });
+
+  it('draws a title choice as a radio button and a tags choice as a checkbox', async () => {
+    const { agent } = await site([suggester()], true);
+    const html = await (await agent.get('/admin/posts/new')).text();
+    const input = (fieldId: string) =>
+      /<template data-editor-choice>[\s\S]*?(<input [^>]*>)/.exec(
+        actionsBeside(html, fieldId) ?? '',
+      )?.[1] ?? '';
+    assert.match(input('editor-title'), /type="radio"/);
+    assert.match(input('editor-title'), /name="[^"]+"/);
+    assert.match(input('editor-tags'), /type="checkbox"/);
+    for (const fieldId of ['editor-title', 'editor-tags']) {
+      assert.match(input(fieldId), /form="editor-suggestions"/, fieldId);
+    }
   });
 
   it('gives each choice box to a form of its own, so saving the draft never posts it', async () => {

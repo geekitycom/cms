@@ -46,7 +46,11 @@
       <template data-editor-choice>
         <li>
           <label class="flex items-start gap-2">
+            {% if fieldId == 'editor-tags' %}
             <input type="checkbox" class="checkbox checkbox-sm mt-0.5" form="editor-suggestions">
+            {% else %}
+            <input type="radio" class="radio radio-sm mt-0.5" name="{{ action.url }}" form="editor-suggestions">
+            {% endif %}
             <span class="flex flex-col">
               <span class="flex flex-wrap items-center gap-2">
                 <span class="break-all" data-choice-value></span>
