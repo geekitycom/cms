@@ -19,6 +19,8 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { basicSetup, EditorView } from 'codemirror';
 
+import { ownParagraph } from '../src/admin/own-paragraph.ts';
+import { videoOf } from '../src/content/video.ts';
 import { LOOK } from './look.ts';
 
 /** The element the server hangs the editor's URLs off. */
@@ -114,7 +116,7 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
 
   const tabs = tabStrip();
   tools.insertAdjacentElement('afterbegin', tabs.element);
-  tools.append(uploadControl(), status);
+  tools.append(uploadControl(), videoControl(), status);
 
   // The fallback did the job of the Preview tab; two of them would be one too
   // many.
@@ -227,6 +229,73 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
     });
 
     wrapper.append(button, input);
+    return wrapper;
+  }
+
+  function videoControl(): HTMLElement {
+    const wrapper = document.createElement('span');
+    wrapper.className = LOOK.videoControl;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = LOOK.uploadButton;
+    button.textContent = 'Add video…';
+
+    const address = document.createElement('input');
+    address.type = 'url';
+    address.className = LOOK.videoAddress;
+    address.placeholder = 'YouTube or Vimeo address';
+    address.setAttribute('aria-label', 'Video address');
+    address.hidden = true;
+
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = LOOK.uploadButton;
+    add.textContent = 'Insert';
+    add.hidden = true;
+
+    function open(opened: boolean): void {
+      address.hidden = !opened;
+      add.hidden = !opened;
+      button.setAttribute('aria-expanded', String(opened));
+      if (opened) address.focus();
+    }
+
+    function insertVideo(): void {
+      const url = address.value.trim();
+      if (videoOf(url) === undefined) {
+        say('That is not a YouTube or Vimeo video address.', 'error');
+        address.focus();
+        return;
+      }
+      const range = view.state.selection.main;
+      const change = ownParagraph(view.state.doc.toString(), range.from, range.to, url);
+      view.dispatch({
+        changes: { from: change.from, to: change.to, insert: change.insert },
+        selection: { anchor: change.cursor },
+      });
+      textarea.value = view.state.doc.toString();
+      address.value = '';
+      open(false);
+      say('');
+      view.focus();
+    }
+
+    button.addEventListener('click', () => {
+      open(address.hidden === true);
+    });
+    add.addEventListener('click', insertVideo);
+    address.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        insertVideo();
+      } else if (event.key === 'Escape') {
+        open(false);
+        button.focus();
+      }
+    });
+
+    wrapper.append(button, address, add);
     return wrapper;
   }
 

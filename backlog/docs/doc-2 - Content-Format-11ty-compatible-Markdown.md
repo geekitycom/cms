@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-09 15:06'
+updated_date: '2026-10-09 15:21'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -186,5 +186,33 @@ markdown-it with the same options 11ty uses by default (`html: true`), plus:
 - footnotes
 - heading anchors
 - fenced code with language class only (no server-side highlighting)
+- videos: a YouTube or Vimeo URL on a line of its own (decision-34)
 
 Anything that must survive an Eleventy build is checked by a test that runs Eleventy against the fixtures directory.
+
+### Videos
+
+A YouTube or Vimeo URL that is a paragraph by itself, with a blank line before and after it, plays as the video. Write it bare or in `<…>`:
+
+```markdown
+The talk I gave in Berlin.
+
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+
+And the follow-up.
+
+<https://vimeo.com/76979871>
+```
+
+The addresses it knows:
+
+| Provider | Addresses                                                                                                                              |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| YouTube  | `youtube.com/watch?v=ID`, `/shorts/ID`, `/embed/ID` and `/live/ID` (with or without `www.` or `m.`), `youtu.be/ID`, `youtube-nocookie.com/embed/ID`. A `t` or `start` of seconds or `1h2m3s` starts the player there. |
+| Vimeo    | `vimeo.com/ID`, `vimeo.com/ID/HASH` for an unlisted video, `vimeo.com/channels/NAME/ID`, `player.vimeo.com/video/ID` with an optional `h=HASH`. |
+
+The page shows the provider's privacy-enhanced player (YouTube's `youtube-nocookie.com`, Vimeo with `dnt=1`), lazily loaded, in a `figure.video-embed` with the URL linked beneath it. The default theme README describes the markup. The Markdown and text/plain representations are the file, so they carry the URL as written; the JSON carries it in `markdown` and the player and link in `html`; the feeds carry the player and the link, so a reader that drops iframes still shows the address.
+
+Anything else stays a link: a URL with words beside it, a `[link](url)` with words of its own (the way to link a video without playing it), a URL inside a list item or a blockquote, and a YouTube or Vimeo address that is not a video, such as a playlist or a channel.
+
+The editor's Add video button asks for the address and puts it on a line of its own at the cursor, so nobody has to remember the blank lines. Eleventy prints the URL as text.

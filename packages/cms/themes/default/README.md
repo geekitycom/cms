@@ -1232,6 +1232,54 @@ the `+` and the `-` in the text carry the meaning as well as the colour does.
 {% block scripts %}{% endblock %}
 ```
 
+### Videos
+
+A YouTube or Vimeo URL on a line of its own in a post plays as the video
+(decision-34; doc-2 lists the addresses it knows). The core renders it into the
+body, so it reaches a theme inside `content` as:
+
+```html
+<figure class="video-embed video-embed-youtube">
+  <iframe
+    src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"
+    width="560"
+    height="315"
+    title="YouTube video"
+    loading="lazy"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    referrerpolicy="strict-origin-when-cross-origin"
+    allowfullscreen
+  ></iframe>
+  <figcaption>
+    <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+      >https://www.youtube.com/watch?v=dQw4w9WgXcQ</a
+    >
+  </figcaption>
+</figure>
+```
+
+It is one line in the real output. A Vimeo video is the same with
+`video-embed-vimeo`, a `https://player.vimeo.com/video/ID?dnt=1` player and the
+title `Vimeo video`. The core sets no style on it: with nothing from the theme
+the player is the providers' standard 560 by 315.
+
+**Paper** makes it responsive. `.video-embed iframe` takes the full width of
+the text column at 16:9, with the rounded corners an image has, and the
+figcaption takes the muted caption style every figure in a post has. A theme
+that ships its own `static/style.css` writes that rule itself:
+
+```css
+.video-embed iframe {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+```
+
+The figcaption is the link a feed reader, a fediverse server or the embed view
+keeps when it drops the iframe. A theme that would rather not show it on the
+page can hide `.video-embed figcaption`; the feeds carry it either way.
+
 ## Mail templates
 
 The messages the CMS sends live under `mail/` and resolve the same way, so a
