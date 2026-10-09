@@ -7,11 +7,20 @@
 
 import { Validator } from '@cfworker/json-schema';
 
-import { chatCompletion, isRecord } from './connection.ts';
+import { effortFor } from './catalog.ts';
+import type { ModelCatalog, ReasoningEffort } from './catalog.ts';
+import { chatCompletion, describeFailure, isRecord } from './connection.ts';
 import type { LlmConnection, LlmFailure } from './connection.ts';
 
-/** The most a reply may run to when a call names no limit. */
-export const DEFAULT_MAX_TOKENS = 1024;
+/**
+ * The most a reply may run to when a call names no limit, reasoning included.
+ * At the default effort a reasoning model spends a fifth or so of it
+ * thinking, which leaves thousands for a short structured answer.
+ */
+export const DEFAULT_MAX_TOKENS = 4096;
+
+/** The reasoning effort asked of a reasoning model when a call names none. */
+export const DEFAULT_REASONING: ReasoningEffort = 'low';
 
 /** How long a call may take, in milliseconds, before it fails as a timeout. */
 export const DEFAULT_TIMEOUT_MS = 60_000;
@@ -30,8 +39,14 @@ export interface LlmRequest {
   readonly schema?: JsonSchema | undefined;
   /** The model to ask, or the plugin's default model. */
   readonly model?: string | undefined;
-  /** The longest reply, or {@link DEFAULT_MAX_TOKENS}. */
+  /** The longest reply, reasoning included, or {@link DEFAULT_MAX_TOKENS}. */
   readonly maxTokens?: number | undefined;
+  /**
+   * How hard a reasoning model on OpenRouter should think, or {@link DEFAULT_REASONING}.
+   * `model-default` sends nothing and leaves it to the model. Other providers
+   * and models that do not reason are sent nothing either way.
+   */
+  readonly reasoning?: ReasoningEffort | 'model-default' | undefined;
   /** Stops the call, which then fails as `aborted`. */
   readonly signal?: AbortSignal | undefined;
 }
@@ -56,7 +71,12 @@ export type Completion<Reply> =
       /** `undefined` when the provider did not report it. */
       readonly usage: LlmUsage | undefined;
     } & Reply)
-  | { readonly ok: false; readonly error: LlmFailure };
+  | {
+      readonly ok: false;
+      readonly error: LlmFailure;
+      /** The failure in plain words, with where to put it right, ready to show. */
+      readonly message: string;
+    };
 
 /** The service `@geekity/plugin-llm` provides, reached with `host.use('@geekity/plugin-llm')`. */
 export interface LlmService {
@@ -85,17 +105,23 @@ export interface ModelCall {
 export async function callModel(
   connection: LlmConnection,
   request: LlmRequest,
+  catalog: ModelCatalog,
 ): Promise<ModelCall> {
   const { schema } = request;
   const validator = schema === undefined ? undefined : new Validator(schema, '2020-12', false);
   const asked = request.model ?? connection.model;
+  const maxTokens = request.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const reasoning = await reasoningFor(connection, request, asked, catalog);
+  const failure = (error: LlmFailure) =>
+    ({ ok: false, error, message: describeFailure(error, connection) }) as const;
 
   const outcome = await chatCompletion(
     connection,
     {
       model: asked,
       messages: request.messages,
-      max_tokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
+      max_tokens: maxTokens,
+      ...(reasoning === undefined ? {} : { reasoning }),
       ...(schema === undefined
         ? {}
         : {
@@ -110,19 +136,24 @@ export async function callModel(
     },
     request.signal,
   );
-  if (!outcome.ok) return { completion: outcome, model: asked, usage: undefined };
+  if (!outcome.ok) return { completion: failure(outcome.error), model: asked, usage: undefined };
 
   const answer = isRecord(outcome.value) ? outcome.value : {};
   const model =
     typeof answer['model'] === 'string' && answer['model'] !== '' ? answer['model'] : asked;
   const usage = usageOf(answer['usage']);
-  const invalid = (reason: string): ModelCall => ({
-    completion: { ok: false, error: { kind: 'invalid-output', reason } },
-    model,
-    usage,
-  });
+  const failed = (error: LlmFailure): ModelCall => ({ completion: failure(error), model, usage });
+  const invalid = (reason: string) => failed({ kind: 'invalid-output', reason });
 
-  const text = replyText(answer);
+  const { text, finishReason } = firstChoice(answer);
+  const atCap = usage !== undefined && usage.completionTokens >= maxTokens;
+  if (finishReason === 'length' || ((text === undefined || text.trim() === '') && atCap)) {
+    return failed({
+      kind: 'cut-off',
+      maxTokens,
+      reasoningTokens: reasoningTokens(answer['usage']),
+    });
+  }
   if (text === undefined) return invalid('It had no text.');
   if (validator === undefined)
     return { completion: { ok: true, model, usage, text }, model, usage };
@@ -154,13 +185,42 @@ export async function callModel(
  */
 const SUMMARY_KEYWORDS = new Set(['properties', 'items', 'false', 'allOf', '$ref']);
 
-/** The first choice's message content, when it is text. */
-function replyText(answer: Record<string, unknown>): string | undefined {
+/**
+ * The `reasoning` field to send: only to OpenRouter, only for a model its
+ * list says takes it, and not when the call leaves it to the model. `exclude`
+ * keeps the reasoning text out of the reply, which no consumer reads.
+ */
+async function reasoningFor(
+  connection: LlmConnection,
+  request: LlmRequest,
+  model: string,
+  catalog: ModelCatalog,
+): Promise<{ effort: ReasoningEffort; exclude: true } | undefined> {
+  const asked = request.reasoning ?? DEFAULT_REASONING;
+  if (connection.openRouter === undefined || asked === 'model-default') return undefined;
+  const reasoner = await catalog(connection, model, request.signal);
+  return reasoner === undefined ? undefined : { effort: effortFor(asked, reasoner), exclude: true };
+}
+
+/** The first choice's message content, when it is text, and why the model stopped. */
+function firstChoice(answer: Record<string, unknown>): {
+  text: string | undefined;
+  finishReason: unknown;
+} {
   const choices = answer['choices'];
   const first: unknown = Array.isArray(choices) ? choices[0] : undefined;
   const message = isRecord(first) ? first['message'] : undefined;
   const content = isRecord(message) ? message['content'] : undefined;
-  return typeof content === 'string' ? content : undefined;
+  return {
+    text: typeof content === 'string' ? content : undefined,
+    finishReason: isRecord(first) ? first['finish_reason'] : undefined,
+  };
+}
+
+function reasoningTokens(usage: unknown): number | undefined {
+  const details = isRecord(usage) ? usage['completion_tokens_details'] : undefined;
+  const count = isRecord(details) ? details['reasoning_tokens'] : undefined;
+  return typeof count === 'number' ? count : undefined;
 }
 
 /** JSON as a model may send it without strict output: inside one Markdown code fence. */

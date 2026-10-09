@@ -4,7 +4,7 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
 import llm from '../src/index.ts';
-import { fakeProvider } from './provider.ts';
+import { fakeProvider, OPENROUTER_BASE_URL, standInForOpenRouter, thinker } from './provider.ts';
 import type { FakeProvider } from './provider.ts';
 import { closeSites, flashes, llmSite, SCREEN } from './site.ts';
 
@@ -44,7 +44,7 @@ describe('the LLM screen', () => {
     await admin.post(SCREEN, { action: 'save', 'setting.base_url': provider.baseUrl });
     await admin.post(SCREEN, { action: 'test-connection' });
     assert.deepEqual(flashes(await (await admin.get(SCREEN)).text()), [
-      'No API key is set, so nothing was sent.',
+      'No API key is set on Plugins &gt; LLM, so nothing was sent.',
     ]);
     assert.equal(provider.received.length, sent);
   });
@@ -85,7 +85,51 @@ describe('the LLM screen', () => {
     await admin.post(SCREEN, { action: 'test-connection' });
     const host = new URL(provider.baseUrl).host;
     assert.deepEqual(flashes(await (await admin.get(SCREEN)).text()), [
-      `${host} refused the API key.`,
+      `${host} refused the API key. Check the key on Plugins &gt; LLM.`,
     ]);
+  });
+
+  it('tests a reasoning model on OpenRouter with the same call, and it answers', async () => {
+    const stop = standInForOpenRouter(provider);
+    try {
+      const { admin } = await llmSite(llm);
+      await admin.post(SCREEN, {
+        action: 'save',
+        'setting.base_url': OPENROUTER_BASE_URL,
+        'setting.api_key': KEY,
+        'setting.default_model': 'acme/thinker',
+      });
+      provider.answer(thinker('OK'));
+      await admin.post(SCREEN, { action: 'test-connection' });
+      assert.deepEqual(flashes(await (await admin.get(SCREEN)).text()), [
+        'Connected. acme/thinker answered.',
+      ]);
+      const sent = provider.received.at(-1)?.body as { reasoning?: unknown; max_tokens?: number };
+      assert.deepEqual(sent.reasoning, { effort: 'low', exclude: true });
+    } finally {
+      stop();
+    }
+  });
+
+  it('says a reply cut off at the limit is cut off, with the reply tokens on Last call', async () => {
+    const stop = standInForOpenRouter(provider);
+    try {
+      const { admin } = await llmSite(llm);
+      await admin.post(SCREEN, {
+        action: 'save',
+        'setting.base_url': OPENROUTER_BASE_URL,
+        'setting.api_key': KEY,
+        'setting.default_model': 'acme/unlisted-thinker',
+      });
+      provider.answer(thinker('OK'));
+      await admin.post(SCREEN, { action: 'test-connection' });
+      const html = await (await admin.get(SCREEN)).text();
+      const [flash] = flashes(html);
+      assert.match(flash ?? '', /stopped at its limit of 4096 tokens/);
+      assert.match(flash ?? '', /does not reason by default/);
+      assert.ok(html.includes('>4096<'), 'Last call shows the reply tokens at the cap');
+    } finally {
+      stop();
+    }
   });
 });

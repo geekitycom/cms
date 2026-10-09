@@ -43,6 +43,21 @@ Enable it under `/admin/plugins`. Its screen is
 | API key       | `api_key`       | none                           | `data/plugins/@geekity/plugin-llm/secrets.json`, mode 0600 |
 | Default model | `default_model` | `openrouter/auto`              | `content/_data/site.json`, under `@geekity/plugin-llm`     |
 
+### Choosing a model
+
+Choose a model that supports structured outputs and does not reason by
+default, such as `openai/gpt-4.1-mini`. On OpenRouter's
+[model list](https://openrouter.ai/models), filter by structured outputs, and
+check that the model's supported parameters do not include `reasoning`. Such a
+model answers an editor suggestion quickly, in a few dozen tokens.
+
+The default, `openrouter/auto`, lets OpenRouter pick a model for each call. It
+may pick a reasoning model, which thinks before it answers and bills those
+tokens as reply tokens. The plugin asks a reasoning model to keep its reasoning
+short (see [Reasoning models](#reasoning-models)), so most calls still succeed,
+but the model, the cost and the time vary from call to call. The Last call row
+shows which model answered.
+
 The API key is never drawn on a page. The screen says whether one is set, and a
 save with the box left blank keeps the stored key.
 
@@ -73,7 +88,7 @@ export default definePlugin({
   label: 'Titles',
   description: 'Suggests a title for a post.',
   hostApi: 1,
-  requires: { '@geekity/plugin-llm': '^0.1.0' },
+  requires: { '@geekity/plugin-llm': '^0.2.0' },
   register(host) {
     host.get('/suggest-title', async () => {
       const llm = host.use('@geekity/plugin-llm');
@@ -90,7 +105,7 @@ export default definePlugin({
       });
       return completion.ok
         ? Response.json({ title: completion.value.title })
-        : Response.json({ error: completion.error.kind }, { status: 502 });
+        : Response.json({ error: completion.message }, { status: 502 });
     });
   },
 });
@@ -103,15 +118,18 @@ export default definePlugin({
 | `messages`  | none              | The conversation, each a `role` (`system`, `user`, `assistant`) and `content`.                             |
 | `schema`    | none              | A JSON Schema the reply must satisfy. With one, a success carries `value`. Without one, it carries `text`. |
 | `model`     | the default model | The model to ask.                                                                                          |
-| `maxTokens` | 1024              | The longest reply, in tokens.                                                                              |
+| `maxTokens` | 4096              | The longest reply, in tokens, reasoning included.                                                          |
+| `reasoning` | `low`             | How hard a reasoning model on OpenRouter thinks. See [Reasoning models](#reasoning-models).                |
 | `signal`    | none              | An `AbortSignal` that stops the call.                                                                      |
 
 A call that gets no answer within 60 seconds fails as `timeout`.
 
 A success is `{ ok: true, model, usage }` plus `text` or `value`. `model` is
 the model that answered. `usage` gives the prompt, reply and total tokens, and
-the cost when the provider reports it. A failure is `{ ok: false, error }`, and
-`describeFailure(error, connection)` puts it in plain words.
+the cost when the provider reports it. A failure is `{ ok: false, error, message }`.
+`error` is the typed failure below. `message` is the failure in plain words,
+with where to put it right, such as "Check the key on Plugins > LLM". Show
+`message` to the person who asked. The LLM screen shows the same words.
 
 With a schema, the plugin asks for strict `json_schema` output. On OpenRouter
 it also sends `provider.require_parameters`, so the request goes only to a
@@ -132,9 +150,42 @@ title as `X-OpenRouter-Title`, which OpenRouter uses for app attribution.
 | `unavailable`    | The provider failed to answer (5xx and other statuses). A later try may succeed.                                                                |
 | `rejected`       | The provider refused the request as asked (400, 404 or 422), such as an unknown model or one without structured output. Retrying does not help. |
 | `invalid-output` | The reply had no text, was not JSON, or did not match the schema.                                                                               |
+| `cut-off`        | The reply reached `maxTokens` before the answer was finished. `reasoningTokens` says how many went on reasoning, when the provider said.        |
 | `timeout`        | The provider did not answer in time.                                                                                                            |
 | `aborted`        | The caller's signal stopped the call.                                                                                                           |
 | `network`        | The provider could not be reached.                                                                                                              |
+
+## Reasoning models
+
+A reasoning model thinks before it answers, and its thinking counts against
+`maxTokens`. Left to its own default, such a model can spend the whole limit
+thinking and return no answer. The provider then reports `finish_reason`
+`length`, and the call fails as `cut-off`, whose message names the limit.
+
+On OpenRouter, the plugin sends a reasoning model OpenRouter's
+[`reasoning` parameter](https://openrouter.ai/docs/use-cases/reasoning-tokens)
+with `effort` set to the call's `reasoning`, `low` by default, and `exclude`
+set to `true`, because no consumer reads the reasoning text. When the model
+lists the efforts it supports and not the one asked for, the plugin sends the
+nearest one above it. A model that must reason gets its lowest effort instead of
+`none`. Pass `reasoning: 'model-default'` to send no `reasoning` parameter and
+leave the effort to the model.
+
+The plugin reads OpenRouter's public model list (`GET /api/v1/models`, sent
+without the API key) to learn which models take the `reasoning` parameter, and
+keeps it for an hour. Only those models get it. A model that does not reason
+gets the request it would get without this feature. With a schema, the
+plugin also sends `provider.require_parameters`, and OpenRouter then routes
+only to endpoints that support every parameter sent. If the list cannot be
+read, the call goes ahead without the `reasoning` parameter.
+
+At `low` effort, OpenRouter gives a model that takes a token budget about a
+fifth of `maxTokens` for reasoning. The default of 4096 leaves about 800
+tokens for brief reasoning and plenty for a short structured answer.
+
+Other providers get no `reasoning` field, because an OpenAI-compatible API
+may refuse a field it does not know. On those, choose a model that does not
+reason, or pass a larger `maxTokens`.
 
 ## The last call
 
@@ -146,9 +197,11 @@ or the reply.
 
 ## Test connection
 
-The screen's **Test connection** button sends one short message and asks for a
-reply of a few tokens, so it costs almost nothing. It reports which model
-answered, or the error in plain words. It counts as the last call.
+The screen's **Test connection** button sends one short message through the same
+call as every other plugin, with the default limit and reasoning effort. A model
+that does not reason answers in a few tokens, so it costs almost nothing. It
+reports which model answered, or the error in plain words. It counts as the
+last call.
 
 ## The bundle
 
