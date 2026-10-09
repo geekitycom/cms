@@ -150,21 +150,12 @@ export async function storeUpload(
   };
 }
 
-/** A file the site's rules accept, as it is to be stored. */
 export interface AcceptedUpload {
-  /** The extension, lower-cased, with its dot. */
   extension: string;
   media: UploadMediaType;
-  /** The bytes with their location and camera metadata removed. */
   bytes: Uint8Array;
 }
 
-/**
- * Hold one file to the site's upload rules without storing it: the extension
- * is on the allowlist, the declared media type (empty when none was declared)
- * is one that extension may have, the file is within the limit for its kind,
- * its first bytes are that format's, and its metadata can be removed.
- */
 export function acceptUpload(
   name: string,
   declared: string,

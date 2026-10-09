@@ -22,7 +22,6 @@ const BOOKMARKED_PAGE = 'https://unread.example/an-essay/';
 const ANNOUNCED_ID = `${BASE_URL}/?p=813`;
 const QUIET_ID = `${BASE_URL}/?p=42`;
 
-/** One POST that left the process. */
 interface Sent {
   url: string;
   body: string;
@@ -63,7 +62,6 @@ beforeEach(() => {
   sent.length = 0;
 });
 
-/** Every activity a follower was sent, as `Type object-id`. */
 function activities(): string[] {
   return sent
     .filter((one) => one.url === SHARED_INBOX)
@@ -74,7 +72,6 @@ function activities(): string[] {
     });
 }
 
-/** The posts a webmention was sent about. */
 function webmentionSources(): string[] {
   return sent
     .filter((one) => one.url === WEBMENTION_ENDPOINT)
@@ -173,7 +170,6 @@ async function settle(cms: Cms): Promise<void> {
   await cms.indexNow.settled();
 }
 
-/** Wait for the watcher to index a file whose body now says `marker`. */
 async function indexed(cms: Cms, slug: string, marker: string): Promise<void> {
   const deadline = Date.now() + 20_000;
   while (!(cms.store.getBySlug(slug)?.body.includes(marker) ?? false)) {
@@ -208,8 +204,7 @@ async function editor(
   });
 }
 
-/** A post its followers were sent before it reached this site. */
-function announcedPost(body = `Thoughts on [a page](${LINKED_PAGE}).`): string {
+function migratedFederatedPost(body = `Thoughts on [a page](${LINKED_PAGE}).`): string {
   return `---
 title: Already announced
 date: 2025-11-02T10:00:00.000Z
@@ -225,8 +220,7 @@ ${body}
 `;
 }
 
-/** A post that was public before it reached this site, and never federated. */
-function quietPost(body = `An old essay about [a page](${LINKED_PAGE}).`): string {
+function migratedUnfederatedPost(body = `An old essay about [a page](${LINKED_PAGE}).`): string {
   return `---
 title: An old essay
 date: 2019-05-01T10:00:00.000Z
@@ -241,8 +235,7 @@ ${body}
 `;
 }
 
-/** A draft restored from content that was public before it reached this site. */
-function quietDraft(): string {
+function migratedDraft(): string {
   return `---
 title: A restored essay
 date: 2012-02-03T10:00:00.000Z
@@ -256,8 +249,7 @@ An essay from 2012 about [a page](${LINKED_PAGE}).
 `;
 }
 
-/** A post first published here, the control every rule above leaves alone. */
-function freshPost(body = `New words about [a page](${LINKED_PAGE}).`): string {
+function nativePost(body = `New words about [a page](${LINKED_PAGE}).`): string {
   return `---
 title: Brand new
 date: 2026-10-09T10:00:00.000Z
@@ -278,7 +270,7 @@ describe('a post first published on this site (TASK-296 AC #4)', () => {
   it('is announced, mentioned, pinged and submitted when its file is written', async () => {
     const { cms, contentDir } = await site({ watch: true });
 
-    await writeDocument(contentDir, FRESH_FILE, freshPost());
+    await writeDocument(contentDir, FRESH_FILE, nativePost());
     await indexed(cms, 'brand-new', 'New words');
 
     assert.deepEqual(activities(), [`Create ${BASE_URL}/2026/10/brand-new/`]);
@@ -292,8 +284,8 @@ describe('a migrated post written while the site watches (TASK-296 AC #1, #2, #7
   it('sends nothing for a post its followers already hold, nor for one never federated', async () => {
     const { cms, contentDir } = await site({ watch: true });
 
-    await writeDocument(contentDir, ANNOUNCED_FILE, announcedPost());
-    await writeDocument(contentDir, QUIET_FILE, quietPost());
+    await writeDocument(contentDir, ANNOUNCED_FILE, migratedFederatedPost());
+    await writeDocument(contentDir, QUIET_FILE, migratedUnfederatedPost());
     await indexed(cms, 'already-announced', 'Thoughts');
     await indexed(cms, 'an-old-essay', 'An old essay');
 
@@ -307,20 +299,20 @@ describe('a migrated post on a fresh database, edited later (TASK-296 AC #1, #2,
   it('sends one Update for the announced post, nothing to followers for the quiet one, and the mentions an edit earns', async () => {
     const { cms, contentDir } = await site({
       watch: true,
-      files: { [ANNOUNCED_FILE]: announcedPost(), [QUIET_FILE]: quietPost() },
+      files: { [ANNOUNCED_FILE]: migratedFederatedPost(), [QUIET_FILE]: migratedUnfederatedPost() },
     });
     assertSilent('booting over the migrated archive');
 
     await writeDocument(
       contentDir,
       ANNOUNCED_FILE,
-      announcedPost(`Second thoughts on [a page](${LINKED_PAGE}).`),
+      migratedFederatedPost(`Second thoughts on [a page](${LINKED_PAGE}).`),
     );
     await indexed(cms, 'already-announced', 'Second thoughts');
     await writeDocument(
       contentDir,
       QUIET_FILE,
-      quietPost(`A revised essay about [a page](${LINKED_PAGE}).`),
+      migratedUnfederatedPost(`A revised essay about [a page](${LINKED_PAGE}).`),
     );
     await indexed(cms, 'an-old-essay', 'A revised essay');
 
@@ -338,11 +330,11 @@ describe('a migrated post the scheduler comes to (TASK-296 AC #1, #2)', () => {
   it('announces neither one when its date arrives', async () => {
     const { cms, setNow } = await site({
       files: {
-        [ANNOUNCED_FILE]: announcedPost().replace(
+        [ANNOUNCED_FILE]: migratedFederatedPost().replace(
           'date: 2025-11-02T10:00:00.000Z',
           'date: 2026-10-10T10:00:00.000Z',
         ),
-        [QUIET_FILE]: quietPost().replace(
+        [QUIET_FILE]: migratedUnfederatedPost().replace(
           'date: 2019-05-01T10:00:00.000Z',
           'date: 2026-10-10T11:00:00.000Z',
         ),
@@ -360,7 +352,7 @@ describe('a migrated post the scheduler comes to (TASK-296 AC #1, #2)', () => {
 describe('resending a migrated post (TASK-296 AC #1, #2)', () => {
   it('sends an Update for the announced post and nothing for the quiet one', async () => {
     const { cms } = await site({
-      files: { [ANNOUNCED_FILE]: announcedPost(), [QUIET_FILE]: quietPost() },
+      files: { [ANNOUNCED_FILE]: migratedFederatedPost(), [QUIET_FILE]: migratedUnfederatedPost() },
     });
 
     assert.equal(await cms.delivery.resend('an-old-essay'), undefined);
@@ -377,8 +369,8 @@ describe('a reply context arriving for migrated posts (TASK-296 AC #2, #6)', () 
       source.replace('migrated: true', `migrated: true\nbookmark-of: ${BOOKMARKED_PAGE}`);
     const { cms } = await site({
       files: {
-        [ANNOUNCED_FILE]: bookmarking(announcedPost('')),
-        [QUIET_FILE]: bookmarking(quietPost('')),
+        [ANNOUNCED_FILE]: bookmarking(migratedFederatedPost('')),
+        [QUIET_FILE]: bookmarking(migratedUnfederatedPost('')),
         '_data/replyContexts.json': JSON.stringify({
           [BOOKMARKED_PAGE]: { url: BOOKMARKED_PAGE, name: 'An unread essay' },
         }),
@@ -394,7 +386,7 @@ describe('a reply context arriving for migrated posts (TASK-296 AC #2, #6)', () 
 
 describe('a peer fetching a migrated post that never federated (TASK-296 AC #2)', () => {
   it('is served the object at its stored id', async () => {
-    const { cms } = await site({ files: { [QUIET_FILE]: quietPost() } });
+    const { cms } = await site({ files: { [QUIET_FILE]: migratedUnfederatedPost() } });
 
     const response = await cms.app.request(QUIET_ID, {
       headers: { accept: 'application/activity+json' },
@@ -410,7 +402,10 @@ describe('an announced migrated draft published from the admin (TASK-296 AC #1)'
   it('sends no Create, nor anything else', async () => {
     const { cms, agent } = await site({
       files: {
-        [ANNOUNCED_FILE]: announcedPost().replace('migrated: true', 'migrated: true\ndraft: true'),
+        [ANNOUNCED_FILE]: migratedFederatedPost().replace(
+          'migrated: true',
+          'migrated: true\ndraft: true',
+        ),
       },
     });
 
@@ -424,7 +419,7 @@ describe('an announced migrated draft published from the admin (TASK-296 AC #1)'
 
 describe('a migrated draft published later (TASK-296 AC #9)', () => {
   it('appears at its original date and tells nobody, until an edit earns a mention', async () => {
-    const { cms, agent, contentDir } = await site({ files: { [DRAFT_FILE]: quietDraft() } });
+    const { cms, agent, contentDir } = await site({ files: { [DRAFT_FILE]: migratedDraft() } });
 
     const published = await editor(agent, '/admin/posts/a-restored-essay', { action: 'publish' });
     assert.equal(published.status, 303, await published.text());

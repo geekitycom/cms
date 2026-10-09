@@ -58,11 +58,6 @@ function vimeoOf(url: URL): Video | undefined {
   return { provider: 'vimeo', id, ...(hash === undefined ? {} : { hash }) };
 }
 
-/**
- * The player a recognised video URL renders as: the provider's own iframe in
- * its privacy-enhanced mode, with the URL as written linked beneath it, so a
- * feed reader or a fediverse server that drops the frame still has the video.
- */
 export function videoEmbedHtml(video: Video, href: string): string {
   const { src, title } = playerOf(video);
   return [

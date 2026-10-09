@@ -53,9 +53,8 @@ const EMPTY: RedirectTable = { paths: new Map(), queries: new Map() };
 /** Anything resolved against this is a site path; nothing is ever sent to it. */
 const SITE = 'http://site.invalid';
 
-/** One redirect file as read: its path, for messages, and its text. */
-export interface RedirectFile {
-  readonly name: string;
+interface RedirectFile {
+  readonly path: string;
   readonly text: string;
 }
 
@@ -75,28 +74,28 @@ export function parseRedirects(files: readonly RedirectFile[]): {
   const queries = new Map<string, Redirect>();
   const fileOf = new Map<Redirect, string>();
 
-  for (const { name, text } of files) {
+  for (const { path: file, text } of files) {
     const entries = entriesOf(text);
     if (typeof entries === 'string') {
-      problems.push(`${name}: ${entries}`);
+      problems.push(`${file}: ${entries}`);
       continue;
     }
     entries.forEach((entry, index) => {
       const result = parseEntry(entry);
       if (typeof result === 'string') {
-        problems.push(`${name}: entry ${String(index + 1)} ${result}`);
+        problems.push(`${file}: entry ${String(index + 1)} ${result}`);
         return;
       }
       const { key, query, redirect } = result;
       const table = query === '' ? paths : queries;
       if (table.has(key)) {
         problems.push(
-          `${name}: "${redirect.from}" is declared more than once; the first declaration is used.`,
+          `${file}: "${redirect.from}" is declared more than once; the first declaration is used.`,
         );
         return;
       }
       table.set(key, redirect);
-      fileOf.set(redirect, name);
+      fileOf.set(redirect, file);
     });
   }
 
@@ -267,7 +266,7 @@ export function createRedirectSource(options: {
     current() {
       const files = [file, ...jsonFilesIn(dir)].flatMap((name) => {
         const text = readIfPresent(name);
-        return text === undefined ? [] : [{ name, text }];
+        return text === undefined ? [] : [{ path: name, text }];
       });
       const key = JSON.stringify(files);
       if (key === cachedKey) return cached;

@@ -1,8 +1,3 @@
-/**
- * Tools > Dev mode (TASK-295, decision-35): what the site held back while it
- * was in dev mode, so a migration can show it would have been silent.
- */
-
 import type { Hono } from 'hono';
 
 import { devModeOn, readDevModeRecord } from '../dev-mode.ts';

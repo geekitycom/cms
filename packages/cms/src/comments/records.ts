@@ -82,11 +82,6 @@ export function commentsFile(contentDir: string, slug: string): string {
   return path.join(commentsDirectory(contentDir), `${fileNameOf(slug)}.json`);
 }
 
-/**
- * The name a slug's files go by: the slug percent-encoded, so a permalink
- * ending in `i-♥-rss` has a file as plain as one ending in `hello-world`,
- * whose name is the slug itself.
- */
 function fileNameOf(slug: string): string {
   const name = encodeURIComponent(slug);
   if (!SAFE_NAME.test(name)) {
@@ -95,7 +90,6 @@ function fileNameOf(slug: string): string {
   return name;
 }
 
-/** The slug a file name stands for, or `undefined` for a name no slug encodes to. */
 function slugOfFileName(name: string): string | undefined {
   try {
     const slug = decodeURIComponent(name);
@@ -105,7 +99,6 @@ function slugOfFileName(name: string): string | undefined {
   }
 }
 
-/** What a file may be named: what {@link slugify} produces, percent-encoded, and no more. */
 const SAFE_NAME = /^[A-Za-z0-9%][A-Za-z0-9._%-]*$/;
 
 /** Where commenters' emails live, relative to the data directory. */
@@ -363,13 +356,6 @@ export async function addComment(
   });
 }
 
-/**
- * Write comments a post already had somewhere else, such as an import from
- * another platform: each in place of the entry with its id, or after the last.
- * Every other entry keeps its place and its bytes. Nobody is told, since none
- * of them is news to anybody, which is why this does not go through
- * {@link intakeComment}.
- */
 export async function putComments(
   records: CommentRecords,
   slug: string,
