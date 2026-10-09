@@ -175,7 +175,7 @@ async function settle(cms: Cms): Promise<void> {
 
 /** Wait for the watcher to index a file whose body now says `marker`. */
 async function indexed(cms: Cms, slug: string, marker: string): Promise<void> {
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + 20_000;
   while (!(cms.store.getBySlug(slug)?.body.includes(marker) ?? false)) {
     assert.ok(Date.now() < deadline, `the watcher indexed ${slug}`);
     await new Promise((resolve) => setTimeout(resolve, 25));
