@@ -4,8 +4,8 @@ import { after, before, describe, it } from 'node:test';
 import type { Plugin } from '@geekity/cms';
 import llm from '@geekity/plugin-llm';
 
-import { fakeProvider, replying } from './provider.ts';
-import type { FakeProvider } from './provider.ts';
+import { fakeProvider, replying } from '../../plugin-llm/test/provider.ts';
+import type { FakeProvider } from '../../plugin-llm/test/provider.ts';
 import { actionUrl, closeSites, tagSite } from './site.ts';
 import { fakeTagsPub } from './tags-pub.ts';
 import type { FakeTagsPub } from './tags-pub.ts';
@@ -40,11 +40,16 @@ describe('the bundled plugin', () => {
       apiKey: 'sk-bundle',
     });
     tagsPub.followers.set('bundled', 3);
-    provider.answer(replying(JSON.stringify({ tags: ['Bundled'] })));
+    provider.answer(
+      replying(JSON.stringify({ forThisPost: ['Bundled'], forReach: ['Fediverse'] })),
+    );
     const response = await admin.post(actionUrl('suggest-tags'), { type: 'post', body: 'Words.' });
     assert.deepEqual(await response.json(), {
       ok: true,
-      choices: [{ value: 'bundled', note: '3 followers on tags.pub' }],
+      choices: [
+        { value: 'Bundled', note: '3 followers on tags.pub', group: 'For this post' },
+        { value: 'Fediverse', note: 'No followers on tags.pub', group: 'For reach' },
+      ],
     });
   });
 });

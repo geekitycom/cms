@@ -1,9 +1,10 @@
 /**
  * `@geekity/plugin-tag-suggest` (decision-33): Suggest tags beside the
  * editor's Tags field. A press asks the language model `@geekity/plugin-llm`
- * connects to for hashtags that fit the draft, preferring the tags the site
- * already uses, then ranks them by how many people follow each on tags.pub.
- * The author ticks the ones to add. Nothing is sent on save or publish.
+ * connects to for hashtags in two groups: the ones this post is about, and
+ * the ones from a seed list of hashtags people follow that fit it, for reach.
+ * Follower counts on tags.pub help rank both. The author ticks the ones to
+ * add. Nothing is sent on save or publish.
  */
 
 import { definePlugin } from '@geekity/cms/plugin';
@@ -13,11 +14,15 @@ import type {
   PluginEditorDraft,
   PluginEditorSuggestion,
 } from '@geekity/cms/plugin';
-import type { LlmFailure, LlmService } from '@geekity/plugin-llm';
+import type { LlmService } from '@geekity/plugin-llm';
 
 import { followerCounts, LOOKUP_TIMEOUT_MS } from './followers.ts';
 import type { FollowerCount, FollowerLookup } from './followers.ts';
+import { hashtagKey, readableTag } from './key.ts';
+import { SEED } from './seed.ts';
 import { VERSION } from './version.ts';
+
+export { hashtagKey };
 
 const LLM = '@geekity/plugin-llm';
 const NAME = '@geekity/plugin-tag-suggest';
@@ -34,11 +39,9 @@ const SETTINGS = [
   },
 ] as const;
 
-/** How many tags the model is asked for. */
-const ASKED = 8;
-
-/** The most candidates looked up, whatever the model sends. */
-const MOST_CANDIDATES = 12;
+/** How many tags the model is asked for in each group. */
+const FOR_POST = { least: 3, most: 5 } as const;
+const FOR_REACH_MOST = 5;
 
 /** How many of the site's tags the model is shown, most used first. */
 const SITE_TAGS_SHOWN = 100;
@@ -46,103 +49,91 @@ const SITE_TAGS_SHOWN = 100;
 /** How much of the body goes to the model; a longer one is cut there. */
 const BODY_CHARACTERS = 24_000;
 
-/** Letters NFKD leaves whole, spelled out as tags.pub spells them. */
-const TRANSLITERATIONS: readonly (readonly [RegExp, string])[] = [
-  [/ß/g, 'ss'],
-  [/æ/g, 'ae'],
-  [/œ/g, 'oe'],
-  [/ø/g, 'o'],
-  [/đ|ð/g, 'd'],
-  [/ł/g, 'l'],
-  [/þ/g, 'th'],
-];
+const FOR_THIS_POST = 'For this post';
+const FOR_REACH = 'For reach';
 
-/**
- * A tag as tags.pub names its account: lower case ASCII letters and digits,
- * accents dropped, everything else removed. tags.pub folds every tag this way
- * and refuses a spelling that is not already folded, and a tag in a script it
- * folds by transliteration, such as `日本`, comes out empty here and is left
- * out rather than guessed at.
- */
-export function hashtagKey(tag: string): string {
-  let value = tag.normalize('NFKD').toLowerCase();
-  for (const [pattern, replacement] of TRANSLITERATIONS)
-    value = value.replace(pattern, replacement);
-  return value.replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+const SEED_FOLLOWERS: ReadonlyMap<string, number> = new Map(
+  SEED.tags.map(([name, followers]) => [hashtagKey(name), followers]),
+);
+
+interface Suggested {
+  readonly forThisPost: readonly string[];
+  readonly forReach: readonly string[];
 }
 
-/** What goes wrong with the model in plain words, with where to put it right. */
-function failureWords(error: LlmFailure): string {
-  switch (error.kind) {
-    case 'unconfigured':
-      return 'No language model is set up yet. Add an API key on Plugins > LLM, then try again.';
-    case 'unauthorized':
-      return 'The language model provider refused the API key. Check the key on Plugins > LLM.';
-    case 'no-credit':
-      return 'The account behind the API key has no credit left. Add credit with the provider, then try again.';
-    case 'rate-limited':
-      return error.retryAfter === undefined
-        ? 'The provider is limiting requests. Try again shortly.'
-        : `The provider is limiting requests. Try again in ${String(error.retryAfter)} seconds.`;
-    case 'unavailable':
-      return 'The provider could not answer just now. Try again in a while.';
-    case 'rejected':
-      return 'The provider refused the request. The model chosen on Plugins > LLM may not give structured answers; choose another model there.';
-    case 'invalid-output':
-      return 'The model’s answer was not usable. Try again, or choose another model on Plugins > LLM.';
-    case 'timeout':
-      return `The model did not answer within ${String(error.seconds)} seconds. Try again.`;
-    case 'aborted':
-      return 'The request was stopped before the answer came.';
-    case 'network':
-      return 'The language model provider could not be reached. Check the base URL on Plugins > LLM.';
-  }
-}
-
-/** One candidate: what goes in the field, and the key tags.pub knows it by. */
+/** One candidate: the key tags.pub knows it by, and how the model and this site spell it. */
 interface Candidate {
-  readonly value: string;
   readonly key: string;
-  readonly used: boolean;
+  readonly modelSpelling: string;
+  readonly siteSpelling: string | undefined;
+  readonly modelOrder: number;
 }
 
-/**
- * The model's tags folded and deduplicated, in the model's order. A tag the
- * site already uses keeps the site's spelling, so accepting it files the post
- * with the posts already there.
- */
-function candidatesFrom(suggested: readonly string[], siteTags: readonly string[]): Candidate[] {
+function usedHere(candidate: Candidate): boolean {
+  return candidate.siteSpelling !== undefined;
+}
+
+function candidatesFrom(
+  suggested: Suggested,
+  siteTags: readonly string[],
+): { forThisPost: Candidate[]; forReach: Candidate[] } {
   const ours = new Map<string, string>();
   for (const tag of siteTags) {
     const key = hashtagKey(tag);
     if (key !== '' && !ours.has(key)) ours.set(key, tag);
   }
-  const candidates = new Map<string, Candidate>();
-  for (const tag of suggested) {
-    const key = hashtagKey(tag);
-    if (key === '' || candidates.has(key)) continue;
-    const own = ours.get(key);
-    candidates.set(key, { value: own ?? key, key, used: own !== undefined });
-  }
-  return [...candidates.values()].slice(0, MOST_CANDIDATES);
+  const group = (tags: readonly string[], most: number, admits: (key: string) => boolean) => {
+    const candidates: Candidate[] = [];
+    for (const tag of tags) {
+      const modelSpelling = readableTag(tag);
+      const key = hashtagKey(modelSpelling);
+      if (key === '' || !admits(key) || candidates.some((c) => c.key === key)) continue;
+      if (candidates.length === most) break;
+      candidates.push({
+        key,
+        modelSpelling,
+        siteSpelling: ours.get(key),
+        modelOrder: candidates.length,
+      });
+    }
+    return candidates;
+  };
+  const forThisPost = group(suggested.forThisPost, FOR_POST.most, () => true);
+  const postKeys = new Set(forThisPost.map((c) => c.key));
+  const forReach = group(
+    suggested.forReach,
+    FOR_REACH_MOST,
+    (key) => SEED_FOLLOWERS.has(key) && !postKeys.has(key),
+  );
+  return { forThisPost, forReach };
 }
 
-/** Most followed first; a candidate with no count after every one with a count; the model's order otherwise. */
-function ranked(
-  candidates: readonly Candidate[],
-  counts: ReadonlyMap<string, FollowerCount>,
-): PluginEditorChoice[] {
-  const followers = (candidate: Candidate) => {
-    const count = counts.get(candidate.key);
-    return count?.known === true ? count.followers : -1;
+type Counts = ReadonlyMap<string, FollowerCount>;
+
+function followersOf(candidate: Candidate, counts: Counts): number | undefined {
+  const count = counts.get(candidate.key);
+  return count?.known === true ? count.followers : undefined;
+}
+
+function rankForPost(candidates: readonly Candidate[]): Candidate[] {
+  return [...candidates].sort(
+    (a, b) => Number(usedHere(b)) - Number(usedHere(a)) || a.modelOrder - b.modelOrder,
+  );
+}
+
+function rankForReach(candidates: readonly Candidate[], counts: Counts): Candidate[] {
+  const weight = (candidate: Candidate) =>
+    Math.max(followersOf(candidate, counts) ?? 0, SEED_FOLLOWERS.get(candidate.key) ?? 0);
+  return [...candidates].sort((a, b) => weight(b) - weight(a) || a.modelOrder - b.modelOrder);
+}
+
+function choice(candidate: Candidate, counts: Counts, group: string): PluginEditorChoice {
+  return {
+    value: candidate.siteSpelling ?? candidate.modelSpelling,
+    note: noteFor(counts.get(candidate.key)),
+    ...(usedHere(candidate) ? { badge: 'Used here' } : {}),
+    group,
   };
-  return [...candidates]
-    .sort((a, b) => followers(b) - followers(a))
-    .map((candidate) => ({
-      value: candidate.value,
-      note: noteFor(counts.get(candidate.key)),
-      ...(candidate.used ? { badge: 'Used here' } : {}),
-    }));
 }
 
 function noteFor(count: FollowerCount | undefined): string {
@@ -151,6 +142,27 @@ function noteFor(count: FollowerCount | undefined): string {
   if (count.followers === 0) return 'No followers on tags.pub';
   return `${count.followers.toLocaleString('en')} ${count.followers === 1 ? 'follower' : 'followers'} on tags.pub`;
 }
+
+const INSTRUCTIONS = [
+  'Suggest hashtags for this blog post, in two lists.',
+  '',
+  `forThisPost: ${String(FOR_POST.least)} to ${String(FOR_POST.most)} tags for what this post is specifically about, most fitting first: ` +
+    'the people, events, places, projects and technologies it names, and its subject. ' +
+    'Avoid generic words, such as experience, thoughts, posts, update or networking, ' +
+    'unless the post is about that very thing. ' +
+    'Use one of the tags this site already uses only when this post is about that subject; ' +
+    'that the site uses a tag is no reason by itself to suggest it.',
+  '',
+  `forReach: up to ${String(FOR_REACH_MOST)} tags from the hashtags people follow, listed below, ` +
+    'that this post is genuinely about, most fitting first. ' +
+    'Leave it empty when none fit. Never pick one only because many people follow it.',
+  '',
+  'Write each tag as one word with no # and no spaces. ' +
+    'Join several words in CamelCase, each word capitalised, such as WordCampUS, IndieWeb or OpenSource. ' +
+    'Use only what the post is about; invent nothing.',
+  '',
+  `Hashtags people follow, most followed first: ${SEED.tags.map(([name]) => name).join(', ')}`,
+].join('\n');
 
 /** The draft as the model reads it. */
 function draftText(draft: PluginEditorDraft, siteTags: readonly string[]): string {
@@ -161,7 +173,7 @@ function draftText(draft: PluginEditorDraft, siteTags: readonly string[]): strin
   return [
     siteTags.length === 0
       ? 'This site uses no tags yet.'
-      : `Tags this site already uses, most used first: ${siteTags.slice(0, SITE_TAGS_SHOWN).join(', ')}`,
+      : `Tags this site already uses, most used first (suggest one only when this post is about it): ${siteTags.slice(0, SITE_TAGS_SHOWN).join(', ')}`,
     '',
     `Kind: ${draft.type === 'page' ? 'page' : (draft.postType ?? 'post')}`,
     draft.title === '' ? undefined : `Title: ${draft.title}`,
@@ -181,40 +193,40 @@ async function suggestTags(
   if (draft.body.trim() === '' && draft.title.trim() === '') {
     return { ok: false, message: 'Write some of the post first. There is nothing to read yet.' };
   }
-  const completion = await llm.complete<{ tags: string[] }>({
+  const tags = { type: 'array', items: { type: 'string' } };
+  const completion = await llm.complete<Suggested>({
     messages: [
-      {
-        role: 'system',
-        content:
-          `Suggest up to ${String(ASKED)} hashtags for this blog post, most fitting first. ` +
-          'Each is one word, or words run together with no spaces, and no #. ' +
-          'Prefer a tag the site already uses when it fits; suggest a new one only for what those miss. ' +
-          'Use only what the post is about; invent nothing.',
-      },
+      { role: 'system', content: INSTRUCTIONS },
       { role: 'user', content: draftText(draft, siteTags) },
     ],
     schema: {
       type: 'object',
-      properties: { tags: { type: 'array', items: { type: 'string' } } },
-      required: ['tags'],
+      properties: { forThisPost: tags, forReach: tags },
+      required: ['forThisPost', 'forReach'],
       additionalProperties: false,
     },
     signal,
   });
-  if (!completion.ok) return { ok: false, message: failureWords(completion.error) };
+  if (!completion.ok) return { ok: false, message: completion.message };
 
-  const candidates = candidatesFrom(completion.value.tags, siteTags);
-  if (candidates.length === 0) {
+  const { forThisPost, forReach } = candidatesFrom(completion.value, siteTags);
+  if (forThisPost.length + forReach.length === 0) {
     return {
       ok: false,
       message: 'The model suggested no tags that tags.pub can look up. Try again.',
     };
   }
   const counts = await followerCounts(
-    candidates.map((candidate) => candidate.key),
+    [...forThisPost, ...forReach].map((candidate) => candidate.key),
     { ...lookup, signal },
   );
-  return { ok: true, choices: ranked(candidates, counts) };
+  return {
+    ok: true,
+    choices: [
+      ...rankForPost(forThisPost).map((c) => choice(c, counts, FOR_THIS_POST)),
+      ...rankForReach(forReach, counts).map((c) => choice(c, counts, FOR_REACH)),
+    ],
+  };
 }
 
 export default definePlugin({
@@ -225,7 +237,7 @@ export default definePlugin({
     'Suggests tags for a post in the editor, from the language model the LLM plugin connects to, ' +
     'ranked by how many people follow each tag on tags.pub, when the author asks.',
   hostApi: 1,
-  requires: { [LLM]: '^0.1.0' },
+  requires: { [LLM]: '^0.2.0' },
   register(host) {
     const settings = host.settings(SETTINGS);
     host.editorAction({

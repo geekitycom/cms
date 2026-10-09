@@ -13,7 +13,7 @@ import type {
   PluginEditorSuggestion,
   PluginPostType,
 } from '@geekity/cms/plugin';
-import type { LlmFailure, LlmService } from '@geekity/plugin-llm';
+import type { LlmService } from '@geekity/plugin-llm';
 
 import { VERSION } from './version.ts';
 
@@ -28,8 +28,11 @@ export const DESCRIPTION_CHARACTERS = 280;
 /** The longest description, in words: where a feed cuts an excerpt (WordPress's 55). */
 export const DESCRIPTION_WORDS = 55;
 
-/** The longest title asked for, in characters. */
-const TITLE_CHARACTERS = 90;
+/** About the longest title asked for, in characters. */
+const TITLE_CHARACTERS = 60;
+
+/** How many of the site's latest titles the model sees as examples of its style. */
+const TITLE_EXAMPLES = 5;
 
 /** How much of the body goes to the model; a longer one is cut there. */
 const BODY_CHARACTERS = 24_000;
@@ -50,34 +53,6 @@ export function offersTitle(draft: PluginEditorDraft): boolean {
 /** A read post is described by its read line, which the editor asks to leave alone. */
 export function offersDescription(draft: PluginEditorDraft): boolean {
   return draft.postType !== 'read';
-}
-
-/** What goes wrong in plain words, with where to put it right. */
-export function failureWords(error: LlmFailure): string {
-  switch (error.kind) {
-    case 'unconfigured':
-      return 'No language model is set up yet. Add an API key on Plugins > LLM, then try again.';
-    case 'unauthorized':
-      return 'The language model provider refused the API key. Check the key on Plugins > LLM.';
-    case 'no-credit':
-      return 'The account behind the API key has no credit left. Add credit with the provider, then try again.';
-    case 'rate-limited':
-      return error.retryAfter === undefined
-        ? 'The provider is limiting requests. Try again shortly.'
-        : `The provider is limiting requests. Try again in ${String(error.retryAfter)} seconds.`;
-    case 'unavailable':
-      return 'The provider could not answer just now. Try again in a while.';
-    case 'rejected':
-      return 'The provider refused the request. The model chosen on Plugins > LLM may not give structured answers; choose another model there.';
-    case 'invalid-output':
-      return 'The model’s answer was not usable. Try again, or choose another model on Plugins > LLM.';
-    case 'timeout':
-      return `The model did not answer within ${String(error.seconds)} seconds. Try again.`;
-    case 'aborted':
-      return 'The request was stopped before the answer came.';
-    case 'network':
-      return 'The language model provider could not be reached. Check the base URL on Plugins > LLM.';
-  }
 }
 
 /**
@@ -134,14 +109,26 @@ function draftText(draft: PluginEditorDraft): string {
 interface Ask {
   readonly key: 'title' | 'description';
   readonly instruction: string;
+  readonly style: (recentTitles: readonly string[]) => string[];
   readonly tidy: (text: string) => string;
 }
 
 const TITLE: Ask = {
   key: 'title',
   instruction:
-    `Suggest a title for this blog post: specific, plain and under ${String(TITLE_CHARACTERS)} characters, ` +
-    'in the words a reader would search for. No quotation marks, no full stop at the end, no clickbait.',
+    'Suggest a title for this blog post, written the way its author would write it: ' +
+    `short, plain and specific, about ${String(TITLE_CHARACTERS)} characters at most. ` +
+    'No quotation marks, no full stop at the end, no clickbait.',
+  style: (recentTitles) => {
+    const examples = recentTitles.slice(0, TITLE_EXAMPLES);
+    return examples.length === 0
+      ? []
+      : [
+          '',
+          'Recent titles on this site, to match their style:',
+          ...examples.map((title) => `- ${title}`),
+        ];
+  },
   tidy: cleanTitle,
 };
 
@@ -151,13 +138,14 @@ const DESCRIPTION: Ask = {
     'Write the description shown under this post in listings and feeds: one or two plain sentences, ' +
     `at most ${String(DESCRIPTION_CHARACTERS)} characters and ${String(DESCRIPTION_WORDS)} words, ` +
     'that say what the post is about. No Markdown, and do not start with "This post".',
+  style: () => [],
   tidy: fitDescription,
 };
 
 async function suggest(
   llm: LlmService,
   ask: Ask,
-  { draft, signal }: PluginEditorContext,
+  { draft, recentTitles, signal }: PluginEditorContext,
 ): Promise<PluginEditorSuggestion> {
   if (draft.body.trim() === '' && draft.title.trim() === '') {
     return { ok: false, message: 'Write some of the post first. There is nothing to read yet.' };
@@ -166,9 +154,11 @@ async function suggest(
     messages: [
       {
         role: 'system',
-        content:
+        content: [
           `${ask.instruction} Write in the language with the tag "${draft.lang}". ` +
-          'Use only what the post says; invent nothing.',
+            'Use only what the post says; invent nothing.',
+          ...ask.style(recentTitles),
+        ].join('\n'),
       },
       { role: 'user', content: draftText(draft) },
     ],
@@ -180,7 +170,7 @@ async function suggest(
     },
     signal,
   });
-  if (!completion.ok) return { ok: false, message: failureWords(completion.error) };
+  if (!completion.ok) return { ok: false, message: completion.message };
   const value = ask.tidy(completion.value[ask.key]);
   return value === ''
     ? { ok: false, message: 'The model answered with nothing. Try again.' }
@@ -195,7 +185,7 @@ export default definePlugin({
     'Suggests a title and a description for a post in the editor, from the language model ' +
     'the LLM plugin connects to, when the author asks.',
   hostApi: 1,
-  requires: { [LLM]: '^0.1.0' },
+  requires: { [LLM]: '^0.2.0' },
   register(host) {
     host.editorAction({
       id: 'suggest-title',

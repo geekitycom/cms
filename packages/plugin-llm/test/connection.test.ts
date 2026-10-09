@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, before, describe, it } from 'node:test';
 
+import { modelCatalog } from '../src/catalog.ts';
 import { callModel } from '../src/complete.ts';
 import { describeFailure } from '../src/connection.ts';
 import type { LlmConnection } from '../src/connection.ts';
@@ -45,7 +46,7 @@ describe('describeFailure', () => {
         headers,
         body: JSON.stringify({ error: { code: status, message: `Busy right now (${KEY})` } }),
       });
-      const { completion } = await callModel(connection(), HELLO);
+      const { completion } = await callModel(connection(), HELLO, modelCatalog());
       assert.equal(completion.ok, false);
       if (completion.ok) return;
       assert.equal(completion.error.kind, kind);
@@ -62,6 +63,14 @@ describe('describeFailure', () => {
     assert.match(words({ kind: 'timeout', seconds: 60 }), /did not answer within 60 seconds/);
     assert.match(words({ kind: 'aborted' }), /stopped/);
     assert.match(words({ kind: 'invalid-output', reason: 'It was not JSON.' }), /not JSON/);
+    assert.match(
+      words({ kind: 'cut-off', maxTokens: 4096, reasoningTokens: 4096 }),
+      /limit of 4096 tokens .* 4096 of them went on reasoning\. Choose a model .* that does not reason/,
+    );
+    assert.doesNotMatch(
+      words({ kind: 'cut-off', maxTokens: 64, reasoningTokens: undefined }),
+      /reasoning\. /,
+    );
   });
 });
 

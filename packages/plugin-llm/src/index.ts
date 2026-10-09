@@ -15,6 +15,7 @@ import type {
   PluginSiteInfo,
 } from '@geekity/cms/plugin';
 
+import { modelCatalog } from './catalog.ts';
 import { callModel, DEFAULT_TIMEOUT_MS } from './complete.ts';
 import type {
   Completion,
@@ -24,11 +25,12 @@ import type {
   LlmUsage,
   ModelCall,
 } from './complete.ts';
-import { describeFailure, OPENROUTER_HOST } from './connection.ts';
+import { OPENROUTER_HOST } from './connection.ts';
 import type { LlmConnection } from './connection.ts';
 import { VERSION } from './version.ts';
 
-export { DEFAULT_MAX_TOKENS, DEFAULT_TIMEOUT_MS } from './complete.ts';
+export type { ReasoningEffort } from './catalog.ts';
+export { DEFAULT_MAX_TOKENS, DEFAULT_REASONING, DEFAULT_TIMEOUT_MS } from './complete.ts';
 export type {
   Completion,
   JsonSchema,
@@ -37,8 +39,7 @@ export type {
   LlmService,
   LlmUsage,
 } from './complete.ts';
-export { describeFailure } from './connection.ts';
-export type { LlmConnection, LlmFailure } from './connection.ts';
+export type { LlmFailure } from './connection.ts';
 
 declare module '@geekity/cms/plugin' {
   interface PluginServices {
@@ -97,14 +98,14 @@ interface LastCall {
   readonly message: string;
 }
 
-async function recordCall(data: PluginDataFolder, call: ModelCall, connection: LlmConnection) {
+async function recordCall(data: PluginDataFolder, call: ModelCall) {
   const { completion } = call;
   const record: LastCall = {
     at: new Date().toISOString(),
     model: call.model,
     usage: call.usage,
     outcome: completion.ok ? 'ok' : completion.error.kind,
-    message: completion.ok ? 'Answered.' : describeFailure(completion.error, connection),
+    message: completion.ok ? 'Answered.' : completion.message,
   };
   try {
     await data.update(LAST_CALL_FILE, () => `${JSON.stringify(record, null, 2)}\n`);
@@ -193,7 +194,7 @@ function llmScreen(
             {
               paragraph: [
                 'Test connection sends one short message and reports which model answered. ' +
-                  'It costs a few tokens.',
+                  'It costs a few tokens, more if the model reasons.',
               ],
             },
           ],
@@ -208,11 +209,10 @@ function llmScreen(
         async run() {
           const { completion, model } = await call({
             messages: [{ role: 'user', content: 'Reply with the word OK.' }],
-            maxTokens: 16,
           });
           return completion.ok
             ? { ok: true, message: `Connected. ${model} answered.` }
-            : { ok: false, message: describeFailure(completion.error, connection()) };
+            : { ok: false, message: completion.message };
         },
       },
     ],
@@ -230,11 +230,11 @@ export default definePlugin({
   register(host) {
     const settings = host.settings(LLM_SETTINGS);
     const connection = () => connectionFrom(settings, host.siteInfo());
+    const catalog = modelCatalog();
 
     async function call(request: LlmRequest): Promise<ModelCall> {
-      const now = connection();
-      const made = await callModel(now, request);
-      await recordCall(host.data, made, now);
+      const made = await callModel(connection(), request, catalog);
+      await recordCall(host.data, made);
       return made;
     }
 

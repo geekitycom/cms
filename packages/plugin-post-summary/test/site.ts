@@ -27,6 +27,8 @@ export interface Admin {
 export interface SiteOptions {
   /** The fake provider's base URL. */
   baseUrl: string;
+  /** The LLM's default model, `acme/tiny-1` unless named. */
+  model?: string;
   /** The API key, or none, leaving the LLM unconfigured. */
   apiKey?: string | undefined;
   /** Files under `content/posts/`, by name. */
@@ -59,7 +61,11 @@ export async function summarySite(
       language: 'en',
       notifyServer: '',
       plugins: {
-        [LLM]: { enabled: true, base_url: options.baseUrl, default_model: 'acme/tiny-1' },
+        [LLM]: {
+          enabled: true,
+          base_url: options.baseUrl,
+          default_model: options.model ?? 'acme/tiny-1',
+        },
         [SUMMARY]: { enabled: options.enabled ?? true },
       },
     }),

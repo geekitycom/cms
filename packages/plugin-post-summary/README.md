@@ -45,7 +45,8 @@ The plugin puts two buttons in the post and page editor:
 - **Suggest description** sits under Description, in Summary and language.
 
 A button sends the draft as it stands: the title, the body, the tags, the kind
-of post and its language. The suggestion appears under the button. **Accept**
+of post and its language. Suggest title also sends the site's latest titles,
+as described below. The suggestion appears under the button. **Accept**
 puts it in the field, and **Dismiss** drops it. Accepting saves nothing; the
 post is saved only by the editor's own buttons.
 
@@ -54,6 +55,10 @@ post, or a note that was saved without a title, because those posts show no
 title. It is offered for a new post with no title yet, which a title would make
 an article. Suggest description is not offered for a read post, which is
 described by its read line.
+
+A title is asked for in about 60 characters at most, written the way the
+author would write it. Suggest title also sends the titles of the site's five
+latest posts that have one, so the model can match their style.
 
 A description is at most 280 characters and 55 words: the length the default
 theme's listings print and a feed's excerpt keeps. A longer answer is cut after

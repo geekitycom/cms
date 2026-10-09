@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
 
+import { modelCatalog } from '../src/catalog.ts';
+import type { ModelCatalog } from '../src/catalog.ts';
 import { callModel, DEFAULT_MAX_TOKENS } from '../src/complete.ts';
 import type { LlmRequest } from '../src/complete.ts';
 import { describeFailure } from '../src/connection.ts';
 import { connectionFrom, DEFAULT_BASE_URL } from '../src/index.ts';
 import type { LlmConnection } from '../src/connection.ts';
-import { fakeProvider, replying } from './provider.ts';
+import { fakeProvider, replying, thinker } from './provider.ts';
 import type { FakeProvider } from './provider.ts';
 
 /**
@@ -16,12 +18,16 @@ import type { FakeProvider } from './provider.ts';
 
 const KEY = 'sk-or-v1-complete-key-2222';
 let provider: FakeProvider;
+let catalog: ModelCatalog;
 
 before(async () => {
   provider = await fakeProvider();
 });
 after(() => provider.close());
-beforeEach(() => provider.answer(replying('Hello.')));
+beforeEach(() => {
+  provider.answer(replying('Hello.'));
+  catalog = modelCatalog();
+});
 
 function connection(overrides: Partial<LlmConnection> = {}): LlmConnection {
   return {
@@ -35,8 +41,14 @@ function connection(overrides: Partial<LlmConnection> = {}): LlmConnection {
 }
 
 async function complete(request: LlmRequest, overrides: Partial<LlmConnection> = {}) {
-  return (await callModel(connection(overrides), request)).completion;
+  return (await callModel(connection(overrides), request, catalog)).completion;
 }
+
+function errorOf(completion: Awaited<ReturnType<typeof complete>>) {
+  return completion.ok ? undefined : completion.error;
+}
+
+const OPENROUTER = { openRouter: { siteUrl: 'https://example.test/', siteTitle: 'Example' } };
 
 function lastSent(): { headers: Record<string, unknown>; body: Record<string, unknown> } {
   const sent = provider.received.at(-1);
@@ -141,6 +153,127 @@ describe('complete with a schema', () => {
   });
 });
 
+describe('a reply cut off at the limit', () => {
+  it('reports finish_reason length as cut off, naming the limit, not as invalid output', async () => {
+    provider.answer({
+      status: 200,
+      body: JSON.stringify({
+        model: 'acme/tiny-1',
+        choices: [{ finish_reason: 'length', message: { content: '{"title":"Half a' } }],
+        usage: { prompt_tokens: 40, completion_tokens: 64, total_tokens: 104 },
+      }),
+    });
+    const completion = await complete({ messages: MESSAGES, schema: TITLE, maxTokens: 64 });
+    assert.deepEqual(completion, {
+      ok: false,
+      error: { kind: 'cut-off', maxTokens: 64, reasoningTokens: undefined },
+      message: describeFailure(
+        { kind: 'cut-off', maxTokens: 64, reasoningTokens: undefined },
+        connection(),
+      ),
+    });
+    assert.match(completion.ok ? '' : completion.message, /limit of 64 tokens/);
+  });
+
+  it('reports empty content with the reply tokens at the cap as cut off, with the reasoning spent', async () => {
+    provider.answer({
+      status: 200,
+      body: JSON.stringify({
+        model: 'z-ai/glm-5.3-flash',
+        choices: [{ message: { content: null, reasoning: null } }],
+        usage: {
+          prompt_tokens: 40,
+          completion_tokens: 1024,
+          total_tokens: 1064,
+          completion_tokens_details: { reasoning_tokens: 1024 },
+        },
+      }),
+    });
+    const completion = await complete({ messages: MESSAGES, maxTokens: 1024 });
+    assert.equal(completion.ok, false);
+    if (completion.ok) return;
+    assert.deepEqual(completion.error, { kind: 'cut-off', maxTokens: 1024, reasoningTokens: 1024 });
+    assert.match(completion.message, /1024 tokens/);
+    assert.match(completion.message, /reasoning/);
+    assert.doesNotMatch(completion.message, /no text/);
+  });
+});
+
+describe('reasoning', () => {
+  const reasoningSent = () => lastSent().body['reasoning'];
+
+  it('asks a reasoning model on OpenRouter to keep its reasoning short, and gets its answer', async () => {
+    provider.answer(thinker('{"title":"Brief"}'));
+    const completion = await complete(
+      { messages: MESSAGES, schema: TITLE, model: 'acme/thinker' },
+      OPENROUTER,
+    );
+    assert.deepEqual(reasoningSent(), { effort: 'low', exclude: true });
+    assert.ok(completion.ok && 'value' in completion);
+    assert.deepEqual(completion.value, { title: 'Brief' });
+  });
+
+  it('leaves the default budget room for a short answer after brief reasoning', async () => {
+    provider.answer(thinker('{"title":"Brief"}', { briefly: DEFAULT_MAX_TOKENS / 2 }));
+    const completion = await complete(
+      { messages: MESSAGES, schema: TITLE, model: 'acme/thinker' },
+      OPENROUTER,
+    );
+    assert.ok(completion.ok, 'half the budget spent reasoning still leaves room');
+  });
+
+  it('takes the effort a call names, mapped to the nearest one the model lists', async () => {
+    provider.answer(thinker('Hi'));
+    await complete({ messages: MESSAGES, model: 'acme/thinker', reasoning: 'high' }, OPENROUTER);
+    assert.deepEqual(reasoningSent(), { effort: 'high', exclude: true });
+    await complete({ messages: MESSAGES, model: 'acme/thinker', reasoning: 'minimal' }, OPENROUTER);
+    assert.deepEqual(reasoningSent(), { effort: 'low', exclude: true });
+    await complete({ messages: MESSAGES, model: 'acme/thinker', reasoning: 'none' }, OPENROUTER);
+    assert.deepEqual(reasoningSent(), { effort: 'low', exclude: true }, 'it may not turn off');
+  });
+
+  it('sends no reasoning field when a call leaves it to the model, which then runs out', async () => {
+    provider.answer(thinker('{"title":"Brief"}'));
+    const completion = await complete(
+      { messages: MESSAGES, schema: TITLE, model: 'acme/thinker', reasoning: 'model-default' },
+      OPENROUTER,
+    );
+    assert.equal(reasoningSent(), undefined);
+    assert.equal(completion.ok, false);
+    if (completion.ok) return;
+    assert.equal(completion.error.kind, 'cut-off');
+  });
+
+  it('sends a model that does not reason the same request as before', async () => {
+    await complete({ messages: MESSAGES, schema: TITLE, model: 'acme/plain' }, OPENROUTER);
+    assert.deepEqual(Object.keys(lastSent().body).sort(), [
+      'max_tokens',
+      'messages',
+      'model',
+      'provider',
+      'response_format',
+    ]);
+    await complete({ messages: MESSAGES, model: 'acme/unlisted' }, OPENROUTER);
+    assert.equal(reasoningSent(), undefined, 'a model the list does not name is not asked');
+  });
+
+  it('reads the model list once and matches a variant by its model', async () => {
+    const before = provider.catalogFetches;
+    await complete({ messages: MESSAGES, model: 'acme/thinker:nitro' }, OPENROUTER);
+    assert.deepEqual(reasoningSent(), { effort: 'low', exclude: true });
+    await complete({ messages: MESSAGES }, OPENROUTER);
+    assert.deepEqual(reasoningSent(), undefined, 'acme/default is not on the list');
+    assert.equal(provider.catalogFetches, before + 1);
+  });
+
+  it('sends a provider that is not OpenRouter no reasoning field and reads no model list', async () => {
+    const before = provider.catalogFetches;
+    await complete({ messages: MESSAGES, model: 'acme/thinker', reasoning: 'high' });
+    assert.equal(reasoningSent(), undefined);
+    assert.equal(provider.catalogFetches, before);
+  });
+});
+
 describe('OpenRouter attribution', () => {
   it('sends the site URL and title on OpenRouter', async () => {
     await complete(
@@ -166,6 +299,7 @@ describe('failures', () => {
     assert.deepEqual(await complete({ messages: MESSAGES }, { apiKey: undefined }), {
       ok: false,
       error: { kind: 'unconfigured' },
+      message: describeFailure({ kind: 'unconfigured' }, connection()),
     });
     assert.equal(provider.received.length, before);
   });
@@ -184,22 +318,25 @@ describe('failures', () => {
         headers,
         body: JSON.stringify({ error: { code: status, message: 'Upstream down' } }),
       });
-      assert.deepEqual(await complete({ messages: MESSAGES }), { ok: false, error });
+      assert.deepEqual(await complete({ messages: MESSAGES }), {
+        ok: false,
+        error,
+        message: describeFailure(error, connection()),
+      });
     });
   }
 
   it('gives up after the timeout', async () => {
     provider.answer({ ...replying('late'), delayMs: 1_000 });
     const completion = await complete({ messages: MESSAGES }, { timeoutMs: 100 });
-    assert.deepEqual(completion, { ok: false, error: { kind: 'timeout', seconds: 0.1 } });
+    assert.deepEqual(errorOf(completion), { kind: 'timeout', seconds: 0.1 });
   });
 
   it('maps a refused connection to network', async () => {
     const closed = await fakeProvider();
     await closed.close();
-    assert.deepEqual(await complete({ messages: MESSAGES }, { baseUrl: closed.baseUrl }), {
-      ok: false,
-      error: { kind: 'network' },
+    assert.deepEqual(errorOf(await complete({ messages: MESSAGES }, { baseUrl: closed.baseUrl })), {
+      kind: 'network',
     });
   });
 
@@ -208,13 +345,13 @@ describe('failures', () => {
     const controller = new AbortController();
     const pending = complete({ messages: MESSAGES, signal: controller.signal });
     setTimeout(() => controller.abort(), 50);
-    assert.deepEqual(await pending, { ok: false, error: { kind: 'aborted' } });
+    assert.deepEqual(errorOf(await pending), { kind: 'aborted' });
   });
 
   it('sends nothing for a signal already aborted', async () => {
     const before = provider.received.length;
     const completion = await complete({ messages: MESSAGES, signal: AbortSignal.abort() });
-    assert.deepEqual(completion, { ok: false, error: { kind: 'aborted' } });
+    assert.deepEqual(errorOf(completion), { kind: 'aborted' });
     assert.equal(provider.received.length, before);
   });
 });

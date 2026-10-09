@@ -14,7 +14,8 @@ export interface LlmConnection {
   /**
    * Who is calling, sent to OpenRouter as `HTTP-Referer` and
    * `X-OpenRouter-Title`, or `undefined` for a provider that is not OpenRouter.
-   * OpenRouter also gets `provider.require_parameters` with a schema.
+   * OpenRouter also gets `provider.require_parameters` with a schema, and
+   * `reasoning` for a model that takes it.
    */
   readonly openRouter: { readonly siteUrl: string; readonly siteTitle: string } | undefined;
   /** How long a call may take, in milliseconds. */
@@ -41,6 +42,16 @@ export type LlmFailure =
   | { readonly kind: 'rejected'; readonly status: number; readonly message: string | undefined }
   /** The reply was not what was asked for: no text, not JSON, or not what the schema says. */
   | { readonly kind: 'invalid-output'; readonly reason: string }
+  /**
+   * The reply reached `maxTokens` before the answer was finished, often a
+   * reasoning model that spent it thinking. `reasoningTokens` is how many of
+   * them went on reasoning, when the provider said.
+   */
+  | {
+      readonly kind: 'cut-off';
+      readonly maxTokens: number;
+      readonly reasoningTokens: number | undefined;
+    }
   | { readonly kind: 'timeout'; readonly seconds: number }
   /** The caller's signal stopped the call. */
   | { readonly kind: 'aborted' }
@@ -109,32 +120,45 @@ export async function chatCompletion(
   return failed(failureFor(response, text, apiKey));
 }
 
-/** A failure in plain words, naming the provider by its host and never the key. */
+/**
+ * A failure in plain words, naming the provider by its host and never the key,
+ * and saying where to put it right. The LLM screen and every consumer show
+ * these same words.
+ */
 export function describeFailure(error: LlmFailure, connection: LlmConnection): string {
   const host = hostOf(connection.baseUrl);
+  const said = (message: string | undefined) => (message === undefined ? '.' : `: ${message}`);
   switch (error.kind) {
     case 'unconfigured':
-      return 'No API key is set, so nothing was sent.';
+      return 'No API key is set on Plugins > LLM, so nothing was sent.';
     case 'unauthorized':
-      return `${host} refused the API key.`;
+      return `${host} refused the API key. Check the key on Plugins > LLM.`;
     case 'no-credit':
-      return `The account behind the API key has no credit left at ${host}.`;
+      return `The account behind the API key has no credit left at ${host}. Add credit there, then try again.`;
     case 'rate-limited':
       return error.retryAfter === undefined
         ? `${host} is limiting requests. Try again shortly.`
         : `${host} is limiting requests. Try again in ${String(error.retryAfter)} seconds.`;
     case 'unavailable':
-      return `${host} could not answer (status ${String(error.status)})${error.message === undefined ? '.' : `: ${error.message}`}`;
+      return `${host} could not answer (status ${String(error.status)})${said(error.message)} Try again in a while.`;
     case 'rejected':
-      return `${host} refused the request (status ${String(error.status)})${error.message === undefined ? '.' : `: ${error.message}`}`;
+      return `${host} refused the request (status ${String(error.status)})${said(error.message)} The model chosen on Plugins > LLM may not exist or may not give structured answers; choose another there.`;
     case 'invalid-output':
-      return `The model's reply was not usable. ${error.reason}`;
+      return `The model's reply was not usable. ${error.reason} Try again, or choose another model on Plugins > LLM.`;
+    case 'cut-off':
+      return (
+        `The model stopped at its limit of ${String(error.maxTokens)} tokens before it finished its answer` +
+        (error.reasoningTokens === undefined || error.reasoningTokens === 0
+          ? '. '
+          : `, after ${String(error.reasoningTokens)} of them went on reasoning. `) +
+        'Choose a model on Plugins > LLM that does not reason by default, or give the call more tokens.'
+      );
     case 'timeout':
-      return `${host} did not answer within ${String(error.seconds)} seconds.`;
+      return `${host} did not answer within ${String(error.seconds)} seconds. Try again.`;
     case 'aborted':
       return 'The call was stopped before it finished.';
     case 'network':
-      return `${host} could not be reached. Check the base URL.`;
+      return `${host} could not be reached. Check the base URL on Plugins > LLM.`;
   }
 }
 

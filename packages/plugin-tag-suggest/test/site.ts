@@ -29,6 +29,8 @@ export interface Admin {
 export interface SiteOptions {
   /** The fake provider's base URL. */
   baseUrl: string;
+  /** The LLM's default model, `acme/tiny-1` unless named. */
+  model?: string;
   /** The fake tags.pub's URL. */
   tagsServer: string;
   /** The API key, or none, leaving the LLM unconfigured. */
@@ -63,7 +65,11 @@ export async function tagSite(
       language: 'en',
       notifyServer: '',
       plugins: {
-        [LLM]: { enabled: true, base_url: options.baseUrl, default_model: 'acme/tiny-1' },
+        [LLM]: {
+          enabled: true,
+          base_url: options.baseUrl,
+          default_model: options.model ?? 'acme/tiny-1',
+        },
         [TAGS]: { enabled: options.enabled ?? true, tags_server: options.tagsServer },
       },
     }),

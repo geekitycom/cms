@@ -28,11 +28,12 @@
     "plugin": true,
     "hostApi": 1,
     "requires": {
-      "@geekity/plugin-llm": "^0.1.0"
+      "@geekity/plugin-llm": "^0.2.0"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node ../../scripts/build-plugin-bundle.js",
+    "seed": "tsx scripts/build-seed.ts",
     "test": "tsx --import ../cms/src/__testing__/offline.ts --test \"test/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",

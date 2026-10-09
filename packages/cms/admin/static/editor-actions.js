@@ -3,8 +3,9 @@
    endpoint, which answers { ok, value }, { ok, choices } or { ok: false,
    message }, and shows the suggestion with Accept and Dismiss. Choices come
    only beside the tags field, each drawn from the page's template row with a
-   box to tick, and Accept adds the ticked ones. Accept fills the field and saves
-   nothing; a save is still only the form's own buttons.
+   box to tick, under a heading row wherever its group changes, and Accept
+   adds the ticked ones. Accept fills the field and saves nothing; a save is
+   still only the form's own buttons.
 
    A file rather than an inline script, loaded from the admin's own origin
    like slug.js, so the admin's policy stays `script-src 'self'` and
@@ -55,7 +56,8 @@
     var text = suggestion && suggestion.querySelector('p');
     var list = suggestion && suggestion.querySelector('[data-editor-choices]');
     var row = block.querySelector('template[data-editor-choice]');
-    if (!url || !press || !status || !text || !list || !row) return;
+    var heading = block.querySelector('template[data-editor-choice-group]');
+    if (!url || !press || !status || !text || !list || !row || !heading) return;
     var buttons = suggestion.querySelectorAll('button');
     var accept = buttons[0];
     var dismiss = buttons[1];
@@ -74,7 +76,15 @@
     }
 
     function drawChoices(choices) {
+      var group = '';
       choices.forEach(function (choice) {
+        var named = choice.group ? String(choice.group) : '';
+        if (named !== group && named !== '') {
+          var title = heading.content.firstElementChild.cloneNode(true);
+          title.textContent = named;
+          list.appendChild(title);
+        }
+        group = named;
         var item = row.content.firstElementChild.cloneNode(true);
         var badge = item.querySelector('.badge');
         item.querySelector('input').value = String(choice.value);
