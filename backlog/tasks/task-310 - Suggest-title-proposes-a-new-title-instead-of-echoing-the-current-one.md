@@ -4,6 +4,7 @@ title: Suggest title proposes a new title instead of echoing the current one
 status: To Do
 assignee: []
 created_date: '2026-10-09 14:17'
+updated_date: '2026-10-09 14:19'
 labels: []
 dependencies: []
 references:
@@ -25,3 +26,9 @@ On shll.me with z-ai/glm-5.3-flash, Suggest title answered in a couple of second
 - [ ] #2 When a suggestion matches the field's current value ignoring case, spacing and trailing punctuation, the editor says the model suggests keeping it (for a title or a description) and offers no Accept
 - [ ] #3 Tests assert the title prompt omits the current title, the description prompt keeps it, and the keep-it outcome
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-09: second example from Andrew on shll.me: with the title edited to 'My experience at WordCamp fo shizzle', Suggest title returned 'My experience at WordCamp US', an edit of the current title rather than a title from the body. Confirms the model anchors on the Title line.
+<!-- SECTION:NOTES:END -->
