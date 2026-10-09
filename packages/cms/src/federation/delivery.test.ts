@@ -2057,6 +2057,37 @@ bookmark-of: ${SLOW_PAGE}
   }
 });
 
+describe('a cited page stored on a site with no accounts (TASK-311 AC #1)', () => {
+  it('reports no delivery failure for the announced reply that cites it', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    const { cms } = await site({
+      files: {
+        'posts/imported-reply.md': `---
+title: An imported reply
+date: 2020-05-01T10:00:00.000Z
+permalink: /2020/05/imported-reply/
+migrated: true
+in-reply-to: ${PLAIN_PAGE}
+activitypub:
+  published: 2020-05-01T10:00:00.000Z
+---
+Agreed.
+`,
+      },
+    });
+
+    await cms.replyContexts.settled();
+    await cms.delivery.settled();
+
+    assert.equal(cms.replyContexts.read(PLAIN_PAGE)?.name, 'A page', 'the context was stored');
+    assert.deepEqual(
+      warn.mock.calls.map((call) => String(call.arguments[0])),
+      [],
+    );
+    assert.deepEqual(deliveries, []);
+  });
+});
+
 describe('a post that mentions a fediverse handle (TASK-194)', () => {
   const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
   const FOLLOWERS = `${BASE_URL}/author/${ADA}/followers/`;

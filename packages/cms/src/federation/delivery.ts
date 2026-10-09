@@ -610,7 +610,12 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         const before = deliveryContext((url) => (url === target ? previous : options.cited(url)));
         const citing = store
           .listFederated()
-          .filter((document) => isFederatedDocument(document, now) && cites(document, target));
+          .filter(
+            (document) =>
+              isFederatedDocument(document, now) &&
+              cites(document, target) &&
+              documentAuthor(context, document) !== undefined,
+          );
 
         for (const document of citing) {
           const shape = await shapeOf(context, document);
