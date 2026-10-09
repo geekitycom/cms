@@ -2902,6 +2902,25 @@ first request after the file changes, and it is skipped. The following entries a
 A file that is not a JSON list serves no redirects and is reported the same
 way.
 
+#### More than one file
+
+Every `*.json` file in `content/_data/redirects/` is read after
+`redirects.json`, in name order, and served the same way. A tool that generates
+redirects, such as an import, writes a file of its own there and never touches
+the list a person keeps. A file there, or `redirects.json` itself, may also be
+an object that maps each `from` to its `to`, every one a `301`:
+
+```json
+{
+  "/?p=123": "/2026/01/hello/",
+  "/old-section/": "/new-section/"
+}
+```
+
+Where two files declare the same `from`, the one read first wins, so
+`redirects.json` wins over every file in the folder, and the other declaration
+is reported. A loop across files is found and skipped as within one.
+
 Every redirect the CMS sends carries `X-Redirect-By: Geekity CMS`. This
 includes the declared redirects, moved URLs, trailing slashes, feed spellings
 and the admin's redirects. Someone who traces a chain of redirects through a
