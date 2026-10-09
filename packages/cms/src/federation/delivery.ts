@@ -227,6 +227,17 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     });
   }
 
+  function requireSender(context: Context<FederationContextData>, document: Document): User {
+    const author = documentAuthor(context, document);
+    if (author === undefined) {
+      throw new Error(
+        `The post "${document.slug}" cannot be delivered: the site has no accounts, ` +
+          'and decision-14 makes a user the actor a post is announced by.',
+      );
+    }
+    return author;
+  }
+
   /**
    * Fan one activity about one post out to the followers.
    *
@@ -245,17 +256,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     if (activityId === undefined) {
       throw new TypeError('An activity cannot be delivered without an id.');
     }
-    const author = documentAuthor(context, about);
-    if (author === undefined) {
-      throw new Error(
-        `The post "${about.slug}" cannot be delivered: the site has no accounts, ` +
-          'and decision-14 makes a user the actor a post is announced by.',
-      );
-    }
-
     return await fanOut(
       context,
-      author,
+      requireSender(context, about),
       activity,
       {
         activityId,
@@ -498,6 +501,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       }
 
       const context = deliveryContext();
+      if (subject === undefined || documentAuthor(context, subject) === undefined) return;
 
       if (after === undefined) {
         // Unpublished, trashed or deleted; `before` is the post as it last
@@ -589,6 +593,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
           return await withdraw(context, document, await shapeOf(context, document));
         }
 
+        requireSender(context, document);
         const stamped = await stamp(document);
         const shape = await shapeOf(context, stamped);
         // A like or a repost is sent again as it is: its id is one a peer

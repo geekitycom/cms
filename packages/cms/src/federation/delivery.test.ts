@@ -2088,6 +2088,42 @@ Agreed.
   });
 });
 
+describe('a published post on a site with no accounts (TASK-312)', () => {
+  const POST_FILE = 'posts/2026-03-04-watched.md';
+
+  async function noAccounts(): Promise<Site> {
+    return await site({ files: { [POST_FILE]: publishedPost('Nobody can send this.') } });
+  }
+
+  it('is not stamped as announced, and no delivery fails, when it appears or changes', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    const { cms, contentDir } = await noAccounts();
+    const post = cms.store.getByPath(POST_FILE);
+    assert.ok(post !== undefined);
+
+    const change = { type: 'created', path: POST_FILE, origin: 'watch' } as const;
+    await cms.delivery.handle({ ...change, previous: undefined, next: post });
+    await cms.delivery.handle({ ...change, type: 'updated', previous: post, next: post });
+    await cms.delivery.settled();
+
+    const file = await readFile(path.join(contentDir, POST_FILE), 'utf8');
+    assert.doesNotMatch(file, /activitypub/);
+    assert.deepEqual(
+      warn.mock.calls.map((call) => String(call.arguments[0])),
+      [],
+    );
+  });
+
+  it('is not stamped by a resend, which says why it cannot send', async () => {
+    const { cms, contentDir } = await noAccounts();
+
+    await assert.rejects(cms.delivery.resend('watched'), /the site has no accounts/);
+
+    const file = await readFile(path.join(contentDir, POST_FILE), 'utf8');
+    assert.doesNotMatch(file, /activitypub/);
+  });
+});
+
 describe('a post that mentions a fediverse handle (TASK-194)', () => {
   const PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
   const FOLLOWERS = `${BASE_URL}/author/${ADA}/followers/`;
