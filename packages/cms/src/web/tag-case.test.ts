@@ -1,8 +1,3 @@
-/**
- * Tags without regard to case on the public site (TASK-308): one archive at
- * the lower-case URL, every other casing redirected there, and one spelling
- * wherever the site prints the tag.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';

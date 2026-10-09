@@ -143,8 +143,7 @@ export function mountTaxonomyScreens(
 
     // A rename onto a term that already exists is a merge, and a merge is not
     // undoable: it is offered rather than done, with both counts on the screen,
-    // and only a form that says it has been seen goes through. A tag renamed to
-    // another casing of itself is not one.
+    // and only a form that says it has been seen goes through.
     const target =
       termKey(kind.taxonomy, to) === termKey(kind.taxonomy, from) ? [] : carriers(c, kind, to);
     if (target.length > 0 && field(body[TAXONOMY_FIELDS.confirm]) === '') {

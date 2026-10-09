@@ -676,7 +676,6 @@ describe('listByTag', () => {
 });
 
 describe('tags without regard to case (TASK-308)', () => {
-  /** A post on its own day, carrying `tags`. */
   function tagged(day: number, tags: string[], overrides: Partial<Document> = {}): Document {
     const date = `2026-09-${String(day).padStart(2, '0')}`;
     return post({

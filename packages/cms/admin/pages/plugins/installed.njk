@@ -5,10 +5,7 @@
    range it needs, linked to that plugin's row when it is installed, because
    nothing is enabled on the operator's behalf. Under geekity serve, Reload
    appears when the plugins folder differs from what this worker loaded
-   (TASK-288). A site with a plugins folder and GEEKITY_PLUGIN_INSTALL not off
-   adds, updates and removes folder plugins here (TASK-306); Update, Update
-   all and Remove go through the confirm screen, and all three ask for the
-   password. #}
+   (TASK-288). #}
 {% extends "layouts/shell.njk" %}
 {% from "components/badge.njk" import status %}
 {% from "components/button.njk" import button %}

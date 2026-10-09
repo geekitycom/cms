@@ -1,7 +1,3 @@
-/**
- * Installing, updating and removing folder plugins from Admin > Plugins
- * (TASK-306), against a fake npm registry on loopback.
- */
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -129,7 +125,6 @@ async function token(agent: Browser): Promise<string> {
   return value;
 }
 
-/** Post a form from the screen, then read the screen the redirect lands on. */
 async function submit(
   agent: Browser,
   url: string,

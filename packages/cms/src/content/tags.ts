@@ -1,10 +1,4 @@
 /**
- * Tags match without regard to case (TASK-308): `WordPress` and `wordpress`
- * are one tag, with one archive, shown in one spelling. Files keep whatever
- * spelling they were written in; the site picks one to show.
- */
-
-/**
  * What makes two spellings one tag, and the segment of its archive URL.
  *
  * `toLowerCase()` rather than a locale's rules, so a tag matches the same way

@@ -1,8 +1,3 @@
-/**
- * What `geekity plugin add` says about a plugin's ranges (TASK-304): a plugin
- * built against one core accepts every later 0.x core, and the same holds for
- * a plugin it requires.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

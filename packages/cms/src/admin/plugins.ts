@@ -298,7 +298,6 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     return await confirmed(c, 'remove', (options, name) => deletePlugin(options, name));
   });
 
-  /** A POST from the confirm screen: the switch, the password, then the change. */
   async function confirmed(
     c: Context<GeekityEnv>,
     action: Confirmable,
@@ -365,7 +364,6 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     });
   }
 
-  /** Make one change with the folder to itself, then flash what happened. */
   async function manage(
     c: Context<GeekityEnv>,
     pluginsDir: string,
@@ -389,7 +387,6 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     return c.redirect(PLUGINS_PATH, 303);
   }
 
-  /** The signed-in admin's username, when `password` is theirs. */
   function confirmedUser(c: Context<GeekityEnv>, password: string): string | undefined {
     const userId = c.var.session?.userId;
     if (userId == null || password === '') return undefined;
@@ -604,7 +601,6 @@ async function submittedName(c: Context<GeekityEnv>): Promise<string> {
   return typeof value === 'string' ? value : '';
 }
 
-/** Whether this site lets the admin change its plugins folder, and why not. */
 type PluginInstaller =
   | { readonly state: 'on'; readonly pluginsDir: string }
   | { readonly state: 'off' }
@@ -623,7 +619,6 @@ const INSTALLER_REFUSALS: Readonly<Record<'off' | 'no-folder', string>> = {
 
 type Confirmable = 'update' | 'update-all' | 'remove';
 
-/** What the Add plugin form refuses, by field. */
 interface AddProblems {
   package?: string;
   password?: string;
@@ -662,7 +657,6 @@ const VERSION_FIELD = 'version';
 const PASSWORD_FIELD = 'password';
 const WRONG_PASSWORD = 'Your password was not right, so nothing was';
 
-/** What the screen and the confirm screen pass to the install and upgrade code. */
 function manageOptions(c: Context<GeekityEnv>, pluginsDir: string) {
   return {
     pluginsDir,

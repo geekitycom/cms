@@ -1,9 +1,3 @@
-/**
- * Adding, updating and removing folder plugins on behalf of an admin
- * (TASK-306): the same install and upgrade as `geekity plugin`, one change at
- * a time per plugins folder, each change recorded with who made it. Who may
- * ask, and whether the site allows it at all, is the route's business.
- */
 import path from 'node:path';
 
 import type { FlashKind } from '../admin/store.ts';
@@ -39,7 +33,6 @@ export interface ManageOutcome {
   message: string;
 }
 
-/** The last check for newer versions, per plugins folder, until the folder changes. */
 const checks = new Map<string, { at: Date; plugins: readonly PluginUpgrade[] }>();
 
 export function lastUpdateCheck(
@@ -140,11 +133,6 @@ const UPGRADE_KINDS: Readonly<Record<PluginUpgrade['status'], FlashKind>> = {
   failed: 'error',
 };
 
-/**
- * Run one change with the plugins folder to itself, then record what it
- * changed. Two admins pressing Update at once would otherwise both stage and
- * swap the same folder.
- */
 async function serialized(
   options: ManageOptions,
   change: () => Promise<{ changes: readonly PluginChange[]; outcomes: ManageOutcome[] }>,

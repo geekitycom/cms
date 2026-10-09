@@ -260,7 +260,6 @@ describe('the post object', () => {
       href: `${BASE_URL}/tag/notes/`,
     });
 
-    // What delivery builds from: a file just read, in its own casing.
     const indexed = instance.store.getByPermalink('/2026/09/hello/');
     assert.ok(indexed !== undefined);
     const context = instance.federation.createContext(new URL(BASE_URL), {

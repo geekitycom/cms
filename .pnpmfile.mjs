@@ -10,10 +10,6 @@
  * a 0.x package publishes as `>=<version> <1.0.0`: the version it was built
  * against, up to 1.0. From 1.0 on it is the caret range pnpm writes.
  *
- * Any other `workspace:` spelling publishes as pnpm does: `workspace:~`,
- * `workspace:*` and a bare `workspace:` on the workspace version, and an
- * explicit range such as `workspace:>=0.2.0 <1.0.0` as the range itself.
- *
  * pnpm runs `beforePacking` after its own `workspace:` rewrite, on every
  * `pnpm pack` in the workspace, which is how `pnpm release` and
  * scripts/pack-install-smoke.sh build their tarballs. pnpm records this file's

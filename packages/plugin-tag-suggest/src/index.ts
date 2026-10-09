@@ -120,7 +120,6 @@ function candidatesFrom(
     suggested.forReach,
     FOR_REACH_MOST,
     (key) => SEED_FOLLOWERS.has(key) && !postKeys.has(key),
-    // A model that copies the folded seed list gives `opensource`; the seed's own name may read better.
     (modelSpelling, key) =>
       modelSpelling === key ? (SEED_NAMES.get(key) ?? modelSpelling) : modelSpelling,
   );

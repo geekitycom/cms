@@ -316,7 +316,6 @@ export function postObject(
     // each one points at the archive the site serves for it.
     tags: [
       ...mentions(replyTo, mentioned),
-      // In the site's spelling: the document may be a file just read rather than the index's copy.
       ...document.tags.map((tag) => {
         const spelled = context.data.store.tagSpelling(tag) ?? tag;
         return hashtag(spelled, tagHref(spelled, 0, bases), baseUrl);

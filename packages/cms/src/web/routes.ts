@@ -434,7 +434,6 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     const { target, format } = feedRequest;
     const canonical = feedTargetHref(target, format, bases);
     if (!feedRequest.canonical) return c.redirect(canonical, 301);
-    // A tag's feed in another casing than its archive's, for a tag something carries.
     if (
       target.kind === 'listing' &&
       target.subject.term?.taxonomy === 'tag' &&
@@ -1166,7 +1165,6 @@ function parseListingPath(
   const taxonomy = taxonomyForSegment(segments[0], bases);
   const named = segments[1];
   if (taxonomy === undefined || named === undefined) return undefined;
-  // A tag in any casing is the one tag, and an archive shows it as the site spells it.
   const term: TaxonomyTerm = {
     taxonomy,
     term: taxonomy === 'tag' ? (store.tagSpelling(named) ?? named) : named,

@@ -981,7 +981,6 @@ function decodedSegment(segment: string): string {
   }
 }
 
-/** What the flash says about tags the save wrote in the site's spelling. */
 function respelledMessage(respelled: readonly Respelling[]): string {
   const pairs = respelled.map(({ given, site }) => `“${site}” for “${given}”`);
   const noun = respelled.length === 1 ? 'a tag' : `${String(respelled.length)} tags`;

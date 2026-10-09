@@ -633,21 +633,11 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
   let open = true;
 
-  /**
-   * Every tag's spelling by key, worked out in one pass over the tags and kept
-   * while nothing can have changed which spelling most listed documents use:
-   * no other connection has written (`PRAGMA data_version`), and the clock has
-   * not reached the next scheduled document. A write through this connection
-   * marks the keys it touched, and only those are worked out again. Worked out
-   * per tag on every read instead, a listing of a 3,000-post site took twenty
-   * times as long.
-   */
   let spelled:
     | { version: unknown; from: string; until: string | undefined; keys: Map<string, string> }
     | undefined;
   const staleKeys = new Set<string>();
 
-  /** More keys than this to refresh, and they are all worked out again in one pass. */
   const MOST_KEYS_REFRESHED = 500;
 
   function siteSpellings(): ReadonlyMap<string, string> {
@@ -688,7 +678,6 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       .all(now, ...stale) as Record<string, unknown>[];
   }
 
-  /** Mark the tags a document carries in the index now, before a write changes them. */
   function tagsChanging(contentPath: string): void {
     for (const row of statements.keysFor.all(contentPath)) staleKeys.add(String(row['key']));
   }
@@ -1107,21 +1096,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
   };
 }
 
-/**
- * How the index stores and matches one taxonomy's terms.
- *
- * A tag is matched on its key, so every casing is one tag; a category is
- * matched as the file spells it. The names are the module's own literals
- * rather than anything a caller supplies, so there is nothing here to
- * interpolate from outside.
- */
 interface TermTable {
   readonly table: 'document_tags' | 'document_categories';
-  /** The column the term is matched on. */
   readonly matchColumn: 'key' | 'category';
-  /** The column the term is spelled in. */
   readonly column: 'tag' | 'category';
-  /** A term as the value {@link TermTable.matchColumn} holds for it. */
   readonly match: (term: string) => string;
 }
 
@@ -1135,27 +1113,15 @@ const TERM_TABLES: Readonly<Record<TaxonomyName, TermTable>> = {
   },
 };
 
-/** Code-unit order, for a list sorted after its query rather than by `ORDER BY`. */
 function compareText(a: string, b: string): number {
   if (a === b) return 0;
   return a < b ? -1 : 1;
 }
 
-/** `path IN (…)`: the documents carrying one term, bound as the term's match value. */
 function termFilter({ table, matchColumn }: TermTable): string {
   return `path IN (SELECT path FROM ${table} WHERE ${matchColumn} = ?)`;
 }
 
-/**
- * Each tag's key and the spelling the site shows it in: the spelling most
- * listed documents carry, ties going to the one listed earliest; then, for a
- * tag nothing listed carries, the spelling most documents carry and the
- * earliest; then the spelling itself, so the answer never depends on row
- * order. Worked out from the rows rather than stored, so a rebuilt index
- * answers the same (decision-9).
- *
- * It binds the clock, then whatever `where` binds.
- */
 function tagSpellingsSql(where: string): string {
   return `
     SELECT key, tag FROM (
@@ -1180,11 +1146,6 @@ function tagSpellingsSql(where: string): string {
   `;
 }
 
-/**
- * The query behind {@link ContentStore.listTermUsage} for one taxonomy: every
- * term by what it is matched on, one spelling of it, the public count and the
- * total, in one pass.
- */
 function termUsageSql({ table, matchColumn, column }: TermTable): string {
   return `
     SELECT ${table}.${matchColumn} AS key, MIN(${table}.${column}) AS term,
