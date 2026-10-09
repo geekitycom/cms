@@ -11,6 +11,7 @@
 import { definePlugin } from '@geekity/cms/plugin';
 
 import { importCommand } from './command.ts';
+import { contentImportCommand } from './content-command.ts';
 import { wordPressFederation } from './federation.ts';
 import { wordPressRecords } from './records.ts';
 import { wordPressScreen } from './screen.ts';
@@ -52,5 +53,6 @@ export default definePlugin({
     host.federation(wordPressFederation(records));
     host.screen(wordPressScreen(records));
     host.command(importCommand(records));
+    host.command(contentImportCommand(host.data));
   },
 });

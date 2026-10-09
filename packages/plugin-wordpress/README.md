@@ -3,8 +3,10 @@
 A [Geekity CMS](../cms/README.md) plugin for a site that moved from the
 WordPress ActivityPub plugin. It answers the old plugin's inbox and collection
 paths until every follower's server has refetched the actor, records when each
-path was last asked for, and adds `geekity import wordpress-actor`, which
-brings each person's key pair, actor id and followers across.
+path was last asked for, and adds two imports: `geekity import wordpress`,
+which brings the content of a WordPress export across, and
+`geekity import wordpress-actor`, which brings each person's key pair, actor id
+and followers across.
 
 A site born on the CMS never needs it. Stored actor ids, post object ids,
 WebFinger aliases and the feed and archive layout are the site's own and are in
@@ -37,16 +39,17 @@ under `/admin/plugins`:
 docker compose exec geekity geekity plugin add @geekity/plugin-wordpress
 ```
 
-`geekity import wordpress-actor` works as soon as the plugin is installed. The
+Both imports work as soon as the plugin is installed. The
 old paths are served only while the plugin is enabled under `/admin/plugins`,
 and disabling it takes them away on the next request, with nothing restarted.
 
 The plugin keeps two files in `data/plugins/@geekity/plugin-wordpress/`:
 
-| File            | What it holds                                                                                                               |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `actors.json`   | Each username and the number WordPress gave that person's actor, which the old paths are built from. Written by the import. |
-| `requests.json` | When each old path was last asked for, per user, and when the shared inbox was. Losing it resets what the screen says.      |
+| File            | What it holds                                                                                                                |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `actors.json`   | Each username and the number WordPress gave that person's actor, which the old paths are built from. Written by the import.  |
+| `requests.json` | When each old path was last asked for, per user, and when the shared inbox was. Losing it resets what the screen says.       |
+| `import.json`   | A hash of every file `geekity import wordpress` wrote, by path. Losing it makes every imported file a clash on the next run. |
 
 ## The old paths
 
@@ -70,6 +73,38 @@ Every one of those paths records the instant it was last asked for, and the
 plugin's screen under Plugins, `/admin/plugins/@geekity/plugin-wordpress`,
 lists each path with that instant, or _Never_. Once every follower's server has
 refetched the actor, nothing asks any more, and the plugin can be disabled.
+
+## Bringing the content across
+
+`geekity import wordpress` reads the WXR file WordPress writes under Tools >
+Export (or `wp export`) and writes what it holds into the content directory:
+
+```sh
+geekity import wordpress example.WordPress.2026-10-08.xml
+```
+
+A file that is not a WordPress export is refused before anything is written,
+with each problem named, and the command exits 1.
+
+The command prints the totals, then one tab-separated row per item: its
+outcome, post type, WordPress id, title, the file it went to, and why.
+
+| Outcome     | What it means                                                                                            |
+| ----------- | -------------------------------------------------------------------------------------------------------- |
+| `written`   | The file is new, was changed on WordPress since the last run, or was removed here and is written again.  |
+| `unchanged` | The file already holds what WordPress has.                                                               |
+| `kept`      | The file was edited on this site and WordPress has not changed it since. The edit stays.                 |
+| `conflict`  | The file was edited on this site and changed on WordPress too. The edit stays; the row gives both dates. |
+| `clash`     | A file the import never wrote is at the path. It is left alone.                                          |
+| `skipped`   | The item has no Geekity counterpart, such as a revision, a menu or the ActivityPub plugin's records.     |
+| `warned`    | The item was imported, with something the operator should check.                                         |
+
+**Run it as often as you like.** Two runs over one export leave the content
+directory byte for byte as one run did, and a run over a newer export picks up
+what was added or edited on WordPress since. The import never writes over a file
+it did not write, and never deletes one, so a site can layer its own fixes on
+top of an import. To take WordPress's side of a conflict, remove the file and
+run the import again.
 
 ## Bringing a person across
 

@@ -408,6 +408,9 @@ importers:
       '@fedify/vocab':
         specifier: ^2.4.0
         version: 2.4.0
+      sax:
+        specifier: ^1.6.1
+        version: 1.6.1
     devDependencies:
       '@fedify/cli':
         specifier: 2.4.0
@@ -421,6 +424,9 @@ importers:
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.4
+      '@types/sax':
+        specifier: ^1.2.7
+        version: 1.2.7
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -1759,6 +1765,9 @@ packages:
 
   '@types/nunjucks@3.2.6':
     resolution: {integrity: sha512-pHiGtf83na1nCzliuAdq8GowYiXvH5l931xZ0YEHaLMNFgynpEqx+IPStlu7UaDkehfvl01e4x/9Tpwhy7Ue3w==}
+
+  '@types/sax@1.2.7':
+    resolution: {integrity: sha512-rO73L89PJxeYM3s3pPPjiPgVVcymqU490g0YO5n5By0k2Erzj6tay/4lr1CHAAU4JyOWd1rpQ8bCf6cZfHU96A==}
 
   '@types/semver@7.8.0':
     resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
@@ -5263,6 +5272,10 @@ snapshots:
       '@types/node': 26.6.4
 
   '@types/nunjucks@3.2.6': {}
+
+  '@types/sax@1.2.7':
+    dependencies:
+      '@types/node': 26.6.4
 
   '@types/semver@7.8.0': {}
 

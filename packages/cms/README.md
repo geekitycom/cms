@@ -792,9 +792,9 @@ ignored.
 
 A site that moved here from the WordPress ActivityPub plugin keeps its people's
 actor ids and its posts' object ids, which are identity and are the CMS's own
-(above). What it needs for a while besides is the plugin's old paths, which
+(above). What it needs besides is its content, the plugin's old paths, which
 followers' servers keep delivering to until they refetch the actor, and an
-import that brings each person's key pair and followers across. Both are the
+import that brings each person's key pair and followers across. All three are the
 [`@geekity/plugin-wordpress`](../plugin-wordpress/README.md) package, which a
 site born on the CMS never installs. decision-14's switch is that plugin now:
 where the cutover used to say "turn the switch on", it says install and enable
@@ -809,19 +809,25 @@ the WordPress plugin.
 2. **Export, while the WordPress site is still up.** Each person's key pair,
    and the followers if the old site is going away before the import runs. The
    plugin's README says how. Note the actor id and the numeric actor id off
-   `https://example.com/?author=2`, and bring the content across.
+   `https://example.com/?author=2`, and take a WXR export under Tools > Export.
 3. **Install the WordPress plugin and import.** Add `@geekity/plugin-wordpress`
-   to the site's dependencies and to `plugins` in its config, then run `geekity import
-wordpress-actor ada --actor-id … --wordpress-id … --keypair ada.keypair.json`.
-   The command works before the plugin is enabled. Check the report: every
-   follower should be added, and any that were skipped should be re-run once
-   their servers answer. Tools > Dev mode shows that the import sent nothing.
+   to the site's dependencies and to `plugins` in its config, then run
+   `geekity import wordpress example.WordPress.xml` for the content and
+   `geekity import wordpress-actor ada --actor-id … --wordpress-id … --keypair ada.keypair.json`
+   for each person. Both work before the plugin is enabled. Check the reports:
+   every post should be written, every conflict or clash resolved, every
+   follower added, and any follower that was skipped re-run once its server
+   answers. Tools > Dev mode shows that the imports sent nothing. Both imports
+   are safe to run again: run them over a fresh export just before step 4 to
+   pick up what WordPress received in the meantime.
 4. **Enable the WordPress plugin, move the DNS and go live.** Enable it under
    `/admin/plugins`, then move the DNS. Remove `GEEKITY_DEV_MODE` and run
    `geekity dev-mode off`: nothing held during the migration is sent.
    Followers' servers go on delivering to the plugin's old inbox paths until
    they next refetch the actor, and the plugin is what catches those
-   deliveries.
+   deliveries. Once WordPress no longer answers, run both imports one last time
+   over its final export: they merge what arrived between the export and the
+   DNS move, and leave alone whatever this site wrote or edited since.
 5. **Watch.** `/admin/federation` lists the users with their actor ids and
    followers; the plugin's own screen under Plugins lists each old path with
    the instant it was last asked for. Deliveries should thin out as each
