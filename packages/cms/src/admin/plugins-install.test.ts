@@ -197,10 +197,13 @@ describe('Add plugin (TASK-306)', () => {
     assert.equal(await folderVersion(pluginsDir, SUMMARY), '0.3.0');
     assert.ok(
       result.flash.some((message) =>
-        message.includes(`requires ${LLM} ^1.0.0, which is not installed`),
+        message.includes(
+          `requires ${LLM} ^1.0.0, which is not installed. Add ${LLM} with the Add plugin form.`,
+        ),
       ),
       result.flash.join('\n'),
     );
+    assert.ok(!result.flash.some((message) => message.includes('geekity plugin add')));
   });
 
   it('refuses a tarball that does not match its integrity hash, and records nothing', async () => {
@@ -328,6 +331,33 @@ describe('Update and Remove (TASK-306)', () => {
     const reload = await submit(agent, PLUGINS_RELOAD_PATH, {});
     assert.equal(reload.status, 303);
     assert.equal(current.reloads, 1);
+  });
+});
+
+describe('Remove an enabled plugin (TASK-306)', () => {
+  it('is not offered, and the confirm screen and the POST refuse it until it is disabled', async () => {
+    const { agent, pluginsDir, dataDir } = await site({ installed: [`${TAGS}@2.0.0`] });
+    const enabled = await submit(agent, `${PLUGINS_PATH}/enable`, { plugin: TAGS });
+    assert.equal(enabled.status, 303);
+    assert.ok(!row(enabled.html, TAGS).includes('action=remove'));
+
+    const confirm = await screen(
+      agent,
+      `${PLUGINS_CONFIRM_PATH}?action=remove&plugin=${encodeURIComponent(TAGS)}`,
+    );
+    assert.match(confirm, /@acme\/plugin-tags is enabled\. Disable it first\./);
+    assert.ok(!confirm.includes(`action="${PLUGINS_REMOVE_PATH}"`));
+
+    const refused = await submit(agent, PLUGINS_REMOVE_PATH, { plugin: TAGS, password: PASSWORD });
+    assert.ok(
+      refused.flash.includes(`${TAGS} is enabled. Disable it first.`),
+      refused.flash.join(' | '),
+    );
+    assert.equal(await folderVersion(pluginsDir, TAGS), '2.0.0');
+    assert.deepEqual(await record(dataDir), []);
+
+    const disabled = await submit(agent, `${PLUGINS_PATH}/disable`, { plugin: TAGS });
+    assert.ok(row(disabled.html, TAGS).includes('action=remove'));
   });
 });
 

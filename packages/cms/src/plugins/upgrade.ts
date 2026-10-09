@@ -2,6 +2,7 @@ import semver from 'semver';
 
 import { readPluginManifest, scanPluginFolders } from './folder.ts';
 import { addPlugin, CORE_PACKAGE, fetchPackument, requirementNotes } from './install.ts';
+import type { AddAdvice } from './install.ts';
 import type { PackageDocument } from './install.ts';
 
 type Ranges = Readonly<Record<string, string>>;
@@ -48,6 +49,7 @@ export interface UpgradeOptions {
   configured?: readonly PluginRelease[];
   only?: readonly string[] | undefined;
   check?: boolean;
+  addAdvice: AddAdvice;
 }
 
 export async function upgradePlugins(options: UpgradeOptions): Promise<UpgradeReport> {
@@ -151,7 +153,7 @@ export async function upgradePlugins(options: UpgradeOptions): Promise<UpgradeRe
   const unmet = [...installed.keys()].flatMap((name) => {
     const release = final.get(name);
     if (release === undefined) return [];
-    const notes = requirementNotes(release, versions, coreVersion);
+    const notes = requirementNotes(release, versions, coreVersion, options.addAdvice);
     return notes.length === 0 ? [] : [{ name, notes }];
   });
 

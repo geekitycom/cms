@@ -360,11 +360,14 @@ non-zero only when an install it attempted failed.
 - `geekity plugin upgrade --check` prints the same report and installs
   nothing.
 
-To remove a plugin, delete its folder and press Reload:
+To remove a plugin, disable it on the Plugins screen, delete its folder and
+press Reload:
 
 ```sh
 docker compose exec geekity geekity plugin remove @geekity/plugin-llm
 ```
+
+`plugin remove` refuses a plugin the site has enabled, as WordPress does.
 
 A plugin that is not on npm installs the same way by hand: copy its bundle
 folder, `index.js` and `plugin.json`, to `plugins/<package name>/` and press
@@ -390,7 +393,8 @@ on a site with a plugins folder:
 - **Update all** brings every folder plugin up to date, the same way as
   `plugin upgrade`.
 - **Remove** deletes the plugin's folder. Its settings and its folder under
-  `data/plugins/` stay.
+  `data/plugins/` stay. Only a disabled plugin has Remove: disable a plugin
+  first, as in WordPress.
 
 Each change asks for your password, and an update or a removal first shows
 what it will change. One change runs at a time. After a change, press

@@ -14,7 +14,12 @@ import { readPluginChanges } from '../plugins/changes.ts';
 import type { PluginChangeEntry } from '../plugins/changes.ts';
 import { readEnabledPlugins, setPluginEnabled } from '../plugins/enabled.ts';
 import { pluginFolderChanges, scanPluginFolders } from '../plugins/folder.ts';
-import { installedFolders, parsePackageSpec, pluginRegistry } from '../plugins/install.ts';
+import {
+  enabledRefusal,
+  installedFolders,
+  parsePackageSpec,
+  pluginRegistry,
+} from '../plugins/install.ts';
 import {
   checkForUpdates,
   deletePlugin,
@@ -220,7 +225,10 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
             checked.status !== 'newest'
               ? describeUpgrade(checked)
               : undefined,
-          removeUrl: manageable ? confirmPath('remove', plugin.name) : undefined,
+          removeUrl:
+            manageable && !enabled.has(plugin.name)
+              ? confirmPath('remove', plugin.name)
+              : undefined,
           requirements: requirements.map((requirement) => ({
             ...requirement,
             words: REQUIREMENT_WORDS[requirement.state],
@@ -326,13 +334,16 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     let ready: boolean;
     if (action === 'remove') {
       const folders = installedFolders(pluginsDir);
-      ready = folders.has(name);
+      const enabled = readEnabledPlugins(c.var.config.contentDir).has(name);
+      ready = folders.has(name) && !enabled;
       const version = folders.get(name);
-      lines = ready
-        ? [
-            `${name}${version === undefined ? '' : ` ${version}`} is deleted from the plugins folder. Its settings in site.json and its folder under data/plugins stay.`,
-          ]
-        : [`${name} is not in the plugins folder.`];
+      lines = !folders.has(name)
+        ? [`${name} is not in the plugins folder.`]
+        : enabled
+          ? [enabledRefusal(name)]
+          : [
+              `${name}${version === undefined ? '' : ` ${version}`} is deleted from the plugins folder. Its settings in site.json and its folder under data/plugins stay.`,
+            ];
     } else {
       try {
         const report = await checkForUpdates(
@@ -373,6 +384,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     try {
       const outcomes = await change({
         ...manageOptions(c, pluginsDir),
+        contentDir: c.var.config.contentDir,
         dataDir: c.var.config.dataDir,
         user,
         next:

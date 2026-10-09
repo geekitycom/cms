@@ -96,7 +96,7 @@ site (or `npx geekity`, or a `package.json` script, which is how the generated
 | `geekity maintenance on`, `off`, `status` | Take the public site down on purpose with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` names when it should be back.                          |
 | `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`. See [The media library](#the-media-library).                                                          |
 | `geekity user add <name>`                 | Create an admin account, so a site can get its first login without the setup screen.                                                                                               |
-| `geekity plugin add <package>`, `remove`  | Install a plugin package's bundle from the npm registry into the plugins folder (`GEEKITY_PLUGINS_DIR`), or delete it. Reload on the Plugins screen loads the change.              |
+| `geekity plugin add <package>`, `remove`  | Install a plugin package's bundle from the npm registry into the plugins folder (`GEEKITY_PLUGINS_DIR`), or delete a disabled one. Reload on the Plugins screen loads the change.  |
 | `geekity --help`, `-h`                    | The same table, on the terminal.                                                                                                                                                   |
 | `geekity --version`                       | The installed version.                                                                                                                                                             |
 

@@ -252,4 +252,19 @@ describe('geekity plugin remove', () => {
     assert.equal(absent.code, 1);
     assert.match(absent.stderr, /@acme\/plugin-llm is not in the plugins folder/);
   });
+
+  it('refuses a plugin the site has enabled, and leaves its folder', async () => {
+    const { site, pluginsDir, geekity } = await setup([release(LLM, '1.0.0')]);
+    await geekity('add', LLM);
+    await fs.mkdir(path.join(site, 'content', '_data'), { recursive: true });
+    await fs.writeFile(
+      path.join(site, 'content', '_data', 'site.json'),
+      JSON.stringify({ plugins: { [LLM]: { enabled: true } } }),
+    );
+
+    const refused = await geekity('remove', LLM);
+    assert.equal(refused.code, 1);
+    assert.match(refused.stderr, /@acme\/plugin-llm is enabled\. Disable it first\./);
+    assert.equal(await installedVersion(pluginsDir, LLM), '1.0.0');
+  });
 });

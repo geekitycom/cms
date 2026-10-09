@@ -23,6 +23,7 @@ import { initSite, ownManifest, seedStarterContent } from './init.ts';
 import type { PluginCommand } from './plugin.ts';
 import { importPluginFolders, scanPluginFolders } from './plugins/folder.ts';
 import {
+  ADD_WITH_COMMAND,
   addPlugin,
   installedFolders,
   parsePackageSpec,
@@ -151,7 +152,8 @@ Commands:
                    package named, and names any plugin it requires that is
                    missing. Reload on the Plugins screen loads it.
   plugin remove    Delete a plugin's folder from the plugins folder. Reload on
-                   the Plugins screen unloads it.
+                   the Plugins screen unloads it. It refuses a plugin the site
+                   has enabled: disable it first.
   plugin upgrade   Bring each plugin in the plugins folder, or only the ones
                    named, up to its newest version that this core and the
                    other installed plugins can run, installed as plugin add
@@ -864,6 +866,7 @@ async function pluginFolderCommand(
       })),
       only: names.length === 0 ? undefined : names,
       check: flags['check'] === true,
+      addAdvice: ADD_WITH_COMMAND,
     });
     process.stdout.write(upgradeReportText(report));
     return report.plugins.some((plugin) => plugin.status === 'failed') ? 1 : 0;
@@ -871,7 +874,7 @@ async function pluginFolderCommand(
 
   if (spec === undefined) throw new Error(PLUGIN_USAGE);
   if (action === 'remove') {
-    const directory = await removePlugin(spec, pluginsDir);
+    const directory = await removePlugin(spec, { pluginsDir, contentDir: config.contentDir });
     process.stdout.write(
       `Removed ${spec} (${directory}). Reload on the Plugins screen to unload it.\n`,
     );
@@ -893,7 +896,7 @@ async function pluginFolderCommand(
   process.stdout.write(
     [
       done,
-      ...requirementNotes(manifest, installed, ownManifest().version),
+      ...requirementNotes(manifest, installed, ownManifest().version, ADD_WITH_COMMAND),
       'Reload on the Plugins screen to load it, then enable it there.',
       '',
     ].join('\n'),

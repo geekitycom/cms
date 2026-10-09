@@ -17,6 +17,7 @@ import { gunzipSync } from 'node:zlib';
 import semver from 'semver';
 
 import { HOST_API_VERSION } from '../plugin.ts';
+import { readEnabledPlugins } from './enabled.ts';
 import { PLUGIN_ENTRY, PLUGIN_MANIFEST, readPluginManifest, scanPluginFolders } from './folder.ts';
 import type { PluginManifest } from './folder.ts';
 import { PACKAGE_NAME } from './registry.ts';
@@ -106,17 +107,36 @@ export async function addPlugin(
   }
 }
 
-/** Delete a plugin's folder. Throws when there is none. */
-export async function removePlugin(name: string, pluginsDir: string): Promise<string> {
+/**
+ * Delete a plugin's folder. Throws when there is none, and when the site has
+ * the plugin enabled: as in WordPress, a plugin is disabled before it is removed.
+ */
+export async function removePlugin(
+  name: string,
+  site: { pluginsDir: string; contentDir: string },
+): Promise<string> {
+  const { pluginsDir } = site;
   const directory = path.join(pluginsDir, ...name.split('/'));
   if (!PACKAGE_NAME.test(name) || !existsSync(directory)) {
     throw new Error(`${name} is not in the plugins folder, ${pluginsDir}.`);
   }
+  if (readEnabledPlugins(site.contentDir).has(name)) throw new Error(enabledRefusal(name));
   const doomed = path.join(path.dirname(directory), hidden('removing', directory));
   await rename(directory, doomed);
   await rm(doomed, { recursive: true, force: true });
   return directory;
 }
+
+/** Why an enabled plugin is not removed. */
+export function enabledRefusal(name: string): string {
+  return `${name} is enabled. Disable it first.`;
+}
+
+/** The sentence that tells the reader how to add a missing plugin. */
+export type AddAdvice = (name: string) => string;
+
+/** What the command line tells its reader to run. */
+export const ADD_WITH_COMMAND: AddAdvice = (name) => `Add it with: geekity plugin add ${name}`;
 
 /**
  * A line for each plugin the manifest requires that is not installed or not
@@ -127,6 +147,7 @@ export function requirementNotes(
   manifest: Pick<PluginManifest, 'peerDependencies'>,
   installed: ReadonlyMap<string, string | undefined>,
   coreVersion: string,
+  addAdvice: AddAdvice,
 ): string[] {
   const notes: string[] = [];
   for (const [dependency, range] of Object.entries(manifest.peerDependencies)) {
@@ -140,7 +161,7 @@ export function requirementNotes(
     }
     if (!installed.has(dependency)) {
       notes.push(
-        `It requires ${dependency} ${range}, which is not installed. Add it with: geekity plugin add ${dependency}`,
+        `It requires ${dependency} ${range}, which is not installed. ${addAdvice(dependency)}`,
       );
       continue;
     }
