@@ -3,11 +3,11 @@ id: TASK-303
 title: >-
   Editor suggestions read like the author wrote them: short titles and readable,
   fitting tags
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-08 23:58'
-updated_date: '2026-10-09 00:28'
+updated_date: '2026-10-09 02:00'
 labels: []
 dependencies: []
 references:
@@ -33,7 +33,7 @@ Tried on shll.me with openai/gpt-4.1-mini. Suggest title was very wordy on https
 - [x] #4 Tag suggest asks for 3 to 5 specific tags, most fitting first, and avoids generic words; the list ranks by followers only among tags the model put in its top group, or otherwise keeps the model's order when follower counts do not separate them
 - [x] #5 Tests cover the new prompt text, the readable spelling surviving accept, and the ranking rule
 - [x] #6 Tag suggest ships a seed list of hashtags people follow, built by a repo script from a "tag,followers" CSV of tags.pub accounts followed on mastodon.social (Andrew's 2026-10-08 export): tags with at least 2 followers, minus tags.pub service accounts (names starting with "_", such as _followback and _____relay_____), minus sexual and adult tags by a reviewed denylist; the list records its source and date
-- [ ] #7 Suggestions come back in two labelled groups in the editor: "For this post" (the most fitting tags, site tags first when they fit) and "For reach" (tags from the seed list that genuinely fit the post, ranked by followers); a seed tag that does not fit is never offered, and a tag in both groups is shown once
+- [x] #7 Suggestions come back in two labelled groups in the editor: "For this post" (the most fitting tags, site tags first when they fit) and "For reach" (tags from the seed list that genuinely fit the post, ranked by followers); a seed tag that does not fit is never offered, and a tag in both groups is shown once
 - [x] #8 Tests cover the seed filter (service accounts and denylisted tags dropped, threshold kept), the two groups, and that the prompt gives the model the seed list and the fit rule
 <!-- AC:END -->
 
@@ -61,4 +61,12 @@ tag-suggest: model answers { forThisPost, forReach }. forThisPost: 3 to 5 specif
 Seed: scripts/seed.ts (filter), scripts/build-seed.ts (pnpm --filter @geekity/plugin-tag-suggest seed <csv> --source .. --date ..), scripts/denylist.txt (names plus *fragment* entries). src/seed.ts: 551 tags from the 2026-10-08 mastodon.social export (638 with >=2, minus 2 service accounts, minus 85 denylisted). Raw CSV not committed.
 Verification: pnpm build, typecheck, lint, format:check, test (cms 4964, llm 48, post-summary 17, tag-suggest 30, wordpress 36, demo 32; all pass); scripts/pack-install-smoke.sh passed. Mutations (no follower threshold, no seed filter on reach, no site-tags-first) each fail 2 tests. Playwright Chromium against a scratch site with the fake LLM and fake tags.pub drew 'For this post' (WordPress, Phoenix, WordCampUS, Conferences) and 'For reach' (Fediverse, OpenSource) with WordPress shown once; ticking WordCampUS and Fediverse and pressing Accept put 'WordCampUS, Fediverse' in Tags.
 AC #7 left open: the groups, labels, dedupe and the off-seed drop are proven, but whether gpt-4.1-mini only picks seed tags that genuinely fit needs a real call. On shll.me after release, press Suggest tags on the WordCamp US post and the Hello World post: For reach should be empty or clearly on-topic, 'introductions' should not appear on the WordCamp post, and tags should read WordCampUS-style. Press Suggest title on Hello World: expect 60 characters or fewer in Andrew's style.
+
+2026-10-09, on shll.me (0.26.0, plugin-tag-suggest 0.2.0, Andrew's screenshots): the WordCamp US post gave For this post WordCampUS, Phoenix, WordPress, TechConference and For reach opensource, indieweb, tech, digitalrights (fitting, digitalrights a stretch); Hello World gave For this post Geekity, StaticSiteGenerator, FileOrganization, SiteDataManagement and an empty For reach. No introductions, no padding words. Reach tags show the seed's lowercase spelling; filed as TASK-307.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Suggest title asks for a short title in the author's style with recent titles as examples; Suggest tags asks for 3 to 5 specific CamelCase tags, uses a site tag only when it fits, and adds a For reach group from a seed list of followed tags. Verified by tests, a Playwright run against fakes, and on shll.me after 0.26.0.
+<!-- SECTION:FINAL_SUMMARY:END -->
