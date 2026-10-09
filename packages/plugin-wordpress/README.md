@@ -40,16 +40,17 @@ docker compose exec geekity geekity plugin add @geekity/plugin-wordpress
 ```
 
 Both imports work as soon as the plugin is installed. The
-old paths are served only while the plugin is enabled under `/admin/plugins`,
-and disabling it takes them away on the next request, with nothing restarted.
+old paths, and the redirects from WordPress media URLs, are served only while
+the plugin is enabled under `/admin/plugins`, and disabling it takes them away
+on the next request, with nothing restarted.
 
 The plugin keeps two files in `data/plugins/@geekity/plugin-wordpress/`:
 
-| File            | What it holds                                                                                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `actors.json`   | Each username and the number WordPress gave that person's actor, which the old paths are built from. Written by the import.                                   |
-| `requests.json` | When each old path was last asked for, per user, and when the shared inbox was. Losing it resets what the screen says.                                        |
-| `import.json`   | A hash of every file `geekity import wordpress` wrote, by path, and each `site.json` key it set. Losing it makes every imported file a clash on the next run. |
+| File            | What it holds                                                                                                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `actors.json`   | Each username and the number WordPress gave that person's actor, which the old paths are built from. Written by the import.                                                    |
+| `requests.json` | When each old path was last asked for, per user, and when the shared inbox was. Losing it resets what the screen says.                                                         |
+| `import.json`   | A hash of every file `geekity import wordpress` wrote, by path, and each `site.json` and `media.json` key it set. Losing it makes every imported file a clash on the next run. |
 
 ## The old paths
 
@@ -80,8 +81,15 @@ refetched the actor, nothing asks any more, and the plugin can be disabled.
 Export (or `wp export`) and writes what it holds into the content directory:
 
 ```sh
-geekity import wordpress example.WordPress.2026-10-08.xml
+geekity import wordpress example.WordPress.2026-10-08.xml \
+  --uploads ./wp-content/uploads \
+  --origins https://staging.example.com
 ```
+
+`--uploads` is a copy of the site's `wp-content/uploads` (an export carries
+no files), and `--origins` names any other host the posts wrote media URLs
+on, such as the staging host the site was built on, comma-separated. Both are
+optional; see [Media](#media).
 
 A file that is not a WordPress export is refused before anything is written,
 with each problem named, and the command exits 1.
@@ -136,7 +144,38 @@ become paragraphs as WordPress showed them, and a YouTube or Vimeo iframe or
 embed becomes the video's URL on a line of its own, which the site plays.
 What Markdown cannot say stays HTML: other iframes, a figure with a caption, a
 table with spans, and an element carrying a `style` or microformats class.
-`<!--more-->` stays where it was. Media URLs are left as WordPress wrote them.
+`<!--more-->` stays where it was. Media URLs point at the files under
+`/uploads/`, as [Media](#media) describes.
+
+### Media
+
+Each attachment's original is copied from `--uploads` into `content/uploads/`
+at the path WordPress kept it under, such as `uploads/2024/03/photo.png`.
+WordPress's size variants (`photo-1024x575.png`, `photo-scaled.png`) are not
+copied: the site makes its own. A file a post or page shows that is no
+attachment is copied too, for that post.
+
+Every media URL in a body, in Markdown and in the HTML it keeps, on the
+export's own origin, on an `--origins` host, or root-relative, becomes a
+root-relative `/uploads/` URL of the original. One pointing at a size variant
+points at its original. An upload URL on any other host is left alone.
+
+Each file is held to the rules an upload through the editor is: the site's
+allowed types and size limits, and location and camera details removed. A
+file the site would refuse is not copied. The report names it, and names
+each file missing from `--uploads`. Without `--uploads` nothing is copied and
+the report names each attachment.
+
+An attachment's alt text (`_wp_attachment_image_alt`) goes to
+`_data/media.json` under its upload path, which is where the editor offers it
+from. The import owns each key it set there, never the file.
+
+While the plugin is enabled, a request for `/wp-content/uploads/<path>`
+answers 301 at `/uploads/<path>`, so links from elsewhere still land on the
+file. A size variant the import did not copy lands on its original, as
+`import.json` records it, and the query string is kept. No `redirects.json`
+entry is written per file. Keep the plugin enabled for as long as links to the
+old media URLs matter.
 
 ## Bringing a person across
 

@@ -58,6 +58,7 @@ async function site(siteJson: Record<string, unknown> = { title: 'Blog' }): Prom
     loadActorKeys: unused,
     followers: () => [],
     addFollower: unused,
+    checkUpload: unused,
   };
   const context: PluginCommandContext = {
     args: [],

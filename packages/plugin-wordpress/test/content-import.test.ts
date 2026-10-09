@@ -51,6 +51,7 @@ function testSite(contentDir: string): PluginSite {
     loadActorKeys: unused,
     followers: () => [],
     addFollower: unused,
+    checkUpload: unused,
   };
 }
 

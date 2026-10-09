@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-08 10:59'
-updated_date: '2026-10-09 17:43'
+updated_date: '2026-10-09 18:06'
 labels: []
 milestone: m-31
 dependencies:
@@ -76,4 +76,6 @@ TASK-291.1 (posts and pages) landed:
 - #8 checked: test/import-dev-mode.test.ts boots a site with GEEKITY dev mode on, a follower, webmentions, rssCloud and IndexNow, imports a federated post with a link, a never-federated post and a page while the watcher runs, and finds no outbound fetch and no held entry in data/dev-mode.jsonl; a post first published there afterwards is held as a Create. Real run: the full import into a running dev-mode site with a follower held nothing.
 - #10 still open: the posts and pages half holds (posts-import.test.ts 'picks up the posts, pages and edits a newer export carries': an edited post is written as changed on WordPress, a new post and a new page are written new, an untouched page stays unchanged). Media and reactions wait on TASK-291.2 and TASK-291.3.
 - ImporterOutput gained optional settings (site.json keys), decided per key like a file (decision-39); import.json now holds files and settings.
+
+TASK-291.2 (media) landed. #10 media half holds: media-import.test.ts 'picks up media a newer export carries and leaves the rest byte-identical' (a new attachment and its alt are written, the old one unchanged, the new post points at the original). #10 stays open for reactions (TASK-291.3). ImporterOutput.settings is now entries (file, key, value) for any JSON object file the site also writes (decision-40); import.json holds them under entries by file.
 <!-- SECTION:NOTES:END -->

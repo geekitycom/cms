@@ -5,11 +5,12 @@ import type { PluginCommand, PluginCommandContext, PluginDataFolder } from '@gee
 
 import { importWordPressContent } from './content-import.ts';
 import type { ImportReport, Outcome, WordPressImporter } from './content-import.ts';
+import { attachments } from './media-import.ts';
 import { postsAndPages } from './posts-import.ts';
 import { NotAWordPressExportError, parseWordPressExport } from './wxr.ts';
 import type { WordPressExport } from './wxr.ts';
 
-const IMPORTERS: readonly WordPressImporter[] = [postsAndPages];
+const IMPORTERS: readonly WordPressImporter[] = [postsAndPages, attachments];
 
 /**
  * `geekity import wordpress <export.xml>`: a WXR export becomes files in the
@@ -20,9 +21,23 @@ const IMPORTERS: readonly WordPressImporter[] = [postsAndPages];
 export function contentImportCommand(data: PluginDataFolder): PluginCommand {
   return {
     words: ['import', 'wordpress'],
-    usage: '<export.xml>',
+    usage: '<export.xml> [--uploads <directory>] [--origins <url,…>]',
     summary:
       'Bring the posts, pages, media, reactions and redirects of a WordPress export (Tools > Export) into the content directory. Rerunnable; never overwrites a file the import did not write.',
+    options: [
+      {
+        name: 'uploads',
+        value: '<directory>',
+        description:
+          "A copy of the site's wp-content/uploads. Each attachment's original is copied from it into content/uploads/ at the same path. Left off, no media is copied and the report names each attachment.",
+      },
+      {
+        name: 'origins',
+        value: '<url,…>',
+        description:
+          "Other origins the posts wrote media URLs on, such as the staging host the site was built on, comma-separated. URLs on the export's own origin are always rewritten.",
+      },
+    ],
     run: (context) => run(context, data),
   };
 }

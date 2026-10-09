@@ -3,12 +3,13 @@ import { dump } from 'js-yaml';
 import type { PluginCommandContext } from '@geekity/cms/plugin';
 
 import type {
+  DataEntry,
   ImportedFile,
   ImporterOutput,
   ItemNote,
-  SiteSetting,
   WordPressImporter,
 } from './content-import.ts';
+import { wordPressMedia } from './media.ts';
 import { convertBody } from './wordpress-html.ts';
 import type { WordPressExport, WordPressItem } from './wxr.ts';
 
@@ -60,6 +61,8 @@ function dispositionOf(item: WordPressItem): Disposition {
   }
 }
 
+const SITE_JSON = '_data/site.json';
+
 export const postsAndPages: WordPressImporter = {
   postTypes: ['post', 'page'],
   import: importPostsAndPages,
@@ -76,10 +79,11 @@ function importPostsAndPages(
     items.filter((item) => item.type === 'page').map((item) => [item.id, item]),
   );
   const users = new Set(context.site.users().map((user) => user.username));
+  const media = wordPressMedia(exported, context.options['origins']);
 
   const files: ImportedFile[] = [];
   const notes: ItemNote[] = [];
-  const settings: SiteSetting[] = [];
+  const entries: DataEntry[] = [];
   const taken = new Set<string>();
 
   for (const item of items) {
@@ -121,14 +125,14 @@ function importPostsAndPages(
     files.push({
       item,
       path: unique(taken, fileName(item), item),
-      contents: document(front, body.markdown),
+      contents: document(front, media.rewrite(body.markdown)),
     });
 
     if (frontPage && !disposition.draft) {
-      settings.push({ item, key: 'homepage', value: lastSegment(permalink) });
+      entries.push({ item, file: SITE_JSON, key: 'homepage', value: lastSegment(permalink) });
     }
   }
-  return { files, notes, settings };
+  return { files, notes, entries };
 }
 
 interface Home {

@@ -809,10 +809,12 @@ the WordPress plugin.
 2. **Export, while the WordPress site is still up.** Each person's key pair,
    and the followers if the old site is going away before the import runs. The
    plugin's README says how. Note the actor id and the numeric actor id off
-   `https://example.com/?author=2`, and take a WXR export under Tools > Export.
+   `https://example.com/?author=2`, take a WXR export under Tools > Export,
+   and copy `wp-content/uploads`, which the export does not carry.
 3. **Install the WordPress plugin and import.** Add `@geekity/plugin-wordpress`
    to the site's dependencies and to `plugins` in its config, then run
-   `geekity import wordpress example.WordPress.xml` for the content and
+   `geekity import wordpress example.WordPress.xml --uploads wp-content/uploads`
+   for the content and media, and
    `geekity import wordpress-actor ada --actor-id … --wordpress-id … --keypair ada.keypair.json`
    for each person. Both work before the plugin is enabled. Check the reports:
    every post should be written, every conflict or clash resolved, every
@@ -834,7 +836,9 @@ the WordPress plugin.
    follower's server refetches the actor and learns the new endpoints.
 6. **Disable it.** Once every path says _Never_ again for long enough — weeks
    rather than days, since a quiet instance refetches rarely — disable the
-   plugin. The paths go away on the very next request, with nothing restarted,
+   plugin. Disabling it also ends the redirects from the old
+   `/wp-content/uploads/` media URLs, so a site that still gets links to
+   those keeps it enabled. The paths go away on the very next request, with nothing restarted,
    and if something was still using them you can enable it again just as
    quickly.
 

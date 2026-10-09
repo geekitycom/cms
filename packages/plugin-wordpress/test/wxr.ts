@@ -14,6 +14,7 @@ export interface TestItem {
   readonly creator?: string;
   readonly password?: string;
   readonly parent?: number;
+  readonly attachmentUrl?: string;
   readonly terms?: readonly { taxonomy: string; slug: string; name: string }[];
   readonly meta?: readonly { key: string; value: string }[];
   readonly comments?: readonly TestComment[];
@@ -83,6 +84,7 @@ function item(entry: TestItem): string {
 		<wp:post_type><![CDATA[${type}]]></wp:post_type>
 		<wp:post_password><![CDATA[${entry.password ?? ''}]]></wp:post_password>
 		<wp:is_sticky>0</wp:is_sticky>
+${entry.attachmentUrl === undefined ? '' : `		<wp:attachment_url><![CDATA[${entry.attachmentUrl}]]></wp:attachment_url>`}
 ${(entry.terms ?? [])
   .map(
     (term) =>

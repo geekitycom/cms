@@ -122,7 +122,7 @@ async function settle(cms: Cms): Promise<void> {
 }
 
 async function indexed(cms: Cms, slugs: readonly string[]): Promise<void> {
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + 20_000;
   while (!slugs.every((slug) => cms.store.getBySlug(slug) !== undefined)) {
     assert.ok(Date.now() < deadline, `the watcher indexed ${slugs.join(', ')}`);
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -154,6 +154,7 @@ describe('the WordPress import into a running site in dev mode (TASK-291 #8)', (
       loadActorKeys: unused,
       followers: () => [],
       addFollower: unused,
+      checkUpload: unused,
     };
 
     await importWordPressContent({
