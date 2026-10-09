@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/geekitycom/cms/compare/plugin-llm-v0.2.0...plugin-llm-v0.2.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **plugin-llm:** accept any later 0.x core ([8121838](https://github.com/geekitycom/cms/commit/81218384196d972964b568681891888a0f6ef7fa))
+
 ## [0.2.0](https://github.com/geekitycom/cms/compare/plugin-llm-v0.1.0...plugin-llm-v0.2.0) (2026-10-09)
 
 

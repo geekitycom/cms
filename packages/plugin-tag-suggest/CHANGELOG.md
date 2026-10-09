@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/geekitycom/cms/compare/plugin-tag-suggest-v0.2.0...plugin-tag-suggest-v0.2.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **plugin-tag-suggest:** accept any later 0.x core ([db2f04e](https://github.com/geekitycom/cms/commit/db2f04ea3ae6ee4171839114135729676da1f1d1))
+* **plugin-tag-suggest:** offer reach tags in a readable spelling ([482642e](https://github.com/geekitycom/cms/commit/482642e8caac1a9bc95344dc1daf5629c8d43817))
+
 ## [0.2.0](https://github.com/geekitycom/cms/compare/plugin-tag-suggest-v0.1.0...plugin-tag-suggest-v0.2.0) (2026-10-09)
 
 

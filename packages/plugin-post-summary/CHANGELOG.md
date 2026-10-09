@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/geekitycom/cms/compare/plugin-post-summary-v0.2.0...plugin-post-summary-v0.2.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **plugin-post-summary:** accept any later 0.x core ([3f968ef](https://github.com/geekitycom/cms/commit/3f968efd20c3a9ffc874fb6e53bf9114a2be512d))
+
 ## [0.2.0](https://github.com/geekitycom/cms/compare/plugin-post-summary-v0.1.0...plugin-post-summary-v0.2.0) (2026-10-09)
 
 
