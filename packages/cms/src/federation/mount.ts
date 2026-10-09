@@ -244,6 +244,10 @@ async function activityStreamsDocument(
     }
   }
   if (stored === undefined) return undefined;
+  const now = c.var.store.now();
+  if (!isFederatedDocument(stored, now) && !isGone(stored, now)) {
+    return wantsObject ? notFound(c) : undefined;
+  }
   if (wantsObject) return await article(c, federation, stored);
   // A renamed post's old URL is its stored id (decision-20). Once a new
   // document takes that URL over, a browser there is reading the new one; the

@@ -1315,6 +1315,37 @@ describe('a post whose file already names an activitypub.id', () => {
     assert.equal(response.headers.get('location'), '/2011/06/old-news/');
   });
 
+  it('answers nothing at the stored id of a draft, scheduled or non-public post (TASK-297)', async () => {
+    const withheld = (p: number, date: string, ...extra: readonly string[]): string =>
+      [
+        '---',
+        `title: Withheld ${p}`,
+        `date: '${date}'`,
+        `permalink: /withheld/${p}/`,
+        ...extra,
+        'activitypub:',
+        `  id: 'https://blog.example/?p=${p}'`,
+        '---',
+        '',
+        'Secret body.',
+        '',
+      ].join('\n');
+    const instance = await site({
+      'posts/2011-06-06-draft.md': withheld(901, '2011-06-06T09:00:00Z', 'draft: true'),
+      'posts/2099-01-01-scheduled.md': withheld(902, '2099-01-01T09:00:00Z'),
+      'posts/2011-06-06-private.md': withheld(903, '2011-06-06T09:00:00Z', 'visibility: private'),
+    });
+
+    for (const p of [901, 902, 903]) {
+      const object = await get(instance, `/?p=${p}`, ACTIVITY_STREAMS);
+      assert.equal(object.status, 404, `?p=${p} is not served to a peer`);
+      assert.doesNotMatch(await object.text(), /Secret body/);
+
+      const browser = await get(instance, `/?p=${p}`, 'text/html');
+      assert.equal(browser.headers.get('location'), null, `?p=${p} does not redirect a browser`);
+    }
+  });
+
   it('serves a path-shaped stored id the same way', async () => {
     const instance = await site({
       'posts/2011-06-06-old-news.md': [
