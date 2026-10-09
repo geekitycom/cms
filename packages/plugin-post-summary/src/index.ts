@@ -89,6 +89,10 @@ export function cleanTitle(text: string): string {
 }
 
 /** The draft as the model reads it. */
+function withoutTitle(draft: PluginEditorDraft): PluginEditorDraft {
+  return { ...draft, title: '' };
+}
+
 function draftText(draft: PluginEditorDraft): string {
   const body =
     draft.body.length > BODY_CHARACTERS
@@ -105,10 +109,6 @@ function draftText(draft: PluginEditorDraft): string {
     .join('\n');
 }
 
-/**
- * Whether two values say the same, ignoring case, spacing and trailing
- * punctuation, so a suggestion that only re-cases the field is no suggestion.
- */
 function sameText(a: string, b: string): boolean {
   const key = (text: string) =>
     text
@@ -157,10 +157,6 @@ function titleStyle(recentTitles: readonly string[]): string[] {
       ];
 }
 
-/**
- * The model never sees the current title: shown it, a cautious model hands
- * it back, or an edit of it, instead of a title drawn from the body.
- */
 async function suggestTitle(
   llm: LlmService,
   { draft, recentTitles, signal }: PluginEditorContext,
@@ -171,7 +167,7 @@ async function suggestTitle(
   const completion = await llm.complete<{ titles: string[] }>({
     messages: [
       { role: 'system', content: system(TITLE_INSTRUCTION, draft, titleStyle(recentTitles)) },
-      { role: 'user', content: draftText({ ...draft, title: '' }) },
+      { role: 'user', content: draftText(withoutTitle(draft)) },
     ],
     schema: {
       type: 'object',

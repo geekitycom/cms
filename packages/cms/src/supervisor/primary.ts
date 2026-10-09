@@ -9,10 +9,6 @@
  * empties its queues, goes read-only) before the new one is forked, so the
  * new worker's boot migrations run alone.
  *
- * A reload starts when the serving worker asks (Reload, or a change on the
- * Plugins screen), when `geekity plugin` asks over the control socket, or
- * when the plugins folder has changed and then stood still (TASK-309).
- *
  * This module is the state machine alone. The workers, the clock, the folder
  * and the process are handed in, so the order of a reload is tested without
  * starting a process; {@link superviseCluster} binds it to `node:cluster`.
