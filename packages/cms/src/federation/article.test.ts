@@ -1381,6 +1381,30 @@ describe('a post whose file already names an activitypub.id', () => {
     assert.equal((await get(instance, '/', 'text/html')).status, 200);
     assert.equal((await get(instance, '/?p=999', 'text/html')).status, 200);
   });
+
+  it('keeps its object id, permalink and redirect when it names a feed guid (TASK-292)', async () => {
+    const instance = await site({
+      'posts/2011-06-06-old-news.md': MIGRATED['posts/2011-06-06-old-news.md'].replace(
+        'permalink: /2011/06/old-news/\n',
+        "permalink: /2011/06/old-news/\nguid: 'https://blog.example/essays/old-news/'\n",
+      ),
+    });
+
+    const atPermalink = await get(instance, '/2011/06/old-news/', ACTIVITY_STREAMS);
+    const article = (await atPermalink.json()) as Record<string, unknown>;
+    assert.equal(article['id'], 'https://blog.example/?p=813');
+    assert.equal(article['url'], `${BASE_URL}/2011/06/old-news/`);
+
+    assert.equal((await get(instance, '/?p=813', ACTIVITY_STREAMS)).status, 200);
+    const browser = await get(instance, '/?p=813', 'text/html');
+    assert.equal(browser.status, 301);
+    assert.equal(browser.headers.get('location'), '/2011/06/old-news/');
+
+    assert.equal((await get(instance, '/2011/06/old-news/', 'text/html')).status, 200);
+    const atGuid = await get(instance, '/essays/old-news/', 'text/html');
+    assert.equal(atGuid.status, 404, 'the guid is a name, not a URL the site answers');
+    assert.equal((await get(instance, '/essays/old-news/', ACTIVITY_STREAMS)).status, 404);
+  });
 });
 
 describe('the HTML post page', () => {

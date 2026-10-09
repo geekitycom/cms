@@ -39,21 +39,22 @@ import type { ReplyContext } from '../webmention/reply-context.ts';
  * cannot print a second-best version of any of them. The one pair left,
  * {@link FeedItem.id} beside {@link FeedItem.link}, is two real things: what
  * the post is called and where it is read, which differ only for a post
- * carrying a stored id.
+ * carrying a stored id or a `guid`.
  */
 export interface FeedItem {
   /**
-   * The post's name: its ActivityStreams object id, which after decision-13 is
-   * the permalink, or the stored id a migrated post carries. decision-12 makes
-   * this every feed's key for the post, so all three formats print it: RSS as
-   * `guid`, Atom as `<id>` and JSON Feed as `id`.
+   * The post's name: the `guid` its front matter sets, else its ActivityStreams
+   * object id, which after decision-13 is the permalink, or the stored id a
+   * migrated post carries. decision-12 makes this every feed's key for the
+   * post, so all three formats print it: RSS as `guid`, Atom as `<id>` and
+   * JSON Feed as `id`.
    */
   id: string;
   /**
    * Where the post is read: its permalink, absolute on the site's base URL.
    * The same in every format — RSS's `link`, Atom's `rel="alternate"` and JSON
    * Feed's `url` — and equal to {@link FeedItem.id} unless the post carries a
-   * stored one.
+   * stored id or a `guid`.
    */
   link: string;
   /**
@@ -229,10 +230,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   const photos = photosOf(document.extra);
 
   const item: FeedItem = {
-    // A page or a draft has no ActivityStreams id to advertise, and falls back
-    // to its address. A feed only ever carries published posts, so in practice
-    // this is the object id; the fallback is what keeps the shape total.
-    id: activityStreamsId(document, baseUrl) ?? link,
+    id: feedGuidOf(document) ?? activityStreamsId(document, baseUrl) ?? link,
     link,
     terms: [...document.categories, ...document.tags],
     summary: feedExcerpt(document),
@@ -334,6 +332,11 @@ function photosHtml(photos: readonly Photo[], library: AltTextLibrary, baseUrl: 
         ` alt="${escapeXml(photoAlt(photo, library) ?? '')}"></figure>`,
     )
     .join('');
+}
+
+function feedGuidOf(document: Document): string | undefined {
+  const guid = document.extra['guid'];
+  return typeof guid === 'string' && URL.canParse(guid.trim()) ? guid.trim() : undefined;
 }
 
 function ownImage(document: Document): string | undefined {

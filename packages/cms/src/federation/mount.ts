@@ -212,10 +212,10 @@ function storedActorAt(c: Context<GeekityEnv>): User | undefined {
  * decision-13, and a peer that dereferences a link somebody shared lands on
  * the object rather than on a page it cannot read. The other is the
  * `activitypub.id` a migrated post's file carries: the name its followers,
- * its replies and its RSS subscribers already hold, which has to keep
- * answering or every copy out there points at nothing. A browser that follows
- * one of those old links is sent on to the permalink, because that is the URL
- * a person should end up at.
+ * its replies and, unless it sets a `guid`, its RSS subscribers already hold,
+ * which has to keep answering or every copy out there points at nothing. A
+ * browser that follows one of those old links is sent on to the permalink,
+ * because that is the URL a person should end up at.
  *
  * Anything else — a browser at a permalink, a `.md` or `.json` request, a
  * page, a listing — gets `undefined` and falls through to the public site

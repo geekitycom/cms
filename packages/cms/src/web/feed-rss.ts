@@ -148,8 +148,8 @@ function channelImage(source: FeedSource, link: string): string[] {
  * One item as RSS.
  *
  * The `guid` is the item's id, which decision-12 makes every feed's key for
- * the post: after decision-13 that is the permalink itself, or the stored id a
- * migrated post carries. `isPermaLink` tells a reader which of the two it is
+ * the post: after decision-13 that is the permalink itself, or the stored id or
+ * `guid` a migrated post carries. `isPermaLink` tells a reader which it is
  * looking at — `true` when the id is the permalink, so a reader that resolves
  * a guid finds the post, and `false` when it is a stored name like WordPress's
  * `?p=813`, which is the id that post's subscribers already hold.
