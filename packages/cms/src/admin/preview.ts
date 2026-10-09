@@ -48,13 +48,16 @@ export function mountPreview(app: Hono<GeekityEnv>): void {
         // published page would show rather than the plain image behind it, and
         // with the author resolved, so the byline reads the way the published
         // page's would (TASK-67).
-        documentContext(
-          document,
-          c.var.config,
-          authorContext(listUsers(c.var.config.dataDir), document.author),
-          { lead: true },
-          (url) => c.var.replyContexts.read(url),
-        ),
+        {
+          ...documentContext(
+            document,
+            c.var.config,
+            authorContext(listUsers(c.var.config.dataDir), document.author),
+            { lead: true },
+            (url) => c.var.replyContexts.read(url),
+          ),
+          editorPreview: true,
+        },
       ),
     );
   });

@@ -2528,6 +2528,11 @@ export default defineConfig({
 A name that is not a header name, or a value that is empty or has a line break
 in it, stops the site at boot. There is no environment variable for these.
 
+A policy that limits scripts has to allow whatever the site's theme adds to
+every page. For the Umami and Google Analytics snippets, the theme README's
+[Adding to every page](./themes/default/README.md#adding-to-every-page) lists
+the directives each one needs.
+
 Every response under `/admin`, static files and redirects included, gets three
 stricter values in their place, whatever `securityHeaders` says:
 
@@ -3765,6 +3770,17 @@ can extend a packaged one by name:
 The admin is not themed. Its templates and its static files live in a tree of
 their own with a loader of their own, deliberately off this search path, so no
 theme can shadow the login form or the CSRF field inside it.
+
+Analytics and other markup that goes on every page need no layout at all. The
+packaged `layouts/base.njk` includes `partials/head-end.njk` last in `<head>`
+and `partials/body-end.njk` last in `<body>`, both empty in the package, so a
+theme of `theme.json` and `partials/head-end.njk` holding the Umami or Google
+Analytics snippet adds it to every public HTML page and keeps every other
+packaged template. Neither is printed in a feed, a Markdown, text or JSON
+representation, mail, the admin or the editor's preview. The theme README's
+[Adding to every page](./themes/default/README.md#adding-to-every-page) has the
+Umami and GA4 example, the Docker volume, and what a Content-Security-Policy
+has to allow for them.
 
 The packaged theme is the Paper design (doc-9) on the andrewshell.org shell
 (decision-16). Its stylesheet is written in Tailwind v4 in

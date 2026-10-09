@@ -28,6 +28,12 @@
     content           the page body
     footer            the site footer
     scripts           scripts at the end of <body>
+
+  Two partials, empty here, are included outside every block so that no layout
+  can drop them: `partials/head-end.njk` last in <head> and
+  `partials/body-end.njk` last in <body>. A site theme fills either one to add
+  analytics or a widget to every page without overriding a layout. The
+  editor's preview in the admin sets `editorPreview` and leaves both out.
 #}{% import "partials/feeds.njk" as feeds %}
 {%- import "partials/menu.njk" as nav %}
 {#- Whether this is the front page, which is the one page the header and the
@@ -247,6 +253,7 @@
     <link rel="manifest" href="{{ "/manifest.webmanifest" | url }}">
     {% include "partials/jsonld.njk" %}
     {% endblock %}
+    {% if not editorPreview %}{% include "partials/head-end.njk" %}{% endif %}
   </head>
   <body>
     <a class="screen-reader-text" href="#main">Skip to content</a>
@@ -332,5 +339,6 @@
     <script src="{{ "highlight.js" | asset }}" defer></script>
     {% endif %}
     {% endblock %}
+    {% if not editorPreview %}{% include "partials/body-end.njk" %}{% endif %}
   </body>
 </html>
