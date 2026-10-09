@@ -354,6 +354,14 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     );
   }
 
+  async function walkDirectory(absolutePath: string): Promise<void> {
+    const from = toRelative(contentDir, absolutePath);
+    if (from === undefined || watcher === undefined) return;
+    const found = await walk(contentDir, logger, from);
+    if (watcher === undefined) return;
+    for (const relativePath of found) handle(path.join(contentDir, relativePath));
+  }
+
   async function startWatching(): Promise<void> {
     if (watcher !== undefined) return;
 
@@ -367,6 +375,13 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     started.on('add', handle);
     started.on('change', handle);
     started.on('unlink', handle);
+    // chokidar can miss a file written into a directory it has only just seen
+    // appear, so a new directory is walked once its own watch is in place.
+    started.on('addDir', (absolutePath: string) => {
+      setTimeout(() => {
+        void walkDirectory(absolutePath);
+      }, options.debounceMs ?? DEFAULT_DEBOUNCE_MS);
+    });
     started.on('error', (error: unknown) => {
       logger.warn(`Content watcher error: ${messageOf(error)}`);
     });
@@ -491,11 +506,11 @@ function messageOf(error: unknown): string {
 }
 
 /**
- * Every document file under the content directory, content-relative and
- * sorted. A directory that cannot be read is reported and skipped rather than
- * failing the whole walk.
+ * Every document file under the content directory, or under `from` inside it,
+ * content-relative and sorted. A directory that cannot be read is reported and
+ * skipped rather than failing the whole walk.
  */
-async function walk(contentDir: string, logger: SyncLogger): Promise<string[]> {
+async function walk(contentDir: string, logger: SyncLogger, from = ''): Promise<string[]> {
   const found: string[] = [];
 
   async function visit(directory: string, prefix: string): Promise<void> {
@@ -519,7 +534,7 @@ async function walk(contentDir: string, logger: SyncLogger): Promise<string[]> {
     }
   }
 
-  await visit(contentDir, '');
+  await visit(path.join(contentDir, from), from);
   return found.sort();
 }
 
