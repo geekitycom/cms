@@ -89,10 +89,6 @@ export function cleanTitle(text: string): string {
 }
 
 /** The draft as the model reads it. */
-function withoutTitle(draft: PluginEditorDraft): PluginEditorDraft {
-  return { ...draft, title: '' };
-}
-
 function draftText(draft: PluginEditorDraft): string {
   const body =
     draft.body.length > BODY_CHARACTERS
@@ -107,6 +103,10 @@ function draftText(draft: PluginEditorDraft): string {
   ]
     .filter((line) => line !== undefined)
     .join('\n');
+}
+
+function withoutTitle(draft: PluginEditorDraft): PluginEditorDraft {
+  return { ...draft, title: '' };
 }
 
 function sameText(a: string, b: string): boolean {

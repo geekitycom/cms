@@ -172,12 +172,9 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     }
     if (state.phase !== 'serving' || signature === compared) return;
     if (now - seen.since < PLUGIN_SETTLE_MS) return;
-    compared = signature;
     const folder = fingerprint();
-    if (folder === undefined) {
-      compared = undefined;
-      return;
-    }
+    if (folder === undefined) return;
+    compared = signature;
     if (folder === loaded || folder === failed) return;
     options.log('The plugins folder changed and has settled.');
     beginReload(state.worker, folder);

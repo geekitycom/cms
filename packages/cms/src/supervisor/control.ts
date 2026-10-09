@@ -8,8 +8,10 @@ import type { ReloadOutcome } from './supervision.ts';
 
 const RELOAD = 'reload';
 
-// The data folder can sit on a bind mount that cannot hold a socket, or at a
-// path longer than the Unix socket path limit, so the socket lives in tmpdir().
+/**
+ * The data folder can sit on a bind mount that cannot hold a socket, or at a
+ * path longer than the Unix socket path limit, so the socket lives in tmpdir().
+ */
 export function controlSocketPath(dataDir: string): string {
   const id = createHash('sha256').update(path.resolve(dataDir)).digest('hex').slice(0, 16);
   return path.join(tmpdir(), `geekity-${id}.sock`);
@@ -84,14 +86,15 @@ export function askToReload(dataDir: string): Promise<ReloadOutcome | undefined>
 }
 
 function parseOutcome(text: string): ReloadOutcome | undefined {
+  let value: { ok?: unknown; error?: unknown } | null;
   try {
-    const value = JSON.parse(text) as { ok?: unknown; error?: unknown } | null;
-    if (value?.ok === true) return { ok: true };
-    if (value?.ok === false && typeof value.error === 'string') {
-      return { ok: false, error: value.error };
-    }
+    value = JSON.parse(text) as { ok?: unknown; error?: unknown } | null;
   } catch {
     return undefined;
+  }
+  if (value?.ok === true) return { ok: true };
+  if (value?.ok === false && typeof value.error === 'string') {
+    return { ok: false, error: value.error };
   }
   return undefined;
 }
