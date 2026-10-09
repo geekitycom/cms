@@ -329,7 +329,7 @@ Nothing is installed or enabled on your behalf.
 - the tarball does not match the registry's integrity hash
 - the package has no bundle (`dist/bundle/index.js` and `plugin.json`). Such a
   plugin installs only with npm, on a site with its own entry file.
-- the bundle targets a newer host API version than this core provides
+- the bundle targets a host API version other than the one this core provides
 
 To remove a plugin, delete its folder and press Reload:
 
@@ -342,8 +342,8 @@ folder, `index.js` and `plugin.json`, to `plugins/<package name>/` and press
 Reload.
 
 A folder that cannot load does not stop the site. Its row on the Plugins screen
-says why: the bundle failed to import, it exports no plugin, it targets a
-newer host API, or its manifest names a range of `@geekity/cms` or of a
+says why: the bundle failed to import, it exports no plugin, it targets
+another host API version, or its manifest names a range of `@geekity/cms` or of a
 required plugin that is not met. The commands a folder plugin adds, such as
 `geekity import wordpress-actor`, run with `docker compose exec` the same way
 as core's.
@@ -390,11 +390,11 @@ range:
   "geekity": {
     "plugin": true,
     "hostApi": 1,
-    "requires": { "@geekity/plugin-llm": "^0.1.0" }
+    "requires": { "@geekity/plugin-llm": ">=0.2.0 <1.0.0" }
   },
   "peerDependencies": {
-    "@geekity/cms": "^0.24.0",
-    "@geekity/plugin-llm": "^0.1.0"
+    "@geekity/cms": ">=0.26.0 <1.0.0",
+    "@geekity/plugin-llm": ">=0.2.0 <1.0.0"
   }
 }
 ```
@@ -419,14 +419,16 @@ mode `0600`, and an environment variable overrides it, as the
 
 **The host API version and the peer range.** `HOST_API_VERSION` in
 `@geekity/cms/plugin` is the version of the host API this core provides. A
-plugin that targets a newer one is unavailable, with the reason on the Plugins
-screen. The peer range of `@geekity/cms` says which releases of core the
-package works with: npm checks it for a site that installs with npm, and the
-registry checks the copy in `plugin.json` for a folder install. The plugin
-packages in this repository write `workspace:^`, which becomes a caret range on
-the core version they were built with, so before 1.0 each one accepts a single
-core minor. [Core releases and the plugins' core range](#core-releases-and-the-plugins-core-range)
-says what that means for a core release.
+plugin that targets another version is unavailable, with the reason on the
+Plugins screen. The peer range of `@geekity/cms` says which releases of core
+the package works with: npm checks it for a site that installs with npm, and
+the registry checks the copy in `plugin.json` for a folder install. Before 1.0,
+write it as `>=<the core you built against> <1.0.0`, and write the range of a
+required plugin the same way. The host API version, not the core minor, is what
+marks a break.
+[Core releases and the plugins' core range](#core-releases-and-the-plugins-core-range)
+says how the packages in this repository get those ranges, and when the host
+API version goes up.
 
 **The bundle.** A folder install has no `node_modules`, so each plugin package
 also ships one self-contained ES module with every dependency inlined. The
@@ -438,8 +440,9 @@ plugin packages in this repository build it with the shared script after `tsc`:
 
 It writes `dist/bundle/index.js` and `dist/bundle/plugin.json`, which holds the
 package's name, version, host API version and the peer ranges of
-`@geekity/cms` and of each required plugin. The build fails when the package
-is not marked a plugin, when a required plugin is not a peer dependency, when
+`@geekity/cms` and of each required plugin, as the packed `package.json`
+publishes them. The build fails when the package is not marked a plugin, when
+a required plugin is not a peer dependency with the same range, when
 the plugin's name, version, `hostApi` or `requires` differ from `package.json`,
 and on a native module, which a bundle cannot carry. A plugin that needs a
 native module is installed with npm only.
@@ -2801,28 +2804,44 @@ untested step.
 
 ### Core releases and the plugins' core range
 
-Each plugin package peer-depends on `@geekity/cms` with `workspace:^`. Both the
-published `package.json` and the bundle's `plugin.json` turn that into a caret
-range on the core version the plugin was built with: a plugin built while core
-was 0.25.0 accepts `^0.25.0`. Before 1.0, a caret range accepts patches only,
-so that plugin accepts core 0.25.x and nothing else.
+A plugin accepts every core from the one it was built against up to 1.0. A
+plugin package built while core was 0.26.0 publishes the peer range
+`>=0.26.0 <1.0.0`, in its `package.json` and in its bundle's `plugin.json`.
+It stays available on core 0.27.0 and every later 0.x release, so a core minor
+release does not need a release of every plugin. A core older than the one the
+plugin was built against is refused. A folder install shows the plugin as
+unavailable, with the reason, and `geekity plugin add` says so when it
+installs it. npm reports a peer dependency conflict.
 
-A core minor release therefore leaves every plugin that is not released with it
-out of range:
+Each plugin package writes its core peer dependency as `workspace:^`. pnpm
+publishes that as a caret range, and before 1.0 a caret range accepts a single
+core minor. The `beforePacking` hook in `.pnpmfile.mjs` replaces it with
+`>=<core version> <1.0.0` on every `pnpm pack`, which is how `pnpm release`
+builds the tarballs it publishes.
+`scripts/build-plugin-bundle.js` writes the same range into `plugin.json`, and
+`pnpm release` refuses a plugin tarball whose `plugin.json` ranges differ from
+its `package.json`. The lower bound is the core version in the workspace when
+the plugin is packed. release-please bumps that version in the release pull
+request, so a plugin released with core is built against the new core.
 
-- A folder install, as on Docker, shows the plugin as unavailable on the
-  Plugins screen, with the reason "It needs @geekity/cms ^0.25.0, and this core
-  is 0.26.0". The site boots and the other plugins run.
-- A site that installs with npm gets a peer dependency conflict when it
-  upgrades core past the range.
+A plugin's range of another plugin is written out in full, the same in
+`geekity.requires`, in the plugin's `requires` and in the peer dependency as
+`workspace:>=0.2.0 <1.0.0`. pnpm publishes the range after `workspace:` as it
+is. The bundle build refuses a peer range that differs from `geekity.requires`.
+Raise the lower bound when the plugin starts to use something that a later
+release of the required plugin added.
 
-release-please bumps a plugin only when commits changed that plugin's folder,
-so a core minor release does not re-release the plugins by itself. Until the
-range changes, a core minor release needs a release of every plugin built
-against the new core. Land a commit in each plugin's folder before merging the
-release pull request, so that all of them go out in the same grouped release
-pull request. A plugin released in that pull request is built against the new
-core version, and so accepts it.
+The host API version is the gate that marks a break. `HOST_API_VERSION` in
+`packages/cms/src/plugin.ts` goes up in the core release that changes
+`@geekity/cms/plugin` so a plugin written for the current version would fail:
+a type, method or field removed or renamed, an argument or return value
+reshaped, or a behavior a plugin relies on changed. Adding a method, an
+optional field or an extension point keeps the number. A plugin runs only on a
+core that provides exactly the host API version it targets. A release that
+raises the number therefore needs a release of every plugin, built against the
+new host API. Land a commit in each plugin's folder before merging the release
+pull request, so that all of them go out in the same grouped release pull
+request.
 
 ### Publishing the Docker image
 
