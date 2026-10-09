@@ -75,6 +75,10 @@ interface Candidate {
   readonly modelOrder: number;
 }
 
+function seedNameWhenCopiedFolded(modelSpelling: string, key: string): string {
+  return modelSpelling === key ? (SEED_NAMES.get(key) ?? modelSpelling) : modelSpelling;
+}
+
 function usedHere(candidate: Candidate): boolean {
   return candidate.siteSpelling !== undefined;
 }
@@ -120,8 +124,7 @@ function candidatesFrom(
     suggested.forReach,
     FOR_REACH_MOST,
     (key) => SEED_FOLLOWERS.has(key) && !postKeys.has(key),
-    (modelSpelling, key) =>
-      modelSpelling === key ? (SEED_NAMES.get(key) ?? modelSpelling) : modelSpelling,
+    seedNameWhenCopiedFolded,
   );
   return { forThisPost, forReach };
 }
