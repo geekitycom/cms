@@ -13,7 +13,7 @@ import type {
   PluginEditorDraft,
   PluginEditorSuggestion,
 } from '@geekity/cms/plugin';
-import type { LlmFailure, LlmService } from '@geekity/plugin-llm';
+import type { LlmService } from '@geekity/plugin-llm';
 
 import { followerCounts, LOOKUP_TIMEOUT_MS } from './followers.ts';
 import type { FollowerCount, FollowerLookup } from './followers.ts';
@@ -69,34 +69,6 @@ export function hashtagKey(tag: string): string {
   for (const [pattern, replacement] of TRANSLITERATIONS)
     value = value.replace(pattern, replacement);
   return value.replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
-}
-
-/** What goes wrong with the model in plain words, with where to put it right. */
-function failureWords(error: LlmFailure): string {
-  switch (error.kind) {
-    case 'unconfigured':
-      return 'No language model is set up yet. Add an API key on Plugins > LLM, then try again.';
-    case 'unauthorized':
-      return 'The language model provider refused the API key. Check the key on Plugins > LLM.';
-    case 'no-credit':
-      return 'The account behind the API key has no credit left. Add credit with the provider, then try again.';
-    case 'rate-limited':
-      return error.retryAfter === undefined
-        ? 'The provider is limiting requests. Try again shortly.'
-        : `The provider is limiting requests. Try again in ${String(error.retryAfter)} seconds.`;
-    case 'unavailable':
-      return 'The provider could not answer just now. Try again in a while.';
-    case 'rejected':
-      return 'The provider refused the request. The model chosen on Plugins > LLM may not give structured answers; choose another model there.';
-    case 'invalid-output':
-      return 'The model’s answer was not usable. Try again, or choose another model on Plugins > LLM.';
-    case 'timeout':
-      return `The model did not answer within ${String(error.seconds)} seconds. Try again.`;
-    case 'aborted':
-      return 'The request was stopped before the answer came.';
-    case 'network':
-      return 'The language model provider could not be reached. Check the base URL on Plugins > LLM.';
-  }
 }
 
 /** One candidate: what goes in the field, and the key tags.pub knows it by. */
@@ -201,7 +173,7 @@ async function suggestTags(
     },
     signal,
   });
-  if (!completion.ok) return { ok: false, message: failureWords(completion.error) };
+  if (!completion.ok) return { ok: false, message: completion.message };
 
   const candidates = candidatesFrom(completion.value.tags, siteTags);
   if (candidates.length === 0) {
@@ -225,7 +197,7 @@ export default definePlugin({
     'Suggests tags for a post in the editor, from the language model the LLM plugin connects to, ' +
     'ranked by how many people follow each tag on tags.pub, when the author asks.',
   hostApi: 1,
-  requires: { [LLM]: '^0.1.0' },
+  requires: { [LLM]: '^0.2.0' },
   register(host) {
     const settings = host.settings(SETTINGS);
     host.editorAction({

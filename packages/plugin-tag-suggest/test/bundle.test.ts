@@ -4,8 +4,8 @@ import { after, before, describe, it } from 'node:test';
 import type { Plugin } from '@geekity/cms';
 import llm from '@geekity/plugin-llm';
 
-import { fakeProvider, replying } from './provider.ts';
-import type { FakeProvider } from './provider.ts';
+import { fakeProvider, replying } from '../../plugin-llm/test/provider.ts';
+import type { FakeProvider } from '../../plugin-llm/test/provider.ts';
 import { actionUrl, closeSites, tagSite } from './site.ts';
 import { fakeTagsPub } from './tags-pub.ts';
 import type { FakeTagsPub } from './tags-pub.ts';

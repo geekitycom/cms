@@ -7,8 +7,14 @@ import llm from '@geekity/plugin-llm';
 
 import tagSuggest, { hashtagKey } from '../src/index.ts';
 import { VERSION } from '../src/version.ts';
-import { fakeProvider, replying } from './provider.ts';
-import type { FakeProvider } from './provider.ts';
+import {
+  fakeProvider,
+  OPENROUTER_BASE_URL,
+  replying,
+  standInForOpenRouter,
+  thinker,
+} from '../../plugin-llm/test/provider.ts';
+import type { FakeProvider } from '../../plugin-llm/test/provider.ts';
 import { actionUrl, buttonsOn, closeSites, TAGS, tagSite } from './site.ts';
 import { fakeTagsPub } from './tags-pub.ts';
 import type { FakeTagsPub } from './tags-pub.ts';
@@ -42,7 +48,14 @@ after(async () => {
   await tagsPub.close();
 });
 
-const site = (options: { apiKey?: string | undefined; enabled?: boolean } = { apiKey: KEY }) =>
+const site = (
+  options: {
+    apiKey?: string | undefined;
+    enabled?: boolean;
+    baseUrl?: string;
+    model?: string;
+  } = { apiKey: KEY },
+) =>
   tagSite([llm, tagSuggest], {
     baseUrl: provider.baseUrl,
     tagsServer: tagsPub.url,
@@ -215,9 +228,47 @@ describe('Suggest tags', () => {
     const { admin } = await site({ apiKey: undefined });
     assert.deepEqual(await suggest(admin), {
       ok: false,
-      message: 'No language model is set up yet. Add an API key on Plugins > LLM, then try again.',
+      message: 'No API key is set on Plugins > LLM, so nothing was sent.',
     });
     assert.deepEqual(tagsPub.lookups, []);
+  });
+
+  it('suggests tags from a reasoning model on OpenRouter, asked to keep its reasoning short', async () => {
+    const stop = standInForOpenRouter(provider);
+    try {
+      const { admin } = await site({
+        apiKey: KEY,
+        baseUrl: OPENROUTER_BASE_URL,
+        model: 'acme/thinker',
+      });
+      provider.answer(thinker(JSON.stringify({ tags: ['IndieWeb'] })));
+      const answer = await suggest(admin);
+      assert.equal(answer.ok, true);
+      assert.deepEqual(
+        answer.choices?.map((choice) => choice.value),
+        ['IndieWeb'],
+      );
+    } finally {
+      stop();
+    }
+  });
+
+  it('shows why a reply was cut off, in the words the LLM plugin gives', async () => {
+    const stop = standInForOpenRouter(provider);
+    try {
+      const { admin } = await site({
+        apiKey: KEY,
+        baseUrl: OPENROUTER_BASE_URL,
+        model: 'acme/unlisted',
+      });
+      provider.answer(thinker(JSON.stringify({ tags: ['never'] })));
+      const answer = await suggest(admin);
+      assert.equal(answer.ok, false);
+      assert.match(answer.message ?? '', /stopped at its limit of 4096 tokens/);
+      assert.deepEqual(tagsPub.lookups, []);
+    } finally {
+      stop();
+    }
   });
 
   it('asks nothing of an empty draft', async () => {
