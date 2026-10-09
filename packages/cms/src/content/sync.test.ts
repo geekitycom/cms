@@ -361,6 +361,29 @@ describe('a full scan', () => {
     assert.match(warnings[0] ?? '', /not a reply/);
   });
 
+  it('indexes a post whose canonical_href is not an absolute http(s) URL, and says so once', async () => {
+    const warnings: string[] = [];
+    const dir = await contentDir({
+      'posts/2026-09-02-essay.md':
+        "---\ndate: '2026-09-02T09:00:00Z'\ncanonical_href: /essays/essay/\n---\n\nWords.\n",
+      'posts/2026-09-03-crossposted.md':
+        "---\ndate: '2026-09-03T09:00:00Z'\ncanonical_href: https://me.substack.example/p/essay\n---\n\nWords.\n",
+      'posts/2026-09-04-plain.md': "---\ndate: '2026-09-04T09:00:00Z'\n---\n\nWords.\n",
+    });
+    const { sync: content, store: index } = await sync(dir, {
+      logger: { warn: (message) => warnings.push(message) },
+    });
+
+    await content.sync();
+    await content.sync();
+
+    assert.equal(index.listPaths().length, 3, 'all three are indexed');
+    assert.equal(warnings.length, 1, `one warning, for the one bad file: ${warnings.join(' | ')}`);
+    assert.match(warnings[0] ?? '', /posts\/2026-09-02-essay\.md/);
+    assert.match(warnings[0] ?? '', /canonical_href "\/essays\/essay\/"/);
+    assert.match(warnings[0] ?? '', /not an absolute http or https URL/);
+  });
+
   it('is a no-op on a content directory that does not exist', async () => {
     const { sync: content, store: index } = await sync(
       path.join(await temporaryDir('missing'), 'content'),

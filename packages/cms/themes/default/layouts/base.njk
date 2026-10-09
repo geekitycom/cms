@@ -53,6 +53,7 @@
 {% set metaUrl = (page.url or "/") | absoluteUrl %}
 {% set metaImage = shareImage.url if shareImage else "" %}
 {% set isEntry = (type == "post" or type == "page") and not pagination %}
+{% set canonicalUrl = original.url if (isEntry and original) else metaUrl %}
 {#- An author archive is the only page that is about a person: a listing whose
     `author` is whose page this is, rather than the posts page's writer. -#}
 {% set isAuthorArchive = pagination and author.url and url and (author.url in url) %}
@@ -102,7 +103,7 @@
     {% endif %}{% if noindex %}
     <meta name="robots" content="noindex">
     {% endif %}
-    <link rel="canonical" href="{{ (page.url or "/") | absoluteUrl }}">
+    <link rel="canonical" href="{{ canonicalUrl }}">
     <link rel="stylesheet" href="{{ "style.css" | asset }}">
     {% block speculationRules %}
     {#
@@ -188,7 +189,7 @@
     {% if metaDescription %}
     <meta property="og:description" content="{{ metaDescription }}">
     {% endif %}
-    <meta property="og:url" content="{{ metaUrl }}">
+    <meta property="og:url" content="{{ canonicalUrl }}">
     <meta property="og:type" content="{% if isEntry %}article{% else %}website{% endif %}">
     <meta property="og:site_name" content="{{ site.title }}">
     {% if shareImage %}

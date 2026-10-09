@@ -387,6 +387,17 @@ IndieNews and Bridgy Publish look for on the page, and ends with the post's
 copies elsewhere (`syndication`) after **Also on**. A page never prints either,
 and its line is a `p.page-meta` rather than a `p.entry-meta`.
 
+**A post first published elsewhere says so.** A post whose front matter names
+its original with `canonical_href`, an absolute http or https URL such as a
+Substack essay's, has it on the context as `original` (TASK-293). The line
+then reads **Originally published at** and links the original's host as a
+second `u-url` of the h-entry, after the permalink's. It is no
+`u-syndication`, because the original is not a copy of this post, and
+original-post-discovery reads a copy's off-site `u-url` as its original. The
+same URL is the page's `rel="canonical"` and its `og:url`, so search engines
+credit the original. A value that is not an absolute http or https URL is
+ignored, and `geekity sync` names the file.
+
 **Every post's page has one `h1`.** A post with a name of its own is headed by
 it, as above. So is a post with a title and no words, such as a titled like,
 repost or bookmark (TASK-256): its header comes first and its citation after
@@ -919,7 +930,8 @@ mode gets a dark canvas rather than a white flash while the stylesheet loads.
 **The card.** `og:title` is the page's title, or the site's on the front page;
 `og:site_name` is always the site's. `og:type` is `article` on a rendered post
 or page and `website` everywhere else, a listing carrying a page's front matter
-included. `og:url` is the canonical URL. An article also carries
+included. `og:url` is the canonical URL: the page's own, or the `original` a
+post first published elsewhere names. An article also carries
 `article:published_time`, `article:modified_time` (the `updated` date, else the
 publish date), `article:author` (the author's profile URL here, else their
 name) and one `article:tag` per tag.
@@ -1328,6 +1340,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `event`                                     | An event's `{ start, end, location }`: `Date`s, and `{ kind: "place", name }` or `{ kind: "virtual", url }`.      |
 | `syndicateTo`                               | On a post's page, the syndication targets it selects, each `{ id, name, url }`. Empty with none.                  |
 | `syndication`                               | Its copies elsewhere, each `{ url, label }`: front matter `syndication`, and on its page the copies targets made. |
+| `original`                                  | Where it was first published, as `{ url, label }`: front matter `canonical_href`. Absent unless http or https.    |
 | `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |
 | `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
 | `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                       |

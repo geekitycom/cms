@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-09 14:48'
+updated_date: '2026-10-09 15:06'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -75,6 +75,7 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | `activitypub.id` | never written by the CMS. A post's ActivityStreams object id is its permalink (decision-13); this key is read, not minted, so a post migrated from elsewhere keeps the id its followers already hold — `https://example.com/?p=813` — and every `Update` and `Delete` names it |
 | `activitypub.type` | never written by the CMS. `Note` or `Article`, overriding the ActivityStreams type Post Type Discovery derives for the post (decision-17). Any other value is kept in the file, logged as a warning, and ignored. The `activitypub` block is everything about how a post federates, whether the author set it or the CMS wrote it back, and a save never rewrites what the author set |
 | `guid` | the id every feed publishes for the post (TASK-292): RSS's `guid`, Atom's `<id>` and JSON Feed's `id`, in place of the object id decision-12 otherwise prints. A post migrated from elsewhere keeps the guid its feed readers already hold, such as `https://blog.example.com/essays/slug/`, even where it federated as `https://example.com/?p=813`. RSS marks it `isPermaLink="true"` only when it equals the permalink. It changes nothing else: the ActivityStreams object id, the permalink and every redirect stay as they were, and the site answers nothing at the guid's URL. A value that is not an absolute URL is ignored, and the post falls back to `activitypub.id`, else its permalink. The admin editor shows no field for it and keeps it on save |
+| `canonical_href` | where the post was first published, when that is somewhere else (TASK-293), such as a Substack essay republished here. The name is the one an Eleventy site in the wild already used for it, so its files keep their values. An absolute http or https URL becomes the page's `<link rel="canonical">` and `og:url` in place of its own URL, and is on the theme's context as `original` (`{ url, label }`); the default theme prints "Originally published at" and links it as a second `u-url` of the h-entry, after the permalink's. It is no `u-syndication`, which names copies of this post, and original-post-discovery reads a copy's off-site `u-url` as its original. The JSON and Markdown representations carry it in the front matter as written. Any other value is kept in the file, named in a warning by `geekity sync` and when the watcher indexes the file, and ignored. The admin editor shows no field for it and keeps it on save |
 
 Unknown keys are preserved on round trip. The writer emits YAML with a stable key order so diffs stay small.
 

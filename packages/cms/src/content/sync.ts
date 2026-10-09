@@ -7,6 +7,7 @@ import type { FSWatcher } from 'chokidar';
 
 import type { Document, DocumentType } from './document.ts';
 import { handleDirectory } from './handles.ts';
+import { ORIGINAL_FRONT_MATTER_KEY, originalUrlOf } from './original.ts';
 import { parseDocument } from './parser.ts';
 import { replyTarget } from './post-type.ts';
 import { DuplicatePermalinkError, TRASH_DIRECTORY } from './store.ts';
@@ -256,6 +257,12 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     if (document.inReplyTo !== undefined && replyTarget(document) === undefined) {
       logger.warn(
         `${relativePath} names in-reply-to "${document.inReplyTo}", which is not an http or https URL, so it is not a reply.`,
+      );
+    }
+    const original = document.extra[ORIGINAL_FRONT_MATTER_KEY];
+    if (original !== undefined && originalUrlOf(document.extra) === undefined) {
+      logger.warn(
+        `${relativePath} names ${ORIGINAL_FRONT_MATTER_KEY} ${JSON.stringify(original)}, which is not an absolute http or https URL, so the page stays its own canonical URL.`,
       );
     }
 
