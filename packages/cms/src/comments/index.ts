@@ -50,6 +50,7 @@ export {
   heldWebmention,
   intakeComment,
   migrateCommentEmails,
+  putComments,
   readComments,
   rebuildCommentIndexes,
   updateComment,

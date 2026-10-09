@@ -363,6 +363,36 @@ export async function addComment(
   });
 }
 
+/**
+ * Write comments a post already had somewhere else, such as an import from
+ * another platform: each in place of the entry with its id, or after the last.
+ * Every other entry keeps its place and its bytes. Nobody is told, since none
+ * of them is news to anybody, which is why this does not go through
+ * {@link intakeComment}.
+ */
+export async function putComments(
+  records: CommentRecords,
+  slug: string,
+  permalink: string,
+  comments: readonly CommentRecord[],
+): Promise<void> {
+  if (comments.length === 0) return;
+  const file = commentsFile(records.contentDir, slug);
+
+  await withFileLock(file, () => {
+    const held = readPost(records, slug);
+    const post = held.post === '' ? permalink : held.post;
+    const next = [...held.comments];
+    for (const comment of comments) {
+      const at = next.findIndex((entry) => entry.id === comment.id);
+      if (at === -1) next.push(comment);
+      else next[at] = comment;
+    }
+    writePost(records, slug, post, next);
+    for (const comment of comments) records.admin.putComment({ ...comment, slug, permalink: post });
+  });
+}
+
 /** Who is proposing a comment, which is the one thing the rules differ on. */
 export type CommentOrigin =
   /** Somebody filled in the form under a post (doc-6). */

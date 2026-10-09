@@ -414,14 +414,16 @@ export type NewSentWebmention = Omit<SentWebmention, 'attemptedAt'> & {
 };
 
 /** Where a comment came from. */
-export const COMMENT_SOURCES = ['comment', 'webmention'] as const;
+export const COMMENT_SOURCES = ['comment', 'webmention', 'activitypub'] as const;
 
 /**
  * One of {@link COMMENT_SOURCES}.
  *
  * `comment` is the form under the post. `webmention` is another site's post
  * pointing at this one (TASK-51), which lands in the same file with the same
- * shape and is told apart only by this.
+ * shape and is told apart only by this. `activitypub` is a fediverse reply or
+ * reaction a site received before it ran Geekity, brought across by an import:
+ * one this site receives itself is logged in the inbox instead.
  */
 export type CommentSource = (typeof COMMENT_SOURCES)[number];
 
