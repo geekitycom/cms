@@ -405,6 +405,11 @@ export interface PluginEditorContext {
   readonly draft: PluginEditorDraft;
   /** Every tag on the site's published documents, as written, most used first. */
   readonly siteTags: readonly string[];
+  /**
+   * The titles of the site's latest published posts that have one, newest
+   * first, at most ten, leaving out any the draft's own title repeats.
+   */
+  readonly recentTitles: readonly string[];
   /** Aborts when the author leaves the page before the answer comes. */
   readonly signal: AbortSignal;
 }
@@ -416,6 +421,12 @@ export interface PluginEditorChoice {
   readonly note?: string | undefined;
   /** A word or two drawn as a badge, such as `Used here`. */
   readonly badge?: string | undefined;
+  /**
+   * The heading the choice is listed under, such as `For reach`. The editor
+   * draws the heading before a choice whose group differs from the one before
+   * it, so a plugin lists each group's choices together.
+   */
+  readonly group?: string | undefined;
 }
 
 /**

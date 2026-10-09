@@ -179,6 +179,7 @@ export function mountEditorActions(app: Hono<GeekityEnv>): void {
       const suggestion = await action.suggest({
         draft,
         siteTags: c.var.store.listTags().map(({ tag }) => tag),
+        recentTitles: recentTitles(c, draft.title),
         signal: c.req.raw.signal,
       });
       if ('choices' in suggestion && action.field !== 'tags') {
@@ -197,8 +198,26 @@ function answerOf(suggestion: PluginEditorSuggestion): object {
   if ('value' in suggestion) return { ok: true, value: suggestion.value };
   return {
     ok: true,
-    choices: suggestion.choices.map(({ value, note, badge }) => ({ value, note, badge })),
+    choices: suggestion.choices.map(({ value, note, badge, group }) => ({
+      value,
+      note,
+      badge,
+      group,
+    })),
   };
+}
+
+/** How many of the latest titles a plugin is handed. */
+const RECENT_TITLES = 10;
+
+function recentTitles(c: Context<GeekityEnv>, own: string): string[] {
+  const titles: string[] = [];
+  for (const { title } of c.var.store.listPosts({ limit: RECENT_TITLES * 5 })) {
+    if (title.trim() === '' || title === own) continue;
+    titles.push(title);
+    if (titles.length === RECENT_TITLES) break;
+  }
+  return titles;
 }
 
 function describe(error: unknown): string {

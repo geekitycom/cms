@@ -66,6 +66,7 @@ function suggester(
 async function site(
   plugins: Plugin[],
   enabled: boolean,
+  posts: Record<string, string> = {},
 ): Promise<{ cms: Cms; agent: Browser; contentDir: string }> {
   const contentDir = await box.dir('geekity-editor-actions-content-');
   const dataDir = await box.dir('geekity-editor-actions-data-');
@@ -91,6 +92,9 @@ async function site(
     path.join(contentDir, 'posts', 'liked.md'),
     '---\ndate: 2026-10-01T09:00:00Z\nlike-of: https://elsewhere.example/post\n---\n\nGood one.\n',
   );
+  for (const [name, text] of Object.entries(posts)) {
+    await writeFile(path.join(contentDir, 'posts', name), text);
+  }
   const cms = await box.open({ contentDir, dataDir, plugins });
   return { cms, agent: await signedIn(cms), contentDir };
 }
@@ -311,11 +315,58 @@ describe('editor actions', () => {
     assert.deepEqual(seen, [['Baking', 'bread']]);
   });
 
-  it('answers a plugin’s choices as JSON, each with its note and badge', async () => {
+  it('hands the plugin the titles of the site’s latest posts, newest first, the draft’s own left out', async () => {
+    const seen: (readonly string[])[] = [];
+    const titler = definePlugin({
+      name: NAME,
+      version: '1.0.0',
+      label: 'Titler',
+      description: 'Suggests titles.',
+      hostApi: HOST_API_VERSION,
+      register(host) {
+        host.editorAction({
+          id: 'suggest-title',
+          field: 'title',
+          label: 'Suggest title',
+          suggest: ({ recentTitles }) => {
+            seen.push(recentTitles);
+            return { ok: true, value: '' };
+          },
+        });
+      },
+    });
+    const days = Object.fromEntries(
+      Array.from({ length: 12 }, (_, index) => [
+        `day-${String(10 + index)}.md`,
+        `---\ntitle: Day ${String(10 + index)}\ndate: 2026-09-${String(10 + index)}T09:00:00Z\n---\n\nText.\n`,
+      ]),
+    );
+    const { agent } = await site([titler], true, {
+      ...days,
+      'later.md': '---\ndate: 2026-09-30T09:00:00Z\n---\n\nAn untitled note.\n',
+    });
+    await press(agent, '/admin/posts/new', 'suggest-title', { body: 'Crumb.', title: 'Day 21' });
+    assert.deepEqual(seen, [
+      [
+        'Day 20',
+        'Day 19',
+        'Day 18',
+        'Day 17',
+        'Day 16',
+        'Day 15',
+        'Day 14',
+        'Day 13',
+        'Day 12',
+        'Day 11',
+      ],
+    ]);
+  });
+
+  it('answers a plugin’s choices as JSON, each with its note, badge and group', async () => {
     const choices = [
-      { value: 'bread', note: '120 followers', badge: 'Used here' },
-      { value: 'crumb', note: 'followers unknown' },
-      { value: 'oven' },
+      { value: 'bread', note: '120 followers', badge: 'Used here', group: 'For this post' },
+      { value: 'crumb', note: 'followers unknown', group: 'For this post' },
+      { value: 'oven', group: 'For reach' },
     ];
     const { agent } = await site([suggester(undefined, () => ({ ok: true, choices }))], true);
     const response = await press(agent, '/admin/posts/new', 'suggest-tags');
@@ -345,6 +396,7 @@ describe('editor actions', () => {
       block,
       /<template data-editor-choice>[\s\S]*<input type="checkbox"[\s\S]*<\/template>/,
     );
+    assert.match(block, /<template data-editor-choice-group>\s*<li[^>]*data-choice-group[^>]*>/);
   });
 
   it('gives each choice box to a form of its own, so saving the draft never posts it', async () => {
