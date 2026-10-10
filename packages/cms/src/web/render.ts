@@ -36,7 +36,7 @@ import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { ContactFormContext } from '../contact/form.ts';
 import { commentAnchor, commentPageHref } from './conversation.ts';
 import type { CommentThread, Conversation } from './conversation.ts';
-import { activityStreamsId } from './documents.ts';
+import { activityStreamsId, isServed } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type {
   DocumentContext,
@@ -685,17 +685,16 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // added here rather than in `documentContext` because it needs the
     // site's base URL, which a document on its own does not carry.
     const objectId = activityStreamsId(document, config.baseUrl);
-    // `commentsFeed` is where this post's replies are syndicated. It is set
-    // here rather than in a layout because only a published post has one —
-    // a page never federates, so nothing can ever have replied to it — and
-    // because a site that overrides `post.njk` should keep the link anyway.
-    // `conversation` is what the fediverse said back. It is on the context
-    // only when there is something in it, so a theme can ask `{% if
-    // conversation %}` and a post nobody has answered renders no empty
-    // section (TASK-49).
-    const said = answerable(document, commentPolicyOf(siteData.read()), config.now())
-      ? options.conversation?.(document)
-      : undefined;
+    // `conversation` is what was said back. It is on the context only when
+    // there is something in it, so a theme can ask `{% if conversation %}`
+    // and a post nobody has answered renders no empty section (TASK-49).
+    // `commentsFeed` is where it is syndicated, for a served document that
+    // shows one, and is set here rather than in a layout so that a site which
+    // overrides `post.njk` or `page.njk` keeps the link.
+    const now = config.now();
+    const shows = answerable(document, commentPolicyOf(siteData.read()), now);
+    const said = shows ? options.conversation?.(document) : undefined;
+    const feedsIt = shows && isServed(document, now);
     // `commentForm` is on the context only when the post is open, so the
     // theme asks `{% if commentForm %}` rather than working the rules out
     // for itself — and a closed post shows the thread with no form.
@@ -710,7 +709,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // only when the site takes them, so a theme asks `{% if webmention %}`
     // and a site that has turned them off advertises nothing.
     const webmention = webmentionEndpointFor(siteData.read());
-    const pingback = pingbackEndpointFor(siteData.read(), document, config.now());
+    const pingback = pingbackEndpointFor(siteData.read(), document, now);
     // The posts either side of this one, as the two links a theme draws under
     // an entry (TASK-79). Each is on the context only when there is one, so a
     // theme asks `{% if previous %}` and the ends of the archive draw nothing.
@@ -732,12 +731,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...neighbourContext('next', either.next, options.replyContext),
       url,
       page: { ...context.page, url },
-      ...(objectId === undefined
-        ? {}
-        : {
-            activityStreams: objectId,
-            commentsFeed: commentsFeedPath(document.permalink),
-          }),
+      ...(objectId === undefined ? {} : { activityStreams: objectId }),
+      ...(feedsIt ? { commentsFeed: commentsFeedPath(document.permalink) } : {}),
       // And the whole archive, for a page whose front matter asked for it
       // (TASK-85). On the context only for that page, so a theme asks
       // `{% if archiveMonths %}` exactly as it asks about the contact form.

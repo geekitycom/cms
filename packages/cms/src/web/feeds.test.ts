@@ -1818,7 +1818,7 @@ describe('the comments feeds on an HTML page', () => {
     }
   });
 
-  it('advertises a post’s own comments feed, and only a post’s', async () => {
+  it('advertises a post’s own comments feed, and not a closed page’s', async () => {
     const { cms } = await site(files);
 
     const post =
@@ -1831,7 +1831,10 @@ describe('the comments feeds on an HTML page', () => {
     );
 
     const page = (await (await cms.app.request('/about/')).text()).split('</head>')[0] ?? '';
-    assert.ok(!page.includes('/about/feed/'), 'a page has no comments feed to advertise');
+    assert.ok(
+      !page.includes('/about/feed/'),
+      'a page that takes no comments has no comments feed to advertise',
+    );
   });
 });
 

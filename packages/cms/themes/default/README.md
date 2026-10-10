@@ -1778,9 +1778,9 @@ as well as the site's — on an author archive that root is `author.url`.
 
 `layouts/base.njk` fills the `alternates` block with `feedLinks` over `/` and
 then the site's comments feed, so every page that extends it advertises all
-four. On a published post it adds that post's own comments feed, from
-`commentsFeed` on the context, and a link pointing at the post's ActivityPub
-object:
+four. On a published post, and on a page that takes comments, it adds that
+document's own comments feed, from `commentsFeed` on the context. On a
+published post it also adds a link pointing at the post's ActivityPub object:
 
 ```html
 <link
@@ -1793,9 +1793,10 @@ object:
 A post's object id is its permalink, so that link usually points at the page it
 is on: it says the URL answers ActivityStreams as well as HTML. A post migrated
 from elsewhere keeps the id its file names, and the link points there instead.
-It comes from `activityStreams`, which — like `commentsFeed` — is only on the
-context of a rendered published post, so a layout that overrides the block and
-does not call `super()` has to emit both itself. They are on the context rather
+It comes from `activityStreams`, which is only on the context of a rendered
+published post, as `commentsFeed` is only on a document that has a comments
+feed, so a layout that overrides the block and does not call `super()` has to
+emit both itself. They are on the context rather
 than in `post.njk` so that a site which overrides that layout, as the demo
 does, keeps them.
 

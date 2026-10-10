@@ -1,6 +1,7 @@
 import type { User } from '../admin/accounts.ts';
-import { readSiteSettings } from '../admin/settings.ts';
+import { readSiteJson, readSiteSettings } from '../admin/settings.ts';
 import { avatarHref } from '../avatars/avatars.ts';
+import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { ActorProfile, AdminStore, InboxActivity, PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel, postTypeOf } from '../content/post-type.ts';
@@ -897,6 +898,10 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
   const naming = authorNaming(context.admin);
   const posts = new PostsByObjectId(context);
   const now = context.store.now();
+  const policy = commentPolicyOf(readSiteJson(context.contentDir));
+  // A page that takes no comments shows none, so the site's feed has none of its.
+  const shown = (post: Document | undefined): post is Document =>
+    post !== undefined && isListed(post, now) && answerable(post, policy, now);
   const said: (Interaction & { post: Document })[] = [];
 
   for (let offset = 0; said.length < limit;) {
@@ -910,7 +915,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
       // A note answering another note is as much this post's as one answering
       // the post, so the post is found the way a reply post finds its thread.
       const post = documentNamed(context, reply.inReplyTo);
-      if (post === undefined || !isListed(post, now)) continue;
+      if (!shown(post)) continue;
 
       said.push({ ...federatedInteraction(reply, naming(activity.actorId)), post });
       if (said.length === limit) break;
@@ -921,7 +926,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
   // approval per quote, and a site has few enough to read whole.
   for (const approval of readAllQuoteAuthorizations(context.contentDir)) {
     const post = posts.get(approval.post);
-    if (post === undefined || !isListed(post, now)) continue;
+    if (!shown(post)) continue;
     for (const quote of quotesOf(context.admin, [approval], approval.post, naming)) {
       said.push({ ...quote, post });
     }
@@ -932,7 +937,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
     limit: limit * OVERSCAN,
   })) {
     const post = context.store.getBySlug(stored.slug);
-    if (post === undefined || !isListed(post, now)) continue;
+    if (!shown(post)) continue;
     said.push({ ...interactionOf(stored, post.permalink), post });
   }
 
@@ -954,7 +959,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
   // not: the thread is listed, and the reply post is one of its answers.
   for (const answer of context.store.listReplyPosts({ limit: limit * OVERSCAN })) {
     const post = threadRootOf(context, answer);
-    if (post === undefined || !isListed(post, now)) continue;
+    if (!shown(post)) continue;
     const reply = placedOn(post).get(rootOf(context, answer));
     if (reply !== undefined) said.push({ ...reply, post });
   }

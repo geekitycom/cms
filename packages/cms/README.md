@@ -3307,26 +3307,38 @@ post as under it.
 
 ### Comments
 
-This CMS stores no comments of its own. What it has instead is the fediverse
-replies its inbox has been sent: a `Create` of a `Note` whose `inReplyTo` names
-a post's ActivityStreams object id (see [Federation](#federation)). Those are
-what the comments feeds publish, at the URLs WordPress publishes its own at —
-`{permalink}feed/` for one post, `/comments/feed/` for the whole site.
+The comments feeds publish a document's conversation, at the URLs WordPress
+publishes its own at: `{permalink}feed/` for one post or page, and
+`/comments/feed/` for the whole site. Both are read from the same conversation
+the page draws under the post, so they carry what a reader sees there:
+
+- native comments left through the form, once a moderator approves them;
+- webmention replies and mentions;
+- fediverse replies, a `Create` of a `Note` whose `inReplyTo` names the post
+  or a reply under it (see [Federation](#federation)), and the quotes of a
+  post its author approved;
+- reply posts written on this site that answer the post or a reply under it.
+
+Likes, boosts and reposts are counted on the page and are in no feed.
 
 Both are RSS 2.0 and nothing else: a comments feed has no Atom or JSON spelling
-here, so `{permalink}feed/atom/` 404s. A post with no replies answers an empty
-feed rather than a 404 — it exists, and a reader that subscribed before anybody
-answered should keep polling — while a permalink that is no published post 404s
-like any other. A page has no comments feed at all: only posts federate, so
-nothing can ever have replied to one.
+here, so `{permalink}feed/atom/` 404s. A post has a comments feed whether or
+not it still takes comments. A page has one while it takes comments
+(`comments: true` in its front matter, and comments on for the site), which is
+when it shows its conversation; any other page's `{permalink}feed/` 404s, and
+its comments are left out of `/comments/feed/` too. A document with no replies
+answers an empty feed rather than a 404, because it exists and a reader that
+subscribed before anybody answered should keep polling. A permalink that is no
+published document 404s like any other. The page advertises its own feed with
+a `<link rel="alternate" type="application/rss+xml">` in its `<head>`.
 
 A channel carries the usual `title` (`Comments on: {post}`), `link`,
 `description`, `language`, `lastBuildDate`, `generator`, `atom:link rel="self"`
 and the same notify-server elements every other feed carries. An item carries the author's name as its `title` and `dc:creator`,
 the reply's `url` as its `link` (a comment left through the form links to its
-own page at `/comment/{id}/`), a `guid`, the `published` time the note gave (or
+own page at `/comment/{id}/`), a `guid`, the `published` time the reply gave (or
 when it arrived, if it gave none), `description` holding a plain-text excerpt
-and `content:encoded` holding the note. The `guid` of a comment left through the
+and `content:encoded` holding the reply. The `guid` of a comment left through the
 form is its page, `isPermaLink="true"`; any other reply's is its own id: a
 fediverse note's id, a webmention's stored id, a reply post's object id. A
 comment imported from WordPress keeps the `guid` WordPress's comments feed
@@ -3345,16 +3357,18 @@ Each item also carries, from the [source namespace][source-ns]:
 - `<source url="…">Name</source>`, the core RSS element, when the site knows a
   feed for the author: a webmention author's `h-card` URL or site, or a site
   user's author feed `/author/{username}/feed/`. A comment left through the
-  form and a fediverse reply carry none. On the site-wide feed the title names the post as well: `{author} on
-{post}`, or `{author} replying to {parent author} on {post}` for an answer to
-  another reply a reader can see.
+  form and a fediverse reply carry none.
 
-The author's name is the profile the site stored when that actor followed it,
-and otherwise the `@user@host` the actor's own URL implies. Naming them
+On the site-wide feed the title names the post or page as well: `{author} on
+{post}`, or `{author} replying to {parent author} on {post}` for an answer to
+another reply a reader can see.
+
+A fediverse reply's author is named by the profile the site stored when that
+actor followed it, and otherwise the `@user@host` the actor's own URL implies. Naming them
 properly would mean dereferencing the actor, which is a network round trip per
 comment shown.
 
-**The note's HTML is sanitised before it is published.** It is markup a
+**A reply's HTML is sanitised before it is published.** It is markup a
 stranger wrote, so it is tokenised and rebuilt from an allowlist rather than
 passed through: `p`, `br`, `a`, `em`, `strong`, `del`, `code`, `pre`,
 `blockquote` and the list elements survive; `script` and `style` are dropped
@@ -3363,8 +3377,8 @@ every attribute goes except an `a`'s `href`, which must be `http`, `https` or
 `mailto` and is marked `rel="nofollow noopener noreferrer"`. `sanitizeCommentHtml`
 is exported for a site that shows comments in its own templates.
 
-A reply to a post that has since been unpublished or moved to the trash
-disappears from `/comments/feed/`, and that post's own feed 404s with the post.
+A reply to a document that has since been unpublished or moved to the trash
+disappears from `/comments/feed/`, and that document's own feed 404s with it.
 `feedSize` caps both feeds.
 
 ### Walking a thread

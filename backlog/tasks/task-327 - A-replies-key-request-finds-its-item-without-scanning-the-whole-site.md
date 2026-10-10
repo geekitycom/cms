@@ -4,6 +4,7 @@ title: 'A /replies/{key}/ request finds its item without scanning the whole site
 status: To Do
 assignee: []
 created_date: '2026-10-10 15:07'
+updated_date: '2026-10-10 15:19'
 labels:
   - feeds
   - performance
@@ -29,4 +30,5 @@ TASK-324 (decision-48) resolves /replies/{key}/, where key is the first 16 hex d
 - [ ] #2 The index stays correct as documents, comments, webmentions, fediverse replies and reply posts are added, edited, moved or removed, and after a restart
 - [ ] #3 An unknown key answers 404 without touching more than the index
 - [ ] #4 A test shows the lookup still finds a post, a page, a native comment by key, a webmention, a fediverse note and a reply post
+- [ ] #5 /replies/ serves nothing for a document that does not show its conversation (a page without comments: true, or comments off site-wide): it 404s like {permalink}feed/ does, using the same answerable rule
 <!-- AC:END -->

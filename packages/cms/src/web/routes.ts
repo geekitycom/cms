@@ -441,7 +441,7 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     }
   }
 
-  const feedRequest = parseFeedPath(store, pathname, bases, authors);
+  const feedRequest = parseFeedPath(c, pathname, bases, authors);
   if (feedRequest !== undefined) {
     const { target, format } = feedRequest;
     const canonical = feedTargetHref(target, format, bases);
@@ -473,11 +473,11 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     // is the front page.
     if (document.path === pages.home?.path) return c.redirect('/', 301);
 
-    // WordPress answered `?feed=rss2` on a permalink with that post's comments
-    // feed, which is the only feed a post has here too. The other spellings
-    // name a format a comments feed does not come in, so they are not a feed
-    // request at all and the page is served.
-    if (document.type === 'post' && queryFeedFormat(c) === 'rss') {
+    // WordPress answered `?feed=rss2` on a permalink with that document's
+    // comments feed, which is the only feed a document has here too. The other
+    // spellings name a format a comments feed does not come in, so they are
+    // not a feed request at all and the page is served.
+    if (queryFeedFormat(c) === 'rss' && showsConversation(c, document)) {
       return c.redirect(commentsFeedHref(document), 301);
     }
     return negotiateDocument(c, document, selectFromAccept(c, DOCUMENT_REPRESENTATIONS));
@@ -685,14 +685,15 @@ interface FeedRequest {
  *
  * The site's own canonical feeds are real routes and never reach here; what
  * does reach here is every taxonomy feed — their bases are a setting, so they
- * cannot be in the route table — every post's comments feed, and every alias.
+ * cannot be in the route table — every document's comments feed, and every alias.
  */
 function parseFeedPath(
-  store: ContentStore,
+  c: Context<GeekityEnv>,
   pathname: string,
   bases: TaxonomyBases,
   authors: AuthorLookup,
 ): FeedRequest | undefined {
+  const { store } = c.var;
   const split = splitFeedPath(pathname);
   if (split === undefined) return undefined;
   const { format, canonical } = split;
@@ -712,14 +713,18 @@ function parseFeedPath(
       : undefined;
   }
 
-  // Otherwise it may be a post's comments feed. Only a published post has one:
-  // a page never federates, so nothing in the fediverse can ever have replied
-  // to it, and a comments feed for it would be empty for ever.
+  // Otherwise it may be a document's comments feed, which it has exactly when
+  // its page shows its conversation.
   if (format !== 'rss') return undefined;
   const document = publicDocumentAt(store, split.root);
-  if (document?.type !== 'post') return undefined;
+  if (document === undefined || !showsConversation(c, document)) return undefined;
 
   return { target: { kind: 'comments', document }, format, canonical };
+}
+
+/** Whether this document's page shows its conversation, and so has a comments feed. */
+function showsConversation(c: Context<GeekityEnv>, document: Document): boolean {
+  return answerable(document, commentPolicyOf(c.var.renderer.site()), c.var.store.now());
 }
 
 /** Where the canonical URL of one feed is. */
@@ -935,9 +940,9 @@ function canonicalTarget(
   const { store, renderer } = c.var;
 
   // A feed first: `/feed`, `/feed/atom`, `/{base}/x/feed`, `/comments/feed`
-  // and a post's `{permalink}feed` all lead somewhere real, and `/feed/rss`
+  // and a document's `{permalink}feed` all lead somewhere real, and `/feed/rss`
   // leads to `/feed/` in the same one hop rather than to a second redirect.
-  const feedRequest = parseFeedPath(store, pathname, bases, authors);
+  const feedRequest = parseFeedPath(c, pathname, bases, authors);
   if (feedRequest !== undefined) {
     const { target } = feedRequest;
     if (
@@ -1557,12 +1562,11 @@ function feed(c: Context<GeekityEnv>, format: FeedFormat, subject: ListingSubjec
 }
 
 /**
- * A post's comments, or the whole site's, as RSS 2.0.
+ * A post's or page's comments, or the whole site's, as RSS 2.0.
  *
- * A post with no replies answers an empty feed rather than a 404: it exists,
- * and a reader that subscribed before anybody answered should keep polling.
- * Only a permalink that is no published post 404s, which is the ordinary
- * document lookup rather than anything this feed decides.
+ * A document with no replies answers an empty feed rather than a 404: it
+ * exists, and a reader that subscribed before anybody answered should keep
+ * polling. Which documents have a feed at all is {@link parseFeedPath}'s to say.
  */
 function comments(c: Context<GeekityEnv>, document: Document | undefined): Response {
   const { conversation, renderer, config } = c.var;
@@ -1956,10 +1960,10 @@ export function feedHref(
 }
 
 /**
- * Where the site's comments feed lives, and where one post's does.
+ * Where the site's comments feed lives, and where one document's does.
  *
  * WordPress's URLs, so a site migrated from it keeps both: the whole site's
- * comments at `/comments/feed/`, and a post's under its own permalink. There
+ * comments at `/comments/feed/`, and a document's under its own permalink. There
  * is one format, RSS 2.0, because that is what a comments feed is read in.
  */
 export function commentsFeedHref(document: Document | undefined): string {
