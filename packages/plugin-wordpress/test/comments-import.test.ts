@@ -10,6 +10,7 @@ import {
   createCms,
   createUser,
   deleteComment,
+  intakeComment,
   openAdminStore,
   pluginDataFolder,
   pluginSite,
@@ -60,6 +61,8 @@ interface CommentEntry {
   addressHash: string | null;
   inReplyTo: string | null;
   url: string | null;
+  migrated?: true;
+  origin?: string;
 }
 
 async function site(): Promise<Site> {
@@ -209,11 +212,29 @@ const THE_POST: TestItem = {
 };
 
 const FILE = 'i-%E2%99%A5-rss.json';
-const id = (n: number) =>
-  createHash('sha256')
-    .update(`${SITE}/?p=753#comment-${String(n)}`)
-    .digest('hex')
-    .slice(0, 16);
+const PERMALINK = '/2024/03/i-♥-rss/';
+const hex = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
+const formerId = (n: number) => `${SITE}/?p=753#comment-${String(n)}`;
+const ORIGINS: Readonly<Record<number, { source: 'activitypub' | 'webmention'; origin: string }>> =
+  {
+    1: { source: 'activitypub', origin: 'https://mstdn.example/users/One#likes/1' },
+    2: { source: 'activitypub', origin: 'https://mstdn.example/users/Two#likes/2' },
+    3: { source: 'webmention', origin: 'at://did:plc:abc/app.bsky.feed.like/1' },
+    4: { source: 'activitypub', origin: 'https://mstdn.example/users/Four#reposts/4' },
+    5: { source: 'activitypub', origin: 'https://mstdn.example/users/Five#reposts/5' },
+    6: { source: 'webmention', origin: 'https://geoff.example/2024/03/i-rss/' },
+    8: { source: 'activitypub', origin: 'https://mstdn.example/users/weldon/statuses/1' },
+    9: { source: 'webmention', origin: 'https://ki48.example/i-rss/' },
+    10: { source: 'webmention', origin: 'https://aneesh.example/bookmarked/' },
+    11: { source: 'webmention', origin: 'https://comments.example/2024/03/237/' },
+    15: { source: 'activitypub', origin: 'https://mstdn.example/users/Fifteen#likes/15' },
+  };
+/** The key decision-51 gives comment N on THE_POST, worked out here rather than by the code under test. */
+const id = (n: number) => {
+  const known = ORIGINS[n];
+  if (known === undefined) return hex(formerId(n));
+  return known.source === 'webmention' ? hex(`${known.origin} ${PERMALINK}`) : hex(known.origin);
+};
 const numbered = new Map(Array.from({ length: 20 }, (_, n) => [id(n), String(n)]));
 
 function rowsWhy(rows: readonly ReportRow[]): string[] {
@@ -241,6 +262,7 @@ describe('the comments and reactions import', () => {
       addressHash: null,
       inReplyTo: null,
       url: null,
+      migrated: true,
     });
 
     const published = await fs.readFile(
@@ -390,7 +412,6 @@ describe('the comments and reactions import', () => {
       rss: await body('/feed/'),
       atom: await body('/feed/atom/'),
       json: await body('/feed/json/'),
-      comments: await body('/comments/feed/'),
       sitemap: await body('/sitemap.xml'),
       canonical: /<link rel="canonical" href="([^"]*)">/.exec(page)?.[1] ?? '',
       ogUrl: /<meta property="og:url" content="([^"]*)">/.exec(page)?.[1] ?? '',
@@ -522,6 +543,156 @@ describe('the comments and reactions import', () => {
     assert.equal(rows.find((row) => /comment 11\b/.test(row.why))?.outcome, 'kept');
   });
 
+  it('marks every comment migrated, keeps its origin, and keys it as the site would key it arriving here', async () => {
+    const wp = await site();
+    await wp.run([THE_POST]);
+    const cms = await wp.serve();
+
+    const stored = (await wp.comments(FILE)).map((comment) => [
+      numbered.get(comment.id),
+      comment.migrated,
+      comment.origin,
+    ]);
+    assert.deepEqual(
+      stored,
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14].map((n) => [String(n), true, ORIGINS[n]?.origin]),
+    );
+    const permalink = cms.store.getBySlug('i-♥-rss')?.permalink;
+    assert.equal(permalink, PERMALINK, 'a webmention is keyed by the permalink the site serves');
+  });
+
+  it('takes a webmention sent again for an imported one as the comment it holds', async () => {
+    const wp = await site();
+    await wp.run([THE_POST]);
+    const cms = await wp.serve();
+    const before = await wp.comments(FILE);
+
+    const outcome = await intakeComment({
+      records: { admin: cms.admin, contentDir: wp.contentDir, dataDir: wp.dataDir },
+      origin: 'webmention',
+      comment: {
+        slug: 'i-♥-rss',
+        permalink: PERMALINK,
+        source: 'webmention',
+        kind: 'mention',
+        author: { name: 'Author of 9', url: 'https://ki48.example', email: null, avatar: null },
+        content: { markdown: 'I ♥ RSS, a directory', html: '<p>I ♥ RSS, a directory</p>\n' },
+        submitted: '2024-03-07T10:00:00.000Z',
+        inReplyTo: null,
+        url: 'https://ki48.example/i-rss/',
+        notify: false,
+      },
+      dataDir: wp.dataDir,
+      baseUrl: SITE,
+    });
+
+    assert.equal(outcome.kind, 'stored');
+    assert.ok(outcome.kind === 'stored' && !outcome.created, 'no second record');
+    assert.equal(outcome.kind === 'stored' && outcome.comment.id, id(9));
+    const after = await wp.comments(FILE);
+    assert.deepEqual(
+      after.map((comment) => comment.id),
+      before.map((comment) => comment.id),
+    );
+    assert.equal(after.find((comment) => comment.id === id(9))?.migrated, true);
+  });
+
+  it('puts no imported comment in the comments feeds, though the post still shows them', async () => {
+    const wp = await site();
+    await wp.run([THE_POST]);
+    const cms = await wp.serve();
+
+    const page = await (await cms.app.request('/2024/03/i-%E2%99%A5-rss/')).text();
+    assert.match(page, new RegExp(`id="comment-${id(7)}"`));
+    assert.match(page, new RegExp(`id="comment-${id(8)}"`));
+    for (const feed of ['/comments/feed/', '/2024/03/i-%E2%99%A5-rss/feed/']) {
+      const response = await cms.app.request(feed);
+      assert.equal(response.status, 200, feed);
+      const text = await response.text();
+      assert.doesNotMatch(text, /<item>/, `${feed} holds no item`);
+      assert.doesNotMatch(
+        text,
+        /Lovely|Agreed|Held for moderation/,
+        `${feed} says nothing imported`,
+      );
+    }
+  });
+
+  it('carries a 0.2.0 import across a boot and a re-import with one record per comment', async () => {
+    const wp = await site();
+    await wp.run([THE_POST]);
+    await asImportedBy020(wp);
+    const booted = await wp.serve();
+    const records = { admin: booted.admin, contentDir: wp.contentDir, dataDir: wp.dataDir };
+    const native = await addComment(records, {
+      slug: 'i-♥-rss',
+      permalink: PERMALINK,
+      source: 'comment',
+      kind: 'reply',
+      status: 'approved',
+      author: { name: 'Live', url: null, email: 'live@example.com', avatar: null },
+      content: { markdown: 'Said here.', html: '<p>Said here.</p>\n' },
+      submitted: '2024-04-01T10:00:00.000Z',
+      addressHash: null,
+      inReplyTo: hex(formerId(8)),
+      url: null,
+      notify: true,
+    });
+    await updateComment(records, hex(formerId(9)), { status: 'spam' });
+
+    const rows = await wp.run([THE_POST]);
+
+    const imported = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14];
+    const after = await wp.comments(FILE);
+    assert.deepEqual(
+      after.map((comment) => comment.id),
+      [...imported.map(id), native.id],
+      'each comment once, in its place, under its key',
+    );
+    assert.ok(after.slice(0, -1).every((comment) => comment.migrated === true));
+    assert.deepEqual(
+      after.map((comment) => comment.origin),
+      [...imported.map((n) => ORIGINS[n]?.origin), undefined],
+    );
+    assert.equal(after.find((comment) => comment.id === id(8))?.inReplyTo, id(7));
+    assert.equal(after.at(-1)?.inReplyTo, id(8), 'a reply here follows the comment it answers');
+    assert.equal(after.find((comment) => comment.id === id(9))?.status, 'spam');
+    const emails = JSON.parse(
+      await fs.readFile(path.join(wp.dataDir, 'comments', FILE), 'utf8'),
+    ) as { comments: Record<string, { email: string }> };
+    assert.deepEqual(Object.keys(emails.comments).sort(), [id(7), id(14), native.id].sort());
+
+    const outcomes = Object.fromEntries(
+      rows
+        .filter((row) => row.path?.startsWith('_data/comments/'))
+        .map((row) => [/comment (\d+)/.exec(row.why)?.[1], row.outcome]),
+    );
+    assert.deepEqual(
+      outcomes,
+      Object.fromEntries(imported.map((n) => [String(n), n === 9 ? 'conflict' : 'written'])),
+    );
+    const record = JSON.parse(
+      await fs.readFile(
+        path.join(wp.dataDir, 'plugins', '@geekity', 'plugin-wordpress', 'import.json'),
+        'utf8',
+      ),
+    ) as { comments: Record<string, Record<string, string>> };
+    assert.deepEqual(
+      Object.keys(record.comments[`_data/comments/${FILE}`] ?? {}).sort(),
+      imported.map(id).sort(),
+    );
+
+    const again = await wp.run([THE_POST]);
+    assert.deepEqual(await wp.comments(FILE), after, 'a third run changes nothing');
+    assert.ok(
+      again
+        .filter((row) => row.path?.startsWith('_data/comments/'))
+        .every((row) => row.outcome === (/comment 9\b/.test(row.why) ? 'conflict' : 'unchanged')),
+    );
+    const cms = await wp.serve();
+    assert.equal(cms.admin.listCommentsFor('i-♥-rss').length, imported.length + 1);
+  });
+
   it('skips a comment on a post the import leaves out, naming it', async () => {
     const wp = await site();
     const rows = await wp.run([
@@ -537,3 +708,70 @@ describe('the comments and reactions import', () => {
     assert.ok(rows.some((row) => row.outcome === 'skipped' && /comment 50/.test(row.why)));
   });
 });
+
+/**
+ * Turn what this version's import wrote into what plugin-wordpress 0.2.0
+ * wrote: each comment's id its WordPress URL, a reply naming its parent's,
+ * no migrated flag or origin, and the record keyed by those ids with the hash
+ * of each comment as written.
+ */
+async function asImportedBy020(wp: Site): Promise<void> {
+  const formerOf = (key: string | null) =>
+    key === null ? null : formerId(Number(numbered.get(key)));
+  const published = path.join(wp.contentDir, '_data', 'comments', FILE);
+  const file = JSON.parse(await fs.readFile(published, 'utf8')) as {
+    post: string;
+    comments: Record<string, unknown>[];
+  };
+  const old = file.comments.map(({ migrated: _migrated, origin: _origin, ...comment }) => ({
+    ...comment,
+    id: formerOf(comment['id'] as string),
+    inReplyTo: formerOf(comment['inReplyTo'] as string | null),
+  }));
+  await fs.writeFile(published, `${JSON.stringify({ ...file, comments: old }, null, 2)}\n`);
+
+  const privateFile = path.join(wp.dataDir, 'comments', FILE);
+  const emails = JSON.parse(await fs.readFile(privateFile, 'utf8')) as {
+    comments: Record<string, unknown>;
+  };
+  await fs.writeFile(
+    privateFile,
+    `${JSON.stringify({ comments: Object.fromEntries(Object.entries(emails.comments).map(([key, value]) => [formerOf(key), value])) }, null, 2)}\n`,
+  );
+
+  const plugin = pluginSite({
+    admin: wp.admin,
+    config: resolveConfig(
+      { contentDir: wp.contentDir, dataDir: wp.dataDir, baseUrl: SITE },
+      { env: {} },
+    ),
+  });
+  const recordFile = path.join(
+    wp.dataDir,
+    'plugins',
+    '@geekity',
+    'plugin-wordpress',
+    'import.json',
+  );
+  const record = JSON.parse(await fs.readFile(recordFile, 'utf8')) as Record<string, unknown>;
+  const written = plugin.comments(PERMALINK).comments;
+  record['comments'] = {
+    [`_data/comments/${FILE}`]: Object.fromEntries(
+      written.map((comment) => [
+        comment.id,
+        createHash('sha256').update(sorted(comment)).digest('hex'),
+      ]),
+    ),
+  };
+  await fs.writeFile(recordFile, `${JSON.stringify(record, null, 2)}\n`);
+}
+
+function sorted(value: unknown): string {
+  return JSON.stringify(value, (_key, inner: unknown) =>
+    inner !== null && typeof inner === 'object' && !Array.isArray(inner)
+      ? Object.fromEntries(
+          Object.entries(inner as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1)),
+        )
+      : inner,
+  );
+}

@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto';
-
+import { repliesKey, webmentionKey } from '@geekity/cms/plugin';
 import type { PluginCommandContext, PluginComment } from '@geekity/cms/plugin';
 
 import type {
@@ -69,26 +68,25 @@ function importComments(exported: WordPressExport, context: PluginCommandContext
       }
       continue;
     }
-    const mapped = mapComments(item, markdownOf);
+    const mapped = mapComments(item, permalink, markdownOf);
     notes.push(...mapped.notes);
-    comments.push(...mapped.comments.map((comment) => ({ ...comment, permalink })));
+    comments.push(...mapped.comments);
   }
   return { files: [], notes, comments };
 }
 
 function mapComments(
   item: WordPressItem,
+  permalink: string,
   markdownOf: (html: string) => string,
-): { comments: Omit<ImportedComment, 'permalink'>[]; notes: ItemNote[] } {
-  // The key of the comment's WordPress URL (decision-51), so a re-import gives
-  // each comment the key it already has.
-  const idOf = (comment: number) =>
-    createHash('sha256')
-      .update(`${item.guid}#comment-${String(comment)}`)
-      .digest('hex')
-      .slice(0, 16);
+): { comments: ImportedComment[]; notes: ItemNote[] } {
   const notes: ItemNote[] = [];
-  const kept: { wordPress: WordPressComment; comment: PluginComment; label: string }[] = [];
+  const kept: {
+    wordPress: WordPressComment;
+    comment: PluginComment;
+    formerId: string;
+    label: string;
+  }[] = [];
 
   for (const wordPress of [...item.comments].sort((a, b) => a.id - b.id)) {
     const type = wordPress.type === '' ? 'comment' : wordPress.type;
@@ -106,10 +104,14 @@ function mapComments(
     const kind = kindOf(source, named);
     const says = kind === 'reply' || kind === 'mention';
     const name = nameOf(wordPress);
+    const url = urlOf(wordPress, type, source, kind);
+    const origin = originOf(wordPress, source, url);
+    const formerId = `${item.guid}#comment-${String(wordPress.id)}`;
     kept.push({
       wordPress,
+      formerId,
       comment: {
-        id: idOf(wordPress.id),
+        id: keyOf(source, origin, permalink, formerId),
         source,
         kind,
         status,
@@ -123,25 +125,31 @@ function mapComments(
         markdown: says ? markdownOf(wordPress.content) : '',
         submitted: instantOf(wordPress.dateGmt ?? item.dateGmt),
         inReplyTo: null,
-        url: urlOf(wordPress, type, source, kind),
+        url,
+        migrated: true,
+        ...(origin === undefined ? {} : { origin }),
       },
       label: `${labelOf(wordPress)}, a ${kind} by ${name}`,
     });
   }
 
-  const kinds = new Map(kept.map(({ wordPress, comment }) => [wordPress.id, comment.kind]));
-  const comments = kept.map(({ wordPress, comment, label }) => {
+  const replies = new Map(
+    kept
+      .filter(({ comment }) => comment.kind === 'reply')
+      .map(({ wordPress, comment }) => [wordPress.id, comment.id]),
+  );
+  const comments = kept.map(({ wordPress, comment, formerId, label }) => {
+    const imported = { item, permalink, formerId, label };
     const { parent } = wordPress;
-    if (parent === 0) return { item, comment, label };
-    if (kinds.get(parent) === 'reply') {
-      return { item, comment: { ...comment, inReplyTo: idOf(parent) }, label };
-    }
+    if (parent === 0) return { ...imported, comment };
+    const inReplyTo = replies.get(parent);
+    if (inReplyTo !== undefined) return { ...imported, comment: { ...comment, inReplyTo } };
     notes.push({
       item,
       outcome: 'warned',
       why: `${labelOf(wordPress)}: answers comment ${String(parent)}, which is not an imported reply; shown under the post`,
     });
-    return { item, comment, label };
+    return { ...imported, comment };
   });
   return { comments, notes };
 }
@@ -172,6 +180,44 @@ function urlOf(comment: WordPressComment, type: string, source: Source, kind: Ki
         null
       );
   }
+}
+
+/**
+ * Its name where it was first published: the note a fediverse reply is, or
+ * the activity a like or boost is; the page a webmention was sent from. A
+ * form comment has none.
+ */
+function originOf(
+  comment: WordPressComment,
+  source: Source,
+  url: string | null,
+): string | undefined {
+  switch (source) {
+    case 'comment':
+      return undefined;
+    case 'activitypub':
+      return metaOf(comment, 'source_id') || undefined;
+    case 'webmention':
+      return url ?? (metaOf(comment, 'source_id') || undefined);
+  }
+}
+
+/**
+ * The key the site would give the same comment arriving here itself
+ * (decision-51), so a resend or a redelivery is the comment it already holds.
+ * A form comment, which arrived nowhere else, has the key of its WordPress
+ * URL.
+ */
+function keyOf(
+  source: Source,
+  origin: string | undefined,
+  permalink: string,
+  formerId: string,
+): string {
+  if (origin === undefined) return repliesKey(formerId);
+  return source === 'webmention'
+    ? (webmentionKey(origin, permalink) ?? repliesKey(formerId))
+    : repliesKey(origin);
 }
 
 function nameOf(comment: WordPressComment): string {

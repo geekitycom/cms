@@ -61,6 +61,7 @@ async function site(siteJson: Record<string, unknown> = { title: 'Blog' }): Prom
     checkUpload: unused,
     comments: unused,
     putComments: unused,
+    renameComments: unused,
   };
   const context: PluginCommandContext = {
     args: [],

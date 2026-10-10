@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-10 21:49'
-updated_date: '2026-10-10 23:25'
+updated_date: '2026-10-10 23:50'
 labels:
   - bug
 milestone: m-31
@@ -52,13 +52,13 @@ Decide and record what happens to form comments already stored with UUIDs since 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every comment's stored id is a 16-hex key by the rules above; a record with any other id is refused when stored, naming the file and id
+- [x] #1 Every comment's stored id is a 16-hex key by the rules above; a record with any other id is refused when stored, naming the file and id
 - [x] #2 Every comment is anchored as id="comment-{key}"; a form comment's page is /comment/{key}/; every replies feed is /replies/{key}/; source:comments, thread links and reply notices use these forms
 - [x] #3 No URL the site prints (thread links and anchors, /comment/ pages, comments-feed links, /replies/ links) contains a percent-encoded URL
-- [ ] #4 plugin-wordpress writes each imported comment with migrated: true and the hash key of its WordPress comment URL; a site imported with 0.2.0 picks this up on a re-import or in place, without a clash per comment file
-- [ ] #5 plugin-wordpress keeps each comment's origin identity from the WXR (source_id, webmention_source_url) and keys fediverse and webmention comments by it; a webmention resend, a redelivered activity or a reply backfill for an imported comment matches it and adds no record
+- [x] #4 plugin-wordpress writes each imported comment with migrated: true and the hash key of its WordPress comment URL; a site imported with 0.2.0 picks this up on a re-import or in place, without a clash per comment file
+- [x] #5 plugin-wordpress keeps each comment's origin identity from the WXR (source_id, webmention_source_url) and keys fediverse and webmention comments by it; a webmention resend, a redelivered activity or a reply backfill for an imported comment matches it and adds no record
 - [x] #6 A migrated comment shows on its page and in its thread as before, replies to it still thread under it, and it appears in no feed and no advertised reply count
-- [ ] #7 On the andrewshell.org import, /comments/feed/ and every {permalink}feed/ hold no imported comment, so a reader of WordPress's comments feed sees nothing new at cutover
+- [x] #7 On the andrewshell.org import, /comments/feed/ and every {permalink}feed/ hold no imported comment, so a reader of WordPress's comments feed sees nothing new at cutover
 - [x] #8 The fate of UUID-keyed form comments stored since v0.29.0 is decided and recorded
 - [ ] #9 The README's comments, replies feed and theme sections, and the plugin-wordpress README, describe the key rule and migrated comments
 - [ ] #10 gather() drops an inbox row (delivered or fetched) whose activity or note id is a migrated comment's origin, so a redelivery or backfill of an imported fediverse comment shows once
@@ -90,6 +90,14 @@ Phase (b), migrated comments out of feeds (AC#6, AC#11):
 3. Feeds: feedComments, directReplies-based counts and repliesIn leave migrated entries out; the thread, the page and /comment/{key}/ do not. A native reply under a migrated entry keeps it as parent, so source:inReplyTo names its guid.
 4. Simplify: replyGuid goes from guids.ts; nothing else special-cases imported ids.
 5. TDD: records round trip, plugin round trip, a feeds test over migrated comments of every source; pnpm checks; curl a scratch site.
+
+Phase (c), plugin-wordpress import (AC#1 importer side, #4, #5 except the inbox dedupe, #7):
+1. Core exports the key rule to plugins: repliesKey and webmentionKey from @geekity/cms/plugin (webmentionKey moves beside repliesKey in web/feed-source.ts), so the importer derives no key itself.
+2. Core PluginSite.renameComments(permalink, renames): each held comment a rename names takes its new id in place, every reply naming it follows, the index follows. Plugin commands run migrateCommentEmails and migrateCommentKeys first, as a boot does, so an import run before any boot meets only keys.
+3. Importer: every comment migrated: true; origin = source_id for a fediverse comment (note id for a reply, activity id for a like or boost; url keeps the web URL), webmention_source_url (or a linkback's page, or source_id) for a webmention. Key = repliesKey(origin) for activitypub, webmentionKey(origin, permalink) for webmention, repliesKey(WordPress comment URL) with no origin. inReplyTo is the parent's key.
+4. Re-import over a 0.2.0 import: per post, rename every held comment whose id is a former key of an imported comment (the re-keyed WordPress URL) to its new key; move import.json entries recorded under a former name (the URL 0.2.0 used, or the re-keyed key) to the new key, keeping the record's verdict when the held comment is still what 0.2.0 wrote; an owned comment the site edited keeps its content but gets migrated and origin.
+5. README: keys, migrated, origin, anchors.
+6. TDD: origin/key/migrated per source; 0.2.0 shape + boot + re-import gives one record per comment; real WXR scratch site: no imported comment in /comments/feed/ or any {permalink}feed/; real 0.2.0 import (git worktree at plugin-wordpress-v0.2.0) then boot then re-import.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -128,4 +136,25 @@ Choice: /replies/{key}/ of a migrated comment still answers, listing the native 
 Verification: new web/migrated-comments.test.ts (red before the change: feeds held migrated items and counted them); records and plugin round-trip tests. pnpm build, pnpm -r test (cms 5399 pass, all packages 0 fail), pnpm -r typecheck, pnpm lint, pnpm format:check pass. Scratch site scratchpad/site336b on dist/cli.js: migrated form, fediverse, webmention and like comments all on the post page; /comment/{form key}/ 200 with the native reply and a reply post under it, /comment/{fediverse key}/ 404; {permalink}feed/ and /comments/feed/ hold only the three native comments and the reply post, with source:inReplyTo naming /comment/{key}/, the fediverse origin and the webmention source; /feed/ gives the post no source:comments; /replies/{post key}/ is empty. Server stopped.
 
 AC#6 and AC#11 checked. Task stays In Progress for phases (c) and (d).
+
+Phase (c), plugin-wordpress import (2026-10-10).
+
+Built:
+- Core exports the key rule to plugins: repliesKey and webmentionKey from @geekity/cms/plugin. webmentionKey moved from comments/records.ts to web/feed-source.ts beside repliesKey, so the plugin bundle inlines only that file.
+- PluginSite.renameComments(permalink, renames) (comments/records.ts renameComments): each held comment a rename names takes its new id in its place; its email in data/ follows; every reply in the file naming the old id names the new one; the index drops the old row and puts the new ones. Refuses, changing nothing, a new id the post already holds. Optional addition to the plugin API, so HOST_API_VERSION stays 1.
+- geekity <plugin command> now runs migrateCommentEmails and migrateCommentKeys before the command, as a boot does, so an import run on a 0.2.0 site that has not booted since upgrading meets only keys instead of a refusal.
+- comments-import.ts: every comment is migrated: true. origin = source_id for an activitypub comment (the note for a reply, the activity for a like or boost; url keeps the note's web page), and for a webmention its url (webmention_source_url, or a pingback/trackback's author URL) else source_id. Key = repliesKey(origin) for activitypub, webmentionKey(origin, permalink) for webmention, repliesKey(WordPress comment URL) with no origin. inReplyTo is the parent's key. idOf and its comment went.
+- content-import.ts writeComments: renames each held comment at repliesKey(formerId) (what the boot gave a 0.2.0 id) to its key; carryOver moves an import.json entry recorded under the 0.2.0 id to the key, keeping 'the import wrote this' only when the held comment, read back under its 0.2.0 ids, still hashes to what 0.2.0 recorded; a comment the import owns but the site edited keeps its words and status and is still marked migrated with its origin. ImportedComment gained formerId.
+- README (plugin-wordpress): migrated, origin and key table, upgrading from 0.2.0, #comment-N no longer scrolls.
+
+Choice: the 5 Bluesky reactions in the andrewshell.org export (4 likes, 1 repost, no protocol, source_url empty) keep source_id (an at:// URI) as origin and are keyed webmentionKey(origin, permalink); nothing native would arrive with that identity today, but it is kept, as AC#5 names source_id.
+
+Andrew's export (real WXR): 68 comments imported. activitypub: 28 boosts, 12 likes, 1 reply, all with origin (source_id). webmention: 9 mentions (7 pingbacks, 1 mention, 1 bookmark), 1 reply, 1 repost, all with origin (webmention_source_url or pingback author URL); 4 likes and 1 repost with an at:// origin. 11 form comments, no origin. All 68 migrated, 68 distinct keys.
+
+Not done here: a redelivered activity or a reply backfill lands in the inbox log, so its dedupe is gather()'s (AC#10, phase d); the README says only that a webmention resend is the held comment. A Markdown document linking #comment-{old key} of a renamed fediverse or webmention comment is not rewritten (those comments have no /comment/ page; form comments keep their key).
+
+Verification: new tests in plugin-wordpress comments-import.test.ts (origin/key/migrated per source with the webmention key checked against the permalink the site serves; a webmention resend through intakeComment is the held record; /comments/feed/ and the post feed hold no item while the page anchors the replies; a 0.2.0-shaped import, booted, with a native reply under a fediverse comment and a moderator's spam call, re-imported: one record per comment in place under its key, the native reply follows, spam kept and migrated, import.json keyed by keys, no clash, a further run unchanged), plugins/site.test.ts (renameComments) and cli-plugins.test.ts (comment ids are keys before a plugin command). Each new test was seen failing with its defect put back (no rename, no carry-over, no identity patch, no migrated, keys by URL, no inReplyTo follow, no CLI migration). pnpm build, pnpm test (cms 5401, plugin-wordpress 94, 0 fail), pnpm typecheck, pnpm lint, pnpm format:check pass.
+Scratch sites from the real WXR: site336c (fresh import, served on dist/cli.js): /comments/feed/ and all 16 {permalink}feed/ answer 200 with no item and no imported id, origin or url in them; with one form comment's migrated flag removed (positive control, a copy) that comment appears in both feeds; the 13 imported replies are anchored on their posts. site336d: plugin-wordpress 0.2.0 (git worktree at plugin-wordpress-v0.2.0 on its own core) imported the WXR, the new core booted (ids re-keyed), the new plugin re-imported: 68 written ('written again with its key, migrated and its origin'), 0 clash, 68 records, 68 import.json entries all keys, and content/_data/comments and data/comments byte-identical to the fresh import; another run 0 written. site336e: same without the boot (the CLI migrates first): same result. Servers stopped; worktree removed.
+
+AC#5 checked on the orchestrator's split: the importer keeps and keys by the origin, and a webmention resend matches (tested); the redelivered activity and reply backfill half is enforced in gather() and proved under AC#10 in phase (d). AC#9 stays open: the plugin-wordpress README is done, the core README's comments, replies feed and theme sections are not this phase's.
 <!-- SECTION:NOTES:END -->

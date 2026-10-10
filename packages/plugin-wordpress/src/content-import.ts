@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { repliesKey } from '@geekity/cms/plugin';
 import type {
   PluginCommandContext,
   PluginComment,
@@ -34,6 +35,8 @@ export interface ImportedComment {
   readonly item: WordPressItem;
   readonly permalink: string;
   readonly comment: PluginComment;
+  /** Its id as plugin-wordpress 0.2.0 wrote it: its WordPress URL, `{guid}#comment-N`. */
+  readonly formerId: string;
   readonly label: string;
 }
 
@@ -319,34 +322,83 @@ async function writeComments(
   record: ImportRecord,
   data: PluginDataFolder,
 ): Promise<ReportRow[]> {
+  // A boot gave each id 0.2.0 wrote the key of that WordPress URL. A comment
+  // now keyed by its origin moves from that key to its own.
+  await site.renameComments(
+    permalink,
+    new Map(comments.map(({ comment, formerId }) => [repliesKey(formerId), comment.id])),
+  );
   const held = site.comments(permalink);
-  const current = new Map(held.comments.map((comment) => [comment.id, sha256(canonical(comment))]));
-  const recorded = record.comments.get(held.file) ?? new Map<CommentId, Sha256>();
+  const byId = new Map(held.comments.map((comment) => [comment.id, comment]));
+  const { recorded, carried } = carryOver(record.comments.get(held.file), comments, byId);
 
   const rows: ReportRow[] = [];
   const writes: PluginComment[] = [];
   for (const { item, comment, label } of comments) {
-    const now = current.get(comment.id);
+    const here = byId.get(comment.id);
+    const now = here === undefined ? undefined : sha256(canonical(here));
     const before = recorded.get(comment.id);
     const next = sha256(canonical(comment));
     const deletedHere = now === undefined && before !== undefined;
     const decision: Decision = deletedHere
       ? { action: 'leave', outcome: 'kept', why: 'deleted on this site; left out' }
       : decide(now, before, next);
-    if (decision.action === 'write') writes.push(comment);
+    let why = decision.why;
+    if (decision.action === 'write') {
+      writes.push(comment);
+      if (carried.has(comment.id)) why = 'written again with its key, migrated and its origin';
+    } else if (
+      here !== undefined &&
+      before !== undefined &&
+      (here.migrated !== true || here.origin !== comment.origin)
+    ) {
+      // The import owns what a comment is, though this site owns what it says.
+      writes.push({
+        ...here,
+        migrated: true,
+        ...(comment.origin === undefined ? {} : { origin: comment.origin }),
+      });
+      why = `${why}; marked migrated, with its origin`;
+    }
     if (decision.action !== 'leave') recorded.set(comment.id, next);
-    rows.push({
-      outcome: decision.outcome,
-      item,
-      path: held.file,
-      why: `${label}: ${decision.why}`,
-    });
+    rows.push({ outcome: decision.outcome, item, path: held.file, why: `${label}: ${why}` });
   }
 
   await site.putComments(permalink, writes);
   if (recorded.size > 0) record.comments.set(held.file, recorded);
   await saveRecord(data, record);
   return rows;
+}
+
+/**
+ * The record of what the import last wrote on a post, each entry under the
+ * comment's key. 0.2.0 recorded each one under its former id; its entry moves
+ * to the key, and keeps saying the import wrote what is there only while the
+ * comment still is what 0.2.0 wrote.
+ */
+function carryOver(
+  saved: ReadonlyMap<CommentId, Sha256> | undefined,
+  comments: readonly ImportedComment[],
+  held: ReadonlyMap<CommentId, PluginComment>,
+): { recorded: Map<CommentId, Sha256>; carried: Set<CommentId> } {
+  const recorded = new Map(saved);
+  const carried = new Set<CommentId>();
+  const formerIds = new Map(comments.map(({ comment, formerId }) => [comment.id, formerId]));
+  for (const { comment, formerId } of comments) {
+    const then = recorded.get(formerId);
+    if (then === undefined) continue;
+    recorded.delete(formerId);
+    carried.add(comment.id);
+    const here = held.get(comment.id);
+    const asWritten = here && {
+      ...here,
+      id: formerId,
+      inReplyTo: here.inReplyTo === null ? null : (formerIds.get(here.inReplyTo) ?? here.inReplyTo),
+    };
+    const untouched = asWritten !== undefined && sha256(canonical(asWritten)) === then;
+    recorded.set(comment.id, untouched ? sha256(canonical(here)) : then);
+  }
+  return { recorded, carried };
 }
 
 function canonical(value: unknown): string {
