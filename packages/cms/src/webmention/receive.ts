@@ -4,7 +4,7 @@ import { deleteComment, heldWebmention, intakeComment } from '../comments/record
 import type { CommentNotices, CommentRecords, ProposedComment } from '../comments/records.ts';
 import type { CommentChecker } from '../comments/submission.ts';
 import type { Document } from '../content/document.ts';
-import { commentIdAt } from '../web/conversation.ts';
+import { commentKeyAt } from '../web/conversation.ts';
 import type { ConversationReader } from '../web/conversation.ts';
 import { sanitizeCommentHtml } from '../web/sanitize.ts';
 import { readCapped, WEBMENTION_USER_AGENT } from './discovery.ts';
@@ -134,9 +134,9 @@ export function checkWebmentionRequest(
 
   // A comment's page is a page here, and what is said to it is said on the
   // post it is under (TASK-319).
-  const commentId = commentIdAt(to.pathname);
+  const key = commentKeyAt(to.pathname);
   const pathname =
-    commentId === undefined ? to.pathname : options.conversation.comment(commentId)?.post.permalink;
+    key === undefined ? to.pathname : options.conversation.comment(key)?.post.permalink;
   const document = pathname === undefined ? undefined : options.documentAt(pathname);
   if (document === undefined) return refuse('target', 'There is no page here at that address.');
 
@@ -226,7 +226,7 @@ export async function verifyWebmention(
   // answering one is a reply here even when it never names the post itself.
   const inReplyTo =
     entry?.inReplyTo
-      .map((url) => options.conversation.replyNamed(incoming.document, url))
+      .map((url) => options.conversation.replyNamed(incoming.document, url)?.id)
       .find((id) => id !== undefined) ?? null;
   const kind = inReplyTo === null ? (entry?.kind ?? 'mention') : 'reply';
   const author = {
@@ -320,7 +320,7 @@ async function keepCarried(
 
   const bring = async (nested: readonly NestedReply[], parent: string): Promise<void> => {
     for (const reply of nested) {
-      const named = options.conversation.replyNamed(incoming.document, reply.url);
+      const named = options.conversation.replyNamed(incoming.document, reply.url)?.id;
       const theirs =
         named !== undefined && records.admin.getComment(named)?.via === incoming.source;
       let id = named;

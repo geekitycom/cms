@@ -1971,6 +1971,7 @@ Each entry — a reply, a like or a boost — is:
 | Key              | What it holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`             | What it is called: a reply's own note id, which is what an answer to it names.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `key`            | Its key (decision-51): 16 lowercase hex digits, the comment's id for one stored on the site and the key of its guid for anything else. Its anchor is `#comment-{key}` and its replies feed `/replies/{key}/`.                                                                                                                                                                                                                                                                         |
 | `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page, `"webmention"` for another page linking here, `"post"` for a reply post a user of the site wrote (its `url` is the post's permalink).                                                                                                                                                                                                                                                                    |
 | `kind`           | `"reply"`, `"like"`, `"boost"`, `"repost"` or `"mention"`. A `repost` comes from a webmention; a `mention` is a webmention or an approved fediverse quote.                                                                                                                                                                                                                                                                                                                            |
 | `author.name`    | The best name available: their display name, else their handle, else their server, else their id. For a webmention, the source's `h-card` name, else its host.                                                                                                                                                                                                                                                                                                                        |
@@ -1978,7 +1979,7 @@ Each entry — a reply, a like or a boost — is:
 | `author.url`     | Their profile page, the website a commenter typed, or a webmention author's `u-url`. May be `null`, so guard the link.                                                                                                                                                                                                                                                                                                                                                                |
 | `author.avatar`  | Their avatar, or `null`. The site knows one for a fediverse actor whose profile it holds and for a webmention whose `h-card` carried a `u-photo`. Always a same-origin `/_geekity/avatars/…` path, never the remote URL: see [Avatars](#avatars).                                                                                                                                                                                                                                     |
 | `author.actorId` | Their id, which is what identifies them however they are named. `null` for a native comment.                                                                                                                                                                                                                                                                                                                                                                                          |
-| `url`            | Where it can be read: the remote note's `url` for a fediverse reply or quote, the source page for a webmention, and `/comment/{id}/`, its own page, for a native comment (see [A comment's own page](#a-comments-own-page)).                                                                                                                                                                                                                                                          |
+| `url`            | Where it can be read: the remote note's `url` for a fediverse reply or quote, the source page for a webmention, and `/comment/{key}/`, its own page, for a native comment (see [A comment's own page](#a-comments-own-page)).                                                                                                                                                                                                                                                         |
 | `content`        | What it says, **already sanitised**, so print it with `\| safe`. Empty for a like or a boost.                                                                                                                                                                                                                                                                                                                                                                                         |
 | `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.                                                                                                                                                                                                                                                                                                                                                                                         |
 | `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -2011,7 +2012,7 @@ and every link carrying `rel="nofollow ugc"`. Nothing else survives any of the
 three routes, so a theme may print all of them directly.
 
 The packaged partial draws each entry as the source design does: an
-`li.comment.h-entry` carrying `id="comment-{{ reply.id }}"` and a
+`li.comment.h-entry` carrying `id="comment-{{ reply.key }}"` and a
 `comment-{{ reply.source }}` class, holding an `article.comment-body` whose
 `footer.comment-meta` is the author as a `.comment-author.vcard.p-author.h-card`
 (their avatar, or the first letter of their name in a `span.comment-avatar-empty`
@@ -2022,7 +2023,7 @@ is a reply post, whose author is a user of the site) and the permalink as a `.co
 `div.comment-content.e-content`. Answers nest in an
 `ol.children` inside what they answer. A Reply link in a `div.reply` goes on the
 ones written here — `source == "comment"` — when the post is still open; it
-carries the comment's id to the form as `?reply_to=`, so threading needs no
+carries the comment's key to the form as `?reply_to=`, so threading needs no
 JavaScript. A fediverse reply is answered on the server that holds it and a
 webmention on the page that sent it, so neither gets one. A placeholder is an
 `li.comment.comment-placeholder` with the hidden comment's anchor, a
@@ -2057,17 +2058,17 @@ An Eleventy build of the same content gets the same thing from the same files:
 and then loops over exactly the keys above. The slug is what names the post's
 comment file under `content/_data/comments/`; the format is documented in
 backlog doc-6. Two things differ: a native comment's `url` is its
-`#comment-{id}` anchor, because a static build writes no comment pages, and
+`#comment-{key}` anchor, because a static build writes no comment pages, and
 the site's own reply posts (`source: "post"`) are not in the thread.
 
 ### A comment's own page
 
-A comment left through the form has a page of its own at `/comment/{id}/`,
-with the id percent-encoded, which is its `url` everywhere: the thread's
-permalink, the comments feeds and what another site fetches when it replies
-to the comment. The anchor `#comment-{id}` on the post stays, so an old link
-still scrolls to it. A webmention and a fediverse reply have no such page:
-their `url` is where they came from.
+A comment left through the form has a page of its own at `/comment/{key}/`,
+which is its `url` everywhere: the thread's permalink, the comments feeds and
+what another site fetches when it replies to the comment. The anchor
+`#comment-{key}` on the post stays, so an old link still scrolls to it. A
+webmention and a fediverse reply have no such page: their `url` is where they
+came from.
 
 `layouts/comment.njk` draws it, with the comment as the page's one `h-entry`.
 It answers only while the post shows its conversation, and is `noindex` and on
@@ -2210,7 +2211,7 @@ labelled "Include in posts and feeds" and unchecked by default: unchecked
 publishes the reply post unlisted, checked publishes it public. The stranger's
 branch never draws it, and the CMS ignores it from a stranger.
 
-A Reply link, `?reply_to={id}#respond`, goes on every entry of the thread for
+A Reply link, `?reply_to={key}#respond`, goes on every entry of the thread for
 somebody signed in, and on `source == "comment"` entries only for a stranger.
 `partials/comment.njk` asks `reply.source == "comment" or
 commentForm.signedInAs`.

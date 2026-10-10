@@ -7,7 +7,6 @@ import { rsvpValue } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
 import { REPLY_ACTIVITY_TYPE, replyIdOf, replyTargetOf } from '../federation/replies.ts';
 import { repliesKey } from '../web/feed-source.ts';
-import { replyGuid } from '../web/guids.ts';
 
 /**
  * Which rows of the inbox log are replies: a `Create` that named something it
@@ -20,12 +19,6 @@ const IS_REPLY = `activity_type = '${REPLY_ACTIVITY_TYPE}' AND in_reply_to IS NO
 export interface OpenAdminStoreOptions {
   /** Directory the database lives in. Created if it is missing. */
   dataDir: string;
-  /**
-   * The site's base URL, which a native comment's `/replies/` key is worked
-   * out against (TASK-327). Opening with a different one than last time works
-   * every key out again; opening with none leaves new comments without keys.
-   */
-  baseUrl?: string | undefined;
 }
 
 /**
@@ -857,11 +850,6 @@ export interface AdminStore {
   getComment(id: string): PostComment | undefined;
   /** The comments whose `url` is this one, whatever their status (TASK-300). */
   listCommentsAt(url: string): PostComment[];
-  /**
-   * The comments and webmentions whose feed guid has this `/replies/` key,
-   * whatever their status (TASK-327): one indexed lookup.
-   */
-  listCommentsByRepliesKey(key: string): PostComment[];
   /** The logged replies whose note's id has this `/replies/` key (TASK-327). */
   listRepliesByKey(key: string): InboxActivity[];
   /** How many comments stand at each status. What the dashboard shows. */
@@ -1145,11 +1133,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     `),
     commentById: db.prepare('SELECT * FROM comments WHERE id = ?'),
     commentsAt: db.prepare('SELECT * FROM comments WHERE url = ? ORDER BY submitted_at'),
-    commentsByRepliesKey: db.prepare(
-      'SELECT * FROM comments WHERE replies_key = ? ORDER BY submitted_at, id',
-    ),
-    staleCommentKeys: db.prepare('SELECT id, source FROM comments WHERE keys_base IS NOT ?'),
-    writeCommentKey: db.prepare('UPDATE comments SET replies_key = ?, keys_base = ? WHERE id = ?'),
     repliesByKey: db.prepare(`
       SELECT * FROM ap_inbox WHERE ${IS_REPLY} AND reply_key = ? ORDER BY received_at, id
     `),
@@ -1167,8 +1150,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         id, slug, permalink, source, kind, status,
         author_name, author_url, author_email,
         markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar, notify,
-        redacted, rsvp, via, replies_key, keys_base
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        redacted, rsvp, via
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET
         slug = excluded.slug,
         permalink = excluded.permalink,
@@ -1188,9 +1171,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         notify = excluded.notify,
         redacted = excluded.redacted,
         rsvp = excluded.rsvp,
-        via = excluded.via,
-        replies_key = excluded.replies_key,
-        keys_base = excluded.keys_base
+        via = excluded.via
     `),
     deleteComment: db.prepare('DELETE FROM comments WHERE id = ?'),
     clearComments: db.prepare('DELETE FROM comments'),
@@ -1320,21 +1301,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return [];
     }
   }
-
-  /** Work out again every comment key worked out against another base, or none. */
-  function refreshCommentKeys(baseUrl: string): void {
-    inTransaction(() => {
-      for (const row of statements.staleCommentKeys.all(baseUrl) as Record<string, unknown>[]) {
-        const comment = {
-          id: String(row['id']),
-          source: oneOf(row['source'], COMMENT_SOURCES, 'comment'),
-        };
-        statements.writeCommentKey.run(...commentKey(comment, baseUrl), comment.id);
-      }
-    });
-  }
-
-  if (options.baseUrl !== undefined) refreshCommentKeys(options.baseUrl);
 
   const listeners = new Set<(written: ConversationWrite) => void>();
   const written = (change: ConversationWrite): void => {
@@ -1695,10 +1661,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return (statements.commentsAt.all(url) as Record<string, unknown>[]).map(toComment);
     },
 
-    listCommentsByRepliesKey(key) {
-      return (statements.commentsByRepliesKey.all(key) as Record<string, unknown>[]).map(toComment);
-    },
-
     listRepliesByKey(key) {
       return (statements.repliesByKey.all(key) as Record<string, unknown>[]).map(toInboxActivity);
     },
@@ -1740,7 +1702,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         redactedColumn(comment.redacted),
         comment.rsvp ?? null,
         comment.via ?? null,
-        ...commentKey(comment, options.baseUrl),
       );
       written({
         kind: 'comment',
@@ -1784,7 +1745,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             redactedColumn(comment.redacted),
             comment.rsvp ?? null,
             comment.via ?? null,
-            ...commentKey(comment, options.baseUrl),
           );
         }
       });
@@ -2869,6 +2829,16 @@ const MIGRATIONS: readonly Migration[] = [
     version: 25,
     sql: `ALTER TABLE ap_inbox ADD COLUMN fetched INTEGER NOT NULL DEFAULT 0;`,
   },
+  {
+    // A comment's key is its id (decision-51), so the key worked out from its
+    // guid against the base URL has nothing left to say.
+    version: 26,
+    sql: `
+      DROP INDEX comments_replies_key;
+      ALTER TABLE comments DROP COLUMN replies_key;
+      ALTER TABLE comments DROP COLUMN keys_base;
+    `,
+  },
 ];
 
 /** What {@link AdminStore.onConversationWrite} hears about one logged activity. */
@@ -2883,12 +2853,4 @@ function activityWrite(activity: InboxActivity): ConversationWrite {
 function replyKeyOf(activity: Parameters<typeof replyIdOf>[0]): string | null {
   const id = replyIdOf(activity);
   return id === null ? null : repliesKey(id);
-}
-
-/** A comment's `/replies/` key and the base it was worked out against, as columns. */
-function commentKey(
-  comment: Pick<PostComment, 'id' | 'source'>,
-  baseUrl: string | undefined,
-): [string | null, string | null] {
-  return baseUrl === undefined ? [null, null] : [repliesKey(replyGuid(comment, baseUrl)), baseUrl];
 }

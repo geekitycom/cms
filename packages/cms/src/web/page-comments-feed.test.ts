@@ -21,7 +21,7 @@ const BASE_URL = 'https://blog.example';
 
 function said(id: string, name: string, minute: number): Record<string, unknown> {
   return {
-    id: `00000000-0000-4000-8000-${id.padStart(12, '0')}`,
+    id: `0000${id.padStart(12, '0')}`,
     source: 'comment',
     kind: 'reply',
     status: 'approved',

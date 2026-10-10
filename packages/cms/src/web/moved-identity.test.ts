@@ -15,8 +15,8 @@ after(() => box.cleanup());
 const BASE_URL = 'https://blog.example';
 const POST = '/2026/09/hello/';
 const PAGE = '/about/';
-const ADA = '00000000-0000-4000-8000-0000000000a1';
-const CY = '00000000-0000-4000-8000-0000000000c1';
+const ADA = '00000000000000a1';
+const CY = '00000000000000c1';
 const TARGET = 'https://elsewhere.example/a-page/';
 
 function markdown(frontMatter: string[], body: string): string {

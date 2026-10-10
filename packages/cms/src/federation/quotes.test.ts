@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -522,7 +523,8 @@ describe('an approved quote on the quoted post’s page (TASK-171)', () => {
     const html = await page(instance);
 
     assert.equal(mentions(html), undefined, 'not among the mentions');
-    assert.ok(html.includes(`id="comment-${QUOTE}"`), 'but in the thread');
+    const key = createHash('sha256').update(QUOTE).digest('hex').slice(0, 16);
+    assert.ok(html.includes(`id="comment-${key}"`), 'but in the thread, anchored by its key');
   });
 
   it('survives the database being thrown away (AC #5)', async () => {

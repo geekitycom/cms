@@ -20,7 +20,7 @@ import {
 } from '../federation/replies.ts';
 import { authorContext, authorFeedHref, siteAuthorContext } from './authors.ts';
 import { activityStreamsId, isListed, isServed, permalinkOfObjectId } from './documents.ts';
-import { isRepliesKey, repliesFeedPath, repliesKey } from './feed-source.ts';
+import { isKey, repliesFeedPath, repliesKey } from './feed-source.ts';
 import type { FeedComment } from './feeds.ts';
 import { COMMENT_PAGE_PREFIX, commentPageHref, feedGuid, replyGuid } from './guids.ts';
 import { absoluteUrl } from './negotiate.ts';
@@ -111,6 +111,12 @@ export interface InteractionAuthor {
 export interface Interaction {
   /** What it is called: the note's id, and what a reply to it names. */
   readonly id: string;
+  /**
+   * Its key (decision-51): a stored comment's id, else the key of its guid.
+   * The one thing in its anchor, `#comment-{key}`, and its replies feed,
+   * `/replies/{key}/`.
+   */
+  readonly key: string;
   /** Where it came from. */
   readonly source: InteractionSource;
   /** Which of the three it is. */
@@ -144,8 +150,10 @@ export interface Interaction {
  * visible reply sits under it.
  */
 export interface WithheldReply {
-  /** The hidden comment's id, so its anchor on the post is still there. */
+  /** The hidden comment's id. */
   readonly id: string;
+  /** Its key, so its anchor on the post is still there. */
+  readonly key: string;
   readonly withheld: true;
   /** The replies under it, oldest first, at least one of them visible. */
   readonly replies: ThreadReply[];
@@ -286,14 +294,14 @@ export interface ConversationReader {
    */
   readonly comment: (id: string) => CommentThread | undefined;
   /**
-   * The id of the reply on a post that a URL names, or `undefined` (TASK-319):
+   * The reply on a post that a URL names, or `undefined` (TASK-319):
    * a comment by its own page or by the post's `#comment-` anchor, a
    * webmention by the page it was sent from, a fediverse reply by its url or
    * its id. Every stored comment counts whatever its status, because what a
    * reply answers is a fact about it, and whether a reader may see the one it
    * answers is decided when the thread is read.
    */
-  readonly replyNamed: (document: Document, url: string) => string | undefined;
+  readonly replyNamed: (document: Document, url: string) => Interaction | undefined;
   /**
    * What a URL names on this site, while a reader may see it: a reply (a
    * comment by its page or its anchor, a webmention by the page it was sent
@@ -303,11 +311,10 @@ export interface ConversationReader {
    */
   readonly heldAt: (url: string) => HeldAt | undefined;
   /**
-   * What a `/replies/` segment names and its direct replies (TASK-324), or
-   * `undefined`: a key names a served post or page, or a reply a reader can
-   * see, by its feed guid; anything else is a native comment's id.
+   * What a key names and its direct replies (TASK-324, decision-51), or
+   * `undefined`: a served post or page, or a reply a reader can see.
    */
-  readonly repliesTo: (segment: string) => RepliesOf | undefined;
+  readonly repliesTo: (key: string) => RepliesOf | undefined;
   /**
    * The document whose conversation a URL is in (TASK-320): the post a
    * comment's page or anchor is on, the post a webmention was sent to, the
@@ -471,8 +478,10 @@ function gather(
       if (activity.objectId !== objectId) continue;
       if (activity.activityId !== null && withdrawn.has(activity.activityId)) continue;
       const author = naming(activity.actorId);
+      const id = activity.activityId ?? `${activity.actorId}#rsvp`;
       answers.push({
-        id: activity.activityId ?? `${activity.actorId}#rsvp`,
+        id,
+        key: repliesKey(id),
         source: 'activitypub',
         kind: 'reply',
         author,
@@ -500,8 +509,10 @@ function gather(
       reacted.add(key);
 
       const author = naming(activity.actorId);
+      const id = activity.activityId ?? `${activity.actorId}#${kind}`;
       (kind === 'like' ? likes : boosts).push({
-        id: activity.activityId ?? `${activity.actorId}#${kind}`,
+        id,
+        key: repliesKey(id),
         source: 'activitypub',
         kind,
         author,
@@ -597,8 +608,8 @@ function replyNamed(
   context: ConversationContext,
   document: Document,
   url: string,
-): string | undefined {
-  return namedIn(context, document, gather(context, document), url)?.id;
+): Interaction | undefined {
+  return namedIn(context, document, gather(context, document), url);
 }
 
 /** The entry of a gathered conversation a URL names, held ones included. */
@@ -614,11 +625,11 @@ function namedIn(
   } catch {
     return undefined;
   }
-  const commentId = commentNamedBy(named, document, context.baseUrl);
+  const key = keyNamedBy(named, document, context.baseUrl);
 
   return [...said.written, ...said.held.values()].find(
     (reply) =>
-      reply.id === commentId ||
+      reply.key === key ||
       reply.id === named.href ||
       (reply.url !== null && absoluteUrl(reply.url, context.baseUrl) === named.href),
   );
@@ -638,36 +649,31 @@ function heldAt(context: ConversationContext, url: string): HeldAt | undefined {
   return { kind: 'reply', post, reply };
 }
 
-function repliesTo(context: ConversationContext, segment: string): RepliesOf | undefined {
-  if (!isRepliesKey(segment)) {
-    const stored = context.admin.getComment(segment);
-    if (stored?.source !== 'comment') return undefined;
-    const post = context.store.getBySlug(stored.slug);
-    return post === undefined ? undefined : repliesIn(context, post, segment);
-  }
+function repliesTo(context: ConversationContext, key: string): RepliesOf | undefined {
+  if (!isKey(key)) return undefined;
 
   // Each source's index is asked in turn, so a key naming nothing costs three
   // lookups and no more (TASK-327).
-  const [document] = context.store.listByRepliesKey(segment);
+  const [document] = context.store.listByRepliesKey(key);
   if (document !== undefined) {
-    if (repliesKey(feedGuid(document, context.baseUrl)) === segment) {
+    if (repliesKey(feedGuid(document, context.baseUrl)) === key) {
       return repliesIn(context, document, null);
     }
     const root = threadRootOf(context, document);
-    return root === undefined ? undefined : repliesIn(context, root, rootOf(context, document));
+    return root === undefined ? undefined : repliesIn(context, root, key);
   }
 
-  const [comment] = context.admin.listCommentsByRepliesKey(segment);
+  const comment = context.admin.getComment(key);
   if (comment !== undefined) {
     const post = context.store.getBySlug(comment.slug);
-    return post === undefined ? undefined : repliesIn(context, post, comment.id);
+    return post === undefined ? undefined : repliesIn(context, post, key);
   }
 
-  for (const activity of context.admin.listRepliesByKey(segment)) {
+  for (const activity of context.admin.listRepliesByKey(key)) {
     const reply = replyFrom(activity);
     if (reply === undefined) continue;
     const post = documentNamed(context, reply.id);
-    return post === undefined ? undefined : repliesIn(context, post, reply.id);
+    return post === undefined ? undefined : repliesIn(context, post, key);
   }
   return undefined;
 }
@@ -679,11 +685,11 @@ function repliesTo(context: ConversationContext, segment: string): RepliesOf | u
 function repliesIn(
   context: ConversationContext,
   post: Document,
-  id: string | null,
+  key: string | null,
 ): RepliesOf | undefined {
   if (!isServed(post, context.store.now())) return undefined;
   const thread = postConversation(context, post).replies;
-  const reply = id === null ? null : visibleReply(thread, id);
+  const reply = key === null ? null : visibleReply(thread, key);
   if (reply === undefined) return undefined;
   return {
     post,
@@ -757,9 +763,9 @@ function documentNamed(context: ConversationContext, url: string, depth = 0): Do
   }
 
   if (named.origin === new URL(context.baseUrl).origin) {
-    const id = commentIdAt(named.pathname);
-    if (id !== undefined) {
-      const comment = context.admin.getComment(id);
+    const key = commentKeyAt(named.pathname);
+    if (key !== undefined) {
+      const comment = context.admin.getComment(key);
       return comment === undefined ? undefined : context.store.getBySlug(comment.slug);
     }
     const permalink = permalinkOfObjectId(`${named.origin}${named.pathname}`, context.baseUrl);
@@ -854,6 +860,7 @@ function replyPostInteraction(
 ): Interaction {
   return {
     id,
+    key: repliesKey(id),
     source: 'post',
     kind: 'reply',
     author: documentAuthor(context, post),
@@ -881,17 +888,17 @@ function documentAuthor(context: ConversationContext, post: Document): Interacti
   };
 }
 
-/** The comment a URL on this site names by its page or by its anchor on the post. */
-function commentNamedBy(url: URL, document: Document, baseUrl: string): string | undefined {
+/** The key a URL on this site names by a comment's page or by an anchor on the post. */
+function keyNamedBy(url: URL, document: Document, baseUrl: string): string | undefined {
   const post = new URL(absoluteUrl(document.permalink, baseUrl));
   if (url.origin !== post.origin) return undefined;
 
-  const onItsPage = commentIdAt(url.pathname);
+  const onItsPage = commentKeyAt(url.pathname);
   if (onItsPage !== undefined) return onItsPage;
 
   const anchor = `#${commentAnchor('')}`;
   if (url.pathname !== post.pathname || !url.hash.startsWith(anchor)) return undefined;
-  return decoded(url.hash.slice(anchor.length));
+  return url.hash.slice(anchor.length);
 }
 
 /**
@@ -1084,6 +1091,7 @@ function quotesOf(
 
       quotes.push({
         id: quote.id,
+        key: repliesKey(quote.id),
         source: 'activitypub',
         kind: 'mention',
         author: naming(quote.actorId),
@@ -1109,6 +1117,7 @@ function federatedInteraction(
 ): Interaction {
   return {
     id: reply.id,
+    key: repliesKey(reply.id),
     source: 'activitypub',
     kind: 'reply',
     author,
@@ -1127,6 +1136,7 @@ function federatedInteraction(
 function interactionOf(comment: PostComment, permalink: string): Interaction {
   return {
     id: comment.id,
+    key: comment.id,
     source: comment.source,
     kind: comment.kind,
     author: {
@@ -1162,29 +1172,20 @@ function interactionOf(comment: PostComment, permalink: string): Interaction {
 }
 
 /**
- * The `id` a comment is anchored at on the page.
+ * The `id` a thread entry is anchored at on the page, by its key.
  *
  * Prefixed rather than bare so a comment can never collide with a heading
  * anchor the post's own Markdown produced.
  */
-export function commentAnchor(id: string): string {
-  return `comment-${id}`;
+export function commentAnchor(key: string): string {
+  return `comment-${key}`;
 }
 
-/** The id of the comment whose page a path is, or `undefined` (TASK-319). */
-export function commentIdAt(pathname: string): string | undefined {
+/** The key of the comment whose page a path is, or `undefined` (TASK-319). */
+export function commentKeyAt(pathname: string): string | undefined {
   if (!pathname.startsWith(COMMENT_PAGE_PREFIX) || !pathname.endsWith('/')) return undefined;
-  const encoded = pathname.slice(COMMENT_PAGE_PREFIX.length, -1);
-  if (encoded === '' || encoded.includes('/')) return undefined;
-  return decoded(encoded);
-}
-
-function decoded(value: string): string | undefined {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return undefined;
-  }
+  const key = pathname.slice(COMMENT_PAGE_PREFIX.length, -1);
+  return isKey(key) ? key : undefined;
 }
 
 /**
@@ -1218,19 +1219,6 @@ function placed(replies: readonly ThreadReply[], parent: Interaction | null = nu
  */
 function directReplies(replies: readonly ThreadReply[]): Interaction[] {
   return replies.flatMap((reply) => (isWithheld(reply) ? directReplies(reply.replies) : [reply]));
-}
-
-/**
- * The `/replies/` feed of one reply: a native comment's by its id, anything
- * else's by the key of its guid, as is a native comment whose id would read
- * as a key.
- */
-function repliesHrefOf(reply: Interaction, baseUrl: string): string {
-  return repliesFeedPath(
-    reply.source === 'comment' && !isRepliesKey(reply.id)
-      ? reply.id
-      : repliesKey(replyGuid(reply, baseUrl)),
-  );
 }
 
 /**
@@ -1271,7 +1259,7 @@ export function feedComments(
         : {
             replies: {
               count: replies.length,
-              feed: absoluteUrl(repliesHrefOf(entry, baseUrl), baseUrl),
+              feed: absoluteUrl(repliesFeedPath(entry.key), baseUrl),
             },
           }),
       ...(entry.author.feed === null
@@ -1413,7 +1401,8 @@ function threadOf(said: Gathered, under: string = said.root): ThreadReply[] {
     withheld.set(id, undefined);
     const list = siblings(said.held.get(id)?.inReplyTo ?? said.root, id, true);
     if (list === undefined) return undefined;
-    const entry: WithheldReply = { id, withheld: true, replies: [] };
+    const key = said.held.get(id)?.key ?? (isKey(id) ? id : repliesKey(id));
+    const entry: WithheldReply = { id, key, withheld: true, replies: [] };
     list.push(entry);
     withheld.set(id, entry);
     return entry;
@@ -1426,11 +1415,14 @@ function threadOf(said: Gathered, under: string = said.root): ThreadReply[] {
   return top;
 }
 
-/** The entry of a thread with this id that a reader can see, at any depth. */
-export function visibleReply(replies: readonly ThreadReply[], id: string): Interaction | undefined {
+/** The entry of a thread with this key that a reader can see, at any depth. */
+export function visibleReply(
+  replies: readonly ThreadReply[],
+  key: string,
+): Interaction | undefined {
   for (const reply of replies) {
-    if (!isWithheld(reply) && reply.id === id) return reply;
-    const found = visibleReply(reply.replies, id);
+    if (!isWithheld(reply) && reply.key === key) return reply;
+    const found = visibleReply(reply.replies, key);
     if (found !== undefined) return found;
   }
   return undefined;

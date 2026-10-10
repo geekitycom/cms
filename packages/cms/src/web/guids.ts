@@ -64,23 +64,30 @@ export function feedGuid(document: Document, baseUrl: string): string {
 
 /**
  * The guid a reply has in the comments feeds: a native comment's page, which
- * is a permalink, and anything else's own id. A comment imported with a URL
- * for an id keeps it, as a migrated post keeps its stored `guid`: it is the
- * guid WordPress's comments feed already published, so a reader sees nothing
- * new.
+ * is a permalink, a webmention's source page, and anything else's own id.
  */
 export function replyGuid(
-  reply: { readonly id: string; readonly source: InteractionSource },
+  reply: {
+    readonly id: string;
+    readonly source: InteractionSource;
+    readonly url: string | null;
+  },
   baseUrl: string,
 ): string {
-  return reply.source === 'comment' && !URL.canParse(reply.id)
-    ? absoluteUrl(commentPageHref(reply.id), baseUrl)
-    : reply.id;
+  switch (reply.source) {
+    case 'comment':
+      return absoluteUrl(commentPageHref(reply.id), baseUrl);
+    case 'webmention':
+      return reply.url ?? reply.id;
+    case 'activitypub':
+    case 'post':
+      return reply.id;
+  }
 }
 
-/** Where a native comment's own page is (TASK-318). */
-export function commentPageHref(id: string): string {
-  return `${COMMENT_PAGE_PREFIX}${encodeURIComponent(id)}/`;
+/** Where a native comment's own page is (TASK-318), by its key. */
+export function commentPageHref(key: string): string {
+  return `${COMMENT_PAGE_PREFIX}${key}/`;
 }
 
 /** What every comment page's path starts with. */

@@ -82,6 +82,7 @@ import {
   followAllMovedComments,
   followMovedComments,
   migrateCommentEmails,
+  migrateCommentKeys,
   rebuildCommentIndexes,
 } from './comments/index.ts';
 import { contactFormFor } from './contact/index.ts';
@@ -520,6 +521,7 @@ export {
   intakeComment,
   isModerationAction,
   migrateCommentEmails,
+  migrateCommentKeys,
   MAXIMUM_BODY_LENGTH,
   MAXIMUM_FORM_AGE_SECONDS,
   MAXIMUM_NAME_LENGTH,
@@ -551,6 +553,7 @@ export type {
   CommentForm,
   CommentFormContext,
   CommentEmailMigrationReport,
+  CommentKeyMigrationReport,
   CommentIndexReport,
   CommentIntakeOutcome,
   CommentNotices,
@@ -1650,7 +1653,7 @@ function openCache(resolved: ResolvedConfig): { store: ContentStore; admin: Admi
     const { dataDir, baseUrl } = resolved;
     const store = openContentStore({ dataDir, baseUrl, now: resolved.now });
     try {
-      return { store, admin: openAdminStore({ dataDir, baseUrl }) };
+      return { store, admin: openAdminStore({ dataDir }) };
     } catch (error) {
       store.close();
       throw error;
@@ -1708,9 +1711,11 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
   // their authors' emails under data/comments/ (TASK-50, TASK-182). A comment
   // file that still holds an email, from before they moved or from a hand
   // edit, has it moved first; then the index is rebuilt, on every boot for the
-  // same reason the federation one is.
+  // same reason the federation one is. Between the two, every comment id
+  // that is not yet a key becomes one (decision-51).
   const commentRecords = { admin, contentDir: resolved.contentDir, dataDir: resolved.dataDir };
   migrateCommentEmails(commentRecords);
+  migrateCommentKeys(commentRecords);
   rebuildCommentIndexes(commentRecords);
 
   // And, once the files are the whole story, that every user's keys are

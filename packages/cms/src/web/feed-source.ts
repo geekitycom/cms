@@ -99,29 +99,28 @@ export function commentsFeedPath(permalink?: string): string {
 export const REPLIES_ROOT = '/replies/';
 
 /**
- * A replies key: the first 16 hex digits of the SHA-256 of an item's feed
- * guid. 64 bits, so two items of one site sharing a key is a birthday event
- * only past about four billion of them.
+ * A key: 16 lowercase hex digits, the one name every comment and every item
+ * that can be replied to has in a URL (decision-51): `/comment/{key}/`,
+ * `/replies/{key}/` and `#comment-{key}`. A stored comment's key is its id;
+ * anything else's is {@link repliesKey} of its feed guid. 64 bits, so two
+ * items of one site sharing a key is a birthday event only past about four
+ * billion of them.
  */
-const REPLIES_KEY = /^[0-9a-f]{16}$/;
+const KEY = /^[0-9a-f]{16}$/;
 
-/** The key a replies feed names an item by, from its feed guid. */
+/** The key of an item that has no stored id: the first 16 hex digits of the SHA-256 of its feed guid. */
 export function repliesKey(guid: string): string {
   return createHash('sha256').update(guid).digest('hex').slice(0, 16);
 }
 
-/**
- * Whether a `/replies/` segment is a key. Anything else is a native comment's
- * id: a comment whose id happens to look like a key is named by its key
- * instead, so no segment can name two items.
- */
-export function isRepliesKey(segment: string): boolean {
-  return REPLIES_KEY.test(segment);
+/** Whether a string is a key. */
+export function isKey(value: string): boolean {
+  return KEY.test(value);
 }
 
-/** The URL of the feed of one item's direct replies, by its key or comment id. */
-export function repliesFeedPath(segment: string): string {
-  return `${REPLIES_ROOT}${encodeURIComponent(segment)}/`;
+/** The URL of the feed of one item's direct replies, by its key. */
+export function repliesFeedPath(key: string): string {
+  return `${REPLIES_ROOT}${key}/`;
 }
 
 /** A feed URL taken apart: which listing it syndicates, and in what format. */

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { PluginCommandContext, PluginComment } from '@geekity/cms/plugin';
 
 import type {
@@ -78,7 +80,13 @@ function mapComments(
   item: WordPressItem,
   markdownOf: (html: string) => string,
 ): { comments: Omit<ImportedComment, 'permalink'>[]; notes: ItemNote[] } {
-  const idOf = (comment: number) => `${item.guid}#comment-${String(comment)}`;
+  // The key of the comment's WordPress URL (decision-51), so a re-import gives
+  // each comment the key it already has.
+  const idOf = (comment: number) =>
+    createHash('sha256')
+      .update(`${item.guid}#comment-${String(comment)}`)
+      .digest('hex')
+      .slice(0, 16);
   const notes: ItemNote[] = [];
   const kept: { wordPress: WordPressComment; comment: PluginComment; label: string }[] = [];
 

@@ -113,8 +113,8 @@ export function mountComments(app: Hono<GeekityEnv>): void {
         address: clientAddress(c, config),
       });
       if (answered.kind === 'saved') {
-        const id = c.var.conversation.replyNamed(document, answered.saved.permalink);
-        const anchor = id === undefined ? 'comments' : commentAnchor(id);
+        const reply = c.var.conversation.replyNamed(document, answered.saved.permalink);
+        const anchor = reply === undefined ? 'comments' : commentAnchor(reply.key);
         return c.redirect(`${document.permalink}?${COMMENT_NOTICE_PARAM}=posted#${anchor}`, 303);
       }
       return refusedPage(c, document, viewer, form, answered.refusal, now);
@@ -264,7 +264,7 @@ export function commentReplyTarget(options: {
     const reply = visibleReply(options.thread.replies, options.id);
     return reply === undefined
       ? {}
-      : { commentReplyTo: reply.id, commentReplyingTo: reply.author.name };
+      : { commentReplyTo: reply.key, commentReplyingTo: reply.author.name };
   }
 
   const parent = options.admin.getComment(options.id);

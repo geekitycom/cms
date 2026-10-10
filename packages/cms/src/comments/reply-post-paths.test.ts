@@ -39,7 +39,7 @@ const BASE_URL = 'https://blog.example';
 const NOW = new Date('2026-09-20T12:00:00.000Z');
 const POST_URL = '/2026/09/hello-world/';
 const ADA = { username: 'ada', password: 'correct horse battery', displayName: 'Ada Lovelace' };
-const ANN = '00000000-0000-4000-8000-0000000000a1';
+const ANN = '00000000000000a1';
 const ANN_PAGE = `${BASE_URL}/comment/${ANN}/`;
 const MICROPUB = '/_geekity/micropub';
 

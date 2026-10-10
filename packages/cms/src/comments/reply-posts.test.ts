@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -32,8 +33,8 @@ const NOW = new Date('2026-09-20T12:00:00.000Z');
 const POST_URL = '/2026/09/hello-world/';
 const ADA = { username: 'ada', password: 'correct horse battery', displayName: 'Ada Lovelace' };
 
-const NATIVE = '00000000-0000-4000-8000-0000000000a1';
-const WEBMENTION = '00000000-0000-4000-8000-0000000000b1';
+const NATIVE = '00000000000000a1';
+const WEBMENTION = '00000000000000b1';
 const SENDER = 'https://grace.example/2026/09/about-that/';
 const NOTE = 'https://remote.example/users/carol/statuses/1';
 const NOTE_URL = 'https://remote.example/@carol/1';
@@ -159,6 +160,11 @@ async function reply(
   return { agent, created, response };
 }
 
+/** The key of a thread entry that is not a stored comment: the hash of its guid. */
+function keyOf(guid: string): string {
+  return createHash('sha256').update(guid).digest('hex').slice(0, 16);
+}
+
 function replyPosts(cms: Cms): Document[] {
   return cms.store.listAll({ type: 'post' }).filter((document) => document.inReplyTo !== undefined);
 }
@@ -205,14 +211,14 @@ describe('a signed-in reply from the thread (AC #1)', () => {
 
   it('to a fediverse reply answers the note by its id', async () => {
     const cms = await site();
-    const { created } = await reply(cms, NOTE);
+    const { created } = await reply(cms, keyOf(NOTE));
     assert.equal(created.inReplyTo, NOTE);
   });
 
   it('to a reply post answers the reply post', async () => {
     const cms = await site();
     const { created: first } = await reply(cms, NATIVE);
-    const { created: second } = await reply(cms, `${BASE_URL}${first.permalink}`);
+    const { created: second } = await reply(cms, keyOf(`${BASE_URL}${first.permalink}`));
     assert.equal(second.inReplyTo, `${BASE_URL}${first.permalink}`);
   });
 });
@@ -304,22 +310,22 @@ describe('the Reply links (AC #6)', () => {
     const agent = await signIn(cms, { username: ADA.username, password: ADA.password });
 
     const signed = await page(agent);
-    for (const id of [NATIVE, WEBMENTION, NOTE]) {
-      assert.ok(signed.includes(`?reply_to=${encodeURIComponent(id)}#respond`), id);
+    for (const key of [NATIVE, WEBMENTION, keyOf(NOTE)]) {
+      assert.ok(signed.includes(`?reply_to=${key}#respond`), key);
     }
 
     const visitor = await page(cms);
     assert.ok(visitor.includes(`?reply_to=${NATIVE}#respond`));
     assert.ok(!visitor.includes(`?reply_to=${WEBMENTION}#respond`));
-    assert.ok(!visitor.includes(`?reply_to=${encodeURIComponent(NOTE)}#respond`));
+    assert.ok(!visitor.includes(`?reply_to=${keyOf(NOTE)}#respond`));
   });
 
   it('name a fediverse reply on the form for somebody signed in', async () => {
     const cms = await site();
     const agent = await signIn(cms, { username: ADA.username, password: ADA.password });
-    const html = await page(agent, `${POST_URL}?reply_to=${encodeURIComponent(NOTE)}`);
+    const html = await page(agent, `${POST_URL}?reply_to=${keyOf(NOTE)}`);
     assert.match(html, /Replying to @carol@remote\.example\./);
-    assert.ok(html.includes(`value="${NOTE}"`));
+    assert.ok(html.includes(`value="${keyOf(NOTE)}"`));
   });
 });
 
@@ -373,7 +379,7 @@ describe('answers to a reply post (AC #8)', () => {
   const ANSWERED = JSON.stringify({
     post: '/2026/09/answer/',
     comments: [
-      said('00000000-0000-4000-8000-0000000000c1', 'Hugo', 30, {
+      said('00000000000000c1', 'Hugo', 30, {
         source: 'webmention',
         url: 'https://hugo.example/re/',
       }),
@@ -422,7 +428,7 @@ describe('what stays a comment (AC #9)', () => {
       '_data/comments/hello-world.json': JSON.stringify({
         post: POST_URL,
         comments: [
-          said('00000000-0000-4000-8000-0000000000d1', ADA.displayName, 5, {
+          said('00000000000000d1', ADA.displayName, 5, {
             author: { name: ADA.displayName, url: '/author/ada/', email: null, avatar: null },
           }),
         ],

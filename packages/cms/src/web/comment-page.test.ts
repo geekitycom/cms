@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -15,7 +16,7 @@ const BASE_URL = 'https://blog.example';
 const POST = '/2026/09/hello/';
 
 function id(which: string): string {
-  return `00000000-0000-4000-8000-${which.padStart(12, '0')}`;
+  return `0000${which.padStart(12, '0')}`;
 }
 
 const TOP = id('a1');
@@ -166,7 +167,7 @@ before(async () => {
 });
 
 function pageOf(which: string): string {
-  return `/comment/${encodeURIComponent(which)}/`;
+  return `/comment/${which}/`;
 }
 
 async function get(pathname: string): Promise<string> {
@@ -229,12 +230,15 @@ describe('a native comment’s own page (TASK-318)', () => {
     assert.equal(first(cite(entry, 'in-reply-to'), 'url'), `${BASE_URL}${pageOf(TOP)}`);
   });
 
-  it('has a page for a comment imported with an id that is a URL', async () => {
-    const url = `${BASE_URL}${pageOf(IMPORTED)}`;
-    const entry = only(await get(pageOf(IMPORTED)), url);
+  it('has a page at its key for a comment stored with a URL for an id, and none at the URL', async () => {
+    const key = createHash('sha256').update(IMPORTED).digest('hex').slice(0, 16);
+    const url = `${BASE_URL}${pageOf(key)}`;
+    const entry = only(await get(pageOf(key)), url);
 
     assert.equal(first(entry, 'url'), url);
-    assert.ok((await get(POST)).includes(`href="${pageOf(IMPORTED)}"`), 'the thread links it');
+    assert.ok((await get(POST)).includes(`href="${pageOf(key)}"`), 'the thread links it');
+    const old = await cms.app.request(`/comment/${encodeURIComponent(IMPORTED)}/`);
+    assert.equal(old.status, 404);
   });
 
   it('is noindex in its head and its headers', async () => {

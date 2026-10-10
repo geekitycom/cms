@@ -204,9 +204,10 @@ as comments. Each lands under the post as one the site received itself would:
 
 A reply keeps the comment it answers. An approved comment is approved here,
 and one WordPress held for moderation waits here too. Spam and trash are left
-out and named in the report. Each comment keeps the id WordPress's comments
-feed gave it, `https://example.com/?p=ID#comment-N`, so a feed reader sees
-nothing it has not seen. A commenter's email goes only to `data/comments/`.
+out and named in the report. Each comment's id is the key of the URL
+WordPress's comments feed gave it, `https://example.com/?p=ID#comment-N`: the
+first 16 hex digits of its SHA-256, which is the only id shape the CMS stores.
+A commenter's email goes only to `data/comments/`.
 Nothing is announced: no moderator is emailed and nothing is delivered.
 
 The import merges by comment id. A rerun adds the comments WordPress received

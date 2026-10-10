@@ -15,7 +15,7 @@
 
 {% macro comment(reply, classes="h-entry") %}
 {% if reply.withheld %}
-<li id="comment-{{ reply.id }}" class="comment comment-placeholder">
+<li id="comment-{{ reply.key }}" class="comment comment-placeholder">
   <p class="comment-withheld">{{ withheld() }}</p>
   <ol class="children">
     {% for child in reply.replies %}
@@ -24,7 +24,7 @@
   </ol>
 </li>
 {% else %}
-<li id="comment-{{ reply.id }}" class="comment {{ classes }} comment-{{ reply.source }}">
+<li id="comment-{{ reply.key }}" class="comment {{ classes }} comment-{{ reply.source }}">
   <article class="comment-body">
     <footer class="comment-meta">
       <div class="comment-author vcard p-author h-card">
@@ -64,7 +64,7 @@
       page that sent it.
     #}
     {% if commentForm and (reply.source == "comment" or commentForm.signedInAs) %}
-    <div class="reply"><a class="comment-reply-link" href="{{ page.url }}?reply_to={{ reply.id | urlencode }}#respond">Reply</a></div>
+    <div class="reply"><a class="comment-reply-link" href="{{ page.url }}?reply_to={{ reply.key }}#respond">Reply</a></div>
     {% endif %}
   </article>
   {% if reply.replies.length %}

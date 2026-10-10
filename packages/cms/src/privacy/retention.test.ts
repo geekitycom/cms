@@ -128,9 +128,15 @@ async function message(dataDir: string, received: string, email: string): Promis
 describe('the retention sweep', () => {
   it('removes emails, address hashes and contact messages past their periods, from the files and the index', async () => {
     const { cms, dataDir, file } = await siteWith([
-      { id: 'old', name: 'Ada', email: 'ada@example.com', submitted: OLD, notify: true },
-      { id: 'middling', name: 'Grace', email: 'grace@example.com', submitted: MIDDLING },
-      { id: 'recent', name: 'Alan', email: 'alan@example.com', submitted: RECENT },
+      {
+        id: '00000000000000a1',
+        name: 'Ada',
+        email: 'ada@example.com',
+        submitted: OLD,
+        notify: true,
+      },
+      { id: '00000000000000a2', name: 'Grace', email: 'grace@example.com', submitted: MIDDLING },
+      { id: '00000000000000a3', name: 'Alan', email: 'alan@example.com', submitted: RECENT },
     ]);
     const oldMessage = await message(dataDir, ANCIENT, 'old@example.com');
     const middlingMessage = await message(dataDir, MIDDLING, 'middling@example.com');
@@ -152,15 +158,15 @@ describe('the retention sweep', () => {
     assert.deepEqual(middling?.redacted, ['addressHash']);
 
     assert.equal(recent?.author.email, 'alan@example.com');
-    assert.equal(recent?.addressHash, 'hash-recent');
+    assert.equal(recent?.addressHash, 'hash-00000000000000a3');
     assert.equal(recent?.redacted, undefined, 'nothing removed, nothing marked');
 
-    const indexed = cms.admin.getComment('old');
+    const indexed = cms.admin.getComment('00000000000000a1');
     assert.equal(indexed?.author.email, null, 'the index says what the file says');
     assert.equal(indexed?.addressHash, null);
     assert.equal(indexed?.notify, false);
-    assert.equal(cms.admin.getComment('middling')?.addressHash, null);
-    assert.equal(cms.admin.getComment('recent')?.author.email, 'alan@example.com');
+    assert.equal(cms.admin.getComment('00000000000000a2')?.addressHash, null);
+    assert.equal(cms.admin.getComment('00000000000000a3')?.author.email, 'alan@example.com');
 
     assert.equal(
       readContactMessage(dataDir, oldMessage),
@@ -174,8 +180,8 @@ describe('the retention sweep', () => {
 
   it('changes nothing the second time', async () => {
     const { cms, dataDir, file } = await siteWith([
-      { id: 'old', name: 'Ada', email: 'ada@example.com', submitted: OLD },
-      { id: 'recent', name: 'Alan', email: 'alan@example.com', submitted: RECENT },
+      { id: '00000000000000a1', name: 'Ada', email: 'ada@example.com', submitted: OLD },
+      { id: '00000000000000a3', name: 'Alan', email: 'alan@example.com', submitted: RECENT },
     ]);
     await message(dataDir, MIDDLING, 'middling@example.com');
 
@@ -205,7 +211,7 @@ describe('the retention sweep', () => {
 
   it('keeps everything forever when every period is 0', async () => {
     const { cms, dataDir, file } = await siteWith(
-      [{ id: 'old', name: 'Ada', email: 'ada@example.com', submitted: OLD }],
+      [{ id: '00000000000000a1', name: 'Ada', email: 'ada@example.com', submitted: OLD }],
       { commentEmailRetentionDays: 0, addressHashRetentionDays: 0, contactMessageRetentionDays: 0 },
     );
     const oldMessage = await message(dataDir, ANCIENT, 'old@example.com');
@@ -219,7 +225,15 @@ describe('the retention sweep', () => {
 
   it('removes nothing on an upgraded site whose site.json never chose a period', async () => {
     const { cms, dataDir, file } = await siteWith(
-      [{ id: 'old', name: 'Ada', email: 'ada@example.com', submitted: OLD, notify: true }],
+      [
+        {
+          id: '00000000000000a1',
+          name: 'Ada',
+          email: 'ada@example.com',
+          submitted: OLD,
+          notify: true,
+        },
+      ],
       {},
     );
     const oldMessage = await message(dataDir, ANCIENT, 'old@example.com');
@@ -229,14 +243,14 @@ describe('the retention sweep', () => {
 
     assert.deepEqual(report, { comments: 0, messagesDeleted: 0, messagesRedacted: 0 });
     assert.equal(await readFile(file, 'utf8'), before, 'the old email and hash are still there');
-    assert.equal(cms.admin.getComment('old')?.author.email, 'ada@example.com');
+    assert.equal(cms.admin.getComment('00000000000000a1')?.author.email, 'ada@example.com');
     assert.equal(readContactMessage(dataDir, oldMessage)?.from.email, 'old@example.com');
     assert.equal(readContactMessage(dataDir, oldMessage)?.addressHash, 'contact-hash');
   });
 
   it('runs once the site serves', async () => {
     const { cms } = await siteWith([
-      { id: 'old', name: 'Ada', email: 'ada@example.com', submitted: OLD },
+      { id: '00000000000000a1', name: 'Ada', email: 'ada@example.com', submitted: OLD },
     ]);
 
     await cms.serve();
@@ -250,22 +264,28 @@ describe('the retention sweep', () => {
 describe('a comment whose email has been removed', () => {
   it('keeps its place in the thread, its status and its words on the page', async () => {
     const { cms } = await siteWith([
-      { id: 'parent', name: 'Ada', email: 'ada@example.com', submitted: OLD, notify: true },
       {
-        id: 'reply',
+        id: '00000000000000b1',
+        name: 'Ada',
+        email: 'ada@example.com',
+        submitted: OLD,
+        notify: true,
+      },
+      {
+        id: '00000000000000b2',
         name: 'Alan',
         email: 'alan@example.com',
         submitted: RECENT,
-        inReplyTo: 'parent',
+        inReplyTo: '00000000000000b1',
       },
     ]);
 
     await cms.retention.sweep();
 
-    const parent = cms.admin.getComment('parent');
+    const parent = cms.admin.getComment('00000000000000b1');
     assert.equal(parent?.status, 'approved');
     assert.equal(parent?.author.name, 'Ada');
-    assert.equal(cms.admin.getComment('reply')?.inReplyTo, 'parent');
+    assert.equal(cms.admin.getComment('00000000000000b2')?.inReplyTo, '00000000000000b1');
 
     const page = await (await cms.app.request(PERMALINK)).text();
     assert.match(page, /Said by Ada\./);
@@ -280,7 +300,7 @@ describe('a comment whose email has been removed', () => {
 
   it('does not make every emailless comment under that name auto-approved', async () => {
     const { cms } = await siteWith([
-      { id: 'old', name: 'Ada', email: 'ada@example.com', submitted: OLD },
+      { id: '00000000000000a1', name: 'Ada', email: 'ada@example.com', submitted: OLD },
     ]);
     assert.equal(cms.admin.hasApprovedAuthor('Ada', null), false, 'before the sweep');
 
@@ -292,11 +312,17 @@ describe('a comment whose email has been removed', () => {
 
   it('can still be moderated from the link in a notice', async () => {
     const { cms, dataDir } = await siteWith([
-      { id: 'waiting', name: 'Ada', email: 'ada@example.com', submitted: OLD, status: 'pending' },
+      {
+        id: '00000000000000c1',
+        name: 'Ada',
+        email: 'ada@example.com',
+        submitted: OLD,
+        status: 'pending',
+      },
     ]);
     const link = moderationLink(
       { dataDir, baseUrl: 'https://blog.example', now: NOW },
-      'waiting',
+      '00000000000000c1',
       'approve',
     );
 
@@ -308,13 +334,13 @@ describe('a comment whose email has been removed', () => {
       body: new URLSearchParams({ token, action: 'approve' }),
     });
     assert.equal(response.status, 200);
-    assert.equal(cms.admin.getComment('waiting')?.status, 'approved');
-    assert.deepEqual(cms.admin.getComment('waiting')?.redacted, ['email', 'addressHash']);
+    assert.equal(cms.admin.getComment('00000000000000c1')?.status, 'approved');
+    assert.deepEqual(cms.admin.getComment('00000000000000c1')?.redacted, ['email', 'addressHash']);
   });
 
   it('survives a rebuild of the index', async () => {
     const { cms } = await siteWith([
-      { id: 'old', name: 'Ada', email: 'ada@example.com', submitted: OLD },
+      { id: '00000000000000a1', name: 'Ada', email: 'ada@example.com', submitted: OLD },
     ]);
     await cms.retention.sweep();
 
@@ -325,7 +351,7 @@ describe('a comment whose email has been removed', () => {
       dataDir: cms.config.dataDir,
     });
 
-    assert.deepEqual(cms.admin.getComment('old')?.redacted, ['email', 'addressHash']);
+    assert.deepEqual(cms.admin.getComment('00000000000000a1')?.redacted, ['email', 'addressHash']);
     assert.equal(cms.admin.hasApprovedAuthor('Ada', null), false);
   });
 });

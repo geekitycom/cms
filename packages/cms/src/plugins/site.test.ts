@@ -84,7 +84,7 @@ describe('PluginSite.checkUpload', () => {
 
 function imported(overrides: Partial<PluginComment> = {}): PluginComment {
   return {
-    id: 'https://old.example/?p=7#comment-3',
+    id: '0000000000007003',
     source: 'activitypub',
     kind: 'reply',
     status: 'approved',
@@ -109,7 +109,7 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
     await plugin.putComments('/2026/07/i-♥-rss/', [
       imported(),
       imported({
-        id: 'https://old.example/?p=7#comment-4',
+        id: '0000000000007004',
         source: 'comment',
         author: { name: 'Ada', url: null, email: 'ada@example.com', avatar: null },
         url: null,
@@ -125,8 +125,8 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
     assert.deepEqual(
       held.comments.map((comment) => [comment.id, comment.source]),
       [
-        ['https://old.example/?p=7#comment-3', 'activitypub'],
-        ['https://old.example/?p=7#comment-4', 'comment'],
+        ['0000000000007003', 'activitypub'],
+        ['0000000000007004', 'comment'],
       ],
     );
     assert.equal(
@@ -145,7 +145,7 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
     assert.deepEqual(read.comments, [
       imported(),
       imported({
-        id: 'https://old.example/?p=7#comment-4',
+        id: '0000000000007004',
         source: 'comment',
         author: { name: 'Ada', url: null, email: 'ada@example.com', avatar: null },
         url: null,
@@ -179,7 +179,7 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
 
     await plugin.putComments('/2026/09/hello/', [
       imported({ markdown: 'Edited at the source.' }),
-      imported({ id: 'https://old.example/?p=7#comment-9', kind: 'like', markdown: '' }),
+      imported({ id: '0000000000007009', kind: 'like', markdown: '' }),
     ]);
 
     const held = JSON.parse(await readFile(file, 'utf8')) as {
@@ -187,7 +187,7 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
     };
     assert.deepEqual(
       held.comments.map((comment) => comment.id),
-      ['https://old.example/?p=7#comment-3', live.id, 'https://old.example/?p=7#comment-9'],
+      ['0000000000007003', live.id, '0000000000007009'],
     );
     assert.equal(held.comments[0]?.content.markdown, 'Edited at the source.');
     assert.deepEqual(held.comments[1], liveEntry, 'the live comment is byte for byte as it was');

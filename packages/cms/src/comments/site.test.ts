@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -738,7 +739,7 @@ describe('a site whose comment files still hold emails', () => {
       post: '/2026/09/hello-world/',
       comments: [
         {
-          id: 'c1',
+          id: '00000000000000c1',
           status: 'approved',
           author: { name: 'Ada Lovelace', url: null, email: 'ada@example.com', avatar: null },
           content: { markdown: 'Old words.', html: '<p>Old words.</p>' },
@@ -754,8 +755,8 @@ describe('a site whose comment files still hold emails', () => {
 
     const published = await readFile(commentsFile(contentDir, 'hello-world'), 'utf8');
     assert.ok(!published.includes('ada@example.com'), 'the email left content/');
-    assert.equal(cms.admin.getComment('c1')?.author.email, 'ada@example.com');
-    assert.equal(cms.admin.getComment('c1')?.notify, true);
+    assert.equal(cms.admin.getComment('00000000000000c1')?.author.email, 'ada@example.com');
+    assert.equal(cms.admin.getComment('00000000000000c1')?.notify, true);
     assert.match(await postPage(cms), /Old words\./);
   });
 });
@@ -776,8 +777,9 @@ describe('answering a comment from the page', () => {
     assert.match(replying, new RegExp(`name="in_reply_to" value="${id}"`));
   });
 
-  it('carries an id that is a URL, as an imported comment’s is, whole through the Reply link', async () => {
+  it('gives a comment stored before keys its key at boot, and the Reply link carries it', async () => {
     const id = 'https://old.example/?p=7#comment-5';
+    const key = createHash('sha256').update(id).digest('hex').slice(0, 16);
     const { cms } = await site({
       'posts/2026-09-19-hello-world.md': POST,
       '_data/comments/hello-world.json': JSON.stringify({
@@ -796,11 +798,11 @@ describe('answering a comment from the page', () => {
     });
 
     const link = /<div class="reply"><a[^>]*href="([^"]*)"/.exec(await postPage(cms))?.[1] ?? '';
-    const query = link.replace('/2026/09/hello-world/', '').replace(/#respond$/, '');
-    const replying = await postPage(cms, query.replaceAll('&amp;', '&'));
+    assert.equal(link, `/2026/09/hello-world/?reply_to=${key}#respond`);
+    const replying = await postPage(cms, `?reply_to=${key}`);
 
     assert.match(replying, /Replying to Ada Lovelace\./);
-    assert.ok(replying.includes(`name="in_reply_to" value="${id}"`), 'the form answers that id');
+    assert.ok(replying.includes(`name="in_reply_to" value="${key}"`), 'the form answers that key');
   });
 
   it('ignores a reply_to that names nothing on this post', async () => {

@@ -28,7 +28,7 @@ const ANSWER = '/2026/09/answer/';
 const ANSWER_GUID = `${BASE_URL}${ANSWER}`;
 
 function id(which: string): string {
-  return `00000000-0000-4000-8000-${which.padStart(12, '0')}`;
+  return `0000${which.padStart(12, '0')}`;
 }
 
 const TOP = id('a1');
@@ -42,9 +42,12 @@ const ON_PAGE = id('e1');
 const ON_CLOSED_PAGE = id('e2');
 const NOTE = 'https://remote.example/notes/1';
 const NOTE_UNDER_NOTE = 'https://remote.example/notes/2';
+const GUS = 'https://gus.example/reply';
+const KIT = 'https://kit.example/reply';
+const MAX = 'https://max.example/linked';
 
 function commentPage(which: string): string {
-  return `${BASE_URL}/comment/${encodeURIComponent(which)}/`;
+  return `${BASE_URL}/comment/${which}/`;
 }
 
 function keyOf(guid: string): string {
@@ -101,19 +104,19 @@ const FILES: Record<string, string> = {
       said(WEBMENTION_UNDER_MIDDLE, 'Gus', 3, {
         inReplyTo: MIDDLE,
         source: 'webmention',
-        url: 'https://gus.example/reply',
+        url: GUS,
       }),
       said(HELD, 'Hal', 4, { status: 'pending' }),
       said(UNDER_HELD, 'Ivy', 5, { inReplyTo: HELD }),
       said(WEBMENTION_UNDER_NOTE, 'Kit', 9, {
         inReplyTo: NOTE_UNDER_NOTE,
         source: 'webmention',
-        url: 'https://kit.example/reply',
+        url: KIT,
       }),
       said(MENTION, 'Max', 10, {
         kind: 'mention',
         source: 'webmention',
-        url: 'https://max.example/linked',
+        url: MAX,
       }),
     ],
   }),
@@ -202,13 +205,13 @@ function local(url: string): string {
 const PARENTS: Record<string, string> = {
   [commentPage(TOP)]: POST_GUID,
   [commentPage(MIDDLE)]: commentPage(TOP),
-  [WEBMENTION_UNDER_MIDDLE]: commentPage(MIDDLE),
+  [GUS]: commentPage(MIDDLE),
   [ANSWER_GUID]: commentPage(TOP),
   // Its parent is waiting for a moderator, so it sits under the post.
   [commentPage(UNDER_HELD)]: POST_GUID,
   [NOTE]: POST_GUID,
   [NOTE_UNDER_NOTE]: NOTE,
-  [WEBMENTION_UNDER_NOTE]: NOTE_UNDER_NOTE,
+  [KIT]: NOTE_UNDER_NOTE,
 };
 
 describe('the comments feeds name what each item answers', () => {
@@ -220,23 +223,24 @@ describe('the comments feeds name what each item answers', () => {
         assert.ok(item !== undefined, `${guid} is an item of ${feed}`);
         assert.equal(child(item, 'source:inReplyTo').text, parent, `what ${guid} answers`);
       }
-      assert.equal(child(found.get(MENTION) as XmlElement, 'source:inReplyTo').text, POST_GUID);
+      assert.equal(child(found.get(MAX) as XmlElement, 'source:inReplyTo').text, POST_GUID);
       for (const item of found.values()) {
         assert.ok(optional(item, 'source:inReplyTo') !== undefined, `${guidOf(item)} names one`);
       }
     });
   }
 
-  it('gives a native comment its page as a permalink guid, and others their id', async () => {
+  it('gives a native comment its page as a permalink guid, and a webmention its source', async () => {
     const found = byGuid(await items(`${POST}feed/`));
     const top = found.get(commentPage(TOP));
     assert.ok(top !== undefined);
     assert.equal(child(top, 'guid').attributes['isPermaLink'], 'true');
     assert.equal(child(top, 'link').text, commentPage(TOP));
 
-    const webmention = found.get(WEBMENTION_UNDER_MIDDLE);
+    const webmention = found.get(GUS);
     assert.ok(webmention !== undefined);
-    assert.equal(child(webmention, 'guid').attributes['isPermaLink'], 'false');
+    assert.equal(child(webmention, 'guid').attributes['isPermaLink'], 'true');
+    assert.equal(child(webmention, 'link').text, GUS);
   });
 });
 
@@ -246,23 +250,16 @@ describe('the /replies/ feeds', () => {
     assert.deepEqual(found.map(guidOf), [NOTE, commentPage(UNDER_HELD), commentPage(TOP)]);
   });
 
-  it('answer a native comment’s direct replies at its id', async () => {
-    const found = await items(`/replies/${encodeURIComponent(TOP)}/`);
+  it('answer a native comment’s direct replies at its key, which is its id', async () => {
+    const found = await items(`/replies/${TOP}/`);
     assert.deepEqual(found.map(guidOf), [ANSWER_GUID, commentPage(MIDDLE)]);
     assert.equal(child(found[1] as XmlElement, 'source:inReplyTo').text, commentPage(TOP));
   });
 
-  it('answer a native comment’s direct replies at the key of its guid too', async () => {
-    const found = await items(`/replies/${keyOf(commentPage(TOP))}/`);
-    assert.deepEqual(found.map(guidOf), [ANSWER_GUID, commentPage(MIDDLE)]);
-  });
-
-  it('answer a fediverse reply’s and a webmention’s at the key of their guid', async () => {
+  it('answer a fediverse reply’s at the key of its guid, and a webmention’s at its key', async () => {
     assert.deepEqual((await items(`/replies/${keyOf(NOTE)}/`)).map(guidOf), [NOTE_UNDER_NOTE]);
-    assert.deepEqual((await items(`/replies/${keyOf(NOTE_UNDER_NOTE)}/`)).map(guidOf), [
-      WEBMENTION_UNDER_NOTE,
-    ]);
-    assert.deepEqual(await items(`/replies/${keyOf(WEBMENTION_UNDER_MIDDLE)}/`), []);
+    assert.deepEqual((await items(`/replies/${keyOf(NOTE_UNDER_NOTE)}/`)).map(guidOf), [KIT]);
+    assert.deepEqual(await items(`/replies/${WEBMENTION_UNDER_MIDDLE}/`), []);
     assert.deepEqual(await items(`/replies/${keyOf(ANSWER_GUID)}/`), []);
   });
 
@@ -273,11 +270,7 @@ describe('the /replies/ feeds', () => {
   });
 
   it('404 for a page not showing its conversation, as its {permalink}feed/ does', async () => {
-    const segments = [
-      keyOf(`${BASE_URL}${CLOSED_PAGE}`),
-      encodeURIComponent(ON_CLOSED_PAGE),
-      keyOf(commentPage(ON_CLOSED_PAGE)),
-    ];
+    const segments = [keyOf(`${BASE_URL}${CLOSED_PAGE}`), ON_CLOSED_PAGE];
     for (const segment of segments) {
       const response = await cms.app.request(`/replies/${segment}/`);
       assert.equal(response.status, 404, `/replies/${segment}/`);
@@ -285,8 +278,14 @@ describe('the /replies/ feeds', () => {
     assert.equal((await cms.app.request(`${CLOSED_PAGE}feed/`)).status, 404);
   });
 
-  it('404 for an unknown key, an unknown id and a comment a reader may not see', async () => {
-    for (const segment of ['0123456789abcdef', encodeURIComponent(id('ff')), HELD]) {
+  it('404 for an unknown key, anything that is not a key, and a comment a reader may not see', async () => {
+    const notKeys = [
+      keyOf(commentPage(TOP)),
+      encodeURIComponent(NOTE),
+      '00000000-0000-4000-8000-0000000000a1',
+      TOP.toUpperCase(),
+    ];
+    for (const segment of ['0123456789abcdef', id('ff'), HELD, ...notKeys]) {
       const response = await cms.app.request(`/replies/${segment}/`);
       assert.equal(response.status, 404, `/replies/${segment}/`);
     }
@@ -297,14 +296,14 @@ describe('source:comments', () => {
   it('counts direct replies and points at their feed, and is absent with none', async () => {
     const found = byGuid(await items(`${POST}feed/`));
     const expected: Record<string, { count: number; feed: string } | undefined> = {
-      [commentPage(TOP)]: { count: 2, feed: `/replies/${encodeURIComponent(TOP)}/` },
-      [commentPage(MIDDLE)]: { count: 1, feed: `/replies/${encodeURIComponent(MIDDLE)}/` },
+      [commentPage(TOP)]: { count: 2, feed: `/replies/${TOP}/` },
+      [commentPage(MIDDLE)]: { count: 1, feed: `/replies/${MIDDLE}/` },
       [NOTE]: { count: 1, feed: `/replies/${keyOf(NOTE)}/` },
       [NOTE_UNDER_NOTE]: { count: 1, feed: `/replies/${keyOf(NOTE_UNDER_NOTE)}/` },
-      [WEBMENTION_UNDER_MIDDLE]: undefined,
+      [GUS]: undefined,
       [commentPage(UNDER_HELD)]: undefined,
       [ANSWER_GUID]: undefined,
-      [MENTION]: undefined,
+      [MAX]: undefined,
     };
     for (const [guid, pointer] of Object.entries(expected)) {
       const element = optional(found.get(guid) as XmlElement, 'source:comments');
@@ -338,7 +337,7 @@ describe('source:comments', () => {
 describe('<source url>', () => {
   it('names the feed of an author the site knows one for, and nobody else’s', async () => {
     const found = byGuid(await items(`${POST}feed/`));
-    const webmention = child(found.get(WEBMENTION_UNDER_MIDDLE) as XmlElement, 'source');
+    const webmention = child(found.get(GUS) as XmlElement, 'source');
     assert.equal(webmention.attributes['url'], 'https://gus.example/');
     assert.equal(webmention.text, 'Gus');
 
@@ -365,5 +364,41 @@ describe('walking a thread from the post', () => {
       }
     }
     assert.deepEqual(reached.sort(), Object.keys(PARENTS).sort());
+  });
+});
+
+describe('every URL the conversation prints (decision-51)', () => {
+  it('names each comment and reply by a key, and percent-encodes no URL', async () => {
+    const pages = [
+      POST,
+      `${POST}feed/`,
+      '/comments/feed/',
+      commentPage(TOP).slice(BASE_URL.length),
+    ];
+    const hello = byGuid(await items('/feed/')).get(POST_GUID) as XmlElement;
+    const queue = [local(child(hello, 'source:comments').attributes['feedUrl'] ?? '')];
+    while (queue.length > 0) {
+      const feed = queue.shift() ?? '';
+      pages.push(feed);
+      for (const item of await items(feed)) {
+        const pointer = optional(item, 'source:comments');
+        if (pointer !== undefined) queue.push(local(pointer.attributes['feedUrl'] ?? ''));
+      }
+    }
+
+    for (const pathname of pages) {
+      const body = await (await cms.app.request(pathname)).text();
+      const named =
+        /(?:<li id="comment-|#comment-|\/comment\/|\/replies\/|reply_to=)([^"/<\s#&]+)/g;
+      for (const [, name] of body.matchAll(named)) {
+        assert.match(name ?? '', /^[0-9a-f]{16}$/, `${pathname} names ${name ?? ''} by a key`);
+      }
+    }
+    const thread = await (await cms.app.request(POST)).text();
+    assert.ok(
+      thread.includes(`id="comment-${keyOf(NOTE)}"`),
+      'a fediverse reply is anchored by key',
+    );
+    assert.ok(thread.includes(`id="comment-${TOP}"`), 'a comment by its key');
   });
 });
