@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-10-10 17:12'
+updated_date: '2026-10-10 18:57'
 ---
 # Native comments
 
@@ -368,12 +368,6 @@ the queue and must not quietly let a spam one out, which is why only a fresh
 an old one. The entry's id, its post and its source never move, because those
 are what make it the same comment; its kind, author, words and date are
 replaced by what the page says now.
-
-A comment `submitComment` is handed a signed-in `author` for (the `moderator`
-origin) is never offered to a checker at all, and is approved: the person
-writing it is the person who would have approved it, and a spam service has no
-say in what the owner of the site says. Neither the thread nor the moderation
-screen writes one any more: a signed-in reply is a reply post (TASK-326).
 
 ### Who is told
 

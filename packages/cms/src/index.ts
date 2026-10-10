@@ -567,7 +567,6 @@ export type {
   ModerationOutcome,
   NewComment,
   ProposedComment,
-  SignedInAuthor,
   SubmissionType,
   SubmitCommentOptions,
   VerifyAkismetKeyOptions,
@@ -1961,9 +1960,6 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
 
   const learnHandles = handleLearner(federationContext);
 
-  // Somebody answering a fediverse reply addresses whoever they answer, not
-  // the site, so their answer is read off the replies collection of the note
-  // it answers, on a timer rather than while a page is drawn (TASK-321).
   const replyBackfill = createReplyBackfill({
     admin,
     store,
@@ -1996,9 +1992,6 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     cited: (url) => replyContexts.read(url),
   });
 
-  // And whoever a reply post answers, when it answers their comment and they
-  // asked (TASK-326): from the index, so every door a reply post comes in by
-  // tells them once.
   const replyNotices = createReplyNotices({
     admin,
     store,
@@ -2271,8 +2264,6 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     // written before profiles were kept, and stale ones on a timer (TASK-184).
     actorProfiles.start();
 
-    // And the fediverse replies the inbox was never sent are read now and on
-    // a timer from here on (TASK-321).
     replyBackfill.start();
 
     // And whatever personal data has outlived its period is removed now and

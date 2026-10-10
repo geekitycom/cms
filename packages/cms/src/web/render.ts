@@ -737,9 +737,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(writer === undefined ? {} : { siteAuthor: writer }),
       ...neighbourContext('previous', either.previous, options.replyContext),
       ...neighbourContext('next', either.next, options.replyContext),
-      // The site's own pages that link here (TASK-322): what a link between
-      // two of its posts is instead of a webmention. Always a list, so a
-      // theme asks `{% if backlinks.length %}`.
       backlinks: (options.backlinks?.(document) ?? []).map((linking) =>
         backlinkContext(linking, options.replyContext),
       ),

@@ -769,7 +769,6 @@ function commentNotice(
       admin: c.var.admin,
       document,
       id: c.req.query(COMMENT_REPLY_PARAM),
-      // Somebody signed in may answer anything in the thread (TASK-300).
       thread: viewer === undefined ? undefined : c.var.conversation.thread(document),
     }),
     // And the thank-you after a contact form was sent, which travels the same

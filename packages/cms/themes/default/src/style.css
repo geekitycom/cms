@@ -873,7 +873,6 @@
     @apply target;
   }
 
-  /* The site's own posts that link to this one, under a small label. */
   .backlinks {
     @apply mt-12 font-sans text-sm;
   }

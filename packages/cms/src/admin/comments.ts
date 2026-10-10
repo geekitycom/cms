@@ -233,10 +233,6 @@ export function mountCommentsScreen(
       return c.redirect(back, 303);
     }
 
-    // A signed-in reply is a reply post wherever it is written (TASK-326,
-    // decision-47): the same in-reply-to and the same box as the thread's
-    // form, saved through the editor's write path, so the commenter is told
-    // the way any reply post answering them tells them.
     const written = await writeReplyPost(documentSite(c), {
       document,
       answered: parent,

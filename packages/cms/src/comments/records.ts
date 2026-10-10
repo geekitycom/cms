@@ -55,14 +55,14 @@ import type { CommentChecker, CommentSubmission, CommentVerdict } from './submis
  * and the same thread. So every entry says its `source` and its `kind`, and
  * nothing here assumes a person filled in a form.
  *
- * Three things write comments — the form under a post, the webmention endpoint
- * and a moderator's reply on the admin screen — and they all go through
+ * Two things write comments — the form under a post and the webmention
+ * endpoint — and both go through
  * {@link intakeComment}, which is the whole of what happens between a proposed
  * comment and a comment existing: the address hashed, the approved-author rule,
  * the {@link CommentChecker}, one verdict-to-status rule, the write, and the
  * message to whoever was waiting to hear. What the callers keep is what is
- * really theirs — parsing a form and its cheap defences, fetching and verifying
- * a source, and knowing who is signed in.
+ * really theirs — parsing a form and its cheap defences, and fetching and
+ * verifying a source.
  */
 
 /** Where the comment files live, relative to the content directory. */
@@ -387,9 +387,7 @@ export type CommentOrigin =
   /** Somebody filled in the form under a post (doc-6). */
   | 'form'
   /** Another page said it links here, and it was verified (doc-7). */
-  | 'webmention'
-  /** A moderator answered from the admin screen. */
-  | 'moderator';
+  | 'webmention';
 
 /**
  * A comment as its writer proposes it: everything but the three things the
@@ -470,14 +468,11 @@ export type CommentIntakeOutcome =
  * whose name and email together have been approved before is approved again —
  * WordPress's rule, and the whole of the auto-approval decision. A webmention
  * waits, because a page linking here is as much a stranger's words as a form
- * submission is. A moderator's reply is approved, because the person writing it
- * is the person who would have approved it.
+ * submission is.
  *
- * **What the checker says.** Everything but a moderator's own words goes
- * through {@link CommentChecker}; a checker that is down or throws is no
- * opinion, so a service having a bad afternoon never stops a site taking
- * comments. A moderator's reply is not offered to it at all: a spam service has
- * no say in what the owner of the site says.
+ * **What the checker says.** Everything goes through {@link CommentChecker}; a
+ * checker that is down or throws is no opinion, so a service having a bad
+ * afternoon never stops a site taking comments.
  *
  * **The one verdict-to-status rule.**
  *
@@ -514,7 +509,7 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
   const held =
     origin === 'webmention' ? heldWebmention(records, comment.slug, comment.url) : undefined;
 
-  const verdict = origin === 'moderator' ? 'unknown' : await ask(options, proposed);
+  const verdict = await ask(options, proposed);
 
   if (verdict === 'discard') {
     if (held === undefined) return { kind: 'discarded', removed: false };
@@ -574,7 +569,6 @@ function siteStatusFor(
   records: CommentRecords,
   comment: ProposedComment,
 ): CommentStatus {
-  if (origin === 'moderator') return 'approved';
   if (origin === 'webmention') return 'pending';
   return records.admin.hasApprovedAuthor(comment.author.name, comment.author.email)
     ? 'approved'

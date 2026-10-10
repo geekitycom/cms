@@ -96,7 +96,6 @@ export type {
   SubmissionType,
   CommentThrottle,
   CommentVerdict,
-  SignedInAuthor,
   SubmitCommentOptions,
 } from './submission.ts';
 export { signedInCommenter } from './viewer.ts';

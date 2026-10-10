@@ -2809,13 +2809,10 @@ const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    // The page a salmention's nested reply was read out of (TASK-320).
     version: 24,
     sql: `ALTER TABLE comments ADD COLUMN via TEXT;`,
   },
   {
-    // Whether a logged reply was read off a remote server rather than
-    // delivered (TASK-321). Every row before this was delivered.
     version: 25,
     sql: `ALTER TABLE ap_inbox ADD COLUMN fetched INTEGER NOT NULL DEFAULT 0;`,
   },
