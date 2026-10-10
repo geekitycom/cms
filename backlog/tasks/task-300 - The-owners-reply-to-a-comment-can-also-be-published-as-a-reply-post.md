@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-08 14:39'
-updated_date: '2026-10-10 12:31'
+updated_date: '2026-10-10 12:47'
 labels:
   - comments
   - indieweb
@@ -49,7 +49,7 @@ Existing owner comments stay comments; only new replies become posts.
 <!-- AC:BEGIN -->
 - [ ] #1 A signed-in user replying from the thread creates a reply post, not a comment, whose in-reply-to is the native comment's page, the webmention reply's sender URL, the fediverse reply's Note id, or the post, by what it answers
 - [ ] #2 The thread shows that reply post inline under what it answers, once, with its author, content and a u-url to the reply post
-- [ ] #3 The form shows signed-in users a Public/Unlisted choice (checked publishes publicly); anonymous visitors never see it, and a forged field from them is ignored
+- [ ] #3 The form shows signed-in users a checkbox labelled "Include in posts and feeds", unchecked by default: checked publishes the reply post as Public, unchecked as Unlisted, and either way it reaches who it answers. Anonymous visitors never see it, and a forged field from them is ignored
 - [ ] #4 A public reply post appears in the post listing and the RSS, Atom and JSON feeds like any reply post; an unlisted one is absent from them and keeps the unlisted rules
 - [ ] #5 A reply to a webmention reply sends a webmention to its sender URL; a reply to a fediverse reply federates with inReplyTo the remote Note id and is addressed to its author
 - [ ] #6 Every comment, including webmention and fediverse replies, shows signed-in users a Reply link; visitors keep a Reply link on native comments only
