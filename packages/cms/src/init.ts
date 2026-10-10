@@ -137,7 +137,7 @@ async function copyTemplate(part: string, destination: string): Promise<void> {
  *
  * pnpm reads its settings from this file even for a single package, and from
  * version 11 reads nothing else: the `pnpm` field in `package.json` is
- * ignored. Two things are settled here so a fresh install runs quietly and
+ * ignored. What is settled here lets a fresh install run quietly and
  * unattended. Other package managers ignore the file.
  */
 export function pnpmSettings(): string {
@@ -148,12 +148,6 @@ export function pnpmSettings(): string {
     '# allowed by name.',
     'allowBuilds:',
     '  esbuild: true',
-    '',
-    '# nunjucks names chokidar an optional peer and only reaches for it when a',
-    "# FileSystemLoader is built with `watch: true`. The CMS's loader never is.",
-    'peerDependencyRules:',
-    '  allowedVersions:',
-    "    nunjucks>chokidar: '5'",
     '',
   ].join('\n');
 }

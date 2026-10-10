@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, afterEach, describe, it } from 'node:test';
@@ -88,20 +88,6 @@ async function countingStore(): Promise<{ store: ContentStore; upserts: number }
   return counter;
 }
 
-/**
- * The directories a watcher test may write into. A watcher test creates them
- * before the watcher starts, even when they are empty.
- *
- * macOS drops the event for a directory created underneath a live watch often
- * enough to matter, and chokidar cannot watch a directory it was never told
- * about — so once that one event is lost, no amount of rewriting the file
- * inside it is ever seen, and `eventually` waits out its whole deadline for a
- * reason that has nothing to do with the CMS. What these tests are about is a
- * file appearing after the watcher started, and that is deterministic once the
- * directory holding it is already watched.
- */
-const WATCHED_DIRECTORIES = ['pages', 'posts', '_trash/pages', '_trash/posts'];
-
 /** A sync over a content directory, stopped when the file finishes. */
 async function sync(
   dir: string,
@@ -113,11 +99,6 @@ async function sync(
   } = {},
 ): Promise<{ sync: ContentSync; store: ContentStore; changes: DocumentChange[] }> {
   const index = options.store ?? (await store());
-  if (options.watch === true) {
-    for (const relative of WATCHED_DIRECTORIES) {
-      await mkdir(path.join(dir, relative), { recursive: true });
-    }
-  }
   const created = createContentSync({
     store: index,
     contentDir: dir,
@@ -137,32 +118,17 @@ async function sync(
  * Poll until `read` returns something truthy, then hand it back. Bounded, so a
  * watcher that never fires fails the test instead of hanging it.
  *
- * `poke` is repeated every so often while waiting. macOS drops a filesystem
- * event now and then — reproducible with chokidar alone, no CMS involved — and
- * nothing recovers a notification the kernel never sent. Writing the same file
- * again asks for another one. A watcher that is genuinely not listening still
- * fails, because no number of writes reaches it.
- *
  * The deadline is generous because it costs nothing: the loop returns the
  * instant the value appears, so only a test that is about to fail ever waits
  * this long. Four seconds was enough on an idle machine and not always enough
  * on a loaded one, where the pre-push hook runs this suite next to a build.
  */
-async function eventually<T>(
-  read: () => T | undefined | false,
-  what: string,
-  poke?: () => Promise<void>,
-): Promise<T> {
+async function eventually<T>(read: () => T | undefined | false, what: string): Promise<T> {
   const deadline = Date.now() + 10_000;
-  let nextPoke = Date.now() + 400;
   for (;;) {
     const value = read();
     if (value !== undefined && value !== false) return value;
     if (Date.now() > deadline) throw new Error(`Timed out waiting for ${what}.`);
-    if (poke !== undefined && Date.now() > nextPoke) {
-      nextPoke = Date.now() + 400;
-      await poke();
-    }
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
 }
@@ -431,6 +397,98 @@ describe('the watcher', () => {
     assert.equal(index.getByPermalink('/about/')?.title, 'About');
   });
 
+  it(
+    'starts over a content directory it cannot write to, and says it could not check the watch',
+    { skip: process.getuid?.() === 0 ? 'root can write to any directory' : false },
+    async () => {
+      const dir = await contentDir({
+        'pages/about.md': markdown({ title: 'About', permalink: '/about/' }),
+      });
+      await chmod(dir, 0o555);
+      const warnings: string[] = [];
+      const { sync: content, store: index } = await sync(dir, {
+        watch: true,
+        logger: { warn: (message) => warnings.push(message) },
+      });
+
+      try {
+        const result = await content.start();
+
+        assert.equal(result.created, 1);
+        assert.equal(index.getByPermalink('/about/')?.title, 'About');
+        assert.ok(
+          warnings.some((message) => message.includes('cannot be written')),
+          `the unchecked watch is named: ${warnings.join(' | ')}`,
+        );
+      } finally {
+        await chmod(dir, 0o755);
+      }
+    },
+  );
+
+  it('indexes documents written into new directories while the boot scan runs', async () => {
+    const dir = await contentDir({
+      'pages/about.md': markdown({ title: 'About', permalink: '/about/' }),
+    });
+    const { sync: content, store: index } = await sync(dir, { watch: true });
+    const arrivals = {
+      'posts/2026/10/deep/late.md': markdown({ title: 'Late', permalink: '/late/' }),
+      'posts/2026/11/later.md': markdown({ title: 'Later', permalink: '/later/' }),
+      'imported/pages/away.md': markdown({ title: 'Away', permalink: '/away/' }),
+    };
+    content.events.on('created', async (change) => {
+      if (change.path === 'pages/about.md') await writeFiles(dir, arrivals);
+    });
+
+    await content.start();
+
+    await eventually(
+      () => Object.keys(arrivals).every((relative) => index.getByPath(relative) !== undefined),
+      'every document written during the boot scan to be indexed',
+    );
+  });
+
+  it('indexes documents in several directories made at once under a running watch, and drops them when a directory goes', async () => {
+    const dir = await contentDir({
+      'pages/about.md': markdown({ title: 'About', permalink: '/about/' }),
+    });
+    const { sync: content, store: index } = await sync(dir, { watch: true });
+    await content.start();
+    const arrivals: Record<string, string> = {};
+    for (const year of ['2019', '2020', '2021']) {
+      for (const month of ['01', '06']) {
+        arrivals[`posts/${year}/${month}/a.md`] = markdown({
+          title: `${year}-${month} a`,
+          permalink: `/${year}/${month}/a/`,
+        });
+        arrivals[`imported/${year}/posts/${month}/b.md`] = markdown({
+          title: `${year}-${month} b`,
+          permalink: `/imported/${year}/${month}/b/`,
+        });
+      }
+    }
+
+    await Promise.all(
+      Object.entries(arrivals).map(async ([relative, text]) => {
+        await mkdir(path.dirname(path.join(dir, relative)), { recursive: true });
+        await writeFile(path.join(dir, relative), text, 'utf8');
+      }),
+    );
+
+    await eventually(
+      () => Object.keys(arrivals).every((relative) => index.getByPath(relative) !== undefined),
+      'every document in the new directories to be indexed',
+    );
+
+    await rm(path.join(dir, 'imported'), { recursive: true });
+
+    await eventually(
+      () => index.listPaths().every((indexed) => !indexed.startsWith('imported/')),
+      'the documents of the removed directory to leave the index',
+    );
+    assert.equal(index.listPaths().length, 1 + Object.keys(arrivals).length / 2);
+  });
+
   it('picks up an edit to a post without a restart', async () => {
     const dir = await contentDir({
       'posts/2026-09-02-hello.md': markdown({
@@ -444,25 +502,19 @@ describe('the watcher', () => {
     await content.start();
     changes.length = 0;
 
-    const rewrite = () =>
-      writeFiles(dir, {
-        'posts/2026-09-02-hello.md': markdown({
-          title: 'Hello',
-          permalink: '/2026/09/hello/',
-          date: '2026-09-02T09:00:00Z',
-          body: 'Rewritten.',
-        }),
-      });
-    await rewrite();
+    await writeFiles(dir, {
+      'posts/2026-09-02-hello.md': markdown({
+        title: 'Hello',
+        permalink: '/2026/09/hello/',
+        date: '2026-09-02T09:00:00Z',
+        body: 'Rewritten.',
+      }),
+    });
 
-    const html = await eventually(
-      () => {
-        const found = index.getByPath('posts/2026-09-02-hello.md')?.html;
-        return found !== undefined && found.includes('Rewritten.') ? found : undefined;
-      },
-      'the edit to reach the index',
-      rewrite,
-    );
+    const html = await eventually(() => {
+      const found = index.getByPath('posts/2026-09-02-hello.md')?.html;
+      return found !== undefined && found.includes('Rewritten.') ? found : undefined;
+    }, 'the edit to reach the index');
 
     assert.match(html, /Rewritten\./);
     assert.deepEqual(
@@ -478,20 +530,17 @@ describe('the watcher', () => {
     const { sync: content, store: index } = await sync(dir, { watch: true });
     await content.start();
 
-    const create = () =>
-      writeFiles(dir, {
-        'posts/2026-09-03-new.md': markdown({
-          title: 'Brand new',
-          permalink: '/2026/09/new/',
-          date: '2026-09-03T09:00:00Z',
-        }),
-      });
-    await create();
+    await writeFiles(dir, {
+      'posts/2026-09-03-new.md': markdown({
+        title: 'Brand new',
+        permalink: '/2026/09/new/',
+        date: '2026-09-03T09:00:00Z',
+      }),
+    });
 
     const document = await eventually(
       () => index.getByPath('posts/2026-09-03-new.md'),
       'the new file to be indexed',
-      create,
     );
 
     assert.equal(document.title, 'Brand new');
@@ -612,13 +661,11 @@ describe('the watcher', () => {
       path.join(dir, '_trash/posts/2026-09-02-hello.md'),
     );
 
-    const retrash = () => writeFiles(dir, { '_trash/posts/2026-09-02-hello.md': source });
     await eventually(
       () => index.getByPath('_trash/posts/2026-09-02-hello.md') !== undefined,
       'the trashed file to be indexed',
-      retrash,
     );
-    await eventually(() => index.listPosts().length === 0, 'the live row to go', retrash);
+    await eventually(() => index.listPosts().length === 0, 'the live row to go');
     assert.equal(index.counts().trashed, 1);
   });
 
@@ -633,27 +680,22 @@ describe('the watcher', () => {
     });
     await content.start();
 
-    const breakIt = () => writeFiles(dir, { 'pages/broken.md': 'no front matter\n' });
-    await breakIt();
+    await writeFiles(dir, { 'pages/broken.md': 'no front matter\n' });
     await eventually(
       () => warnings.some((warning) => warning.includes('broken.md')),
       'the parse failure to be logged',
-      breakIt,
     );
 
-    const addLater = () =>
-      writeFiles(dir, {
-        'posts/2026-08-04-later.md': markdown({
-          title: 'Later',
-          permalink: '/2026/08/later/',
-          date: '2026-08-04T09:00:00Z',
-        }),
-      });
-    await addLater();
+    await writeFiles(dir, {
+      'posts/2026-08-04-later.md': markdown({
+        title: 'Later',
+        permalink: '/2026/08/later/',
+        date: '2026-08-04T09:00:00Z',
+      }),
+    });
     const document = await eventually(
       () => index.getByPath('posts/2026-08-04-later.md'),
       'the watcher to keep working after a parse failure',
-      addLater,
     );
 
     assert.equal(document.title, 'Later');
@@ -890,21 +932,15 @@ describe('the search index (TASK-22 AC #2)', () => {
 
     assert.equal(index.countSearch('aardvarks'), 1, 'the boot scan did not index the words');
 
-    const rewrite = () =>
-      writeFiles(dir, {
-        'posts/2026-09-02-hello.md': markdown({
-          title: 'Hello',
-          permalink: '/2026/09/hello/',
-          date: '2026-09-02T09:00:00Z',
-          body: 'Badgers at dusk.',
-        }),
-      });
-    await rewrite();
-    await eventually(
-      () => index.countSearch('badgers') === 1,
-      'the edit to be searchable',
-      rewrite,
-    );
+    await writeFiles(dir, {
+      'posts/2026-09-02-hello.md': markdown({
+        title: 'Hello',
+        permalink: '/2026/09/hello/',
+        date: '2026-09-02T09:00:00Z',
+        body: 'Badgers at dusk.',
+      }),
+    });
+    await eventually(() => index.countSearch('badgers') === 1, 'the edit to be searchable');
     assert.equal(index.countSearch('aardvarks'), 0);
 
     await mkdir(path.join(dir, '_trash/posts'), { recursive: true });

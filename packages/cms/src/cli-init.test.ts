@@ -67,8 +67,6 @@ describe('geekity init', () => {
     const settings = await fs.readFile(path.join(parent, 'my-site', 'pnpm-workspace.yaml'), 'utf8');
     // esbuild's install script, which pnpm blocks by default; tsx needs it.
     assert.match(settings, /^allowBuilds:\n {2}esbuild: true$/m);
-    // nunjucks names chokidar an optional peer at a major the CMS is past.
-    assert.match(settings, /^ {4}nunjucks>chokidar: '5'$/m);
   });
 
   it('gives the site the TypeScript toolchain its scripts and its config need', async () => {
