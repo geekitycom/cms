@@ -8,7 +8,8 @@
 
   `url` is the cited page, always its `u-url`. `context` is what the page said
   about itself, from the reply contexts file. With a name, the name is the
-  link; with only an author, "a post" is; a URL that is itself an image
+  link; a comment on this site (`context.comment`, TASK-326) is "a comment";
+  with only an author, "a post" is; a URL that is itself an image
   (`context.image`, TASK-255) is "an image from" its host; anything else is "a
   page on" its host, never the bare URL, which can run to hundreds of
   characters. The author follows as an `h-card`.
@@ -42,6 +43,7 @@
 {%- if named %} <span class="p-name"><a class="u-url" href="{{ url }}">{{ title.slice(0, cut) }}</a>{{ byline.slice(0, 4) }}{{ card(context.author, byline.slice(4)) }}</span>
 {%- else %}
   {%- if context.name %} <a class="u-url p-name" href="{{ url }}">{{ context.name }}</a>
+  {%- elif context.comment %} <a class="u-url" href="{{ url }}">a comment</a>
   {%- elif context.author %} <a class="u-url" href="{{ url }}">a post</a>
   {%- elif context.image %} <a class="u-url" href="{{ url }}">an image from {{ url | host }}</a>
   {%- else %} <a class="u-url" href="{{ url }}">a page on {{ url | host }}</a>

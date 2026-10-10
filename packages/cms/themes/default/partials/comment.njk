@@ -33,7 +33,7 @@
         {%- else %}
         <span class="comment-avatar-empty" aria-hidden="true">{{ reply.author.name | first | upper }}</span>
         {%- endif %}
-        <b class="fn p-name">{% if reply.author.url %}<a class="url u-url" href="{{ reply.author.url }}" rel="nofollow ugc noopener noreferrer">{{ reply.author.name }}</a>{% else %}{{ reply.author.name }}{% endif %}</b>
+        <b class="fn p-name">{% if reply.author.url %}<a class="url u-url" href="{{ reply.author.url }}"{% if reply.source != "post" %} rel="nofollow ugc noopener noreferrer"{% endif %}>{{ reply.author.name }}</a>{% else %}{{ reply.author.name }}{% endif %}</b>
       </div>
       <div class="comment-metadata">
         {%- if reply.url %}

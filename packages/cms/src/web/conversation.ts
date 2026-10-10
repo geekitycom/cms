@@ -300,12 +300,13 @@ export interface ConversationReader {
    */
   readonly replyNamed: (document: Document, url: string) => string | undefined;
   /**
-   * The reply a reader may see that a URL names anywhere on this site, with
-   * the post it is on (TASK-300): a comment by its page or its anchor, a
-   * webmention by the page it was sent from, a fediverse reply by its id or
-   * url. What a reply post answering one cites, instead of fetching a page.
+   * What a URL names on this site, while a reader may see it: a reply (a
+   * comment by its page or its anchor, a webmention by the page it was sent
+   * from, a fediverse reply by its id or url, a reply post by its permalink)
+   * with the post it is on, or a served post or page itself (TASK-300,
+   * TASK-326). What a reply post answering it cites, instead of fetching a page.
    */
-  readonly replyAt: (url: string) => ReplyAt | undefined;
+  readonly heldAt: (url: string) => HeldAt | undefined;
   /**
    * What a `/replies/` segment names and its direct replies (TASK-324), or
    * `undefined`: a key names a served post or page, or a reply a reader can
@@ -324,11 +325,10 @@ export interface RepliesOf {
   readonly replies: Placed[];
 }
 
-/** A reply on this site, and the post whose conversation it is in. */
-export interface ReplyAt {
-  readonly post: Document;
-  readonly reply: Interaction;
-}
+/** What {@link ConversationReader.heldAt} found: a reply and the post it is on, or a post. */
+export type HeldAt =
+  | { readonly kind: 'reply'; readonly post: Document; readonly reply: Interaction }
+  | { readonly kind: 'document'; readonly post: Document; readonly author: InteractionAuthor };
 
 /** A native comment, what it answers and what answers it (TASK-318). */
 export interface CommentThread {
@@ -359,7 +359,7 @@ export function createConversation(context: ConversationContext): ConversationRe
     latest: (limit) => siteConversation(context, limit),
     comment: (id) => commentThread(context, id),
     replyNamed: (document, url) => replyNamed(context, document, url),
-    replyAt: (url) => replyAt(context, url),
+    heldAt: (url) => heldAt(context, url),
     repliesTo: (segment) => repliesTo(context, segment),
   };
 }
@@ -601,15 +601,18 @@ function namedIn(
   );
 }
 
-function replyAt(context: ConversationContext, url: string): ReplyAt | undefined {
+function heldAt(context: ConversationContext, url: string): HeldAt | undefined {
   const post = documentNamed(context, url);
-  if (post === undefined) return undefined;
+  if (post === undefined || !isServed(post, context.store.now())) return undefined;
+  if (url === absoluteUrl(post.permalink, context.baseUrl) || url === rootOf(context, post)) {
+    return { kind: 'document', post, author: documentAuthor(context, post) };
+  }
   const said = gather(context, post);
   const reply = namedIn(context, post, said, url);
   if (reply === undefined || said.withdrawn.has(reply.id) || said.held.has(reply.id)) {
     return undefined;
   }
-  return { post, reply };
+  return { kind: 'reply', post, reply };
 }
 
 function repliesTo(context: ConversationContext, segment: string): RepliesOf | undefined {
@@ -797,28 +800,32 @@ function replyPostInteraction(
   id: string,
   inReplyTo: string,
 ): Interaction {
-  const users = context.users();
-  const author =
-    authorContext(users, post.author) ??
-    siteAuthorContext(users, readSiteSettings(context.contentDir).author);
   return {
     id,
     source: 'post',
     kind: 'reply',
-    author: {
-      name: author?.name ?? readSiteSettings(context.contentDir).title,
-      handle: null,
-      url: author?.url ?? null,
-      avatar: author?.avatar ?? null,
-      actorId: null,
-      feed: author?.username === undefined ? null : authorFeedHref(author.username, 'rss'),
-    },
+    author: documentAuthor(context, post),
     url: post.permalink,
     content: post.html,
     published: new Date(post.date ?? post.updated ?? 0),
     inReplyTo,
     status: 'published',
     replies: [],
+  };
+}
+
+/** Who a post or page on this site is by: its author, else the site's. */
+function documentAuthor(context: ConversationContext, post: Document): InteractionAuthor {
+  const users = context.users();
+  const site = readSiteSettings(context.contentDir);
+  const author = authorContext(users, post.author) ?? siteAuthorContext(users, site.author);
+  return {
+    name: author?.name ?? site.title,
+    handle: null,
+    url: author?.url ?? null,
+    avatar: author?.avatar ?? null,
+    actorId: null,
+    feed: author?.username === undefined ? null : authorFeedHref(author.username, 'rss'),
   };
 }
 

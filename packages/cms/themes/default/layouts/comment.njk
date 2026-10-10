@@ -38,7 +38,7 @@
   {{ cited(index - 1) }}
   {% if step %}
   <p class="cite-line">
-    <span class="p-author h-card">{% if step.author.url %}<a class="u-url p-name" href="{{ step.author.url }}" rel="nofollow ugc noopener noreferrer">{{ step.author.name }}</a>{% else %}<span class="p-name">{{ step.author.name }}</span>{% endif %}</span>,
+    <span class="p-author h-card">{% if step.author.url %}<a class="u-url p-name" href="{{ step.author.url }}"{% if step.source != "post" %} rel="nofollow ugc noopener noreferrer"{% endif %}>{{ step.author.name }}</a>{% else %}<span class="p-name">{{ step.author.name }}</span>{% endif %}</span>,
     {%- if step.url %}
     <a class="u-url" href="{{ step.url }}"{% if step.source != "comment" %} rel="nofollow noopener noreferrer"{% endif %}><time class="dt-published" datetime="{{ step.published | date("iso") }}">{{ step.published | date }}</time></a>
     {%- else %}

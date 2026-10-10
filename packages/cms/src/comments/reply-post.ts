@@ -1,23 +1,57 @@
 import { blankForm, POST_KIND, writeDocument } from '../admin/documents.ts';
-import type { DocumentSite } from '../admin/documents.ts';
+import type { DocumentSite, WriteOutcome } from '../admin/documents.ts';
 import { readSiteSettings } from '../admin/settings.ts';
-import type { PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
 import { commentPageHref, visibleReply } from '../web/conversation.ts';
 import type { Conversation, Interaction } from '../web/conversation.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
-import type { CommentNotices } from './records.ts';
 import { commentKeys, commentProblems } from './submission.ts';
 import type { CommentForm, CommentRefusal, CommentThrottle } from './submission.ts';
-import type { CommentViewer } from './form.ts';
 
 /**
- * What a signed-in user's reply in a thread becomes (TASK-300, decision-47): a
- * reply post, written through the same path as the editor and Micropub, so it
- * federates, sends its webmentions and fetches its reply context the way any
- * reply post does. The thread shows it inline because its `in-reply-to` names
- * what it answers there.
+ * What a signed-in user's reply becomes (TASK-300, decision-47), from the
+ * thread or the moderation screen (TASK-326): a reply post, written through
+ * the same path as the editor and Micropub, so it federates, sends its
+ * webmentions, fetches its reply context and tells the commenter it answers
+ * the way any reply post does. The thread shows it inline because its
+ * `in-reply-to` names what it answers there.
  */
+
+/** What {@link writeReplyPost} writes. */
+export interface ReplyPostWrite {
+  /** The post whose thread it is said in. */
+  readonly document: Document;
+  /** What it answers in that thread, or `undefined` for the post itself. */
+  readonly answered: Answered | undefined;
+  readonly body: string;
+  /** Public when set; Unlisted, its own page and no listing or feed, otherwise. */
+  readonly listed: boolean;
+}
+
+/** Enough of a reply, a thread entry or a stored comment, to name it. */
+export type Answered = Pick<Interaction, 'source' | 'id' | 'url'>;
+
+/** Save a signed-in user's reply as a reply post. */
+export async function writeReplyPost(
+  site: DocumentSite,
+  write: ReplyPostWrite,
+): Promise<WriteOutcome> {
+  const { baseUrl, contentDir } = site.config;
+  return await writeDocument(site, {
+    kind: POST_KIND,
+    document: undefined,
+    draft: false,
+    form: {
+      ...blankForm(POST_KIND, readSiteSettings(contentDir).timezone, site.store.now()),
+      body: write.body,
+      inReplyTo:
+        write.answered === undefined
+          ? absoluteUrl(write.document.permalink, baseUrl)
+          : answeredAt(write.answered, baseUrl),
+      visibility: write.listed ? 'public' : 'unlisted',
+    },
+  });
+}
 
 /** What {@link submitReplyPost} needs around a submission. */
 export interface SubmitReplyPostOptions {
@@ -28,11 +62,8 @@ export interface SubmitReplyPostOptions {
   /** That post's thread, which the form's `in_reply_to` names an entry of. */
   readonly conversation: Conversation;
   readonly form: CommentForm;
-  readonly viewer: CommentViewer;
   readonly throttle: CommentThrottle;
   readonly address?: string | undefined;
-  /** Who to tell when the reply answers a comment whose writer asked (TASK-55). */
-  readonly notices?: CommentNotices | undefined;
 }
 
 /** What became of a signed-in reply. */
@@ -42,8 +73,7 @@ export type ReplyPostOutcome =
 
 /** Take a signed-in reply from the thread and save it as a reply post. */
 export async function submitReplyPost(options: SubmitReplyPostOptions): Promise<ReplyPostOutcome> {
-  const { site, document, form, throttle } = options;
-  const { baseUrl, contentDir } = site.config;
+  const { form, throttle } = options;
 
   const problems = commentProblems(form, true);
   if (Object.keys(problems).length > 0) return refused({ kind: 'invalid', problems });
@@ -52,33 +82,17 @@ export async function submitReplyPost(options: SubmitReplyPostOptions): Promise<
   const wait = throttle.retryAfter(keys);
   if (wait !== undefined) return refused({ kind: 'rate-limited', retryAfter: wait });
 
-  const answered = visibleReply(options.conversation.replies, form.inReplyTo.trim());
-  const body = form.body.trim();
-  const written = await writeDocument(site, {
-    kind: POST_KIND,
-    document: undefined,
-    draft: false,
-    form: {
-      ...blankForm(POST_KIND, readSiteSettings(contentDir).timezone, site.store.now()),
-      body,
-      inReplyTo:
-        answered === undefined
-          ? absoluteUrl(document.permalink, baseUrl)
-          : answeredAt(answered, baseUrl),
-      visibility: form.listed.trim() === '' ? 'unlisted' : 'public',
-    },
+  const written = await writeReplyPost(options.site, {
+    document: options.document,
+    answered: visibleReply(options.conversation.replies, form.inReplyTo.trim()),
+    body: form.body.trim(),
+    listed: form.listed.trim() !== '',
   });
   throttle.fail(keys);
 
   if (written.outcome !== 'saved') {
     const message = written.outcome === 'refused' ? written.message : 'That reply was not saved.';
     return refused({ kind: 'invalid', problems: { body: message } });
-  }
-
-  if (answered?.source === 'comment') {
-    options.notices?.replyApproved(
-      replyNotice(answered, written.saved, document, options.viewer, body, baseUrl),
-    );
   }
   return { kind: 'saved', saved: written.saved };
 }
@@ -88,7 +102,7 @@ export async function submitReplyPost(options: SubmitReplyPostOptions): Promise<
  * its own page, a webmention by the page it was sent from, a fediverse reply by
  * the note's id, and a reply post by its permalink.
  */
-function answeredAt(reply: Interaction, baseUrl: string): string {
+function answeredAt(reply: Answered, baseUrl: string): string {
   switch (reply.source) {
     case 'comment':
       return absoluteUrl(commentPageHref(reply.id), baseUrl);
@@ -98,35 +112,6 @@ function answeredAt(reply: Interaction, baseUrl: string): string {
     case 'post':
       return absoluteUrl(reply.url ?? reply.id, baseUrl);
   }
-}
-
-/**
- * The reply post as the reply notice reads one: the commenter who asked to be
- * told about replies is told about this one, with a link to the reply post.
- */
-function replyNotice(
-  parent: Interaction,
-  saved: Document,
-  document: Document,
-  viewer: CommentViewer,
-  markdown: string,
-  baseUrl: string,
-): PostComment {
-  return {
-    id: saved.permalink,
-    slug: document.slug,
-    permalink: document.permalink,
-    source: 'comment',
-    kind: 'reply',
-    status: 'approved',
-    author: { name: viewer.name, url: viewer.url, email: viewer.email, avatar: null },
-    content: { markdown, html: saved.html },
-    submitted: saved.date ?? new Date().toISOString(),
-    addressHash: null,
-    inReplyTo: parent.id,
-    url: absoluteUrl(saved.permalink, baseUrl),
-    notify: false,
-  };
 }
 
 function refused(refusal: CommentRefusal): ReplyPostOutcome {

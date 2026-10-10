@@ -577,7 +577,8 @@ a `p-author h-card`, when the target was read when the post was saved
 provider's known oEmbed endpoint, asked before its page, which is read only
 when the endpoint names nothing (TASK-251, TASK-253). Any other target's oEmbed
 title comes from the endpoint its page links. A title that is only a site suffix such as "- YouTube" is
-no title. With only an author it says "a post", and with neither "a page on"
+no title. A comment on this site (`replyContext.comment`, TASK-326) says "a
+comment". With only an author it says "a post", and with neither "a page on"
 the target's host, never the bare URL, which can run to hundreds of
 characters: "Bookmarked a page on example.com" (TASK-255). Its kicker
 and its hidden `h1` say Repost, Like or Bookmark. It is placed as the reply
@@ -1968,7 +1969,8 @@ The packaged partial draws each entry as the source design does: an
 `comment-{{ reply.source }}` class, holding an `article.comment-body` whose
 `footer.comment-meta` is the author as a `.comment-author.vcard.p-author.h-card`
 (their avatar, or the first letter of their name in a `span.comment-avatar-empty`
-when there is none) and the permalink as a `.comment-metadata` link around a
+when there is none, and their link marked `rel="nofollow ugc"` unless the entry
+is a reply post, whose author is a user of the site) and the permalink as a `.comment-metadata` link around a
 `time.dt-published`, with a `span.comment-source` saying "via webmention" or
 "via the fediverse" when it came that way, then the words in
 `div.comment-content.e-content`. Answers nest in an

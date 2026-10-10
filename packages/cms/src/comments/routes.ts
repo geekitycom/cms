@@ -6,6 +6,7 @@ import { clientAddress, createLoginThrottle } from '../admin/throttle.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
+import { documentSite } from '../admin/documents.ts';
 import { isServed } from '../web/documents.ts';
 import { PRIVATE_CACHE_CONTROL } from '../web/negotiate.ts';
 import {
@@ -104,22 +105,12 @@ export function mountComments(app: Hono<GeekityEnv>): void {
 
     if (viewer !== undefined) {
       const answered = await submitReplyPost({
-        site: {
-          store,
-          config,
-          announce: c.var.announce,
-          writer: viewer.username,
-          citedContext: (target) => c.var.replyContexts.describe(target),
-          storedContext: (target) => c.var.replyContexts.read(target),
-          learnHandles: c.var.learnHandles,
-        },
+        site: documentSite(c, viewer.username),
         document,
         conversation: c.var.conversation.thread(document),
         form,
-        viewer,
         throttle: throttle(config),
         address: clientAddress(c, config),
-        notices: c.var.notifications,
       });
       if (answered.kind === 'saved') {
         const id = c.var.conversation.replyNamed(document, answered.saved.permalink);

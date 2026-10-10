@@ -1,15 +1,13 @@
 import type { Context, Hono } from 'hono';
 
 import { postLabel } from '../content/post-type.ts';
-import { renderCommentMarkdown } from '../comments/markdown.ts';
 import { isModerationAction, moderateComment } from '../comments/moderate.ts';
-import { intakeComment } from '../comments/records.ts';
+import { writeReplyPost } from '../comments/reply-post.ts';
 import type { CommentRecords } from '../comments/records.ts';
 import type { GeekityEnv } from '../env.ts';
-import { documentEditorPath, PAGE_KIND, POST_KIND } from './documents.ts';
+import { documentEditorPath, documentSite, PAGE_KIND, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { findUserById } from './accounts.ts';
 import { formatInTimezone } from './formatting.ts';
 import { readSiteSettings } from './settings.ts';
 import { ADMIN_PREFIX } from './session.ts';
@@ -53,6 +51,8 @@ export const COMMENT_ADMIN_FIELDS = {
   action: 'action',
   /** The reply's own text, on the reply form. */
   body: 'body',
+  /** The reply form's "Include in posts and feeds" box: ticked is Public, else Unlisted. */
+  listed: 'listed',
   /** Which list to go back to afterwards. */
   status: 'status',
 } as const;
@@ -227,36 +227,27 @@ export function mountCommentsScreen(
       return c.redirect(back, 303);
     }
 
-    // The moderator's reply is a comment like any other, so it goes through
-    // the same door as the form and the webmention endpoint. The intake
-    // approves it — the person writing it is the person who would have
-    // approved it — and tells whoever it answers, if they asked to be told
-    // (TASK-55). It lands in the same file, under the comment it answers, so
-    // the thread on the page reads as one conversation.
-    await intakeComment({
-      records: recordsOf(c),
-      origin: 'moderator',
-      comment: {
-        slug: parent.slug,
-        permalink: parent.permalink,
-        source: 'comment',
-        kind: 'reply',
-        author: { name: moderatorName(c), url: null, email: null, avatar: null },
-        content: { markdown, html: renderCommentMarkdown(markdown) },
-        submitted: c.var.config.now().toISOString(),
-        inReplyTo: parent.id,
-        url: null,
-        // A moderator writing from the admin is already reading the queue;
-        // nothing here is going to email them about their own reply.
-        notify: false,
-      },
-      // No address is recorded for a reply written in the admin: it came from
-      // a signed-in person, and the hash exists to spot a run of anonymous
-      // submissions rather than to log the owner of the site.
-      dataDir: c.var.config.dataDir,
-      baseUrl: c.var.config.baseUrl,
-      notices: c.var.notifications,
+    const document = c.var.store.getBySlug(parent.slug);
+    if (document === undefined) {
+      flash(c, 'error', 'The post that comment is on is not here any more.');
+      return c.redirect(back, 303);
+    }
+
+    // A signed-in reply is a reply post wherever it is written (TASK-326,
+    // decision-47): the same in-reply-to and the same box as the thread's
+    // form, saved through the editor's write path, so the commenter is told
+    // the way any reply post answering them tells them.
+    const written = await writeReplyPost(documentSite(c), {
+      document,
+      answered: parent,
+      body: markdown,
+      listed: text(body[COMMENT_ADMIN_FIELDS.listed]) !== '',
     });
+    if (written.outcome !== 'saved') {
+      const message = written.outcome === 'refused' ? written.message : 'That reply was not saved.';
+      flash(c, 'error', message);
+      return c.redirect(back, 303);
+    }
 
     flash(c, 'notice', `Replied to ${parent.author.name}.`);
     return c.redirect(back, 303);
@@ -323,23 +314,6 @@ function commentRow(c: Context<GeekityEnv>, comment: PostComment): CommentRow {
         : documentEditorPath(document.type === 'page' ? PAGE_KIND : POST_KIND, document),
     inReplyTo: comment.inReplyTo,
   };
-}
-
-/**
- * What a reply from the admin is signed with: the site's author when it names
- * one, else the login of whoever is signed in.
- *
- * A blog's replies to its own comments read as the blog, which is what the
- * `author` setting is for; the login is the fallback rather than the default
- * because it is an account name rather than a person's name.
- */
-function moderatorName(c: Context<GeekityEnv>): string {
-  const author = readSiteSettings(c.var.config.contentDir).author.trim();
-  if (author !== '') return author;
-
-  const userId = c.var.session?.userId;
-  const user = userId == null ? undefined : findUserById(c.var.config.dataDir, userId);
-  return user?.username ?? 'The author';
 }
 
 /** A form field as a string. A file upload, or a missing field, is the empty one. */

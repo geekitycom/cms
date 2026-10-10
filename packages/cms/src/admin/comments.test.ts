@@ -179,7 +179,7 @@ describe('the comments screen', () => {
     assert.equal(cms.admin.listComments({}).length, 0);
   });
 
-  it('posts a reply under the comment it answers, already approved', async () => {
+  it('posts a reply under the comment it answers, as a reply post (TASK-326)', async () => {
     const { cms, agent, token } = await moderating();
     const id = await stored(cms, { status: 'approved' });
 
@@ -190,11 +190,10 @@ describe('the comments screen', () => {
       [COMMENT_ADMIN_FIELDS.status]: 'approved',
     });
 
-    const written = cms.admin.listCommentsFor('hello-world');
-    assert.equal(written.length, 2);
-    const reply = written.find((entry) => entry.inReplyTo === id);
-    assert.equal(reply?.status, 'approved');
-    assert.match(reply?.content.html ?? '', /<strong>Ada<\/strong>/);
+    assert.equal(cms.admin.listCommentsFor('hello-world').length, 1, 'no comment was added');
+    const reply = cms.store.listAll({ type: 'post' }).find((post) => post.inReplyTo !== undefined);
+    assert.equal(reply?.inReplyTo, `https://blog.example/comment/${id}/`);
+    assert.match(reply.html, /<strong>Ada<\/strong>/);
 
     const html = await (await cms.app.request('/2026/09/hello-world/')).text();
     assert.ok(

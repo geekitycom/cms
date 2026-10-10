@@ -509,18 +509,7 @@ async function saveFromForm(
     });
   }
 
-  const written = await writeDocument(
-    {
-      store,
-      config: c.var.config,
-      announce: c.var.announce,
-      writer: currentUsername(c),
-      citedContext: (target) => c.var.replyContexts.describe(target),
-      storedContext: (target) => c.var.replyContexts.read(target),
-      learnHandles: c.var.learnHandles,
-    },
-    { kind, document, form, draft },
-  );
+  const written = await writeDocument(documentSite(c), { kind, document, form, draft });
   if (written.outcome === 'refused') return refuse(written);
   if (written.outcome === 'conflict') {
     return renderConflict(c, {
@@ -554,6 +543,25 @@ export interface DocumentSite {
   readonly citedContext: (target: string) => Promise<ReplyContext | undefined>;
   readonly storedContext: (target: string) => ReplyContext | undefined;
   readonly learnHandles: HandleLearner;
+}
+
+/**
+ * The write path as one request reaches it, writing as `writer`: by default
+ * whoever the admin session names.
+ */
+export function documentSite(
+  c: Context<GeekityEnv>,
+  writer: string | undefined = currentUsername(c),
+): DocumentSite {
+  return {
+    store: c.var.store,
+    config: c.var.config,
+    announce: c.var.announce,
+    writer,
+    citedContext: (target) => c.var.replyContexts.describe(target),
+    storedContext: (target) => c.var.replyContexts.read(target),
+    learnHandles: c.var.learnHandles,
+  };
 }
 
 /** What {@link writeDocument} is asked to write. */

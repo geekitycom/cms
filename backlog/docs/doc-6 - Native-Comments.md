@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-10-10 14:30'
+updated_date: '2026-10-10 15:31'
 ---
 # Native comments
 
@@ -333,9 +333,8 @@ a service charged per call should not be told what it already assumed.
 
 ## One door in
 
-Three things write a comment — the form under a post, the webmention endpoint
-(doc-7) and a moderator's reply on the admin screen — and all three go through
-one function: `intakeComment`, in `src/comments/records.ts`. It is handed a
+Two things write a comment — the form under a post and the webmention endpoint
+(doc-7) — and both go through one function: `intakeComment`, in `src/comments/records.ts`. It is handed a
 proposed comment and where it came from, and it owns everything between that
 and a comment existing: hashing the address, the auto-approval rule above, the
 `CommentChecker` call, the verdict-to-status rule below, the file and index
@@ -344,8 +343,7 @@ write inside the per-file lock, and the message to whoever was waiting to hear.
 What the callers keep is what is really theirs. `src/comments/submission.ts`
 parses the form and runs the three defences; `src/webmention/receive.ts`
 fetches the source, checks that it really links here and reads its
-microformats; `src/admin/comments.ts` knows who is signed in. None of the three
-builds a comment record, asks a checker, maps a verdict onto a status, or sends
+microformats. Neither builds a comment record, asks a checker, maps a verdict onto a status, or sends
 a notice.
 
 ### The verdict-to-status rule
@@ -370,9 +368,11 @@ an old one. The entry's id, its post and its source never move, because those
 are what make it the same comment; its kind, author, words and date are
 replaced by what the page says now.
 
-A moderator's reply is never offered to a checker at all, and is approved: the
-person writing it is the person who would have approved it, and a spam service
-has no say in what the owner of the site says.
+A comment `submitComment` is handed a signed-in `author` for (the `moderator`
+origin) is never offered to a checker at all, and is approved: the person
+writing it is the person who would have approved it, and a spam service has no
+say in what the owner of the site says. Neither the thread nor the moderation
+screen writes one any more: a signed-in reply is a reply post (TASK-326).
 
 ### Who is told
 
@@ -644,13 +644,14 @@ that need it.
 
 A comment is something somebody else says on the site: a visitor through the
 form, a webmention or a fediverse reply. A post is something a signed-in user
-says. So when somebody signed in replies from the thread, the form writes a
-reply post, one record, instead of a comment (TASK-300, decision-47). Owner
-comments written before this stay comments, and so does a reply written on the
-moderation screen.
+says. So when somebody signed in replies, from the thread or from the
+moderation screen, they write a reply post, one record, instead of a comment
+(TASK-300, TASK-326, decision-47). Owner comments written before this stay
+comments.
 
-The form saves it through `writeDocument`, the write path the editor and
-Micropub share. Its federation, its webmentions and its reply context follow
+Both doors save it through `writeReplyPost` (`comments/reply-post.ts`), which
+fills a blank editor form and hands it to `writeDocument`, the write path the
+editor and Micropub share. Its federation, its webmentions and its reply context follow
 from that save as for any other reply post. Its `in-reply-to` is what it
 answers:
 
@@ -668,6 +669,42 @@ unlisted`: the reply post has its own `noindex` page and is on no listing, post
 feed, outbox or sitemap, while its webmention and its fediverse delivery go out
 as for any unlisted post. Checked writes a public reply post. A visitor's form
 has no such field, and the endpoint never reads one from a visitor.
+
+### From the moderation screen
+
+Each card on `/admin/comments` has a Reply box. What it posts is a reply post
+written as the signed-in user, answering the card's comment exactly as the
+thread's form would: a native comment by its `/comment/{id}/` page, a
+webmention by the page it came from. The box has the same "Include in posts and
+feeds" checkbox, `listed`, unchecked by default, so a reply from the queue is
+unlisted unless it is ticked. The thread shows it inline under the comment, as
+it shows one written there. A comment still waiting for a moderator can be
+answered too: the reply post threads under its placeholder until it is
+approved.
+
+### The reply notice
+
+A commenter who asked to hear about replies is told about a reply post that
+answers their comment once, whichever door it came in by: the thread, the
+moderation screen, the editor, Micropub or a file. No door sends it. A
+subscriber to the index (`comments/reply-notices.ts`), beside federation and
+the webmention sender, sends it on the change that first makes the reply post
+served:
+
+- a scan, the boot scan included, is never news;
+- a change whose previous version was already served (an edit, a file the
+  watcher re-reads) is not news;
+- the reply post's `in-reply-to` must resolve through `heldAt` to a native
+  comment a reader can see;
+- the key `reply-notice:{comment id}:{reply post permalink}` in the admin
+  state must be unset, and is set before the message goes, so a reply post
+  trashed and restored, or drafted and published again, tells nobody twice.
+
+The ledger is derived state (decision-9): a deleted database forgets it, and
+the boot scan that rebuilds the index sends nothing, so nothing is told twice
+either way. The message itself is the comment reply notice of TASK-55, with
+the reply post's author's account as the writer, so nobody is told about their
+own reply.
 
 ### How the thread finds them
 
@@ -705,15 +742,21 @@ answers. A reply post shows there only when that thread shows it.
 - **The counts.** It counts as a reply in the thread's title. `source:comments`
   on a post feed counts the reply posts that answer the post, one of its
   comments or a note that answers it directly.
-- **Its reply context.** A reply post whose `in-reply-to` names a reply this
-  site holds takes its context from the stored reply through `replyAt`, read
-  when the page is drawn, so it quotes the comment rather than the post page
-  the comment is on. The service does not fetch a target `replyAt` answers.
-  That holds for a reply post written in the editor or over Micropub as well.
+- **Its reply context.** A reply post whose `in-reply-to` names something
+  this site holds takes its context from the index through `heldAt`, read when
+  the page is drawn: a reply quotes the comment rather than the post page the
+  comment is on, and a served post or page gives its title, words, author and
+  date. The service never fetches a target `heldAt` answers, so a top-level
+  reply never fetches the site's own page (TASK-326). That holds for a reply
+  post written in the editor or over Micropub as well. A reply post citing a
+  comment, a webmention or a fediverse reply says "In reply to a comment by"
+  its writer; citing a post, a page or another reply post, it keeps the post
+  wording.
+- **Its author link.** The thread links a reply post's author to their author
+  page with no `rel="nofollow ugc"`: they are a user of the site. Visitor,
+  webmention and fediverse author links keep it.
 
 ### Its limits
 
-- A reply post written in the editor or over Micropub that answers a native
-  comment sends no reply notice. Only the form sends one.
 - A visitor answering a fediverse reply leaves a native comment, which goes
   nowhere over ActivityPub. A visitor is not a user and has no actor.

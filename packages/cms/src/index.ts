@@ -107,6 +107,7 @@ import { mountMicropub } from './micropub/endpoint.ts';
 import { mountMicropubMedia } from './micropub/media.ts';
 import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
 import { heldReplyContext } from './webmention/reply-context.ts';
+import { createReplyNotices } from './comments/reply-notices.ts';
 import {
   selectedTargets,
   syndicationCopies,
@@ -1788,8 +1789,8 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     lookup: resolved.hostLookup,
     fediverse: citedPostReader(() => federationContext()),
     held: (target) => {
-      const found = conversation.replyAt(target);
-      return found === undefined ? undefined : heldReplyContext(target, found.reply);
+      const found = conversation.heldAt(target);
+      return found === undefined ? undefined : heldReplyContext(target, found);
     },
     onStored: (target, previous) => {
       delivery.citedPageStored(target, previous);
@@ -1940,6 +1941,20 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     mail,
     config: resolved,
     cited: (url) => replyContexts.read(url),
+  });
+
+  // And whoever a reply post answers, when it answers their comment and they
+  // asked (TASK-326): from the index, so every door a reply post comes in by
+  // tells them once.
+  const replyNotices = createReplyNotices({
+    admin,
+    store,
+    conversation,
+    notices: notifications,
+    config: resolved,
+  });
+  content.events.on('change', (change) => {
+    replyNotices.handle(change);
   });
 
   // And the other half of it (TASK-60): a user who asked for an hourly or a

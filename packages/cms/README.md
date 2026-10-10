@@ -1097,21 +1097,22 @@ feeds and search. Backlog doc-6 has the rules.
 ### Replying while signed in
 
 A comment is something somebody else says on the site. A post is something a
-signed-in user says. So a reply written in the thread by somebody signed in to
-the site is a reply post, not a comment. It is one file under `posts/`, saved
+signed-in user says. So a reply written by somebody signed in to the site, in
+the thread or in the Reply box on the moderation screen, is a reply post, not a
+comment. It is one file under `posts/`, saved
 the way the editor and Micropub save one, and the thread shows it inline under
 what it answers. Its `in-reply-to` is what it answers:
 
 | Answering          | `in-reply-to`                     | It also                                                  |
 | ------------------ | --------------------------------- | -------------------------------------------------------- |
 | The post           | The post's permalink              |                                                          |
-| A native comment   | The comment's `/comment/{id}/`    | Emails the commenter, if they asked about replies.       |
+| A native comment   | The comment's `/comment/{id}/`    | Emails the commenter once, if they asked about replies.  |
 | A webmention reply | The page the webmention came from | Sends that page a webmention.                            |
 | A fediverse reply  | The note's id                     | Federates in reply to the note, addressed to its author. |
 | A reply post       | The reply post's permalink        |                                                          |
 
-The signed-in form has an "Include in posts and feeds" checkbox, unchecked by
-default. Unchecked, the reply post is [unlisted](#unlisted-posts): its own page
+The signed-in form and the moderation screen's Reply box have an "Include in
+posts and feeds" checkbox, unchecked by default. Unchecked, the reply post is [unlisted](#unlisted-posts): its own page
 and the thread, but no listing or post feed. Checked, it is public. It reaches
 whoever it answers either way. A visitor's form has no such box.
 
@@ -1123,7 +1124,15 @@ reply sends nothing over ActivityPub.
 A reply post written in the editor or over Micropub joins a thread the same way
 when its `in-reply-to` names the post or anything in its thread: a comment's
 page or `#comment-` anchor, a webmention's page, a note's id. Its reply context
-quotes that comment from the site's own records instead of the page it is on. A
+quotes that comment from the site's own records instead of the page it is on,
+and says "In reply to a comment by" its writer. A reply post answering one of
+the site's own posts or pages takes that post's title, words and author from
+the index too, so the site never fetches its own page. The commenter's email
+goes once for a reply post from any of these doors, sent when the reply post is
+first published and never again when it is edited, trashed and restored, or the
+site restarts. In the thread, a reply post's author link carries no
+`rel="nofollow ugc"`, which is kept for visitors, webmentions and the
+fediverse. A
 webmention or a fediverse reply to a reply post threads under it in the
 original thread too. Comments written before this stay comments. Backlog doc-6
 and decision-47 have the rules.
