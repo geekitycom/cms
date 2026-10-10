@@ -126,18 +126,25 @@ const SEVERAL = {};
 const ADA_PERSON = { '@id': 'http://localhost:3000/author/ada/#person' };
 
 describe('a site whose author is a user (AC #2)', () => {
+  it("prints the site author's bio card on a post-listing homepage", async () => {
+    const home = main(await body(await site({ ...LISTING, ...SOLO }), '/'));
+
+    assert.match(home, /class="bio p-author h-card"/);
+    assert.match(home, /Ada Lovelace/);
+    assert.match(home, /Wrote the first program\./);
+  });
+
+  it('prints only the page on a static front page (TASK-317)', async () => {
+    const home = main(await body(await site({ ...FRONT_PAGE, ...SOLO }), '/'));
+
+    assert.match(home, /Hello and welcome\./);
+    assert.doesNotMatch(home, /h-card|Wrote the first program/, 'the bio is still printed');
+  });
+
   for (const [shape, settings] of [
     ['a post-listing homepage', LISTING],
     ['a static front page', FRONT_PAGE],
   ] as const) {
-    it(`prints the site author's bio card on ${shape}`, async () => {
-      const home = main(await body(await site({ ...settings, ...SOLO }), '/'));
-
-      assert.match(home, /class="bio p-author h-card"/);
-      assert.match(home, /Ada Lovelace/);
-      assert.match(home, /Wrote the first program\./);
-    });
-
     it(`claims the author's profiles and archive with rel="me" on ${shape}`, async () => {
       const home = await body(await site({ ...settings, ...SOLO }), '/');
 
@@ -325,10 +332,7 @@ function bioCard(html: string, pageUrl: string): Mf2Item {
 }
 
 describe('the homepage h-card is the site’s representative h-card (TASK-193)', () => {
-  for (const [shape, settings] of [
-    ['a post-listing homepage', LISTING],
-    ['a static front page', FRONT_PAGE],
-  ] as const) {
+  for (const [shape, settings] of [['a post-listing homepage', LISTING]] as const) {
     it(`gives the bio card u-url and u-uid equal to the homepage on ${shape} (AC #1)`, async () => {
       const card = bioCard(await body(await site({ ...settings, ...SOLO }), '/'), HOME);
 
@@ -371,6 +375,13 @@ describe('the homepage h-card is the site’s representative h-card (TASK-193)',
       assert.equal(card.properties['url']?.[0], `${HOME}author/ada/`, 'the archive comes first');
     });
   }
+
+  it('is left to the page’s own words on a static front page (TASK-317)', async () => {
+    const html = await body(await site({ ...FRONT_PAGE, ...SOLO }), '/');
+
+    assert.equal(representativeHCard(html, HOME), undefined, 'the theme still prints a card');
+    assert.ok(claimsMe(html, '/author/ada/'), 'the claims went with it');
+  });
 
   it('gives a site with several authors no homepage uid', async () => {
     const html = await body(await site({ ...FRONT_PAGE, ...SEVERAL }), '/');

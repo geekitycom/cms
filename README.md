@@ -1227,7 +1227,7 @@ The first image a page shows is the exception to `loading="lazy"`. It is
 usually the page's Largest Contentful Paint, and waiting to lazy-load it slows
 that paint down, so it carries `fetchpriority="high"` and no `loading` instead.
 On a single post or page that is the first image in the body. On a listing, and
-on a front page with its recent posts under it, it is the first image in the
+on a front page that lists `newestPosts` under its words, it is the first image in the
 page's own body when that has one, and otherwise the first image of the first
 entry. Every other image stays lazy.
 
@@ -1337,9 +1337,10 @@ so.
 **Site author** on the General page says who the site is. It lists every
 user by display name, and Several authors. A new site has several authors.
 Choosing a user makes the site that person's, and the homepage speaks for them,
-whether it lists posts or shows a static front page. It shows their bio card,
-carries their `rel="me"` profile links, and links their author archive with
-`rel="me"`. The archive links back to the homepage with `rel="me"`, so the two
+whether it lists posts or shows a static front page. It carries their
+`rel="me"` profile links and links their author archive with `rel="me"`, as
+`<link rel="me">` elements in the head. A homepage that lists posts also shows
+their bio card; a static front page shows only its own title and words. The archive links back to the homepage with `rel="me"`, so the two
 URLs are provably the same person. A Mastodon profile that links the homepage
 then verifies, the homepage is their IndieAuth identity, and the structured
 data names them as the site's publisher and what it is about. The footer and

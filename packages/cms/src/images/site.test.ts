@@ -372,8 +372,10 @@ function uploadImages(html: string): string[] {
 }
 
 /** A site with one uploaded photograph, and the URL it was given. */
-async function siteWithPhoto(): Promise<{ cms: Cms; contentDir: string; url: string }> {
-  const { cms, agent, token, contentDir } = await siteWithAdmin();
+async function siteWithPhoto(
+  config: GeekityConfig = {},
+): Promise<{ cms: Cms; contentDir: string; url: string }> {
+  const { cms, agent, token, contentDir } = await siteWithAdmin(config);
   const url = await uploaded(
     agent,
     token,
@@ -483,8 +485,21 @@ describe('image loading priority end to end', () => {
     assertLazy(tags[1]);
   });
 
-  it('gives the lead to the first recent post under a front page with no image', async () => {
-    const { cms, contentDir, url } = await siteWithPhoto();
+  it('gives the lead to the first of newestPosts under a front page with no image', async () => {
+    const themesDir = await box.dir('geekity-image-themes-');
+    await mkdir(path.join(themesDir, 'lister', 'layouts'), { recursive: true });
+    await writeFile(
+      path.join(themesDir, 'lister', 'theme.json'),
+      JSON.stringify({ name: 'Lister', kind: 'site' }),
+      'utf8',
+    );
+    await writeFile(
+      path.join(themesDir, 'lister', 'layouts', 'front-page.njk'),
+      '{% extends "layouts/base.njk" %}{% block content %}{{ content | safe }}' +
+        '{% set posts = newestPosts(5) %}{% include "partials/post-list.njk" %}{% endblock %}',
+      'utf8',
+    );
+    const { cms, contentDir, url } = await siteWithPhoto({ themesDir });
     await mkdir(path.join(contentDir, 'pages'), { recursive: true });
     await mkdir(path.join(contentDir, '_data'), { recursive: true });
     await writeFile(
@@ -494,7 +509,7 @@ describe('image loading priority end to end', () => {
     );
     await writeFile(
       path.join(contentDir, '_data', 'site.json'),
-      JSON.stringify({ homepage: 'welcome' }),
+      JSON.stringify({ homepage: 'welcome', theme: 'lister' }),
       'utf8',
     );
     await writePost(contentDir, 'newer', 'date: 2026-01-02T00:00:00Z', `![Newer](${url})`);

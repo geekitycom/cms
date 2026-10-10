@@ -377,19 +377,17 @@ describe('the demo content', () => {
 /**
  * The demo's Reading settings (TASK-74) and the two page kinds they turn on
  * (TASK-85): `site.json` names About as the homepage and Posts as the posts
- * page, so `/` is the About page's words over the recent posts and the
+ * page, so `/` is the About page's title and words (TASK-317) and the
  * listing lives at `/posts/`. The Archive page says `archive: true`, and is
  * the whole archive grouped by month.
  */
 describe('the demo front page and archive page', () => {
-  it('serves the About page at / over the recent posts', async () => {
+  it('serves the About page at /, its title and words and nothing else', async () => {
     const body = await text('/');
 
+    assert.match(body, /<h2 class="section-title">About<\/h2>/, 'the homepage’s own title');
     assert.match(body, /The demo site exists so the CMS/, 'the homepage’s own words');
-    assert.match(body, /<h2 class="section-title">Recent Posts<\/h2>/);
-    assert.match(body, /<h3 class="feed-title p-name">/, 'the entries are headed under the h2');
-    assert.match(body, /The theme is just templates/, 'the newest post is not listed');
-    assert.match(body, /<p class="front-links">[\s\S]*?href="\/posts\/"/, 'no link to the listing');
+    assert.doesNotMatch(body, /Recent Posts|feed-title|front-links/, 'the posts are listed');
   });
 
   it('redirects the About page’s own permalink to /', async () => {

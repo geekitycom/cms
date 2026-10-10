@@ -745,16 +745,19 @@ claims: the name is linked `rel="author"` alone and `me` comes off every
 link.
 
 **The homepage** speaks for the site's author only on a site whose Site author
-setting names a user, which `soloAuthor` on the context says. Then both
-`layouts/home.njk` at `/` and `layouts/front-page.njk` end with that person's
-card, with its `rel="me"` claims, and their author archive's link home carries
-`rel="me"` back, so the homepage and the archive name each other. Those two
-layouts also set `bioHome` to the homepage's absolute URL, which puts a
-`data.u-url.u-uid` holding it first in the card, so a parser running the
+setting names a user, which `soloAuthor` on the context says. Then
+`layouts/base.njk` puts that person's `rel="me"` claims in the head of `/` as
+`<link rel="me">` elements, one for their author archive and one for each
+profile link, whichever layout draws the page (decision-45). Their author
+archive's link home carries `rel="me"` back, so the homepage and the archive
+name each other. `layouts/home.njk` at `/` also ends with that person's card,
+with the same claims, and sets `bioHome` to the homepage's absolute URL, which
+puts a `data.u-url.u-uid` holding it first in the card, so a parser running the
 [representative h-card algorithm](https://microformats.org/wiki/representative-h-card-parsing)
 on the homepage finds this card as the site's (TASK-193). The archive stays a
-second `u-url`. No other page sets `bioHome`. On a site
-with several authors neither homepage prints a card. Each of
+second `u-url`. No other page sets `bioHome`. A static front page prints no
+card: see [The front page](#the-front-page) for how a site puts one back. On a
+site with several authors neither homepage prints a card or makes a claim. Each of
 those is printed only when the profile says it, so a profile holding a name
 alone prints a name alone. A name this site has no account for is printed
 unlinked, because the file still said somebody wrote this.
@@ -790,8 +793,8 @@ byline under the title rather than a bio in the footer, so it writes one.
 ### A listing
 
 `partials/post-list.njk` is the feed every listing is made of (the home page,
-the posts page, a tag, category or author archive, and the front page's recent
-posts) and it is a microformats2 `h-feed` of `h-entry` items, each opening on
+the posts page, a tag, category or author archive, and a front page that
+lists `newestPosts`) and it is a microformats2 `h-feed` of `h-entry` items, each opening on
 its kicker:
 
 ```html
@@ -938,25 +941,69 @@ name a homepage (`homepage` in `content/_data/site.json`). It is that page read
 somewhere else: the same document, the same context, with `page.url` saying `/`
 rather than the permalink that redirects there.
 
-It draws the page's own words and then what the site has been writing:
+It draws the page's own title and words, and nothing else (decision-44):
 
-1. `div.page-body.e-content`, the rendered body. No title — `layouts/base.njk`
-   heads the root path with the site title, and a second `h1` under it would be
-   one heading too many — and no Published line, because a front page is read
-   as the site rather than as a page somebody wrote on a Tuesday.
-2. `<h2>Recent Posts</h2>` over `partials/post-list.njk` with `feedHeading` set
-   to 3, so the entries sit under that heading rather than beside it.
-3. `p.front-links`, a line of links to where the writing is. The posts page is
-   linked by its own title when the site names one, and the search always is
-   (TASK-22).
-4. The bio, under a rule, exactly as an entry ends: whoever the site's author
-   setting names, with their note and their own links.
+1. `h2.section-title`, the page's title. It is an `h2` because
+   `layouts/base.njk` heads the root path with the site title as the `h1`.
+2. `div.page-body.e-content`, the rendered body. There is no Published line,
+   because a front page is read as the site rather than as a page somebody
+   wrote on a Tuesday.
+3. The contact form, when the page's front matter says `contact: true`.
 
-Two context keys are the front page's alone. `recentPosts` is the entries to
-list, in the same shape a listing's are: the posts of the current month when
-there are at least five of them, and the five newest otherwise. `postsPage` is
-`{ title, url }` for the page carrying the listing, and is **absent** when the
-site names none — a link to a listing that has no URL is a link to nothing.
+It lists no posts, prints no line of links and prints no bio. A site that wants
+any of them on its front page overrides `layouts/front-page.njk` in its own
+theme. Two context keys are the front page's alone, for that override:
+
+- `newestPosts(count)` is a function. It returns the newest `count` published
+  posts as entries, in the same shape a listing's `posts` are, so
+  `partials/post-list.njk` prints them. Drafts, future-dated, unlisted and
+  trashed posts are left out. The theme chooses the count. The query runs only
+  when a template calls it, so a front page that lists nothing costs nothing.
+  A count that is not a whole number of at least 1 is an error.
+- `postsPage` is `{ title, url }` for the page carrying the listing, and is
+  **absent** when the site names none, because a link to a listing that has no
+  URL is a link to nothing.
+
+`newestPosts` replaces `recentPosts`, which held this month's posts when there
+were at least five and the five newest otherwise. An override that read
+`recentPosts` calls `newestPosts(5)` instead. This override draws the page's
+words, the five newest posts, a line of links and the site author's card as
+the site's representative h-card:
+
+```njk
+{% extends "layouts/base.njk" %}
+
+{% block content %}
+<div class="page-body e-content">
+  {{ content | safe }}
+</div>
+
+<h2 class="section-title">Recent Posts</h2>
+{% set posts = newestPosts(5) %}
+{% set feedHeading = 3 %}
+{% include "partials/post-list.njk" %}
+
+<p class="front-links">
+  {% if postsPage %}
+  <a href="{{ postsPage.url | url }}">{{ postsPage.title }}<span aria-hidden="true"> &rarr;</span></a>
+  {% endif %}
+  <a href="{{ "/search/" | url }}">Search<span aria-hidden="true"> &rarr;</span></a>
+</p>
+
+{% if soloAuthor %}
+{% set bioAuthor = soloAuthor %}
+{% set bioHome = "/" | absoluteUrl %}
+<hr>
+<footer>
+  {% include "partials/bio.njk" %}
+</footer>
+{% endif %}
+{% endblock %}
+```
+
+The stylesheet still styles `h2.section-title` and `p.front-links`, so an
+override can use both. Whatever the override prints, the solo author's
+`rel="me"` claims stay in the head of `/` (decision-45).
 
 ### An archive page
 
@@ -1487,7 +1534,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
 | `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                       |
 | `next`                                      | The published post after it. Absent on the newest post, and on a page.                                            |
-| `recentPosts`                               | The newest posts, as entries, on the front page only: this month's when it holds five, else five.                 |
+| `newestPosts`                               | A function, front page only: `newestPosts(5)` is the five newest published posts, as entries.                     |
 | `postsPage`                                 | The page carrying the listing, as `{ title, url }`, on the front page only. Absent when the site names none.      |
 | `archiveMonths`                             | Every published post as `{ month, posts }`, newest month first. Only on a page that says `archive: true`.         |
 | `webmention`                                | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.      |

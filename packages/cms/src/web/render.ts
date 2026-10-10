@@ -355,19 +355,16 @@ export interface CreateRendererOptions {
    */
   neighbours?: ((document: Document) => DocumentNeighbours) | undefined;
   /**
-   * The newest posts, for `recentPosts` on the front page (TASK-79).
-   *
-   * Which posts are recent is `web/recent.ts`'s rule and the query behind it
-   * is the index's; this is only how the answer reaches a template. Asked per
-   * render, and only while drawing the front page, so a site whose `/` is its
-   * listing never runs it at all.
+   * The newest `count` published posts, for `newestPosts` on the front page
+   * (TASK-317). The theme chooses the count; the index decides what is
+   * published.
    */
-  recentPosts?: (() => readonly Document[]) | undefined;
+  newestPosts?: ((count: number) => readonly Document[]) | undefined;
   /**
    * Every published post, for a page whose front matter says `archive: true`
    * (TASK-85).
    *
-   * Injected for the reason the recent posts are, and asked per render and
+   * Injected for the reason the newest posts are, and asked per render and
    * only for a page that asked for the list: an archive is the one listing
    * with no paging, so a site with a thousand posts runs the query on the one
    * page that prints a thousand links and on no other.
@@ -579,25 +576,31 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   }
 
   /**
-   * The front page's recent posts, as the entries a listing prints, or nothing
-   * at all when the renderer was built without a source for them.
+   * `newestPosts(count)`, the function a front page calls for the entries a
+   * listing prints, or nothing when the renderer was built without a source.
    *
-   * One read of the users file for the whole list, the way a listing does it:
-   * five posts is five bylines resolved against the same people.
-   *
-   * The first post's first image is fetched at once when the front page's own
-   * words above it have no image, because it is then the first one on the page.
+   * A function rather than a list so the theme chooses the count and a front
+   * page that lists nothing runs no query. The first entry's image is fetched
+   * at once when the page's own words above it have none, because it is then
+   * the first image on the page.
    */
-  function recentPostsContext(page: Document): Record<string, unknown> {
-    const posts = options.recentPosts?.();
-    if (posts === undefined) return {};
+  function newestPostsContext(page: Document): Record<string, unknown> {
+    const source = options.newestPosts;
+    if (source === undefined) return {};
 
-    const people = users();
     const pageLeads = page.html.includes('<img');
     return {
-      recentPosts: posts.map((document, index) =>
-        entryContext(document, people, { lead: !pageLeads && index === 0 }),
-      ),
+      newestPosts: (count: unknown) => {
+        if (typeof count !== 'number' || !Number.isInteger(count) || count < 1) {
+          throw new RangeError(
+            `newestPosts(count) takes a whole number of posts, at least 1, not ${String(count)}`,
+          );
+        }
+        const people = users();
+        return source(count).map((document, index) =>
+          entryContext(document, people, { lead: !pageLeads && index === 0 }),
+        );
+      },
     };
   }
 
@@ -790,13 +793,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // should say the URL this is served at rather than the one that
       // redirects here.
       url: '/',
-      // The newest posts under the page's own words, which is what a front
-      // page is for (decision-16). Built here rather than by the route
-      // because it is the same document context every listing entry is, and
-      // resolved once for the whole list the way a listing's bylines are.
-      // `postsPage` goes with them: the front page is the one page that
-      // links the listing by name rather than by menu item.
-      extra: { ...recentPostsContext(document), ...postsPageContext(), ...extra },
+      // What a front page may list and link, for a theme that asks: the
+      // newest posts as listing entries, and the page carrying the listing.
+      extra: { ...newestPostsContext(document), ...postsPageContext(), ...extra },
       viewer,
     });
   }

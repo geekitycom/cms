@@ -1787,7 +1787,7 @@ The rule works for pages too.
 | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Its permalink, in every representation                                     | 200, with `X-Robots-Tag: noindex`. The default theme also prints `<meta name="robots" content="noindex">`.                                   |
 | The home page, tag, category and author archives, the `archive: true` page | Absent, and not counted in a pager or a tag count.                                                                                           |
-| Previous and next links under other posts, the front page's recent posts   | Absent.                                                                                                                                      |
+| Previous and next links under other posts, a front page's `newestPosts`    | Absent.                                                                                                                                      |
 | Every RSS, Atom and JSON feed, and the site-wide comments feed             | Absent. Saving one pings no notify server.                                                                                                   |
 | The sitemap, search (HTML and JSON) and `llms.txt`                         | Absent.                                                                                                                                      |
 | IndexNow                                                                   | Not submitted. A public post that becomes unlisted is submitted once, so a search engine reads the `noindex`.                                |
@@ -2132,9 +2132,38 @@ choice is WordPress's own, and so are its two answers:
   the default, and it is what an empty `homepage` means.
 - **A static page.** The page is served at `/`, its own permalink answers `301`
   to `/` so the front page has one URL, and the menu links it at `/`. The
-  default theme draws it with `layouts/front-page.njk` — the page's own words,
-  then `Recent Posts`, then the line of links and the bio — and a theme lays it
-  out differently by overriding that one file.
+  default theme draws it with `layouts/front-page.njk`, which prints the
+  page's own title and words and nothing else (decision-44). It lists no
+  posts, prints no links and prints no bio.
+
+A site that wants more on its front page, such as its newest posts or links
+to its archives, overrides `layouts/front-page.njk` in its own theme. The
+front page's context carries `newestPosts(count)`, a function that returns the
+newest `count` published posts as the same entries a listing prints. Drafts,
+future-dated, unlisted and trashed posts are left out. The theme chooses the
+count, and the query runs only when the theme calls it. For example, this
+override lists the five newest posts under the page's words:
+
+```njk
+{% extends "layouts/base.njk" %}
+
+{% block content %}
+<div class="page-body e-content">{{ content | safe }}</div>
+
+<h2 class="section-title">Recent Posts</h2>
+{% set posts = newestPosts(5) %}
+{% set feedHeading = 3 %}
+{% include "partials/post-list.njk" %}
+{% endblock %}
+```
+
+On a solo author site the default theme's base layout puts the author's
+`rel="me"` claims in the head of `/` as `<link rel="me">` elements, one for
+their author archive and one for each profile link, whatever the front page
+prints (decision-45). A static front page prints no h-card. A site that wants
+its homepage to carry a representative h-card writes one in the homepage's
+words, or includes `partials/bio.njk` with `bioHome` set in its override, as
+the [theme README](./themes/default/README.md#the-front-page) shows.
 
 With a homepage set, a second pick gives the listing a page of its own: the
 **posts page**. Its permalink carries the listing, with the page's own title

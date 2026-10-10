@@ -1,8 +1,8 @@
 /**
  * The four things the andrewshell.org design reads that the context did not
  * carry (decision-16, TASK-79): `siteAuthor` on every page, `summary` on every
- * listing entry, `previous` and `next` on a post, and `recentPosts` on the
- * front page.
+ * listing entry, `previous` and `next` on a post, and on the front page the
+ * newest posts, as many as the theme asks `newestPosts` for (TASK-317).
  *
  * Everything here goes through HTTP and through a theme that prints the keys,
  * because the question is not what a function returned — it is what a template
@@ -46,9 +46,10 @@ function probeTheme(): Record<string, string> {
     '{% if siteAuthor %}{{ siteAuthor.name }}|{{ siteAuthor.username }}',
     '|{{ siteAuthor.jobTitle }}|{{ siteAuthor.location }}{% else %}nobody{% endif %}',
     '</p>',
-    '<p class="recent-posts">{% if recentPosts %}',
-    '{% for entry in recentPosts %}[{{ entry.title }}|{{ entry.url }}|{{ entry.summary }}]{% endfor %}',
+    '<p class="newest-posts">{% if newestPosts %}',
+    '{% for entry in newestPosts(count if count is defined else 10) %}[{{ entry.title }}|{{ entry.url }}|{{ entry.summary }}]{% endfor %}',
     '{% else %}none{% endif %}</p>',
+    '<p class="recent-posts">{{ recentPosts is defined }}</p>',
   ].join('');
   const list = [
     '<ul class="entries">',
@@ -331,29 +332,44 @@ describe('previous and next, on a post (AC #3)', () => {
   });
 });
 
-describe('recentPosts, on the front page (AC #4)', () => {
-  /** A page at `/`, and the archive under `/posts-page/`. */
+describe('newestPosts, on the front page (TASK-317 AC #3)', () => {
+  /** A page at `/`, and the archive under `/archive/`. */
   const READING = { homepage: 'about', postsPage: 'archive' };
 
-  /** The content above plus the page the listing moves to. */
-  const WITH_ARCHIVE = { ...CONTENT, 'pages/archive.md': page('Archive', 'archive') };
+  /** The content above plus the page the listing moves to, and a count on the homepage. */
+  function withCount(count: string): Record<string, string> {
+    return {
+      ...CONTENT,
+      'pages/about.md': `---\ntitle: About\npermalink: /about/\ncount: ${count}\n---\n\nThe about page.\n`,
+      'pages/archive.md': page('Archive', 'archive'),
+    };
+  }
 
-  it('is the five newest posts when the current month holds fewer than five', async () => {
-    const cms = await site(READING, WITH_ARCHIVE);
+  it('is as many of the newest posts as the theme asks for, as listing entries', async () => {
+    const cms = await site(READING, withCount('2'));
 
-    // September has two; the rule falls back to the newest five, and this
-    // archive has four altogether.
     assert.equal(
-      printed(await body(cms, '/'), 'recent-posts'),
+      printed(await body(cms, '/'), 'newest-posts'),
+      '[Alpha|/posts/alpha/|What Alpha is about.]' +
+        '[Beta|/posts/beta/|Beta has a body and no description.]',
+    );
+  });
+
+  it('leaves out a draft and a post whose date has not arrived', async () => {
+    const cms = await site(READING, withCount('10'));
+
+    assert.equal(
+      printed(await body(cms, '/'), 'newest-posts'),
       '[Alpha|/posts/alpha/|What Alpha is about.]' +
         '[Beta|/posts/beta/|Beta has a body and no description.]' +
         '[Gamma|/posts/gamma/|Body of gamma.]' +
         '[Delta|/posts/delta/|]',
+      'Drafted and Later are not posts a reader can open',
     );
   });
 
-  it('is the whole of the current month once the month holds five', async () => {
-    const monthly: Record<string, string> = { ...WITH_ARCHIVE };
+  it('does not depend on the month: the count is the whole rule', async () => {
+    const monthly = withCount('3');
     for (const day of ['01', '02', '03', '04']) {
       monthly[`posts/sept-${day}.md`] = post(
         `Sept ${day}`,
@@ -363,33 +379,31 @@ describe('recentPosts, on the front page (AC #4)', () => {
     }
     const cms = await site(READING, monthly);
 
-    const recent = printed(await body(cms, '/'), 'recent-posts');
-    const titles = [...recent.matchAll(/\[([^|]+)\|/g)].map((match) => match[1]);
-    assert.deepEqual(
-      titles,
-      ['Alpha', 'Beta', 'Sept 04', 'Sept 03', 'Sept 02', 'Sept 01'],
-      'every September post, and none from August',
+    assert.equal(
+      printed(await body(cms, '/'), 'newest-posts')
+        .match(/\[[^|]+/g)
+        ?.join(''),
+      '[Alpha[Beta[Sept 04',
     );
   });
 
-  it('is not on the listing, which still pages the whole archive', async () => {
-    const cms = await site({ ...READING, postsPerPage: 2 }, WITH_ARCHIVE);
+  it('refuses a count that is not a whole number of posts', async () => {
+    const cms = await site(READING, withCount('0'));
 
-    const listing = await body(cms, '/archive/');
-    assert.equal(printed(listing, 'recent-posts'), 'none', 'the listing has no recent posts');
-    assert.deepEqual(entries(listing), [
-      'true:Alpha|What Alpha is about.',
-      'true:Beta|Beta has a body and no description.',
-    ]);
-    assert.deepEqual(entries(await body(cms, '/archive/page/2/')), [
-      'true:Gamma|Body of gamma.',
-      'true:Delta|',
-    ]);
+    const response = await cms.app.request('/');
+    assert.equal(response.status, 500, 'newestPosts(0) asked the index for every post');
   });
 
-  it('is on the front page only, and not on an ordinary page', async () => {
-    const cms = await site(READING, WITH_ARCHIVE);
+  it('replaces recentPosts, which no page carries any more', async () => {
+    const cms = await site(READING, withCount('2'));
 
-    assert.equal(printed(await body(cms, '/posts/alpha/'), 'recent-posts'), 'none');
+    assert.equal(printed(await body(cms, '/'), 'recent-posts'), 'false');
+  });
+
+  it('is on the front page only, and not on a listing or an ordinary page', async () => {
+    const cms = await site(READING, withCount('2'));
+
+    assert.equal(printed(await body(cms, '/archive/'), 'newest-posts'), 'none');
+    assert.equal(printed(await body(cms, '/posts/alpha/'), 'newest-posts'), 'none');
   });
 });

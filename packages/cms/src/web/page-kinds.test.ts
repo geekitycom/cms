@@ -1,8 +1,8 @@
 /**
  * The two page kinds the source design has that a front matter key turns on
- * here (decision-16, TASK-85): the front page, which is a page's own words
- * over the recent posts, and an archive page, which is a page's own words over
- * every post there has ever been, grouped by month.
+ * here (decision-16, TASK-85): the front page, which is a page's own title and
+ * words and nothing else (TASK-317), and an archive page, which is a page's own
+ * words over every post there has ever been, grouped by month.
  *
  * Both are markup rather than a return value, so all of it is asserted over
  * HTTP against the theme the package ships.
@@ -91,13 +91,6 @@ function main(html: string): string {
   return /<main id="main">([\s\S]*?)<\/main>/.exec(html)?.[1] ?? '';
 }
 
-/** The titles of a feed's entries, in the order they are printed. */
-function feedTitles(html: string): string[] {
-  return [...html.matchAll(/<h3 class="feed-title p-name">\s*<a[^>]*>([^<]*)<\/a>/g)].map(
-    (match) => match[1] ?? '',
-  );
-}
-
 /** Every month of an archive page, as `Month Year: title, title`. */
 function months(html: string): string[] {
   return [...html.matchAll(/<h2>([^<]*)<\/h2>\s*<ol class="list-none">([\s\S]*?)<\/ol>/g)].map(
@@ -108,46 +101,21 @@ function months(html: string): string[] {
   );
 }
 
-describe('the front page a homepage is given (AC #1)', () => {
-  it('prints the page’s words, then Recent Posts as an h-feed of h3 entries', async () => {
-    const cms = await site({ homepage: 'about' });
-    const html = await body(cms, '/');
-
-    assert.match(html, /The words of the about page\./, 'the page’s own body is the front page');
-    assert.match(html, /<h2 class="section-title">Recent Posts<\/h2>/, 'nothing heads the posts');
-    assert.match(html, /<div class="feed h-feed">/, 'the posts are not an h-feed');
-    assert.deepEqual(
-      feedTitles(html),
-      ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'],
-      'the newest five, headed at 3 under the h2',
-    );
-    assert.doesNotMatch(html, /Drafted|Later/, 'a draft or a post still to come is listed');
-  });
-
-  it('leaves off the Published line and ends on the bio', async () => {
-    const cms = await site({ homepage: 'about' });
+describe('the front page a homepage is given (TASK-317)', () => {
+  it('prints the page’s own title and words and nothing else (AC #1)', async () => {
+    const cms = await site({ homepage: 'about', postsPage: 'posts' });
     const content = main(await body(cms, '/'));
 
-    assert.doesNotMatch(content, /page-meta/, 'the front page dates itself');
-    assert.match(content, /<div class="bio p-author h-card">/, 'the bio is not on the front page');
-    assert.ok(
-      content.indexOf('bio p-author') > content.indexOf('feed h-feed'),
-      'the bio is above the posts rather than under them',
+    assert.match(content, /<h2 class="section-title">About<\/h2>/, 'the page’s title is gone');
+    assert.match(content, /The words of the about page\./, 'the page’s own body is gone');
+    assert.doesNotMatch(content, /Recent Posts|feed h-feed|Alpha/, 'the posts are still listed');
+    assert.doesNotMatch(
+      content,
+      /front-links|href="\/search\/"/,
+      'the line of links is still there',
     );
-  });
-
-  it('links the posts page, and only when the site names one', async () => {
-    const withPosts = await body(await site({ homepage: 'about', postsPage: 'posts' }), '/');
-    assert.match(withPosts, /<p class="front-links">[\s\S]*?href="\/posts\/"[\s\S]*?Posts/);
-
-    const without = await body(await site({ homepage: 'about' }), '/');
-    const links = /<p class="front-links">([\s\S]*?)<\/p>/.exec(without)?.[1] ?? '';
-    assert.doesNotMatch(links, /href="\/posts\/"/, 'a site with no posts page links one anyway');
-  });
-
-  it('links the search whether or not there is a posts page (TASK-22)', async () => {
-    const html = await body(await site({ homepage: 'about' }), '/');
-    assert.match(html, /<p class="front-links">[\s\S]*?href="\/search\/"[\s\S]*?Search/);
+    assert.doesNotMatch(content, /class="bio|h-card/, 'the bio is still there');
+    assert.doesNotMatch(content, /page-meta/, 'the front page dates itself');
   });
 
   it('still redirects the page’s own permalink to /', async () => {
@@ -162,8 +130,8 @@ describe('the front page a homepage is given (AC #1)', () => {
     const cms = await site({ homepage: 'about' });
     const html = await body(cms, '/plain/');
 
-    assert.doesNotMatch(html, /Recent Posts/, 'every page is a front page');
-    assert.match(html, /<p class="page-meta">/, 'the page layout is not what a page gets');
+    assert.match(html, /<h1 class="p-name">Plain<\/h1>/, 'the page layout is not what a page gets');
+    assert.match(html, /<p class="page-meta">/);
   });
 });
 

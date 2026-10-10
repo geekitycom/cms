@@ -94,7 +94,6 @@ import {
   mountHealth,
   mountPublicSite,
   mountWellKnown,
-  recentPosts,
   redirectBy,
   serverError,
   themeName,
@@ -1158,9 +1157,7 @@ export {
   prefersActivityStreams,
   profileContext,
   publicDocumentAt,
-  recentPosts,
   resolveLicense,
-  RECENT_POSTS,
   recordTermRename,
   redirectedTerm,
   REPRESENTATION_EXTENSIONS,
@@ -1210,7 +1207,6 @@ export {
   splitFeedPath,
   splitLinkRel,
   splitRepresentationExtension,
-  startOfMonth,
   tagHref,
   TAXONOMIES,
   userForAuthor,
@@ -1293,7 +1289,6 @@ export type {
   PageContext,
   PaginateOptions,
   Pagination,
-  RecentPostsSource,
   Renderer,
   Representation,
   RepresentationExtension,
@@ -1868,10 +1863,10 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     // asked per render for the reason the conversation is: a post published a
     // minute ago is already the neighbour of the one before it.
     neighbours: (document) => store.neighbours(document),
-    // And the newest posts for the front page, by the current-month-or-five
-    // rule. Only the front page asks, so a site whose `/` is its listing never
-    // runs the query at all.
-    recentPosts: () => recentPosts(store),
+    // And the newest posts, as many as a front page asks for (TASK-317). The
+    // query runs only when a theme calls `newestPosts`, so the packaged front
+    // page, which lists nothing, never runs it.
+    newestPosts: (count) => store.listPosts({ limit: count }),
     // And every published post, for a page that says `archive: true`. The one
     // listing with no paging, so it is asked for only by the page that prints
     // it (TASK-85).
