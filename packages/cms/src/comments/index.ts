@@ -54,6 +54,7 @@ export {
   migrateCommentEmails,
   migrateCommentKeys,
   putComments,
+  renameComments,
   readComments,
   rebuildCommentIndexes,
   updateComment,

@@ -19,7 +19,7 @@ import type { RsvpValue } from '../content/rsvp.ts';
 import type { ContentStore } from '../content/store.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { hashClientAddress } from '../forms/protection.ts';
-import { isKey, repliesKey } from '../web/feed-source.ts';
+import { isKey, repliesKey, webmentionKey } from '../web/feed-source.ts';
 import { COMMENT_PAGE_PREFIX } from '../web/guids.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
 
@@ -392,6 +392,46 @@ export async function putComments(
   });
 }
 
+/**
+ * Give comments on one post new ids: each one `renames` maps keeps its place
+ * under its new id, its email in `data/` follows it, and every reply naming
+ * its old id names the new one. Refuses a new id the post already holds.
+ */
+export async function renameComments(
+  records: CommentRecords,
+  slug: string,
+  renames: ReadonlyMap<string, string>,
+): Promise<void> {
+  const file = commentsFile(records.contentDir, slug);
+
+  await withFileLock(file, () => {
+    const held = readPost(records, slug);
+    const ids = new Set(held.comments.map((comment) => comment.id));
+    const moved = new Map([...renames].filter(([from, to]) => from !== to && ids.has(from)));
+    if (moved.size === 0) return;
+    for (const [from, to] of moved) {
+      if (ids.has(to)) {
+        throw new Error(`${file}: comment "${from}" cannot take id "${to}", which another has.`);
+      }
+    }
+
+    const changed: CommentRecord[] = [];
+    const next = held.comments.map((entry) => {
+      const id = moved.get(entry.id) ?? entry.id;
+      const inReplyTo =
+        entry.inReplyTo === null ? null : (moved.get(entry.inReplyTo) ?? entry.inReplyTo);
+      if (id === entry.id && inReplyTo === entry.inReplyTo) return entry;
+      const renamed = { ...entry, id, inReplyTo };
+      changed.push(renamed);
+      return renamed;
+    });
+    writePost(records, slug, held.post, next);
+    for (const from of moved.keys()) records.admin.deleteComment(from);
+    for (const comment of changed)
+      records.admin.putComment({ ...comment, slug, permalink: held.post });
+  });
+}
+
 /** Who is proposing a comment, which is the one thing the rules differ on. */
 export type CommentOrigin =
   /** Somebody filled in the form under a post (doc-6). */
@@ -575,16 +615,6 @@ export function heldWebmention(
   return records.admin
     .listCommentsFor(slug)
     .find((comment) => comment.source === 'webmention' && comment.url === source);
-}
-
-/**
- * A webmention's key: the key of its source and the post it was sent to,
- * which together are its identity (doc-7). The source alone would give one
- * key to a page that mentions two posts. `undefined`, so a key is minted, for
- * one with no source.
- */
-export function webmentionKey(source: string | null, permalink: string): string | undefined {
-  return source === null || source === '' ? undefined : repliesKey(`${source} ${permalink}`);
 }
 
 /** Where this site's own rules put a comment, before a checker has spoken. */

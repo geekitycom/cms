@@ -1,7 +1,8 @@
 /**
  * `@geekity/cms/plugin`: the whole of what a plugin may import from core
- * (decision-33). Types, the host API version and {@link definePlugin}, which is
- * an identity function so a bundled plugin needs no runtime import of core.
+ * (decision-33). Types, the host API version, {@link definePlugin}, which is
+ * an identity function, and the key rule a plugin writing comments names them
+ * by. A bundled plugin inlines what it uses of these.
  *
  * Removing or reshaping anything here is a breaking change to `@geekity/cms`
  * (decision-6), and bumps {@link HOST_API_VERSION}.
@@ -32,6 +33,14 @@ export const HOST_API_VERSION = 1;
  * which activities they have already handled.
  */
 export type { KvStore };
+
+/**
+ * The key rule (decision-51), so a plugin that writes comments keys each one
+ * as the site would key the same comment arriving here: a fediverse reply or
+ * reaction by {@link repliesKey} of its note or activity id, a webmention by
+ * {@link webmentionKey} of its source and the post's permalink.
+ */
+export { repliesKey, webmentionKey } from './web/feed-source.ts';
 
 /** What a plugin's route handler is handed. */
 export interface PluginRequestContext {
@@ -125,6 +134,13 @@ export interface PluginSite {
    * email only in `data/`. Nobody is told: no notice, digest or delivery.
    */
   putComments(permalink: string, comments: readonly PluginComment[]): Promise<void>;
+  /**
+   * Give comments on the post at a permalink new ids: each one whose id
+   * `renames` maps takes the new id in its place, and every reply naming it
+   * names the new one. An id the post does not hold is passed over. Throws,
+   * changing nothing, when a new id is one the post already holds.
+   */
+  renameComments(permalink: string, renames: ReadonlyMap<string, string>): Promise<void>;
 }
 
 /** What {@link PluginSite.comments} reads. */

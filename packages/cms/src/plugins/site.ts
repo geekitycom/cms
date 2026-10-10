@@ -13,7 +13,7 @@ import { migratedFields } from '../admin/store.ts';
 import type { AdminStore, CommentRecord } from '../admin/store.ts';
 import { acceptUpload, refusedUpload } from '../admin/uploads.ts';
 import { renderCommentMarkdown } from '../comments/markdown.ts';
-import { commentsFile, putComments, readComments } from '../comments/records.ts';
+import { commentsFile, putComments, readComments, renameComments } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { slugForPermalink } from '../content/parser.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
@@ -116,6 +116,10 @@ export function pluginSite(options: { admin: AdminStore; config: ResolvedConfig 
         permalink,
         comments.map(commentRecordOf),
       );
+    },
+
+    async renameComments(permalink, renames) {
+      await renameComments({ admin, contentDir, dataDir }, postSlug(permalink), renames);
     },
   };
 }

@@ -15,6 +15,7 @@ import type { AdminStore } from './admin/store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
 import { resolveConfig } from './config.ts';
 import type { ResolvedConfig } from './config.ts';
+import { migrateCommentEmails, migrateCommentKeys } from './comments/records.ts';
 import { stripStoredUploads } from './content/metadata/sweep.ts';
 import { UPLOAD_DIRECTORY } from './web/assets.ts';
 import { createCms } from './index.ts';
@@ -1138,7 +1139,10 @@ async function pluginCommands(config: ResolvedConfig): Promise<FoundCommand[]> {
  *
  * The database is opened for the reason `user add` opens it: a command can
  * reach `data/users.json` before any server has, so a site upgrading from the
- * version that kept its accounts in SQLite is migrated first.
+ * version that kept its accounts in SQLite is migrated first. The comments
+ * are migrated as a boot would migrate them for the same reason: a command
+ * writing comments before any server has would otherwise meet ids the site
+ * refuses to store.
  */
 async function pluginCommand(argv: readonly string[]): Promise<number> {
   const configPath = configFlag(argv);
@@ -1159,6 +1163,9 @@ async function pluginCommand(argv: readonly string[]): Promise<number> {
   );
   const admin = openAdminStore({ dataDir: config.dataDir });
   migrateUsersToFile({ admin, dataDir: config.dataDir });
+  const comments = { contentDir: config.contentDir, dataDir: config.dataDir };
+  migrateCommentEmails(comments);
+  migrateCommentKeys(comments);
   try {
     return await found.command.run({
       args,

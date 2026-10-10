@@ -207,4 +207,42 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
     assert.equal(held.comments[0]?.content.markdown, 'Edited at the source.');
     assert.deepEqual(held.comments[1], liveEntry, 'the live comment is byte for byte as it was');
   });
+
+  it('renames a comment in its place, its email and the replies naming it following, and refuses a taken id', async () => {
+    const { site: plugin, contentDir, admin } = await site();
+    await plugin.putComments('/2026/09/hello/', [
+      imported({ author: { name: 'Ada', url: null, email: 'ada@example.com', avatar: null } }),
+      imported({ id: '0000000000007004', inReplyTo: '0000000000007003' }),
+      imported({ id: '0000000000007005' }),
+    ]);
+
+    await plugin.renameComments(
+      '/2026/09/hello/',
+      new Map([
+        ['0000000000007003', 'aaaaaaaaaaaaaaaa'],
+        ['ffffffffffffffff', 'bbbbbbbbbbbbbbbb'],
+      ]),
+    );
+
+    const held = plugin.comments('/2026/09/hello/').comments;
+    assert.deepEqual(
+      held.map((comment) => [comment.id, comment.inReplyTo, comment.author.email]),
+      [
+        ['aaaaaaaaaaaaaaaa', null, 'ada@example.com'],
+        ['0000000000007004', 'aaaaaaaaaaaaaaaa', null],
+        ['0000000000007005', null, null],
+      ],
+    );
+    assert.equal(admin.getComment('0000000000007003'), undefined);
+    assert.equal(admin.getComment('aaaaaaaaaaaaaaaa')?.slug, 'hello');
+    assert.equal(admin.getComment('0000000000007004')?.inReplyTo, 'aaaaaaaaaaaaaaaa');
+
+    const file = path.join(contentDir, '_data', 'comments', 'hello.json');
+    const before = await readFile(file, 'utf8');
+    await assert.rejects(
+      plugin.renameComments('/2026/09/hello/', new Map([['0000000000007004', '0000000000007005']])),
+      /hello\.json: comment "0000000000007004" cannot take id "0000000000007005"/,
+    );
+    assert.equal(await readFile(file, 'utf8'), before);
+  });
 });
