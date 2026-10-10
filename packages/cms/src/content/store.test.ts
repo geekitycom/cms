@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -169,14 +170,14 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
@@ -205,7 +206,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       // The hash of a file with no categories has not changed, so a sync would
       // leave a surviving row alone and never learn its categories. The row
       // has to go; the file it was derived from is still on disk.
@@ -234,7 +235,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       assert.equal(upgraded.counts().total, 0, 'the stale HTML survived the upgrade');
     } finally {
       upgraded.close();
@@ -253,7 +254,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       assert.equal(upgraded.counts().total, 0, 'a row without tag keys survived the upgrade');
       upgraded.upsert(post({ tags: ['OpenSource'] }));
       assert.equal(upgraded.countByTag('opensource'), 1);
@@ -292,7 +293,7 @@ describe('a reply target', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       assert.equal(upgraded.counts().total, 0, 'a row with in-reply-to in extra survived');
     } finally {
       upgraded.close();
@@ -341,7 +342,7 @@ describe('former permalinks (TASK-127)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       assert.equal(upgraded.counts().total, 0, 'a row with redirect_from in extra survived');
     } finally {
       upgraded.close();
@@ -1329,7 +1330,7 @@ describe('the permalink of a trashed document (TASK-195)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       upgraded.upsert(again);
       assert.equal(upgraded.getByPermalink('/2026/09/hello-world/')?.title, 'Again');
       assert.throws(() => {
@@ -1559,7 +1560,7 @@ describe('the search index migration (TASK-22 AC #2)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       assert.equal(upgraded.counts().total, 0, 'a row survived with no words indexed for it');
 
       upgraded.upsert(post());
@@ -1681,5 +1682,98 @@ describe('setReadOnly', () => {
     index.setReadOnly(false);
     index.upsert(post());
     assert.equal(index.listAll().length, 1);
+  });
+});
+
+describe('the /replies/ keys (TASK-327)', () => {
+  const BASE = 'https://blog.example';
+
+  function keyOf(guid: string): string {
+    return createHash('sha256').update(guid).digest('hex').slice(0, 16);
+  }
+
+  function paths(index: ContentStore, guid: string): string[] {
+    return index.listByRepliesKey(keyOf(guid)).map((found) => found.path);
+  }
+
+  it('finds a post and a page by the key of their feed guid', async () => {
+    const dir = await dataDir();
+    const index = openContentStore({ dataDir: dir, baseUrl: BASE });
+    openStores.push(index);
+    index.upsert(post());
+    index.upsert(
+      post({ type: 'page', path: 'pages/about.md', slug: 'about', permalink: '/about/' }),
+    );
+
+    assert.deepEqual(paths(index, `${BASE}/2026/09/hello-world/`), [
+      'posts/2026-09-02-hello-world.md',
+    ]);
+    assert.deepEqual(paths(index, `${BASE}/about/`), ['pages/about.md']);
+    assert.deepEqual(index.listByRepliesKey('0123456789abcdef'), []);
+  });
+
+  it('follows an edited guid, a move and a removal, and only served documents', async () => {
+    const index = openContentStore({ dataDir: await dataDir(), baseUrl: BASE });
+    openStores.push(index);
+    index.upsert(post({ extra: { guid: 'https://old.example/?p=1' } }));
+    assert.equal(paths(index, 'https://old.example/?p=1').length, 1);
+    assert.deepEqual(paths(index, `${BASE}/2026/09/hello-world/`), []);
+
+    index.upsert(post({ activitypub: { id: 'https://old.example/?p=2' } }));
+    assert.deepEqual(paths(index, 'https://old.example/?p=1'), [], 'the old guid names nothing');
+    assert.equal(paths(index, 'https://old.example/?p=2').length, 1, 'a stored object id');
+
+    index.upsert(post({ permalink: '/moved/' }));
+    assert.deepEqual(paths(index, 'https://old.example/?p=2'), []);
+    assert.equal(paths(index, `${BASE}/moved/`).length, 1);
+
+    index.upsert(post({ permalink: '/moved/', draft: true }));
+    assert.deepEqual(paths(index, `${BASE}/moved/`), [], 'a draft is not served');
+
+    index.upsert(post({ permalink: '/moved/' }));
+    index.remove('posts/2026-09-02-hello-world.md');
+    assert.deepEqual(paths(index, `${BASE}/moved/`), []);
+  });
+
+  it('names a reply post by its object id as well as its guid', async () => {
+    const index = openContentStore({ dataDir: await dataDir(), baseUrl: BASE });
+    openStores.push(index);
+    index.upsert(
+      post({
+        inReplyTo: 'https://elsewhere.example/a',
+        extra: { guid: 'https://old.example/?p=3' },
+      }),
+    );
+
+    assert.equal(paths(index, 'https://old.example/?p=3').length, 1);
+    assert.equal(paths(index, `${BASE}/2026/09/hello-world/`).length, 1);
+  });
+
+  it('keeps its keys across a restart, and works them out again for a new base', async () => {
+    const dir = await dataDir();
+    const first = openContentStore({ dataDir: dir, baseUrl: BASE });
+    first.upsert(post());
+    first.close();
+
+    const again = openContentStore({ dataDir: dir, baseUrl: BASE });
+    assert.equal(paths(again, `${BASE}/2026/09/hello-world/`).length, 1, 'after a restart');
+    again.close();
+
+    const moved = openContentStore({ dataDir: dir, baseUrl: 'https://new.example' });
+    openStores.push(moved);
+    assert.deepEqual(paths(moved, `${BASE}/2026/09/hello-world/`), []);
+    assert.equal(paths(moved, 'https://new.example/2026/09/hello-world/').length, 1);
+  });
+
+  it('works out the keys of rows written before the index, or without a base', async () => {
+    const dir = await dataDir();
+    const unkeyed = openContentStore({ dataDir: dir });
+    unkeyed.upsert(post());
+    assert.deepEqual(paths(unkeyed, `${BASE}/2026/09/hello-world/`), []);
+    unkeyed.close();
+
+    const keyed = openContentStore({ dataDir: dir, baseUrl: BASE });
+    openStores.push(keyed);
+    assert.equal(paths(keyed, `${BASE}/2026/09/hello-world/`).length, 1);
   });
 });

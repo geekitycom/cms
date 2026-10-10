@@ -34,7 +34,8 @@ import {
 import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { ContactFormContext } from '../contact/form.ts';
-import { commentAnchor, commentPageHref } from './conversation.ts';
+import { commentAnchor } from './conversation.ts';
+import { commentPageHref } from './guids.ts';
 import type { CommentThread, Conversation } from './conversation.ts';
 import { activityStreamsId, isServed } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';

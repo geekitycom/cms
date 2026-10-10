@@ -7,6 +7,8 @@ import { featuredPosts, PINNED_FRONT_MATTER_KEY } from './pinned.ts';
 import { searchExpression, searchText, SNIPPET_CLOSE, SNIPPET_OPEN } from './search.ts';
 import { tagKey, uniqueTags } from './tags.ts';
 import { VISIBILITIES, VISIBILITY_FRONT_MATTER_KEY } from './visibility.ts';
+import { repliesKey } from '../web/feed-source.ts';
+import { feedGuid, postObjectId } from '../web/guids.ts';
 
 export { DATABASE_FILE } from '../cache.ts';
 
@@ -33,6 +35,12 @@ export interface OpenContentStoreOptions {
    * to {@link systemClock}; a test hands one it can move.
    */
   now?: Clock | undefined;
+  /**
+   * The site's base URL, which the `/replies/` keys of a document are worked
+   * out against (TASK-327). Opening with a different one than last time works
+   * every key out again; opening with none leaves new rows without keys.
+   */
+  baseUrl?: string | undefined;
 }
 
 /**
@@ -211,6 +219,12 @@ export interface ContentStore {
   listRepliesTo(targets: readonly string[]): Document[];
   /** Served posts with an `in-reply-to`, unlisted ones included, newest first. */
   listReplyPosts(options?: ListOptions): Document[];
+  /**
+   * The served documents a `/replies/` key names (TASK-327): the ones whose
+   * feed guid has that key, and the reply posts whose object id has it. One
+   * indexed lookup, so a key that names nothing costs nothing else.
+   */
+  listByRepliesKey(key: string): Document[];
   /** Every indexed path, sorted. What a sync compares the content tree against. */
   listPaths(): string[];
   /** How many documents there are of each kind. */
@@ -511,10 +525,12 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     insert: db.prepare(`
       INSERT INTO documents (
         path, type, slug, permalink, title, date, date_sort, updated, draft, trashed,
-        description, author, in_reply_to, activitypub, extra, body, html, hash
+        description, author, in_reply_to, activitypub, extra, body, html, hash,
+        replies_key, reply_post_key, keys_base
       ) VALUES (
         :path, :type, :slug, :permalink, :title, :date, :date_sort, :updated, :draft, :trashed,
-        :description, :author, :in_reply_to, :activitypub, :extra, :body, :html, :hash
+        :description, :author, :in_reply_to, :activitypub, :extra, :body, :html, :hash,
+        :replies_key, :reply_post_key, :keys_base
       )
       ON CONFLICT (path) DO UPDATE SET
         type = excluded.type,
@@ -533,7 +549,21 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
         extra = excluded.extra,
         body = excluded.body,
         html = excluded.html,
-        hash = excluded.hash
+        hash = excluded.hash,
+        replies_key = excluded.replies_key,
+        reply_post_key = excluded.reply_post_key,
+        keys_base = excluded.keys_base
+    `),
+    rowsKeyedElsewhere: db.prepare('SELECT * FROM documents WHERE keys_base IS NOT ?'),
+    writeKeys: db.prepare(`
+      UPDATE documents
+      SET replies_key = :replies_key, reply_post_key = :reply_post_key, keys_base = :keys_base
+      WHERE path = :path
+    `),
+    byRepliesKey: db.prepare(`
+      SELECT * FROM documents
+      WHERE (replies_key = ?1 OR reply_post_key = ?1) AND ${SERVED_CLAUSE}
+      ORDER BY replies_key = ?1 DESC, date_sort DESC, path DESC
     `),
     deleteTags: db.prepare('DELETE FROM document_tags WHERE path = ?'),
     insertTag: db.prepare(
@@ -635,6 +665,23 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
   let open = true;
 
+  /** Work out again every key worked out against another base, or none. */
+  function refreshRepliesKeys(baseUrl: string): void {
+    db.exec('BEGIN');
+    try {
+      for (const row of statements.rowsKeyedElsewhere.all(baseUrl) as Record<string, unknown>[]) {
+        const document = toDocument(row, [], []);
+        statements.writeKeys.run({ path: document.path, ...repliesKeysOf(document, baseUrl) });
+      }
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  if (options.baseUrl !== undefined) refreshRepliesKeys(options.baseUrl);
+
   let cachedSpellings: CachedSpellings | undefined;
   const staleKeys = new Set<string>();
 
@@ -714,7 +761,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     markTagsStaleBeforeWrite(contentPath);
     for (const tag of document.tags) staleKeys.add(tagKey(tag));
     try {
-      statements.insert.run(toRow(document));
+      statements.insert.run({ ...toRow(document), ...repliesKeysOf(document, options.baseUrl) });
     } catch (error) {
       throw translateWriteError(error, document, statements.pathForPermalink);
     }
@@ -999,6 +1046,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       );
     },
 
+    listByRepliesKey(key) {
+      return hydrateAll(statements.byRepliesKey.all(key, nowKey()) as Record<string, unknown>[]);
+    },
+
     listPaths() {
       return statements.paths.all().map((row) => String(row['path']));
     },
@@ -1214,6 +1265,26 @@ function limitClause(options: ListOptions): string {
 function limitParams(options: ListOptions): never[] {
   if (options.limit === undefined && options.offset === undefined) return [];
   return [options.limit ?? -1, options.offset ?? 0] as never[];
+}
+
+/**
+ * The `/replies/` keys of a document (TASK-327): its feed guid's, and for a
+ * reply post its object id's, which is what it is named by in the thread it
+ * answers. The two differ only for a reply post with a stored `guid`. Both are
+ * worked out against `baseUrl`, which is recorded beside them so a change of
+ * site URL is noticed on the next open; with no base there are no keys.
+ */
+function repliesKeysOf(
+  document: Document,
+  baseUrl: string | undefined,
+): Record<'replies_key' | 'reply_post_key' | 'keys_base', string | null> {
+  if (baseUrl === undefined) return { replies_key: null, reply_post_key: null, keys_base: null };
+  const isReplyPost = document.type === 'post' && document.inReplyTo !== undefined;
+  return {
+    replies_key: repliesKey(feedGuid(document, baseUrl)),
+    reply_post_key: isReplyPost ? repliesKey(postObjectId(document, baseUrl)) : null,
+    keys_base: baseUrl,
+  };
 }
 
 /** A {@link Document} as the columns of the `documents` table. */
@@ -1475,6 +1546,20 @@ const MIGRATIONS: readonly Migration[] = [
       -- A thread finds the reply posts answering it by their \`in-reply-to\`
       -- (TASK-300).
       CREATE INDEX documents_in_reply_to ON documents (in_reply_to);
+    `,
+  },
+  {
+    version: 10,
+    sql: `
+      -- What a \`/replies/\` key names (TASK-327), so resolving one is a lookup
+      -- rather than a walk of the site. The keys hang off the base URL, which
+      -- a migration does not know: the rows are filled when the store is
+      -- opened with one, as they are whenever that base changes.
+      ALTER TABLE documents ADD COLUMN replies_key TEXT;
+      ALTER TABLE documents ADD COLUMN reply_post_key TEXT;
+      ALTER TABLE documents ADD COLUMN keys_base TEXT;
+      CREATE INDEX documents_replies_key ON documents (replies_key);
+      CREATE INDEX documents_reply_post_key ON documents (reply_post_key);
     `,
   },
 ];

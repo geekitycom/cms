@@ -1631,9 +1631,10 @@ export interface ServeContext {
  */
 function openCache(resolved: ResolvedConfig): { store: ContentStore; admin: AdminStore } {
   return withRebuiltDatabase(resolved.dataDir, () => {
-    const store = openContentStore({ dataDir: resolved.dataDir, now: resolved.now });
+    const { dataDir, baseUrl } = resolved;
+    const store = openContentStore({ dataDir, baseUrl, now: resolved.now });
     try {
-      return { store, admin: openAdminStore({ dataDir: resolved.dataDir }) };
+      return { store, admin: openAdminStore({ dataDir, baseUrl }) };
     } catch (error) {
       store.close();
       throw error;

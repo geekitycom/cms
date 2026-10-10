@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -43,8 +44,8 @@ async function reader(): Promise<{
 }> {
   const dataDir = await temporaryDir('geekity-conversation-');
   const contentDir = await temporaryDir('geekity-conversation-content-');
-  const admin = openAdminStore({ dataDir });
-  const posts = openContentStore({ dataDir });
+  const admin = openAdminStore({ dataDir, baseUrl: BASE_URL });
+  const posts = openContentStore({ dataDir, baseUrl: BASE_URL });
   stores.push(admin, posts);
   return {
     admin,
@@ -1223,6 +1224,56 @@ describe('reply posts in a conversation (TASK-300)', () => {
         ['/2026/09/two/', '/2026/09/hello/'],
         ['/2026/09/one/', '/2026/09/hello/'],
       ],
+    );
+  });
+});
+
+describe('what a /replies/ key names (TASK-327)', () => {
+  function keyOf(guid: string): string {
+    return createHash('sha256').update(guid).digest('hex').slice(0, 16);
+  }
+
+  /** The same store, refusing every read that walks a whole source. */
+  function refusingScans<T extends object>(target: T, scans: readonly string[]): T {
+    return new Proxy(target, {
+      get(object, property, receiver) {
+        if (typeof property === 'string' && scans.includes(property)) {
+          return () => assert.fail(`${property} walked the site`);
+        }
+        return Reflect.get(object, property, receiver) as unknown;
+      },
+    });
+  }
+
+  it('finds a post, a comment and a note by key without walking any source', async () => {
+    const { admin, posts, contentDir } = await reader();
+    posts.upsert(hello());
+    indexComment(admin, hello(), {
+      id: 'comment-1',
+      name: 'Ada',
+      html: '<p>Hi.</p>',
+      submitted: '2026-09-02T12:00:00.000Z',
+    });
+    logReply(admin, { inReplyTo: POST, id: 'https://remote.example/notes/1' });
+    const read = createConversation({
+      admin: refusingScans(admin, ['listComments', 'listReplies']),
+      store: refusingScans(posts, ['listAll', 'listReplyPosts', 'listPosts']),
+      contentDir,
+      baseUrl: BASE_URL,
+      users: () => [],
+    });
+
+    assert.equal(read.repliesTo('0123456789abcdef'), undefined, 'an unknown key');
+    assert.equal(read.repliesTo(keyOf(POST))?.reply, null, 'the post itself');
+    assert.equal(
+      read.repliesTo(keyOf(`${BASE_URL}/comment/comment-1/`))?.reply?.id,
+      'comment-1',
+      'a native comment',
+    );
+    assert.equal(
+      read.repliesTo(keyOf('https://remote.example/notes/1'))?.reply?.id,
+      'https://remote.example/notes/1',
+      'a fediverse note',
     );
   });
 });

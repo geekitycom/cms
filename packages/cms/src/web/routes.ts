@@ -49,7 +49,8 @@ import {
   siteAuthorContext,
 } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
-import { COMMENT_PAGE_PREFIX, feedComments, spokenIn } from './conversation.ts';
+import { feedComments, spokenIn } from './conversation.ts';
+import { COMMENT_PAGE_PREFIX } from './guids.ts';
 import {
   goneDocumentAt,
   isGone,
@@ -1607,12 +1608,13 @@ function comments(c: Context<GeekityEnv>, document: Document | undefined): Respo
  * The feed of one item's direct replies (TASK-324): a post's or page's, or a
  * reply's, so a reader can walk a thread one level at a time through
  * `source:comments`. An item nobody answered has an empty feed; a segment
- * naming nothing a reader can see 404s.
+ * naming nothing a reader can see 404s, as does one on a document not showing
+ * its conversation, by the rule `{permalink}feed/` follows.
  */
 function repliesFeed(c: Context<GeekityEnv>, segment: string): Response {
   const { conversation, renderer, config } = c.var;
   const found = conversation.repliesTo(segment);
-  if (found === undefined) return notFound(c);
+  if (found === undefined || !showsConversation(c, found.post)) return notFound(c);
 
   const site = renderer.site();
   const cited = (url: string) => c.var.replyContexts.read(url);

@@ -1051,7 +1051,7 @@ async function userCommand(
   }
 
   const config = resolveConfig(await loadConfig(process.cwd(), configPath));
-  const admin = openAdminStore({ dataDir: config.dataDir });
+  const admin = openAdminStore({ dataDir: config.dataDir, baseUrl: config.baseUrl });
   migrateUsersToFile({ admin, dataDir: config.dataDir });
 
   try {
@@ -1157,7 +1157,7 @@ async function pluginCommand(argv: readonly string[]): Promise<number> {
     withoutConfig(argv).slice(found.command.words.length),
     found.command,
   );
-  const admin = openAdminStore({ dataDir: config.dataDir });
+  const admin = openAdminStore({ dataDir: config.dataDir, baseUrl: config.baseUrl });
   migrateUsersToFile({ admin, dataDir: config.dataDir });
   try {
     return await found.command.run({

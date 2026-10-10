@@ -116,7 +116,7 @@ function noteFrom(activity: InboxActivity):
   const object = activityObject(activity.json);
   if (object === undefined) return undefined;
 
-  const id = uriOf(object['id']) ?? activity.objectId;
+  const id = noteIdOf(object, activity.objectId);
   if (id === null) return undefined;
 
   const published = new Date(textOf(object['published']) ?? '');
@@ -189,6 +189,25 @@ export function replyTargetOf(json: string): string | null {
   const object = activityObject(json);
   if (object === undefined) return null;
   return uriOf(object['inReplyTo']);
+}
+
+/**
+ * The id of the note a logged activity delivers as a reply, or `null` when it
+ * delivers none: what {@link replyFrom} names the reply, worked out from what
+ * a row stores so the admin store can index its `/replies/` key (TASK-327).
+ */
+export function replyIdOf(
+  activity: Pick<InboxActivity, 'activityType' | 'objectId' | 'json'>,
+): string | null {
+  if (activity.activityType !== REPLY_ACTIVITY_TYPE) return null;
+  const object = activityObject(activity.json);
+  if (object === undefined || uriOf(object['inReplyTo']) === null) return null;
+  return noteIdOf(object, activity.objectId);
+}
+
+/** A note's id: its own, else the one the activity names it by. */
+function noteIdOf(object: Record<string, unknown>, objectId: string | null): string | null {
+  return uriOf(object['id']) ?? objectId;
 }
 
 /** The inlined object of a stored activity, or `undefined` when there is none. */

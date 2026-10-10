@@ -19,15 +19,10 @@ import {
   REPLY_ACTIVITY_TYPE,
 } from '../federation/replies.ts';
 import { authorContext, authorFeedHref, siteAuthorContext } from './authors.ts';
-import {
-  activityStreamsId,
-  feedGuid,
-  isListed,
-  isServed,
-  permalinkOfObjectId,
-} from './documents.ts';
+import { activityStreamsId, isListed, isServed, permalinkOfObjectId } from './documents.ts';
 import { isRepliesKey, repliesFeedPath, repliesKey } from './feed-source.ts';
 import type { FeedComment } from './feeds.ts';
+import { COMMENT_PAGE_PREFIX, commentPageHref, feedGuid, replyGuid } from './guids.ts';
 import { absoluteUrl } from './negotiate.ts';
 import { sanitizeCommentHtml } from './sanitize.ts';
 
@@ -623,53 +618,30 @@ function repliesTo(context: ConversationContext, segment: string): RepliesOf | u
     return post === undefined ? undefined : repliesIn(context, post, segment);
   }
 
-  const now = context.store.now();
-  for (const document of context.store.listAll({ draft: false })) {
-    if (!isServed(document, now)) continue;
+  // Each source's index is asked in turn, so a key naming nothing costs three
+  // lookups and no more (TASK-327).
+  const [document] = context.store.listByRepliesKey(segment);
+  if (document !== undefined) {
     if (repliesKey(feedGuid(document, context.baseUrl)) === segment) {
       return repliesIn(context, document, null);
     }
+    const root = threadRootOf(context, document);
+    return root === undefined ? undefined : repliesIn(context, root, rootOf(context, document));
   }
 
-  for (const candidate of keyedReplies(context)) {
-    if (repliesKey(guidOf(candidate, context.baseUrl)) !== segment) continue;
-    const document = candidate.find();
-    return document === undefined ? undefined : repliesIn(context, document, candidate.id);
+  const [comment] = context.admin.listCommentsByRepliesKey(segment);
+  if (comment !== undefined) {
+    const post = context.store.getBySlug(comment.slug);
+    return post === undefined ? undefined : repliesIn(context, post, comment.id);
   }
-  return undefined;
-}
 
-/**
- * Every reply a key could name, with its source and a way to find the
- * document it is said under: the stored comments and webmentions, the
- * fediverse notes in the log and the reply posts.
- */
-function* keyedReplies(context: ConversationContext): Generator<KeyedReply> {
-  for (const stored of context.admin.listComments({})) {
-    yield {
-      id: stored.id,
-      source: stored.source,
-      find: () => context.store.getBySlug(stored.slug),
-    };
-  }
-  for (const activity of context.admin.listReplies()) {
+  for (const activity of context.admin.listRepliesByKey(segment)) {
     const reply = replyFrom(activity);
     if (reply === undefined) continue;
-    yield { id: reply.id, source: 'activitypub', find: () => documentNamed(context, reply.id) };
+    const post = documentNamed(context, reply.id);
+    return post === undefined ? undefined : repliesIn(context, post, reply.id);
   }
-  for (const answer of context.store.listReplyPosts()) {
-    yield {
-      id: rootOf(context, answer),
-      source: 'post',
-      find: () => threadRootOf(context, answer),
-    };
-  }
-}
-
-interface KeyedReply {
-  readonly id: string;
-  readonly source: InteractionSource;
-  readonly find: () => Document | undefined;
+  return undefined;
 }
 
 /**
@@ -1119,14 +1091,6 @@ export function commentAnchor(id: string): string {
   return `comment-${id}`;
 }
 
-/** Where a native comment's own page is (TASK-318). */
-export function commentPageHref(id: string): string {
-  return `${COMMENT_PAGE_PREFIX}${encodeURIComponent(id)}/`;
-}
-
-/** What every comment page's path starts with. */
-export const COMMENT_PAGE_PREFIX = '/comment/';
-
 /** The id of the comment whose page a path is, or `undefined` (TASK-319). */
 export function commentIdAt(pathname: string): string | undefined {
   if (!pathname.startsWith(COMMENT_PAGE_PREFIX) || !pathname.endsWith('/')) return undefined;
@@ -1177,19 +1141,6 @@ function directReplies(replies: readonly ThreadReply[]): Interaction[] {
 }
 
 /**
- * The guid a reply has in the comments feeds: a native comment's page, which
- * is a permalink, and anything else's own id. A comment imported with a URL
- * for an id keeps it, as a migrated post keeps its stored `guid`: it is the
- * guid WordPress's comments feed already published, so a reader sees nothing
- * new.
- */
-function guidOf(reply: Pick<Interaction, 'id' | 'source'>, baseUrl: string): string {
-  return reply.source === 'comment' && !URL.canParse(reply.id)
-    ? absoluteUrl(commentPageHref(reply.id), baseUrl)
-    : reply.id;
-}
-
-/**
  * The `/replies/` feed of one reply: a native comment's by its id, anything
  * else's by the key of its guid, as is a native comment whose id would read
  * as a key.
@@ -1198,7 +1149,7 @@ function repliesHrefOf(reply: Interaction, baseUrl: string): string {
   return repliesFeedPath(
     reply.source === 'comment' && !isRepliesKey(reply.id)
       ? reply.id
-      : repliesKey(guidOf(reply, baseUrl)),
+      : repliesKey(replyGuid(reply, baseUrl)),
   );
 }
 
@@ -1226,10 +1177,10 @@ export function feedComments(
         ? thread === undefined
           ? undefined
           : feedGuid(thread, baseUrl)
-        : guidOf(entry.parent, baseUrl);
+        : replyGuid(entry.parent, baseUrl);
     const replies = directReplies(entry.replies);
     return {
-      id: guidOf(entry, baseUrl),
+      id: replyGuid(entry, baseUrl),
       url: absoluteUrl(entry.url ?? '/', baseUrl),
       author: entry.author.name,
       published: entry.published,

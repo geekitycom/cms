@@ -12,7 +12,7 @@ import { replyTarget, showsTitle } from '../content/post-type.ts';
 import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { absoluteHtmlUrls } from './absolute-urls.ts';
-import { feedGuid } from './documents.ts';
+import { feedGuid } from './guids.ts';
 import { feedLanguage, feedPathUnder, repliesFeedPath, repliesKey } from './feed-source.ts';
 import { escapeXml } from './feed-xml.ts';
 import { resolveLicense } from './license.ts';

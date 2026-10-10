@@ -67,13 +67,8 @@ export type {
   RepliesOf,
   SiteInteraction,
 } from './conversation.ts';
-export {
-  activityStreamsId,
-  isListed,
-  isServed,
-  postObjectId,
-  publicDocumentAt,
-} from './documents.ts';
+export { activityStreamsId, isListed, isServed, publicDocumentAt } from './documents.ts';
+export { postObjectId } from './guids.ts';
 export {
   atomEntry,
   atomFeed,

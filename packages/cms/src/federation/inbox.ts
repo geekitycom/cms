@@ -21,7 +21,7 @@ import type { NewFollower } from '../admin/store.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import { actorId, senderKeyPairs, userByUsername } from './actor.ts';
 import { documentAuthor, isFederatedDocument, postByObjectId } from './article.ts';
-import { postObjectId } from '../web/documents.ts';
+import { postObjectId } from '../web/guids.ts';
 import type { FederationContextData } from './federation.ts';
 import { authorizeQuote, quoteAuthorization, revokeQuotes } from './quotes.ts';
 import { profileFrom } from './profiles.ts';

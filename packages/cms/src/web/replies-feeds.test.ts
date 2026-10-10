@@ -23,6 +23,7 @@ const BASE_URL = 'https://blog.example';
 const POST = '/2026/09/hello/';
 const POST_GUID = `${BASE_URL}${POST}`;
 const PAGE = '/about/';
+const CLOSED_PAGE = '/colophon/';
 const ANSWER = '/2026/09/answer/';
 const ANSWER_GUID = `${BASE_URL}${ANSWER}`;
 
@@ -38,6 +39,7 @@ const UNDER_HELD = id('b2');
 const WEBMENTION_UNDER_NOTE = id('c1');
 const MENTION = id('d1');
 const ON_PAGE = id('e1');
+const ON_CLOSED_PAGE = id('e2');
 const NOTE = 'https://remote.example/notes/1';
 const NOTE_UNDER_NOTE = 'https://remote.example/notes/2';
 
@@ -89,7 +91,8 @@ const FILES: Record<string, string> = {
     `permalink: ${ANSWER}`,
     `in-reply-to: ${commentPage(TOP)}`,
   ]),
-  'pages/about.md': document(['title: About', `permalink: ${PAGE}`]),
+  'pages/about.md': document(['title: About', `permalink: ${PAGE}`, 'comments: true']),
+  'pages/colophon.md': document(['title: Colophon', `permalink: ${CLOSED_PAGE}`]),
   '_data/comments/hello.json': JSON.stringify({
     post: POST,
     comments: [
@@ -117,6 +120,10 @@ const FILES: Record<string, string> = {
   '_data/comments/about.json': JSON.stringify({
     post: PAGE,
     comments: [said(ON_PAGE, 'Pat', 1)],
+  }),
+  '_data/comments/colophon.json': JSON.stringify({
+    post: CLOSED_PAGE,
+    comments: [said(ON_CLOSED_PAGE, 'Quin', 1)],
   }),
 };
 
@@ -245,6 +252,11 @@ describe('the /replies/ feeds', () => {
     assert.equal(child(found[1] as XmlElement, 'source:inReplyTo').text, commentPage(TOP));
   });
 
+  it('answer a native comment’s direct replies at the key of its guid too', async () => {
+    const found = await items(`/replies/${keyOf(commentPage(TOP))}/`);
+    assert.deepEqual(found.map(guidOf), [ANSWER_GUID, commentPage(MIDDLE)]);
+  });
+
   it('answer a fediverse reply’s and a webmention’s at the key of their guid', async () => {
     assert.deepEqual((await items(`/replies/${keyOf(NOTE)}/`)).map(guidOf), [NOTE_UNDER_NOTE]);
     assert.deepEqual((await items(`/replies/${keyOf(NOTE_UNDER_NOTE)}/`)).map(guidOf), [
@@ -258,6 +270,19 @@ describe('the /replies/ feeds', () => {
     const found = await items(`/replies/${keyOf(`${BASE_URL}${PAGE}`)}/`);
     assert.deepEqual(found.map(guidOf), [commentPage(ON_PAGE)]);
     assert.equal(child(found[0] as XmlElement, 'source:inReplyTo').text, `${BASE_URL}${PAGE}`);
+  });
+
+  it('404 for a page not showing its conversation, as its {permalink}feed/ does', async () => {
+    const segments = [
+      keyOf(`${BASE_URL}${CLOSED_PAGE}`),
+      encodeURIComponent(ON_CLOSED_PAGE),
+      keyOf(commentPage(ON_CLOSED_PAGE)),
+    ];
+    for (const segment of segments) {
+      const response = await cms.app.request(`/replies/${segment}/`);
+      assert.equal(response.status, 404, `/replies/${segment}/`);
+    }
+    assert.equal((await cms.app.request(`${CLOSED_PAGE}feed/`)).status, 404);
   });
 
   it('404 for an unknown key, an unknown id and a comment a reader may not see', async () => {
