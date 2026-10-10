@@ -308,6 +308,32 @@ export interface ConversationReader {
    * see, by its feed guid; anything else is a native comment's id.
    */
   readonly repliesTo: (segment: string) => RepliesOf | undefined;
+  /**
+   * The document whose conversation a URL is in (TASK-320): the post a
+   * comment's page or anchor is on, the post a webmention was sent to, the
+   * post a fediverse reply answers however deep, or the document at the URL.
+   */
+  readonly documentOf: (url: string) => Document | undefined;
+  /**
+   * Every page in the conversation a document is in that answers something
+   * off this site, with what a reader sees under it (TASK-320): what a
+   * salmention is sent from. A reply post answers its `in-reply-to`; a
+   * comment's own page answers the webmention reply it is under. One
+   * answering something here has nobody to tell: this site already knows.
+   */
+  readonly upstreams: (document: Document) => Upstream[];
+}
+
+/** One page of this site's answering a page elsewhere (TASK-320). */
+export interface Upstream {
+  /** The document the page is, or that the comment is on. */
+  readonly post: Document;
+  /** The page, absolute: a reply post's permalink or a comment's own page. */
+  readonly source: string;
+  /** What it answers, off this site. */
+  readonly target: string;
+  /** The replies a reader sees under it, as its page prints them. */
+  readonly replies: readonly ThreadReply[];
 }
 
 /** What one `/replies/` feed is about, and what is in it (TASK-324). */
@@ -356,6 +382,8 @@ export function createConversation(context: ConversationContext): ConversationRe
     replyNamed: (document, url) => replyNamed(context, document, url),
     heldAt: (url) => heldAt(context, url),
     repliesTo: (segment) => repliesTo(context, segment),
+    documentOf: (url) => documentNamed(context, url),
+    upstreams: (document) => upstreamsOf(context, document),
   };
 }
 
@@ -662,6 +690,56 @@ function repliesIn(
     reply,
     replies: directReplies(reply?.replies ?? thread).map((entry) => ({ ...entry, parent: reply })),
   };
+}
+
+function upstreamsOf(context: ConversationContext, document: Document): Upstream[] {
+  const top = threadRootOf(context, document) ?? document;
+  if (!isServed(top, context.store.now())) return [];
+  const said = gather(context, top);
+  const site = new URL(context.baseUrl).origin;
+  const elsewhere = (url: string | null | undefined): url is string => {
+    if (url === null || url === undefined) return false;
+    try {
+      return new URL(url).origin !== site;
+    } catch {
+      return false;
+    }
+  };
+
+  const found: Upstream[] = [];
+  const posts = [
+    top,
+    ...said.written.flatMap((entry) => {
+      const post =
+        entry.source === 'post' ? context.store.getByPermalink(entry.url ?? '') : undefined;
+      return post === undefined ? [] : [post];
+    }),
+  ];
+  for (const post of posts) {
+    if (!elsewhere(post.inReplyTo)) continue;
+    found.push({
+      post,
+      source: absoluteUrl(post.permalink, context.baseUrl),
+      target: post.inReplyTo,
+      replies: postConversation(context, post).replies,
+    });
+  }
+
+  const entries = new Map(said.written.map((entry) => [entry.id, entry]));
+  for (const entry of said.written) {
+    if (entry.source !== 'comment' || entry.inReplyTo === null) continue;
+    const parent = entries.get(entry.inReplyTo);
+    if (parent?.source !== 'webmention' || !elsewhere(parent.url)) continue;
+    const page = commentThread(context, entry.id);
+    if (page === undefined) continue;
+    found.push({
+      post: page.post,
+      source: absoluteUrl(commentPageHref(entry.id), context.baseUrl),
+      target: parent.url,
+      replies: page.comment.replies,
+    });
+  }
+  return found;
 }
 
 /**

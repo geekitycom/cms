@@ -576,11 +576,22 @@ export interface CommentRecord {
    * site that has had none stay byte for byte what they were.
    */
   rsvp?: RsvpValue;
+  /**
+   * The page whose entry carried it, for a webmention reply read out of
+   * another webmention's source rather than sent on its own (a salmention,
+   * TASK-320). Absent for every other comment.
+   */
+  via?: string;
 }
 
 /** A comment's {@link CommentRecord.rsvp} as a record carries it: present only when there is one. */
 export function rsvpField(rsvp: RsvpValue | undefined): Pick<CommentRecord, 'rsvp'> {
   return rsvp === undefined ? {} : { rsvp };
+}
+
+/** A comment's {@link CommentRecord.via} as a record carries it: present only when there is one. */
+export function viaField(via: string | null | undefined): Pick<CommentRecord, 'via'> {
+  return via === undefined || via === null || via === '' ? {} : { via };
 }
 
 /**
@@ -857,6 +868,12 @@ export interface AdminStore {
   /** Forget a comment. Returns `false` when there was nothing to forget. */
   deleteComment(id: string): boolean;
   /**
+   * Hear about every comment written or forgotten and every activity logged,
+   * as it happens (TASK-320). A rebuild of either index is not news and says
+   * nothing. Returns the function that stops listening.
+   */
+  onConversationWrite(listener: (written: ConversationWrite) => void): () => void;
+  /**
    * Make the comment index say exactly this, in one transaction.
    *
    * What a rebuild from `content/_data/comments/` calls (decision-9): the
@@ -946,6 +963,15 @@ export interface AdminStore {
   /** Close the database. Safe to call twice. */
   close(): void;
 }
+
+/**
+ * What {@link AdminStore.onConversationWrite} hears: a comment on the post of
+ * that slug, or an activity naming these objects as what it is about or what
+ * it answers.
+ */
+export type ConversationWrite =
+  | { readonly kind: 'comment'; readonly slug: string }
+  | { readonly kind: 'activity'; readonly about: readonly string[] };
 
 /**
  * Open (and if needed create) the admin tables in `dataDir`, applying every
@@ -1114,8 +1140,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         id, slug, permalink, source, kind, status,
         author_name, author_url, author_email,
         markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar, notify,
-        redacted, rsvp, replies_key, keys_base
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        redacted, rsvp, via, replies_key, keys_base
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET
         slug = excluded.slug,
         permalink = excluded.permalink,
@@ -1135,6 +1161,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         notify = excluded.notify,
         redacted = excluded.redacted,
         rsvp = excluded.rsvp,
+        via = excluded.via,
         replies_key = excluded.replies_key,
         keys_base = excluded.keys_base
     `),
@@ -1262,8 +1289,18 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
 
   if (options.baseUrl !== undefined) refreshCommentKeys(options.baseUrl);
 
+  const listeners = new Set<(written: ConversationWrite) => void>();
+  const written = (change: ConversationWrite): void => {
+    for (const listener of listeners) listener(change);
+  };
+
   return {
     file,
+
+    onConversationWrite(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
 
     createSession(input) {
       const now = input.now ?? new Date();
@@ -1498,7 +1535,12 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       if (row === undefined) {
         throw new Error(`The activity "${activity.activityType}" was not written to the log.`);
       }
-      return toInboxActivity(row);
+      const logged = toInboxActivity(row);
+      written({
+        kind: 'activity',
+        about: [logged.objectId, logged.inReplyTo].filter((id) => id !== null),
+      });
+      return logged;
     },
 
     replaceInboxActivities(activities) {
@@ -1643,13 +1685,19 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         comment.notify ? 1 : 0,
         redactedColumn(comment.redacted),
         comment.rsvp ?? null,
+        comment.via ?? null,
         ...commentKey(comment, options.baseUrl),
       );
+      written({ kind: 'comment', slug: comment.slug });
       return comment;
     },
 
     deleteComment(id) {
-      return statements.deleteComment.run(id).changes > 0;
+      const row = statements.commentById.get(id) as Record<string, unknown> | undefined;
+      const slug = row === undefined ? undefined : String(row['slug']);
+      const deleted = statements.deleteComment.run(id).changes > 0;
+      if (slug !== undefined) written({ kind: 'comment', slug });
+      return deleted;
     },
 
     replaceComments(comments) {
@@ -1676,6 +1724,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             comment.notify ? 1 : 0,
             redactedColumn(comment.redacted),
             comment.rsvp ?? null,
+            comment.via ?? null,
             ...commentKey(comment, options.baseUrl),
           );
         }
@@ -2008,6 +2057,7 @@ function toComment(row: Record<string, unknown>): PostComment {
     notify: Number(row['notify'] ?? 0) === 1,
     ...redactedOf(row['redacted']),
     ...rsvpField(rsvpValue(row['rsvp'])),
+    ...viaField(nullableText(row['via'])),
   };
 }
 
@@ -2737,6 +2787,11 @@ const MIGRATIONS: readonly Migration[] = [
         update.run(key, Number(row['id']));
       }
     },
+  },
+  {
+    // The page a salmention's nested reply was read out of (TASK-320).
+    version: 24,
+    sql: `ALTER TABLE comments ADD COLUMN via TEXT;`,
   },
 ];
 

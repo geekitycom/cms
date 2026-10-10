@@ -11,6 +11,10 @@
   the shape it is handed is documented in the theme README under "The
   conversation".
 
+  `conversationPart` is `reactions` or `replies` for one half of it, which is
+  how a reply post prints its replies inside its entry (TASK-320), and the
+  whole of it otherwise.
+
   The macros come first because Nunjucks defines one where it stands rather
   than hoisting it, and the two sections below call them. One reply and
   everything under it is `partials/comment.njk`, which a comment's own page
@@ -63,7 +67,9 @@
   first. A post that is no event has no groups.
 #}
 {% set rsvpIcons = { yes: "✅", maybe: "🤔", interested: "⭐", no: "❌" } %}
-{% if conversation.rsvps.length %}
+{% set showReactions = conversationPart != "replies" %}
+{% set showReplies = conversationPart != "reactions" %}
+{% if showReactions and conversation.rsvps.length %}
 <div class="reactions-section rsvps-section">
   {%- for answer in conversation.rsvps %}
   {{- group(answer.people, answer.label, "rsvp-" + answer.value, rsvpIcons[answer.value]) }}
@@ -77,7 +83,7 @@
   boosts, which is why there are three groups and not four. `p-like`,
   `p-repost` and `p-mention` are the source theme's classes for them.
 #}
-{% if conversation.likes.length or conversation.boosts.length or conversation.mentions.length %}
+{% if showReactions and (conversation.likes.length or conversation.boosts.length or conversation.mentions.length) %}
 <div class="reactions-section">
   {{- group(conversation.likes, "Likes", "p-like", "❤️") }}
   {{- group(conversation.boosts, "Boosts", "p-repost", "🔁") }}
@@ -99,7 +105,7 @@
   switch, the closing window and the post's own front matter all agree it is
   open, so there is nothing else for a theme to work out.
 #}
-{% if conversation.replies.length %}
+{% if showReplies and conversation.replies.length %}
 <div id="comments" class="comments-area">
   <h2 class="comments-title">
     {{- conversation.counts.replies | plural({ one: "One reply", other: "# replies" }, "en") -}}
@@ -107,7 +113,7 @@
 
   <ol class="comment-list">
     {% for reply in conversation.replies %}
-    {{ thread.comment(reply) }}
+    {{ thread.comment(reply, "p-comment h-cite" if conversationPart == "replies" else "h-entry") }}
     {% endfor %}
   </ol>
 

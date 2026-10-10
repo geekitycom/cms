@@ -9,6 +9,7 @@ import type { ConversationReader } from '../web/conversation.ts';
 import { sanitizeCommentHtml } from '../web/sanitize.ts';
 import { readCapped, WEBMENTION_USER_AGENT } from './discovery.ts';
 import { linksTo, sourceEntry } from './microformats.ts';
+import type { NestedReply } from './microformats.ts';
 import { isPrivateHost } from './public-address.ts';
 
 /**
@@ -208,6 +209,7 @@ export async function verifyWebmention(
 
   if (fetched.kind === 'gone' || !mentions(fetched, incoming)) {
     const why = fetched.kind === 'gone' ? 'gone' : 'unlinked';
+    await dropCarried(records, incoming, new Set());
     if (held === undefined) return { kind: 'ignored', why };
     await deleteComment(records, held.id);
     return { kind: 'deleted', why };
@@ -283,13 +285,115 @@ export async function verifyWebmention(
   });
 
   if (outcome.kind === 'stored') {
+    await keepCarried(options, outcome.comment, entry?.replies ?? []);
     return { kind: 'stored', comment: outcome.comment, created: outcome.created };
   }
+  await dropCarried(records, incoming, new Set());
   // A source nobody was holding anything from leaves nothing behind, and one
   // whose entry went while this was deciding has already been dealt with.
   return outcome.kind === 'discarded' && outcome.removed
     ? { kind: 'deleted', why: 'discarded' }
     : { kind: 'ignored', why: 'discarded' };
+}
+
+/**
+ * Bring the replies a source carries in its h-entry into the thread under it
+ * (a salmention, TASK-320), and take away the ones it carried before and
+ * carries no longer.
+ *
+ * Each is a webmention of its own as far as the thread and the moderator are
+ * concerned, put through the same intake with its own page as its `url`, and
+ * `via` naming the source, which is what lets the source take it away again.
+ * One this site already has some other way is not copied: a page of this
+ * site's, a reply post or a comment's page, or a reply the conversation
+ * already names that this source did not bring, such as one held from its own
+ * webmention. What is nested under one of those still threads under it.
+ */
+async function keepCarried(
+  options: VerifyWebmentionOptions,
+  carrier: PostComment,
+  replies: readonly NestedReply[],
+): Promise<void> {
+  const { incoming, records } = options;
+  const site = new URL(options.baseUrl).origin;
+  const kept = new Set<string>();
+
+  const bring = async (nested: readonly NestedReply[], parent: string): Promise<void> => {
+    for (const reply of nested) {
+      const named = options.conversation.replyNamed(incoming.document, reply.url);
+      const theirs =
+        named !== undefined && records.admin.getComment(named)?.via === incoming.source;
+      let id = named;
+      if (new URL(reply.url).origin !== site && (named === undefined || theirs)) {
+        const outcome = await intakeComment({
+          records,
+          origin: 'webmention',
+          comment: carriedComment(options, reply, parent),
+          post: { title: incoming.document.title, url: incoming.target },
+          dataDir: options.dataDir,
+          baseUrl: options.baseUrl,
+          checker: options.checker,
+          notices: options.notices,
+          address: incoming.address,
+          userAgent: incoming.userAgent,
+          referrer: incoming.referrer,
+          logger: options.logger,
+        });
+        id = outcome.kind === 'stored' ? outcome.comment.id : undefined;
+        if (id !== undefined) kept.add(id);
+      }
+      if (id !== undefined) await bring(reply.replies, id);
+    }
+  };
+
+  await bring(replies, carrier.id);
+  await dropCarried(records, incoming, kept);
+}
+
+/** Delete what a source carried, but for the ones in `kept`. */
+async function dropCarried(
+  records: CommentRecords,
+  incoming: IncomingWebmention,
+  kept: ReadonlySet<string>,
+): Promise<void> {
+  for (const comment of records.admin.listCommentsFor(incoming.document.slug)) {
+    if (comment.via === incoming.source && !kept.has(comment.id)) {
+      await deleteComment(records, comment.id);
+    }
+  }
+}
+
+/** One nested reply as the comment it is proposed as. */
+function carriedComment(
+  options: VerifyWebmentionOptions,
+  reply: NestedReply,
+  parent: string,
+): ProposedComment {
+  const { incoming } = options;
+  return {
+    slug: incoming.document.slug,
+    permalink: incoming.document.permalink,
+    source: 'webmention',
+    kind: 'reply',
+    author: {
+      name: reply.author.name === '' ? hostOf(reply.url) : reply.author.name,
+      url: reply.author.url,
+      email: null,
+      avatar: reply.author.photo,
+    },
+    content: {
+      markdown: reply.content.text,
+      html:
+        reply.content.html === ''
+          ? paragraph(reply.content.text)
+          : sanitizeCommentHtml(reply.content.html),
+    },
+    submitted: reply.published ?? options.now.toISOString(),
+    inReplyTo: parent,
+    url: reply.url,
+    via: incoming.source,
+    notify: false,
+  };
 }
 
 /**

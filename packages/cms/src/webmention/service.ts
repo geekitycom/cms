@@ -1,5 +1,12 @@
+import { createHash } from 'node:crypto';
+
 import { readSiteSettings } from '../admin/settings.ts';
-import type { AdminStore, SentWebmention, WebmentionSendStatus } from '../admin/store.ts';
+import type {
+  AdminStore,
+  ConversationWrite,
+  SentWebmention,
+  WebmentionSendStatus,
+} from '../admin/store.ts';
 import type { CommentNotices, CommentRecords } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
@@ -18,7 +25,7 @@ import { verifyWebmention } from './receive.ts';
 import { selectedTargets, syndicationCopies, syndicationTargetsReader } from './syndication.ts';
 import type { SyndicationTarget } from './syndication.ts';
 import type { IncomingWebmention, WebmentionOutcome } from './receive.ts';
-import type { ConversationReader } from '../web/conversation.ts';
+import type { ConversationReader, ThreadReply, Upstream } from '../web/conversation.ts';
 
 /**
  * Telling the pages a post links to that it links to them.
@@ -41,6 +48,16 @@ import type { ConversationReader } from '../web/conversation.ts';
 
 /** How long one webmention POST is given before it is abandoned. */
 export const SEND_TIMEOUT_MS = 10_000;
+
+/**
+ * How many salmentions one page sends one target in {@link SALMENTION_WINDOW_MS}
+ * (TASK-320). Two sites that both send them, each answering the other, stop
+ * on their own once neither has anything new; this is for one that never
+ * settles, such as a page that prints something different every time it is
+ * read.
+ */
+export const SALMENTION_LIMIT = 5;
+export const SALMENTION_WINDOW_MS = 60 * 60 * 1000;
 
 /** What one post's links came to. */
 export interface WebmentionReport {
@@ -86,8 +103,11 @@ export interface CreateWebmentionServiceOptions {
    * (TASK-197). A reply to the copy tells the original too.
    */
   originalOf?: ((url: string) => string | undefined) | undefined;
-  /** What says which reply on a post an incoming webmention answers (TASK-319). */
-  conversation: Pick<ConversationReader, 'replyNamed'>;
+  /**
+   * What says which reply on a post an incoming webmention answers (TASK-319),
+   * and which pages a salmention goes from (TASK-320).
+   */
+  conversation: Pick<ConversationReader, 'replyNamed' | 'upstreams' | 'documentOf'>;
 }
 
 /** Sends a site's webmentions, takes the ones sent to it, and remembers both. */
@@ -98,6 +118,12 @@ export interface WebmentionService {
    * is not something a stranger's server should be able to hold up.
    */
   handle(change: DocumentChange): void;
+  /**
+   * Consider one comment or activity written to the index (TASK-320), and send
+   * a salmention from each page whose replies it changed. Returns at once, as
+   * {@link handle} does.
+   */
+  heard(written: ConversationWrite): void;
   /**
    * Send one post's webmentions again, from the file as it now reads.
    *
@@ -265,57 +291,138 @@ export function createWebmentionService(
     }
   }
 
+  // The documents whose conversations changed since the salmentions were
+  // last looked at. A webmention carrying nested replies writes several
+  // comments in a row, and they are looked at once.
+  const changed = new Map<string, Document>();
+  let looking = false;
+
+  function conversationChanged(document: Document): void {
+    changed.set(document.path, document);
+    if (looking) return;
+    looking = true;
+    enqueue(async () => {
+      looking = false;
+      const documents = [...changed.values()];
+      changed.clear();
+      for (const one of documents) {
+        for (const upstream of options.conversation.upstreams(one)) await salmention(upstream);
+      }
+    }).catch((thrown: unknown) => {
+      logger.warn(`A salmention failed: ${messageOf(thrown)}`);
+    });
+  }
+
+  /**
+   * Tell what a page answers that the replies under it changed, when they did
+   * since it was last told, and it has not been told too often lately.
+   */
+  async function salmention(upstream: Upstream): Promise<void> {
+    const at = config.now();
+    const fingerprint = fingerprintOf(upstream.replies);
+    const targets = new Set(
+      [upstream.target, originalOf(upstream.target)].flatMap((url) => {
+        const target = externalTarget(url, config.baseUrl);
+        return target === undefined ? [] : [target];
+      }),
+    );
+    for (const target of targets) {
+      const key = `salmention:${upstream.source} ${target}`;
+      const recorded = admin.getState(key);
+      // A post brought over from another site arrives with the replies it
+      // already had, which are not news to anybody: they are where it starts.
+      if (recorded === undefined && isMigrated(upstream.post)) {
+        admin.setState(key, JSON.stringify({ fingerprint, sent: [] }));
+        continue;
+      }
+      const told = toldOf(recorded);
+      if (told.fingerprint === fingerprint) continue;
+      const recent = told.sent.filter(
+        (sent) => at.getTime() - Date.parse(sent) < SALMENTION_WINDOW_MS,
+      );
+      if (recent.length >= SALMENTION_LIMIT) {
+        logger.warn(
+          `Not sending another salmention from ${upstream.source} to ${target} this hour.`,
+        );
+        continue;
+      }
+      if (held(upstream.source, [target])) continue;
+      admin.setState(key, JSON.stringify({ fingerprint, sent: [...recent, at.toISOString()] }));
+      await tell(upstream.post.slug, upstream.source, target);
+    }
+  }
+
+  /** Tell whatever pages one change of a post moved, as {@link WebmentionService.handle} says. */
+  function sendFor(change: DocumentChange): void {
+    const now = config.now();
+    const document = change.next ?? change.previous;
+    if (document === undefined || isMigratedArrival(change, now)) return;
+
+    // Nothing goes out about a post the outside world has never been able to
+    // read: a draft edited into another draft is not news.
+    const wasPublic = isPublic(change.previous, now);
+    const isNowPublic = isPublic(change.next, now);
+    if (!wasPublic && !isNowPublic) return;
+
+    // Both versions' links, because a page that has just been unlinked has
+    // to be told too: it goes and looks, finds the link gone, and drops what
+    // it was showing. That is how a webmention is withdrawn — there is no
+    // other way to say it.
+    const source = absoluteUrl(document.permalink, config.baseUrl);
+    const links = targetsOf(
+      [change.previous, change.next],
+      targets(),
+      config.baseUrl,
+      siteLanguage(),
+      originalOf,
+    );
+    if (links.length === 0) return;
+
+    // A post that moved is a new source to its targets, which answer with
+    // their copies of it under its new permalink.
+    const moved =
+      change.previous !== undefined &&
+      change.next !== undefined &&
+      change.previous.permalink !== change.next.permalink
+        ? change.previous.permalink
+        : undefined;
+    const current = isNowPublic ? change.next : undefined;
+
+    enqueue(async () => {
+      if (moved !== undefined) await copies.forget(moved);
+      await keepCopies(
+        document.permalink,
+        [change.previous, change.next],
+        current,
+        await tellAll(document.slug, source, links),
+      );
+    }).catch((thrown: unknown) => {
+      logger.warn(`A webmention failed: ${messageOf(thrown)}`);
+    });
+  }
+
   return {
     handle(change) {
       // A full scan is a rebuild of the index, not news about the site.
       if (change.origin === 'scan') return;
       if (!sending()) return;
+      sendFor(change);
+      // And a reply post edited, published or withdrawn changes the replies
+      // under whatever it is in.
+      for (const version of [change.previous, change.next]) {
+        if (version !== undefined) conversationChanged(version);
+      }
+    },
 
-      const now = config.now();
-      const document = change.next ?? change.previous;
-      if (document === undefined || isMigratedArrival(change, now)) return;
-
-      // Nothing goes out about a post the outside world has never been able to
-      // read: a draft edited into another draft is not news.
-      const wasPublic = isPublic(change.previous, now);
-      const isNowPublic = isPublic(change.next, now);
-      if (!wasPublic && !isNowPublic) return;
-
-      // Both versions' links, because a page that has just been unlinked has
-      // to be told too: it goes and looks, finds the link gone, and drops what
-      // it was showing. That is how a webmention is withdrawn — there is no
-      // other way to say it.
-      const source = absoluteUrl(document.permalink, config.baseUrl);
-      const links = targetsOf(
-        [change.previous, change.next],
-        targets(),
-        config.baseUrl,
-        siteLanguage(),
-        originalOf,
-      );
-      if (links.length === 0) return;
-
-      // A post that moved is a new source to its targets, which answer with
-      // their copies of it under its new permalink.
-      const moved =
-        change.previous !== undefined &&
-        change.next !== undefined &&
-        change.previous.permalink !== change.next.permalink
-          ? change.previous.permalink
-          : undefined;
-      const current = isNowPublic ? change.next : undefined;
-
-      enqueue(async () => {
-        if (moved !== undefined) await copies.forget(moved);
-        await keepCopies(
-          document.permalink,
-          [change.previous, change.next],
-          current,
-          await tellAll(document.slug, source, links),
-        );
-      }).catch((thrown: unknown) => {
-        logger.warn(`A webmention failed: ${messageOf(thrown)}`);
-      });
+    heard(written) {
+      if (!sending()) return;
+      const document =
+        written.kind === 'comment'
+          ? store.getBySlug(written.slug)
+          : written.about
+              .map((url) => options.conversation.documentOf(url))
+              .find((found) => found !== undefined);
+      if (document !== undefined) conversationChanged(document);
     },
 
     async send(slug) {
@@ -388,6 +495,47 @@ export function createWebmentionService(
       return Promise.all([chain, checking]).then(ignore);
     },
   };
+}
+
+/** What a page last told its target, and when it has told it lately. */
+interface Salmentioned {
+  readonly fingerprint: string;
+  readonly sent: readonly string[];
+}
+
+/** The ledger entry as the state holds it; nothing recorded is no replies, never told. */
+function toldOf(value: string | undefined): Salmentioned {
+  const nothing: Salmentioned = { fingerprint: fingerprintOf([]), sent: [] };
+  if (value === undefined) return nothing;
+  try {
+    const parsed = JSON.parse(value) as Partial<Salmentioned>;
+    return {
+      fingerprint: typeof parsed.fingerprint === 'string' ? parsed.fingerprint : '',
+      sent: Array.isArray(parsed.sent) ? parsed.sent.filter((one) => typeof one === 'string') : [],
+    };
+  } catch {
+    return nothing;
+  }
+}
+
+/** What a reader sees under a page, as one value that changes when any of it does. */
+function fingerprintOf(replies: readonly ThreadReply[]): string {
+  const shape = (list: readonly ThreadReply[]): unknown[] =>
+    list.map((reply) =>
+      'withheld' in reply
+        ? [reply.id, shape(reply.replies)]
+        : [
+            reply.id,
+            reply.url,
+            reply.author.name,
+            reply.content,
+            reply.published.toISOString(),
+            shape(reply.replies),
+          ],
+    );
+  return createHash('sha256')
+    .update(JSON.stringify(shape(replies)))
+    .digest('hex');
 }
 
 /** One page told, and the copy of the post it made, when it said where. */

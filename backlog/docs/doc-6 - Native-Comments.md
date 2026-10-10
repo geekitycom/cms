@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-10-10 15:31'
+updated_date: '2026-10-10 17:12'
 ---
 # Native comments
 
@@ -78,6 +78,7 @@ belong. `comments` is the list, oldest first.
 | `url`         | Where it lives when it lives somewhere else: a webmention's source page, `null` for one written here. |
 | `notify`      | **Not in this file** either: it sits beside the email in `data/comments/{slug}.json`. Whether the commenter asked to be told when somebody answers them, only ever `true` alongside an email; a comment with no entry there asked for nothing. |
 | `redacted`    | What was removed from it for privacy (TASK-135): any of `email`, `addressHash` and `author`. Absent when nothing was. An author whose email was removed does not count toward auto-approval. |
+| `via`         | The page whose entry carried it, for a webmention reply read out of another webmention's source (a salmention, TASK-320). Absent for every other comment. |
 
 The shape is deliberately wider than a form submission, because a webmention
 lands in the same file: it has a page of its own and no email, it may be a like
@@ -521,6 +522,13 @@ of its interface:
 - **`replyNamed(document, url)`** — the id of the reply on a post that a URL
   names, which is how a received webmention finds its parent (TASK-319). See
   "Where a received reply goes" above.
+- **`documentOf(url)`** — the document whose conversation a URL is in: the
+  post a comment's page or anchor is on, the post a webmention was sent to,
+  the post a fediverse reply answers however deep, or the document at the URL
+  (TASK-320).
+- **`upstreams(document)`** — every page in the conversation a document is in
+  that answers something off this site, with the replies a reader sees under
+  it: what a salmention is sent from. See "Salmention" below.
 - **`replyAt(url)`** — the reply a reader can see that a URL names anywhere on
   the site, with the post it is on (TASK-300): a comment by its page or anchor,
   a webmention by its sender's page, a fediverse reply by its note id. A reply
@@ -760,3 +768,112 @@ answers. A reply post shows there only when that thread shows it.
 
 - A visitor answering a fediverse reply leaves a native comment, which goes
   nowhere over ActivityPub. A visitor is not a user and has no actor.
+
+## Salmention
+
+With a plain webmention, a reply to a reply reaches the page it answers and
+never the post at the top of the thread. [Salmention](https://indieweb.org/Salmention)
+closes that gap when every site in the chain cooperates: the page that gained a
+reply sends its webmention again upstream, and the upstream site fetches it
+again and reads the replies nested inside its h-entry. This site does both
+halves (TASK-320, decision-49). It cannot make another site do either.
+
+### Receiving
+
+A webmention from a source the site already holds fetches the source again
+and rewrites the entry it made, matched by its `url` as always ("The files"
+above). It also reads the replies nested in the source's chosen h-entry
+(`sourceEntry` in `webmention/microformats.ts`):
+
+- each `p-comment` item of the entry, an `h-cite` or an `h-entry`;
+- each child `h-entry` or `h-cite` whose `u-in-reply-to` names the entry's
+  `u-url`;
+- and the same again inside each of those, at most 8 deep and 200 in all.
+
+A nested reply with no `u-url` is passed over: its page is its identity.
+
+Each nested reply becomes a comment record of its own on the same post, put
+through `intakeComment` exactly as a webmention is, so the checker, the
+verdict-to-status rule and the moderators' notice are the ones a webmention
+gets. It is `source: webmention`, `kind: reply`, `url` its own page,
+`inReplyTo` the source's entry (or the nested reply it sits under), and `via`
+the source's URL. `via` is what lets the source take it away: when the source
+is read again, every record whose `via` is that source and that the source no
+longer carries is deleted, and when the source is deleted (it has gone, it
+stopped linking here, or the checker discarded it) everything it carried goes
+with it. A moderator's decision on a nested reply stands when the source sends
+again, as it does for a webmention.
+
+A nested reply is not copied when the site already has it some other way:
+
+- its URL is on this site (a reply post, a comment's page, a post);
+- the conversation already names it (`replyNamed`), and not as one this
+  source brought: a webmention held from its own page, a fediverse note, a
+  reply post, or a reply another source brought.
+
+What is nested under one of those still threads under it. A nested reply
+whose own page later sends a webmention is the same record from then on, with
+`via` cleared, so the source dropping it no longer deletes it.
+
+### Sending
+
+Two kinds of page here answer a page elsewhere, and each one tells it when
+the replies under it change:
+
+| The page                | What it answers                          |
+| ----------------------- | ---------------------------------------- |
+| A reply post            | Its `in-reply-to`, when that is off-site |
+| A comment's own page    | The webmention reply it is under         |
+
+A comment page answering anything else (the post, another comment, a reply
+post, a fediverse note) has nobody to tell: what it answers is on this site,
+which already knows, or speaks ActivityPub rather than webmention. The silo
+original a cited copy is of (TASK-197) is told too.
+
+`ConversationReader.upstreams(document)` lists those pages for the whole
+thread a document is in, each with the replies a reader sees under it. The
+webmention service asks it whenever the conversation may have changed: on
+every comment the index writes or forgets and every activity it logs
+(`AdminStore.onConversationWrite`, which a rebuild of either index does not
+fire), and on every content change but a scan. Writes that come together, such
+as a source carrying several nested replies, are looked at once.
+
+A page sends only when what a reader sees under it changed: the service keeps
+a fingerprint of those replies (their ids, URLs, authors, words and dates) in
+the admin state under `salmention:{page} {target}`, and a page that has never
+sent counts as one with no replies. So a reply post's first webmention, on
+publishing, stays the ordinary one, and a reply under it that is still waiting
+for a moderator sends nothing until it is approved. The ledger is derived
+state (decision-9): a deleted database costs at most one extra webmention per
+page.
+
+The reply post's page prints its replies inside its `h-entry`, as `p-comment
+h-cite`s, so a receiver finds them there; its likes, boosts and mentions stay
+below the entry. A comment's own page already prints its replies that way
+(TASK-318).
+
+### What stops a loop
+
+Two sites that both do this, each answering the other, stop on their own. A
+page here sends only when its replies changed, and reading the other site's
+page back adds nothing, because what it nests of this site's is this site's
+own and is not copied. The site tells it once more when its answer appears,
+and then it has nothing new to say.
+
+For a page that never settles, such as one that prints something different
+each time it is read, one page tells one target at most 5 times an hour
+(`SALMENTION_LIMIT`). A change past that is not sent; the next change after
+the hour is.
+
+### Its limits
+
+- A page is told only that the replies under it changed. Salmention also asks
+  a site to tell every page its post sent a webmention to; this site tells the
+  page it answers and nothing else.
+- A comment's own page sends nothing when the comment itself first appears or
+  is removed, only when its replies change: a native comment answering a
+  webmention reply does not send that page a webmention of its own.
+- A change past the hourly limit waits for the next change to be sent.
+- A failed send is not tried again until the replies change again.
+- Nested replies are read off the source's chosen entry only, not off other
+  entries on its page.

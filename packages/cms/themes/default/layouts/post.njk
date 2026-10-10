@@ -118,6 +118,14 @@
     {% include "partials/bio.njk" %}
   </footer>
   {% endif %}
+  {#- A reply post's replies are inside its entry as `p-comment h-cite`s, so
+      the page it answers reads them there when it is sent a salmention
+      (TASK-320). The likes and boosts stay below: their links are not the
+      entry's. -#}
+  {% if conversation and postType == "reply" %}
+  {% set conversationPart = "replies" %}
+  {% include "partials/conversation.njk" %}
+  {% endif %}
 </article>
 
 {# The post either side of this one, as two cards. Each is on the context only
@@ -138,6 +146,7 @@
 
 {# Only a post that has been replied to, liked or boosted has one of these. #}
 {% if conversation %}
+{% set conversationPart = "reactions" if postType == "reply" else "all" %}
 {% include "partials/conversation.njk" %}
 {% endif %}
 

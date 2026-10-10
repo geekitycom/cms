@@ -1985,6 +1985,12 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
   content.events.on('change', (change) => {
     webmentions.handle(change);
   });
+  // A reply under a reply post or a comment's page changes what its page
+  // says, whichever door it came in by, and the page tells what it answers
+  // (a salmention, TASK-320).
+  admin.onConversationWrite((written) => {
+    webmentions.heard(written);
+  });
   content.events.on('change', (change) => {
     replyContexts.handle(change);
   });

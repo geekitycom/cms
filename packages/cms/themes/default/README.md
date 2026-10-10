@@ -1898,6 +1898,13 @@ One reply and everything under it is `comment(reply, classes)` in
 `classes` is the reply's microformat: `h-entry`, the default, under a post, and
 `p-comment h-cite` on a comment's page, where the comment is the one entry.
 
+A reply post prints its replies inside its own `h-entry`, as `p-comment
+h-cite`s, so the page it answers finds them there when it is sent a salmention
+(TASK-320). `layouts/post.njk` includes `partials/conversation.njk` twice for
+one, setting `conversationPart`: `"replies"` inside the entry for the thread,
+and `"reactions"` below it for the facepiles, whose links are not the entry's.
+Left unset, the partial prints the whole section.
+
 ### The shape
 
 The conversation is deliberately **not** spelled in ActivityPub's vocabulary.

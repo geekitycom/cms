@@ -63,7 +63,28 @@ export interface SourceEntry {
   readonly rsvp?: RsvpValue;
   /** Everything its `in-reply-to` names, a nested `h-cite` by its `url` (TASK-319). */
   readonly inReplyTo: readonly string[];
+  /** The replies its page shows inside it, which a salmention carries (TASK-320). */
+  readonly replies: readonly NestedReply[];
 }
+
+/** A reply printed inside another entry, with its own page, and the replies under it. */
+export interface NestedReply {
+  /** Its own page, which is its identity: one with none is not read. */
+  readonly url: string;
+  readonly author: SourceEntry['author'];
+  /** Its `e-content`, **unsanitised**, or its summary or name as text. */
+  readonly content: SourceEntry['content'];
+  /** When it says it was published, as an ISO 8601 instant, or `null`. */
+  readonly published: string | null;
+  readonly replies: readonly NestedReply[];
+}
+
+/**
+ * How deep and how many nested replies are read off one page. A stranger's
+ * page is as long as they like, and a thread is rarely more than a few deep.
+ */
+const NESTED_DEPTH = 8;
+const NESTED_LIMIT = 200;
 
 /** The attributes that make an element a link to somewhere. */
 const LINK_ATTRIBUTES: readonly string[] = ['href', 'src', 'data', 'poster', 'cite'];
@@ -124,6 +145,7 @@ export function sourceEntry(html: string, sourceUrl: string, target: string): So
   const content = contentOf(chosen, root);
 
   const kind = chosen === undefined ? 'mention' : kindOf(chosen, wanted);
+  const url = (chosen === undefined ? undefined : first(chosen, 'url')?.text) ?? sourceUrl;
   const rsvp =
     chosen === undefined || kind !== 'reply' ? undefined : rsvpValue(first(chosen, 'rsvp')?.text);
   return {
@@ -132,7 +154,8 @@ export function sourceEntry(html: string, sourceUrl: string, target: string): So
     author,
     content,
     published: chosen === undefined ? null : instantOf(first(chosen, 'published')),
-    url: (chosen === undefined ? undefined : first(chosen, 'url')?.text) ?? sourceUrl,
+    url,
+    replies: chosen === undefined ? [] : nestedReplies(chosen, url, sourceUrl),
     inReplyTo:
       chosen === undefined
         ? []
@@ -144,6 +167,68 @@ export function sourceEntry(html: string, sourceUrl: string, target: string): So
             )
             .filter((url) => url !== ''),
   };
+}
+
+/**
+ * The replies an entry carries: its `p-comment` items, and the `h-entry` and
+ * `h-cite` children that name it in their `in-reply-to`, each read the same
+ * way in turn. A reply is known by its page, so one with no `u-url`, or one
+ * already read on this page, is passed over.
+ */
+function nestedReplies(entry: MicroformatItem, url: string, sourceUrl: string): NestedReply[] {
+  const seen = new Set<string>([url, sourceUrl]);
+
+  const read = (item: MicroformatItem, itsUrl: string, depth: number): NestedReply[] => {
+    if (depth >= NESTED_DEPTH) return [];
+    const answering = (child: MicroformatItem): boolean =>
+      (child.types.includes('h-entry') || child.types.includes('h-cite')) &&
+      (child.properties['in-reply-to'] ?? []).some((value) => value.text === itsUrl);
+    const carried = [
+      ...(item.properties['comment'] ?? []).flatMap((value) =>
+        value.item === undefined ? [] : [value.item],
+      ),
+      ...item.children.filter(answering),
+    ];
+
+    const replies: NestedReply[] = [];
+    for (const reply of carried) {
+      const at = first(reply, 'url')?.text;
+      if (at === undefined || !isWebUrl(at) || seen.has(at) || seen.size > NESTED_LIMIT) continue;
+      seen.add(at);
+      const author = first(reply, 'author');
+      replies.push({
+        url: at,
+        author:
+          author?.item !== undefined
+            ? cardOf(author.item)
+            : { name: author?.text ?? '', url: null, photo: null },
+        content: nestedContent(reply),
+        published: instantOf(first(reply, 'published')),
+        replies: read(reply, at, depth + 1),
+      });
+    }
+    return replies;
+  };
+
+  return read(entry, url, 0);
+}
+
+function isWebUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/** What a nested reply says: its content, else its summary or its name. */
+function nestedContent(item: MicroformatItem): SourceEntry['content'] {
+  const content = first(item, 'content');
+  if (content !== undefined && (content.html ?? '') !== '') {
+    return { html: content.html ?? '', text: content.text };
+  }
+  return { html: '', text: (first(item, 'summary') ?? first(item, 'name'))?.text ?? '' };
 }
 
 /** The first `h-entry` on a page, as the parts a citation of it shows. */
