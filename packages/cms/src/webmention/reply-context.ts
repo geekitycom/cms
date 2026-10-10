@@ -1,4 +1,7 @@
 import { discoverPostType } from '../content/post-type.ts';
+import { htmlToText } from '../content/search.ts';
+import type { HeldAt } from '../web/conversation.ts';
+import { absoluteUrl } from '../web/negotiate.ts';
 import type { CitedImage, CitedPicture, PictureSource } from './cited-picture.ts';
 import { readCitedStart } from './cited-start.ts';
 import { fetchPublic, webUrl } from './fetch-public.ts';
@@ -48,6 +51,12 @@ export interface ReplyContext {
   readonly original?: string;
   /** Its title, when it has one of its own; a note's name is its text. */
   readonly name?: string;
+  /**
+   * Set when it is a comment on this site (TASK-326): one somebody else left
+   * through the form, a webmention or the fediverse, which a citation calls "a
+   * comment" rather than "a post".
+   */
+  readonly comment?: true;
   /** A short excerpt of what it says, or the page's description. */
   readonly text?: string;
   /** Who wrote it. */
@@ -836,6 +845,35 @@ function metaOf(root: HtmlElement, key: string): string {
     return (element.attributes['content'] ?? '').replace(/\s+/g, ' ').trim();
   }
   return '';
+}
+
+/**
+ * The context of something this site already holds (TASK-300, TASK-326): a
+ * comment, a webmention, a fediverse reply or a reply post in one of its
+ * threads, or one of its own posts or pages. Read from the index rather than
+ * fetched, so a reply to a comment shows the comment rather than the whole
+ * post it is on, and a reply to the site's own post never fetches its page.
+ */
+export function heldReplyContext(target: string, held: HeldAt): ReplyContext {
+  const said =
+    held.kind === 'reply'
+      ? held.reply
+      : {
+          author: held.author,
+          content: held.post.html,
+          published: new Date(held.post.date ?? held.post.updated ?? 0),
+        };
+  const name = held.kind === 'document' ? held.post.title.trim() : '';
+  const text = excerpt(withoutDirectionControls(htmlToText(said.content)));
+  const url = said.author.url === null ? undefined : webUrl(absoluteUrl(said.author.url, target));
+  return {
+    url: target,
+    ...(held.kind === 'reply' && held.reply.source !== 'post' ? { comment: true } : {}),
+    ...(name === '' ? {} : { name }),
+    ...(text === '' ? {} : { text }),
+    author: { name: said.author.name, ...(url === undefined ? {} : { url: url.href }) },
+    published: said.published.toISOString(),
+  };
 }
 
 /** The first words of a text, marked as cut when they are. */

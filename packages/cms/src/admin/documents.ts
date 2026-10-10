@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { access, mkdir, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -72,6 +73,7 @@ import { isServed } from '../web/documents.ts';
 import { LANG_FRONT_MATTER_KEY } from '../web/locale.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
+import { commentsFile } from '../comments/records.ts';
 import { CONTACT_FRONT_MATTER_KEY } from '../contact/form.ts';
 import { authorNames, userForAuthor } from '../web/authors.ts';
 import { findUserById, listUsers } from './accounts.ts';
@@ -509,18 +511,7 @@ async function saveFromForm(
     });
   }
 
-  const written = await writeDocument(
-    {
-      store,
-      config: c.var.config,
-      announce: c.var.announce,
-      writer: currentUsername(c),
-      citedContext: (target) => c.var.replyContexts.describe(target),
-      storedContext: (target) => c.var.replyContexts.read(target),
-      learnHandles: c.var.learnHandles,
-    },
-    { kind, document, form, draft },
-  );
+  const written = await writeDocument(documentSite(c), { kind, document, form, draft });
   if (written.outcome === 'refused') return refuse(written);
   if (written.outcome === 'conflict') {
     return renderConflict(c, {
@@ -554,6 +545,25 @@ export interface DocumentSite {
   readonly citedContext: (target: string) => Promise<ReplyContext | undefined>;
   readonly storedContext: (target: string) => ReplyContext | undefined;
   readonly learnHandles: HandleLearner;
+}
+
+/**
+ * The write path as one request reaches it, writing as `writer`: by default
+ * whoever the admin session names.
+ */
+export function documentSite(
+  c: Context<GeekityEnv>,
+  writer: string | undefined = currentUsername(c),
+): DocumentSite {
+  return {
+    store: c.var.store,
+    config: c.var.config,
+    announce: c.var.announce,
+    writer,
+    citedContext: (target) => c.var.replyContexts.describe(target),
+    storedContext: (target) => c.var.replyContexts.read(target),
+    learnHandles: c.var.learnHandles,
+  };
 }
 
 /** What {@link writeDocument} is asked to write. */
@@ -777,7 +787,7 @@ export async function writeDocument(
   // editing the slug or the permalink: correcting a date refiles the file and
   // leaves the URL where it was. An empty permalink field is a form that
   // carried none, not a request to move.
-  const promised = promisedDocument(document, store.now());
+  const promised = promisedDocument(document, store.now(), contentDir);
   const submitted = normalizePermalink(form.permalink);
   const asked =
     promised !== undefined &&
@@ -824,14 +834,19 @@ export async function writeDocument(
     ...optional('author', chosenAuthor(config.dataDir, form.author, document, writer)),
     ...optional('inReplyTo', replyTo(kind, form, document)),
     ...optional('activitypub', keptIdentity(document, promised, permalink, config.baseUrl)),
-    extra: resolveExtra(
-      kind,
-      document,
-      form,
-      store.now(),
-      media,
-      syndicationTargetsReader(contentDir)(),
-      timezone,
+    extra: keptGuid(
+      resolveExtra(
+        kind,
+        document,
+        form,
+        store.now(),
+        media,
+        syndicationTargetsReader(contentDir)(),
+        timezone,
+      ),
+      promised,
+      permalink,
+      config.baseUrl,
     ),
     body: form.body,
   };
@@ -1020,15 +1035,21 @@ function documentPath(input: {
  * nothing has been promised yet.
  *
  * A published post or page is at a URL readers, search engines and other
- * sites may hold, and a post that was ever announced is at one its followers
- * hold even while it is a draft. A draft nobody was told about, a trashed
- * document and one whose date has not arrived have been shown to nobody, and
- * may move without leaving anything behind.
+ * sites may hold, a post that was ever announced is at one its followers hold
+ * even while it is a draft, and one with comments is at the URL they were
+ * left on. A draft nobody was told about, a trashed document and one whose
+ * date has not arrived have been shown to nobody, and may move without
+ * leaving anything behind.
  */
-function promisedDocument(document: Document | undefined, now: Date): Document | undefined {
+function promisedDocument(
+  document: Document | undefined,
+  now: Date,
+  contentDir: string,
+): Document | undefined {
   if (document === undefined) return undefined;
   const announced = document.activitypub?.published !== undefined;
-  return isServed(document, now) || announced ? document : undefined;
+  const answered = existsSync(commentsFile(contentDir, document.slug));
+  return isServed(document, now) || announced || answered ? document : undefined;
 }
 
 /**
@@ -1076,6 +1097,28 @@ function keptIdentity(
   }
   if (block?.id !== undefined) return block;
   return { ...block, id: absoluteUrl(promised.permalink, baseUrl) };
+}
+
+/**
+ * The extra front matter to write, which pins the feed guid when a promised
+ * page moves.
+ *
+ * A page has no object id, so its feed guid is its permalink (decision-12),
+ * and the `/replies/` feed a reader subscribed to is keyed by that guid. The
+ * URL the page is leaving is written as its stored `guid`, as a moved post's
+ * is written as its `activitypub.id`.
+ */
+function keptGuid(
+  extra: Record<string, unknown>,
+  promised: Document | undefined,
+  permalink: string,
+  baseUrl: string,
+): Record<string, unknown> {
+  if (promised === undefined || promised.type === 'post' || promised.permalink === permalink) {
+    return extra;
+  }
+  if (extra['guid'] !== undefined) return extra;
+  return { ...extra, guid: absoluteUrl(promised.permalink, baseUrl) };
 }
 
 /**

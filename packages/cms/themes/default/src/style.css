@@ -873,6 +873,26 @@
     @apply target;
   }
 
+  .backlinks {
+    @apply mt-12 font-sans text-sm;
+  }
+
+  .backlinks-title {
+    @apply mb-2 text-[0.72rem] font-normal tracking-[0.14em] text-muted uppercase;
+  }
+
+  .backlinks ol {
+    @apply list-none space-y-1 p-0;
+  }
+
+  .backlinks a {
+    @apply target;
+  }
+
+  .backlinks time {
+    @apply ms-1 text-muted;
+  }
+
   /* Pagination: two words, the newer at the start and the older at the end. */
   .pagination {
     @apply mt-12 flex flex-wrap gap-4 font-sans text-sm;
@@ -1025,6 +1045,28 @@
 
   .no-comments {
     @apply mt-8 font-sans text-sm text-muted italic;
+  }
+
+  /* A comment's own page (TASK-318): the thread above it as one citation,
+     each step drawn flat although each is nested in the next. */
+  .comment-thread {
+    @apply mb-8;
+  }
+
+  .comment-step > .comment-step {
+    @apply mb-4;
+  }
+
+  .comment-withheld {
+    @apply italic;
+  }
+
+  .comment-page .comments-area {
+    @apply mt-10;
+  }
+
+  .comment-back {
+    @apply mt-10 font-sans text-sm;
   }
 
   /* The comment form under an open post and the contact form on a page that

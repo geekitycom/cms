@@ -177,6 +177,9 @@ export function rssItem(item: FeedItem): string[] {
     // Markdown should render from this rather than from the HTML above. It is
     // the same text the ActivityStreams `Article` carries as its `source`.
     `      <source:markdown>${cdata(item.markdown)}</source:markdown>`,
+    // What a reply answers, in the same namespace (TASK-300): RSS 2.0 has no
+    // element of its own for it.
+    ...optionalElement('source:inReplyTo', item.inReplyTo, 3),
     '    </item>',
   ];
 }
@@ -228,10 +231,11 @@ function alternateEnclosure(alternate: AlternateEnclosure): string[] {
  * Where one item's comments are, said three ways.
  *
  * `<comments>` is the page a person should read them on and `wfw:commentRss`
- * the feed a reader should poll, which is the pair WordPress publishes and so
- * the pair every reader already understands. `source:comments` is the same
- * feed with the count beside it, so a reader can say "3 comments" without
- * fetching anything.
+ * the feed of the whole thread a reader should poll, which is the pair
+ * WordPress publishes and so the pair every reader already understands.
+ * `source:comments` is the namespace's walkable tree (TASK-324): how many
+ * replies answer the post directly and the feed of only those, written only
+ * when there are some.
  *
  * Written only when the item carries them: a feed whose builder did not
  * resolve the counts would otherwise publish "0 comments" about a post with
@@ -244,8 +248,16 @@ function commentPointers(item: FeedItem): string[] {
   return [
     element('comments', comments.page, 3),
     element('wfw:commentRss', comments.feed, 3),
-    `      <source:comments count="${String(comments.count)}" ` +
-      `feedUrl="${escapeXml(comments.feed)}"/>`,
+    ...sourceComments(comments.replies),
+  ];
+}
+
+/** The `source:comments` of an item with direct replies, and nothing for one without. */
+function sourceComments(replies: { count: number; feed: string } | undefined): string[] {
+  if (replies === undefined || replies.count === 0) return [];
+  return [
+    `      <source:comments count="${String(replies.count)}" ` +
+      `feedUrl="${escapeXml(replies.feed)}"/>`,
   ];
 }
 
@@ -297,18 +309,30 @@ export function commentsRssFeed(source: CommentFeedSource): string {
  */
 function commentItem(comment: FeedComment): string[] {
   const html = sanitizeCommentHtml(comment.html);
+  const replying = comment.replyingTo === undefined ? '' : ` replying to ${comment.replyingTo}`;
   const title =
-    comment.post === undefined ? comment.author : `${comment.author} on ${comment.post.title}`;
+    comment.post === undefined
+      ? comment.author
+      : `${comment.author}${replying} on ${comment.post.title}`;
 
   return [
     '    <item>',
     element('title', title, 3),
     element('link', comment.url, 3),
-    // A reply's id is a name rather than an address: some servers publish a
-    // note at an id nothing dereferences and a `url` somewhere else entirely.
-    `      <guid isPermaLink="false">${escapeXml(comment.id)}</guid>`,
+    // A native comment's guid is its page. Anything else's is a name rather
+    // than an address: some servers publish a note at an id nothing
+    // dereferences and a `url` somewhere else entirely.
+    `      <guid isPermaLink="${comment.id === comment.url ? 'true' : 'false'}">` +
+      `${escapeXml(comment.id)}</guid>`,
     element('pubDate', rfc822(comment.published), 3),
     element('dc:creator', comment.author, 3),
+    ...(comment.authorFeed === undefined
+      ? []
+      : [
+          `      <source url="${escapeXml(comment.authorFeed)}">${escapeXml(comment.author)}</source>`,
+        ]),
+    ...optionalElement('source:inReplyTo', comment.inReplyTo, 3),
+    ...sourceComments(comment.replies),
     // A comment never carries a description, so its summary is always an
     // excerpt of what it says.
     element('description', excerptHtml(excerptFromHtml(html)), 3),

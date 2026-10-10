@@ -62,6 +62,8 @@ import {
   rebuildFederationIndexes,
   signedProfileLoader,
 } from './federation/index.ts';
+import { createReplyBackfill, signedRepliesLoader } from './federation/backfill.ts';
+import type { ReplyBackfill } from './federation/backfill.ts';
 import { citedPostReader } from './federation/cited-post.ts';
 import { handleLearner } from './federation/handles.ts';
 import type {
@@ -77,6 +79,8 @@ import type { IndexNowNotifier } from './indexnow.ts';
 import {
   commentFormFor,
   createAkismetChecker,
+  followAllMovedComments,
+  followMovedComments,
   migrateCommentEmails,
   rebuildCommentIndexes,
 } from './comments/index.ts';
@@ -90,6 +94,7 @@ import {
   createRenderer,
   createSiteDataSource,
   createThemeSource,
+  frontPageSlugs,
   maintenanceGate,
   mountHealth,
   mountPublicSite,
@@ -105,7 +110,13 @@ import { createIndieAuthState } from './indieauth/grants.ts';
 import { mountTokenEndpoint, mountTokenInfoEndpoints } from './indieauth/token.ts';
 import { mountMicropub } from './micropub/endpoint.ts';
 import { mountMicropubMedia } from './micropub/media.ts';
-import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
+import {
+  createReplyContextService,
+  createWebmentionService,
+  followMovedWebmentions,
+} from './webmention/index.ts';
+import { heldReplyContext } from './webmention/reply-context.ts';
+import { createReplyNotices } from './comments/reply-notices.ts';
 import {
   selectedTargets,
   syndicationCopies,
@@ -560,7 +571,6 @@ export type {
   ModerationOutcome,
   NewComment,
   ProposedComment,
-  SignedInAuthor,
   SubmissionType,
   SubmitCommentOptions,
   VerifyAkismetKeyOptions,
@@ -1055,6 +1065,9 @@ export {
   commentAnchor,
   commentsFeedHref,
   commentsFeedPath,
+  REPLIES_ROOT,
+  repliesFeedPath,
+  repliesKey,
   commentsFeedResponse,
   commentsRssFeed,
   COMMENTS_ROOT,
@@ -1237,6 +1250,7 @@ export type {
   AcceptRange,
   AssetResponseOptions,
   AuthorContext,
+  BacklinkContext,
   LinkLine,
   PublishedProfileLink,
   AuthorRequest,
@@ -1276,6 +1290,8 @@ export type {
   InteractionSource,
   InteractionStatus,
   JsonFeedItem,
+  Placed,
+  RepliesOf,
   SiteInteraction,
   NotifyServer,
   Listing,
@@ -1471,6 +1487,13 @@ export interface Cms {
    */
   readonly actorProfiles: ActorProfileService;
   /**
+   * The fediverse replies nobody delivered, read off the `replies`
+   * collections of the fediverse replies in recent threads (TASK-321). Swept
+   * on a timer once the site serves; a site or a test reaches for it to sweep
+   * now or to wait.
+   */
+  readonly replyBackfill: ReplyBackfill;
+  /**
    * The sweep that removes commenter emails, address hashes and contact
    * messages once they outlive the periods in the site's settings (TASK-135).
    * Runs on a timer once the site serves; a site or a test reaches for it to
@@ -1624,9 +1647,10 @@ export interface ServeContext {
  */
 function openCache(resolved: ResolvedConfig): { store: ContentStore; admin: AdminStore } {
   return withRebuiltDatabase(resolved.dataDir, () => {
-    const store = openContentStore({ dataDir: resolved.dataDir, now: resolved.now });
+    const { dataDir, baseUrl } = resolved;
+    const store = openContentStore({ dataDir, baseUrl, now: resolved.now });
     try {
-      return { store, admin: openAdminStore({ dataDir: resolved.dataDir }) };
+      return { store, admin: openAdminStore({ dataDir, baseUrl }) };
     } catch (error) {
       store.close();
       throw error;
@@ -1748,6 +1772,20 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     contentDir: resolved.contentDir,
     watch: resolved.watch,
   });
+  // A watched change waits for its burst to settle, as a scan does: a git
+  // pull that moves a post and adds another at its old URL must not hand the
+  // new post's comments to the moved one before the new one is indexed.
+  content.events.on('change', async (change) => {
+    if (change.origin === 'scan' || change.origin === 'watch' || change.next === undefined) {
+      return;
+    }
+    await followMovedComments(commentRecords, store, change.next);
+    followMovedWebmentions(admin, store, resolved.baseUrl);
+  });
+  content.onSettled(async () => {
+    await followAllMovedComments(commentRecords, store);
+    followMovedWebmentions(admin, store, resolved.baseUrl);
+  });
   // Email. Built whether or not the site has a provider or a credential, for
   // the reason the Akismet checker is: the settings and `data/mail.json` are
   // read per send, so a key pasted into the settings screen sends the next
@@ -1764,6 +1802,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     store,
     contentDir: resolved.contentDir,
     baseUrl: resolved.baseUrl,
+    users: () => listUsers(resolved.dataDir),
   });
 
   // What a reply shows of the post it answers. Built before the renderer,
@@ -1780,6 +1819,10 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     config: resolved,
     lookup: resolved.hostLookup,
     fediverse: citedPostReader(() => federationContext()),
+    held: (target) => {
+      const found = conversation.heldAt(target);
+      return found === undefined ? undefined : heldReplyContext(target, found);
+    },
     onStored: (target, previous) => {
       delivery.citedPageStored(target, previous);
       const original = replyContexts.read(target)?.original;
@@ -1863,6 +1906,22 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     // asked per render for the reason the conversation is: a post published a
     // minute ago is already the neighbour of the one before it.
     neighbours: (document) => store.neighbours(document),
+    // And the site's own posts and pages that link to it (TASK-322), asked per
+    // render for the same reason: a post published a minute ago that cites
+    // this one is already one of its backlinks, and so does one whose link
+    // reaches it through a redirect declared a minute ago (TASK-330). A link
+    // to `/` lands on the page the Reading setting puts there, which is the
+    // page its slug names, as the routes resolve it.
+    backlinks: (document) => {
+      const { homepage } = frontPageSlugs(siteData.read());
+      return store.listBacklinks(document, {
+        redirects: redirects.current(),
+        home:
+          document.type === 'page' &&
+          homepage !== '' &&
+          store.getBySlug(homepage)?.path === document.path,
+      });
+    },
     newestPosts: (count) => store.listPosts({ limit: count }),
     // And every published post, for a page that says `archive: true`. The one
     // listing with no paging, so it is asked for only by the page that prints
@@ -1910,6 +1969,17 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
 
   const learnHandles = handleLearner(federationContext);
 
+  const replyBackfill = createReplyBackfill({
+    admin,
+    store,
+    conversation,
+    config: resolved,
+    load: signedRepliesLoader(federationContext),
+    heard: (actorId) => {
+      actorProfiles.capture(actorId);
+    },
+  });
+
   const delivery = createDeliveryService({
     federation,
     admin,
@@ -1929,6 +1999,20 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     mail,
     config: resolved,
     cited: (url) => replyContexts.read(url),
+  });
+
+  const replyNotices = createReplyNotices({
+    admin,
+    store,
+    conversation,
+    notices: notifications,
+    config: resolved,
+  });
+  content.events.on('change', (change) => {
+    replyNotices.handle(change);
+  });
+  admin.onConversationWrite((written) => {
+    replyNotices.heard(written);
   });
 
   // And the other half of it (TASK-60): a user who asked for an hourly or a
@@ -1953,9 +2037,16 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     config: resolved,
     notifications,
     originalOf: (url) => replyContexts.read(url)?.original,
+    conversation,
   });
   content.events.on('change', (change) => {
     webmentions.handle(change);
+  });
+  // A reply under a reply post or a comment's page changes what its page
+  // says, whichever door it came in by, and the page tells what it answers
+  // (a salmention, TASK-320).
+  admin.onConversationWrite((written) => {
+    webmentions.heard(written);
   });
   content.events.on('change', (change) => {
     replyContexts.handle(change);
@@ -2185,6 +2276,8 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     // written before profiles were kept, and stale ones on a timer (TASK-184).
     actorProfiles.start();
 
+    replyBackfill.start();
+
     // And whatever personal data has outlived its period is removed now and
     // every few hours from here on (TASK-135).
     retention.start();
@@ -2202,6 +2295,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     digests.stop();
     avatars.stop();
     actorProfiles.stop();
+    replyBackfill.stop();
     retention.stop();
   }
 
@@ -2219,6 +2313,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     await replyContexts.settled();
     await avatars.settled();
     await actorProfiles.settled();
+    await replyBackfill.settled();
     await retention.settled();
     await notifier.settled();
   }
@@ -2244,6 +2339,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     replyContexts,
     avatars,
     actorProfiles,
+    replyBackfill,
     retention,
     notifier,
     indexNow,

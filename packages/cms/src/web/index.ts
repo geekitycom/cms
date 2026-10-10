@@ -45,6 +45,7 @@ export {
   themeName,
 } from './context.ts';
 export type {
+  BacklinkContext,
   DocumentContext,
   FrontPageSlugs,
   NeighbourContext,
@@ -63,21 +64,21 @@ export type {
   InteractionKind,
   InteractionSource,
   InteractionStatus,
+  Placed,
+  RepliesOf,
   SiteInteraction,
 } from './conversation.ts';
-export {
-  activityStreamsId,
-  isListed,
-  isServed,
-  postObjectId,
-  publicDocumentAt,
-} from './documents.ts';
+export { activityStreamsId, isListed, isServed, publicDocumentAt } from './documents.ts';
+export { postObjectId } from './guids.ts';
 export {
   atomEntry,
   atomFeed,
   cdata,
   commentsFeedPath,
   commentsFeedResponse,
+  REPLIES_ROOT,
+  repliesFeedPath,
+  repliesKey,
   commentsRssFeed,
   COMMENTS_ROOT,
   COMMENTS_TITLE_PREFIX,

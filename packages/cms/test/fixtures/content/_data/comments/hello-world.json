@@ -56,6 +56,60 @@
       "submitted": "2026-09-06T10:00:00.000Z",
       "addressHash": null,
       "inReplyTo": null
+    },
+    {
+      "id": "01994c7a-0000-7000-8000-0000000fff01",
+      "source": "comment",
+      "kind": "reply",
+      "status": "approved",
+      "author": {
+        "name": "Cal",
+        "url": null,
+        "email": null
+      },
+      "content": {
+        "markdown": "Answering one still held.",
+        "html": "<p>Answering one still held.</p>\n"
+      },
+      "submitted": "2026-09-07T10:00:00.000Z",
+      "addressHash": null,
+      "inReplyTo": "01994c7a-0000-7000-8000-0000000ffff0"
+    },
+    {
+      "id": "01994c7a-0000-7000-8000-00000000dd01",
+      "source": "comment",
+      "kind": "reply",
+      "status": "approved",
+      "author": {
+        "name": "Dee",
+        "url": null,
+        "email": null
+      },
+      "content": {
+        "markdown": "Answering one since deleted.",
+        "html": "<p>Answering one since deleted.</p>\n"
+      },
+      "submitted": "2026-09-08T10:00:00.000Z",
+      "addressHash": null,
+      "inReplyTo": "01994c7a-0000-7000-8000-0000000dead0"
+    },
+    {
+      "id": "01994c7a-0000-7000-8000-000000005a40",
+      "source": "comment",
+      "kind": "reply",
+      "status": "spam",
+      "author": {
+        "name": "Spammer",
+        "url": null,
+        "email": null
+      },
+      "content": {
+        "markdown": "Buy something.",
+        "html": "<p>Buy something.</p>\n"
+      },
+      "submitted": "2026-09-09T10:00:00.000Z",
+      "addressHash": null,
+      "inReplyTo": null
     }
   ]
 }

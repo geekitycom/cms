@@ -673,6 +673,30 @@ describe('the comment intake', () => {
     assert.equal(site.provider.sent.length, 0);
   });
 
+  it('tells whoever a comment answers when it is approved on arrival', async () => {
+    const site = await intakeSite();
+    const parent = await addComment(site, ada({ status: 'approved', notify: true }));
+    site.provider.clear();
+
+    const stored = onlyStored(
+      await site.take({
+        checker: checkerSaying('ham'),
+        comment: proposal({
+          author: { name: 'Grace Hopper', url: null, email: 'grace@example.com', avatar: null },
+          content: { markdown: 'Thanks.', html: '<p>Thanks.</p>\n' },
+          inReplyTo: parent.id,
+        }),
+      }),
+    );
+
+    assert.equal(stored.status, 'approved');
+    assert.equal(site.provider.sent.length, 1);
+    assert.deepEqual(
+      site.provider.sent[0]?.to.map((recipient) => recipient.address),
+      ['ada@example.com'],
+    );
+  });
+
   it('stores nothing at all for a checker that says discard', async () => {
     const site = await intakeSite();
 
@@ -821,36 +845,5 @@ describe('the comment intake', () => {
     assert.deepEqual(outcome, { kind: 'discarded', removed: true });
     assert.deepEqual(readComments(site, 'hello-world'), []);
     assert.equal(site.admin.getComment(first.id), undefined);
-  });
-
-  it('approves a moderator’s reply without asking anybody', async () => {
-    const site = await intakeSite();
-    const parent = onlyStored(await site.take({ comment: proposal({ notify: true }) }));
-    site.provider.clear();
-    const checker = checkerSaying('spam');
-
-    const stored = onlyStored(
-      await site.take({
-        origin: 'moderator',
-        checker,
-        comment: proposal({
-          author: { name: 'The author', url: null, email: null, avatar: null },
-          content: { markdown: 'Thanks.', html: '<p>Thanks.</p>\n' },
-          inReplyTo: parent.id,
-        }),
-      }),
-    );
-
-    assert.equal(stored.status, 'approved');
-    // A moderator writing in the admin is the person who would have approved
-    // it; a spam service has no say in what the owner of the site says.
-    assert.deepEqual(checker.seen, []);
-    // Nothing is waiting, so no moderation notice goes; what does go is the
-    // message to whoever asked to hear about replies to their comment.
-    assert.equal(site.provider.sent.length, 1);
-    assert.deepEqual(
-      site.provider.sent[0]?.to.map((recipient) => recipient.address),
-      ['ada@example.com'],
-    );
   });
 });

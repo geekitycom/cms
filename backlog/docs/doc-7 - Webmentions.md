@@ -3,7 +3,7 @@ id: doc-7
 title: Webmentions
 type: specification
 created_date: '2026-09-04 23:08'
-updated_date: '2026-10-02 17:01'
+updated_date: '2026-10-10 13:45'
 ---
 # Webmentions
 
@@ -247,7 +247,10 @@ happening.
 
 ## On the page
 
-A `reply` threads with the comments. A `repost` joins the boosts, because to a
+A `reply` threads with the comments, under the comment, webmention or fediverse
+reply its `u-in-reply-to` names when it names one on the same post, and at the
+top otherwise (TASK-319, doc-6 "Where a received reply goes"). A webmention aimed
+at a comment's own page, `/comment/{id}/`, lands on that comment's post. A `repost` joins the boosts, because to a
 reader they are the same act under two vocabularies. A `like` joins the likes. A
 `mention` is neither an answer nor a reaction and gets a list of its own,
 `conversation.mentions`, which the packaged partial draws as a `<details>` of

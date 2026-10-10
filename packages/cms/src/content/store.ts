@@ -7,6 +7,12 @@ import { featuredPosts, PINNED_FRONT_MATTER_KEY } from './pinned.ts';
 import { searchExpression, searchText, SNIPPET_CLOSE, SNIPPET_OPEN } from './search.ts';
 import { tagKey, uniqueTags } from './tags.ts';
 import { VISIBILITIES, VISIBILITY_FRONT_MATTER_KEY } from './visibility.ts';
+import { repliesKey } from '../web/feed-source.ts';
+import { feedGuid, postObjectId } from '../web/guids.ts';
+import { absoluteUrl } from '../web/negotiate.ts';
+import { NO_REDIRECTS } from '../web/redirects.ts';
+import type { RedirectTable } from '../web/redirects.ts';
+import { linksInto, ownSiteLinks, siteLinkKey, spelling } from '../webmention/links.ts';
 
 export { DATABASE_FILE } from '../cache.ts';
 
@@ -33,6 +39,20 @@ export interface OpenContentStoreOptions {
    * to {@link systemClock}; a test hands one it can move.
    */
   now?: Clock | undefined;
+  /**
+   * The site's base URL, which the `/replies/` keys of a document are worked
+   * out against (TASK-327). Opening with a different one than last time works
+   * every key out again; opening with none leaves new rows without keys.
+   */
+  baseUrl?: string | undefined;
+}
+
+/** What, beyond the index, decides which links land on a document. */
+export interface BacklinkSite {
+  /** The site's declared redirects, as they are now. */
+  readonly redirects?: RedirectTable | undefined;
+  /** Whether the document is the page the Reading setting shows at `/`. */
+  readonly home?: boolean | undefined;
 }
 
 /**
@@ -203,6 +223,35 @@ export interface ContentStore {
    * which is the same thing as whether a follower holds a copy.
    */
   listFederated(options?: ListOptions): Document[];
+  /**
+   * Served posts whose `in-reply-to` is exactly one of these URLs, unlisted
+   * ones included, newest first (TASK-300): the reply posts a thread shows.
+   * Naming nothing returns nothing.
+   */
+  listRepliesTo(targets: readonly string[]): Document[];
+  /** Served posts with an `in-reply-to`, unlisted ones included, newest first. */
+  listReplyPosts(options?: ListOptions): Document[];
+  /**
+   * The served documents a `/replies/` key names (TASK-327): the ones whose
+   * feed guid has that key, and the reply posts whose object id has it. One
+   * indexed lookup, so a key that names nothing costs nothing else.
+   */
+  listByRepliesKey(key: string): Document[];
+  /**
+   * The listed posts and pages whose body links to `document`, newest first
+   * (TASK-322): its backlinks.
+   *
+   * A link names a path rather than a document, and is matched to one here,
+   * on read: a link to the document's permalink, or to a `redirect_from` of it
+   * that still leads to it, whichever way the link was spelled; to `/` when
+   * `home` says the document is the homepage; and to any URL the site answers
+   * with a redirect that ends on one of those (TASK-330). So a link written
+   * before its target existed counts once the target does, a post that
+   * becomes public later counts from then, and an edited redirect file moves
+   * a backlink, with nothing rewritten. A document linking to itself is not
+   * its own backlink.
+   */
+  listBacklinks(document: Document, site?: BacklinkSite): Document[];
   /** Every indexed path, sorted. What a sync compares the content tree against. */
   listPaths(): string[];
   /** How many documents there are of each kind. */
@@ -503,10 +552,12 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     insert: db.prepare(`
       INSERT INTO documents (
         path, type, slug, permalink, title, date, date_sort, updated, draft, trashed,
-        description, author, in_reply_to, activitypub, extra, body, html, hash
+        description, author, in_reply_to, activitypub, extra, body, html, hash,
+        replies_key, reply_post_key, keys_base
       ) VALUES (
         :path, :type, :slug, :permalink, :title, :date, :date_sort, :updated, :draft, :trashed,
-        :description, :author, :in_reply_to, :activitypub, :extra, :body, :html, :hash
+        :description, :author, :in_reply_to, :activitypub, :extra, :body, :html, :hash,
+        :replies_key, :reply_post_key, :keys_base
       )
       ON CONFLICT (path) DO UPDATE SET
         type = excluded.type,
@@ -525,7 +576,21 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
         extra = excluded.extra,
         body = excluded.body,
         html = excluded.html,
-        hash = excluded.hash
+        hash = excluded.hash,
+        replies_key = excluded.replies_key,
+        reply_post_key = excluded.reply_post_key,
+        keys_base = excluded.keys_base
+    `),
+    rowsKeyedElsewhere: db.prepare('SELECT * FROM documents WHERE keys_base IS NOT ?'),
+    writeKeys: db.prepare(`
+      UPDATE documents
+      SET replies_key = :replies_key, reply_post_key = :reply_post_key, keys_base = :keys_base
+      WHERE path = :path
+    `),
+    byRepliesKey: db.prepare(`
+      SELECT * FROM documents
+      WHERE (replies_key = ?1 OR reply_post_key = ?1) AND ${SERVED_CLAUSE}
+      ORDER BY replies_key = ?1 DESC, date_sort DESC, path DESC
     `),
     deleteTags: db.prepare('DELETE FROM document_tags WHERE path = ?'),
     insertTag: db.prepare(
@@ -540,6 +605,11 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     byPath: db.prepare('SELECT * FROM documents WHERE path = ?'),
     byPermalink: db.prepare(
       'SELECT * FROM documents WHERE permalink = ? ORDER BY trashed, path DESC LIMIT 1',
+    ),
+    deleteLinks: db.prepare('DELETE FROM document_links WHERE path = ?'),
+    insertLink: db.prepare('INSERT INTO document_links (path, target, query) VALUES (?, ?, ?)'),
+    servedAt: db.prepare(
+      `SELECT 1 FROM documents WHERE permalink = ? AND ${SERVED_CLAUSE} LIMIT 1`,
     ),
     deleteRedirects: db.prepare('DELETE FROM document_redirects WHERE path = ?'),
     insertRedirect: db.prepare(
@@ -627,6 +697,27 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
   let open = true;
 
+  /**
+   * Work out again everything worked out against another base, or none: the
+   * `/replies/` keys and the links to the site's own pages.
+   */
+  function refreshAgainstBase(baseUrl: string): void {
+    db.exec('BEGIN');
+    try {
+      for (const row of statements.rowsKeyedElsewhere.all(baseUrl) as Record<string, unknown>[]) {
+        const document = toDocument(row, [], []);
+        statements.writeKeys.run({ path: document.path, ...repliesKeysOf(document, baseUrl) });
+        writeLinks(document, baseUrl);
+      }
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  if (options.baseUrl !== undefined) refreshAgainstBase(options.baseUrl);
+
   let cachedSpellings: CachedSpellings | undefined;
   const staleKeys = new Set<string>();
 
@@ -701,12 +792,39 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     return rows.map(hydrateOne);
   }
 
+  function writeLinks(document: Document, baseUrl: string | undefined): void {
+    statements.deleteLinks.run(document.path);
+    if (baseUrl === undefined) return;
+    const pageUrl = absoluteUrl(document.permalink, baseUrl);
+    for (const { path, query } of ownSiteLinks(document.html, pageUrl, baseUrl)) {
+      statements.insertLink.run(document.path, path, query);
+    }
+  }
+
+  /**
+   * The paths a link to `document` may name: its permalink, and each of its
+   * former ones that the site still answers with it rather than with a live
+   * document holding it now or another document claiming it.
+   */
+  function linkKeysOf(document: Document): string[] {
+    const former = (document.redirectFrom ?? []).filter(
+      (url) =>
+        statements.byPermalink.get(url) === undefined &&
+        text(
+          (
+            statements.byFormerPermalink.get(url, nowKey()) as Record<string, unknown> | undefined
+          )?.['path'],
+        ) === document.path,
+    );
+    return [...new Set([document.permalink, ...former].map(siteLinkKey))];
+  }
+
   function writeOne(document: Document): void {
     const contentPath = document.path;
     markTagsStaleBeforeWrite(contentPath);
     for (const tag of document.tags) staleKeys.add(tagKey(tag));
     try {
-      statements.insert.run(toRow(document));
+      statements.insert.run({ ...toRow(document), ...repliesKeysOf(document, options.baseUrl) });
     } catch (error) {
       throw translateWriteError(error, document, statements.pathForPermalink);
     }
@@ -722,6 +840,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     (document.redirectFrom ?? []).forEach((url, position) => {
       statements.insertRedirect.run(contentPath, url, position);
     });
+    writeLinks(document, options.baseUrl);
     // The words it is found by. Replaced rather than updated, because an FTS5
     // table has no key to conflict on: the path is only a column in it.
     const words = searchText(document);
@@ -841,6 +960,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
         db.exec('DELETE FROM document_tags');
         db.exec('DELETE FROM document_categories');
         db.exec('DELETE FROM document_redirects');
+        db.exec('DELETE FROM document_links');
         db.exec('DELETE FROM documents');
         db.exec('COMMIT');
       } catch (error) {
@@ -971,6 +1091,65 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
     listFederated(options = {}) {
       return select([`type = 'post'`, FEDERATED_CLAUSE], [], options);
+    },
+
+    listRepliesTo(targets) {
+      const wanted = [...new Set(targets)];
+      if (wanted.length === 0) return [];
+      return select(
+        ["type = 'post'", SERVED_CLAUSE, `in_reply_to IN (${wanted.map(() => '?').join(', ')})`],
+        [nowKey(), ...wanted],
+        {},
+      );
+    },
+
+    listReplyPosts(options = {}) {
+      return select(
+        ["type = 'post'", SERVED_CLAUSE, 'in_reply_to IS NOT NULL'],
+        [nowKey()],
+        options,
+      );
+    },
+
+    listByRepliesKey(key) {
+      return hydrateAll(statements.byRepliesKey.all(key, nowKey()) as Record<string, unknown>[]);
+    },
+
+    listBacklinks(document, site = {}) {
+      const now = nowKey();
+      const answeredAt = linkKeysOf(document);
+      if (site.home === true) answeredAt.push('/');
+      const into = linksInto(site.redirects ?? NO_REDIRECTS, answeredAt, (sitePath) =>
+        [sitePath, `${sitePath}/`].some(
+          (url) =>
+            statements.servedAt.get(url, now) !== undefined ||
+            statements.byFormerPermalink.get(url, now) !== undefined,
+        ),
+      );
+      return select(
+        [
+          LISTED_CLAUSE,
+          'path <> ?',
+          `path IN (
+            SELECT path FROM document_links
+            WHERE target IN (SELECT value FROM json_each(?))
+              AND (query = '' OR target || '?' || query NOT IN (SELECT value FROM json_each(?)))
+            UNION
+            SELECT path FROM document_links
+            WHERE target IN (SELECT value FROM json_each(?))
+              AND target || '?' || query IN (SELECT value FROM json_each(?))
+          )`,
+        ],
+        [
+          now,
+          document.path,
+          JSON.stringify(into.paths),
+          JSON.stringify(into.intercepted),
+          JSON.stringify(into.queries.map((link) => link.path)),
+          JSON.stringify(into.queries.map(spelling)),
+        ],
+        {},
+      );
     },
 
     listPaths() {
@@ -1188,6 +1367,26 @@ function limitClause(options: ListOptions): string {
 function limitParams(options: ListOptions): never[] {
   if (options.limit === undefined && options.offset === undefined) return [];
   return [options.limit ?? -1, options.offset ?? 0] as never[];
+}
+
+/**
+ * The `/replies/` keys of a document (TASK-327): its feed guid's, and for a
+ * reply post its object id's, which is what it is named by in the thread it
+ * answers. The two differ only for a reply post with a stored `guid`. Both are
+ * worked out against `baseUrl`, which is recorded beside them so a change of
+ * site URL is noticed on the next open; with no base there are no keys.
+ */
+function repliesKeysOf(
+  document: Document,
+  baseUrl: string | undefined,
+): Record<'replies_key' | 'reply_post_key' | 'keys_base', string | null> {
+  if (baseUrl === undefined) return { replies_key: null, reply_post_key: null, keys_base: null };
+  const isReplyPost = document.type === 'post' && document.inReplyTo !== undefined;
+  return {
+    replies_key: repliesKey(feedGuid(document, baseUrl)),
+    reply_post_key: isReplyPost ? repliesKey(postObjectId(document, baseUrl)) : null,
+    keys_base: baseUrl,
+  };
 }
 
 /** A {@link Document} as the columns of the `documents` table. */
@@ -1441,6 +1640,49 @@ const MIGRATIONS: readonly Migration[] = [
       );
       CREATE INDEX document_tags_key ON document_tags (key);
       DELETE FROM documents;
+    `,
+  },
+  {
+    version: 9,
+    sql: `
+      -- A thread finds the reply posts answering it by their \`in-reply-to\`
+      -- (TASK-300).
+      CREATE INDEX documents_in_reply_to ON documents (in_reply_to);
+    `,
+  },
+  {
+    version: 10,
+    sql: `
+      -- What a \`/replies/\` key names (TASK-327), so resolving one is a lookup
+      -- rather than a walk of the site. The keys hang off the base URL, which
+      -- a migration does not know: the rows are filled when the store is
+      -- opened with one, as they are whenever that base changes.
+      ALTER TABLE documents ADD COLUMN replies_key TEXT;
+      ALTER TABLE documents ADD COLUMN reply_post_key TEXT;
+      ALTER TABLE documents ADD COLUMN keys_base TEXT;
+      CREATE INDEX documents_replies_key ON documents (replies_key);
+      CREATE INDEX documents_reply_post_key ON documents (reply_post_key);
+    `,
+  },
+  {
+    version: 11,
+    sql: `
+      -- The pages of the site each document links to (TASK-322), as the paths
+      -- the links name rather than the documents they lead to, which are
+      -- matched when a document's backlinks are read. A link keeps its query
+      -- (TASK-330), sorted as a redirect source's is, because the site answers
+      -- \`/?p=7\` with a redirect rather than with \`/\`. Like the \`/replies/\`
+      -- keys they are read against the base URL, so forgetting every row's
+      -- base is what makes the next open with one fill them from the stored
+      -- HTML, with no scan of the files.
+      CREATE TABLE document_links (
+        path   TEXT NOT NULL REFERENCES documents (path) ON DELETE CASCADE,
+        target TEXT NOT NULL,
+        query  TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (path, target, query)
+      );
+      CREATE INDEX document_links_target ON document_links (target);
+      UPDATE documents SET keys_base = NULL;
     `,
   },
 ];

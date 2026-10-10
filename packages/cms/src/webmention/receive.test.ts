@@ -828,3 +828,196 @@ describe('telling the moderators about it (TASK-55)', () => {
     assert.equal(provider.sent.length, 0, 'an edited page re-sending is not new news');
   });
 });
+
+describe('a webmention that answers a reply on the post (TASK-319)', () => {
+  const NOTE = 'https://remote.example/notes/1';
+  const NOTE_URL = 'https://remote.example/@ada/1';
+  const IMPORTED = 'https://old.example/?p=7#comment-5';
+
+  function records(cms: Cms) {
+    return { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir };
+  }
+
+  async function comment(
+    cms: Cms,
+    values: { id?: string; slug?: string; permalink?: string; status?: PostComment['status'] } = {},
+  ): Promise<PostComment> {
+    const { addComment } = await import('../comments/records.ts');
+    return await addComment(records(cms), {
+      id: values.id,
+      slug: values.slug ?? 'hello-world',
+      permalink: values.permalink ?? '/2026/09/hello-world/',
+      source: 'comment',
+      kind: 'reply',
+      status: values.status ?? 'approved',
+      author: { name: 'Bob', url: null, email: null, avatar: null },
+      content: { markdown: 'Bob says so.', html: '<p>Bob says so.</p>' },
+      submitted: '2026-09-19T10:00:00.000Z',
+      addressHash: null,
+      inReplyTo: null,
+      url: null,
+      notify: false,
+    });
+  }
+
+  function pageOf(id: string): string {
+    return `${BASE_URL}/comment/${encodeURIComponent(id)}/`;
+  }
+
+  function answering(...urls: string[]): string {
+    return reply(
+      urls.map((url) => `<a class="u-in-reply-to" href="${url}">re</a>`).join('') +
+        '<div class="e-content"><p>An answer.</p></div>',
+    );
+  }
+
+  function federatedNote(cms: Cms): void {
+    cms.admin.logInboxActivity({
+      activityId: `${NOTE}/activity`,
+      activityType: 'Create',
+      actorId: 'https://remote.example/users/ada',
+      objectId: NOTE,
+      json: JSON.stringify({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: `${NOTE}/activity`,
+        type: 'Create',
+        actor: 'https://remote.example/users/ada',
+        object: {
+          id: NOTE,
+          type: 'Note',
+          attributedTo: 'https://remote.example/users/ada',
+          content: '<p>Federated words.</p>',
+          inReplyTo: POST_URL,
+          published: '2026-09-19T09:30:00Z',
+          url: NOTE_URL,
+        },
+      }),
+    });
+  }
+
+  it('threads under a comment its source answers by the comment’s own page (AC #1, #4)', async () => {
+    const cms = await site();
+    const parent = await comment(cms);
+    pages.set('https://them.example/note', { body: answering(pageOf(parent.id)) });
+
+    const response = await sendAndSettle(cms, 'https://them.example/note', pageOf(parent.id));
+    assert.equal(response.status, 202, 'a webmention aimed at a comment page is accepted');
+
+    const held = stored(cms);
+    assert.equal(held.length, 1, 'it lands on the comment’s post');
+    assert.equal(held[0]?.kind, 'reply');
+    assert.equal(held[0]?.inReplyTo, parent.id);
+    assert.equal(held[0]?.url, 'https://them.example/note', 'its URL stays its sender’s page');
+
+    const { updateComment } = await import('../comments/records.ts');
+    await updateComment(records(cms), held[0]?.id ?? '', { status: 'approved' });
+    const page = await (await cms.app.request(`/comment/${encodeURIComponent(parent.id)}/`)).text();
+    assert.match(page, /An answer\./, 'and once approved it is under that comment on its page');
+  });
+
+  it('finds a comment whose id is a URL by its percent-encoded page (AC #1)', async () => {
+    const cms = await site();
+    await comment(cms, { id: IMPORTED });
+    pages.set('https://them.example/note', { body: answering(pageOf(IMPORTED)) });
+
+    assert.equal(
+      (await sendAndSettle(cms, 'https://them.example/note', pageOf(IMPORTED))).status,
+      202,
+    );
+    assert.equal(stored(cms)[0]?.inReplyTo, IMPORTED);
+  });
+
+  it('threads under a comment its source answers by the post’s #comment- anchor (AC #1)', async () => {
+    const cms = await site();
+    const parent = await comment(cms);
+    const anchored = `${POST_URL}#comment-${parent.id}`;
+    pages.set('https://them.example/note', { body: answering(anchored) });
+
+    await sendAndSettle(cms, 'https://them.example/note', anchored);
+    assert.equal(stored(cms)[0]?.inReplyTo, parent.id);
+  });
+
+  it('threads under a comment still waiting for a moderator', async () => {
+    const cms = await site();
+    const parent = await comment(cms, { status: 'pending' });
+    const anchored = `${POST_URL}#comment-${parent.id}`;
+    pages.set('https://them.example/note', { body: answering(anchored) });
+
+    await sendAndSettle(cms, 'https://them.example/note', anchored);
+    assert.equal(stored(cms)[0]?.inReplyTo, parent.id);
+  });
+
+  it('threads under an earlier webmention reply its source answers by its sender URL (AC #2)', async () => {
+    const cms = await site();
+    pages.set('https://first.example/reply', { body: answering(POST_URL) });
+    await sendAndSettle(cms, 'https://first.example/reply');
+    const first = stored(cms)[0];
+    assert.ok(first !== undefined);
+
+    pages.set('https://them.example/note', {
+      body: reply(
+        '<a class="u-in-reply-to" href="https://first.example/reply">re</a>' +
+          `<div class="e-content"><p>On <a href="${POST_URL}">this post</a>.</p></div>`,
+      ),
+    });
+    await sendAndSettle(cms, 'https://them.example/note');
+
+    const second = stored(cms).find((one) => one.url === 'https://them.example/note');
+    assert.equal(second?.inReplyTo, first.id);
+    assert.equal(second?.kind, 'reply', 'a reply here though it never names the post itself');
+  });
+
+  it('threads under a fediverse reply its source answers by the note’s url or id (AC #2)', async () => {
+    const cms = await site();
+    federatedNote(cms);
+
+    pages.set('https://them.example/by-url', { body: answering(NOTE_URL, POST_URL) });
+    pages.set('https://them.example/by-id', { body: answering(NOTE, POST_URL) });
+    await sendAndSettle(cms, 'https://them.example/by-url');
+    await sendAndSettle(cms, 'https://them.example/by-id');
+
+    const byUrl = stored(cms).find((one) => one.url === 'https://them.example/by-url');
+    const byId = stored(cms).find((one) => one.url === 'https://them.example/by-id');
+    assert.equal(byUrl?.inReplyTo, NOTE);
+    assert.equal(byId?.inReplyTo, NOTE);
+  });
+
+  it('stays top-level when it answers only the post, another post’s comment, or nothing (AC #3)', async () => {
+    const cms = await site();
+    const elsewhere = await comment(cms, { slug: 'camp', permalink: '/2026/09/camp/' });
+
+    pages.set('https://them.example/post-only', { body: answering(POST_URL) });
+    pages.set('https://them.example/other-post', {
+      body: answering(pageOf(elsewhere.id), POST_URL),
+    });
+    pages.set('https://them.example/nothing', {
+      body: reply(`<a href="${POST_URL}">a link</a>`),
+    });
+    await sendAndSettle(cms, 'https://them.example/post-only');
+    await sendAndSettle(cms, 'https://them.example/other-post');
+    await sendAndSettle(cms, 'https://them.example/nothing');
+
+    const held = stored(cms);
+    assert.equal(held.length, 3);
+    for (const one of held) assert.equal(one.inReplyTo, null, `${one.url ?? ''} is top-level`);
+  });
+
+  it('moves to its new parent when the source is edited and sent again (AC #5)', async () => {
+    const cms = await site();
+    const one = await comment(cms);
+    const two = await comment(cms);
+
+    pages.set('https://them.example/note', { body: answering(pageOf(one.id), POST_URL) });
+    await sendAndSettle(cms, 'https://them.example/note');
+    assert.equal(stored(cms)[0]?.inReplyTo, one.id);
+
+    pages.set('https://them.example/note', { body: answering(pageOf(two.id), POST_URL) });
+    await sendAndSettle(cms, 'https://them.example/note');
+    assert.equal(stored(cms).length, 1, 'still one comment');
+    assert.equal(stored(cms)[0]?.inReplyTo, two.id, 'under the comment it answers now');
+
+    pages.set('https://them.example/note', { body: answering(POST_URL) });
+    await sendAndSettle(cms, 'https://them.example/note');
+    assert.equal(stored(cms)[0]?.inReplyTo, null, 'and back at the top once it answers the post');
+  });
+});

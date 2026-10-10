@@ -1,0 +1,79 @@
+{#
+  One reply and everything under it. A macro rather than an include so it can
+  call itself: a reply that answers a reply is the same thing one level in.
+
+  `classes` is the reply's microformat. Under a post each reply is an
+  `h-entry` of its own. On a comment's own page (TASK-318) the comment is the
+  page's one entry, so its replies are `p-comment h-cite` inside it.
+
+  A `withheld` entry (TASK-325) is a comment a reader may not see that has
+  visible replies under it. It keeps its anchor and prints `withheld()` in
+  place of an author and words, as a comment's own page does for an ancestor,
+  and is no microformat of its own.
+#}
+{% macro withheld() %}This comment is no longer shown.{% endmacro %}
+
+{% macro comment(reply, classes="h-entry") %}
+{% if reply.withheld %}
+<li id="comment-{{ reply.id }}" class="comment comment-placeholder">
+  <p class="comment-withheld">{{ withheld() }}</p>
+  <ol class="children">
+    {% for child in reply.replies %}
+    {{ comment(child, classes) }}
+    {% endfor %}
+  </ol>
+</li>
+{% else %}
+<li id="comment-{{ reply.id }}" class="comment {{ classes }} comment-{{ reply.source }}">
+  <article class="comment-body">
+    <footer class="comment-meta">
+      <div class="comment-author vcard p-author h-card">
+        {%- if reply.author.avatar %}
+        <img class="avatar u-photo" src="{{ reply.author.avatar }}" alt="" width="40" height="40" loading="lazy">
+        {%- else %}
+        <span class="comment-avatar-empty" aria-hidden="true">{{ reply.author.name | first | upper }}</span>
+        {%- endif %}
+        <b class="fn p-name">{% if reply.author.url %}<a class="url u-url" href="{{ reply.author.url }}"{% if reply.source != "post" %} rel="nofollow ugc noopener noreferrer"{% endif %}>{{ reply.author.name }}</a>{% else %}{{ reply.author.name }}{% endif %}</b>
+      </div>
+      <div class="comment-metadata">
+        {%- if reply.url %}
+        <a class="u-url" href="{{ reply.url }}"{% if reply.source != "comment" and reply.source != "post" %} rel="nofollow noopener noreferrer"{% endif %}><time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time></a>
+        {%- else %}
+        <time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time>
+        {%- endif %}
+        {%- if reply.source == "webmention" %}
+        <span class="comment-source">via webmention</span>
+        {%- elif reply.source == "activitypub" %}
+        <span class="comment-source">via the fediverse</span>
+        {%- endif %}
+      </div>
+    </footer>
+    <div class="comment-content e-content">
+      {%- if reply.rsvp %}
+      <p class="comment-rsvp"><data class="p-rsvp" value="{{ reply.rsvp.value }}">{{ reply.rsvp.label }}</data></p>
+      {%- endif %}
+      {{ reply.content | safe }}
+    </div>
+    {#
+      Answering a comment on this site needs no JavaScript: the link carries
+      the comment's id to the form, which puts it in a hidden field. Somebody
+      signed in can answer anything in the thread, and their answer is a reply
+      post that reaches a webmention's page or a fediverse reply's author
+      (TASK-300). A visitor answers comments written here only: a fediverse
+      reply is answered on the server that holds it, and a webmention on the
+      page that sent it.
+    #}
+    {% if commentForm and (reply.source == "comment" or commentForm.signedInAs) %}
+    <div class="reply"><a class="comment-reply-link" href="{{ page.url }}?reply_to={{ reply.id | urlencode }}#respond">Reply</a></div>
+    {% endif %}
+  </article>
+  {% if reply.replies.length %}
+  <ol class="children">
+    {% for child in reply.replies %}
+    {{ comment(child, classes) }}
+    {% endfor %}
+  </ol>
+  {% endif %}
+</li>
+{% endif %}
+{% endmacro %}

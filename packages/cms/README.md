@@ -683,6 +683,50 @@ database.
 
 [FEP-044f]: https://codeberg.org/fediverse/fep/src/branch/main/fep/044f/fep-044f.md
 
+### Replies to fediverse replies
+
+Somebody who answers a fediverse reply on one of the site's posts addresses
+the person they answer, not the site, so their reply never reaches the inbox.
+Most servers list a note's replies in its `replies` collection, and the site
+reads those collections to bring such replies in. The sweep starts when
+the site serves and runs every hour, within these limits:
+
+| Limit    | Value    | Meaning                                                                                               |
+| -------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| Interval | 6 hours  | How long a thread is left alone after it was read.                                                    |
+| Age      | 30 days  | How old a post gets before its thread is no longer read, by the post's date.                          |
+| Depth    | 4 levels | How far below the post a fediverse reply may sit and still have its collection read.                  |
+| Pages    | 3        | How many pages of one collection are read. Mastodon's first page holds the author's own replies only. |
+
+Every request is signed as the site's first account, as the actor profile
+fetches are. A reply is kept only when it answers the note whose collection
+listed it, is addressed to the public, and is written by an actor on the
+note's own server. A note on the site's own origin is never fetched, because
+the site already knows what it published.
+
+A reply found this way is logged as the `Create` nobody delivered: a line in
+`content/_data/federation/inbox/{yyyy}-{mm}.jsonl` with `"fetched": true` in
+front of it, an `actor` taken from the note's `attributedTo` and the id
+`{note id}#fetched`. From there it is a reply like any other. It is threaded
+under the reply it answers with its own URL, counted, given a `/replies/` feed
+and listed on the federation screen, and its author's `Delete` takes it back.
+A note held once is never logged twice. The sweep skips a note the inbox
+already holds, and a delivery of a note the sweep fetched first replaces the
+fetched line.
+
+The site removes a fetched reply, with the fetched replies under it, when its
+server answers 404 or 410 for it, or when a collection read to its end no
+longer lists it. A delivered reply is never removed this way. A note with no
+`replies` collection, a server that answers with any other error, and a
+collection cut off by the page limit change nothing. The thread keeps what it
+holds, and the sweep goes on to the next reply.
+
+The site reads `replies` and not the conversation a note names in `context`
+([FEP-7888]), because Mastodon publishes `replies` and few servers publish a
+`context` collection yet.
+
+[FEP-7888]: https://codeberg.org/fediverse/fep/src/branch/main/fep/7888/fep-7888.md
+
 ### Relays
 
 A [Mastodon-style relay][fepae0c] boosts every public activity it is sent on to
@@ -1075,6 +1119,68 @@ A checker that throws is treated as having no opinion and logged, so a service
 that is down never stops a site taking comments. `/admin/comments` is the
 moderation queue and the dashboard carries the number waiting.
 
+### A comment's own page
+
+A comment left through the form has a page of its own at `/comment/{id}/`,
+the comment's id percent-encoded. That page is the comment's URL in the thread
+and in both comments feeds, so a site that replies to the comment fetches the
+comment rather than the whole post. The `#comment-{id}` anchor on the post
+stays, so an old link still scrolls to it. A webmention or a fediverse reply
+has no such page: its URL is where it came from.
+
+The page holds the comment as its one `h-entry`, with `u-in-reply-to` the post
+or the comment it answers. Above it is the thread from the post down, each step
+a nested `u-in-reply-to h-cite`, and below it the replies to it at every depth.
+An ancestor a reader may not see is a placeholder saying the comment is no
+longer shown, and the thread on the post prints the same placeholder above an
+approved reply to a pending, spam or deleted comment. The page answers only an approved comment, and only as the post
+would: 410 once the post is deleted, 404 while the post is not public or not
+showing its conversation. It is `noindex` and absent from the sitemap, the post
+feeds and search. Backlog doc-6 has the rules.
+
+### Replying while signed in
+
+A comment is something somebody else says on the site. A post is something a
+signed-in user says. So a reply written by somebody signed in to the site, in
+the thread or in the Reply box on the moderation screen, is a reply post, not a
+comment. It is one file under `posts/`, saved
+the way the editor and Micropub save one, and the thread shows it inline under
+what it answers. Its `in-reply-to` is what it answers:
+
+| Answering          | `in-reply-to`                     | It also                                                  |
+| ------------------ | --------------------------------- | -------------------------------------------------------- |
+| The post           | The post's permalink              |                                                          |
+| A native comment   | The comment's `/comment/{id}/`    | Emails the commenter once, if they asked about replies.  |
+| A webmention reply | The page the webmention came from | Sends that page a webmention.                            |
+| A fediverse reply  | The note's id                     | Federates in reply to the note, addressed to its author. |
+| A reply post       | The reply post's permalink        |                                                          |
+
+The signed-in form and the moderation screen's Reply box have an "Include in
+posts and feeds" checkbox, unchecked by default. Unchecked, the reply post is [unlisted](#unlisted-posts): its own page
+and the thread, but no listing or post feed. Checked, it is public. It reaches
+whoever it answers either way. A visitor's form has no such box.
+
+Somebody signed in gets a Reply link on every reply in a thread, webmentions
+and fediverse replies included. A visitor gets one on native comments only. A
+visitor's reply is always a native comment, so a visitor answering a fediverse
+reply sends nothing over ActivityPub.
+
+A reply post written in the editor or over Micropub joins a thread the same way
+when its `in-reply-to` names the post or anything in its thread: a comment's
+page or `#comment-` anchor, a webmention's page, a note's id. Its reply context
+quotes that comment from the site's own records instead of the page it is on,
+and says "In reply to a comment by" its writer. A reply post answering one of
+the site's own posts or pages takes that post's title, words and author from
+the index too, so the site never fetches its own page. The commenter's email
+goes once for a reply post from any of these doors, sent when the reply post is
+first published and never again when it is edited, trashed and restored, or the
+site restarts. In the thread, a reply post's author link carries no
+`rel="nofollow ugc"`, which is kept for visitors, webmentions and the
+fediverse. A
+webmention or a fediverse reply to a reply post threads under it in the
+original thread too. Comments written before this stay comments. Backlog doc-6
+and decision-47 have the rules.
+
 ### Being told about one
 
 With mail configured, a comment or a webmention entering the queue emails every
@@ -1207,6 +1313,19 @@ it was showing. One outcome is recorded per link (`sent`, `none` for a page that
 takes none, or `failed`), shown per post on `/admin/federation`, and the Resend
 button there sends them again from the file as it now reads.
 
+**Links to the site's own pages** send no webmention. A post that cites another
+post on the same site does not go through moderation, does not add to a comment
+count and does not make an HTTP request to the site itself. The index records
+the link instead. The linked post or page then lists the linking one among its
+backlinks, which the default theme prints as "Linked from" under it, apart from
+the comments. A link counts for the document the site serves at its URL: a link
+to `/` counts for the page the Reading setting makes the homepage, and a link
+to a URL the site redirects, such as an imported `/?p=123`, counts for the
+document the redirect leads to. Redirects are followed when the backlinks are
+read, so editing a redirect file moves a backlink without touching the post
+that holds the link. A draft, future-dated, unlisted, private or trashed post is never
+a backlink. See `themes/default/README.md` for the `backlinks` context.
+
 **Receiving** advertises `/_geekity/webmention` two ways — a `Link` header on
 every representation of a document, and a `<link rel="webmention">` in the head
 — and takes a form `POST` of `source` and `target`. It answers `202` for
@@ -1218,6 +1337,12 @@ repost or a plain mention), and files the result as a **pending comment** with
 queue as everything else — through the same `commentChecker` seam, so a checker
 can tell one from a form submission by its `source`. Akismet is told it is a
 `webmention` rather than a `comment`.
+
+A reply whose `u-in-reply-to` names a reply already on the post (a comment by
+its own page or its `#comment-{id}` anchor, an earlier webmention by the page it
+was sent from, a fediverse reply by its url or id) threads under that reply, and
+moves with it when the source is edited and sent again. A webmention sent to a
+comment's page, `/comment/{id}/`, lands on that comment's post.
 
 The source URL is its identity. A page that sends its webmention again updates
 what it left rather than adding a second, and one whose link has gone — or which
@@ -1788,7 +1913,7 @@ The rule works for pages too.
 | Its permalink, in every representation                                     | 200, with `X-Robots-Tag: noindex`. The default theme also prints `<meta name="robots" content="noindex">`.                                   |
 | The home page, tag, category and author archives, the `archive: true` page | Absent, and not counted in a pager or a tag count.                                                                                           |
 | Previous and next links under other posts, a front page's `newestPosts`    | Absent.                                                                                                                                      |
-| Every RSS, Atom and JSON feed, and the site-wide comments feed             | Absent. Saving one pings no notify server.                                                                                                   |
+| Every RSS, Atom and JSON feed, and the site-wide comments feed             | Absent. Saving one pings no notify server. An unlisted reply post shown in a thread is still in that thread's comments feeds.                |
 | The sitemap, search (HTML and JSON) and `llms.txt`                         | Absent.                                                                                                                                      |
 | IndexNow                                                                   | Not submitted. A public post that becomes unlisted is submitted once, so a search engine reads the `noindex`.                                |
 | The ActivityPub outbox and featured collection                             | Absent.                                                                                                                                      |
@@ -2692,6 +2817,7 @@ Booting mounts the public site on the app. The routes are:
 | `/author/{username}/feed/` and siblings | The same, for one person.                                                                                              |
 | `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                                                                       |
 | `{permalink}feed/`                      | One post's replies, the same way.                                                                                      |
+| `/comment/{id}/`                        | One comment left through the form, on a page of its own: see [Comments](#comments). Noindex and on no list.            |
 | `/sitemap.xml`                          | Every public URL, for a search engine.                                                                                 |
 | `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                                      |
 | `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                                     |
@@ -2876,9 +3002,20 @@ The list is in the file, so deleting `data/geekity.db` keeps it working.
 
 A URL in the list only redirects while nothing else lives there: a new document
 given that URL takes it over. Moving a document back to a URL in its list takes
-that URL off the list. A draft that was never published moves without leaving
-anything behind. Correcting a published post's date files it under the new
-day but keeps its URL.
+that URL off the list. A draft that was never published and has no comments
+moves without leaving anything behind; one with comments was read at its URL,
+so it keeps a `redirect_from` like a published one. Correcting a published
+post's date files it under the new day but keeps its URL.
+
+A moved document keeps its conversation. Its comments and stored webmentions
+move to its new slug, a reply post answering any URL in its `redirect_from`
+stays in its thread, and its feeds keep their guid: a post keeps its object id
+as its `activitypub.id`, and a page keeps the URL it left as its `guid`, so the
+`/replies/` feed a reader subscribed to keeps answering. The record of the
+webmentions a post has sent moves with it too. A move made by hand is followed
+the same way when the file names the old URL in `redirect_from`; a permalink
+changed by hand with no `redirect_from` leaves the old URL answering 404 and its
+comments where they were, until the file names it.
 
 ### Declared redirects
 
@@ -3094,6 +3231,7 @@ so a site moving off it keeps every subscriber it had:
 | `/category/{name}/feed/` | One category archive, the same three             |
 | `/comments/feed/`        | Every reply the site has been sent, in RSS       |
 | `{permalink}feed/`       | One post's replies, in RSS                       |
+| `/replies/{id or key}/`  | One item's direct replies, in RSS                |
 
 `/feed/` is RSS because that is the format nearly every existing subscriber
 holds. The two archive bases are settings (`tagBase`, `categoryBase`), so the
@@ -3180,8 +3318,8 @@ do not know it to ignore:
 The key is `_geekity` because an extension is named after its publisher, and
 `in_reply_to` spells the microformats `in-reply-to` property the JSON way. A
 post that is not a reply, or whose `in-reply-to` is not such a URL, carries
-neither. RSS 2.0 has no equivalent element, so an RSS item for a reply is
-written the same as any other.
+neither. RSS 2.0 has no equivalent element, so an RSS item carries the target
+as the [source namespace][source-ns]'s `<source:inReplyTo>`.
 
 **Languages.** Every feed declares the site's `language` once: RSS as the
 channel's `language`, Atom as the feed's `xml:lang` and JSON Feed as its
@@ -3211,17 +3349,21 @@ avatar when the site has one.
 An item carries `title`, `link`, `guid`, `pubDate` in RFC 822, `dc:creator` from
 the post's author or the site's, one `category` per term, `description` holding
 the summary, `content:encoded` holding the whole rendered post, and
-`source:markdown` holding the Markdown the post was written from. The `guid`,
-the terms and the summary are the ones described above.
+`source:markdown` holding the Markdown the post was written from. A reply also
+carries `source:inReplyTo` holding the URL it answers. The `guid`, the terms
+and the summary are the ones described above.
 
 `source:markdown` is Dave Winer's [source namespace][source-ns]: a reader that
 understands Markdown should render from it rather than from `content:encoded`.
 It is the same text the ActivityStreams `Article` carries as its `source`.
 
-Every item also says where its comments are, three ways: `comments` is the page
-to read them on, `wfw:commentRss` (the [Well-Formed Web][wfw-ns] comment API) is
-the feed to poll, and `source:comments` is that same feed with a `count`
-attribute, so a reader can say "3 comments" without fetching anything.
+Every item also says where its comments are: `comments` is the page to read
+them on and `wfw:commentRss` (the [Well-Formed Web][wfw-ns] comment API) is the
+feed of the whole thread to poll. A post with replies also carries
+`source:comments`, whose `count` is how many replies answer the post directly
+and whose `feedUrl` is its `/replies/{key}/` feed holding only those (see
+[Walking a thread](#walking-a-thread)). A post nobody answered carries no
+`source:comments`.
 
 When the site has a license (Settings > General, or `license` in `site.json`),
 the channel carries a `creativeCommons:license` holding its URL, and every item
@@ -3242,34 +3384,68 @@ post as under it.
 
 ### Comments
 
-This CMS stores no comments of its own. What it has instead is the fediverse
-replies its inbox has been sent: a `Create` of a `Note` whose `inReplyTo` names
-a post's ActivityStreams object id (see [Federation](#federation)). Those are
-what the comments feeds publish, at the URLs WordPress publishes its own at —
-`{permalink}feed/` for one post, `/comments/feed/` for the whole site.
+The comments feeds publish a document's conversation, at the URLs WordPress
+publishes its own at: `{permalink}feed/` for one post or page, and
+`/comments/feed/` for the whole site. Both are read from the same conversation
+the page draws under the post, so they carry what a reader sees there:
+
+- native comments left through the form, once a moderator approves them;
+- webmention replies and mentions;
+- fediverse replies, a `Create` of a `Note` whose `inReplyTo` names the post
+  or a reply under it (see [Federation](#federation)), and the quotes of a
+  post its author approved;
+- reply posts written on this site that answer the post or a reply under it.
+
+Likes, boosts and reposts are counted on the page and are in no feed.
 
 Both are RSS 2.0 and nothing else: a comments feed has no Atom or JSON spelling
-here, so `{permalink}feed/atom/` 404s. A post with no replies answers an empty
-feed rather than a 404 — it exists, and a reader that subscribed before anybody
-answered should keep polling — while a permalink that is no published post 404s
-like any other. A page has no comments feed at all: only posts federate, so
-nothing can ever have replied to one.
+here, so `{permalink}feed/atom/` 404s. A post has a comments feed whether or
+not it still takes comments. A page has one while it takes comments
+(`comments: true` in its front matter, and comments on for the site), which is
+when it shows its conversation; any other page's `{permalink}feed/` 404s, and
+its comments are left out of `/comments/feed/` too. A document with no replies
+answers an empty feed rather than a 404, because it exists and a reader that
+subscribed before anybody answered should keep polling. A permalink that is no
+published document 404s like any other. The page advertises its own feed with
+a `<link rel="alternate" type="application/rss+xml">` in its `<head>`.
 
 A channel carries the usual `title` (`Comments on: {post}`), `link`,
 `description`, `language`, `lastBuildDate`, `generator`, `atom:link rel="self"`
 and the same notify-server elements every other feed carries. An item carries the author's name as its `title` and `dc:creator`,
-the reply's `url` as its `link` and its id as `guid isPermaLink="false"`, the
-`published` time the note gave (or when it arrived, if it gave none),
-`description` holding a plain-text excerpt and `content:encoded` holding the
-note. On the site-wide feed the title names the post as well: `{author} on
-{post}`.
+the reply's `url` as its `link` (a comment left through the form links to its
+own page at `/comment/{id}/`), a `guid`, the `published` time the reply gave (or
+when it arrived, if it gave none), `description` holding a plain-text excerpt
+and `content:encoded` holding the reply. The `guid` of a comment left through the
+form is its page, `isPermaLink="true"`; any other reply's is its own id: a
+fediverse note's id, a webmention's stored id, a reply post's object id. A
+comment imported from WordPress keeps the `guid` WordPress's comments feed
+published, so a reader sees nothing new after the move.
+`isPermaLink` is `true` exactly when the `guid` is the `link`.
 
-The author's name is the profile the site stored when that actor followed it,
-and otherwise the `@user@host` the actor's own URL implies. Naming them
+Each item also carries, from the [source namespace][source-ns]:
+
+- `source:inReplyTo`, the `guid` of what it answers in these feeds: the post's
+  feed `guid` for an answer to the post, else the `guid` of the reply it
+  answers. A reply under a comment a reader may not see (one waiting for a
+  moderator, spam or deleted) names the nearest reply above it a reader can
+  see, or the post, and is counted as that one's reply.
+- `source:comments`, only on an item with replies: `count` is how many answer
+  it directly and `feedUrl` its `/replies/` feed.
+- `<source url="…">Name</source>`, the core RSS element, when the site knows a
+  feed for the author: a webmention author's `h-card` URL or site, or a site
+  user's author feed `/author/{username}/feed/`. A comment left through the
+  form and a fediverse reply carry none.
+
+On the site-wide feed the title names the post or page as well: `{author} on
+{post}`, or `{author} replying to {parent author} on {post}` for an answer to
+another reply a reader can see.
+
+A fediverse reply's author is named by the profile the site stored when that
+actor followed it, and otherwise the `@user@host` the actor's own URL implies. Naming them
 properly would mean dereferencing the actor, which is a network round trip per
 comment shown.
 
-**The note's HTML is sanitised before it is published.** It is markup a
+**A reply's HTML is sanitised before it is published.** It is markup a
 stranger wrote, so it is tokenised and rebuilt from an allowlist rather than
 passed through: `p`, `br`, `a`, `em`, `strong`, `del`, `code`, `pre`,
 `blockquote` and the list elements survive; `script` and `style` are dropped
@@ -3278,9 +3454,36 @@ every attribute goes except an `a`'s `href`, which must be `http`, `https` or
 `mailto` and is marked `rel="nofollow noopener noreferrer"`. `sanitizeCommentHtml`
 is exported for a site that shows comments in its own templates.
 
-A reply to a post that has since been unpublished or moved to the trash
-disappears from `/comments/feed/`, and that post's own feed 404s with the post.
+A reply to a document that has since been unpublished or moved to the trash
+disappears from `/comments/feed/`, and that document's own feed 404s with it.
 `feedSize` caps both feeds.
+
+### Walking a thread
+
+`{permalink}feed/` is the whole thread, flat, which is what WordPress
+publishes and `wfw:commentRss` points at. A program that wants the tree
+(Dave Winer's [rss.chat][rss-chat] reads conversations this way) walks it one
+level at a time instead: from a post item's `source:comments` to a feed of the
+replies that answer the post directly, and from each of those items' own
+`source:comments` to the replies that answer it, until an item has none.
+Every reply a reader can see is reached once.
+
+Each of those feeds is at `/replies/{segment}/`, RSS 2.0, newest first, its
+items in the same shape as the comments feeds:
+
+- `/replies/{id}/` for a comment left through the form, by the same id as its
+  page at `/comment/{id}/`, percent-encoded.
+- `/replies/{key}/` for everything else: a post or a page, a webmention, a
+  fediverse reply or a reply post. A document has no id of its own and slugs
+  are not unique across posts and pages, so the key is the first 16 hex digits
+  of the SHA-256 of the item's feed `guid`.
+
+A segment of exactly 16 lowercase hex digits is a key, and anything else is a
+comment id. A comment whose id happens to look like a key is named by its key
+instead, so no segment can name two items. An item nobody answered answers an
+empty feed; a key or an id that names nothing a reader can see 404s.
+
+[rss-chat]: https://github.com/scripting/rss.chat
 
 ### Atom and JSON Feed
 
@@ -3571,8 +3774,10 @@ commentsRssFeed({
 
 `conversation.thread(document)` is the same reading for one post — the shape the
 theme's `conversation.njk` is handed — `spokenIn` flattens it into the entries a
-feed carries, and `conversation.counts(documents)` is the number `source:comments`
-puts beside each item of a post feed.
+feed carries, each with the reply it sits under, `conversation.counts(documents)`
+is the number of direct replies `source:comments` puts beside each item of a
+post feed, and `conversation.repliesTo(segment)` is what one `/replies/` feed
+holds.
 
 ## Sitemap and robots.txt
 
@@ -4000,10 +4205,24 @@ Layouts are yours. The directory data files name them — `posts.json` says
 Eleventy layout receives is the one this package's theme mirrors, so a layout
 can often be moved across with only its `{% extends %}` removed.
 
-The feeds are the one thing that does not carry over: `/feed/`, `/feed/atom/`
-and `/feed/json/` are generated in code here, not by a template, so an Eleventy
-build needs its own. `/sitemap.xml` and `/robots.txt` are the same story, and
-for the same reason. Everything else is the same directory.
+The default theme's own layouts and partials build too, copied into
+`content/_includes/` as `layouts/` and `partials/`: the config adds the theme's
+other filters (`absoluteUrl`, `asset`, `host`, `fediverseHandle`) and the
+`newestPosts(count)` a front page override lists posts with, so a site theme's
+`front-page.njk` calling `{% set posts = newestPosts(5) %}` builds. They get
+only the context the config gives, though: `collections.menus` rather than
+`menus`, the `conversation` filter rather than the key, and no comment form,
+search or listing pagination.
+
+Some things do not carry over. `/feed/`, `/feed/atom/` and `/feed/json/` are
+generated in code here, not by a template, so an Eleventy build needs its own;
+`/sitemap.xml` and `/robots.txt` are the same story, for the same reason. A
+comment's own page at `/comment/{id}/` is not written, since a build has no
+server to take a comment, so a comment links to its `#comment-{id}` anchor on
+the post. The site's own reply posts are not threaded under what they answer,
+and a document's backlinks are not listed: both read the CMS's index of every
+document, which the config's filters do not have. The config's header lists
+the same.
 
 ### The compatibility test
 

@@ -11,10 +11,11 @@
  * would mean there.
  */
 import assert from 'node:assert/strict';
-import { cp, readdir, readFile, mkdtemp, rm } from 'node:fs/promises';
+import { cp, readdir, readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { inspect } from 'node:util';
 import { after, before, describe, it } from 'node:test';
 
 import Eleventy from '@11ty/eleventy';
@@ -34,6 +35,7 @@ import type { Document, FrontPageSlugs, SiteData } from '../src/index.ts';
 const PROJECT_DIR = fileURLToPath(new URL('./fixtures/', import.meta.url));
 const CONTENT_DIR = path.join(PROJECT_DIR, 'content');
 const CONFIG_PATH = fileURLToPath(new URL('../docs/eleventy.config.example.js', import.meta.url));
+const THEME_DIR = fileURLToPath(new URL('../themes/default/', import.meta.url));
 
 /**
  * Feeds are generated in code by the CMS rather than by a template, so they are
@@ -87,6 +89,17 @@ async function outputPaths(directory: string, prefix = ''): Promise<string[]> {
   }
 
   return found.sort();
+}
+
+/**
+ * The placeholder `<li>` for a hidden comment, through the end of the list of
+ * replies it holds, or the empty string when the page has none for it.
+ */
+function placeholderAt(html: string, id: string): string {
+  const start = html.indexOf(`<li class="comment comment-placeholder" id="comment-${id}">`);
+  if (start < 0) return '';
+  const end = html.indexOf('</ol>', start);
+  return html.slice(start, end < 0 ? undefined : end);
 }
 
 /** The file Eleventy should write for a permalink: `/a/b/` becomes `a/b/index.html`. */
@@ -433,12 +446,33 @@ describe('the fixtures content directory under Eleventy', () => {
     assert.ok(html.includes('class="comment comment-comment"'), 'it says where it came from');
     assert.ok(html.includes('Ada Lovelace'), 'the commenter is named');
 
-    // Two answers now: the fediverse reply and the comment.
-    assert.ok(html.includes('2 replies'), `both are counted: ${html}`);
+    // The fediverse reply, the comment, and the two replies under hidden
+    // comments below: a placeholder is not a reply and is not counted.
+    assert.ok(html.includes('4 replies'), `the visible ones are counted: ${html}`);
 
     // Nothing a moderator has not approved, and no email anywhere near it.
     assert.ok(!html.includes('Still waiting for a moderator.'), 'a pending comment is not built');
     assert.ok(!html.includes('ada@example.com'), 'the email is never published');
+  });
+
+  it('keeps a reply under a hidden comment, under a placeholder for it (TASK-325)', async () => {
+    const html = await readFile(
+      path.join(buildDir, '_site', '2026/09/hello-world/index.html'),
+      'utf8',
+    );
+
+    const held = placeholderAt(html, '01994c7a-0000-7000-8000-0000000ffff0');
+    assert.ok(held.includes('<p>Answering one still held.</p>'), `under the held one: ${html}`);
+    assert.ok(!held.includes('Still waiting for a moderator.'), 'which says nothing itself');
+
+    const deleted = placeholderAt(html, '01994c7a-0000-7000-8000-0000000dead0');
+    assert.ok(deleted.includes('<p>Answering one since deleted.</p>'), `under it: ${html}`);
+
+    assert.ok(
+      !html.includes('01994c7a-0000-7000-8000-000000005a40'),
+      'the spam has no placeholder',
+    );
+    assert.ok(!html.includes('Buy something.'), 'and is not printed');
   });
 
   it('puts a webmention from _data/comments in the mentions of the same conversation', async () => {
@@ -502,5 +536,138 @@ describe('the fixtures content directory under Eleventy', () => {
     assert.match(nav, /<a href="\/about\/" aria-current="page">About<\/a>/);
     // And the flags an item carries reach a build too (TASK-107).
     assert.match(nav, /<a href="https:\/\/elsewhere\.example\/@fixture" rel="me">Mastodon<\/a>/);
+  });
+});
+
+/**
+ * andrewshell.org's own front page, as its site theme overrides the default
+ * theme's (TASK-317): the homepage's words, the five newest posts through the
+ * default theme's `partials/post-list.njk`, then its own links.
+ */
+const FRONT_PAGE_OVERRIDE = `{% extends "layouts/base.njk" %}
+
+{% block content %}
+<div class="page-body e-content">
+  {{ content | safe }}
+</div>
+
+<h2 class="section-title">Recent Posts</h2>
+{% set posts = newestPosts(5) %}
+{% set feedHeading = 3 %}
+{% include "partials/post-list.njk" %}
+
+<p class="front-links">
+  <a href="{{ "/essays/" | url }}">See all essays<span aria-hidden="true"> &rarr;</span></a> |
+  <a href="{{ "/search/" | url }}">Search<span aria-hidden="true"> &rarr;</span></a>
+</p>
+{% endblock %}
+`;
+
+/**
+ * The fixtures built the way a site leaving Geekity with the default theme
+ * would build them: the theme's layouts and partials as the includes, the
+ * directory data files naming them, and the homepage on the override of
+ * `front-page.njk`, the layout the CMS picks for it.
+ *
+ * Eleventy caches a compiled layout by its path for the life of the process,
+ * so each build names its override afresh; otherwise a second build in this
+ * file would render the first one's.
+ */
+let builds = 0;
+async function buildWithDefaultTheme(frontPage: string, dir: string): Promise<void> {
+  builds += 1;
+  const layout = `layouts/front-page-${builds}.njk`;
+  await cp(PROJECT_DIR, dir, { recursive: true });
+  // A build that fails leaves its copy of the uploads running after it, and
+  // nothing here needs them.
+  await rm(path.join(dir, 'content', 'uploads'), { recursive: true, force: true });
+
+  const includes = path.join(dir, 'content', '_includes');
+  await rm(includes, { recursive: true, force: true });
+  for (const part of ['layouts', 'partials']) {
+    await cp(path.join(THEME_DIR, part), path.join(includes, part), { recursive: true });
+  }
+  await writeFile(path.join(includes, layout), frontPage);
+  await writeFile(
+    path.join(dir, 'content', 'posts', 'posts.json'),
+    JSON.stringify({ layout: 'layouts/post.njk', tags: ['post'] }),
+  );
+  await writeFile(
+    path.join(dir, 'content', 'pages', 'pages.json'),
+    JSON.stringify({ layout: 'layouts/page.njk' }),
+  );
+  const front = path.join(dir, 'content', 'pages', 'front.md');
+  await writeFile(
+    front,
+    (await readFile(front, 'utf8')).replace(/^---\n/, `---\nlayout: ${layout}\n`),
+  );
+
+  const originalCwd = process.cwd();
+  process.chdir(dir);
+  try {
+    await new Eleventy('content', '_site', { configPath: CONFIG_PATH, quietMode: true }).write();
+  } finally {
+    process.chdir(originalCwd);
+  }
+}
+
+describe('the default theme under Eleventy', () => {
+  const built: string[] = [];
+
+  async function freshDir(): Promise<string> {
+    const dir = await mkdtemp(path.join(tmpdir(), 'geekity-11ty-theme-'));
+    built.push(dir);
+    return dir;
+  }
+
+  after(async () => {
+    for (const dir of built) await rm(dir, { recursive: true, force: true });
+  });
+
+  it('builds a front page override that lists newestPosts(5) (TASK-331 AC #1)', async () => {
+    const dir = await freshDir();
+    await buildWithDefaultTheme(FRONT_PAGE_OVERRIDE, dir);
+
+    const html = await readFile(path.join(dir, '_site', 'index.html'), 'utf8');
+    assert.match(html, /The page the site shows at its root\./);
+
+    const titles = [
+      ...html.matchAll(
+        /<h3 class="feed-title p-name">\s*<a href="([^"]*)" class="u-url">([^<]*)<\/a>/g,
+      ),
+    ].map((match) => [match[2], match[1]]);
+    assert.deepEqual(titles, [
+      ['Hello, World!', '/2026/09/hello-world/'],
+      ['Café au Lait', '/2026/07/cafe-au-lait/'],
+      ['Renamed in the Admin', '/notes/renamed/'],
+    ]);
+    assert.ok(!html.includes('Notes from a Draft'), 'the draft is not listed');
+    assert.match(html, /<p>The first post on a file-first site\.<\/p>/, 'with its summary');
+  });
+
+  it('lists only as many as the theme asks for', async () => {
+    const dir = await freshDir();
+    await buildWithDefaultTheme(
+      FRONT_PAGE_OVERRIDE.replace('newestPosts(5)', 'newestPosts(2)'),
+      dir,
+    );
+
+    const html = await readFile(path.join(dir, '_site', 'index.html'), 'utf8');
+    assert.equal([...html.matchAll(/class="feed-title p-name"/g)].length, 2);
+    assert.ok(!html.includes('Renamed in the Admin'), 'the third newest is left out');
+  });
+
+  it('refuses a count that is not a whole number of posts, as the CMS does', async () => {
+    await assert.rejects(
+      buildWithDefaultTheme(
+        FRONT_PAGE_OVERRIDE.replace('newestPosts(5)', 'newestPosts(0)'),
+        await freshDir(),
+      ),
+      // Eleventy wraps what the template threw in errors of its own.
+      (error) =>
+        /newestPosts\(count\) takes a whole number of posts, at least 1, not 0/.test(
+          inspect(error, { depth: 10 }),
+        ),
+    );
   });
 });

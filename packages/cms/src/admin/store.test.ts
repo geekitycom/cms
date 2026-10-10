@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -6,7 +7,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import { openAdminStore } from './store.ts';
-import type { AdminStore, NewDelivery, NewFollower, NewInboxActivity, NewRelay } from './store.ts';
+import type {
+  AdminStore,
+  NewDelivery,
+  NewFollower,
+  NewInboxActivity,
+  NewRelay,
+  PostComment,
+} from './store.ts';
 
 const temporaryDirs: string[] = [];
 const openStores: AdminStore[] = [];
@@ -1242,5 +1250,167 @@ describe('setReadOnly', () => {
     admin.setReadOnly(false);
     assert.deepEqual(admin.takeFlash(session.id), [{ kind: 'notice', message: 'Saved.' }]);
     assert.deepEqual(admin.takeFlash(session.id), []);
+  });
+});
+
+describe('the /replies/ keys (TASK-327)', () => {
+  const BASE = 'https://blog.example';
+
+  function keyOf(guid: string): string {
+    return createHash('sha256').update(guid).digest('hex').slice(0, 16);
+  }
+
+  function comment(overrides: Partial<PostComment> = {}): PostComment {
+    return {
+      id: 'c-1',
+      slug: 'hello',
+      permalink: '/2026/09/hello/',
+      source: 'comment',
+      kind: 'reply',
+      status: 'approved',
+      author: { name: 'Ann', url: null, email: null, avatar: null },
+      content: { markdown: 'Hi.', html: '<p>Hi.</p>' },
+      submitted: '2026-09-03T10:00:00.000Z',
+      addressHash: null,
+      inReplyTo: null,
+      url: null,
+      notify: false,
+      ...overrides,
+    };
+  }
+
+  function ids(admin: AdminStore, guid: string): string[] {
+    return admin.listCommentsByRepliesKey(keyOf(guid)).map((found) => found.id);
+  }
+
+  function note(id: string, inReplyTo: string | undefined): NewInboxActivity {
+    return {
+      activityId: `${id}/activity`,
+      activityType: 'Create',
+      actorId: 'https://remote.example/users/carol',
+      objectId: id,
+      json: JSON.stringify({ type: 'Create', object: { id, type: 'Note', inReplyTo } }),
+    };
+  }
+
+  it('finds a comment by its page and a webmention by its id, until it is forgotten', async () => {
+    const dir = await temporaryDir();
+    const admin = openAdminStore({ dataDir: dir, baseUrl: BASE });
+    openStores.push(admin);
+    admin.putComment(comment());
+    admin.putComment(comment({ id: 'w-1', source: 'webmention' }));
+    admin.putComment(comment({ id: 'https://old.example/?c=9' }));
+
+    assert.deepEqual(ids(admin, `${BASE}/comment/c-1/`), ['c-1']);
+    assert.deepEqual(ids(admin, 'w-1'), ['w-1']);
+    assert.deepEqual(ids(admin, 'https://old.example/?c=9'), ['https://old.example/?c=9']);
+
+    admin.deleteComment('c-1');
+    assert.deepEqual(ids(admin, `${BASE}/comment/c-1/`), []);
+    admin.replaceComments([comment({ id: 'c-2' })]);
+    assert.deepEqual(ids(admin, 'w-1'), []);
+    assert.deepEqual(ids(admin, `${BASE}/comment/c-2/`), ['c-2']);
+  });
+
+  it('keeps comment keys across a restart and works them out again for a new base', async () => {
+    const dir = await temporaryDir();
+    const unkeyed = openAdminStore({ dataDir: dir });
+    unkeyed.putComment(comment());
+    assert.deepEqual(ids(unkeyed, `${BASE}/comment/c-1/`), [], 'no base, no key');
+    unkeyed.close();
+
+    const keyed = openAdminStore({ dataDir: dir, baseUrl: BASE });
+    assert.deepEqual(ids(keyed, `${BASE}/comment/c-1/`), ['c-1']);
+    keyed.close();
+
+    const moved = openAdminStore({ dataDir: dir, baseUrl: 'https://new.example' });
+    openStores.push(moved);
+    assert.deepEqual(ids(moved, `${BASE}/comment/c-1/`), []);
+    assert.deepEqual(ids(moved, 'https://new.example/comment/c-1/'), ['c-1']);
+  });
+
+  it('finds a logged reply by its note, and nothing that is not a reply', async () => {
+    const admin = await store();
+    admin.logInboxActivity(note('https://remote.example/notes/1', `${BASE}/2026/09/hello/`));
+    admin.logInboxActivity(note('https://remote.example/notes/2', undefined));
+    admin.replaceInboxActivities([
+      note('https://remote.example/notes/3', 'https://remote.example/notes/1'),
+    ]);
+
+    const found = (id: string) =>
+      admin.listRepliesByKey(keyOf(id)).map((activity) => activity.objectId);
+    assert.deepEqual(found('https://remote.example/notes/1'), [], 'gone with the rebuilt log');
+    assert.deepEqual(found('https://remote.example/notes/2'), []);
+    assert.deepEqual(found('https://remote.example/notes/3'), ['https://remote.example/notes/3']);
+  });
+
+  it('backfills the key of a reply logged before the index', async () => {
+    const dir = await temporaryDir();
+    const first = openAdminStore({ dataDir: dir });
+    first.logInboxActivity(note('https://remote.example/notes/1', `${BASE}/2026/09/hello/`));
+    first.close();
+
+    const legacy = new DatabaseSync(path.join(dir, 'geekity.db'));
+    legacy.exec(`
+      DELETE FROM admin_migrations WHERE version = 23;
+      DROP INDEX comments_replies_key;
+      DROP INDEX ap_inbox_reply_key;
+      ALTER TABLE comments DROP COLUMN replies_key;
+      ALTER TABLE comments DROP COLUMN keys_base;
+      ALTER TABLE ap_inbox DROP COLUMN reply_key;
+    `);
+    legacy.close();
+
+    const upgraded = openAdminStore({ dataDir: dir });
+    openStores.push(upgraded);
+    assert.equal(upgraded.listRepliesByKey(keyOf('https://remote.example/notes/1')).length, 1);
+  });
+});
+
+describe('moving the record of sent webmentions (TASK-332)', () => {
+  const OLD = 'https://blog.example/2026/09/hello/';
+  const NEW = 'https://blog.example/2026/09/greetings/';
+
+  function sent(
+    admin: AdminStore,
+    slug: string,
+    source: string,
+    target: string,
+    attemptedAt: string,
+  ): void {
+    admin.recordSentWebmention({
+      slug,
+      source,
+      target,
+      endpoint: null,
+      status: 'none',
+      error: null,
+      attemptedAt,
+    });
+  }
+
+  it('keeps the later attempt for a target both posts hold, and leaves nothing behind', async () => {
+    const admin = await store();
+    sent(admin, 'hello', OLD, 'https://a.example/', '2026-09-03T00:00:00.000Z');
+    sent(admin, 'hello', OLD, 'https://b.example/', '2026-09-05T00:00:00.000Z');
+    sent(admin, 'hello', OLD, 'https://c.example/', '2026-09-03T00:00:00.000Z');
+    sent(admin, 'greetings', NEW, 'https://a.example/', '2026-09-04T00:00:00.000Z');
+    sent(admin, 'greetings', NEW, 'https://b.example/', '2026-09-04T00:00:00.000Z');
+
+    admin.moveSentWebmentions({ slug: 'hello', source: OLD }, 'greetings');
+
+    assert.deepEqual(
+      admin.listSentWebmentions('greetings').map((row) => [row.target, row.source]),
+      [
+        ['https://a.example/', NEW],
+        ['https://b.example/', OLD],
+        ['https://c.example/', OLD],
+      ],
+    );
+    assert.deepEqual(admin.listSentWebmentions('hello'), []);
+    assert.deepEqual(admin.listSentWebmentionSources(), [
+      { slug: 'greetings', source: NEW },
+      { slug: 'greetings', source: OLD },
+    ]);
   });
 });

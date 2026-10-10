@@ -1,9 +1,8 @@
-import type { Stats } from 'node:fs';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { watch as watchTree } from 'node:fs';
+import type { FSWatcher } from 'node:fs';
+import { mkdir, readdir, readFile, rmdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-
-import { watch as watchPaths } from 'chokidar';
-import type { FSWatcher } from 'chokidar';
 
 import type { Document, DocumentType } from './document.ts';
 import { handleDirectory } from './handles.ts';
@@ -23,6 +22,15 @@ const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 
 /** How long the watcher waits for a path to stop changing before re-reading it. */
 export const DEFAULT_DEBOUNCE_MS = 100;
+
+/** Name prefix of the directory the watcher makes to learn that it is listening. */
+const PROBE_PREFIX = '.geekity-watch-';
+
+/** How long one probe waits for its event before another is made. */
+const PROBE_INTERVAL_MS = 250;
+
+/** How long the watcher keeps probing before it reports that it hears nothing. */
+const PROBE_DEADLINE_MS = 5_000;
 
 /** Directories that hold documents. Everything else in `content/` is not indexed. */
 const DOCUMENT_DIRECTORIES: ReadonlyMap<string, DocumentType> = new Map([
@@ -166,6 +174,14 @@ export interface ContentSync {
    * for it.
    */
   announce(change: DocumentChange): Promise<void>;
+  /**
+   * Run `listener` each time the index settles: after every full scan, and
+   * after a run of watcher changes once no more are waiting. It runs on the
+   * sync's own queue, so no file is reconciled while it does, and a scan
+   * resolves only once it has finished. Returns the function that
+   * unsubscribes.
+   */
+  onSettled(listener: () => unknown): () => void;
   /** Walk the content directory once, reconciling every file and dropping rows whose file is gone. */
   sync(): Promise<SyncResult>;
   /**
@@ -338,69 +354,163 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     return result;
   }
 
-  // Watcher events are debounced per path and then handled one at a time, so
-  // a burst of writes to one file costs a single re-parse and two files that
-  // change together never interleave their index writes.
+  // Watcher events are debounced per path and then handled one at a time, on
+  // the same queue as a full scan, so a burst of writes to one file costs a
+  // single re-parse and no two reconciles of one path ever interleave.
   const pending = new Map<string, NodeJS.Timeout>();
   let queue: Promise<void> = Promise.resolve();
+  let queued = 0;
   let watcher: FSWatcher | undefined;
 
-  function handle(absolutePath: string): void {
-    const relativePath = toRelative(contentDir, absolutePath);
-    if (relativePath === undefined || !isDocumentPath(relativePath)) return;
+  function enqueue<T>(work: () => Promise<T>): Promise<T> {
+    queued += 1;
+    const run = queue.then(work).finally(() => {
+      queued -= 1;
+    });
+    queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
 
+  const settledListeners = new Set<() => unknown>();
+  let unsettled = false;
+
+  async function settle(): Promise<void> {
+    unsettled = false;
+    for (const listener of [...settledListeners]) {
+      try {
+        await listener();
+      } catch (error) {
+        logger.warn(`A settled listener threw: ${messageOf(error)}`);
+      }
+    }
+  }
+
+  async function scanAndSettle(): Promise<SyncResult> {
+    const result = await scan();
+    await settle();
+    return result;
+  }
+
+  /**
+   * Reconcile what an event names, once it has stopped changing. A document
+   * is re-read; any other path may be a directory that was made, moved or
+   * removed, so every document under it, on disk or in the index, is.
+   */
+  function handle(relativePath: string): void {
     clearTimeout(pending.get(relativePath));
     pending.set(
       relativePath,
       setTimeout(() => {
         pending.delete(relativePath);
-        queue = queue.then(async () => {
-          try {
-            await reconcile(relativePath, 'watch');
-          } catch (error) {
-            if (error instanceof SkippedFile) return;
-            logger.warn(`Could not sync ${relativePath}: ${messageOf(error)}`);
+        void enqueue(async () => {
+          const paths = isDocumentPath(relativePath)
+            ? [relativePath]
+            : await documentsUnder(relativePath);
+          for (const documentPath of paths) {
+            try {
+              if (await reconcile(documentPath, 'watch')) unsettled = true;
+            } catch (error) {
+              if (error instanceof SkippedFile) continue;
+              logger.warn(`Could not sync ${documentPath}: ${messageOf(error)}`);
+            }
           }
+          // This run is the one left in the queue, and no path is waiting out
+          // its debounce: the burst is over.
+          if (unsettled && pending.size === 0 && queued === 1) await settle();
         });
       }, options.debounceMs ?? DEFAULT_DEBOUNCE_MS),
     );
   }
 
-  async function walkDirectory(absolutePath: string): Promise<void> {
-    const from = toRelative(contentDir, absolutePath);
-    if (from === undefined || watcher === undefined) return;
-    const found = await walk(contentDir, logger, from);
-    if (watcher === undefined) return;
-    for (const relativePath of found) handle(path.join(contentDir, relativePath));
+  /** Documents under a content-relative path: indexed ones that are gone first, then what is on disk. */
+  async function documentsUnder(from: string): Promise<string[]> {
+    const onDisk = await walk(contentDir, logger, from);
+    const present = new Set(onDisk);
+    const gone = store
+      .listPaths()
+      .filter(
+        (indexed) => (from === '' || indexed.startsWith(`${from}/`)) && !present.has(indexed),
+      );
+    return [...gone, ...onDisk];
   }
 
+  /**
+   * Watch the whole content tree with one recursive watch.
+   *
+   * One watch for the tree, rather than one per directory, is what lets a new
+   * directory's documents be reported at all on macOS: there every directory
+   * watch in the process shares one FSEvents stream, and adding a watch
+   * restarts that stream, deaf to anything that happens while it does.
+   */
   async function startWatching(): Promise<void> {
     if (watcher !== undefined) return;
+    await mkdir(contentDir, { recursive: true });
 
-    const started = watchPaths(contentDir, {
-      ignored: (candidate: string, stats?: Stats) => isIgnored(contentDir, candidate, stats),
-      ignoreInitial: true,
+    const started = watchTree(contentDir, {
+      recursive: true,
       persistent: true,
+      ignore: isIgnored,
     });
     watcher = started;
 
-    started.on('add', handle);
-    started.on('change', handle);
-    started.on('unlink', handle);
-    // chokidar can miss a file written into a directory it has only just seen
-    // appear, so a new directory is walked once its own watch is in place.
-    started.on('addDir', (absolutePath: string) => {
-      setTimeout(() => {
-        void walkDirectory(absolutePath);
-      }, options.debounceMs ?? DEFAULT_DEBOUNCE_MS);
+    started.on('change', (_type: string, filename: string | null) => {
+      if (filename === null) {
+        handle('');
+        return;
+      }
+      const relativePath = filename.replace(/\\/g, '/');
+      if (!path.basename(relativePath).startsWith(PROBE_PREFIX)) handle(relativePath);
     });
     started.on('error', (error: unknown) => {
       logger.warn(`Content watcher error: ${messageOf(error)}`);
     });
 
-    await new Promise<void>((resolve) => {
-      started.once('ready', () => resolve());
-    });
+    if (!(await hearsChanges(started))) {
+      logger.warn(
+        `The content watcher reported nothing for ${PROBE_DEADLINE_MS / 1000}s, so a file changed while the site runs may not show until it restarts.`,
+      );
+    }
+  }
+
+  /**
+   * Whether the watch reports changes yet, learned by making one: macOS
+   * starts reporting a moment after the watch returns, and a change made
+   * before then is never reported, so the boot scan waits for this.
+   */
+  async function hearsChanges(started: FSWatcher): Promise<boolean> {
+    const deadline = Date.now() + PROBE_DEADLINE_MS;
+    while (Date.now() < deadline) {
+      const probe = `${PROBE_PREFIX}${randomUUID()}`;
+      const heard = new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => {
+          started.off('change', listener);
+          resolve(false);
+        }, PROBE_INTERVAL_MS);
+        function listener(_type: string, filename: string | null): void {
+          if (filename === null || path.basename(filename) !== probe) return;
+          clearTimeout(timer);
+          started.off('change', listener);
+          resolve(true);
+        }
+        started.on('change', listener);
+      });
+      const probePath = path.join(contentDir, probe);
+      try {
+        await mkdir(probePath);
+      } catch (error) {
+        logger.warn(
+          `The content directory cannot be written, so whether the watcher reports changes was not checked: ${messageOf(error)}`,
+        );
+        return true;
+      }
+      const wasHeard = await heard;
+      await rmdir(probePath);
+      if (wasHeard) return true;
+    }
+    return false;
   }
 
   return {
@@ -410,23 +520,31 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
       return emitChange(events, store.now(), change);
     },
 
-    sync() {
-      return scan();
+    onSettled(listener) {
+      settledListeners.add(listener);
+      return () => {
+        settledListeners.delete(listener);
+      };
     },
 
+    sync() {
+      return enqueue(scanAndSettle);
+    },
+
+    // The watch goes first and the scan after it hears changes, so a file
+    // written at any moment of the boot is either found by the scan or
+    // reported by the watch.
     async start() {
-      const result = await scan();
       if (options.watch !== false) await startWatching();
-      return result;
+      return await enqueue(scanAndSettle);
     },
 
     async stop() {
       for (const timer of pending.values()) clearTimeout(timer);
       pending.clear();
 
-      const running = watcher;
+      watcher?.close();
       watcher = undefined;
-      if (running !== undefined) await running.close();
 
       // Anything already past its debounce is allowed to finish, so stopping
       // never leaves a half-applied write behind.
@@ -436,29 +554,20 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
 }
 
 /**
- * Whether chokidar should skip a path: anything inside a directory the walk
- * would not descend into, and any file that is not a document.
+ * Whether the watch should skip a content-relative path: anything inside a
+ * directory the walk would not descend into, and anything named as such a
+ * directory. The watch's own probe is let through.
  *
- * chokidar calls this without stats before it knows what a path is, so a name
- * that could be a directory is kept and filtered again when its event arrives.
+ * The watch is told only a name, never whether it is a file, so a file that
+ * is not a document is kept here and found to name no documents when its
+ * event is handled.
  */
-function isIgnored(contentDir: string, absolutePath: string, stats?: Stats): boolean {
-  const relativePath = toRelative(contentDir, absolutePath);
-  if (relativePath === undefined) return false;
-  if (relativePath === '') return false;
-
-  const segments = relativePath.split('/');
+function isIgnored(relativePath: string): boolean {
+  const segments = relativePath.replace(/\\/g, '/').split('/');
   const name = segments.at(-1) as string;
   if (segments.slice(0, -1).some((segment) => !isWalkableDirectory(segment))) return true;
-  if (stats?.isFile() === true) return !isDocumentPath(relativePath);
+  if (segments.length === 1 && name.startsWith(PROBE_PREFIX)) return false;
   return !isWalkableDirectory(name);
-}
-
-/** A watched absolute path as a content-relative one, or `undefined` if it is outside. */
-function toRelative(contentDir: string, absolutePath: string): string | undefined {
-  const relativePath = path.relative(contentDir, absolutePath).replace(/\\/g, '/');
-  if (relativePath.startsWith('../') || path.isAbsolute(relativePath)) return undefined;
-  return relativePath;
 }
 
 /** Thrown inside a reconcile that logged and gave up on one file. */

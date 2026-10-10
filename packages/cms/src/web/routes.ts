@@ -28,8 +28,10 @@ import {
   UPLOAD_ASSET_PREFIX,
 } from './assets.ts';
 import { COMMENT_NOTICE_PARAM, COMMENT_REPLY_PARAM } from '../comments/form.ts';
+import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments/routes.ts';
 import { commenterOf } from '../comments/viewer.ts';
+import type { CommentViewer } from '../comments/form.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
 import { mountPingbacks, pingbackEndpointFor } from '../webmention/pingback.ts';
@@ -48,8 +50,10 @@ import {
 } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import { feedComments, spokenIn } from './conversation.ts';
+import { COMMENT_PAGE_PREFIX } from './guids.ts';
 import {
   goneDocumentAt,
+  isGone,
   isListed,
   isServed,
   permalinkOfObjectId,
@@ -58,6 +62,8 @@ import {
 } from './documents.ts';
 import {
   commentsFeedPath,
+  REPLIES_ROOT,
+  repliesFeedPath,
   commentsFeedResponse,
   feedPathUnder,
   feedResponse,
@@ -123,7 +129,7 @@ import {
   SEARCH_PATH,
   SEARCH_QUERY_PARAM,
 } from './search.ts';
-import { findQueryRedirect, redirectLocation } from './redirects.ts';
+import { findPathRedirect, findQueryRedirect, redirectLocation } from './redirects.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { Taxonomy, TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
@@ -217,6 +223,13 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
 
   // The site-wide comments feed, for the same reason and at WordPress's URL.
   app.get(commentsFeedHref(undefined), (c) => comments(c, undefined));
+
+  // A native comment's own page (TASK-318), at a fixed path so a permalink
+  // cannot take it.
+  app.get(`${COMMENT_PAGE_PREFIX}:id/`, (c) => commentPage(c, c.req.param('id')));
+
+  // The feed of one item's direct replies (TASK-324), fixed for the same reason.
+  app.get(`${REPLIES_ROOT}:segment/`, (c) => repliesFeed(c, c.req.param('segment')));
 
   // The sitemap, its children and the robots file: fixed paths at the root of
   // the site, which is the only place a crawler looks, and routes for the same
@@ -429,7 +442,7 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     }
   }
 
-  const feedRequest = parseFeedPath(store, pathname, bases, authors);
+  const feedRequest = parseFeedPath(c, pathname, bases, authors);
   if (feedRequest !== undefined) {
     const { target, format } = feedRequest;
     const canonical = feedTargetHref(target, format, bases);
@@ -461,11 +474,11 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     // is the front page.
     if (document.path === pages.home?.path) return c.redirect('/', 301);
 
-    // WordPress answered `?feed=rss2` on a permalink with that post's comments
-    // feed, which is the only feed a post has here too. The other spellings
-    // name a format a comments feed does not come in, so they are not a feed
-    // request at all and the page is served.
-    if (document.type === 'post' && queryFeedFormat(c) === 'rss') {
+    // WordPress answered `?feed=rss2` on a permalink with that document's
+    // comments feed, which is the only feed a document has here too. The other
+    // spellings name a format a comments feed does not come in, so they are
+    // not a feed request at all and the page is served.
+    if (queryFeedFormat(c) === 'rss' && showsConversation(c, document)) {
       return c.redirect(commentsFeedHref(document), 301);
     }
     return negotiateDocument(c, document, selectFromAccept(c, DOCUMENT_REPRESENTATIONS));
@@ -534,11 +547,8 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
 
   // And a URL the site itself says has moved (TASK-128), after every live
   // lookup and after the slash that would lead to one, so a declared source
-  // never shadows a live document. One asked for without its trailing slash
-  // reaches the target in one hop.
-  const declared = c.var.redirects.current().paths;
-  const redirect =
-    declared.get(pathname) ?? (pathname.endsWith('/') ? undefined : declared.get(`${pathname}/`));
+  // never shadows a live document.
+  const redirect = findPathRedirect(c.var.redirects.current(), pathname);
   if (redirect !== undefined) {
     return c.redirect(redirectLocation(redirect, search), redirect.status);
   }
@@ -673,14 +683,15 @@ interface FeedRequest {
  *
  * The site's own canonical feeds are real routes and never reach here; what
  * does reach here is every taxonomy feed — their bases are a setting, so they
- * cannot be in the route table — every post's comments feed, and every alias.
+ * cannot be in the route table — every document's comments feed, and every alias.
  */
 function parseFeedPath(
-  store: ContentStore,
+  c: Context<GeekityEnv>,
   pathname: string,
   bases: TaxonomyBases,
   authors: AuthorLookup,
 ): FeedRequest | undefined {
+  const { store } = c.var;
   const split = splitFeedPath(pathname);
   if (split === undefined) return undefined;
   const { format, canonical } = split;
@@ -700,14 +711,18 @@ function parseFeedPath(
       : undefined;
   }
 
-  // Otherwise it may be a post's comments feed. Only a published post has one:
-  // a page never federates, so nothing in the fediverse can ever have replied
-  // to it, and a comments feed for it would be empty for ever.
+  // Otherwise it may be a document's comments feed, which it has exactly when
+  // its page shows its conversation.
   if (format !== 'rss') return undefined;
   const document = publicDocumentAt(store, split.root);
-  if (document?.type !== 'post') return undefined;
+  if (document === undefined || !showsConversation(c, document)) return undefined;
 
   return { target: { kind: 'comments', document }, format, canonical };
+}
+
+/** Whether this document's page shows its conversation, and so has a comments feed. */
+function showsConversation(c: Context<GeekityEnv>, document: Document): boolean {
+  return answerable(document, commentPolicyOf(c.var.renderer.site()), c.var.store.now());
 }
 
 /** Where the canonical URL of one feed is. */
@@ -738,7 +753,11 @@ function queryFeedFormat(c: Context<GeekityEnv>): FeedFormat | undefined {
  * URL and is read back here. An unknown value says nothing at all rather than
  * being printed, so the query cannot be used to put words on somebody's post.
  */
-function commentNotice(c: Context<GeekityEnv>, document: Document): Record<string, unknown> {
+function commentNotice(
+  c: Context<GeekityEnv>,
+  document: Document,
+  viewer: CommentViewer | undefined,
+): Record<string, unknown> {
   const notice = commentNoticeFor(c.req.query(COMMENT_NOTICE_PARAM));
 
   return {
@@ -750,6 +769,7 @@ function commentNotice(c: Context<GeekityEnv>, document: Document): Record<strin
       admin: c.var.admin,
       document,
       id: c.req.query(COMMENT_REPLY_PARAM),
+      thread: viewer === undefined ? undefined : c.var.conversation.thread(document),
     }),
     // And the thank-you after a contact form was sent, which travels the same
     // way for the same reason (TASK-56).
@@ -811,7 +831,7 @@ function negotiateDocument(
     representation === 'html'
       ? c.var.renderer.renderPage(document, {
           frontPage: href === '/',
-          extra: { ...commentNotice(c, document), ...(listed ? {} : { noindex: true }) },
+          extra: { ...commentNotice(c, document, viewer), ...(listed ? {} : { noindex: true }) },
           viewer,
         })
       : undefined;
@@ -917,9 +937,9 @@ function canonicalTarget(
   const { store, renderer } = c.var;
 
   // A feed first: `/feed`, `/feed/atom`, `/{base}/x/feed`, `/comments/feed`
-  // and a post's `{permalink}feed` all lead somewhere real, and `/feed/rss`
+  // and a document's `{permalink}feed` all lead somewhere real, and `/feed/rss`
   // leads to `/feed/` in the same one hop rather than to a second redirect.
-  const feedRequest = parseFeedPath(store, pathname, bases, authors);
+  const feedRequest = parseFeedPath(c, pathname, bases, authors);
   if (feedRequest !== undefined) {
     const { target } = feedRequest;
     if (
@@ -1539,12 +1559,11 @@ function feed(c: Context<GeekityEnv>, format: FeedFormat, subject: ListingSubjec
 }
 
 /**
- * A post's comments, or the whole site's, as RSS 2.0.
+ * A post's or page's comments, or the whole site's, as RSS 2.0.
  *
- * A post with no replies answers an empty feed rather than a 404: it exists,
- * and a reader that subscribed before anybody answered should keep polling.
- * Only a permalink that is no published post 404s, which is the ordinary
- * document lookup rather than anything this feed decides.
+ * A document with no replies answers an empty feed rather than a 404: it
+ * exists, and a reader that subscribed before anybody answered should keep
+ * polling. Which documents have a feed at all is {@link parseFeedPath}'s to say.
  */
 function comments(c: Context<GeekityEnv>, document: Document | undefined): Response {
   const { conversation, renderer, config } = c.var;
@@ -1558,7 +1577,12 @@ function comments(c: Context<GeekityEnv>, document: Document | undefined): Respo
   // answers the same one.
   const found: readonly FeedComment[] = feedComments(
     document === undefined ? conversation.latest(limit) : spokenIn(conversation.thread(document)),
-    { baseUrl: config.baseUrl, limit, cited: (url) => c.var.replyContexts.read(url) },
+    {
+      baseUrl: config.baseUrl,
+      limit,
+      cited: (url) => c.var.replyContexts.read(url),
+      post: document,
+    },
   );
 
   const source: CommentFeedSource = {
@@ -1574,6 +1598,56 @@ function comments(c: Context<GeekityEnv>, document: Document | undefined): Respo
   };
 
   return commentsFeedResponse(source, conditionalHeaders(c));
+}
+
+/**
+ * The feed of one item's direct replies (TASK-324): a post's or page's, or a
+ * reply's, so a reader can walk a thread one level at a time through
+ * `source:comments`. An item nobody answered has an empty feed; a segment
+ * naming nothing a reader can see 404s, as does one on a document not showing
+ * its conversation, by the rule `{permalink}feed/` follows.
+ */
+function repliesFeed(c: Context<GeekityEnv>, segment: string): Response {
+  const { conversation, renderer, config } = c.var;
+  const found = conversation.repliesTo(segment);
+  if (found === undefined || !showsConversation(c, found.post)) return notFound(c);
+
+  const site = renderer.site();
+  const cited = (url: string) => c.var.replyContexts.read(url);
+  const label = postLabel(found.post, cited);
+  const source: CommentFeedSource = {
+    site,
+    comments: feedComments(found.replies, {
+      baseUrl: config.baseUrl,
+      limit: feedSize(site),
+      cited,
+      post: found.post,
+    }),
+    title:
+      found.reply === null
+        ? `Replies to: ${label}`
+        : `Replies to ${found.reply.author.name} on ${label}`,
+    href: found.reply?.url ?? found.post.permalink,
+    feedHref: repliesFeedPath(segment),
+    baseUrl: config.baseUrl,
+  };
+  return commentsFeedResponse(source, conditionalHeaders(c));
+}
+
+/**
+ * One native comment on a page of its own (TASK-318), answering as its post
+ * would: 410 once the post is deleted, and 404 while it is not served or not
+ * showing its conversation. It is never listed anywhere, so it is noindex.
+ */
+function commentPage(c: Context<GeekityEnv>, id: string): Response {
+  const { conversation, renderer, store } = c.var;
+  const found = conversation.comment(id);
+  if (found === undefined) return notFound(c);
+
+  const now = store.now();
+  if (isGone(found.post, now)) return gone(c);
+  if (!isServed(found.post, now) || !showsConversation(c, found.post)) return notFound(c);
+  return c.html(renderer.renderComment(found), 200, { 'x-robots-tag': 'noindex' });
 }
 
 /**
@@ -1879,10 +1953,10 @@ export function feedHref(
 }
 
 /**
- * Where the site's comments feed lives, and where one post's does.
+ * Where the site's comments feed lives, and where one document's does.
  *
  * WordPress's URLs, so a site migrated from it keeps both: the whole site's
- * comments at `/comments/feed/`, and a post's under its own permalink. There
+ * comments at `/comments/feed/`, and a document's under its own permalink. There
  * is one format, RSS 2.0, because that is what a comments feed is read in.
  */
 export function commentsFeedHref(document: Document | undefined): string {

@@ -12,6 +12,25 @@
   `themes/default/partials/conversation.njk`; this is the Eleventy half of the
   same promise, and `test/eleventy.test.ts` compares them.
 #}
+{% macro thread(reply) %}
+{% if reply.withheld %}
+<li class="comment comment-placeholder" id="comment-{{ reply.id }}">
+  <p class="comment-withheld">This comment is no longer shown.</p>
+  <ol class="children">{% for child in reply.replies %}{{ thread(child) }}{% endfor %}</ol>
+</li>
+{% else %}
+<li class="comment comment-{{ reply.source }}" id="comment-{{ reply.id }}">
+  <a class="comment-author" href="{{ reply.author.url }}">{{ reply.author.name }}</a>
+  <a class="comment-permalink" href="{{ reply.url }}">
+    <time datetime="{{ reply.published }}">{{ reply.published }}</time>
+  </a>
+  <div class="comment-body">{{ reply.content | safe }}</div>
+  {% if reply.replies.length %}
+  <ol class="children">{% for child in reply.replies %}{{ thread(child) }}{% endfor %}</ol>
+  {% endif %}
+</li>
+{% endif %}
+{% endmacro %}
 {% set conversation = federation.inbox | conversation(activityStreams, geekitySlug) %}
 {% if conversation.counts.total %}
 <section class="conversation">
@@ -32,15 +51,7 @@
   </ul>
   {% endif %}
   <ol class="comment-list">
-    {% for reply in conversation.replies %}
-    <li class="comment comment-{{ reply.source }}" id="comment-{{ reply.id }}">
-      <a class="comment-author" href="{{ reply.author.url }}">{{ reply.author.name }}</a>
-      <a class="comment-permalink" href="{{ reply.url }}">
-        <time datetime="{{ reply.published }}">{{ reply.published }}</time>
-      </a>
-      <div class="comment-body">{{ reply.content | safe }}</div>
-    </li>
-    {% endfor %}
+    {% for reply in conversation.replies %}{{ thread(reply) }}{% endfor %}
   </ol>
 </section>
 {% endif %}

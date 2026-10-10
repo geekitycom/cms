@@ -133,3 +133,75 @@ describe('sourceEntry', () => {
     assert.equal(entry.author.url, null);
   });
 });
+
+describe('sourceEntry replies (TASK-320)', () => {
+  const entry = (inside: string): string => `
+    <article class="h-entry">
+      <a class="u-url" href="${SOURCE}">permalink</a>
+      <a class="u-in-reply-to" href="${TARGET}">re</a>
+      <div class="e-content"><p>The reply.</p></div>
+      ${inside}
+    </article>`;
+
+  it('reads the p-comment h-cites of the entry, each with its own replies nested under it', () => {
+    const html = entry(`
+      <div class="p-comment h-cite">
+        <a class="p-author h-card" href="https://carol.example/">Carol</a>
+        <a class="u-url" href="https://carol.example/1"><time class="dt-published" datetime="2026-09-21T10:00:00Z">then</time></a>
+        <div class="e-content"><p>Carol answers.</p></div>
+        <div class="p-comment h-cite">
+          <span class="p-author h-card"><span class="p-name">Dan</span></span>
+          <a class="u-url" href="https://dan.example/2">link</a>
+          <div class="e-content"><p>Dan answers Carol.</p></div>
+        </div>
+      </div>
+      <div class="p-comment h-cite"><div class="e-content">No page of its own.</div></div>`);
+
+    const replies = sourceEntry(html, SOURCE, TARGET).replies;
+    assert.equal(replies.length, 1, 'one with no url has no identity and is left out');
+    const carol = replies[0];
+    assert.equal(carol?.url, 'https://carol.example/1');
+    assert.deepEqual(carol?.author, { name: 'Carol', url: 'https://carol.example/', photo: null });
+    assert.equal(carol?.content.html, '<p>Carol answers.</p>');
+    assert.equal(carol?.published, '2026-09-21T10:00:00.000Z');
+    assert.equal(carol?.replies.length, 1);
+    assert.equal(carol?.replies[0]?.url, 'https://dan.example/2');
+    assert.equal(carol?.replies[0]?.author.name, 'Dan');
+    assert.equal(carol?.replies[0]?.content.text, 'Dan answers Carol.');
+  });
+
+  it('reads a child h-entry that answers the entry as one of its replies', () => {
+    const html = entry(`
+      <article class="h-entry">
+        <a class="u-url" href="https://erin.example/3">link</a>
+        <a class="u-in-reply-to" href="${SOURCE}">re</a>
+        <div class="e-content"><p>Erin answers.</p></div>
+      </article>
+      <article class="h-entry">
+        <a class="u-url" href="https://frank.example/4">link</a>
+        <div class="e-content"><p>Frank answers nothing here.</p></div>
+      </article>`);
+
+    const replies = sourceEntry(html, SOURCE, TARGET).replies;
+    assert.deepEqual(
+      replies.map((reply) => reply.url),
+      ['https://erin.example/3'],
+    );
+  });
+
+  it('has no replies when the entry carries none, and stops at a bounded depth', () => {
+    assert.deepEqual(sourceEntry(entry(''), SOURCE, TARGET).replies, []);
+
+    let nested = '';
+    for (let depth = 20; depth > 0; depth -= 1) {
+      nested = `<div class="p-comment h-cite"><a class="u-url" href="https://deep.example/${String(depth)}">x</a>${nested}</div>`;
+    }
+    let deepest = 0;
+    let level = sourceEntry(entry(nested), SOURCE, TARGET).replies;
+    while (level.length > 0) {
+      deepest += 1;
+      level = level[0]?.replies ?? [];
+    }
+    assert.ok(deepest > 1 && deepest < 20, `read ${String(deepest)} levels of twenty`);
+  });
+});

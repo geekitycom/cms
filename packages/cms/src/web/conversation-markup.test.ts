@@ -413,7 +413,7 @@ describe('the comments under a post (AC #2)', () => {
     );
     assert.match(
       said,
-      /<div class="comment-metadata">\s*<a class="u-url" href="[^"]*#comment-00000000-0000-4000-8000-000000000001"><time class="dt-published" datetime="2026-09-11T10:00:00\.000Z">11 September 2026<\/time><\/a>/,
+      /<div class="comment-metadata">\s*<a class="u-url" href="\/comment\/00000000-0000-4000-8000-000000000001\/"><time class="dt-published" datetime="2026-09-11T10:00:00\.000Z">11 September 2026<\/time><\/a>/,
       `the permalink does not wrap a dt-published time: ${said}`,
     );
     assert.match(said, /<div class="comment-content e-content">\s*<p>Approved words\.<\/p>/);

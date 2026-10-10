@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-09-29 23:14'
+updated_date: '2026-10-10 18:57'
 ---
 # Native comments
 
@@ -78,6 +78,7 @@ belong. `comments` is the list, oldest first.
 | `url`         | Where it lives when it lives somewhere else: a webmention's source page, `null` for one written here. |
 | `notify`      | **Not in this file** either: it sits beside the email in `data/comments/{slug}.json`. Whether the commenter asked to be told when somebody answers them, only ever `true` alongside an email; a comment with no entry there asked for nothing. |
 | `redacted`    | What was removed from it for privacy (TASK-135): any of `email`, `addressHash` and `author`. Absent when nothing was. An author whose email was removed does not count toward auto-approval. |
+| `via`         | The page whose entry carried it, for a webmention reply read out of another webmention's source (a salmention, TASK-320). Absent for every other comment. |
 
 The shape is deliberately wider than a form submission, because a webmention
 lands in the same file: it has a page of its own and no email, it may be a like
@@ -115,6 +116,32 @@ Markdown to keep — and a like or a repost carries neither, because a page's
 title is not something its author said about this post. `addressHash` is the
 hash of the address the webmention was *sent from*, hashed exactly as a
 commenter's is.
+
+### Where a received reply goes (TASK-319)
+
+A webmention's `inReplyTo` comes from its source's `u-in-reply-to`. Each URL
+the entry answers is offered to the conversation's `replyNamed`, and the first
+that names a reply on the target post is the parent:
+
+- a comment's own page, `/comment/{id}/`, its id percent-decoded;
+- the post's anchor for a comment, `{permalink}#comment-{id}`;
+- an earlier webmention, by the page it was sent from (its `url`);
+- a fediverse reply on the post, by its `url` or its `id`.
+
+A source that names none of them, names only the post, or names a comment on a
+different post stays at the top, `inReplyTo: null`, as before. One that does
+answer a reply on this post is stored as a `reply` even when it never names the
+post itself. Every stored comment on the post is a candidate whatever its
+status, because what a reply answers is a fact about it: whether a reader may
+see the comment it answers is decided when the thread is read. A source that is
+edited and sent again is matched by its `url` as always, and its `inReplyTo` is
+rewritten with the rest, so it moves to whatever it answers now. Its own `url`
+stays its sender's page.
+
+A webmention may be aimed at a comment's page rather than at the post. The
+endpoint and the pingback endpoint take `/comment/{id}/` as a page here when it
+names an approved native comment, and what is said to it lands on that
+comment's post, where its `u-in-reply-to` threads it under the comment.
 
 ### The email, in `data/`
 
@@ -307,9 +334,8 @@ a service charged per call should not be told what it already assumed.
 
 ## One door in
 
-Three things write a comment — the form under a post, the webmention endpoint
-(doc-7) and a moderator's reply on the admin screen — and all three go through
-one function: `intakeComment`, in `src/comments/records.ts`. It is handed a
+Two things write a comment — the form under a post and the webmention endpoint
+(doc-7) — and both go through one function: `intakeComment`, in `src/comments/records.ts`. It is handed a
 proposed comment and where it came from, and it owns everything between that
 and a comment existing: hashing the address, the auto-approval rule above, the
 `CommentChecker` call, the verdict-to-status rule below, the file and index
@@ -318,8 +344,7 @@ write inside the per-file lock, and the message to whoever was waiting to hear.
 What the callers keep is what is really theirs. `src/comments/submission.ts`
 parses the form and runs the three defences; `src/webmention/receive.ts`
 fetches the source, checks that it really links here and reads its
-microformats; `src/admin/comments.ts` knows who is signed in. None of the three
-builds a comment record, asks a checker, maps a verdict onto a status, or sends
+microformats. Neither builds a comment record, asks a checker, maps a verdict onto a status, or sends
 a notice.
 
 ### The verdict-to-status rule
@@ -343,10 +368,6 @@ the queue and must not quietly let a spam one out, which is why only a fresh
 an old one. The entry's id, its post and its source never move, because those
 are what make it the same comment; its kind, author, words and date are
 replaced by what the page says now.
-
-A moderator's reply is never offered to a checker at all, and is approved: the
-person writing it is the person who would have approved it, and a spam service
-has no say in what the owner of the site says.
 
 ### Who is told
 
@@ -470,12 +491,14 @@ Preferences are a switchboard keyed by event name, not a field per notice. `src/
 
 One function writes a comment and one module reads one back. `src/web/conversation.ts`
 is that module — doc-4 calls it the conversation on the page — and
-`createConversation({ admin, store, baseUrl })` is the whole of its interface:
+`createConversation({ admin, store, contentDir, baseUrl, users })` is the whole
+of its interface:
 
 - **`thread(document)`** — everything said about one post, threaded: the
-  approved comments merged with the fediverse replies by the same `inReplyTo`
-  rule, and the likes, boosts and mentions beside them. This is what the theme
-  is handed as `conversation`.
+  approved comments merged with the fediverse replies and the reply posts
+  answering them (TASK-300) by the same `inReplyTo` rule, and the likes, boosts
+  and mentions beside them. This is what the theme is handed as
+  `conversation`.
 - **`counts(documents)`** — how many answers each of a list of posts has, by
   permalink. The number `source:comments` puts beside an item of a post feed,
   counted off the two indexes rather than by threading each post, because it is
@@ -483,7 +506,28 @@ is that module — doc-4 calls it the conversation on the page — and
 - **`latest(limit)`** — the site's newest answers, each with the post it
   answers, for `/comments/feed/`. One about a post that has since been
   unpublished or trashed is left out: the feed would be showing a conversation
-  about nothing.
+  about nothing. Each also says who wrote the reply it answers, when it
+  answers one a reader can see, so the feed's item reads "Bob replying to Ada
+  on Hello" rather than "Bob on Hello".
+- **`comment(id)`** — one native comment as its own page reads it (TASK-318):
+  the comment with its replies threaded under it, the chain of what it answers
+  from the top-level comment down, and the post in whatever state it is in.
+  See "A comment's own page" below.
+- **`replyNamed(document, url)`** — the id of the reply on a post that a URL
+  names, which is how a received webmention finds its parent (TASK-319). See
+  "Where a received reply goes" above.
+- **`documentOf(url)`** — the document whose conversation a URL is in: the
+  post a comment's page or anchor is on, the post a webmention was sent to,
+  the post a fediverse reply answers however deep, or the document at the URL
+  (TASK-320).
+- **`upstreams(document)`** — every page in the conversation a document is in
+  that answers something off this site, with the replies a reader sees under
+  it: what a salmention is sent from. See "Salmention" below.
+- **`replyAt(url)`** — the reply a reader can see that a URL names anywhere on
+  the site, with the post it is on (TASK-300): a comment by its page or anchor,
+  a webmention by its sender's page, a fediverse reply by its note id. A reply
+  post answering one takes its reply context from here instead of fetching a
+  page. See "A signed-in reply is a reply post" below.
 
 A post's own comments feed is `thread` flattened by `spokenIn` — everything
 somebody actually said, at every depth, with the likes and boosts left out
@@ -506,7 +550,89 @@ fediverse ones and the webmentions — the entry shape is identical, so nothing 
 unless a theme wants to — and `partials/comment-form.njk` renders the form
 under an open post. Threading needs no JavaScript: a Reply link carries the
 comment's id to the form as `?reply_to=`, and the CMS checks it names an
-approved comment on that very post before putting a name on the form.
+approved comment on that very post before putting a name on the form. A
+visitor gets a Reply link on native comments only. Somebody signed in gets one
+on every reply in the thread, and the CMS checks the id names a reply a reader
+can see in that thread (TASK-300).
+
+## A reply under a hidden comment
+
+A comment can be pending, spam or deleted while a reply to it is approved: a
+moderator approves the reply first, files the parent as spam later, or deletes
+it, and a webmention answering a comment is threaded under it whatever that
+comment's status (TASK-319). Such a reply is shown everywhere a reader looks,
+under a placeholder for its parent (TASK-325, decision-46):
+
+- **The thread on the post** prints the placeholder where the hidden comment
+  would be: its `#comment-{id}` anchor, no author, no words, "This comment is
+  no longer shown.", and the visible replies nested under it. A pending or spam
+  comment still says what it answers, so its placeholder goes there; a deleted
+  one is known by nothing, so its placeholder goes under the post. A
+  placeholder sits where its first visible reply's date puts it.
+- **A hidden comment with no visible reply under it prints nothing**: no empty
+  placeholders.
+- **The comment page** of the reply shows the same placeholder in its chain
+  above, and the comment page of the comment the hidden one answers shows the
+  placeholder among its replies. Its link to the whole conversation lands on
+  the reply's anchor, which the thread now prints.
+- **The comments feeds** — the post's and `/comments/feed/` — list the reply
+  and never the placeholder. The site's feed titles it "{author} on {post}",
+  since the comment it answers names nobody.
+- **The counts** — the thread's title and `source:comments` on a post feed —
+  count the visible replies only.
+
+A reply under a fediverse note its author withdrew keeps the older rule: it
+moves up to whatever that note answered, since a withdrawn note is the
+author's own retraction rather than a moderator's.
+
+## A comment's own page
+
+A comment left through the form has a page of its own at `/comment/{id}/`, its
+id percent-encoded (an id imported from WordPress is a URL). It used to have
+only an anchor on the post, `{permalink}#comment-{id}`, and a site replying to
+it fetched that URL and got the whole post page, so whether its reply context
+quoted the comment or the post depended on its parser. The page is what the
+comment's `url` is now: the thread's permalink on the post, both comments
+feeds, and what a reply names. The anchor stays on the post, so an old link
+still scrolls to the comment.
+
+Only a native comment has one. A webmention's `url` is its sender's page and a
+fediverse reply's is the remote note, and they stay so: `/comment/{id}/` 404s
+for either.
+
+A webmention sent to a comment's page is accepted and lands on the comment's
+post, threaded under the comment (see "Where a received reply goes").
+
+The page holds the comment as its one `h-entry`: author `h-card`, content,
+`dt-published`, and `u-url` the page. Above it is the thread from the post
+down, as nested `u-in-reply-to h-cite`s, so the comment's `in-reply-to` is its
+parent (or the post, for a top-level comment), whose own is the next one up,
+down to the post: its title or wordless label, author, date and excerpt. Below
+are its replies, nested at every depth as the thread nests them, each a
+`p-comment h-cite` of the entry, then a link to the comment on the post.
+
+What it shows follows the thread's rules:
+
+- **The comment.** An approved native comment answers 200. Pending, spam, a
+  deleted comment, an unknown id and a webmention 404.
+- **The post.** The page answers as the post would: 410 once the post is
+  deleted, 404 while it is a draft, scheduled or otherwise not served, and 404
+  while the post does not show its conversation (a page that does not take
+  comments).
+- **What it answers.** An ancestor a reader may not see, pending, spam,
+  deleted or a withdrawn fediverse note, is shown as a placeholder saying the
+  comment is no longer shown, with no author or words. The chain goes on past
+  it through what that comment answered while the site still knows it; a
+  deleted comment is known by nothing, so the chain goes from it to the post.
+- **Its replies.** The same list the post's thread is built from, threaded
+  from the comment rather than the post, so a reply waiting for a moderator is
+  absent from both, and an approved reply to one is under the same
+  placeholder in both (see "A reply under a hidden comment").
+
+The page is `noindex`, in a meta tag and an `X-Robots-Tag` header, and on no
+list: not the sitemap, the post feeds or search. It is
+`layouts/comment.njk` in the theme, whose context the theme README documents
+under "A comment's own page".
 
 An Eleventy build of the same content directory shows the same thread:
 `docs/eleventy.config.example.js` reads the same files and its `conversation`
@@ -515,3 +641,233 @@ rather than through the data cascade on purpose — a namespaced
 `_data/comments/` directory would arrive as a global called `comments`, and
 `comments: true` in a post's front matter would shadow it on exactly the pages
 that need it.
+
+## A signed-in reply is a reply post
+
+A comment is something somebody else says on the site: a visitor through the
+form, a webmention or a fediverse reply. A post is something a signed-in user
+says. So when somebody signed in replies, from the thread or from the
+moderation screen, they write a reply post, one record, instead of a comment
+(TASK-300, TASK-326, decision-47). Owner comments written before this stay
+comments.
+
+Both doors save it through `writeReplyPost` (`comments/reply-post.ts`), which
+fills a blank editor form and hands it to `writeDocument`, the write path the
+editor and Micropub share. Its federation, its webmentions and its reply context follow
+from that save as for any other reply post. Its `in-reply-to` is what it
+answers:
+
+| It answers         | `in-reply-to`                          | What reaches them                                   |
+| ------------------ | -------------------------------------- | --------------------------------------------------- |
+| The post           | The post's absolute permalink          | Nothing more: it is on the post's thread.           |
+| A native comment   | The comment's page, `/comment/{id}/`   | The reply notice, when the commenter asked for one. |
+| A webmention reply | The page the webmention came from      | A webmention to that page.                          |
+| A fediverse reply  | The note's id                          | A `Create` with `inReplyTo` that id, to its author. |
+| A reply post       | The reply post's absolute permalink    | Nothing more: it is in the same thread.             |
+
+The signed-in form carries one more field, `listed`, labelled "Include in
+posts and feeds" and unchecked by default. Unchecked writes `visibility:
+unlisted`: the reply post has its own `noindex` page and is on no listing, post
+feed, outbox or sitemap, while its webmention and its fediverse delivery go out
+as for any unlisted post. Checked writes a public reply post. A visitor's form
+has no such field, and the endpoint never reads one from a visitor.
+
+### From the moderation screen
+
+Each card on `/admin/comments` has a Reply box. What it posts is a reply post
+written as the signed-in user, answering the card's comment exactly as the
+thread's form would: a native comment by its `/comment/{id}/` page, a
+webmention by the page it came from. The box has the same "Include in posts and
+feeds" checkbox, `listed`, unchecked by default, so a reply from the queue is
+unlisted unless it is ticked. The thread shows it inline under the comment, as
+it shows one written there. A comment still waiting for a moderator can be
+answered too: the reply post threads under its placeholder until it is
+approved.
+
+### The reply notice
+
+A commenter who asked to hear about replies is told about a reply post that
+answers their comment once, whichever door it came in by: the thread, the
+moderation screen, the editor, Micropub or a file. No door sends it. A
+subscriber to the index (`comments/reply-notices.ts`), beside federation and
+the webmention sender, sends it on the change that first makes the reply post
+served:
+
+- a scan, the boot scan included, is never news;
+- a change whose previous version was already served (an edit, a file the
+  watcher re-reads) is not news;
+- the reply post's `in-reply-to` must resolve through `heldAt` to a native
+  comment a reader can see;
+- the key `reply-notice:{comment id}:{reply post permalink}` in the admin
+  state must be unset, and is set before the message goes, so a reply post
+  trashed and restored, or drafted and published again, tells nobody twice.
+
+The ledger is derived state (decision-9): a deleted database forgets it, and
+the boot scan that rebuilds the index sends nothing, so nothing is told twice
+either way. The message itself is the comment reply notice of TASK-55, with
+the reply post's author's account as the writer, so nobody is told about their
+own reply.
+
+### How the thread finds them
+
+`gather` names every entry of a conversation by each URL a reply post could
+use for it: the post by its permalink and object id, every entry by its id and
+its `url`, and a native comment by its page and its `#comment-` anchor as well.
+It asks the content index for every served post whose `in-reply-to` is one of
+those URLs, unlisted ones included (`listRepliesTo`). Each reply post found
+joins the thread as an entry with `source: 'post'`, its permalink as `url`, its
+author's profile as the author and its rendered body as `content`. Its id is
+its object id, so a fediverse reply to it already names it.
+
+What was said under a reply post comes with it. A reply post's own
+conversation is gathered the same way, and its entries join the thread with
+their top-level answers set to the reply post. A webmention sent to the reply
+post's page or a note answering it therefore threads under it on the original
+post. The reply post's own page shows the same answers as its own thread. A
+reply post is visited once per reading, so two reply posts naming each other
+end.
+
+The site-wide feed finds a reply post from the other side. It reads the newest
+served reply posts and walks each one's `in-reply-to` up to the document at the
+top of its thread. That walk goes through a comment's page to its post, a
+webmention's sender page to the post it was sent to, and a note to the post it
+answers. A reply post shows there only when that thread shows it.
+
+### What a reader sees
+
+- **The thread.** The reply post is shown once, inline under what it
+  answers, with its author, its words and a `u-url` to its own page.
+- **The comments feeds.** A reply post is an item of its thread's post feed
+  and of `/comments/feed/`, linking to the reply post. It is there whether it
+  is public or unlisted: unlisted keeps a post out of listings and post feeds,
+  and the comments feed of a thread lists that thread.
+- **The counts.** It counts as a reply in the thread's title. `source:comments`
+  on a post feed counts the reply posts that answer the post, one of its
+  comments or a note that answers it directly.
+- **Its reply context.** A reply post whose `in-reply-to` names something
+  this site holds takes its context from the index through `heldAt`, read when
+  the page is drawn: a reply quotes the comment rather than the post page the
+  comment is on, and a served post or page gives its title, words, author and
+  date. The service never fetches a target `heldAt` answers, so a top-level
+  reply never fetches the site's own page (TASK-326). That holds for a reply
+  post written in the editor or over Micropub as well. A reply post citing a
+  comment, a webmention or a fediverse reply says "In reply to a comment by"
+  its writer; citing a post, a page or another reply post, it keeps the post
+  wording.
+- **Its author link.** The thread links a reply post's author to their author
+  page with no `rel="nofollow ugc"`: they are a user of the site. Visitor,
+  webmention and fediverse author links keep it.
+
+### Its limits
+
+- A visitor answering a fediverse reply leaves a native comment, which goes
+  nowhere over ActivityPub. A visitor is not a user and has no actor.
+
+## Salmention
+
+With a plain webmention, a reply to a reply reaches the page it answers and
+never the post at the top of the thread. [Salmention](https://indieweb.org/Salmention)
+closes that gap when every site in the chain cooperates: the page that gained a
+reply sends its webmention again upstream, and the upstream site fetches it
+again and reads the replies nested inside its h-entry. This site does both
+halves (TASK-320, decision-49). It cannot make another site do either.
+
+### Receiving
+
+A webmention from a source the site already holds fetches the source again
+and rewrites the entry it made, matched by its `url` as always ("The files"
+above). It also reads the replies nested in the source's chosen h-entry
+(`sourceEntry` in `webmention/microformats.ts`):
+
+- each `p-comment` item of the entry, an `h-cite` or an `h-entry`;
+- each child `h-entry` or `h-cite` whose `u-in-reply-to` names the entry's
+  `u-url`;
+- and the same again inside each of those, at most 8 deep and 200 in all.
+
+A nested reply with no `u-url` is passed over: its page is its identity.
+
+Each nested reply becomes a comment record of its own on the same post, put
+through `intakeComment` exactly as a webmention is, so the checker, the
+verdict-to-status rule and the moderators' notice are the ones a webmention
+gets. It is `source: webmention`, `kind: reply`, `url` its own page,
+`inReplyTo` the source's entry (or the nested reply it sits under), and `via`
+the source's URL. `via` is what lets the source take it away: when the source
+is read again, every record whose `via` is that source and that the source no
+longer carries is deleted, and when the source is deleted (it has gone, it
+stopped linking here, or the checker discarded it) everything it carried goes
+with it. A moderator's decision on a nested reply stands when the source sends
+again, as it does for a webmention.
+
+A nested reply is not copied when the site already has it some other way:
+
+- its URL is on this site (a reply post, a comment's page, a post);
+- the conversation already names it (`replyNamed`), and not as one this
+  source brought: a webmention held from its own page, a fediverse note, a
+  reply post, or a reply another source brought.
+
+What is nested under one of those still threads under it. A nested reply
+whose own page later sends a webmention is the same record from then on, with
+`via` cleared, so the source dropping it no longer deletes it.
+
+### Sending
+
+Two kinds of page here answer a page elsewhere, and each one tells it when
+the replies under it change:
+
+| The page                | What it answers                          |
+| ----------------------- | ---------------------------------------- |
+| A reply post            | Its `in-reply-to`, when that is off-site |
+| A comment's own page    | The webmention reply it is under         |
+
+A comment page answering anything else (the post, another comment, a reply
+post, a fediverse note) has nobody to tell: what it answers is on this site,
+which already knows, or speaks ActivityPub rather than webmention. The silo
+original a cited copy is of (TASK-197) is told too.
+
+`ConversationReader.upstreams(document)` lists those pages for the whole
+thread a document is in, each with the replies a reader sees under it. The
+webmention service asks it whenever the conversation may have changed: on
+every comment the index writes or forgets and every activity it logs
+(`AdminStore.onConversationWrite`, which a rebuild of either index does not
+fire), and on every content change but a scan. Writes that come together, such
+as a source carrying several nested replies, are looked at once.
+
+A page sends only when what a reader sees under it changed: the service keeps
+a fingerprint of those replies (their ids, URLs, authors, words and dates) in
+the admin state under `salmention:{page} {target}`, and a page that has never
+sent counts as one with no replies. So a reply post's first webmention, on
+publishing, stays the ordinary one, and a reply under it that is still waiting
+for a moderator sends nothing until it is approved. The ledger is derived
+state (decision-9): a deleted database costs at most one extra webmention per
+page.
+
+The reply post's page prints its replies inside its `h-entry`, as `p-comment
+h-cite`s, so a receiver finds them there; its likes, boosts and mentions stay
+below the entry. A comment's own page already prints its replies that way
+(TASK-318).
+
+### What stops a loop
+
+Two sites that both do this, each answering the other, stop on their own. A
+page here sends only when its replies changed, and reading the other site's
+page back adds nothing, because what it nests of this site's is this site's
+own and is not copied. The site tells it once more when its answer appears,
+and then it has nothing new to say.
+
+For a page that never settles, such as one that prints something different
+each time it is read, one page tells one target at most 5 times an hour
+(`SALMENTION_LIMIT`). A change past that is not sent; the next change after
+the hour is.
+
+### Its limits
+
+- A page is told only that the replies under it changed. Salmention also asks
+  a site to tell every page its post sent a webmention to; this site tells the
+  page it answers and nothing else.
+- A comment's own page sends nothing when the comment itself first appears or
+  is removed, only when its replies change: a native comment answering a
+  webmention reply does not send that page a webmention of its own.
+- A change past the hourly limit waits for the next change to be sent.
+- A failed send is not tried again until the replies change again.
+- Nested replies are read off the source's chosen entry only, not off other
+  entries on its page.

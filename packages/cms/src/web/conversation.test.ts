@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -14,7 +15,7 @@ import { authorizeQuote } from '../federation/quotes.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { createConversation } from './conversation.ts';
-import type { ConversationReader } from './conversation.ts';
+import type { ConversationReader, Interaction, ThreadReply } from './conversation.ts';
 import { avatarHref } from '../avatars/avatars.ts';
 
 const temporaryDirs: string[] = [];
@@ -43,14 +44,20 @@ async function reader(): Promise<{
 }> {
   const dataDir = await temporaryDir('geekity-conversation-');
   const contentDir = await temporaryDir('geekity-conversation-content-');
-  const admin = openAdminStore({ dataDir });
-  const posts = openContentStore({ dataDir });
+  const admin = openAdminStore({ dataDir, baseUrl: BASE_URL });
+  const posts = openContentStore({ dataDir, baseUrl: BASE_URL });
   stores.push(admin, posts);
   return {
     admin,
     posts,
     contentDir,
-    conversation: createConversation({ admin, store: posts, contentDir, baseUrl: BASE_URL }),
+    conversation: createConversation({
+      admin,
+      store: posts,
+      contentDir,
+      baseUrl: BASE_URL,
+      users: () => [],
+    }),
   };
 }
 
@@ -58,6 +65,11 @@ const BASE_URL = 'https://blog.example';
 
 /** The post every test here is about, and the id the fediverse knows it by. */
 const POST = 'https://blog.example/2026/09/hello/';
+
+function visible(reply: ThreadReply | undefined): Interaction | undefined {
+  assert.ok(reply === undefined || !('withheld' in reply), 'a visible reply');
+  return reply;
+}
 
 function hello(): Document {
   return parseDocument(
@@ -168,7 +180,7 @@ describe('a post’s conversation', () => {
 
     assert.equal(conversation.counts.replies, 2);
     assert.equal(conversation.counts.total, 2);
-    const [first, second] = conversation.replies;
+    const [first, second] = conversation.replies.map(visible);
 
     assert.equal(first?.id, 'https://remote.example/notes/1');
     assert.equal(first?.source, 'activitypub');
@@ -187,6 +199,7 @@ describe('a post’s conversation', () => {
       url: 'https://remote.example/users/ada',
       avatar: null,
       actorId: 'https://remote.example/users/ada',
+      feed: null,
     });
 
     // Newest last: the conversation reads down the page.
@@ -210,12 +223,13 @@ describe('a post’s conversation', () => {
 
     const conversation = read.thread(hello());
 
-    assert.deepEqual(conversation.replies[0]?.author, {
+    assert.deepEqual(visible(conversation.replies[0])?.author, {
       name: 'Ada Lovelace',
       handle: '@ada@remote.example',
       url: 'https://remote.example/@ada',
       avatar: avatarHref('https://remote.example/avatars/ada.png'),
       actorId: 'https://remote.example/users/ada',
+      feed: null,
     });
   });
 
@@ -363,7 +377,7 @@ describe('a post’s conversation', () => {
     const conversation = read.thread(hello());
 
     assert.equal(
-      conversation.replies[0]?.content,
+      visible(conversation.replies[0])?.content,
       '<p>Nice post <a href="https://elsewhere.example/" rel="nofollow noopener noreferrer">link</a></p>',
     );
   });
@@ -688,13 +702,13 @@ describe('a quote of a post (TASK-171)', () => {
     assert.equal(conversation.counts.total, 1);
   });
 
-  it('is counted with the post’s answers', async () => {
+  it('is not counted among the post’s direct replies, which a quote is not', async () => {
     const { admin, contentDir, conversation: read } = await reader();
     await approve(contentDir);
     logQuote(admin);
     logReply(admin, { inReplyTo: POST, id: 'https://remote.example/notes/1' });
 
-    assert.equal(read.counts([hello(), second()]).get('/2026/09/hello/'), 2);
+    assert.equal(read.counts([hello(), second()]).get('/2026/09/hello/'), 1);
     assert.equal(read.counts([hello(), second()]).get('/2026/09/second/'), 0);
   });
 
@@ -761,7 +775,7 @@ describe('the site’s latest answers', () => {
       ['/2026/09/hello/', '/2026/09/hello/', '/2026/09/second/'],
     );
     assert.equal(latest[1]?.source, 'comment');
-    assert.equal(latest[1]?.url, '/2026/09/hello/#comment-comment-1');
+    assert.equal(latest[1]?.url, '/comment/comment-1/');
   });
 
   it('forgets an answer whose post is not there to read', async () => {
@@ -931,10 +945,13 @@ Words.
 
     // Every entry a reader may see, and only those: the moderated one that was
     // never approved is in neither.
-    const guids = [...feed.matchAll(/<guid isPermaLink="false">([^<]+)<\/guid>/g)].map(
+    const guids = [...feed.matchAll(/<guid isPermaLink="(?:true|false)">([^<]+)<\/guid>/g)].map(
       (match) => match[1],
     );
-    assert.deepEqual(guids.sort(), [APPROVED, MENTIONED, NOTE].sort());
+    assert.deepEqual(
+      guids.sort(),
+      [`https://blog.example/comment/${APPROVED}/`, MENTIONED, NOTE].sort(),
+    );
 
     assert.ok(page.includes(`id="comment-${APPROVED}"`), 'the page shows the approved comment');
     assert.ok(page.includes(`id="comment-${NOTE}"`), 'the page shows the fediverse reply');
@@ -946,8 +963,8 @@ Words.
     // that sent it, wherever it is read.
     assert.ok(feed.includes(`<link>${SOURCE_PAGE}</link>`), 'the feed points at the source page');
     assert.ok(
-      feed.includes('<link>https://blog.example/2026/09/hello-world/#comment-' + APPROVED),
-      'the feed points at the comment on the page',
+      feed.includes(`<link>https://blog.example/comment/${APPROVED}/</link>`),
+      'the feed points at the comment’s own page',
     );
     assert.ok(feed.includes('<link>https://remote.example/@ada/1</link>'), 'and at the note');
   });
@@ -1146,5 +1163,117 @@ describe('the RSVPs to an event (TASK-200 AC #2, AC #3)', () => {
     assert.deepEqual(read.thread(hello()).rsvps, []);
     assert.equal(read.thread(hello()).counts.total, 0);
     assert.deepEqual(read.thread(camp()).rsvps, []);
+  });
+});
+
+describe('reply posts in a conversation (TASK-300)', () => {
+  function replyPost(name: string, inReplyTo: string, date = '2026-09-03T09:00:00Z'): Document {
+    return parseDocument(
+      [
+        '---',
+        "title: ''",
+        `date: '${date}'`,
+        `permalink: /2026/09/${name}/`,
+        'visibility: unlisted',
+        `in-reply-to: ${inReplyTo}`,
+        '---',
+        '',
+        `${name} says so.`,
+        '',
+      ].join('\n'),
+      { path: `posts/2026-09-03-${name}.md` },
+    );
+  }
+
+  it('threads a reply post under what it names and counts it', async () => {
+    const { admin, posts, conversation: read } = await reader();
+    posts.upsert(hello());
+    logReply(admin, { inReplyTo: POST, id: 'https://remote.example/notes/1' });
+    posts.upsert(replyPost('answer', 'https://remote.example/notes/1'));
+
+    const [note] = read.thread(hello()).replies;
+    const answer = visible(note)?.replies[0];
+    assert.equal(visible(answer)?.source, 'post');
+    assert.equal(visible(answer)?.url, '/2026/09/answer/');
+    assert.equal(read.thread(hello()).counts.replies, 2);
+    // Only the note answers the post directly; the reply post answers the note.
+    assert.equal(read.counts([hello()]).get('/2026/09/hello/'), 1);
+  });
+
+  it('ends at two reply posts that answer each other', async () => {
+    const { posts, conversation: read } = await reader();
+    const two = replyPost('two', 'https://blog.example/2026/09/three/');
+    posts.upsert(two);
+    posts.upsert(replyPost('three', 'https://blog.example/2026/09/two/'));
+
+    const thread = read.thread(two);
+    assert.equal(thread.counts.replies, 1);
+    assert.equal(visible(thread.replies[0])?.url, '/2026/09/three/');
+  });
+
+  it('puts an unlisted reply post among the site’s latest, naming the thread’s post', async () => {
+    const { posts, conversation: read } = await reader();
+    posts.upsert(hello());
+    posts.upsert(replyPost('one', POST));
+    posts.upsert(replyPost('two', 'https://blog.example/2026/09/one/', '2026-09-04T09:00:00Z'));
+
+    const latest = read.latest(10);
+    assert.deepEqual(
+      latest.map((entry) => [entry.url, entry.post.permalink]),
+      [
+        ['/2026/09/two/', '/2026/09/hello/'],
+        ['/2026/09/one/', '/2026/09/hello/'],
+      ],
+    );
+  });
+});
+
+describe('what a /replies/ key names (TASK-327)', () => {
+  function keyOf(guid: string): string {
+    return createHash('sha256').update(guid).digest('hex').slice(0, 16);
+  }
+
+  /** The same store, refusing every read that walks a whole source. */
+  function refusingScans<T extends object>(target: T, scans: readonly string[]): T {
+    return new Proxy(target, {
+      get(object, property, receiver) {
+        if (typeof property === 'string' && scans.includes(property)) {
+          return () => assert.fail(`${property} walked the site`);
+        }
+        return Reflect.get(object, property, receiver) as unknown;
+      },
+    });
+  }
+
+  it('finds a post, a comment and a note by key without walking any source', async () => {
+    const { admin, posts, contentDir } = await reader();
+    posts.upsert(hello());
+    indexComment(admin, hello(), {
+      id: 'comment-1',
+      name: 'Ada',
+      html: '<p>Hi.</p>',
+      submitted: '2026-09-02T12:00:00.000Z',
+    });
+    logReply(admin, { inReplyTo: POST, id: 'https://remote.example/notes/1' });
+    const read = createConversation({
+      admin: refusingScans(admin, ['listComments', 'listReplies']),
+      store: refusingScans(posts, ['listAll', 'listReplyPosts', 'listPosts']),
+      contentDir,
+      baseUrl: BASE_URL,
+      users: () => [],
+    });
+
+    assert.equal(read.repliesTo('0123456789abcdef'), undefined, 'an unknown key');
+    assert.equal(read.repliesTo(keyOf(POST))?.reply, null, 'the post itself');
+    assert.equal(
+      read.repliesTo(keyOf(`${BASE_URL}/comment/comment-1/`))?.reply?.id,
+      'comment-1',
+      'a native comment',
+    );
+    assert.equal(
+      read.repliesTo(keyOf('https://remote.example/notes/1'))?.reply?.id,
+      'https://remote.example/notes/1',
+      'a fediverse note',
+    );
   });
 });

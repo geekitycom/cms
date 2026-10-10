@@ -9,8 +9,9 @@
   `p-summary`. A post with no title opens on its words, set larger. What a
   reply answers, and what a like, repost or bookmark cites, opens a post with
   no title and follows the header of one with a title, before its words.
-  Then the Published line, the tags, a rule and the bio. The neighbouring posts,
-  the conversation and the comment form follow the entry.
+  Then the Published line, the tags, a rule and the bio. The site's own posts
+  that link to it, the neighbouring posts, the conversation and the comment
+  form follow the entry.
 
   The Published line is inside the `e-content` on purpose. It is what the
   source design does, and it is what makes a reader who copies the words out
@@ -118,7 +119,17 @@
     {% include "partials/bio.njk" %}
   </footer>
   {% endif %}
+  {#- A reply post's replies are inside its entry as `p-comment h-cite`s, so
+      the page it answers reads them there when it is sent a salmention
+      (TASK-320). The likes and boosts stay below: their links are not the
+      entry's. -#}
+  {% if conversation and postType == "reply" %}
+  {% set conversationPart = "replies" %}
+  {% include "partials/conversation.njk" %}
+  {% endif %}
 </article>
+
+{% include "partials/backlinks.njk" %}
 
 {# The post either side of this one, as two cards. Each is on the context only
    when there is one, so the ends of the archive draw one card and a site of a
@@ -138,6 +149,7 @@
 
 {# Only a post that has been replied to, liked or boosted has one of these. #}
 {% if conversation %}
+{% set conversationPart = "reactions" if postType == "reply" else "all" %}
 {% include "partials/conversation.njk" %}
 {% endif %}
 

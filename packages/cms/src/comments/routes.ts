@@ -6,6 +6,7 @@ import { clientAddress, createLoginThrottle } from '../admin/throttle.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
+import { documentSite } from '../admin/documents.ts';
 import { isServed } from '../web/documents.ts';
 import { PRIVATE_CACHE_CONTROL } from '../web/negotiate.ts';
 import {
@@ -19,14 +20,16 @@ import {
 } from './form.ts';
 import type { CommentFormContext, CommentViewer } from './form.ts';
 import { commentPolicyOf, commentsOpen } from './policy.ts';
-import { commentAnchor } from '../web/conversation.ts';
+import { commentAnchor, visibleReply } from '../web/conversation.ts';
+import type { Conversation } from '../web/conversation.ts';
 import {
   COMMENT_FIELDS,
   COMMENT_RATE_LIMIT,
   COMMENT_RATE_WINDOW_SECONDS,
   submitComment,
 } from './submission.ts';
-import type { CommentForm, CommentThrottle } from './submission.ts';
+import type { CommentForm, CommentRefusal, CommentThrottle } from './submission.ts';
+import { submitReplyPost } from './reply-post.ts';
 import { signedInCommenter } from './viewer.ts';
 
 /**
@@ -100,6 +103,23 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       });
     }
 
+    if (viewer !== undefined) {
+      const answered = await submitReplyPost({
+        site: documentSite(c, viewer.username),
+        document,
+        conversation: c.var.conversation.thread(document),
+        form,
+        throttle: throttle(config),
+        address: clientAddress(c, config),
+      });
+      if (answered.kind === 'saved') {
+        const id = c.var.conversation.replyNamed(document, answered.saved.permalink);
+        const anchor = id === undefined ? 'comments' : commentAnchor(id);
+        return c.redirect(`${document.permalink}?${COMMENT_NOTICE_PARAM}=posted#${anchor}`, 303);
+      }
+      return refusedPage(c, document, viewer, form, answered.refusal, now);
+    }
+
     const outcome = await submitComment({
       records: { admin, contentDir: config.contentDir, dataDir: config.dataDir },
       document,
@@ -108,10 +128,6 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       dataDir: config.dataDir,
       baseUrl: config.baseUrl,
       checker: config.commentChecker,
-      // Who the site knows is writing, when it knows (TASK-103). Set, it is
-      // the whole of the comment's attribution and the reason it is approved
-      // on arrival.
-      author: viewer,
       // Who hears about what lands is the intake's to decide, and neither
       // message is awaited: the reader is redirected now and they go out
       // behind them (TASK-55).
@@ -144,26 +160,37 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       // successful post — which is the point of both defences.
       return c.redirect(`${document.permalink}?${COMMENT_NOTICE_PARAM}=pending#respond`, 303);
     }
+    return refusedPage(c, document, viewer, form, refusal, now);
+  });
+}
 
-    if (refusal.kind === 'rate-limited') {
-      c.header('Retry-After', String(refusal.retryAfter));
-      return page(c, document, 429, viewer, {
-        ...drawnFor(refilledCommentForm(document, valuesOf(form), {}, now), viewer),
-        error: 'That is a lot of comments in a short time. Try again in a few minutes.',
-      });
-    }
-
-    const message =
-      refusal.kind === 'too-quick'
-        ? 'That was posted faster than anybody types. Try again.'
-        : refusal.kind === 'stale'
-          ? 'That form had been open a long time. Here it is again — the words are still there.'
-          : undefined;
-
-    return page(c, document, 400, viewer, {
-      ...drawnFor(refilledCommentForm(document, valuesOf(form), problemsOf(refusal), now), viewer),
-      ...(message === undefined ? {} : { error: message }),
+/** The post's page again, with the form refilled and what went wrong on it. */
+function refusedPage(
+  c: Context<GeekityEnv>,
+  document: Document,
+  viewer: CommentViewer | undefined,
+  form: CommentForm,
+  refusal: CommentRefusal,
+  now: Date,
+): Response {
+  if (refusal.kind === 'rate-limited') {
+    c.header('Retry-After', String(refusal.retryAfter));
+    return page(c, document, 429, viewer, {
+      ...drawnFor(refilledCommentForm(document, valuesOf(form), {}, now), viewer),
+      error: 'That is a lot of comments in a short time. Try again in a few minutes.',
     });
+  }
+
+  const message =
+    refusal.kind === 'too-quick'
+      ? 'That was posted faster than anybody types. Try again.'
+      : refusal.kind === 'stale'
+        ? 'That form had been open a long time. Here it is again — the words are still there.'
+        : undefined;
+
+  return page(c, document, 400, viewer, {
+    ...drawnFor(refilledCommentForm(document, valuesOf(form), problemsOf(refusal), now), viewer),
+    ...(message === undefined ? {} : { error: message }),
   });
 }
 
@@ -220,14 +247,25 @@ export function commentNoticeFor(query: string | undefined): string | undefined 
  *
  * Checked against the index rather than trusted, so a made-up id — or one from
  * another page — cannot put a stranger's name on somebody's reply form, and so
- * a comment waiting for a moderator cannot be discovered by guessing.
+ * a comment waiting for a moderator cannot be discovered by guessing. With the
+ * post's `thread`, which is handed over for somebody signed in (TASK-300), any
+ * entry a reader can see is answerable: a webmention, a fediverse reply or a
+ * reply post as well as a comment.
  */
 export function commentReplyTarget(options: {
   admin: AdminStore;
   document: Document;
   id: string | undefined;
+  thread?: Conversation | undefined;
 }): Record<string, unknown> {
   if (options.id === undefined || options.id === '') return {};
+
+  if (options.thread !== undefined) {
+    const reply = visibleReply(options.thread.replies, options.id);
+    return reply === undefined
+      ? {}
+      : { commentReplyTo: reply.id, commentReplyingTo: reply.author.name };
+  }
 
   const parent = options.admin.getComment(options.id);
   if (parent === undefined || parent.slug !== options.document.slug) return {};
@@ -271,6 +309,7 @@ function formOf(body: Record<string, unknown>): CommentForm {
     loaded: text(body[COMMENT_FIELDS.loaded]),
     notify: text(body[COMMENT_FIELDS.notify]),
     csrf: text(body[COMMENT_FIELDS.csrf]),
+    listed: text(body[COMMENT_FIELDS.listed]),
   };
 }
 

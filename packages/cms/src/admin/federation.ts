@@ -18,7 +18,8 @@ import {
 } from '../webmention/syndication.ts';
 import { accountOf, ACTOR_PATH, federationOrigin } from '../federation/paths.ts';
 import { authorHref, profileContext, userForAuthor } from '../web/authors.ts';
-import { postObjectId, publicDocumentAt } from '../web/documents.ts';
+import { publicDocumentAt } from '../web/documents.ts';
+import { postObjectId } from '../web/guids.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { documentEditorPath, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
@@ -106,7 +107,9 @@ export function mountFederationScreen(
     const admin = c.var.admin;
     const baseUrl = c.var.config.baseUrl;
     const cited: CitedPageReader = (url) => c.var.replyContexts.read(url);
-    const post = localPosts(c.var.store, baseUrl, cited);
+    const post = localPosts(c.var.store, baseUrl, cited, (url) =>
+      c.var.conversation.documentOf(url),
+    );
     const users = listUsers(c.var.config.dataDir);
     const targets = syndicationTargetsReader(c.var.config.contentDir);
     const copies = syndicationCopies(c.var.config.contentDir);
@@ -388,6 +391,7 @@ export function deliveryRows(
         slug: document.slug,
         title: postLabel(document, context.cited),
         editUrl: documentEditorPath(POST_KIND, document),
+        inThread: false,
       },
       author: context.author(document),
       slug: document.slug,
@@ -510,7 +514,22 @@ export interface InboxRow {
   readonly remoteUrl: string | null;
   /** The site's own post it was about, when it was about one. */
   readonly post: LocalPost | null;
+  /**
+   * How a reply came to be in the log. `null` for a like or a boost, which
+   * only ever arrive delivered.
+   */
+  readonly via: ReplyVia | null;
 }
+
+/**
+ * Whether the inbox was sent a reply or the site read it (TASK-321).
+ *
+ * A fetched reply was read from the `replies` collection of the note it
+ * answers, and the backfill keeps only items whose `inReplyTo` names that
+ * note, so `from` is where it was read from without the log recording more.
+ */
+export type ReplyVia =
+  { readonly kind: 'delivered' } | { readonly kind: 'fetched'; readonly from: string | null };
 
 /** One of the site's posts, as an inbound activity or a delivery names it. */
 export interface LocalPost {
@@ -519,6 +538,8 @@ export interface LocalPost {
   readonly title: string;
   /** Where its editor is. */
   readonly editUrl: string;
+  /** Whether the id named something in the post's thread rather than the post. */
+  readonly inThread: boolean;
 }
 
 /** What {@link inboxRows} needs to turn ids into names. */
@@ -566,10 +587,16 @@ export function inboxRows(
       // boost is only ever the activity that announced it.
       remoteUrl: object === null ? activity.activityId : (object.url ?? object.id),
       post: context.post(object === null ? activity.objectId : object.inReplyTo),
+      via: viaOf(activity),
     });
   }
 
   return rows;
+}
+
+function viaOf(activity: InboxActivity): ReplyVia | null {
+  if (activity.activityType !== 'Create') return null;
+  return activity.fetched ? { kind: 'fetched', from: activity.inReplyTo } : { kind: 'delivered' };
 }
 
 /**
@@ -613,6 +640,7 @@ export function localPosts(
   store: ContentStore,
   baseUrl: string,
   cited: CitedPageReader,
+  threadOf: (url: string) => Document | undefined = () => undefined,
 ): (objectId: string | null) => LocalPost | null {
   const site = baseUrl === '' ? 'http://localhost' : baseUrl;
   const origin = new URL(site).origin;
@@ -626,17 +654,20 @@ export function localPosts(
     } catch {
       return null;
     }
-    if (url.origin !== origin) return null;
 
-    const document =
-      store.getByStoredObjectId(objectId) ??
-      publicDocumentAt(store, decodeURIComponent(url.pathname));
+    const own =
+      url.origin === origin
+        ? (store.getByStoredObjectId(objectId) ??
+          publicDocumentAt(store, decodeURIComponent(url.pathname)))
+        : undefined;
+    const document = own ?? threadOf(objectId);
     if (document === undefined || document.type !== 'post') return null;
 
     return {
       slug: document.slug,
       title: postLabel(document, cited),
       editUrl: documentEditorPath(POST_KIND, document),
+      inThread: own === undefined,
     };
   };
 }

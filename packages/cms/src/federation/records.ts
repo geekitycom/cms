@@ -242,6 +242,12 @@ export interface InboxLine {
    * is a record of what this server was told, and each line says whose it was.
    */
   readonly recipient: string | null;
+  /**
+   * Whether the site read it off a remote server rather than was told it
+   * (TASK-321): a reply found in another reply's `replies` collection, which
+   * nobody delivered. Absent from the file for everything delivered.
+   */
+  readonly fetched: boolean;
   /** The activity as compacted JSON-LD, exactly as it arrived. */
   readonly json: string;
 }
@@ -278,17 +284,22 @@ export function readInboxLog(contentDir: string): InboxLine[] {
 export async function appendInboxActivity(
   records: FederationRecords,
   json: string,
-  options: { recipient?: string | null | undefined; receivedAt?: string | undefined } = {},
+  options: {
+    recipient?: string | null | undefined;
+    receivedAt?: string | undefined;
+    fetched?: boolean | undefined;
+  } = {},
 ): Promise<InboxActivity | undefined> {
   const { admin, contentDir } = records;
   const receivedAt = options.receivedAt ?? new Date().toISOString();
-  const line: InboxLine = { receivedAt, recipient: options.recipient ?? null, json };
+  const fetched = options.fetched ?? false;
+  const line: InboxLine = { receivedAt, recipient: options.recipient ?? null, fetched, json };
   const row = inboxRowFrom(line);
   if (row === undefined) return undefined;
 
   const file = inboxFile(contentDir, receivedAt);
 
-  return await withFileLock(file, () => {
+  const logged = await withFileLock(file, () => {
     const held = readInboxFile(file);
     const at = row.activityId === null ? -1 : held.findIndex(sameActivity(row.activityId));
     const next = at === -1 ? [...held, line] : held.with(at, line);
@@ -296,6 +307,47 @@ export async function appendInboxActivity(
     writeFileAtomicallySync(file, inboxJsonl(next));
     return admin.logInboxActivity(row);
   });
+
+  // A note the site read before anybody delivered it is held once: the
+  // delivery is what it was told, so the copy it fetched goes.
+  if (!fetched && logged.activityType === 'Create' && logged.objectId !== null) {
+    const note = logged.objectId;
+    await removeInboxActivities(
+      records,
+      admin
+        .listActivitiesAbout([note])
+        .filter((activity) => activity.fetched && activity.objectId === note),
+    );
+  }
+  return logged;
+}
+
+/**
+ * Take logged activities out of the log and the index: what a fetched reply
+ * the remote server no longer lists comes to (TASK-321). Each line goes from
+ * the month file its row says it arrived in, under that file's lock.
+ */
+export async function removeInboxActivities(
+  records: FederationRecords,
+  activities: readonly InboxActivity[],
+): Promise<void> {
+  const byFile = new Map<string, InboxActivity[]>();
+  for (const activity of activities) {
+    const file = inboxFile(records.contentDir, activity.receivedAt);
+    byFile.set(file, [...(byFile.get(file) ?? []), activity]);
+  }
+
+  for (const [file, gone] of byFile) {
+    await withFileLock(file, () => {
+      const ids = new Set(gone.map((activity) => activity.activityId).filter((id) => id !== null));
+      const kept = readInboxFile(file).filter((line) => {
+        const id = activityIdOf(line);
+        return id === null || !ids.has(id);
+      });
+      writeFileAtomicallySync(file, inboxJsonl(kept));
+      for (const activity of gone) records.admin.deleteInboxActivity(activity.id);
+    });
+  }
 }
 
 /**
@@ -328,6 +380,7 @@ export function inboxRowFrom(line: InboxLine): NewInboxActivity | undefined {
     objectId: uriOf(parsed['object']),
     recipient: line.recipient,
     receivedAt: line.receivedAt,
+    fetched: line.fetched,
     json: line.json,
   };
 }
@@ -405,6 +458,7 @@ export function migrateFederationToFiles(records: FederationRecords): void {
       const line: InboxLine = {
         receivedAt: activity.receivedAt,
         recipient: activity.recipient,
+        fetched: activity.fetched,
         json: activity.json,
       };
       const month = inboxFile(contentDir, activity.receivedAt);
@@ -522,13 +576,14 @@ function readInboxFile(file: string): InboxLine[] {
       throw new Error(`${file}: line ${String(index + 1)} is not an activity.`);
     }
 
-    // `receivedAt` and `recipient` are the log's own words and everything else
-    // is the activity, so taking them off leaves exactly what the peer
-    // delivered.
-    const { receivedAt, recipient, ...activity } = parsed;
+    // `receivedAt`, `recipient` and `fetched` are the log's own words and
+    // everything else is the activity, so taking them off leaves exactly what
+    // the peer delivered.
+    const { receivedAt, recipient, fetched, ...activity } = parsed;
     lines.push({
       receivedAt: typeof receivedAt === 'string' ? receivedAt : '',
       recipient: typeof recipient === 'string' && recipient !== '' ? recipient : null,
+      fetched: fetched === true,
       json: JSON.stringify(activity),
     });
   }
@@ -547,6 +602,7 @@ function inboxJsonl(lines: readonly InboxLine[]): string {
           // nobody, so a log written before decision-14 and one written after
           // it read the same.
           ...(line.recipient === null ? {} : { recipient: line.recipient }),
+          ...(line.fetched ? { fetched: true } : {}),
           ...JSON.parse(line.json),
         })}\n`,
     )
@@ -555,10 +611,12 @@ function inboxJsonl(lines: readonly InboxLine[]): string {
 
 /** Whether a line carries this activity id, for the redelivery that replaces it. */
 function sameActivity(activityId: string): (line: InboxLine) => boolean {
-  return (line) => {
-    const parsed: unknown = JSON.parse(line.json);
-    return isRecord(parsed) && uriOf(parsed['id']) === activityId;
-  };
+  return (line) => activityIdOf(line) === activityId;
+}
+
+function activityIdOf(line: InboxLine): string | null {
+  const parsed: unknown = JSON.parse(line.json);
+  return isRecord(parsed) ? uriOf(parsed['id']) : null;
 }
 
 /**

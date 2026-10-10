@@ -8,10 +8,14 @@ import {
   COMMENT_STATUSES,
   REDACTED_FIELDS,
   rsvpField,
+  viaField,
 } from '../admin/store.ts';
 import type { AdminStore, CommentRecord, CommentStatus, PostComment } from '../admin/store.ts';
+import type { Document } from '../content/document.ts';
+import { slugForPermalink } from '../content/parser.ts';
 import { rsvpValue } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
+import type { ContentStore } from '../content/store.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { hashClientAddress } from '../forms/protection.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
@@ -51,14 +55,14 @@ import type { CommentChecker, CommentSubmission, CommentVerdict } from './submis
  * and the same thread. So every entry says its `source` and its `kind`, and
  * nothing here assumes a person filled in a form.
  *
- * Three things write comments — the form under a post, the webmention endpoint
- * and a moderator's reply on the admin screen — and they all go through
+ * Two things write comments — the form under a post and the webmention
+ * endpoint — and both go through
  * {@link intakeComment}, which is the whole of what happens between a proposed
  * comment and a comment existing: the address hashed, the approved-author rule,
  * the {@link CommentChecker}, one verdict-to-status rule, the write, and the
  * message to whoever was waiting to hear. What the callers keep is what is
- * really theirs — parsing a form and its cheap defences, fetching and verifying
- * a source, and knowing who is signed in.
+ * really theirs — parsing a form and its cheap defences, and fetching and
+ * verifying a source.
  */
 
 /** Where the comment files live, relative to the content directory. */
@@ -72,11 +76,9 @@ export function commentsDirectory(contentDir: string): string {
 /**
  * The absolute path of one post's comment file.
  *
- * Named by the post's slug, which is what a post keeps for its whole life: the
- * editor gives an existing document the slug it already has, so the file that
- * holds a post's comments never has to move. A slug carrying anything a
- * filename should not is refused rather than sanitised, because two slugs that
- * sanitised to one name would silently share a thread.
+ * Named by the post's slug. A slug carrying anything a filename should not is
+ * refused rather than sanitised, because two slugs that sanitised to one name
+ * would silently share a thread.
  */
 export function commentsFile(contentDir: string, slug: string): string {
   return path.join(commentsDirectory(contentDir), `${fileNameOf(slug)}.json`);
@@ -320,6 +322,7 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     notify: value['notify'] === true,
     ...redactedIn(value['redacted']),
     ...rsvpField(rsvpValue(value['rsvp'])),
+    ...viaField(optionalText(value['via'])),
   };
 }
 
@@ -384,9 +387,7 @@ export type CommentOrigin =
   /** Somebody filled in the form under a post (doc-6). */
   | 'form'
   /** Another page said it links here, and it was verified (doc-7). */
-  | 'webmention'
-  /** A moderator answered from the admin screen. */
-  | 'moderator';
+  | 'webmention';
 
 /**
  * A comment as its writer proposes it: everything but the three things the
@@ -467,14 +468,11 @@ export type CommentIntakeOutcome =
  * whose name and email together have been approved before is approved again —
  * WordPress's rule, and the whole of the auto-approval decision. A webmention
  * waits, because a page linking here is as much a stranger's words as a form
- * submission is. A moderator's reply is approved, because the person writing it
- * is the person who would have approved it.
+ * submission is.
  *
- * **What the checker says.** Everything but a moderator's own words goes
- * through {@link CommentChecker}; a checker that is down or throws is no
- * opinion, so a service having a bad afternoon never stops a site taking
- * comments. A moderator's reply is not offered to it at all: a spam service has
- * no say in what the owner of the site says.
+ * **What the checker says.** Everything goes through {@link CommentChecker}; a
+ * checker that is down or throws is no opinion, so a service having a bad
+ * afternoon never stops a site taking comments.
  *
  * **The one verdict-to-status rule.**
  *
@@ -511,7 +509,7 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
   const held =
     origin === 'webmention' ? heldWebmention(records, comment.slug, comment.url) : undefined;
 
-  const verdict = origin === 'moderator' ? 'unknown' : await ask(options, proposed);
+  const verdict = await ask(options, proposed);
 
   if (verdict === 'discard') {
     if (held === undefined) return { kind: 'discarded', removed: false };
@@ -523,14 +521,17 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
 
   if (held !== undefined) {
     // Its id, its post and its source never move: that is what makes it the
-    // same comment. What the page now says about itself replaces what it said.
+    // same comment. What the page now says about itself replaces what it said,
+    // what it answers included.
     const moved = await updateComment(records, held.id, {
       kind: comment.kind,
       status,
       author: comment.author,
       content: comment.content,
       submitted: comment.submitted,
+      inReplyTo: comment.inReplyTo,
       rsvp: comment.rsvp ?? null,
+      via: comment.via ?? null,
     });
     return moved === undefined
       ? { kind: 'gone' }
@@ -568,7 +569,6 @@ function siteStatusFor(
   records: CommentRecords,
   comment: ProposedComment,
 ): CommentStatus {
-  if (origin === 'moderator') return 'approved';
   if (origin === 'webmention') return 'pending';
   return records.admin.hasApprovedAuthor(comment.author.name, comment.author.email)
     ? 'approved'
@@ -661,9 +661,13 @@ function messageOf(error: unknown): string {
 export async function updateComment(
   records: CommentRecords,
   id: string,
-  change: Partial<Pick<CommentRecord, 'status' | 'content' | 'author' | 'kind' | 'submitted'>> & {
+  change: Partial<
+    Pick<CommentRecord, 'status' | 'content' | 'author' | 'kind' | 'submitted' | 'inReplyTo'>
+  > & {
     /** What the comment now says it is going to, or `null` when it no longer says. */
     readonly rsvp?: RsvpValue | null;
+    /** The page now carrying it, or `null` once it is sent on its own (TASK-320). */
+    readonly via?: string | null;
   },
 ): Promise<PostComment | undefined> {
   const known = records.admin.getComment(id);
@@ -676,8 +680,12 @@ export async function updateComment(
     const at = held.findIndex((entry) => entry.id === id);
     if (at === -1) return undefined;
 
-    const { rsvp, ...fields } = change;
-    const { rsvp: was, ...merged }: PostComment = {
+    const { rsvp, via, ...fields } = change;
+    const {
+      rsvp: was,
+      via: carried,
+      ...merged
+    }: PostComment = {
       ...known,
       ...(held[at] as CommentRecord),
       ...fields,
@@ -685,6 +693,7 @@ export async function updateComment(
     const moved: PostComment = {
       ...merged,
       ...rsvpField(rsvp === undefined ? was : (rsvp ?? undefined)),
+      ...viaField(via === undefined ? carried : via),
     };
     writePost(records, known.slug, known.permalink, held.with(at, moved));
     records.admin.putComment(moved);
@@ -749,6 +758,67 @@ export async function rewriteComments(
     for (const comment of changed) records.admin.putComment(comment);
     return changed.map((comment) => comment.id);
   });
+}
+
+export async function followMovedComments(
+  records: CommentRecords,
+  store: ContentStore,
+  document: Document,
+): Promise<void> {
+  for (const permalink of document.redirectFrom ?? []) {
+    const from = slugForPermalink(permalink);
+    if (from !== undefined && from !== document.slug) await follow(records, store, from);
+  }
+}
+
+export async function followAllMovedComments(
+  records: CommentRecords,
+  store: ContentStore,
+): Promise<void> {
+  for (const slug of commentSlugs(records.contentDir)) await follow(records, store, slug);
+}
+
+async function follow(records: CommentRecords, store: ContentStore, from: string): Promise<void> {
+  const to = permalinkOwner(store, readPost(records, from).post)?.slug;
+  if (to === undefined || to === from) return;
+
+  const [first = '', second = ''] = [
+    commentsFile(records.contentDir, from),
+    commentsFile(records.contentDir, to),
+  ].sort();
+  await withFileLock(first, () =>
+    withFileLock(second, () => {
+      followFile(records, store, from);
+    }),
+  );
+}
+
+function followFile(records: CommentRecords, store: ContentStore, from: string): void {
+  const left = readPost(records, from);
+  const owner = permalinkOwner(store, left.post);
+  if (owner === undefined || owner.slug === from) return;
+
+  const held = readPost(records, owner.slug).comments;
+  const known = new Set(held.map((comment) => comment.id));
+  const merged = [...held, ...left.comments.filter((comment) => !known.has(comment.id))];
+  writePost(records, owner.slug, owner.permalink, merged);
+  rmSync(commentEmailsFile(records.dataDir, from), { force: true });
+  rmSync(commentsFile(records.contentDir, from), { force: true });
+
+  const moved = new Set(left.comments.map((comment) => comment.id));
+  for (const comment of merged) {
+    if (!moved.has(comment.id)) continue;
+    records.admin.putComment({ ...comment, slug: owner.slug, permalink: owner.permalink });
+  }
+}
+
+/**
+ * The document a URL of this site belongs to: the one at it, else the one
+ * whose `redirect_from` names it.
+ */
+export function permalinkOwner(store: ContentStore, permalink: string): Document | undefined {
+  if (permalink === '') return undefined;
+  return store.getByPermalink(permalink) ?? store.getByFormerPermalink(permalink);
 }
 
 /** The slug of every post that has a comment file, in a stable order. */
@@ -901,6 +971,7 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     notify: comment.notify,
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
     ...rsvpField(comment.rsvp),
+    ...viaField(comment.via),
   };
 }
 
@@ -922,6 +993,7 @@ function publishedEntryOf(comment: CommentRecord): PublishedComment {
     url: comment.url,
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
     ...rsvpField(comment.rsvp),
+    ...viaField(comment.via),
   };
 }
 

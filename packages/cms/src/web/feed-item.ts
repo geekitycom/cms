@@ -12,8 +12,8 @@ import { replyTarget, showsTitle } from '../content/post-type.ts';
 import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { absoluteHtmlUrls } from './absolute-urls.ts';
-import { activityStreamsId } from './documents.ts';
-import { feedLanguage, feedPathUnder } from './feed-source.ts';
+import { feedGuid } from './guids.ts';
+import { feedLanguage, feedPathUnder, repliesFeedPath, repliesKey } from './feed-source.ts';
 import { escapeXml } from './feed-xml.ts';
 import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
@@ -126,8 +126,8 @@ export interface FeedItem {
   /**
    * The URL the post answers, when it is a reply: its `in-reply-to`, and only
    * when that is a URL a reader can follow ({@link replyTarget}). Atom writes
-   * it as `thr:in-reply-to` and JSON Feed in its `_geekity` extension; RSS 2.0
-   * has nowhere to put it.
+   * it as `thr:in-reply-to`, JSON Feed in its `_geekity` extension and RSS as
+   * the source namespace's `source:inReplyTo` (TASK-300).
    */
   inReplyTo?: string | undefined;
   /**
@@ -175,7 +175,8 @@ export interface FeedItem {
  * naming it and that page's copied picture, and revision 11 named a page
  * nothing was read from by its host and a cited image as one, and revision 12
  * kept the title of a titled post with no words,
- * and revision 13 escaped the RSS description as HTML text —
+ * and revision 13 escaped the RSS description as HTML text, and revision 14
+ * pointed RSS `source:comments` at the direct replies' feed (TASK-324) —
  * would leave the validator where it was, and a reader polling with
  * `If-None-Match` would be handed a 304 that hides the new bytes.
  *
@@ -184,16 +185,16 @@ export interface FeedItem {
  * a comment is not a {@link FeedItem}, and their validator has a label of its
  * own in `commentsFeedResponse`.
  */
-export const FEED_ITEM_REVISION = 13;
+export const FEED_ITEM_REVISION = 14;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
   /** The page a person reads them on. */
   page: string;
-  /** The feed a reader polls for them. */
+  /** The feed of the whole thread, which a reader polls for them. */
   feed: string;
-  /** How many there are. */
-  count: number;
+  /** How many replies answer the item directly, and the feed of only those (TASK-324). */
+  replies: { count: number; feed: string };
 }
 
 /** What an item needs to know about the feed it is part of. */
@@ -204,7 +205,7 @@ export interface FeedItemContext {
   users: readonly User[];
   /** The site's public origin, for absolute ids and links. */
   baseUrl: string;
-  /** How many replies each document has, by permalink. See {@link FeedItem.comments}. */
+  /** How many replies answer each document directly, by permalink. See {@link FeedItem.comments}. */
   commentCounts?: ReadonlyMap<string, number> | undefined;
   /** The media library, for a photo's alt text the post does not give. Empty when absent. */
   altTexts?: AltTextLibrary | undefined;
@@ -230,7 +231,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   const photos = photosOf(document.extra);
 
   const item: FeedItem = {
-    id: feedGuidOf(document) ?? activityStreamsId(document, baseUrl) ?? link,
+    id: feedGuid(document, baseUrl),
     link,
     terms: [...document.categories, ...document.tags],
     summary: feedExcerpt(document),
@@ -274,7 +275,10 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     item.comments = {
       page: `${link}#comments`,
       feed: absoluteUrl(feedPathUnder(document.permalink, 'rss'), baseUrl),
-      count: counts.get(document.permalink) ?? 0,
+      replies: {
+        count: counts.get(document.permalink) ?? 0,
+        feed: absoluteUrl(repliesFeedPath(repliesKey(item.id)), baseUrl),
+      },
     };
   }
 
@@ -332,11 +336,6 @@ function photosHtml(photos: readonly Photo[], library: AltTextLibrary, baseUrl: 
         ` alt="${escapeXml(photoAlt(photo, library) ?? '')}"></figure>`,
     )
     .join('');
-}
-
-function feedGuidOf(document: Document): string | undefined {
-  const guid = document.extra['guid'];
-  return typeof guid === 'string' && URL.canParse(guid.trim()) ? guid.trim() : undefined;
 }
 
 function ownImage(document: Document): string | undefined {

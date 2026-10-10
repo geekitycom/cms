@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -7,6 +8,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import { isListed, isServed } from '../web/documents.ts';
+import { parseRedirects } from '../web/redirects.ts';
+import type { RedirectTable } from '../web/redirects.ts';
 import type { Document } from './document.ts';
 import { DuplicatePermalinkError, openContentStore } from './store.ts';
 import type { ContentStore } from './store.ts';
@@ -169,14 +172,14 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7, 8]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7, 8]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
@@ -205,7 +208,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       // The hash of a file with no categories has not changed, so a sync would
       // leave a surviving row alone and never learn its categories. The row
       // has to go; the file it was derived from is still on disk.
@@ -234,7 +237,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       assert.equal(upgraded.counts().total, 0, 'the stale HTML survived the upgrade');
     } finally {
       upgraded.close();
@@ -253,7 +256,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       assert.equal(upgraded.counts().total, 0, 'a row without tag keys survived the upgrade');
       upgraded.upsert(post({ tags: ['OpenSource'] }));
       assert.equal(upgraded.countByTag('opensource'), 1);
@@ -285,13 +288,14 @@ describe('a reply target', () => {
 
     const legacy = new DatabaseSync(path.join(dir, 'geekity.db'));
     legacy.exec(
-      'DELETE FROM migrations WHERE version = 5; ALTER TABLE documents DROP COLUMN in_reply_to',
+      'DROP INDEX documents_in_reply_to; DELETE FROM migrations WHERE version IN (5, 9); ' +
+        'ALTER TABLE documents DROP COLUMN in_reply_to',
     );
     legacy.close();
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       assert.equal(upgraded.counts().total, 0, 'a row with in-reply-to in extra survived');
     } finally {
       upgraded.close();
@@ -340,7 +344,7 @@ describe('former permalinks (TASK-127)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       assert.equal(upgraded.counts().total, 0, 'a row with redirect_from in extra survived');
     } finally {
       upgraded.close();
@@ -1328,7 +1332,7 @@ describe('the permalink of a trashed document (TASK-195)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       upgraded.upsert(again);
       assert.equal(upgraded.getByPermalink('/2026/09/hello-world/')?.title, 'Again');
       assert.throws(() => {
@@ -1558,7 +1562,7 @@ describe('the search index migration (TASK-22 AC #2)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       assert.equal(upgraded.counts().total, 0, 'a row survived with no words indexed for it');
 
       upgraded.upsert(post());
@@ -1680,5 +1684,396 @@ describe('setReadOnly', () => {
     index.setReadOnly(false);
     index.upsert(post());
     assert.equal(index.listAll().length, 1);
+  });
+});
+
+describe('the /replies/ keys (TASK-327)', () => {
+  const BASE = 'https://blog.example';
+
+  function keyOf(guid: string): string {
+    return createHash('sha256').update(guid).digest('hex').slice(0, 16);
+  }
+
+  function paths(index: ContentStore, guid: string): string[] {
+    return index.listByRepliesKey(keyOf(guid)).map((found) => found.path);
+  }
+
+  it('finds a post and a page by the key of their feed guid', async () => {
+    const dir = await dataDir();
+    const index = openContentStore({ dataDir: dir, baseUrl: BASE });
+    openStores.push(index);
+    index.upsert(post());
+    index.upsert(
+      post({ type: 'page', path: 'pages/about.md', slug: 'about', permalink: '/about/' }),
+    );
+
+    assert.deepEqual(paths(index, `${BASE}/2026/09/hello-world/`), [
+      'posts/2026-09-02-hello-world.md',
+    ]);
+    assert.deepEqual(paths(index, `${BASE}/about/`), ['pages/about.md']);
+    assert.deepEqual(index.listByRepliesKey('0123456789abcdef'), []);
+  });
+
+  it('follows an edited guid, a move and a removal, and only served documents', async () => {
+    const index = openContentStore({ dataDir: await dataDir(), baseUrl: BASE });
+    openStores.push(index);
+    index.upsert(post({ extra: { guid: 'https://old.example/?p=1' } }));
+    assert.equal(paths(index, 'https://old.example/?p=1').length, 1);
+    assert.deepEqual(paths(index, `${BASE}/2026/09/hello-world/`), []);
+
+    index.upsert(post({ activitypub: { id: 'https://old.example/?p=2' } }));
+    assert.deepEqual(paths(index, 'https://old.example/?p=1'), [], 'the old guid names nothing');
+    assert.equal(paths(index, 'https://old.example/?p=2').length, 1, 'a stored object id');
+
+    index.upsert(post({ permalink: '/moved/' }));
+    assert.deepEqual(paths(index, 'https://old.example/?p=2'), []);
+    assert.equal(paths(index, `${BASE}/moved/`).length, 1);
+
+    index.upsert(post({ permalink: '/moved/', draft: true }));
+    assert.deepEqual(paths(index, `${BASE}/moved/`), [], 'a draft is not served');
+
+    index.upsert(post({ permalink: '/moved/' }));
+    index.remove('posts/2026-09-02-hello-world.md');
+    assert.deepEqual(paths(index, `${BASE}/moved/`), []);
+  });
+
+  it('names a reply post by its object id as well as its guid', async () => {
+    const index = openContentStore({ dataDir: await dataDir(), baseUrl: BASE });
+    openStores.push(index);
+    index.upsert(
+      post({
+        inReplyTo: 'https://elsewhere.example/a',
+        extra: { guid: 'https://old.example/?p=3' },
+      }),
+    );
+
+    assert.equal(paths(index, 'https://old.example/?p=3').length, 1);
+    assert.equal(paths(index, `${BASE}/2026/09/hello-world/`).length, 1);
+  });
+
+  it('keeps its keys across a restart, and works them out again for a new base', async () => {
+    const dir = await dataDir();
+    const first = openContentStore({ dataDir: dir, baseUrl: BASE });
+    first.upsert(post());
+    first.close();
+
+    const again = openContentStore({ dataDir: dir, baseUrl: BASE });
+    assert.equal(paths(again, `${BASE}/2026/09/hello-world/`).length, 1, 'after a restart');
+    again.close();
+
+    const moved = openContentStore({ dataDir: dir, baseUrl: 'https://new.example' });
+    openStores.push(moved);
+    assert.deepEqual(paths(moved, `${BASE}/2026/09/hello-world/`), []);
+    assert.equal(paths(moved, 'https://new.example/2026/09/hello-world/').length, 1);
+  });
+
+  it('works out the keys of rows written before the index, or without a base', async () => {
+    const dir = await dataDir();
+    const unkeyed = openContentStore({ dataDir: dir });
+    unkeyed.upsert(post());
+    assert.deepEqual(paths(unkeyed, `${BASE}/2026/09/hello-world/`), []);
+    unkeyed.close();
+
+    const keyed = openContentStore({ dataDir: dir, baseUrl: BASE });
+    openStores.push(keyed);
+    assert.equal(paths(keyed, `${BASE}/2026/09/hello-world/`).length, 1);
+  });
+});
+
+describe('backlinks (TASK-322)', () => {
+  const BASE = 'https://blog.example';
+
+  async function linked(): Promise<ContentStore> {
+    const index = openContentStore({ dataDir: await dataDir(), baseUrl: BASE });
+    openStores.push(index);
+    return index;
+  }
+
+  function target(overrides: Partial<Document> = {}): Document {
+    return post({
+      path: 'posts/target.md',
+      slug: 'target',
+      permalink: '/2026/09/target/',
+      ...overrides,
+    });
+  }
+
+  function linking(name: string, href: string, overrides: Partial<Document> = {}): Document {
+    return post({
+      path: `posts/${name}.md`,
+      slug: name,
+      permalink: `/2026/09/${name}/`,
+      html: `<p>See <a href="${href}">this</a>.</p>`,
+      ...overrides,
+    });
+  }
+
+  function backlinks(index: ContentStore, document: Document = target()): string[] {
+    return index.listBacklinks(document).map((found) => found.path);
+  }
+
+  it('lists the posts and pages linking to a document, newest first, however the link is spelled', async () => {
+    const index = await linked();
+    index.upsert(target());
+    index.upsert(linking('absolute', `${BASE}/2026/09/target/`, { date: '2026-09-03T09:00:00Z' }));
+    index.upsert(linking('relative', '/2026/09/target', { date: '2026-09-05T09:00:00Z' }));
+    index.upsert(linking('fragment', '../target/#comments', { date: '2026-09-04T09:00:00Z' }));
+    index.upsert(linking('query', '/2026/09/target/?ref=1', { date: '2026-09-06T09:00:00Z' }));
+    index.upsert(
+      linking('a-page', '/2026/09/target/', {
+        type: 'page',
+        path: 'pages/a-page.md',
+        permalink: '/a-page/',
+        date: '2026-09-01T09:00:00Z',
+      }),
+    );
+    index.upsert(linking('elsewhere', 'https://elsewhere.example/2026/09/target/'));
+    index.upsert(linking('another', '/2026/09/another/'));
+
+    assert.deepEqual(backlinks(index), [
+      'posts/query.md',
+      'posts/relative.md',
+      'posts/fragment.md',
+      'posts/absolute.md',
+      'pages/a-page.md',
+    ]);
+  });
+
+  it('counts a link to a former permalink, and not a post linking to itself', async () => {
+    const index = await linked();
+    const moved = target({
+      redirectFrom: ['/2026/09/old-name/'],
+      html: '<p><a href="/2026/09/target/">me</a> <a href="/2026/09/old-name/">me too</a></p>',
+    });
+    index.upsert(moved);
+    index.upsert(linking('to-the-old-name', '/2026/09/old-name'));
+
+    assert.deepEqual(backlinks(index, moved), ['posts/to-the-old-name.md']);
+  });
+
+  it('leaves a former permalink to the live document that holds it now', async () => {
+    const index = await linked();
+    const moved = target({ redirectFrom: ['/2026/09/taken/'] });
+    index.upsert(moved);
+    index.upsert(linking('taken', '/somewhere/', { permalink: '/2026/09/taken/' }));
+    index.upsert(linking('to-taken', '/2026/09/taken/'));
+
+    assert.deepEqual(backlinks(index, moved), []);
+  });
+
+  it('counts a link written before the document it names existed', async () => {
+    const index = await linked();
+    index.upsert(linking('early', '/2026/09/target/'));
+    index.upsert(target());
+    assert.deepEqual(backlinks(index), ['posts/early.md']);
+  });
+
+  it('never lists a draft, a scheduled, an unlisted, a private or a trashed post', async () => {
+    const index = await linked();
+    index.upsert(target());
+    index.upsert(linking('draft', '/2026/09/target/', { draft: true }));
+    index.upsert(linking('scheduled', '/2026/09/target/', { date: '2999-01-01T00:00:00Z' }));
+    index.upsert(linking('unlisted', '/2026/09/target/', { extra: { visibility: 'unlisted' } }));
+    index.upsert(linking('private', '/2026/09/target/', { extra: { visibility: 'private' } }));
+    index.upsert(
+      linking('trashed', '/2026/09/target/', {
+        path: '_trash/posts/trashed.md',
+      }),
+    );
+
+    assert.deepEqual(backlinks(index), []);
+  });
+
+  it('drops a backlink when the link is edited out, the post unpublished or deleted', async () => {
+    const index = await linked();
+    index.upsert(target());
+    index.upsert(linking('one', '/2026/09/target/'));
+    index.upsert(linking('two', '/2026/09/target/'));
+    index.upsert(linking('three', '/2026/09/target/'));
+    assert.equal(backlinks(index).length, 3);
+
+    index.upsert(linking('one', '/2026/09/another/'));
+    index.upsert(linking('two', '/2026/09/target/', { draft: true }));
+    index.remove('posts/three.md');
+    assert.deepEqual(backlinks(index), []);
+
+    index.upsert(linking('two', '/2026/09/target/'));
+    assert.deepEqual(backlinks(index), ['posts/two.md'], 'publishing it again brings it back');
+  });
+
+  it('works the links out for rows written before the index, or without a base', async () => {
+    const dir = await dataDir();
+    const unlinked = openContentStore({ dataDir: dir });
+    unlinked.upsert(target());
+    unlinked.upsert(linking('early', '/2026/09/target/'));
+    assert.deepEqual(backlinks(unlinked), []);
+    unlinked.close();
+
+    const linkedAgain = openContentStore({ dataDir: dir, baseUrl: BASE });
+    openStores.push(linkedAgain);
+    assert.deepEqual(backlinks(linkedAgain), ['posts/early.md']);
+  });
+
+  it('empties with the rest of the index', async () => {
+    const index = await linked();
+    index.upsert(target());
+    index.upsert(linking('one', '/2026/09/target/'));
+    index.clear();
+    index.upsert(target());
+    assert.deepEqual(backlinks(index), []);
+  });
+});
+
+describe('backlinks through the homepage and the site’s redirects (TASK-330)', () => {
+  const BASE = 'https://blog.example';
+
+  async function linked(): Promise<ContentStore> {
+    const index = openContentStore({ dataDir: await dataDir(), baseUrl: BASE });
+    openStores.push(index);
+    return index;
+  }
+
+  function redirects(...files: Record<string, string>[]): RedirectTable {
+    const { table, problems } = parseRedirects(
+      files.map((entries, index) => ({
+        path: `${String(index)}.json`,
+        text: JSON.stringify(entries),
+      })),
+    );
+    assert.deepEqual(problems, []);
+    return table;
+  }
+
+  const target = post({ path: 'posts/target.md', slug: 'target', permalink: '/2026/09/target/' });
+  const home = post({
+    type: 'page',
+    path: 'pages/welcome.md',
+    slug: 'welcome',
+    permalink: '/welcome/',
+  });
+
+  function linking(name: string, href: string): Document {
+    return post({
+      path: `posts/${name}.md`,
+      slug: name,
+      permalink: `/2026/09/${name}/`,
+      html: `<p>See <a href="${href}">this</a>.</p>`,
+    });
+  }
+
+  function backlinks(
+    index: ContentStore,
+    document: Document,
+    options: { redirects?: RedirectTable; home?: boolean } = {},
+  ): string[] {
+    return index
+      .listBacklinks(document, options)
+      .map((found) => found.path)
+      .sort();
+  }
+
+  it('counts a link to / for the page the Reading setting makes the homepage', async () => {
+    const index = await linked();
+    index.upsert(home);
+    index.upsert(target);
+    index.upsert(linking('root', '/'));
+    index.upsert(linking('absolute-root', `${BASE}`));
+    index.upsert(linking('own-permalink', '/welcome/'));
+
+    assert.deepEqual(backlinks(index, home, { home: true }), [
+      'posts/absolute-root.md',
+      'posts/own-permalink.md',
+      'posts/root.md',
+    ]);
+    assert.deepEqual(
+      backlinks(index, home),
+      ['posts/own-permalink.md'],
+      'a page that is not the homepage is not what / shows',
+    );
+    assert.deepEqual(backlinks(index, target, { home: false }), []);
+  });
+
+  it('counts an imported /?p= or /?page_id= link for the document the redirect leads to', async () => {
+    const index = await linked();
+    index.upsert(home);
+    index.upsert(target);
+    index.upsert(linking('by-id', '/?p=7'));
+    index.upsert(linking('by-page-id', `${BASE}/?page_id=3`));
+    index.upsert(linking('extra-query', '/?p=7&amp;utm_source=feed'));
+    index.upsert(linking('unknown-id', '/?p=8'));
+    const table = redirects({
+      '/?p=7': '/2026/09/target/',
+      '/?p=3': '/welcome/',
+      '/?page_id=3': '/welcome/',
+    });
+
+    assert.deepEqual(backlinks(index, target, { redirects: table }), ['posts/by-id.md']);
+    assert.deepEqual(
+      backlinks(index, home, { redirects: table, home: true }),
+      ['posts/by-page-id.md', 'posts/extra-query.md', 'posts/unknown-id.md'],
+      'a query no redirect names exactly is answered by / itself, as the site answers it',
+    );
+  });
+
+  it('follows a declared path redirect, through a chain and a former permalink', async () => {
+    const index = await linked();
+    const moved = post({
+      path: 'posts/target.md',
+      slug: 'target',
+      permalink: '/2026/09/target/',
+      redirectFrom: ['/2026/09/old-name/'],
+    });
+    index.upsert(moved);
+    index.upsert(linking('declared', '/old'));
+    index.upsert(linking('chained', '/older/?ref=1'));
+    index.upsert(linking('to-former', '/?p=7'));
+    const table = redirects(
+      { '/old/': '/2026/09/target/', '/older/': '/old/' },
+      { '/?p=7': '/2026/09/old-name/' },
+    );
+
+    assert.deepEqual(backlinks(index, moved, { redirects: table }), [
+      'posts/chained.md',
+      'posts/declared.md',
+      'posts/to-former.md',
+    ]);
+  });
+
+  it('leaves a declared path to the document the site serves there instead', async () => {
+    const index = await linked();
+    index.upsert(target);
+    index.upsert(post({ path: 'posts/taken.md', slug: 'taken', permalink: '/taken/' }));
+    index.upsert(
+      post({ path: 'posts/drafted.md', slug: 'drafted', permalink: '/drafted/', draft: true }),
+    );
+    index.upsert(linking('to-taken', '/taken/'));
+    index.upsert(linking('to-drafted', '/drafted/'));
+    const table = redirects({ '/taken/': '/2026/09/target/', '/drafted/': '/2026/09/target/' });
+
+    assert.deepEqual(backlinks(index, target, { redirects: table }), ['posts/to-drafted.md']);
+  });
+
+  it('moves or drops a backlink when its redirect changes, with the linking post untouched', async () => {
+    const index = await linked();
+    const other = post({ path: 'posts/other.md', slug: 'other', permalink: '/2026/09/other/' });
+    index.upsert(target);
+    index.upsert(other);
+    index.upsert(linking('by-id', '/?p=7'));
+    index.upsert(linking('by-path', '/old/'));
+
+    const before = redirects({ '/?p=7': '/2026/09/target/', '/old/': '/2026/09/target/' });
+    assert.deepEqual(backlinks(index, target, { redirects: before }), [
+      'posts/by-id.md',
+      'posts/by-path.md',
+    ]);
+
+    const retargeted = redirects({ '/?p=7': '/2026/09/other/', '/old/': '/2026/09/other/' });
+    assert.deepEqual(backlinks(index, target, { redirects: retargeted }), []);
+    assert.deepEqual(backlinks(index, other, { redirects: retargeted }), [
+      'posts/by-id.md',
+      'posts/by-path.md',
+    ]);
+
+    assert.deepEqual(backlinks(index, other, { redirects: redirects({}) }), []);
   });
 });

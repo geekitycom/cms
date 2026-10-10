@@ -7,6 +7,7 @@ import { setTimeout } from 'node:timers/promises';
 import { browser, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
+import type { Document } from '../content/document.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { commentsFile, readComments } from './records.ts';
@@ -15,13 +16,13 @@ import type { CommentChecker, CommentSubmission } from './submission.ts';
 
 /**
  * Commenting as yourself: what the form under a post looks like when the
- * request carries a login, what the comment it stores says, and the two things
- * a personalised public page has to get right — a token in front of it and a
- * cache directive behind it (TASK-103).
+ * request carries a login, who the reply post it writes is by (TASK-300), and
+ * the two things a personalised public page has to get right — a token in
+ * front of it and a cache directive behind it (TASK-103).
  *
  * Everything is driven over HTTP through the real app, because every
  * acceptance criterion is about what a browser is sent and what lands in
- * `content/_data/comments/` — none of them is a fact about a function.
+ * `content/` — none of them is a fact about a function.
  */
 
 const box = sandbox();
@@ -151,8 +152,13 @@ describe('the form under a post for somebody signed in', () => {
   });
 });
 
-describe('a comment from somebody signed in', () => {
-  it('is attributed to the account, archive and email rather than to a form', async () => {
+/** The reply posts on the site, which is what a signed-in reply becomes (TASK-300). */
+function replyPosts(cms: Cms): Document[] {
+  return cms.store.listAll({ type: 'post' }).filter((document) => document.inReplyTo !== undefined);
+}
+
+describe('a reply from somebody signed in', () => {
+  it('is a reply post by the account rather than a comment (TASK-300)', async () => {
     const { cms, agent } = await signedInSite();
     const token = tokenIn(await postPage(agent));
     assert.ok(token !== undefined, 'the form carried a token');
@@ -160,14 +166,10 @@ describe('a comment from somebody signed in', () => {
     const posted = await agent.post(COMMENT_POST_PATH, submission(token));
     assert.equal(posted.status, 303);
 
-    const [comment] = readComments(cms.config, 'hello-world');
-    assert.ok(comment !== undefined, 'the comment was written to the post file');
-    assert.deepEqual(comment.author, {
-      name: ADA.displayName,
-      url: `/author/${ADA.username}/`,
-      email: ADA.email,
-      avatar: null,
-    });
+    const [reply] = replyPosts(cms);
+    assert.equal(reply?.author, ADA.username);
+    assert.equal(reply.inReplyTo, `${BASE_URL}${POST_URL}`);
+    assert.deepEqual(readComments(cms.config, 'hello-world'), [], 'no comment was written');
   });
 
   it('is called by their username when the account has no display name', async () => {
@@ -178,8 +180,7 @@ describe('a comment from somebody signed in', () => {
 
     await agent.post(COMMENT_POST_PATH, submission(token));
 
-    const [comment] = await storedComments(cms);
-    assert.equal((comment?.['author'] as Record<string, unknown>)['name'], ADA.username);
+    assert.match(await postPage(agent), new RegExp(`>${ADA.username}</a></b>`));
   });
 
   it('ignores a name, email and website smuggled into the submission', async () => {
@@ -196,18 +197,14 @@ describe('a comment from somebody signed in', () => {
       }),
     );
 
-    const [comment] = readComments(cms.config, 'hello-world');
-    assert.deepEqual(comment?.author, {
-      name: ADA.displayName,
-      url: `/author/${ADA.username}/`,
-      email: ADA.email,
-      avatar: null,
-    });
+    const [reply] = replyPosts(cms);
+    assert.equal(reply?.author, ADA.username);
+    assert.ok(!(await postPage(agent)).includes('Somebody Else'));
   });
 });
 
-describe('moderating a comment from the person who would moderate it', () => {
-  it('approves it on arrival and never asks the spam checker', async () => {
+describe('moderating a reply from the person who would moderate it', () => {
+  it('puts it on the page and never asks the spam checker', async () => {
     const asked: CommentSubmission[] = [];
     const checker: CommentChecker = {
       check(submission) {
@@ -215,17 +212,14 @@ describe('moderating a comment from the person who would moderate it', () => {
         return 'spam';
       },
     };
-    const { cms, agent } = await signedInSite({ commentChecker: checker });
+    const { agent } = await signedInSite({ commentChecker: checker });
     const token = tokenIn(await postPage(agent));
     assert.ok(token !== undefined);
 
     const posted = await agent.post(COMMENT_POST_PATH, submission(token));
 
     assert.equal(posted.status, 303);
-    const [comment] = await storedComments(cms);
-    assert.equal(comment?.['status'], 'approved', 'it is on the page, not in a queue');
-    assert.deepEqual(asked, [], 'and the checker was never called');
-    // And it really is on the page, which is what "approved" is for.
+    assert.deepEqual(asked, [], 'the checker was never called');
     assert.match(await postPage(agent), /Answering my own post\./);
   });
 
@@ -269,7 +263,7 @@ describe('the token on the signed-in form', () => {
     );
 
     assert.equal(refused.status, 403);
-    await assert.rejects(storedComments(cms), 'nothing was written');
+    assert.deepEqual(replyPosts(cms), [], 'nothing was written');
   });
 
   it('refuses one carrying no token at all', async () => {
@@ -280,7 +274,7 @@ describe('the token on the signed-in form', () => {
     const refused = await agent.post(COMMENT_POST_PATH, fields);
 
     assert.equal(refused.status, 403);
-    await assert.rejects(storedComments(cms), 'nothing was written');
+    assert.deepEqual(replyPosts(cms), [], 'nothing was written');
   });
 
   it('refuses a signed-in submission sent from another site, token or not', async () => {
@@ -293,7 +287,7 @@ describe('the token on the signed-in form', () => {
     });
 
     assert.equal(refused.status, 403);
-    await assert.rejects(storedComments(cms), 'nothing was written');
+    assert.deepEqual(replyPosts(cms), [], 'nothing was written');
   });
 
   it('is not asked of a stranger, whose form acts on nobody’s behalf', async () => {

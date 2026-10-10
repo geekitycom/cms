@@ -3,7 +3,7 @@ import { scheduledFor } from '../content/schedule.ts';
 import { isTrashedPath } from '../content/store.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import type { ContentStore } from '../content/store.ts';
-import { absoluteUrl } from './negotiate.ts';
+import { postObjectId } from './guids.ts';
 
 /**
  * Why the public site does not serve a document at its URL.
@@ -95,39 +95,6 @@ export function previewDocumentAt(store: ContentStore, permalink: string): Docum
   if (document === undefined) return undefined;
   const reason = hiddenReason(document, store.now());
   return reason === undefined || reason.kind === 'trashed' ? undefined : document;
-}
-
-/**
- * A post's ActivityStreams object id: its permalink, absolute on the site's
- * base URL, or the id its file already names.
- *
- * decision-13. A permalink is by name permanent, and the fediverse id is the
- * same promise made to a different audience, so one URL answers both: a
- * browser gets the page and a peer gets the `Article`, by content negotiation.
- * There is no second URL to mint and none to keep in step.
- *
- * A stored `activitypub.id` wins, for the life of the post. That is not a
- * cache: it is what lets a post migrated from WordPress keep the
- * `https://example.com/?p=813` id its followers, its replies and its RSS
- * subscribers already hold (decision-14), so the CMS serves the object there
- * too and names it in every `Update` and `Delete`. A hand-written
- * `activitypub.id` that is not a URL is not an id, and the permalink is used
- * instead.
- *
- * Unlike {@link activityStreamsId} this answers for any post, published or
- * not: a draft that was announced before it was withdrawn still has the name
- * its followers filed it under, and a `Delete` has to say it.
- */
-export function postObjectId(document: Document, baseUrl: string): string {
-  const stored = document.activitypub?.id;
-  if (stored !== undefined && stored !== '') {
-    try {
-      return new URL(stored).href;
-    } catch {
-      // Not a URL, so not an id. Fall through to the permalink.
-    }
-  }
-  return absoluteUrl(document.permalink, baseUrl);
 }
 
 /**

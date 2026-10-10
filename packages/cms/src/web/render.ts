@@ -34,8 +34,10 @@ import {
 import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { ContactFormContext } from '../contact/form.ts';
-import type { Conversation } from './conversation.ts';
-import { activityStreamsId } from './documents.ts';
+import { commentAnchor } from './conversation.ts';
+import { commentPageHref } from './guids.ts';
+import type { CommentThread, Conversation } from './conversation.ts';
+import { activityStreamsId, isServed } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type {
   DocumentContext,
@@ -59,7 +61,7 @@ import { readCitedStart } from '../webmention/cited-start.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
-import { locationContext, syndicationLinks } from './context.ts';
+import { backlinkContext, locationContext, syndicationLinks } from './context.ts';
 import { pingbackEndpointFor } from '../webmention/pingback.ts';
 import { webmentionEndpointFor } from '../webmention/routes.ts';
 
@@ -72,6 +74,7 @@ export const TEMPLATES = {
   category: 'layouts/category.njk',
   author: 'layouts/author.njk',
   search: 'layouts/search.njk',
+  comment: 'layouts/comment.njk',
   notFound: 'layouts/404.njk',
   gone: 'layouts/410.njk',
   serverError: 'layouts/500.njk',
@@ -215,6 +218,11 @@ export interface Renderer {
    * `snippet` of HTML showing where the words were found.
    */
   renderSearch(search: SearchPage): string;
+  /**
+   * A native comment's own page (TASK-318) through the comment layout: the
+   * comment, the thread above it from its post down, and its replies.
+   */
+  renderComment(thread: CommentThread): string;
   /** The 404 page, for a path that resolved to nothing. */
   renderNotFound(url: string): string;
   /** The 410 page, for the URL of a document that was deleted (TASK-195). */
@@ -354,6 +362,13 @@ export interface CreateRendererOptions {
    * over one template wants.
    */
   neighbours?: ((document: Document) => DocumentNeighbours) | undefined;
+  /**
+   * The listed posts and pages of the site whose body links to a document,
+   * newest first, for `backlinks` on its page (TASK-322). Injected and asked
+   * per render for the reason the neighbours are; a renderer built without it
+   * lists none.
+   */
+  backlinks?: ((document: Document) => readonly Document[]) | undefined;
   /**
    * The newest `count` published posts, for `newestPosts` on the front page
    * (TASK-317). The theme chooses the count; the index decides what is
@@ -678,17 +693,16 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // added here rather than in `documentContext` because it needs the
     // site's base URL, which a document on its own does not carry.
     const objectId = activityStreamsId(document, config.baseUrl);
-    // `commentsFeed` is where this post's replies are syndicated. It is set
-    // here rather than in a layout because only a published post has one —
-    // a page never federates, so nothing can ever have replied to it — and
-    // because a site that overrides `post.njk` should keep the link anyway.
-    // `conversation` is what the fediverse said back. It is on the context
-    // only when there is something in it, so a theme can ask `{% if
-    // conversation %}` and a post nobody has answered renders no empty
-    // section (TASK-49).
-    const said = answerable(document, commentPolicyOf(siteData.read()), config.now())
-      ? options.conversation?.(document)
-      : undefined;
+    // `conversation` is what was said back. It is on the context only when
+    // there is something in it, so a theme can ask `{% if conversation %}`
+    // and a post nobody has answered renders no empty section (TASK-49).
+    // `commentsFeed` is where it is syndicated, for a served document that
+    // shows one, and is set here rather than in a layout so that a site which
+    // overrides `post.njk` or `page.njk` keeps the link.
+    const now = config.now();
+    const shows = answerable(document, commentPolicyOf(siteData.read()), now);
+    const said = shows ? options.conversation?.(document) : undefined;
+    const feedsIt = shows && isServed(document, now);
     // `commentForm` is on the context only when the post is open, so the
     // theme asks `{% if commentForm %}` rather than working the rules out
     // for itself — and a closed post shows the thread with no form.
@@ -703,7 +717,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // only when the site takes them, so a theme asks `{% if webmention %}`
     // and a site that has turned them off advertises nothing.
     const webmention = webmentionEndpointFor(siteData.read());
-    const pingback = pingbackEndpointFor(siteData.read(), document, config.now());
+    const pingback = pingbackEndpointFor(siteData.read(), document, now);
     // The posts either side of this one, as the two links a theme draws under
     // an entry (TASK-79). Each is on the context only when there is one, so a
     // theme asks `{% if previous %}` and the ends of the archive draw nothing.
@@ -723,14 +737,13 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(writer === undefined ? {} : { siteAuthor: writer }),
       ...neighbourContext('previous', either.previous, options.replyContext),
       ...neighbourContext('next', either.next, options.replyContext),
+      backlinks: (options.backlinks?.(document) ?? []).map((linking) =>
+        backlinkContext(linking, options.replyContext),
+      ),
       url,
       page: { ...context.page, url },
-      ...(objectId === undefined
-        ? {}
-        : {
-            activityStreams: objectId,
-            commentsFeed: commentsFeedPath(document.permalink),
-          }),
+      ...(objectId === undefined ? {} : { activityStreams: objectId }),
+      ...(feedsIt ? { commentsFeed: commentsFeedPath(document.permalink) } : {}),
       // And the whole archive, for a page whose front matter asked for it
       // (TASK-85). On the context only for that page, so a theme asks
       // `{% if archiveMonths %}` exactly as it asks about the contact form.
@@ -915,6 +928,21 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         query: search.query,
         posts: items,
         pagination: { ...search.pagination, items },
+      });
+    },
+
+    renderComment({ post, comment, ancestors }) {
+      const url = commentPageHref(comment.id);
+      const on = entryContext(post, users(), { lead: false });
+      return render(TEMPLATES.comment, {
+        title: `${comment.author.name} on ${on.label}`,
+        url,
+        page: { url },
+        noindex: true,
+        comment,
+        ancestors,
+        post: on,
+        threadUrl: `${post.permalink}#${commentAnchor(comment.id)}`,
       });
     },
 

@@ -22,23 +22,53 @@
  *     the listing on a page of its own.
  * 11. A `conversation` filter that builds a post's replies, likes, boosts and
  *     mentions out of that log — and the approved comments and webmentions
- *     from `content/_data/comments/` alongside them — sanitised and nested, as the
- *     CMS's own theme gets them.
+ *     from `content/_data/comments/` alongside them — sanitised and nested,
+ *     with a placeholder for a hidden comment a visible reply answers, in the
+ *     shape the CMS hands its own theme.
  * 12. `soloAuthor`: the user `author` in `site.json` names, read out of
  *     `data/users.json`, so a footer prints their display name as the CMS
  *     does rather than their username.
  * 13. `visibility: unlisted` builds the page and leaves it out of every
  *     collection, with `noindex` set for the layout; any other value besides
  *     `public` hides the document like a draft.
+ * 14. The rest of the CMS's template filters — `absoluteUrl`, `asset`, `host`
+ *     and `fediverseHandle` — and `newestPosts(count)` for a front page, so
+ *     the default theme's layouts and partials build, and so does a site
+ *     theme's override of them.
  *
  * You supply the layouts. The directory data files name them — `posts.json`
  * says `"layout": "post"`, `pages.json` says `"layout": "page"` — so
  * `content/_includes/post.njk` and `content/_includes/page.njk` need to exist.
+ * They may be copies of the default theme's: put its `layouts/` and
+ * `partials/` in `content/_includes/` and name `layouts/post.njk` and
+ * `layouts/page.njk`. They build, but they get only the context this file
+ * gives, not all of what the CMS gives them for a request: menus here are
+ * `collections.menus` rather than `menus`, the conversation is the filter
+ * rather than the `conversation` key, and the comment form, search, a
+ * listing's pagination and the feeds (which the CMS writes in code, not from
+ * a template) are not there at all. Layouts of your own read what this file
+ * provides, as the package's fixtures do.
+ *
+ * What the CMS shows that a static build of the files leaves out:
+ *
+ * - A comment's own page. The CMS serves each approved comment at
+ *   `/comment/{id}/` (TASK-318), a page made for answering it. A build has no
+ *   server to take a comment, so it writes no such page, and a comment's
+ *   `url` is its `#comment-{id}` anchor on the post, which the default theme
+ *   prints on every comment.
+ * - Reply posts in a thread. The CMS threads the site's own posts that answer
+ *   a post or a comment on it (TASK-300), out of its index of every post's
+ *   `in-reply-to`. This filter reads the inbox log and the comment file only,
+ *   so a reply post is built as a post of its own and is not in the thread.
+ * - Backlinks (TASK-322, TASK-330): the documents that link to this one,
+ *   resolved through the site's redirects. That needs every document's
+ *   rendered links and the redirect table at once, which no filter here has.
+ *   `neighbours`, the previous and next post, is not given either.
  *
  * This file has no dependencies beyond Eleventy itself, so it stays copyable.
  * It is not part of the published package; it lives in the repository, and the
  * package's `test:11ty` suite builds the test fixtures with it to prove the
- * URLs still match.
+ * URLs still match, and builds them again with the default theme's layouts.
  */
 
 import { readFileSync } from 'node:fs';
@@ -47,20 +77,25 @@ import { readFileSync } from 'node:fs';
 const POSTS_DIRECTORY = 'posts';
 
 /**
- * The zone the CMS shows its dates in.
- *
- * Dates in the files are UTC instants; the `timezone` setting is the lens they
- * are read through, and the settings screen mirrors it into `site.json`. It is
- * read here rather than off the template context because a filter's `this`
- * differs between Eleventy's template engines and a build has one site.
+ * `content/_data/site.json`, which the settings screen mirrors, or `{}` when
+ * there is none. Read here rather than off the template context because a
+ * filter's `this` differs between Eleventy's template engines and a build has
+ * one site.
  */
-function siteTimezone() {
+function siteJson() {
   try {
-    const site = JSON.parse(readFileSync('content/_data/site.json', 'utf8'));
-    return typeof site.timezone === 'string' && site.timezone !== '' ? site.timezone : 'UTC';
+    return JSON.parse(readFileSync('content/_data/site.json', 'utf8')) ?? {};
   } catch {
-    return 'UTC';
+    return {};
   }
+}
+
+/**
+ * The zone the CMS shows its dates in: dates in the files are UTC instants,
+ * and the `timezone` setting is the lens they are read through.
+ */
+function siteTimezone(site) {
+  return typeof site.timezone === 'string' && site.timezone !== '' ? site.timezone : 'UTC';
 }
 
 /**
@@ -78,16 +113,10 @@ function canonicalLocale(tag) {
 
 /**
  * The locale the CMS writes dates and counts in: the `locale` setting, else
- * the `language`, else `en`, read from `site.json` like the zone.
+ * the `language`, else `en`.
  */
-function siteLocale() {
-  try {
-    const site = JSON.parse(readFileSync('content/_data/site.json', 'utf8'));
-    return canonicalLocale(site.locale) ?? canonicalLocale(site.language) ?? 'en';
-  } catch {
-    // No site.json: the default.
-    return 'en';
-  }
+function siteLocale(site) {
+  return canonicalLocale(site.locale) ?? canonicalLocale(site.language) ?? 'en';
 }
 
 /** What Intl is asked for by each of the `date` filter's word formats. */
@@ -97,6 +126,14 @@ const DATE_FORMATS = {
   medium: { dateStyle: 'medium' },
   short: { dateStyle: 'short' },
   readable: { dateStyle: 'long' },
+  datetime: {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  },
   month: { year: 'numeric', month: 'long' },
   year: { year: 'numeric' },
 };
@@ -360,9 +397,9 @@ function guessedNameOf(actorId) {
 }
 
 /**
- * One post's approved comments, as `content/_data/comments/{slug}.json` says
- * them (TASK-50). The file is named by the slug percent-encoded, which is the
- * slug itself for one that is plain ASCII.
+ * One post's stored comments, as `content/_data/comments/{slug}.json` says
+ * them (TASK-50), whatever their status. The file is named by the slug
+ * percent-encoded, which is the slug itself for one that is plain ASCII.
  *
  * Read from disk rather than through Eleventy's data cascade on purpose. A
  * namespaced `_data/comments/` directory would arrive as a global called
@@ -373,7 +410,7 @@ function guessedNameOf(actorId) {
  * parse is treated the same way: a build should not fail over one broken
  * comment file, which is the rule the CMS applies to it too.
  */
-function nativeCommentsFor(slug) {
+function storedCommentsFor(slug) {
   if (typeof slug !== 'string' || slug === '') return [];
 
   let parsed;
@@ -386,7 +423,24 @@ function nativeCommentsFor(slug) {
   }
 
   const held = Array.isArray(parsed?.comments) ? parsed.comments : [];
-  return held.filter((entry) => entry?.status === 'approved' && typeof entry.id === 'string');
+  return held.filter((entry) => typeof entry?.id === 'string');
+}
+
+/** One post as `newestPosts` lists it: the fields `partials/post-list.njk` reads. */
+function listingEntry(item) {
+  const title = typeof item.data.title === 'string' ? item.data.title.trim() : '';
+  return {
+    url: item.url,
+    title,
+    named: title !== '',
+    postType: title === '' ? 'note' : 'article',
+    date: item.date,
+    summary: typeof item.data.description === 'string' ? item.data.description : '',
+    content: item.content,
+    categories: categoriesOf(item.data),
+    tags: Array.isArray(item.data.tags) ? item.data.tags : [],
+    lang: item.data.lang,
+  };
 }
 
 /** Every activity in the log, oldest month first and in arrival order. */
@@ -405,6 +459,14 @@ function activitiesIn(inbox) {
  * could delete anybody's comment off the page. Replies are nested by
  * `inReplyTo`, and one whose target was deleted moves up to whatever that was
  * answering rather than disappearing with it.
+ *
+ * A reply to a comment a reader may not see — waiting for a moderator, filed
+ * as spam, or deleted — sits under a placeholder for it (TASK-325):
+ * `{ id, withheld: true, replies }`, which names nobody and says nothing. A
+ * held comment still says what it answers, and its placeholder goes there; a
+ * deleted one is known by nothing, so its placeholder goes under the post. A
+ * hidden comment with no visible reply under it gets no placeholder, and a
+ * placeholder is not counted as a reply.
  */
 function conversationIn(inbox, objectId, slug) {
   const empty = {
@@ -428,6 +490,7 @@ function conversationIn(inbox, objectId, slug) {
   const boosts = [];
   const mentions = [];
   const reacted = new Set();
+  const held = new Map();
 
   const author = (actorId) => {
     const handle = handleOf(actorId);
@@ -496,7 +559,11 @@ function conversationIn(inbox, objectId, slug) {
   // came from, so its `url` is that page rather than an anchor here; a repost
   // is a boost by another name and joins them; and a mention is neither an
   // answer nor a reaction, so it gets a list of its own.
-  for (const stored of nativeCommentsFor(slug)) {
+  for (const stored of storedCommentsFor(slug)) {
+    if (stored.status !== 'approved') {
+      held.set(stored.id, stored.inReplyTo ?? root);
+      continue;
+    }
     const kind = stored.kind ?? 'reply';
     const entry = {
       id: stored.id,
@@ -527,10 +594,6 @@ function conversationIn(inbox, objectId, slug) {
     return empty;
   }
 
-  // Oldest first, whatever source an entry came from, which is the order a
-  // conversation reads in.
-  notes.sort((left, right) => String(left.published).localeCompare(String(right.published)));
-
   // A second pass, because a `Delete` may arrive before this walk has seen the
   // thing it deletes.
   for (const activity of activities) {
@@ -541,28 +604,7 @@ function conversationIn(inbox, objectId, slug) {
     withdrawn.add(target);
   }
 
-  const live = notes.filter((note) => !withdrawn.has(note.id));
-  const byId = new Map(live.map((note) => [note.id, note]));
-  const targets = new Map(notes.map((note) => [note.id, note.inReplyTo]));
-  const top = [];
-
-  for (const note of live) {
-    let target = targets.get(note.id);
-    for (let step = 0; step <= targets.size; step += 1) {
-      if (target === undefined) break;
-      if (target === root) {
-        top.push(note);
-        break;
-      }
-      const parent = byId.get(target);
-      if (parent !== undefined) {
-        if (parent !== note) parent.replies.push(note);
-        break;
-      }
-      target = targets.get(target);
-    }
-  }
-
+  const top = threadOf(notes, withdrawn, held, root);
   const kept = countReplies(top);
   const heldLikes = likes.filter((like) => !withdrawn.has(like.id));
   const heldBoosts = boosts.filter((boost) => !withdrawn.has(boost.id));
@@ -582,10 +624,75 @@ function conversationIn(inbox, objectId, slug) {
   };
 }
 
-/** How many replies a thread holds, counting all the way down. */
+/**
+ * The replies as a thread under `root`, oldest first at every level, with a
+ * placeholder for each hidden comment a visible reply answers. The walk is
+ * bounded by the number of notes and a placeholder is made once, so a log
+ * carrying a cycle ends rather than hangs.
+ */
+function threadOf(notes, withdrawn, held, root) {
+  const targets = new Map(notes.map((note) => [note.id, note.inReplyTo]));
+  const shown = new Map(
+    notes.filter((note) => !withdrawn.has(note.id)).map((note) => [note.id, note]),
+  );
+  const top = [];
+  const placeholders = new Map();
+
+  // The list an entry answering `target` joins, or undefined for one that
+  // belongs somewhere else. Only a native entry can answer a deleted comment:
+  // a fediverse note naming an unknown id is answering something else.
+  const siblings = (target, self, native) => {
+    for (let step = 0; step <= targets.size; step += 1) {
+      if (target === undefined) return undefined;
+      if (target === root) return top;
+      const parent = shown.get(target);
+      if (parent !== undefined) return parent.id === self ? undefined : parent.replies;
+      if (held.has(target) || (native && !targets.has(target))) {
+        return placeholder(target)?.replies;
+      }
+      target = targets.get(target);
+    }
+    return undefined;
+  };
+
+  const placeholder = (id) => {
+    if (placeholders.has(id)) return placeholders.get(id);
+    placeholders.set(id, undefined);
+    const list = siblings(held.get(id) ?? root, id, true);
+    if (list === undefined) return undefined;
+    const entry = { id, withheld: true, replies: [] };
+    list.push(entry);
+    placeholders.set(id, entry);
+    return entry;
+  };
+
+  for (const note of shown.values()) {
+    siblings(targets.get(note.id), note.id, note.source !== 'activitypub')?.push(note);
+  }
+
+  sortThread(top);
+  return top;
+}
+
+/**
+ * When a thread entry starts: a reply's own date, and a placeholder's first
+ * visible reply's, since the date of a hidden comment is not the reader's.
+ */
+function startOf(reply) {
+  if (!reply.withheld) return String(reply.published);
+  return reply.replies.length === 0 ? '' : startOf(reply.replies[0]);
+}
+
+/** Every level of a thread oldest first, whatever source an entry came from. */
+function sortThread(replies) {
+  for (const reply of replies) sortThread(reply.replies);
+  replies.sort((left, right) => startOf(left).localeCompare(startOf(right)));
+}
+
+/** How many visible replies a thread holds, counting all the way down. */
 function countReplies(replies) {
   let total = 0;
-  for (const reply of replies) total += 1 + countReplies(reply.replies);
+  for (const reply of replies) total += (reply.withheld ? 0 : 1) + countReplies(reply.replies);
   return total;
 }
 
@@ -760,16 +867,11 @@ export default function (eleventyConfig) {
   // `'now'` is the one word the filter reads rather than parses: the default
   // theme's footer writes `{{ "now" | date("year") }}` for its copyright line,
   // because that is the one date a page has that no file carries.
-  const defaultZone = siteTimezone();
-  const locale = siteLocale();
+  const site = siteJson();
+  const defaultZone = siteTimezone(site);
+  const locale = siteLocale(site);
   // Who the site is, read once per build like the zone (TASK-192).
-  eleventyConfig.addGlobalData('soloAuthor', () => {
-    try {
-      return soloAuthorOf(JSON.parse(readFileSync('content/_data/site.json', 'utf8')));
-    } catch {
-      return undefined;
-    }
-  });
+  eleventyConfig.addGlobalData('soloAuthor', () => soloAuthorOf(site));
 
   eleventyConfig.addFilter('date', (value, format = 'readable', zone, tag) => {
     const at = value === 'now' ? new Date() : value instanceof Date ? value : new Date(value);
@@ -795,6 +897,68 @@ export default function (eleventyConfig) {
     const form = forms?.[new Intl.PluralRules(tag).select(n)] ?? forms?.other;
     if (typeof form !== 'string') return '';
     return form.replaceAll('#', new Intl.NumberFormat(tag, { useGrouping: false }).format(n));
+  });
+
+  // The rest of the CMS's filters, so the default theme's templates build.
+  // `absoluteUrl` puts a path on the site's base URL, base path and all;
+  // `host` is the host a cited URL names; `fediverseHandle` is a user's
+  // account on this site, `@ada@example.com`. `asset` is a theme file's URL
+  // under `/theme/`, where the CMS serves them: copy the theme's `static/`
+  // there, `eleventyConfig.addPassthroughCopy({ 'themes/default/static': 'theme' })`
+  // for a copy of the default theme. The CMS adds a hash of the file to the
+  // URL so it can be cached for a year; a build of yours caches as you set it.
+  eleventyConfig.addFilter('absoluteUrl', (value) => {
+    const pathname = typeof value === 'string' ? value : '';
+    return absoluteUrl(pathname, site.url) ?? pathname;
+  });
+  eleventyConfig.addFilter('host', (value) => {
+    try {
+      return new URL(value).hostname;
+    } catch {
+      return typeof value === 'string' ? value : '';
+    }
+  });
+  eleventyConfig.addFilter('fediverseHandle', (username) => {
+    if (typeof username !== 'string' || username === '') return '';
+    let host = 'localhost';
+    try {
+      host = new URL(site.url).host;
+    } catch {
+      // No base URL: the host the CMS would answer on locally.
+    }
+    return `@${username}@${host}`;
+  });
+  eleventyConfig.addFilter('asset', (value) =>
+    typeof value === 'string' ? `/theme/${value.replace(/^\/+/, '')}` : '/theme/',
+  );
+
+  // `newestPosts(count)`, which the CMS hands a front page so a theme that
+  // overrides `front-page.njk` can list the newest published posts (TASK-317):
+  //
+  //     {% set posts = newestPosts(5) %}
+  //     {% include "partials/post-list.njk" %}
+  //
+  // Each is a listing entry in the shape the default theme's
+  // `partials/post-list.njk` reads: `url`, `title`, `named`, `postType`,
+  // `date`, `summary`, `content`, `categories`, `tags` and `lang`. The CMS
+  // reads a post's kind out of its front matter (a reply, a like, a photo);
+  // here a post with a title is an `article` and one without is a `note`, and
+  // the `summary` is the `description`, where the CMS cuts the first
+  // paragraph for a post that has none. Drafts, scheduled and unlisted posts
+  // are out, because the preprocessors below keep them out of every
+  // collection. Call it from a layout: a layout runs once every document's
+  // own content is rendered, which is what `content` needs.
+  eleventyConfig.addNunjucksGlobal('newestPosts', function (count) {
+    if (typeof count !== 'number' || !Number.isInteger(count) || count < 1) {
+      throw new RangeError(
+        `newestPosts(count) takes a whole number of posts, at least 1, not ${String(count)}`,
+      );
+    }
+    return (this.ctx.collections?.all ?? [])
+      .filter((item) => isPost(item.inputPath))
+      .sort((a, b) => Number(b.date ?? 0) - Number(a.date ?? 0))
+      .slice(0, count)
+      .map(listingEntry);
   });
 
   // The CMS publishes each user's ActivityPub followers and the log of what

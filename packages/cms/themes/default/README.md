@@ -20,6 +20,7 @@ themes/default/
     410.njk      what was at this URL was deleted
     500.njk      the request failed on the server
     503.njk      the site is in maintenance mode
+    comment.njk  a native comment on a page of its own
   partials/
     post-list.njk     the h-feed a listing is made of
     pagination.njk    previous/next pager
@@ -34,9 +35,11 @@ themes/default/
     menu.njk          one named menu, as a nav of links
     feeds.njk         macros for the feed links in <head>
     conversation.njk  the replies, likes and boosts under a post or an open page
+    comment.njk       one reply and its answers, as the thread and a comment page print it
     comment-form.njk  the form under a post or page that is taking comments
     contact-form.njk  the form on a page whose front matter says contact: true
     archive.njk       every post by month, on a page that says archive: true
+    backlinks.njk     the site's own posts and pages that link to this one
     search-form.njk   the search box, on the search page
     head-end.njk      empty: what a site adds to the end of every <head>
     body-end.njk      empty: what a site adds to the end of every <body>
@@ -575,7 +578,8 @@ a `p-author h-card`, when the target was read when the post was saved
 provider's known oEmbed endpoint, asked before its page, which is read only
 when the endpoint names nothing (TASK-251, TASK-253). Any other target's oEmbed
 title comes from the endpoint its page links. A title that is only a site suffix such as "- YouTube" is
-no title. With only an author it says "a post", and with neither "a page on"
+no title. A comment on this site (`replyContext.comment`, TASK-326) says "a
+comment". With only an author it says "a post", and with neither "a page on"
 the target's host, never the bare URL, which can run to hundreds of
 characters: "Bookmarked a page on example.com" (TASK-255). Its kicker
 and its hidden `h1` say Repost, Like or Bookmark. It is placed as the reply
@@ -710,13 +714,50 @@ its front matter names no `image`.
 </figure>
 ```
 
-After the entry a post prints `nav.blog-post-nav`: the `previous` and `next`
-posts as two cards, `rel="prev"` and `rel="next"`, each opening on a
-`span.blog-post-nav-label`, and nothing at all at the ends of the archive; then
-the conversation and the comment form. A page prints the conversation and the
-comment form too when it takes comments, and the contact form when its front
-matter asked for one. A page has no neighbours, no tags and no
-syndication links, because none of those are things a page has.
+After the entry a post prints its backlinks, then `nav.blog-post-nav`: the
+`previous` and `next` posts as two cards, `rel="prev"` and `rel="next"`, each
+opening on a `span.blog-post-nav-label`, and nothing at all at the ends of the
+archive; then the conversation and the comment form. A page prints its
+backlinks too, then the conversation and the comment form when it takes
+comments, and the contact form when its front matter asked for one. A page has
+no neighbours, no tags and no syndication links, because none of those are
+things a page has.
+
+### Backlinks
+
+A link from one of the site's posts or pages to another sends no webmention.
+The CMS records it instead, and the linked document's context carries
+`backlinks`: the listed posts and pages whose body links to it, newest first,
+each as `{ title, url, date }`. `title` is the linking document's title, or a
+note's first words. `date` is absent for a page that has none. A link counts
+whether it is absolute or relative, with or without its trailing slash, a query
+or a fragment, and through a `redirect_from` of the target. A link to `/`
+counts for the page the Reading setting makes the homepage. A link to a URL the
+site answers with a redirect counts for the document the redirect leads to,
+whether the redirect is a `redirect_from` or an entry in `_data/redirects.json`
+or `_data/redirects/*.json`, `/?p=123` included. A link with a query names the
+query's redirect only when the query matches the redirect's source exactly, as
+a request does, so `/?p=123&ref=feed` is a link to `/`. A document that links
+to itself is not its own backlink. Drafts, future-dated, unlisted,
+private and trashed documents never appear. `backlinks` is always a list, and
+it is empty when nothing links to the document.
+
+`partials/backlinks.njk` prints a `section.backlinks` under the entry, apart
+from the conversation: an `h2` that says "Linked from", then an `ol` of links,
+each with its date in a `<time>`. It prints nothing for an empty list, so
+`layouts/post.njk` and `layouts/page.njk` include it with no condition. The
+front page has `backlinks` on its context too, but `layouts/front-page.njk`
+does not print them, because most of a site links home. A site theme that wants
+them there adds the same include to its own `layouts/front-page.njk`:
+
+```njk
+{% include "partials/backlinks.njk" %}
+```
+
+A site theme moves the list by including the partial somewhere else in its own
+layout, and leaves it out by overriding a layout without the include. To change
+the markup, add a `partials/backlinks.njk` to the site theme. That file replaces
+this one, as any other template is replaced.
 
 ### The bio
 
@@ -1534,6 +1575,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
 | `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                       |
 | `next`                                      | The published post after it. Absent on the newest post, and on a page.                                            |
+| `backlinks`                                 | The site's listed posts and pages that link to it, newest first, each `{ title, url, date }`. Empty with none.    |
 | `newestPosts`                               | A function, front page only: `newestPosts(5)` is the five newest published posts, as entries.                     |
 | `postsPage`                                 | The page carrying the listing, as `{ title, url }`, on the front page only. Absent when the site names none.      |
 | `archiveMonths`                             | Every published post as `{ month, posts }`, newest month first. Only on a page that says `archive: true`.         |
@@ -1776,9 +1818,9 @@ as well as the site's — on an author archive that root is `author.url`.
 
 `layouts/base.njk` fills the `alternates` block with `feedLinks` over `/` and
 then the site's comments feed, so every page that extends it advertises all
-four. On a published post it adds that post's own comments feed, from
-`commentsFeed` on the context, and a link pointing at the post's ActivityPub
-object:
+four. On a published post, and on a page that takes comments, it adds that
+document's own comments feed, from `commentsFeed` on the context. On a
+published post it also adds a link pointing at the post's ActivityPub object:
 
 ```html
 <link
@@ -1791,9 +1833,10 @@ object:
 A post's object id is its permalink, so that link usually points at the page it
 is on: it says the URL answers ActivityStreams as well as HTML. A post migrated
 from elsewhere keeps the id its file names, and the link points there instead.
-It comes from `activityStreams`, which — like `commentsFeed` — is only on the
-context of a rendered published post, so a layout that overrides the block and
-does not call `super()` has to emit both itself. They are on the context rather
+It comes from `activityStreams`, which is only on the context of a rendered
+published post, as `commentsFeed` is only on a document that has a comments
+feed, so a layout that overrides the block and does not call `super()` has to
+emit both itself. They are on the context rather
 than in `post.njk` so that a site which overrides that layout, as the demo
 does, keeps them.
 
@@ -1880,14 +1923,26 @@ section — a `div.reactions-section` of the likes, the boosts and the mentions
 as facepiles grouped by kind, and then the thread as
 `div#comments.comments-area` — and a site replaces it with a
 `partials/conversation.njk` of its own in the theme it wears, exactly as it
-replaces any other template. It defines three macros, `face(item, icon, href)`,
-`group(items, label, kind, icon, source)` and `comment(reply)`, and a layout
-that wants to place the pieces itself can import them:
+replaces any other template. It defines two macros, `face(item, icon, href)`
+and `group(items, label, kind, icon, source)`, and a layout that wants to place
+the pieces itself can import them:
 
 ```njk
-{% import "partials/conversation.njk" as thread with context %}
-{{ thread.group(conversation.likes, "Likes", "p-like", "❤️") }}
+{% import "partials/conversation.njk" as reactions with context %}
+{{ reactions.group(conversation.likes, "Likes", "p-like", "❤️") }}
 ```
+
+One reply and everything under it is `comment(reply, classes)` in
+`partials/comment.njk`, which the thread and a comment's own page both import.
+`classes` is the reply's microformat: `h-entry`, the default, under a post, and
+`p-comment h-cite` on a comment's page, where the comment is the one entry.
+
+A reply post prints its replies inside its own `h-entry`, as `p-comment
+h-cite`s, so the page it answers finds them there when it is sent a salmention
+(TASK-320). `layouts/post.njk` includes `partials/conversation.njk` twice for
+one, setting `conversationPart`: `"replies"` inside the entry for the thread,
+and `"reactions"` below it for the facepiles, whose links are not the entry's.
+Left unset, the partial prints the whole section.
 
 ### The shape
 
@@ -1916,26 +1971,35 @@ Each entry — a reply, a like or a boost — is:
 | Key              | What it holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`             | What it is called: a reply's own note id, which is what an answer to it names.                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page, `"webmention"` for another page linking here.                                                                                                                                                                                                                                                                                                                                                            |
+| `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page, `"webmention"` for another page linking here, `"post"` for a reply post a user of the site wrote (its `url` is the post's permalink).                                                                                                                                                                                                                                                                    |
 | `kind`           | `"reply"`, `"like"`, `"boost"`, `"repost"` or `"mention"`. A `repost` comes from a webmention; a `mention` is a webmention or an approved fediverse quote.                                                                                                                                                                                                                                                                                                                            |
 | `author.name`    | The best name available: their display name, else their handle, else their server, else their id. For a webmention, the source's `h-card` name, else its host.                                                                                                                                                                                                                                                                                                                        |
 | `author.handle`  | `@user@host`, or `null`. Taken from the follower or actor profile the site holds, else guessed from the actor URL unless it ends in a number. `null` for a native comment.                                                                                                                                                                                                                                                                                                            |
 | `author.url`     | Their profile page, the website a commenter typed, or a webmention author's `u-url`. May be `null`, so guard the link.                                                                                                                                                                                                                                                                                                                                                                |
 | `author.avatar`  | Their avatar, or `null`. The site knows one for a fediverse actor whose profile it holds and for a webmention whose `h-card` carried a `u-photo`. Always a same-origin `/_geekity/avatars/…` path, never the remote URL: see [Avatars](#avatars).                                                                                                                                                                                                                                     |
 | `author.actorId` | Their id, which is what identifies them however they are named. `null` for a native comment.                                                                                                                                                                                                                                                                                                                                                                                          |
-| `url`            | Where it can be read: the remote note's `url` for a fediverse reply or quote, the source page for a webmention, and `{permalink}#comment-{id}` — this page's own anchor — for a native comment.                                                                                                                                                                                                                                                                                       |
+| `url`            | Where it can be read: the remote note's `url` for a fediverse reply or quote, the source page for a webmention, and `/comment/{id}/`, its own page, for a native comment (see [A comment's own page](#a-comments-own-page)).                                                                                                                                                                                                                                                          |
 | `content`        | What it says, **already sanitised**, so print it with `\| safe`. Empty for a like or a boost.                                                                                                                                                                                                                                                                                                                                                                                         |
 | `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.                                                                                                                                                                                                                                                                                                                                                                                         |
 | `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                                                                                                                                                                                                                                                                                                                                                          |
 | `status`         | `"published"`. On the record for the sources that moderate.                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen. One may be a placeholder: see below.                                                                                                                                                                                                                                                                                                                                                                      |
 | `rsvp`           | An RSVP: `{ value, label }`, its `p-rsvp` (`yes`, `no`, `maybe` or `interested`) and the words for it. Absent otherwise. A webmention reply that is an RSVP carries one, and the default theme prints it as a `data.p-rsvp` at the top of the comment's content. On an event, an RSVP is in `rsvps` rather than the thread, and so is a fediverse `Accept` (`yes`), `TentativeAccept` (`maybe`) or `Reject` (`no`) of the event. Each person is there once, with their latest answer. |
 
-Three rules decide what is in the thread, and they are the CMS's rather than a
+Four rules decide what is in the thread, and they are the CMS's rather than a
 theme's: a reply whose author deleted it is gone, and its own answers move up to
-whatever it was answering; a like is counted once per actor and disappears when
-that actor undoes it; and a note answering something this post has nothing to do
-with is left out.
+whatever it was answering; a comment a reader may not see (waiting for a
+moderator, spam or deleted) that has a visible reply under it is a placeholder,
+and one with none is not there at all; a like is counted once per actor and
+disappears when that actor undoes it; and a note answering something this post
+has nothing to do with is left out.
+
+A placeholder in `replies` is `{ id, withheld: true, replies }`: the hidden
+comment's id and the replies under it, and nothing that names its author or
+says what it said. Test `reply.withheld` before printing an author. A pending
+or spam comment's placeholder sits where the comment would; a deleted one's
+under the post, since nothing is known of what it answered. `counts.replies`
+and the comments feeds count and carry the visible replies only.
 
 `content` is safe to print whatever produced it, and safe for different reasons.
 A fediverse reply is HTML somebody else's server composed, rebuilt from an
@@ -1951,7 +2015,8 @@ The packaged partial draws each entry as the source design does: an
 `comment-{{ reply.source }}` class, holding an `article.comment-body` whose
 `footer.comment-meta` is the author as a `.comment-author.vcard.p-author.h-card`
 (their avatar, or the first letter of their name in a `span.comment-avatar-empty`
-when there is none) and the permalink as a `.comment-metadata` link around a
+when there is none, and their link marked `rel="nofollow ugc"` unless the entry
+is a reply post, whose author is a user of the site) and the permalink as a `.comment-metadata` link around a
 `time.dt-published`, with a `span.comment-source` saying "via webmention" or
 "via the fediverse" when it came that way, then the words in
 `div.comment-content.e-content`. Answers nest in an
@@ -1959,7 +2024,10 @@ when there is none) and the permalink as a `.comment-metadata` link around a
 ones written here — `source == "comment"` — when the post is still open; it
 carries the comment's id to the form as `?reply_to=`, so threading needs no
 JavaScript. A fediverse reply is answered on the server that holds it and a
-webmention on the page that sent it, so neither gets one.
+webmention on the page that sent it, so neither gets one. A placeholder is an
+`li.comment.comment-placeholder` with the hidden comment's anchor, a
+`p.comment-withheld` printing `withheld()` ("This comment is no longer
+shown."), and its replies in an `ol.children`; it is no microformat of its own.
 
 Above the thread, `group()` draws one `div.reaction-group` per kind that has
 anything — `p-like`, `p-repost` and `p-mention`, the source theme's classes — as
@@ -1988,7 +2056,37 @@ An Eleventy build of the same content gets the same thing from the same files:
 
 and then loops over exactly the keys above. The slug is what names the post's
 comment file under `content/_data/comments/`; the format is documented in
-backlog doc-6.
+backlog doc-6. Two things differ: a native comment's `url` is its
+`#comment-{id}` anchor, because a static build writes no comment pages, and
+the site's own reply posts (`source: "post"`) are not in the thread.
+
+### A comment's own page
+
+A comment left through the form has a page of its own at `/comment/{id}/`,
+with the id percent-encoded, which is its `url` everywhere: the thread's
+permalink, the comments feeds and what another site fetches when it replies
+to the comment. The anchor `#comment-{id}` on the post stays, so an old link
+still scrolls to it. A webmention and a fediverse reply have no such page:
+their `url` is where they came from.
+
+`layouts/comment.njk` draws it, with the comment as the page's one `h-entry`.
+It answers only while the post shows its conversation, and is `noindex` and on
+no list: not the sitemap, the post feeds or search. Its context:
+
+| Key         | What it holds                                                                                                                                                                                 |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `comment`   | The comment, an entry of the shape above, its `replies` nested at every depth by the thread's own rules.                                                                                      |
+| `ancestors` | What it answers, from the top-level comment down to its parent. An ancestor a reader may not see (waiting for a moderator, spam, deleted, withdrawn) is `null`, so the chain keeps its place. |
+| `post`      | The post it is on, as a listing entry is: `label`, `url`, `date`, `summary`, `author` and the rest.                                                                                           |
+| `threadUrl` | The comment's anchor on the post, for a link back to the whole conversation.                                                                                                                  |
+
+The packaged layout prints the chain above the comment as nested
+`u-in-reply-to h-cite`s: the comment cites its parent, which cites its own,
+down to the post, which is printed first, so a parser and a reader meet the
+thread in the same order. A `null` ancestor is a cite with no author and no
+words, printing the same `withheld()` the thread's placeholder does. The replies follow inside the
+entry as `comment(reply, "p-comment h-cite")`, with no Reply links, and a
+link to `threadUrl` ends the page.
 
 ### Avatars
 
@@ -2036,17 +2134,17 @@ in a `div.field-row`, side by side on a wide screen, in both forms. On a site
 that takes webmentions a `p.comment-help` under the heading says a reader can
 reply from their own site instead.
 
-| Key                        | What it holds                                                                                                                                                             |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `action`                   | Where the form posts. One fixed path; the post travels as a field.                                                                                                        |
-| `fields`                   | The name each field is submitted under: `post`, `name`, `email`, `url`, `body`, `inReplyTo`, `trap`, `loaded`, `notify`, `csrf`. Use these rather than typing the names.  |
-| `post`                     | The post's slug, for the hidden field.                                                                                                                                    |
-| `loaded`                   | When this form was rendered, in epoch milliseconds, for the hidden field. A submission that comes back too fast is refused.                                               |
-| `values`                   | What is in the fields: empty on a fresh form, what was typed on a refused one.                                                                                            |
-| `problems`                 | One message per field a person has to put right — `name`, `email`, `url`, `body`.                                                                                         |
-| `error`                    | A message about the submission as a whole, when there is one.                                                                                                             |
-| `notifiable`               | Whether to offer `fields.notify`, the "email me when somebody replies" box. False on a site that sends no mail, where the box would promise a message nothing could send. |
-| `nameLength`, `bodyLength` | The `maxlength` for the two fields that have one.                                                                                                                         |
+| Key                        | What it holds                                                                                                                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `action`                   | Where the form posts. One fixed path; the post travels as a field.                                                                                                                 |
+| `fields`                   | The name each field is submitted under: `post`, `name`, `email`, `url`, `body`, `inReplyTo`, `trap`, `loaded`, `notify`, `csrf`, `listed`. Use these rather than typing the names. |
+| `post`                     | The post's slug, for the hidden field.                                                                                                                                             |
+| `loaded`                   | When this form was rendered, in epoch milliseconds, for the hidden field. A submission that comes back too fast is refused.                                                        |
+| `values`                   | What is in the fields: empty on a fresh form, what was typed on a refused one.                                                                                                     |
+| `problems`                 | One message per field a person has to put right — `name`, `email`, `url`, `body`.                                                                                                  |
+| `error`                    | A message about the submission as a whole, when there is one.                                                                                                                      |
+| `notifiable`               | Whether to offer `fields.notify`, the "email me when somebody replies" box. False on a site that sends no mail, where the box would promise a message nothing could send.          |
+| `nameLength`, `bodyLength` | The `maxlength` for the two fields that have one.                                                                                                                                  |
 
 `fields.trap` is a honeypot: render it, hide it from sight and from assistive
 technology, and give it `tabindex="-1"` and `autocomplete="off"`. A submission
@@ -2075,10 +2173,10 @@ The contact form below keeps the same contract.
 Two more keys are on `commentForm` when — and only when — the request carries a
 valid session for this site's admin:
 
-| Key          | What it holds                                                                                                                       |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `signedInAs` | Who the comment will be posted as: `name`, which is their display name or their username, and `url`, which is their author archive. |
-| `csrfToken`  | The value for a hidden `fields.csrf`, without which the submission is refused.                                                      |
+| Key          | What it holds                                                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `signedInAs` | Who the reply will be posted as: `name`, which is their display name or their username, and `url`, which is their author archive. |
+| `csrfToken`  | The value for a hidden `fields.csrf`, without which the submission is refused.                                                    |
 
 **A replacement partial has to draw both forms**, because the site draws this
 one for its own author and the stranger's one for everybody else:
@@ -2088,6 +2186,10 @@ one for its own author and the stranger's one for everybody else:
 <input type="hidden" name="{{ commentForm.fields.csrf }}" value="{{ commentForm.csrfToken }}" />
 <p class="comment-signed-in">
   Commenting as <a href="{{ commentForm.signedInAs.url }}">{{ commentForm.signedInAs.name }}</a>.
+</p>
+<p class="comment-check">
+  <input id="comment-listed" name="{{ commentForm.fields.listed }}" type="checkbox" value="1"{% if commentForm.values.listed %} checked{% endif %} />
+  <label for="comment-listed">Include in posts and feeds</label>
 </p>
 {% else %}
 {# fields.loaded, fields.trap, and the name, email and website boxes #}
@@ -2101,6 +2203,17 @@ or a stopwatch. It renders `fields.csrf` instead, because this is the one form
 on the public site that acts on somebody's behalf — without the token, a page
 on another site could make them post under their own name. The comment box, the
 reply-to field and the notify box are the same in both branches.
+
+What the signed-in branch posts is a reply post rather than a comment (CMS
+README, "Replying while signed in"). It adds `fields.listed`, a checkbox
+labelled "Include in posts and feeds" and unchecked by default: unchecked
+publishes the reply post unlisted, checked publishes it public. The stranger's
+branch never draws it, and the CMS ignores it from a stranger.
+
+A Reply link, `?reply_to={id}#respond`, goes on every entry of the thread for
+somebody signed in, and on `source == "comment"` entries only for a stranger.
+`partials/comment.njk` asks `reply.source == "comment" or
+commentForm.signedInAs`.
 
 The account's email address is **never** on the context. The comment is stored
 with it, exactly as a stranger's is, and it is no more printable than theirs.

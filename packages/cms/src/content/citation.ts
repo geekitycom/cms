@@ -36,6 +36,7 @@ export function citedHost(url: string): string {
 
 export interface CitedPage {
   readonly name?: string;
+  readonly comment?: true;
   readonly author?: { readonly name: string };
   readonly picture?: { readonly kind: string };
 }
@@ -50,6 +51,7 @@ export function citesAnImage(context: CitedPage): boolean {
 
 export function citedPageName(url: string, context: CitedPage | undefined): string {
   if (context?.name !== undefined) return context.name;
+  if (context?.comment === true) return 'a comment';
   if (context?.author !== undefined) return 'a post';
   const image = context !== undefined && citesAnImage(context);
   return `${image ? 'an image from' : 'a page on'} ${citedHost(url)}`;

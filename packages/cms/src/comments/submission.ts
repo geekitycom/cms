@@ -1,5 +1,5 @@
 import { CSRF_FIELD } from '../admin/session.ts';
-import type { CommentAuthor, PostComment } from '../admin/store.ts';
+import type { PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
@@ -80,11 +80,27 @@ export const COMMENT_FIELDS = {
    * actually send mail (TASK-55).
    */
   notify: 'notify',
+  /**
+   * "Include in posts and feeds", which only the signed-in form carries
+   * (TASK-300): ticked, the reply post is Public; left empty, Unlisted. A
+   * stranger's form has no such box, and one sent anyway is never read.
+   */
+  listed: 'listed',
 } as const;
 
 /** A submitted comment form, as strings, which is what a form has. */
 export type CommentForm = Record<
-  'post' | 'name' | 'email' | 'url' | 'body' | 'inReplyTo' | 'trap' | 'loaded' | 'notify' | 'csrf',
+  | 'post'
+  | 'name'
+  | 'email'
+  | 'url'
+  | 'body'
+  | 'inReplyTo'
+  | 'trap'
+  | 'loaded'
+  | 'notify'
+  | 'csrf'
+  | 'listed',
   string
 >;
 
@@ -261,17 +277,6 @@ export type CommentRefusal =
 export type CommentOutcome =
   { kind: 'stored'; comment: PostComment } | { kind: 'refused'; refusal: CommentRefusal };
 
-/**
- * A comment's author as somebody other than the form says it.
- *
- * What a signed-in submission is attributed from: the account's name, its
- * author archive as the website, and its email — which is stored and never
- * shown, exactly as a stranger's is never shown. It is the stored author minus
- * the one field no account can supply: a picture only ever arrives with a
- * webmention (TASK-51).
- */
-export type SignedInAuthor = Omit<CommentAuthor, 'avatar'>;
-
 /** What {@link submitComment} needs around it. */
 export interface SubmitCommentOptions {
   /** The files and the index a stored comment goes into. */
@@ -287,19 +292,6 @@ export interface SubmitCommentOptions {
   baseUrl: string;
   /** The checker, when the site named one. */
   checker?: CommentChecker | undefined;
-  /**
-   * Who the session says is commenting, when one does (TASK-103).
-   *
-   * Set, it is the whole of the comment's attribution: what was typed in a
-   * name, email or website field is ignored, because the signed-in form has no
-   * such fields and anything arriving in them was not put there by the person
-   * the session names. It also settles the three cheap defences — the honeypot
-   * and the form's age are there to catch a robot filling a public form, and a
-   * session is better evidence than either, so neither is checked — and it
-   * makes this a comment the site's own author is writing, which the intake
-   * approves on arrival and never offers to a checker.
-   */
-  author?: SignedInAuthor | undefined;
   /** Who to tell about what lands, handed straight to the intake (TASK-55). */
   notices?: CommentNotices | undefined;
   /** Where the request came from, as far as the site can tell. */
@@ -341,49 +333,28 @@ export interface CommentThrottle {
 export async function submitComment(options: SubmitCommentOptions): Promise<CommentOutcome> {
   const { records, document, form, throttle } = options;
   const now = options.now ?? new Date();
-  // Whether the site knows who this is. It decides the attribution, the two
-  // cheap defences and where the comment lands, so it is read once.
-  const signedIn = options.author;
-
   // The honeypot first, because it costs one comparison and because a
   // submission that tripped it should not reach anything that could tell it so.
-  // Not for a signed-in commenter: their form carries no honeypot, and a
-  // session is better evidence than an empty box.
-  if (signedIn === undefined && trapped(form.trap)) return refused({ kind: 'discarded' });
+  if (trapped(form.trap)) return refused({ kind: 'discarded' });
 
-  const problems = commentProblems(form, signedIn !== undefined);
+  const problems = commentProblems(form);
   if (Object.keys(problems).length > 0) return refused({ kind: 'invalid', problems });
 
-  // The form's age, for the same reason and with the same exception: a
-  // signed-in form carries no loaded-at stamp to measure.
-  if (signedIn === undefined) {
-    const timing = formTimingRefusal(form.loaded, now);
-    if (timing !== undefined) return refused({ kind: timing });
-  }
+  const timing = formTimingRefusal(form.loaded, now);
+  if (timing !== undefined) return refused({ kind: timing });
 
-  // The rate limit stays either way. It is not about proving somebody is a
-  // person; it is about what one address may do in ten minutes, and a stolen
-  // session is exactly the case it would be wanted for.
   const keys = commentKeys(options.address);
   const wait = throttle.retryAfter(keys);
   if (wait !== undefined) return refused({ kind: 'rate-limited', retryAfter: wait });
 
   const markdown = form.body.trim();
-  const author =
-    signedIn === undefined
-      ? {
-          name: form.name.trim(),
-          url: normalizeWebsite(form.url.trim()) ?? null,
-          email: form.email.trim() === '' ? null : form.email.trim(),
-          // A form asks for no picture: only a webmention brings one (TASK-51).
-          avatar: null,
-        }
-      : {
-          name: signedIn.name,
-          url: signedIn.url,
-          email: signedIn.email,
-          avatar: null,
-        };
+  const author = {
+    name: form.name.trim(),
+    url: normalizeWebsite(form.url.trim()) ?? null,
+    email: form.email.trim() === '' ? null : form.email.trim(),
+    // A form asks for no picture: only a webmention brings one (TASK-51).
+    avatar: null,
+  };
   const proposed: ProposedComment = {
     slug: document.slug,
     permalink: document.permalink,
@@ -403,13 +374,7 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
 
   const outcome = await intakeComment({
     records,
-    // Geekity has one role, so anybody who can sign in can already publish a
-    // post and approve any comment. A comment of theirs waiting in a queue for
-    // them to approve would be theatre, and a spam service has no say in what
-    // the owner of the site says — so a signed-in comment arrives at the
-    // intake as exactly what it is, the site's own author writing, and is
-    // approved on arrival with no call to the checker (TASK-103).
-    origin: signedIn === undefined ? 'form' : 'moderator',
+    origin: 'form',
     comment: proposed,
     post: {
       title: postLabel(document, options.cited),

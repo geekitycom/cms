@@ -13,7 +13,7 @@ import { absoluteUrl, contentEtag, isNotModified, latestModified } from './negot
 import type { ConditionalHeaders } from './negotiate.ts';
 import { resolveLicense } from './license.ts';
 
-const COMMENTS_FEED_REVISION = 3;
+const COMMENTS_FEED_REVISION = 4;
 
 /**
  * How a feed is served: its validator, its headers, and which serialiser
@@ -51,6 +51,9 @@ export {
   NOTIFY_PATHS,
   notifyEndpoints,
   notifyServerOf,
+  REPLIES_ROOT,
+  repliesFeedPath,
+  repliesKey,
   splitFeedPath,
 } from './feed-source.ts';
 export type {
@@ -218,6 +221,11 @@ function commentsFingerprint(source: CommentFeedSource): string {
         comment.published.toISOString(),
         comment.html,
         comment.post?.title ?? '',
+        comment.inReplyTo ?? '',
+        comment.replies === undefined
+          ? ''
+          : `${String(comment.replies.count)} ${comment.replies.feed}`,
+        comment.authorFeed ?? '',
       ].join('\0'),
     ),
   ].join('\n');

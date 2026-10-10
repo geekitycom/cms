@@ -5,7 +5,9 @@ import { databaseFile, openDatabase } from '../cache.ts';
 import type { Migration } from '../cache.ts';
 import { rsvpValue } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
-import { REPLY_ACTIVITY_TYPE, replyTargetOf } from '../federation/replies.ts';
+import { REPLY_ACTIVITY_TYPE, replyIdOf, replyTargetOf } from '../federation/replies.ts';
+import { repliesKey } from '../web/feed-source.ts';
+import { replyGuid } from '../web/guids.ts';
 
 /**
  * Which rows of the inbox log are replies: a `Create` that named something it
@@ -18,6 +20,12 @@ const IS_REPLY = `activity_type = '${REPLY_ACTIVITY_TYPE}' AND in_reply_to IS NO
 export interface OpenAdminStoreOptions {
   /** Directory the database lives in. Created if it is missing. */
   dataDir: string;
+  /**
+   * The site's base URL, which a native comment's `/replies/` key is worked
+   * out against (TASK-327). Opening with a different one than last time works
+   * every key out again; opening with none leaves new comments without keys.
+   */
+  baseUrl?: string | undefined;
 }
 
 /**
@@ -236,6 +244,13 @@ export interface InboxActivity {
   readonly inReplyTo: string | null;
   /** When it arrived, as an ISO 8601 instant. */
   readonly receivedAt: string;
+  /**
+   * Whether the site read it rather than was told it: a reply found in a
+   * fediverse reply's `replies` collection (TASK-321), logged as the `Create`
+   * nobody delivered. Only these are the site's to remove when the remote
+   * server stops listing them.
+   */
+  readonly fetched: boolean;
   /** The activity as compacted JSON-LD, exactly as it was received. */
   readonly json: string;
 }
@@ -251,9 +266,11 @@ export interface InboxActivity {
  */
 export type NewInboxActivity = Omit<
   InboxActivity,
-  'id' | 'receivedAt' | 'inReplyTo' | 'recipient'
+  'id' | 'receivedAt' | 'inReplyTo' | 'recipient' | 'fetched'
 > & {
   receivedAt?: string | undefined;
+  /** Delivered, unless it says otherwise. */
+  fetched?: boolean | undefined;
   /**
    * Who it was addressed to, when the delivery said. Optional and `null` by
    * default: an activity that reached the shared inbox without naming one of
@@ -568,11 +585,22 @@ export interface CommentRecord {
    * site that has had none stay byte for byte what they were.
    */
   rsvp?: RsvpValue;
+  /**
+   * The page whose entry carried it, for a webmention reply read out of
+   * another webmention's source rather than sent on its own (a salmention,
+   * TASK-320). Absent for every other comment.
+   */
+  via?: string;
 }
 
 /** A comment's {@link CommentRecord.rsvp} as a record carries it: present only when there is one. */
 export function rsvpField(rsvp: RsvpValue | undefined): Pick<CommentRecord, 'rsvp'> {
   return rsvp === undefined ? {} : { rsvp };
+}
+
+/** A comment's {@link CommentRecord.via} as a record carries it: present only when there is one. */
+export function viaField(via: string | null | undefined): Pick<CommentRecord, 'via'> {
+  return via === undefined || via === null || via === '' ? {} : { via };
 }
 
 /**
@@ -782,6 +810,8 @@ export interface AdminStore {
    * against.
    */
   logInboxActivity(activity: NewInboxActivity): InboxActivity;
+  /** Forget one logged activity by its row id. Returns `false` when there was none. */
+  deleteInboxActivity(id: number): boolean;
   /**
    * Make the inbound log index say exactly this, in one transaction, with the
    * row ids starting again from one.
@@ -819,21 +849,21 @@ export interface AdminStore {
   /** One post's comments, oldest first, whatever status they are at. */
   listCommentsFor(slug: string): PostComment[];
   /**
-   * How many of one post's comments stand at one status.
-   *
-   * A count rather than a list because that is what the feeds want: the RSS
-   * `source:comments` element carries a number per item, and reading every
-   * comment on every post of a feed page to arrive at it would be a page of
-   * text for a page of integers.
-   */
-  countCommentsFor(slug: string, status: CommentStatus): number;
-  /**
    * Comments across the site, newest first, optionally of one status and one
    * page of them. What the moderation screen and the site-wide feed read.
    */
   listComments(options: ListCommentsOptions): PostComment[];
   /** One comment by id, or `undefined`. */
   getComment(id: string): PostComment | undefined;
+  /** The comments whose `url` is this one, whatever their status (TASK-300). */
+  listCommentsAt(url: string): PostComment[];
+  /**
+   * The comments and webmentions whose feed guid has this `/replies/` key,
+   * whatever their status (TASK-327): one indexed lookup.
+   */
+  listCommentsByRepliesKey(key: string): PostComment[];
+  /** The logged replies whose note's id has this `/replies/` key (TASK-327). */
+  listRepliesByKey(key: string): InboxActivity[];
   /** How many comments stand at each status. What the dashboard shows. */
   countCommentsByStatus(): Record<CommentStatus, number>;
   /**
@@ -848,6 +878,12 @@ export interface AdminStore {
   putComment(comment: PostComment): PostComment;
   /** Forget a comment. Returns `false` when there was nothing to forget. */
   deleteComment(id: string): boolean;
+  /**
+   * Hear about every comment written or forgotten and every activity logged,
+   * as it happens (TASK-320). A rebuild of either index is not news and says
+   * nothing. Returns the function that stops listening.
+   */
+  onConversationWrite(listener: (written: ConversationWrite) => void): () => void;
   /**
    * Make the comment index say exactly this, in one transaction.
    *
@@ -896,6 +932,14 @@ export interface AdminStore {
   listSentWebmentions(slug: string): SentWebmention[];
   /** How many of one post's targets stand at each status. */
   countSentWebmentionsByStatus(slug: string): Record<WebmentionSendStatus, number>;
+  /** Every (post, source) the sent webmentions are recorded under. */
+  listSentWebmentionSources(): Pick<SentWebmention, 'slug' | 'source'>[];
+  /**
+   * File what one post sent from one source under another post, as a post
+   * whose slug changed is (TASK-332). Where both hold an outcome for one
+   * target, the later attempt is the one kept.
+   */
+  moveSentWebmentions(from: Pick<SentWebmention, 'slug' | 'source'>, to: string): void;
   /** Every relay subscription, oldest first, however it stands. */
   listRelays(): Relay[];
   /** One relay subscription by the inbox it was made to, or `undefined`. */
@@ -938,6 +982,21 @@ export interface AdminStore {
   /** Close the database. Safe to call twice. */
   close(): void;
 }
+
+/**
+ * What {@link AdminStore.onConversationWrite} hears: a comment on the post of
+ * that slug, or an activity naming these objects as what it is about or what
+ * it answers. `approved` says this write is the one that approved the comment,
+ * so it is on the page now and was not before (TASK-333).
+ */
+export type ConversationWrite =
+  | {
+      readonly kind: 'comment';
+      readonly slug: string;
+      readonly id: string;
+      readonly approved: boolean;
+    }
+  | { readonly kind: 'activity'; readonly about: readonly string[] };
 
 /**
  * Open (and if needed create) the admin tables in `dataDir`, applying every
@@ -1044,6 +1103,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     clearInboxActivities: db.prepare('DELETE FROM ap_inbox'),
     resetInboxSequence: db.prepare("DELETE FROM sqlite_sequence WHERE name = 'ap_inbox'"),
     countInboxActivities: db.prepare('SELECT COUNT(*) AS count FROM ap_inbox'),
+    deleteInboxActivity: db.prepare('DELETE FROM ap_inbox WHERE id = ? RETURNING *'),
     listInboxActivities: db.prepare(`
       SELECT * FROM ap_inbox
       ORDER BY received_at DESC, id DESC
@@ -1051,15 +1111,18 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     `),
     logInboxActivity: db.prepare(`
       INSERT INTO ap_inbox (
-        activity_id, activity_type, actor_id, object_id, in_reply_to, recipient, received_at, json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        activity_id, activity_type, actor_id, object_id, in_reply_to, reply_key, recipient,
+        received_at, fetched, json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (activity_id) DO UPDATE SET
         activity_type = excluded.activity_type,
         actor_id = excluded.actor_id,
         object_id = excluded.object_id,
         in_reply_to = excluded.in_reply_to,
+        reply_key = excluded.reply_key,
         recipient = excluded.recipient,
         received_at = excluded.received_at,
+        fetched = excluded.fetched,
         json = excluded.json
       RETURNING *
     `),
@@ -1081,9 +1144,15 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       SELECT * FROM comments WHERE slug = ? ORDER BY submitted_at, id
     `),
     commentById: db.prepare('SELECT * FROM comments WHERE id = ?'),
-    countCommentsFor: db.prepare(
-      'SELECT COUNT(*) AS count FROM comments WHERE slug = ? AND status = ?',
+    commentsAt: db.prepare('SELECT * FROM comments WHERE url = ? ORDER BY submitted_at'),
+    commentsByRepliesKey: db.prepare(
+      'SELECT * FROM comments WHERE replies_key = ? ORDER BY submitted_at, id',
     ),
+    staleCommentKeys: db.prepare('SELECT id, source FROM comments WHERE keys_base IS NOT ?'),
+    writeCommentKey: db.prepare('UPDATE comments SET replies_key = ?, keys_base = ? WHERE id = ?'),
+    repliesByKey: db.prepare(`
+      SELECT * FROM ap_inbox WHERE ${IS_REPLY} AND reply_key = ? ORDER BY received_at, id
+    `),
     countCommentsByStatus: db.prepare(
       'SELECT status, COUNT(*) AS count FROM comments GROUP BY status',
     ),
@@ -1098,8 +1167,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         id, slug, permalink, source, kind, status,
         author_name, author_url, author_email,
         markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar, notify,
-        redacted, rsvp
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        redacted, rsvp, via, replies_key, keys_base
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET
         slug = excluded.slug,
         permalink = excluded.permalink,
@@ -1118,7 +1187,10 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         author_avatar = excluded.author_avatar,
         notify = excluded.notify,
         redacted = excluded.redacted,
-        rsvp = excluded.rsvp
+        rsvp = excluded.rsvp,
+        via = excluded.via,
+        replies_key = excluded.replies_key,
+        keys_base = excluded.keys_base
     `),
     deleteComment: db.prepare('DELETE FROM comments WHERE id = ?'),
     clearComments: db.prepare('DELETE FROM comments'),
@@ -1168,6 +1240,26 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     `),
     listSentWebmentions: db.prepare(
       'SELECT * FROM webmentions_sent WHERE slug = ? ORDER BY target',
+    ),
+    listSentWebmentionSources: db.prepare(
+      'SELECT DISTINCT slug, source FROM webmentions_sent ORDER BY slug, source',
+    ),
+    copySentWebmentions: db.prepare(`
+      INSERT INTO webmentions_sent (
+        slug, source, target, endpoint, status, error, attempted_at
+      )
+      SELECT :to, source, target, endpoint, status, error, attempted_at
+      FROM webmentions_sent WHERE slug = :slug AND source = :source
+      ON CONFLICT (slug, target) DO UPDATE SET
+        source = excluded.source,
+        endpoint = excluded.endpoint,
+        status = excluded.status,
+        error = excluded.error,
+        attempted_at = excluded.attempted_at
+      WHERE excluded.attempted_at > webmentions_sent.attempted_at
+    `),
+    deleteSentWebmentions: db.prepare(
+      'DELETE FROM webmentions_sent WHERE slug = :slug AND source = :source',
     ),
     countSentWebmentionsByStatus: db.prepare(`
       SELECT status, COUNT(*) AS count FROM webmentions_sent WHERE slug = ? GROUP BY status
@@ -1229,8 +1321,33 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     }
   }
 
+  /** Work out again every comment key worked out against another base, or none. */
+  function refreshCommentKeys(baseUrl: string): void {
+    inTransaction(() => {
+      for (const row of statements.staleCommentKeys.all(baseUrl) as Record<string, unknown>[]) {
+        const comment = {
+          id: String(row['id']),
+          source: oneOf(row['source'], COMMENT_SOURCES, 'comment'),
+        };
+        statements.writeCommentKey.run(...commentKey(comment, baseUrl), comment.id);
+      }
+    });
+  }
+
+  if (options.baseUrl !== undefined) refreshCommentKeys(options.baseUrl);
+
+  const listeners = new Set<(written: ConversationWrite) => void>();
+  const written = (change: ConversationWrite): void => {
+    for (const listener of listeners) listener(change);
+  };
+
   return {
     file,
+
+    onConversationWrite(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
 
     createSession(input) {
       const now = input.now ?? new Date();
@@ -1457,14 +1574,25 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         // Derived here rather than passed in, so the column cannot say
         // something the stored activity does not.
         replyTargetOf(activity.json),
+        replyKeyOf(activity),
         activity.recipient ?? null,
         activity.receivedAt ?? new Date().toISOString(),
+        activity.fetched === true ? 1 : 0,
         activity.json,
       ) as Record<string, unknown> | undefined;
       if (row === undefined) {
         throw new Error(`The activity "${activity.activityType}" was not written to the log.`);
       }
-      return toInboxActivity(row);
+      const logged = toInboxActivity(row);
+      written(activityWrite(logged));
+      return logged;
+    },
+
+    deleteInboxActivity(id) {
+      const row = statements.deleteInboxActivity.get(id) as Record<string, unknown> | undefined;
+      if (row === undefined) return false;
+      written(activityWrite(toInboxActivity(row)));
+      return true;
     },
 
     replaceInboxActivities(activities) {
@@ -1480,8 +1608,10 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             activity.actorId,
             activity.objectId,
             replyTargetOf(activity.json),
+            replyKeyOf(activity),
             activity.recipient ?? null,
             activity.receivedAt ?? new Date().toISOString(),
+            activity.fetched === true ? 1 : 0,
             activity.json,
           );
         }
@@ -1556,15 +1686,21 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return rows.map(toComment);
     },
 
-    countCommentsFor(slug, status) {
-      const row = statements.countCommentsFor.get(slug, status) as
-        Record<string, unknown> | undefined;
-      return Number(row?.['count'] ?? 0);
-    },
-
     getComment(id) {
       const row = statements.commentById.get(id) as Record<string, unknown> | undefined;
       return row === undefined ? undefined : toComment(row);
+    },
+
+    listCommentsAt(url) {
+      return (statements.commentsAt.all(url) as Record<string, unknown>[]).map(toComment);
+    },
+
+    listCommentsByRepliesKey(key) {
+      return (statements.commentsByRepliesKey.all(key) as Record<string, unknown>[]).map(toComment);
+    },
+
+    listRepliesByKey(key) {
+      return (statements.repliesByKey.all(key) as Record<string, unknown>[]).map(toInboxActivity);
     },
 
     countCommentsByStatus() {
@@ -1582,6 +1718,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     },
 
     putComment(comment) {
+      const before = statements.commentById.get(comment.id) as Record<string, unknown> | undefined;
       statements.putComment.run(
         comment.id,
         comment.slug,
@@ -1602,12 +1739,24 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         comment.notify ? 1 : 0,
         redactedColumn(comment.redacted),
         comment.rsvp ?? null,
+        comment.via ?? null,
+        ...commentKey(comment, options.baseUrl),
       );
+      written({
+        kind: 'comment',
+        slug: comment.slug,
+        id: comment.id,
+        approved: comment.status === 'approved' && before?.['status'] !== 'approved',
+      });
       return comment;
     },
 
     deleteComment(id) {
-      return statements.deleteComment.run(id).changes > 0;
+      const row = statements.commentById.get(id) as Record<string, unknown> | undefined;
+      const slug = row === undefined ? undefined : String(row['slug']);
+      const deleted = statements.deleteComment.run(id).changes > 0;
+      if (slug !== undefined) written({ kind: 'comment', slug, id, approved: false });
+      return deleted;
     },
 
     replaceComments(comments) {
@@ -1634,6 +1783,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             comment.notify ? 1 : 0,
             redactedColumn(comment.redacted),
             comment.rsvp ?? null,
+            comment.via ?? null,
+            ...commentKey(comment, options.baseUrl),
           );
         }
       });
@@ -1707,6 +1858,19 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     listSentWebmentions(slug) {
       const rows = statements.listSentWebmentions.all(slug) as Record<string, unknown>[];
       return rows.map(toSentWebmention);
+    },
+
+    listSentWebmentionSources() {
+      const rows = statements.listSentWebmentionSources.all() as Record<string, unknown>[];
+      return rows.map((row) => ({ slug: String(row['slug']), source: String(row['source']) }));
+    },
+
+    moveSentWebmentions(from, to) {
+      if (from.slug === to) return;
+      inTransaction(() => {
+        statements.copySentWebmentions.run({ ...from, to });
+        statements.deleteSentWebmentions.run(from);
+      });
     },
 
     countSentWebmentionsByStatus(slug) {
@@ -1908,6 +2072,7 @@ function toInboxActivity(row: Record<string, unknown>): InboxActivity {
     inReplyTo: nullableText(row['in_reply_to']),
     recipient: nullableText(row['recipient']),
     receivedAt: String(row['received_at']),
+    fetched: Number(row['fetched']) === 1,
     json: String(row['json']),
   };
 }
@@ -1965,6 +2130,7 @@ function toComment(row: Record<string, unknown>): PostComment {
     notify: Number(row['notify'] ?? 0) === 1,
     ...redactedOf(row['redacted']),
     ...rsvpField(rsvpValue(row['rsvp'])),
+    ...viaField(nullableText(row['via'])),
   };
 }
 
@@ -2668,4 +2834,61 @@ const MIGRATIONS: readonly Migration[] = [
     version: 22,
     sql: `ALTER TABLE comments ADD COLUMN rsvp TEXT;`,
   },
+  {
+    // What a \`/replies/\` key names (TASK-327), so resolving one is a lookup
+    // rather than a walk of every comment and logged reply. A note's key is
+    // its id's and is backfilled here; a native comment's hangs off the base
+    // URL, which a migration does not know, so those rows are filled when the
+    // store is opened with one, as they are whenever that base changes.
+    version: 23,
+    sql: `
+      ALTER TABLE comments ADD COLUMN replies_key TEXT;
+      ALTER TABLE comments ADD COLUMN keys_base TEXT;
+      CREATE INDEX comments_replies_key ON comments (replies_key);
+      ALTER TABLE ap_inbox ADD COLUMN reply_key TEXT;
+      CREATE INDEX ap_inbox_reply_key ON ap_inbox (reply_key);
+    `,
+    run(db) {
+      const rows = db.prepare('SELECT id, activity_type, object_id, json FROM ap_inbox').all();
+      const update = db.prepare('UPDATE ap_inbox SET reply_key = ? WHERE id = ?');
+      for (const row of rows) {
+        const key = replyKeyOf({
+          activityType: String(row['activity_type']),
+          objectId: nullableText(row['object_id']),
+          json: String(row['json']),
+        });
+        update.run(key, Number(row['id']));
+      }
+    },
+  },
+  {
+    version: 24,
+    sql: `ALTER TABLE comments ADD COLUMN via TEXT;`,
+  },
+  {
+    version: 25,
+    sql: `ALTER TABLE ap_inbox ADD COLUMN fetched INTEGER NOT NULL DEFAULT 0;`,
+  },
 ];
+
+/** What {@link AdminStore.onConversationWrite} hears about one logged activity. */
+function activityWrite(activity: InboxActivity): ConversationWrite {
+  return {
+    kind: 'activity',
+    about: [activity.objectId, activity.inReplyTo].filter((id) => id !== null),
+  };
+}
+
+/** The `/replies/` key of a logged reply's note, or `null` for anything else. */
+function replyKeyOf(activity: Parameters<typeof replyIdOf>[0]): string | null {
+  const id = replyIdOf(activity);
+  return id === null ? null : repliesKey(id);
+}
+
+/** A comment's `/replies/` key and the base it was worked out against, as columns. */
+function commentKey(
+  comment: Pick<PostComment, 'id' | 'source'>,
+  baseUrl: string | undefined,
+): [string | null, string | null] {
+  return baseUrl === undefined ? [null, null] : [repliesKey(replyGuid(comment, baseUrl)), baseUrl];
+}

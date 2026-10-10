@@ -47,6 +47,8 @@ export {
   commentsDirectory,
   commentsFile,
   deleteComment,
+  followAllMovedComments,
+  followMovedComments,
   heldWebmention,
   intakeComment,
   migrateCommentEmails,
@@ -94,7 +96,6 @@ export type {
   SubmissionType,
   CommentThrottle,
   CommentVerdict,
-  SignedInAuthor,
   SubmitCommentOptions,
 } from './submission.ts';
 export { signedInCommenter } from './viewer.ts';
