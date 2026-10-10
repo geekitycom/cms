@@ -1,11 +1,19 @@
 ---
 id: TASK-300
-title: The owner's reply to a comment can also be published as a reply post
+title: >-
+  A signed-in user's reply in a comment thread is a reply post, shown in the
+  thread
 status: To Do
 assignee: []
 created_date: '2026-10-08 14:39'
-labels: []
-dependencies: []
+updated_date: '2026-10-10 12:31'
+labels:
+  - comments
+  - indieweb
+  - federation
+dependencies:
+  - TASK-318
+  - TASK-319
 references:
   - packages/cms/src/comments/submission.ts
   - packages/cms/src/comments/form.ts
@@ -20,15 +28,33 @@ ordinal: 260800
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-When the signed-in site owner replies to a comment on a post or page, the reply today lives only in that comment thread. Add a checkbox to the comment form, shown only to the signed-in owner, that also publishes the reply as a reply post: a post with in-reply-to pointing at the comment, so it appears on the homepage, in the feeds, and federates like any other reply post. This lets the owner join a conversation on their own site and have it show up in their stream without writing the reply twice.
+Today a signed-in owner's reply to a comment is stored as a local comment. It never leaves the site: no ActivityPub activity and no webmention (comments/submission.ts). The form also only lets you answer a native comment, so a webmention reply or a fediverse reply cannot be answered from the thread at all.
+
+The model from here: a comment is something somebody else says on the site (a visitor through the form, a webmention, a fediverse reply); a post is something a signed-in user says. A signed-in user's reply in a thread is therefore a reply post, one record, whose in-reply-to is what it answers:
+- a native comment: the comment's own page (TASK-318);
+- a webmention reply: its sender's URL, so the other site gets a webmention back;
+- a fediverse reply: the remote Note's id, so it federates into that thread addressed to its author;
+- the post itself, for a top-level reply.
+
+The thread shows the reply post inline where the comment would have been, so the reply is never stored or shown twice. The form's checkbox chooses its visibility: checked is Public (homepage or post listing, feeds, outbox); unchecked is Unlisted, which already means its own noindex page, no listing or feed, webmentions still sent, followers still sent the Create (README, Unlisted posts). A reply post written in the editor or over Micropub whose in-reply-to names a comment on this site shows in that thread the same way.
+
+Replies to the reply post land against it (its own URL), so the thread stitches them in under it, rather than splitting the conversation across two pages.
+
+By design, a visitor's reply to a fediverse comment stays a native comment and does not go out over ActivityPub: a visitor is not a user and has no actor. That is accepted.
+
+Existing owner comments stay comments; only new replies become posts.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The comment form shows a "Also publish as a reply post" checkbox only to the signed-in owner; anonymous and other visitors never see it, and a forged field from them is ignored
-- [ ] #2 Submitting a reply with the box checked creates the comment as today and also a reply post whose in-reply-to is the comment it answers (its URL on the page), with the same body
-- [ ] #3 The reply post appears on the homepage and in the Atom, RSS and JSON feeds like any other reply post, and federates and sends webmentions through the usual reply-post paths
-- [ ] #4 The comment and the reply post are linked so neither is shown twice to readers of the thread (decide and document whether the thread shows the comment, the post, or one pointing at the other)
-- [ ] #5 With the box unchecked, behaviour is unchanged: only the comment is created
-- [ ] #6 Tests cover the owner-only checkbox, the forged-field case, and the post that results; doc-6 Native Comments describes the option
+- [ ] #1 A signed-in user replying from the thread creates a reply post, not a comment, whose in-reply-to is the native comment's page, the webmention reply's sender URL, the fediverse reply's Note id, or the post, by what it answers
+- [ ] #2 The thread shows that reply post inline under what it answers, once, with its author, content and a u-url to the reply post
+- [ ] #3 The form shows signed-in users a Public/Unlisted choice (checked publishes publicly); anonymous visitors never see it, and a forged field from them is ignored
+- [ ] #4 A public reply post appears in the post listing and the RSS, Atom and JSON feeds like any reply post; an unlisted one is absent from them and keeps the unlisted rules
+- [ ] #5 A reply to a webmention reply sends a webmention to its sender URL; a reply to a fediverse reply federates with inReplyTo the remote Note id and is addressed to its author
+- [ ] #6 Every comment, including webmention and fediverse replies, shows signed-in users a Reply link; visitors keep a Reply link on native comments only
+- [ ] #7 A reply post made in the editor or over Micropub whose in-reply-to names a comment on this site shows inline in that thread the same way, and its reply context is the comment, not the whole post page
+- [ ] #8 A webmention or fediverse reply to the reply post threads under it in the original thread
+- [ ] #9 A visitor's reply under a fediverse comment stays a native comment and sends nothing over ActivityPub; existing owner comments are left as comments
+- [ ] #10 doc-6 Native Comments and the CMS README describe the model, and a decision records it
 <!-- AC:END -->
