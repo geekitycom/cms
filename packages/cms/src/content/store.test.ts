@@ -605,44 +605,6 @@ describe('neighbours', () => {
   });
 });
 
-describe('listPostsSince', () => {
-  it('returns the published posts dated at or after an instant, newest first', async () => {
-    const index = await populated();
-
-    assert.deepEqual(titles(index.listPostsSince('2026-06-01T00:00:00.000Z')), [
-      'Newest',
-      'Middle',
-      'Earlier Same Day',
-    ]);
-    assert.deepEqual(titles(index.listPostsSince('2026-09-01T00:00:00.000Z')), ['Newest']);
-    assert.deepEqual(index.listPostsSince('2026-10-01T00:00:00.000Z'), []);
-  });
-
-  it('leaves out the drafts, the trash, the pages and anything not due yet', async () => {
-    let now = new Date('2026-09-05T00:00:00Z');
-    const index = openContentStore({ dataDir: await dataDir(), now: () => now });
-    openStores.push(index);
-    index.upsertAll(corpus());
-    index.upsert(
-      post({
-        path: 'posts/2026-12-01-scheduled.md',
-        slug: 'scheduled',
-        permalink: '/2026/12/scheduled/',
-        title: 'Scheduled',
-        date: '2026-12-01T00:00:00Z',
-      }),
-    );
-
-    assert.deepEqual(titles(index.listPostsSince('2026-09-01T00:00:00.000Z')), ['Newest']);
-
-    now = new Date('2026-12-02T00:00:00Z');
-    assert.deepEqual(titles(index.listPostsSince('2026-09-01T00:00:00.000Z')), [
-      'Scheduled',
-      'Newest',
-    ]);
-  });
-});
-
 describe('listByTag', () => {
   it('returns the documents carrying a tag, newest first', async () => {
     const index = await populated();

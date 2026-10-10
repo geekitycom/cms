@@ -7,6 +7,7 @@ import { after, describe, it } from 'node:test';
 import {
   addComment,
   createCms,
+  createUser,
   deleteComment,
   openAdminStore,
   pluginDataFolder,
@@ -361,6 +362,43 @@ describe('the comments and reactions import', () => {
       },
       { likes: '3', reposts: '3', mentions: '3', comments: '2 replies' },
     );
+  });
+
+  it('prints a lowercase-escaped WordPress permalink with uppercase escapes, as the README says', async () => {
+    const wp = await site();
+    await createUser({ dataDir: wp.dataDir, username: 'ada', password: 'correct horse battery' });
+    await wp.run([THE_POST]);
+    const cms = await wp.serve();
+    const upper = `${SITE}/2024/03/i-%E2%99%A5-rss/`;
+    const lower = `${SITE}/2024/03/i-%e2%99%a5-rss/`;
+    const body = async (url: string, accept = 'text/html') => {
+      const response = await cms.app.request(url, { headers: { accept } });
+      assert.equal(response.status, 200, url);
+      return response.text();
+    };
+    const page = await body('/2024/03/i-%E2%99%A5-rss/');
+    const activity = JSON.parse(
+      await body('/2024/03/i-%E2%99%A5-rss/', 'application/activity+json'),
+    ) as { url?: unknown };
+    const surfaces = {
+      rss: await body('/feed/'),
+      atom: await body('/feed/atom/'),
+      json: await body('/feed/json/'),
+      comments: await body('/comments/feed/'),
+      sitemap: await body('/sitemap.xml'),
+      canonical: /<link rel="canonical" href="([^"]*)">/.exec(page)?.[1] ?? '',
+      ogUrl: /<meta property="og:url" content="([^"]*)">/.exec(page)?.[1] ?? '',
+      activityUrl: String(activity.url),
+    };
+
+    for (const [surface, text] of Object.entries(surfaces)) {
+      assert.ok(text.includes(upper), `${surface} names ${upper}`);
+      assert.ok(!text.includes(lower), `${surface} never names ${lower}`);
+    }
+    for (const spelling of ['/2024/03/i-%E2%99%A5-rss/', '/2024/03/i-%e2%99%a5-rss/']) {
+      const response = await cms.app.request(spelling);
+      assert.equal(response.status, 200, `${spelling} answers without a redirect`);
+    }
   });
 
   it('keeps the id WordPress’s comments feed published, so a feed reader sees nothing new', async () => {

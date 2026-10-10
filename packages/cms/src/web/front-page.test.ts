@@ -94,10 +94,7 @@ describe('a site whose homepage is a page', () => {
     const html = await response.text();
     assert.match(html, /Hello and welcome\./, 'the page’s own body is the front page');
     assert.match(html, /Welcome/);
-    // The archive is not what `/` is: the posts under the page's words are the
-    // front page's own Recent Posts (TASK-85), not the paginated listing,
-    // which has a `page-title` heading and lives on the posts page now.
-    assert.match(html, /<h2 class="section-title">Recent Posts<\/h2>/);
+    assert.doesNotMatch(html, /Newest/, 'the posts are still listed at the root');
     assert.doesNotMatch(html, /class="page-title"/, 'the listing is still at the root');
   });
 
@@ -148,7 +145,15 @@ describe('a site whose homepage is a page', () => {
       ...theme,
     });
     const { cms } = await site(
-      { ...CONTENT, '_data/site.json': siteJson({ homepage: 'welcome', theme: 'fixture' }) },
+      {
+        ...CONTENT,
+        'posts/2099-01-02-ahead.md': post('Ahead', '01', 'ahead').replace('2026-01', '2099-01'),
+        'posts/2026-09-09-drafted.md': post('Drafted', '09', 'drafted').replace(
+          '---\n\n',
+          'draft: true\n---\n\n',
+        ),
+        '_data/site.json': siteJson({ homepage: 'welcome', theme: 'fixture' }),
+      },
       { themesDir },
     );
     return cms;
@@ -160,12 +165,31 @@ describe('a site whose homepage is a page', () => {
     const html = await (await (await themedSite({})).app.request('/')).text();
 
     assert.match(html, /Hello and welcome\./, 'the page’s own words are still the front page');
-    assert.match(
-      html,
-      /<h2 class="section-title">Recent Posts<\/h2>/,
-      'over the posts the packaged layout prints',
-    );
+    assert.match(html, /<h2 class="section-title">Welcome<\/h2>/, 'under its own title');
     assert.doesNotMatch(html, /<p class="page-meta">/, 'and not through the page layout');
+  });
+
+  it('lets a theme list the newest posts it asks for, the way a listing does (TASK-317)', async () => {
+    const cms = await themedSite({
+      'layouts/front-page.njk': [
+        '{% extends "layouts/base.njk" %}{% block content %}',
+        '{{ content | safe }}',
+        '{% set posts = newestPosts(2) %}{% set feedHeading = 3 %}',
+        '{% include "partials/post-list.njk" %}',
+        '{% endblock %}',
+      ].join(''),
+    });
+
+    const html = await (await cms.app.request('/')).text();
+    const titles = [...html.matchAll(/<h3 class="feed-title p-name">\s*<a[^>]*>([^<]*)<\/a>/g)].map(
+      (match) => match[1],
+    );
+    assert.deepEqual(
+      titles,
+      ['Newest', 'Middle'],
+      'the two newest, without the draft or the future',
+    );
+    assert.match(html, /<div class="feed h-feed">/, 'not the entries partials/post-list.njk draws');
   });
 
   it('lets a theme lay the front page out on its own, over the packaged one (AC #2)', async () => {

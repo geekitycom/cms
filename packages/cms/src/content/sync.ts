@@ -7,7 +7,11 @@ import type { FSWatcher } from 'chokidar';
 
 import type { Document, DocumentType } from './document.ts';
 import { handleDirectory } from './handles.ts';
-import { ORIGINAL_FRONT_MATTER_KEY, originalUrlOf } from './original.ts';
+import {
+  ORIGINAL_FRONT_MATTER_KEY,
+  ORIGINAL_NAME_FRONT_MATTER_KEY,
+  originalOf,
+} from './original.ts';
 import { parseDocument } from './parser.ts';
 import { replyTarget } from './post-type.ts';
 import { DuplicatePermalinkError, TRASH_DIRECTORY } from './store.ts';
@@ -259,11 +263,19 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
         `${relativePath} names in-reply-to "${document.inReplyTo}", which is not an http or https URL, so it is not a reply.`,
       );
     }
-    const original = document.extra[ORIGINAL_FRONT_MATTER_KEY];
-    if (original !== undefined && originalUrlOf(document.extra) === undefined) {
-      logger.warn(
-        `${relativePath} names ${ORIGINAL_FRONT_MATTER_KEY} ${JSON.stringify(original)}, which is not an absolute http or https URL, so the page stays its own canonical URL.`,
-      );
+    if (originalOf(document.extra) === undefined) {
+      const original = document.extra[ORIGINAL_FRONT_MATTER_KEY];
+      if (original !== undefined) {
+        logger.warn(
+          `${relativePath} names ${ORIGINAL_FRONT_MATTER_KEY} ${JSON.stringify(original)}, which is not an absolute http or https URL, so the page stays its own canonical URL.`,
+        );
+      }
+      const name = document.extra[ORIGINAL_NAME_FRONT_MATTER_KEY];
+      if (name !== undefined) {
+        logger.warn(
+          `${relativePath} names ${ORIGINAL_NAME_FRONT_MATTER_KEY} ${JSON.stringify(name)} with no absolute http or https ${ORIGINAL_FRONT_MATTER_KEY}, so it names nothing.`,
+        );
+      }
     }
 
     try {

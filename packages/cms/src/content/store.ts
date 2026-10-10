@@ -125,17 +125,6 @@ export interface ContentStore {
   /** Published, untrashed, already-due, listed posts, newest first. */
   listPosts(options?: ListOptions): Document[];
   /**
-   * Published, untrashed, already-due posts dated at or after an instant,
-   * newest first: everything since the start of a month, or a week, or a year.
-   *
-   * A query of its own rather than an option on {@link ContentStore.listPosts}
-   * because it is a different question — "what has been written lately", not
-   * "the front of the archive" — and because an option honoured by one listing
-   * and silently dropped by the counts beside it would be a trap. The instant
-   * is a {@link dateSortKey}, so the comparison is between two UTC ISO strings.
-   */
-  listPostsSince(instant: string): Document[];
-  /**
    * The published posts either side of one by date: what a theme links as
    * previous and next under an entry.
    *
@@ -888,12 +877,6 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
     listPosts(options = {}) {
       return select(["type = 'post'", LISTED_CLAUSE], [nowKey()], options);
-    },
-
-    listPostsSince(instant) {
-      const since = dateSortKey(instant);
-      if (since === null) return [];
-      return select(["type = 'post'", LISTED_CLAUSE, 'date_sort >= ?'], [nowKey(), since], {});
     },
 
     neighbours(document) {

@@ -320,15 +320,6 @@ a:visited {
   color: var(--ink-muted);
 }
 
-/* The front page's line of links, under the recent posts, and the archive page
-   (TASK-85). A stylesheet is an all-or-nothing override, so the two page kinds
-   the package added need their rules here as well. */
-
-.front-links {
-  margin-top: 2rem;
-  font-size: 0.9rem;
-}
-
 .archive h2 {
   margin-bottom: 0.4rem;
   font-size: 1.2rem;

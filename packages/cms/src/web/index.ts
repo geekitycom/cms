@@ -210,8 +210,6 @@ export type {
 export { HEALTH_PATH, mountHealth } from './health.ts';
 export { offsetForPage, paginate } from './pagination.ts';
 export type { Pagination, PaginateOptions } from './pagination.ts';
-export { recentPosts, RECENT_POSTS, startOfMonth } from './recent.ts';
-export type { RecentPostsSource } from './recent.ts';
 export { createRenderer, OPTIONAL_TEMPLATES, TEMPLATES } from './render.ts';
 export type { CreateRendererOptions, Listing, Renderer, SearchPage } from './render.ts';
 export {
