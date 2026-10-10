@@ -203,6 +203,14 @@ export interface ContentStore {
    * which is the same thing as whether a follower holds a copy.
    */
   listFederated(options?: ListOptions): Document[];
+  /**
+   * Served posts whose `in-reply-to` is exactly one of these URLs, unlisted
+   * ones included, newest first (TASK-300): the reply posts a thread shows.
+   * Naming nothing returns nothing.
+   */
+  listRepliesTo(targets: readonly string[]): Document[];
+  /** Served posts with an `in-reply-to`, unlisted ones included, newest first. */
+  listReplyPosts(options?: ListOptions): Document[];
   /** Every indexed path, sorted. What a sync compares the content tree against. */
   listPaths(): string[];
   /** How many documents there are of each kind. */
@@ -973,6 +981,24 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       return select([`type = 'post'`, FEDERATED_CLAUSE], [], options);
     },
 
+    listRepliesTo(targets) {
+      const wanted = [...new Set(targets)];
+      if (wanted.length === 0) return [];
+      return select(
+        ["type = 'post'", SERVED_CLAUSE, `in_reply_to IN (${wanted.map(() => '?').join(', ')})`],
+        [nowKey(), ...wanted],
+        {},
+      );
+    },
+
+    listReplyPosts(options = {}) {
+      return select(
+        ["type = 'post'", SERVED_CLAUSE, 'in_reply_to IS NOT NULL'],
+        [nowKey()],
+        options,
+      );
+    },
+
     listPaths() {
       return statements.paths.all().map((row) => String(row['path']));
     },
@@ -1441,6 +1467,14 @@ const MIGRATIONS: readonly Migration[] = [
       );
       CREATE INDEX document_tags_key ON document_tags (key);
       DELETE FROM documents;
+    `,
+  },
+  {
+    version: 9,
+    sql: `
+      -- A thread finds the reply posts answering it by their \`in-reply-to\`
+      -- (TASK-300).
+      CREATE INDEX documents_in_reply_to ON documents (in_reply_to);
     `,
   },
 ];

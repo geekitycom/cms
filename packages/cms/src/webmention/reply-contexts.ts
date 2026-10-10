@@ -45,6 +45,12 @@ export interface CreateReplyContextServiceOptions {
   readonly fediverse?: FediverseLookup | undefined;
   /** Defaults to `console`. */
   readonly logger?: ReplyContextLogger | undefined;
+  /**
+   * The context of a target that is a reply this site holds (TASK-300), read
+   * from the index rather than fetched or stored: a reply post answering a
+   * comment cites the comment, not the post page it is on.
+   */
+  readonly held?: ((target: string) => ReplyContext | undefined) | undefined;
   /** Told each time a target's context is stored, with the one it replaced. */
   readonly onStored?: ((target: string, previous: ReplyContext | undefined) => void) | undefined;
 }
@@ -87,6 +93,7 @@ export function createReplyContextService(
   options: CreateReplyContextServiceOptions,
 ): ReplyContextService {
   const { store, lookup, config, fediverse } = options;
+  const held = options.held ?? noneHeld;
   const logger = options.logger ?? console;
   const file = path.join(config.contentDir, ...REPLY_CONTEXTS_FILE.split('/'));
 
@@ -157,6 +164,7 @@ export function createReplyContextService(
   }
 
   async function refresh(target: string): Promise<void> {
+    if (held(target) !== undefined) return;
     const fetched = await fetchReplyContext(target, { lookup, fediverse });
     if (!fetched.ok) {
       logger.warn(`Could not read ${target} for a citation's context: ${fetched.reason}`);
@@ -202,16 +210,16 @@ export function createReplyContextService(
   return {
     handle(change) {
       const before = targetsOf(change.previous);
-      const after = targetsOf(change.next);
-      const held = readAll();
+      const after = targetsOf(change.next).filter((target) => held(target) === undefined);
+      const stored = readAll();
 
       // A scan rebuilds the index from files the contexts file sits beside, so
       // it only fetches what that file has never held; an edit fetches a
       // target that changed as well.
       for (const target of after) {
         const changed = !before.includes(target) && change.origin !== 'scan';
-        if (describedForSave.delete(target) && target in held) continue;
-        if (!(target in held) || changed) enqueue(() => refresh(target));
+        if (describedForSave.delete(target) && target in stored) continue;
+        if (!(target in stored) || changed) enqueue(() => refresh(target));
       }
       for (const target of before) {
         if (!after.includes(target)) enqueue(() => forget(target));
@@ -219,11 +227,11 @@ export function createReplyContextService(
     },
 
     catchUp() {
-      const held = readAll();
+      const stored = readAll();
       const missing = new Set<string>();
       for (const document of store.listAll()) {
         for (const target of targetsOf(document)) {
-          if (!(target in held)) missing.add(target);
+          if (!(target in stored) && held(target) === undefined) missing.add(target);
         }
       }
       for (const target of missing) enqueue(() => refresh(target));
@@ -231,8 +239,8 @@ export function createReplyContextService(
     },
 
     async describe(target) {
-      const held = readAll()[target];
-      if (held !== undefined) return held;
+      const known = held(target) ?? readAll()[target];
+      if (known !== undefined) return known;
       const deadline = Date.now() + CITED_SLUG_TIMEOUT_MS;
       const fetched = await fetchReplyContext(target, {
         lookup,
@@ -262,7 +270,7 @@ export function createReplyContextService(
     },
 
     read(target) {
-      return readAll()[target];
+      return held(target) ?? readAll()[target];
     },
 
     settled() {
@@ -365,6 +373,10 @@ function webUrlOf(value: unknown): string | undefined {
 
 function optional<K extends string>(key: K, value: string | undefined): Partial<Record<K, string>> {
   return value === undefined ? {} : ({ [key]: value } as Record<K, string>);
+}
+
+function noneHeld(): undefined {
+  return undefined;
 }
 
 function ignore(): void {

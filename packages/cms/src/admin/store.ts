@@ -834,6 +834,8 @@ export interface AdminStore {
   listComments(options: ListCommentsOptions): PostComment[];
   /** One comment by id, or `undefined`. */
   getComment(id: string): PostComment | undefined;
+  /** The comments whose `url` is this one, whatever their status (TASK-300). */
+  listCommentsAt(url: string): PostComment[];
   /** How many comments stand at each status. What the dashboard shows. */
   countCommentsByStatus(): Record<CommentStatus, number>;
   /**
@@ -1081,6 +1083,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       SELECT * FROM comments WHERE slug = ? ORDER BY submitted_at, id
     `),
     commentById: db.prepare('SELECT * FROM comments WHERE id = ?'),
+    commentsAt: db.prepare('SELECT * FROM comments WHERE url = ? ORDER BY submitted_at'),
     countCommentsFor: db.prepare(
       'SELECT COUNT(*) AS count FROM comments WHERE slug = ? AND status = ?',
     ),
@@ -1565,6 +1568,10 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     getComment(id) {
       const row = statements.commentById.get(id) as Record<string, unknown> | undefined;
       return row === undefined ? undefined : toComment(row);
+    },
+
+    listCommentsAt(url) {
+      return (statements.commentsAt.all(url) as Record<string, unknown>[]).map(toComment);
     },
 
     countCommentsByStatus() {

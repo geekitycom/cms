@@ -106,6 +106,7 @@ import { mountTokenEndpoint, mountTokenInfoEndpoints } from './indieauth/token.t
 import { mountMicropub } from './micropub/endpoint.ts';
 import { mountMicropubMedia } from './micropub/media.ts';
 import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
+import { heldReplyContext } from './webmention/reply-context.ts';
 import {
   selectedTargets,
   syndicationCopies,
@@ -1764,6 +1765,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     store,
     contentDir: resolved.contentDir,
     baseUrl: resolved.baseUrl,
+    users: () => listUsers(resolved.dataDir),
   });
 
   // What a reply shows of the post it answers. Built before the renderer,
@@ -1780,6 +1782,10 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     config: resolved,
     lookup: resolved.hostLookup,
     fediverse: citedPostReader(() => federationContext()),
+    held: (target) => {
+      const found = conversation.replyAt(target);
+      return found === undefined ? undefined : heldReplyContext(target, found.reply);
+    },
     onStored: (target, previous) => {
       delivery.citedPageStored(target, previous);
       const original = replyContexts.read(target)?.original;

@@ -1923,7 +1923,7 @@ Each entry — a reply, a like or a boost — is:
 | Key              | What it holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`             | What it is called: a reply's own note id, which is what an answer to it names.                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page, `"webmention"` for another page linking here.                                                                                                                                                                                                                                                                                                                                                            |
+| `source`         | `"activitypub"` for a fediverse reply, `"comment"` for one left on the page, `"webmention"` for another page linking here, `"post"` for a reply post a user of the site wrote (its `url` is the post's permalink).                                                                                                                                                                                                                                                                    |
 | `kind`           | `"reply"`, `"like"`, `"boost"`, `"repost"` or `"mention"`. A `repost` comes from a webmention; a `mention` is a webmention or an approved fediverse quote.                                                                                                                                                                                                                                                                                                                            |
 | `author.name`    | The best name available: their display name, else their handle, else their server, else their id. For a webmention, the source's `h-card` name, else its host.                                                                                                                                                                                                                                                                                                                        |
 | `author.handle`  | `@user@host`, or `null`. Taken from the follower or actor profile the site holds, else guessed from the actor URL unless it ends in a number. `null` for a native comment.                                                                                                                                                                                                                                                                                                            |
@@ -2083,17 +2083,17 @@ in a `div.field-row`, side by side on a wide screen, in both forms. On a site
 that takes webmentions a `p.comment-help` under the heading says a reader can
 reply from their own site instead.
 
-| Key                        | What it holds                                                                                                                                                             |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `action`                   | Where the form posts. One fixed path; the post travels as a field.                                                                                                        |
-| `fields`                   | The name each field is submitted under: `post`, `name`, `email`, `url`, `body`, `inReplyTo`, `trap`, `loaded`, `notify`, `csrf`. Use these rather than typing the names.  |
-| `post`                     | The post's slug, for the hidden field.                                                                                                                                    |
-| `loaded`                   | When this form was rendered, in epoch milliseconds, for the hidden field. A submission that comes back too fast is refused.                                               |
-| `values`                   | What is in the fields: empty on a fresh form, what was typed on a refused one.                                                                                            |
-| `problems`                 | One message per field a person has to put right — `name`, `email`, `url`, `body`.                                                                                         |
-| `error`                    | A message about the submission as a whole, when there is one.                                                                                                             |
-| `notifiable`               | Whether to offer `fields.notify`, the "email me when somebody replies" box. False on a site that sends no mail, where the box would promise a message nothing could send. |
-| `nameLength`, `bodyLength` | The `maxlength` for the two fields that have one.                                                                                                                         |
+| Key                        | What it holds                                                                                                                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `action`                   | Where the form posts. One fixed path; the post travels as a field.                                                                                                                 |
+| `fields`                   | The name each field is submitted under: `post`, `name`, `email`, `url`, `body`, `inReplyTo`, `trap`, `loaded`, `notify`, `csrf`, `listed`. Use these rather than typing the names. |
+| `post`                     | The post's slug, for the hidden field.                                                                                                                                             |
+| `loaded`                   | When this form was rendered, in epoch milliseconds, for the hidden field. A submission that comes back too fast is refused.                                                        |
+| `values`                   | What is in the fields: empty on a fresh form, what was typed on a refused one.                                                                                                     |
+| `problems`                 | One message per field a person has to put right — `name`, `email`, `url`, `body`.                                                                                                  |
+| `error`                    | A message about the submission as a whole, when there is one.                                                                                                                      |
+| `notifiable`               | Whether to offer `fields.notify`, the "email me when somebody replies" box. False on a site that sends no mail, where the box would promise a message nothing could send.          |
+| `nameLength`, `bodyLength` | The `maxlength` for the two fields that have one.                                                                                                                                  |
 
 `fields.trap` is a honeypot: render it, hide it from sight and from assistive
 technology, and give it `tabindex="-1"` and `autocomplete="off"`. A submission
@@ -2122,10 +2122,10 @@ The contact form below keeps the same contract.
 Two more keys are on `commentForm` when — and only when — the request carries a
 valid session for this site's admin:
 
-| Key          | What it holds                                                                                                                       |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `signedInAs` | Who the comment will be posted as: `name`, which is their display name or their username, and `url`, which is their author archive. |
-| `csrfToken`  | The value for a hidden `fields.csrf`, without which the submission is refused.                                                      |
+| Key          | What it holds                                                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `signedInAs` | Who the reply will be posted as: `name`, which is their display name or their username, and `url`, which is their author archive. |
+| `csrfToken`  | The value for a hidden `fields.csrf`, without which the submission is refused.                                                    |
 
 **A replacement partial has to draw both forms**, because the site draws this
 one for its own author and the stranger's one for everybody else:
@@ -2135,6 +2135,10 @@ one for its own author and the stranger's one for everybody else:
 <input type="hidden" name="{{ commentForm.fields.csrf }}" value="{{ commentForm.csrfToken }}" />
 <p class="comment-signed-in">
   Commenting as <a href="{{ commentForm.signedInAs.url }}">{{ commentForm.signedInAs.name }}</a>.
+</p>
+<p class="comment-check">
+  <input id="comment-listed" name="{{ commentForm.fields.listed }}" type="checkbox" value="1"{% if commentForm.values.listed %} checked{% endif %} />
+  <label for="comment-listed">Include in posts and feeds</label>
 </p>
 {% else %}
 {# fields.loaded, fields.trap, and the name, email and website boxes #}
@@ -2148,6 +2152,17 @@ or a stopwatch. It renders `fields.csrf` instead, because this is the one form
 on the public site that acts on somebody's behalf — without the token, a page
 on another site could make them post under their own name. The comment box, the
 reply-to field and the notify box are the same in both branches.
+
+What the signed-in branch posts is a reply post rather than a comment (CMS
+README, "Replying while signed in"). It adds `fields.listed`, a checkbox
+labelled "Include in posts and feeds" and unchecked by default: unchecked
+publishes the reply post unlisted, checked publishes it public. The stranger's
+branch never draws it, and the CMS ignores it from a stranger.
+
+A Reply link, `?reply_to={id}#respond`, goes on every entry of the thread for
+somebody signed in, and on `source == "comment"` entries only for a stranger.
+`partials/comment.njk` asks `reply.source == "comment" or
+commentForm.signedInAs`.
 
 The account's email address is **never** on the context. The comment is stored
 with it, exactly as a stranger's is, and it is no more printable than theirs.

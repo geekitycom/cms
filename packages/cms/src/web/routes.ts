@@ -31,6 +31,7 @@ import { COMMENT_NOTICE_PARAM, COMMENT_REPLY_PARAM } from '../comments/form.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments/routes.ts';
 import { commenterOf } from '../comments/viewer.ts';
+import type { CommentViewer } from '../comments/form.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
 import { mountPingbacks, pingbackEndpointFor } from '../webmention/pingback.ts';
@@ -744,7 +745,11 @@ function queryFeedFormat(c: Context<GeekityEnv>): FeedFormat | undefined {
  * URL and is read back here. An unknown value says nothing at all rather than
  * being printed, so the query cannot be used to put words on somebody's post.
  */
-function commentNotice(c: Context<GeekityEnv>, document: Document): Record<string, unknown> {
+function commentNotice(
+  c: Context<GeekityEnv>,
+  document: Document,
+  viewer: CommentViewer | undefined,
+): Record<string, unknown> {
   const notice = commentNoticeFor(c.req.query(COMMENT_NOTICE_PARAM));
 
   return {
@@ -756,6 +761,8 @@ function commentNotice(c: Context<GeekityEnv>, document: Document): Record<strin
       admin: c.var.admin,
       document,
       id: c.req.query(COMMENT_REPLY_PARAM),
+      // Somebody signed in may answer anything in the thread (TASK-300).
+      thread: viewer === undefined ? undefined : c.var.conversation.thread(document),
     }),
     // And the thank-you after a contact form was sent, which travels the same
     // way for the same reason (TASK-56).
@@ -817,7 +824,7 @@ function negotiateDocument(
     representation === 'html'
       ? c.var.renderer.renderPage(document, {
           frontPage: href === '/',
-          extra: { ...commentNotice(c, document), ...(listed ? {} : { noindex: true }) },
+          extra: { ...commentNotice(c, document, viewer), ...(listed ? {} : { noindex: true }) },
           viewer,
         })
       : undefined;

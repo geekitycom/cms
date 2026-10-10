@@ -50,7 +50,13 @@ async function reader(): Promise<{
     admin,
     posts,
     contentDir,
-    conversation: createConversation({ admin, store: posts, contentDir, baseUrl: BASE_URL }),
+    conversation: createConversation({
+      admin,
+      store: posts,
+      contentDir,
+      baseUrl: BASE_URL,
+      users: () => [],
+    }),
   };
 }
 
@@ -1151,5 +1157,66 @@ describe('the RSVPs to an event (TASK-200 AC #2, AC #3)', () => {
     assert.deepEqual(read.thread(hello()).rsvps, []);
     assert.equal(read.thread(hello()).counts.total, 0);
     assert.deepEqual(read.thread(camp()).rsvps, []);
+  });
+});
+
+describe('reply posts in a conversation (TASK-300)', () => {
+  function replyPost(name: string, inReplyTo: string, date = '2026-09-03T09:00:00Z'): Document {
+    return parseDocument(
+      [
+        '---',
+        "title: ''",
+        `date: '${date}'`,
+        `permalink: /2026/09/${name}/`,
+        'visibility: unlisted',
+        `in-reply-to: ${inReplyTo}`,
+        '---',
+        '',
+        `${name} says so.`,
+        '',
+      ].join('\n'),
+      { path: `posts/2026-09-03-${name}.md` },
+    );
+  }
+
+  it('threads a reply post under what it names and counts it', async () => {
+    const { admin, posts, conversation: read } = await reader();
+    posts.upsert(hello());
+    logReply(admin, { inReplyTo: POST, id: 'https://remote.example/notes/1' });
+    posts.upsert(replyPost('answer', 'https://remote.example/notes/1'));
+
+    const [note] = read.thread(hello()).replies;
+    const answer = visible(note)?.replies[0];
+    assert.equal(visible(answer)?.source, 'post');
+    assert.equal(visible(answer)?.url, '/2026/09/answer/');
+    assert.equal(read.thread(hello()).counts.replies, 2);
+    assert.equal(read.counts([hello()]).get('/2026/09/hello/'), 2);
+  });
+
+  it('ends at two reply posts that answer each other', async () => {
+    const { posts, conversation: read } = await reader();
+    const two = replyPost('two', 'https://blog.example/2026/09/three/');
+    posts.upsert(two);
+    posts.upsert(replyPost('three', 'https://blog.example/2026/09/two/'));
+
+    const thread = read.thread(two);
+    assert.equal(thread.counts.replies, 1);
+    assert.equal(visible(thread.replies[0])?.url, '/2026/09/three/');
+  });
+
+  it('puts an unlisted reply post among the site’s latest, naming the thread’s post', async () => {
+    const { posts, conversation: read } = await reader();
+    posts.upsert(hello());
+    posts.upsert(replyPost('one', POST));
+    posts.upsert(replyPost('two', 'https://blog.example/2026/09/one/', '2026-09-04T09:00:00Z'));
+
+    const latest = read.latest(10);
+    assert.deepEqual(
+      latest.map((entry) => [entry.url, entry.post.permalink]),
+      [
+        ['/2026/09/two/', '/2026/09/hello/'],
+        ['/2026/09/one/', '/2026/09/hello/'],
+      ],
+    );
   });
 });

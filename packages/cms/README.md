@@ -1094,6 +1094,40 @@ would: 410 once the post is deleted, 404 while the post is not public or not
 showing its conversation. It is `noindex` and absent from the sitemap, the post
 feeds and search. Backlog doc-6 has the rules.
 
+### Replying while signed in
+
+A comment is something somebody else says on the site. A post is something a
+signed-in user says. So a reply written in the thread by somebody signed in to
+the site is a reply post, not a comment. It is one file under `posts/`, saved
+the way the editor and Micropub save one, and the thread shows it inline under
+what it answers. Its `in-reply-to` is what it answers:
+
+| Answering          | `in-reply-to`                     | It also                                                  |
+| ------------------ | --------------------------------- | -------------------------------------------------------- |
+| The post           | The post's permalink              |                                                          |
+| A native comment   | The comment's `/comment/{id}/`    | Emails the commenter, if they asked about replies.       |
+| A webmention reply | The page the webmention came from | Sends that page a webmention.                            |
+| A fediverse reply  | The note's id                     | Federates in reply to the note, addressed to its author. |
+| A reply post       | The reply post's permalink        |                                                          |
+
+The signed-in form has an "Include in posts and feeds" checkbox, unchecked by
+default. Unchecked, the reply post is [unlisted](#unlisted-posts): its own page
+and the thread, but no listing or post feed. Checked, it is public. It reaches
+whoever it answers either way. A visitor's form has no such box.
+
+Somebody signed in gets a Reply link on every reply in a thread, webmentions
+and fediverse replies included. A visitor gets one on native comments only. A
+visitor's reply is always a native comment, so a visitor answering a fediverse
+reply sends nothing over ActivityPub.
+
+A reply post written in the editor or over Micropub joins a thread the same way
+when its `in-reply-to` names the post or anything in its thread: a comment's
+page or `#comment-` anchor, a webmention's page, a note's id. Its reply context
+quotes that comment from the site's own records instead of the page it is on. A
+webmention or a fediverse reply to a reply post threads under it in the
+original thread too. Comments written before this stay comments. Backlog doc-6
+and decision-47 have the rules.
+
 ### Being told about one
 
 With mail configured, a comment or a webmention entering the queue emails every
@@ -1813,7 +1847,7 @@ The rule works for pages too.
 | Its permalink, in every representation                                     | 200, with `X-Robots-Tag: noindex`. The default theme also prints `<meta name="robots" content="noindex">`.                                   |
 | The home page, tag, category and author archives, the `archive: true` page | Absent, and not counted in a pager or a tag count.                                                                                           |
 | Previous and next links under other posts, a front page's `newestPosts`    | Absent.                                                                                                                                      |
-| Every RSS, Atom and JSON feed, and the site-wide comments feed             | Absent. Saving one pings no notify server.                                                                                                   |
+| Every RSS, Atom and JSON feed, and the site-wide comments feed             | Absent. Saving one pings no notify server. An unlisted reply post shown in a thread is still in that thread's comments feeds.                |
 | The sitemap, search (HTML and JSON) and `llms.txt`                         | Absent.                                                                                                                                      |
 | IndexNow                                                                   | Not submitted. A public post that becomes unlisted is submitted once, so a search engine reads the `noindex`.                                |
 | The ActivityPub outbox and featured collection                             | Absent.                                                                                                                                      |
@@ -3206,8 +3240,8 @@ do not know it to ignore:
 The key is `_geekity` because an extension is named after its publisher, and
 `in_reply_to` spells the microformats `in-reply-to` property the JSON way. A
 post that is not a reply, or whose `in-reply-to` is not such a URL, carries
-neither. RSS 2.0 has no equivalent element, so an RSS item for a reply is
-written the same as any other.
+neither. RSS 2.0 has no equivalent element, so an RSS item carries the target
+as the [source namespace][source-ns]'s `<source:inReplyTo>`.
 
 **Languages.** Every feed declares the site's `language` once: RSS as the
 channel's `language`, Atom as the feed's `xml:lang` and JSON Feed as its
@@ -3237,8 +3271,9 @@ avatar when the site has one.
 An item carries `title`, `link`, `guid`, `pubDate` in RFC 822, `dc:creator` from
 the post's author or the site's, one `category` per term, `description` holding
 the summary, `content:encoded` holding the whole rendered post, and
-`source:markdown` holding the Markdown the post was written from. The `guid`,
-the terms and the summary are the ones described above.
+`source:markdown` holding the Markdown the post was written from. A reply also
+carries `source:inReplyTo` holding the URL it answers. The `guid`, the terms
+and the summary are the ones described above.
 
 `source:markdown` is Dave Winer's [source namespace][source-ns]: a reader that
 understands Markdown should render from it rather than from `content:encoded`.

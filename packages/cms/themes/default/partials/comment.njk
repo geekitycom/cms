@@ -37,7 +37,7 @@
       </div>
       <div class="comment-metadata">
         {%- if reply.url %}
-        <a class="u-url" href="{{ reply.url }}"{% if reply.source != "comment" %} rel="nofollow noopener noreferrer"{% endif %}><time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time></a>
+        <a class="u-url" href="{{ reply.url }}"{% if reply.source != "comment" and reply.source != "post" %} rel="nofollow noopener noreferrer"{% endif %}><time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time></a>
         {%- else %}
         <time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time>
         {%- endif %}
@@ -56,11 +56,14 @@
     </div>
     {#
       Answering a comment on this site needs no JavaScript: the link carries
-      the comment's id to the form, which puts it in a hidden field. A
-      fediverse reply is answered on the server that holds it, and a webmention
-      is answered on the page that sent it, so neither gets such a link.
+      the comment's id to the form, which puts it in a hidden field. Somebody
+      signed in can answer anything in the thread, and their answer is a reply
+      post that reaches a webmention's page or a fediverse reply's author
+      (TASK-300). A visitor answers comments written here only: a fediverse
+      reply is answered on the server that holds it, and a webmention on the
+      page that sent it.
     #}
-    {% if commentForm and reply.source == "comment" %}
+    {% if commentForm and (reply.source == "comment" or commentForm.signedInAs) %}
     <div class="reply"><a class="comment-reply-link" href="{{ page.url }}?reply_to={{ reply.id | urlencode }}#respond">Reply</a></div>
     {% endif %}
   </article>

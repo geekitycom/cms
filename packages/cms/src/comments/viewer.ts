@@ -62,6 +62,7 @@ export function commenterOf({ user, csrfToken }: SignedInAccount): CommentViewer
     // What a byline would print for them, on the same rule: a user who has
     // written no display name is called by their username, which is what
     // their archive is under anyway.
+    username: user.username,
     name: user.profile?.displayName ?? user.username,
     url: authorHref(user.username),
     email: user.email ?? null,

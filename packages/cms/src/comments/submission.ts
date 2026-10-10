@@ -80,11 +80,27 @@ export const COMMENT_FIELDS = {
    * actually send mail (TASK-55).
    */
   notify: 'notify',
+  /**
+   * "Include in posts and feeds", which only the signed-in form carries
+   * (TASK-300): ticked, the reply post is Public; left empty, Unlisted. A
+   * stranger's form has no such box, and one sent anyway is never read.
+   */
+  listed: 'listed',
 } as const;
 
 /** A submitted comment form, as strings, which is what a form has. */
 export type CommentForm = Record<
-  'post' | 'name' | 'email' | 'url' | 'body' | 'inReplyTo' | 'trap' | 'loaded' | 'notify' | 'csrf',
+  | 'post'
+  | 'name'
+  | 'email'
+  | 'url'
+  | 'body'
+  | 'inReplyTo'
+  | 'trap'
+  | 'loaded'
+  | 'notify'
+  | 'csrf'
+  | 'listed',
   string
 >;
 
@@ -288,12 +304,13 @@ export interface SubmitCommentOptions {
   /** The checker, when the site named one. */
   checker?: CommentChecker | undefined;
   /**
-   * Who the session says is commenting, when one does (TASK-103).
+   * Who the site knows is commenting, for a caller that stores a comment as
+   * one of the site's own users (TASK-103). The thread's form no longer does:
+   * a signed-in reply there is a reply post (TASK-300).
    *
    * Set, it is the whole of the comment's attribution: what was typed in a
-   * name, email or website field is ignored, because the signed-in form has no
-   * such fields and anything arriving in them was not put there by the person
-   * the session names. It also settles the three cheap defences — the honeypot
+   * name, email or website field is ignored, because anything arriving in them
+   * was not put there by the person named. It also settles the three cheap defences — the honeypot
    * and the form's age are there to catch a robot filling a public form, and a
    * session is better evidence than either, so neither is checked — and it
    * makes this a comment the site's own author is writing, which the intake

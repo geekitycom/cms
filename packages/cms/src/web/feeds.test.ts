@@ -1044,15 +1044,17 @@ describe('a reply in the feeds', () => {
     assert.equal('_geekity' in standalone, false);
   });
 
-  it('leaves RSS as it was: no threading namespace and no reply element', async () => {
+  it('names the target in RSS as source:inReplyTo, with no threading namespace (TASK-300)', async () => {
     const { cms } = await site(files);
     const { body } = await rss(cms, '/feed/');
 
     assert.equal(body.includes('purl.org/syndication/thread'), false);
     assert.equal(body.includes('<thr:'), false);
     const line = `<p class="cite-line">In reply to <a href="${TARGET}">a page on ${new URL(TARGET).hostname}</a></p>`;
+    const element = `<source:inReplyTo>${TARGET}</source:inReplyTo>`;
     assert.ok(body.includes(line), 'the post’s HTML names its target (TASK-252)');
-    assert.equal(body.replaceAll(line, '').includes(TARGET), false);
+    assert.equal(body.split(element).length - 1, 1, 'and source:inReplyTo names it once');
+    assert.equal(body.replaceAll(line, '').replaceAll(element, '').includes(TARGET), false);
   });
 });
 

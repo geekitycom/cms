@@ -102,8 +102,11 @@ describe('an RSS item', () => {
     );
   });
 
-  it('says nothing about a reply’s target, which RSS 2.0 has no element for', () => {
-    assert.deepEqual(rssItem(REPLY), rssItem(BARE));
+  it('names a reply’s target in the source namespace, which RSS 2.0 has no element for (TASK-300)', () => {
+    const extra = rssItem(REPLY).filter((line) => !rssItem(BARE).includes(line));
+    assert.deepEqual(extra, [
+      '      <source:inReplyTo>https://remote.example/notes/1?a=1&amp;b=2</source:inReplyTo>',
+    ]);
   });
 });
 

@@ -87,6 +87,16 @@
     <p class="comment-signed-in">
       Commenting as <a href="{{ commentForm.signedInAs.url }}">{{ commentForm.signedInAs.name }}</a>.
     </p>
+
+    {#
+      What is posted here is a reply post (TASK-300). Unticked it is Unlisted:
+      its own page and the thread, and no listing or feed. Ticked it is Public.
+      It reaches whoever it answers either way.
+    #}
+    <p class="comment-check">
+      <input id="comment-listed" name="{{ commentForm.fields.listed }}" type="checkbox" value="1"{% if commentForm.values.listed %} checked{% endif %} />
+      <label for="comment-listed">Include in posts and feeds</label>
+    </p>
     {% else %}
     {#
       When this form was drawn, which is what the minimum submit time is

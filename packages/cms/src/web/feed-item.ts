@@ -126,8 +126,8 @@ export interface FeedItem {
   /**
    * The URL the post answers, when it is a reply: its `in-reply-to`, and only
    * when that is a URL a reader can follow ({@link replyTarget}). Atom writes
-   * it as `thr:in-reply-to` and JSON Feed in its `_geekity` extension; RSS 2.0
-   * has nowhere to put it.
+   * it as `thr:in-reply-to`, JSON Feed in its `_geekity` extension and RSS as
+   * the source namespace's `source:inReplyTo` (TASK-300).
    */
   inReplyTo?: string | undefined;
   /**

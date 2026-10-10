@@ -23,7 +23,7 @@ export interface CommentFormContext {
    */
   loaded: string;
   /** What is in the fields: empty on a fresh form, what was typed on a refused one. */
-  values: Record<'name' | 'email' | 'url' | 'body' | 'inReplyTo' | 'notify', string>;
+  values: Record<'name' | 'email' | 'url' | 'body' | 'inReplyTo' | 'notify' | 'listed', string>;
   /**
    * Whether to offer "tell me about replies" at all (TASK-55).
    *
@@ -68,6 +68,8 @@ export interface CommentFormContext {
  * no template is ever handed, and `csrfToken` is that session's own.
  */
 export interface CommentViewer {
+  /** Their login, which a reply post of theirs names as its author (TASK-300). */
+  username: string;
   /** What the comment goes under: their display name, else their username. */
   name: string;
   /** Their author archive, which is the comment's website. */
@@ -163,7 +165,7 @@ export function refilledCommentForm(
 
 /** What a form holds before anybody has typed in it. */
 export function blankValues(): CommentFormContext['values'] {
-  return { name: '', email: '', url: '', body: '', inReplyTo: '', notify: '' };
+  return { name: '', email: '', url: '', body: '', inReplyTo: '', notify: '', listed: '' };
 }
 
 /** What a submitted form typed, for putting back in a refused one. */
@@ -175,5 +177,6 @@ export function valuesOf(form: CommentForm): CommentFormContext['values'] {
     body: form.body,
     inReplyTo: form.inReplyTo,
     notify: form.notify,
+    listed: form.listed,
   };
 }

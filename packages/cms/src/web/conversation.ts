@@ -1,3 +1,5 @@
+import type { User } from '../admin/accounts.ts';
+import { readSiteSettings } from '../admin/settings.ts';
 import { avatarHref } from '../avatars/avatars.ts';
 import type { ActorProfile, AdminStore, InboxActivity, PostComment } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
@@ -15,6 +17,7 @@ import {
   replyFrom,
   REPLY_ACTIVITY_TYPE,
 } from '../federation/replies.ts';
+import { authorContext, siteAuthorContext } from './authors.ts';
 import { activityStreamsId, isListed, permalinkOfObjectId } from './documents.ts';
 import type { FeedComment } from './feeds.ts';
 import { absoluteUrl } from './negotiate.ts';
@@ -47,11 +50,12 @@ import { sanitizeCommentHtml } from './sanitize.ts';
  *
  * `activitypub` is a reply, a like or a boost the site's inbox was sent.
  * `comment` is the form under the post (TASK-50). `webmention` is another
- * site's post pointing at this one (TASK-51). All three are the same shape and
- * thread together, which is the whole point of naming the source rather than
- * keeping three lists.
+ * site's post pointing at this one (TASK-51). `post` is a reply post a user of
+ * this site wrote, whose `in-reply-to` names the post or something said under
+ * it (TASK-300). All four are the same shape and thread together, which is the
+ * whole point of naming the source rather than keeping four lists.
  */
-export type InteractionSource = 'activitypub' | 'comment' | 'webmention';
+export type InteractionSource = 'activitypub' | 'comment' | 'webmention' | 'post';
 
 /**
  * What an interaction is.
@@ -219,6 +223,8 @@ export interface ConversationContext {
   readonly contentDir: string;
   /** The site's public origin, for the post's object id. */
   readonly baseUrl: string;
+  /** Who may sign in, for naming the author of a reply post (TASK-300). */
+  readonly users: () => readonly User[];
 }
 
 /**
@@ -268,6 +274,19 @@ export interface ConversationReader {
    * answers is decided when the thread is read.
    */
   readonly replyNamed: (document: Document, url: string) => string | undefined;
+  /**
+   * The reply a reader may see that a URL names anywhere on this site, with
+   * the post it is on (TASK-300): a comment by its page or its anchor, a
+   * webmention by the page it was sent from, a fediverse reply by its id or
+   * url. What a reply post answering one cites, instead of fetching a page.
+   */
+  readonly replyAt: (url: string) => ReplyAt | undefined;
+}
+
+/** A reply on this site, and the post whose conversation it is in. */
+export interface ReplyAt {
+  readonly post: Document;
+  readonly reply: Interaction;
 }
 
 /** A native comment, what it answers and what answers it (TASK-318). */
@@ -299,6 +318,7 @@ export function createConversation(context: ConversationContext): ConversationRe
     latest: (limit) => siteConversation(context, limit),
     comment: (id) => commentThread(context, id),
     replyNamed: (document, url) => replyNamed(context, document, url),
+    replyAt: (url) => replyAt(context, url),
   };
 }
 
@@ -355,12 +375,13 @@ interface Gathered {
   readonly answers: Interaction[];
 }
 
-function gather(context: ConversationContext, document: Document): Gathered {
+function gather(
+  context: ConversationContext,
+  document: Document,
+  seen: ReadonlySet<string> = new Set([document.path]),
+): Gathered {
   const objectId = activityStreamsId(document, context.baseUrl);
-  // What a top-level answer names. The object id when the post has one, and
-  // the permalink otherwise: a post that has never been delivered can still
-  // have native comments, and they have to hang off something.
-  const root = objectId ?? document.permalink;
+  const root = rootOf(context, document);
 
   const activities = objectId === undefined ? [] : activitiesAround(context.admin, objectId);
   const naming = authorNaming(context.admin);
@@ -456,6 +477,22 @@ function gather(context: ConversationContext, document: Document): Gathered {
     group.push({ ...comment, replies: [] });
   }
 
+  // The reply posts answering the post or anything said under it, each
+  // bringing what was said under it: an answer to a reply post lands against
+  // the reply post, and this is what stitches it into the thread it is in.
+  const names = namesIn(context, document, root, [...written, ...held.values()]);
+  for (const answer of context.store.listRepliesTo([...names.keys()])) {
+    const target = names.get(answer.inReplyTo ?? '');
+    if (target === undefined || seen.has(answer.path)) continue;
+    const under = gather(context, answer, new Set([...seen, answer.path]));
+    const top = (entry: Interaction): Interaction =>
+      entry.inReplyTo === null ? { ...entry, inReplyTo: under.root } : entry;
+    written.push(replyPostInteraction(context, answer, under.root, target));
+    written.push(...under.written.map(top));
+    for (const [id, entry] of under.held) held.set(id, top(entry));
+    for (const id of under.withdrawn) withdrawn.add(id);
+  }
+
   // Sorted before threading rather than after, because a thread is built by
   // walking this list: two sources' entries would otherwise interleave in the
   // order the code happened to read them rather than in the order they were
@@ -496,6 +533,16 @@ function replyNamed(
   document: Document,
   url: string,
 ): string | undefined {
+  return namedIn(context, document, gather(context, document), url)?.id;
+}
+
+/** The entry of a gathered conversation a URL names, held ones included. */
+function namedIn(
+  context: ConversationContext,
+  document: Document,
+  said: Gathered,
+  url: string,
+): Interaction | undefined {
   let named: URL;
   try {
     named = new URL(url, context.baseUrl);
@@ -504,13 +551,155 @@ function replyNamed(
   }
   const commentId = commentNamedBy(named, document, context.baseUrl);
 
-  const { written, held } = gather(context, document);
-  return [...written, ...held.values()].find(
+  return [...said.written, ...said.held.values()].find(
     (reply) =>
       reply.id === commentId ||
       reply.id === named.href ||
       (reply.url !== null && absoluteUrl(reply.url, context.baseUrl) === named.href),
-  )?.id;
+  );
+}
+
+function replyAt(context: ConversationContext, url: string): ReplyAt | undefined {
+  const post = documentNamed(context, url);
+  if (post === undefined) return undefined;
+  const said = gather(context, post);
+  const reply = namedIn(context, post, said, url);
+  if (reply === undefined || said.withdrawn.has(reply.id) || said.held.has(reply.id)) {
+    return undefined;
+  }
+  return { post, reply };
+}
+
+/**
+ * The document whose conversation a URL is in: the post a comment's page or
+ * anchor is on, the post a webmention was sent to, the post a fediverse reply
+ * answers however deep, or the document at the URL itself.
+ */
+function documentNamed(context: ConversationContext, url: string, depth = 0): Document | undefined {
+  if (depth > MAXIMUM_NOTE_DEPTH) return undefined;
+  let named: URL;
+  try {
+    named = new URL(url);
+  } catch {
+    return undefined;
+  }
+
+  if (named.origin === new URL(context.baseUrl).origin) {
+    const id = commentIdAt(named.pathname);
+    if (id !== undefined) {
+      const comment = context.admin.getComment(id);
+      return comment === undefined ? undefined : context.store.getBySlug(comment.slug);
+    }
+    const permalink = permalinkOfObjectId(`${named.origin}${named.pathname}`, context.baseUrl);
+    const found = permalink === undefined ? undefined : context.store.getByPermalink(permalink);
+    return found ?? context.store.getByStoredObjectId(named.href);
+  }
+
+  const [comment] = context.admin.listCommentsAt(named.href);
+  if (comment !== undefined) return context.store.getBySlug(comment.slug);
+
+  for (const activity of context.admin.listActivitiesAbout([named.href])) {
+    const reply = replyFrom(activity);
+    if (reply?.id !== named.href) continue;
+    return documentNamed(context, reply.inReplyTo, depth + 1);
+  }
+  return context.store.getByStoredObjectId(named.href);
+}
+
+/**
+ * The document at the top of the conversation a reply post is in: what its
+ * `in-reply-to` names, and what that one is in when it is a reply post too.
+ * `undefined` for a reply post answering nothing on this site.
+ */
+function threadRootOf(
+  context: ConversationContext,
+  document: Document,
+  seen: Set<string> = new Set(),
+): Document | undefined {
+  seen.add(document.path);
+  if (document.inReplyTo === undefined) return undefined;
+  const named = documentNamed(context, document.inReplyTo);
+  if (named === undefined || seen.has(named.path)) return undefined;
+  return threadRootOf(context, named, seen) ?? named;
+}
+
+/** How many notes deep a reply is followed back to the post it is about. */
+const MAXIMUM_NOTE_DEPTH = 32;
+
+/**
+ * What a top-level answer names. The object id when the post has one, and the
+ * permalink otherwise: a post that has never been delivered can still have
+ * native comments, and they have to hang off something.
+ */
+function rootOf(context: ConversationContext, document: Document): string {
+  return activityStreamsId(document, context.baseUrl) ?? document.permalink;
+}
+
+/**
+ * Every URL a reply post's `in-reply-to` could name something here by, and the
+ * id each one names: the post by its permalink and object id, and every entry
+ * by its id, its url and, for a comment written here, its page and its anchor.
+ */
+function namesIn(
+  context: ConversationContext,
+  document: Document,
+  root: string,
+  replies: readonly Interaction[],
+): Map<string, string> {
+  const permalink = absoluteUrl(document.permalink, context.baseUrl);
+  const names = new Map<string, string>([
+    [permalink, root],
+    [root, root],
+  ]);
+  for (const reply of replies) {
+    for (const name of namesOf(reply, permalink, context.baseUrl)) {
+      if (!names.has(name)) names.set(name, reply.id);
+    }
+  }
+  return names;
+}
+
+function namesOf(reply: Interaction, permalink: string, baseUrl: string): string[] {
+  const names = [reply.id];
+  if (reply.url !== null) names.push(absoluteUrl(reply.url, baseUrl));
+  if (reply.source === 'comment') {
+    names.push(
+      absoluteUrl(commentPageHref(reply.id), baseUrl),
+      `${permalink}#${commentAnchor(reply.id)}`,
+    );
+  }
+  return names;
+}
+
+/** A reply post as the thread's own shape, answering `inReplyTo`. */
+function replyPostInteraction(
+  context: ConversationContext,
+  post: Document,
+  id: string,
+  inReplyTo: string,
+): Interaction {
+  const users = context.users();
+  const author =
+    authorContext(users, post.author) ??
+    siteAuthorContext(users, readSiteSettings(context.contentDir).author);
+  return {
+    id,
+    source: 'post',
+    kind: 'reply',
+    author: {
+      name: author?.name ?? readSiteSettings(context.contentDir).title,
+      handle: null,
+      url: author?.url ?? null,
+      avatar: author?.avatar ?? null,
+      actorId: null,
+    },
+    url: post.permalink,
+    content: post.html,
+    published: new Date(post.date ?? post.updated ?? 0),
+    inReplyTo,
+    status: 'published',
+    replies: [],
+  };
 }
 
 /** The comment a URL on this site names by its page or by its anchor on the post. */
@@ -639,6 +828,15 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
     return found;
   };
 
+  // A reply post is in the feed of the thread it is shown in, unlisted or
+  // not: the thread is listed, and the reply post is one of its answers.
+  for (const answer of context.store.listReplyPosts({ limit: limit * OVERSCAN })) {
+    const post = threadRootOf(context, answer);
+    if (post === undefined || !isListed(post, now)) continue;
+    const reply = repliesOn(post).get(rootOf(context, answer));
+    if (reply !== undefined) said.push({ ...reply, post });
+  }
+
   return newestFirst(said, limit).map((entry) => ({
     ...entry,
     replyingTo:
@@ -665,10 +863,31 @@ function commentCounts(
           quotesOf(context.admin, approvals, objectId, naming).length;
     counts.set(
       document.permalink,
-      federated + context.admin.countCommentsFor(document.slug, 'approved'),
+      federated +
+        context.admin.countCommentsFor(document.slug, 'approved') +
+        replyPostsAnswering(context, document).length,
     );
   }
   return counts;
+}
+
+/**
+ * The reply posts answering a post, one of its comments or one of the notes
+ * that answer it directly (TASK-300), off the indexes rather than the thread.
+ */
+function replyPostsAnswering(context: ConversationContext, document: Document): Document[] {
+  const root = rootOf(context, document);
+  const comments = context.admin
+    .listCommentsFor(document.slug)
+    .map((comment) => interactionOf(comment, document.permalink));
+  const names = [...namesIn(context, document, root, comments).keys()];
+  const objectId = activityStreamsId(document, context.baseUrl);
+  if (objectId !== undefined) {
+    for (const note of context.admin.listRepliesTo(objectId)) {
+      if (note.objectId !== null) names.push(note.objectId);
+    }
+  }
+  return context.store.listRepliesTo(names);
 }
 
 /**
@@ -1007,6 +1226,16 @@ function threadOf(said: Gathered, under: string = said.root): ThreadReply[] {
   }
 
   return top;
+}
+
+/** The entry of a thread with this id that a reader can see, at any depth. */
+export function visibleReply(replies: readonly ThreadReply[], id: string): Interaction | undefined {
+  for (const reply of replies) {
+    if (!isWithheld(reply) && reply.id === id) return reply;
+    const found = visibleReply(reply.replies, id);
+    if (found !== undefined) return found;
+  }
+  return undefined;
 }
 
 function isWithheld(reply: ThreadReply): reply is WithheldReply {

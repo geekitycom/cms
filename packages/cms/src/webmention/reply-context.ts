@@ -1,4 +1,6 @@
 import { discoverPostType } from '../content/post-type.ts';
+import { htmlToText } from '../content/search.ts';
+import { absoluteUrl } from '../web/negotiate.ts';
 import type { CitedImage, CitedPicture, PictureSource } from './cited-picture.ts';
 import { readCitedStart } from './cited-start.ts';
 import { fetchPublic, webUrl } from './fetch-public.ts';
@@ -836,6 +838,30 @@ function metaOf(root: HtmlElement, key: string): string {
     return (element.attributes['content'] ?? '').replace(/\s+/g, ' ').trim();
   }
   return '';
+}
+
+/**
+ * The context of a reply this site already holds (TASK-300): a comment, a
+ * webmention or a fediverse reply in one of its threads, cited by a reply post
+ * that answers it. Read from the index rather than fetched, so a reply to a
+ * comment shows the comment rather than the whole post it is on.
+ */
+export function heldReplyContext(
+  target: string,
+  reply: {
+    readonly author: { readonly name: string; readonly url: string | null };
+    readonly content: string;
+    readonly published: Date;
+  },
+): ReplyContext {
+  const text = excerpt(withoutDirectionControls(htmlToText(reply.content)));
+  const url = reply.author.url === null ? undefined : webUrl(absoluteUrl(reply.author.url, target));
+  return {
+    url: target,
+    ...(text === '' ? {} : { text }),
+    author: { name: reply.author.name, ...(url === undefined ? {} : { url: url.href }) },
+    published: reply.published.toISOString(),
+  };
 }
 
 /** The first words of a text, marked as cut when they are. */

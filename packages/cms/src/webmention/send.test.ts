@@ -718,3 +718,63 @@ describe('syndication on the federation screen (TASK-155 AC #9)', () => {
     );
   });
 });
+
+describe('a reply from the thread to a webmention (TASK-300 AC #5)', () => {
+  it('sends a webmention to the page the webmention came from', async () => {
+    const cms = await site({
+      files: {
+        'posts/2026-03-04-hello-world.md': [
+          '---',
+          'title: Hello world',
+          "date: '2026-03-04T09:00:00Z'",
+          'permalink: /2026/03/hello-world/',
+          'comments: true',
+          '---',
+          '',
+          'Words.',
+          '',
+        ].join('\n'),
+        '_data/comments/hello-world.json': JSON.stringify({
+          post: '/2026/03/hello-world/',
+          comments: [
+            {
+              id: '00000000-0000-4000-8000-0000000000b1',
+              source: 'webmention',
+              kind: 'reply',
+              status: 'approved',
+              author: { name: 'Them', url: null, email: null, avatar: null },
+              content: { markdown: 'A reply.', html: '<p>A reply.</p>' },
+              submitted: '2026-03-05T09:00:00.000Z',
+              addressHash: null,
+              inReplyTo: null,
+              url: FRIENDLY,
+              notify: false,
+            },
+          ],
+        }),
+      },
+    });
+    const agent = await signedIn(cms);
+    const html = await (await agent.get('/2026/03/hello-world/')).text();
+    const token = csrfField(html);
+    assert.ok(token !== undefined, 'the thread offers the signed-in form');
+
+    const response = await agent.post('/_geekity/comments', {
+      post: 'hello-world',
+      body: 'Answering them from the thread.',
+      in_reply_to: '00000000-0000-4000-8000-0000000000b1',
+      csrf_token: token,
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.webmentions.settled();
+
+    const [reply] = cms.store
+      .listAll({ type: 'post' })
+      .filter((document) => document.inReplyTo === FRIENDLY);
+    assert.ok(reply !== undefined, 'a reply post answers the page');
+    assert.deepEqual(
+      sent.map((one) => [one.source, one.target]),
+      [[`${BASE_URL}${reply.permalink}`, FRIENDLY]],
+    );
+  });
+});

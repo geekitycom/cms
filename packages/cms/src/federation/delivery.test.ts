@@ -2204,3 +2204,58 @@ describe('a post that mentions a fediverse handle (TASK-194)', () => {
     assert.deepEqual(webfingerLookups, ['acct:ghost@remote.example']);
   });
 });
+
+describe('a reply from the thread to a fediverse reply (TASK-300 AC #5)', () => {
+  it('federates in reply to the note by its id, addressed to its author', async () => {
+    const post = `---
+title: On watching files
+date: 2026-03-04T10:00:00.000Z
+permalink: /2026/03/watched/
+comments: true
+---
+
+Words.
+`;
+    const { cms } = await site({ files: { 'posts/2026-03-04-watched.md': post } });
+    const agent = await signedIn(cms);
+    cms.admin.logInboxActivity({
+      activityId: `${STATUS_ID}/activity`,
+      activityType: 'Create',
+      actorId: CAROL_ACTOR,
+      objectId: STATUS_ID,
+      json: JSON.stringify({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: `${STATUS_ID}/activity`,
+        type: 'Create',
+        actor: CAROL_ACTOR,
+        object: {
+          id: STATUS_ID,
+          type: 'Note',
+          attributedTo: CAROL_ACTOR,
+          content: '<p>Something worth answering.</p>',
+          inReplyTo: `${BASE_URL}/2026/03/watched/`,
+        },
+      }),
+    });
+
+    const html = await (await agent.get('/2026/03/watched/')).text();
+    const token = new RegExp('name="csrf_token" value="([^"]+)"').exec(html)?.[1];
+    assert.ok(token !== undefined, 'the thread offers the signed-in form');
+    deliveries.length = 0;
+    const response = await agent.post('/_geekity/comments', {
+      post: 'watched',
+      body: 'Answering Carol from the thread.',
+      in_reply_to: STATUS_ID,
+      csrf_token: token,
+    });
+    assert.equal(response.status, 303, await response.text());
+    await cms.delivery.settled();
+
+    const toCarol = delivered('Create').find((one) => one.url === CAROL_INBOX);
+    assert.ok(toCarol !== undefined, JSON.stringify(deliveries.map((one) => one.url)));
+    const note = toCarol.body['object'] as Record<string, unknown>;
+    assert.equal(note['inReplyTo'], STATUS_ID);
+    assert.ok([note['to'], note['cc']].flat().includes(CAROL_ACTOR), 'addressed to Carol');
+    assert.match(String(note['content']), /Answering Carol from the thread\./);
+  });
+});
