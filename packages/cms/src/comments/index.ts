@@ -47,6 +47,8 @@ export {
   commentsDirectory,
   commentsFile,
   deleteComment,
+  followAllMovedComments,
+  followMovedComments,
   heldWebmention,
   intakeComment,
   migrateCommentEmails,

@@ -11,8 +11,11 @@ import {
   viaField,
 } from '../admin/store.ts';
 import type { AdminStore, CommentRecord, CommentStatus, PostComment } from '../admin/store.ts';
+import type { Document } from '../content/document.ts';
+import { slugForPermalink } from '../content/parser.ts';
 import { rsvpValue } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
+import type { ContentStore } from '../content/store.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { hashClientAddress } from '../forms/protection.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
@@ -73,11 +76,9 @@ export function commentsDirectory(contentDir: string): string {
 /**
  * The absolute path of one post's comment file.
  *
- * Named by the post's slug, which is what a post keeps for its whole life: the
- * editor gives an existing document the slug it already has, so the file that
- * holds a post's comments never has to move. A slug carrying anything a
- * filename should not is refused rather than sanitised, because two slugs that
- * sanitised to one name would silently share a thread.
+ * Named by the post's slug. A slug carrying anything a filename should not is
+ * refused rather than sanitised, because two slugs that sanitised to one name
+ * would silently share a thread.
  */
 export function commentsFile(contentDir: string, slug: string): string {
   return path.join(commentsDirectory(contentDir), `${fileNameOf(slug)}.json`);
@@ -763,6 +764,57 @@ export async function rewriteComments(
     for (const comment of changed) records.admin.putComment(comment);
     return changed.map((comment) => comment.id);
   });
+}
+
+export async function followMovedComments(
+  records: CommentRecords,
+  store: ContentStore,
+  document: Document,
+): Promise<void> {
+  for (const permalink of document.redirectFrom ?? []) {
+    const from = slugForPermalink(permalink);
+    if (from === undefined || from === document.slug) continue;
+    const to = ownerOf(store, readPost(records, from).post)?.slug;
+    if (to === undefined || to === from) continue;
+
+    const [first = '', second = ''] = [
+      commentsFile(records.contentDir, from),
+      commentsFile(records.contentDir, to),
+    ].sort();
+    await withFileLock(first, () =>
+      withFileLock(second, () => {
+        followFile(records, store, from);
+      }),
+    );
+  }
+}
+
+export function followAllMovedComments(records: CommentRecords, store: ContentStore): void {
+  for (const slug of commentSlugs(records.contentDir)) followFile(records, store, slug);
+}
+
+function followFile(records: CommentRecords, store: ContentStore, from: string): void {
+  const left = readPost(records, from);
+  const owner = ownerOf(store, left.post);
+  if (owner === undefined || owner.slug === from) return;
+
+  const held = readPost(records, owner.slug).comments;
+  const known = new Set(held.map((comment) => comment.id));
+  const merged = [...held, ...left.comments.filter((comment) => !known.has(comment.id))];
+  writePost(records, owner.slug, owner.permalink, merged);
+  rmSync(commentEmailsFile(records.dataDir, from), { force: true });
+  rmSync(commentsFile(records.contentDir, from), { force: true });
+
+  const moved = new Set(left.comments.map((comment) => comment.id));
+  for (const comment of merged) {
+    if (!moved.has(comment.id)) continue;
+    records.admin.putComment({ ...comment, slug: owner.slug, permalink: owner.permalink });
+  }
+}
+
+function ownerOf(store: ContentStore, permalink: string): Document | undefined {
+  if (permalink === '') return undefined;
+  return store.getByPermalink(permalink) ?? store.getByFormerPermalink(permalink);
 }
 
 /** The slug of every post that has a comment file, in a stable order. */
