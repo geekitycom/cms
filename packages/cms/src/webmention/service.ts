@@ -18,6 +18,7 @@ import { verifyWebmention } from './receive.ts';
 import { selectedTargets, syndicationCopies, syndicationTargetsReader } from './syndication.ts';
 import type { SyndicationTarget } from './syndication.ts';
 import type { IncomingWebmention, WebmentionOutcome } from './receive.ts';
+import type { ConversationReader } from '../web/conversation.ts';
 
 /**
  * Telling the pages a post links to that it links to them.
@@ -85,6 +86,8 @@ export interface CreateWebmentionServiceOptions {
    * (TASK-197). A reply to the copy tells the original too.
    */
   originalOf?: ((url: string) => string | undefined) | undefined;
+  /** What says which reply on a post an incoming webmention answers (TASK-319). */
+  conversation: Pick<ConversationReader, 'replyNamed'>;
 }
 
 /** Sends a site's webmentions, takes the ones sent to it, and remembers both. */
@@ -340,6 +343,7 @@ export function createWebmentionService(
             records,
             dataDir: config.dataDir,
             baseUrl: config.baseUrl,
+            conversation: options.conversation,
             checker: config.commentChecker,
             // The intake decides whether this one is news: a page that is
             // edited and re-sent updates the entry it made, and putting the

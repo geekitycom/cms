@@ -523,13 +523,15 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
 
   if (held !== undefined) {
     // Its id, its post and its source never move: that is what makes it the
-    // same comment. What the page now says about itself replaces what it said.
+    // same comment. What the page now says about itself replaces what it said,
+    // what it answers included.
     const moved = await updateComment(records, held.id, {
       kind: comment.kind,
       status,
       author: comment.author,
       content: comment.content,
       submitted: comment.submitted,
+      inReplyTo: comment.inReplyTo,
       rsvp: comment.rsvp ?? null,
     });
     return moved === undefined
@@ -661,7 +663,9 @@ function messageOf(error: unknown): string {
 export async function updateComment(
   records: CommentRecords,
   id: string,
-  change: Partial<Pick<CommentRecord, 'status' | 'content' | 'author' | 'kind' | 'submitted'>> & {
+  change: Partial<
+    Pick<CommentRecord, 'status' | 'content' | 'author' | 'kind' | 'submitted' | 'inReplyTo'>
+  > & {
     /** What the comment now says it is going to, or `null` when it no longer says. */
     readonly rsvp?: RsvpValue | null;
   },

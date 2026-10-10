@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-10-10 13:30'
+updated_date: '2026-10-10 13:45'
 ---
 # Native comments
 
@@ -115,6 +115,32 @@ Markdown to keep — and a like or a repost carries neither, because a page's
 title is not something its author said about this post. `addressHash` is the
 hash of the address the webmention was *sent from*, hashed exactly as a
 commenter's is.
+
+### Where a received reply goes (TASK-319)
+
+A webmention's `inReplyTo` comes from its source's `u-in-reply-to`. Each URL
+the entry answers is offered to the conversation's `replyNamed`, and the first
+that names a reply on the target post is the parent:
+
+- a comment's own page, `/comment/{id}/`, its id percent-decoded;
+- the post's anchor for a comment, `{permalink}#comment-{id}`;
+- an earlier webmention, by the page it was sent from (its `url`);
+- a fediverse reply on the post, by its `url` or its `id`.
+
+A source that names none of them, names only the post, or names a comment on a
+different post stays at the top, `inReplyTo: null`, as before. One that does
+answer a reply on this post is stored as a `reply` even when it never names the
+post itself. Every stored comment on the post is a candidate whatever its
+status, because what a reply answers is a fact about it: whether a reader may
+see the comment it answers is decided when the thread is read. A source that is
+edited and sent again is matched by its `url` as always, and its `inReplyTo` is
+rewritten with the rest, so it moves to whatever it answers now. Its own `url`
+stays its sender's page.
+
+A webmention may be aimed at a comment's page rather than at the post. The
+endpoint and the pingback endpoint take `/comment/{id}/` as a page here when it
+names an approved native comment, and what is said to it lands on that
+comment's post, where its `u-in-reply-to` threads it under the comment.
 
 ### The email, in `data/`
 
@@ -490,6 +516,9 @@ is that module — doc-4 calls it the conversation on the page — and
   the comment with its replies threaded under it, the chain of what it answers
   from the top-level comment down, and the post in whatever state it is in.
   See "A comment's own page" below.
+- **`replyNamed(document, url)`** — the id of the reply on a post that a URL
+  names, which is how a received webmention finds its parent (TASK-319). See
+  "Where a received reply goes" above.
 
 A post's own comments feed is `thread` flattened by `spokenIn` — everything
 somebody actually said, at every depth, with the likes and boosts left out
@@ -528,6 +557,9 @@ still scrolls to the comment.
 Only a native comment has one. A webmention's `url` is its sender's page and a
 fediverse reply's is the remote note, and they stay so: `/comment/{id}/` 404s
 for either.
+
+A webmention sent to a comment's page is accepted and lands on the comment's
+post, threaded under the comment (see "Where a received reply goes").
 
 The page holds the comment as its one `h-entry`: author `h-card`, content,
 `dt-published`, and `u-url` the page. Above it is the thread from the post

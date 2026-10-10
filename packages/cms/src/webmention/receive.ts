@@ -4,6 +4,8 @@ import { deleteComment, heldWebmention, intakeComment } from '../comments/record
 import type { CommentNotices, CommentRecords, ProposedComment } from '../comments/records.ts';
 import type { CommentChecker } from '../comments/submission.ts';
 import type { Document } from '../content/document.ts';
+import { commentIdAt } from '../web/conversation.ts';
+import type { ConversationReader } from '../web/conversation.ts';
 import { sanitizeCommentHtml } from '../web/sanitize.ts';
 import { readCapped, WEBMENTION_USER_AGENT } from './discovery.ts';
 import { linksTo, sourceEntry } from './microformats.ts';
@@ -85,6 +87,8 @@ export interface CheckWebmentionOptions {
   readonly documentAt: (pathname: string) => Document | undefined;
   /** The public post a URL elsewhere is one of the syndicated copies of (TASK-197). */
   readonly syndicatedAt?: ((url: string) => Document | undefined) | undefined;
+  /** What says which post a comment's own page (TASK-318) is on. */
+  readonly conversation: Pick<ConversationReader, 'comment'>;
 }
 
 /**
@@ -127,7 +131,12 @@ export function checkWebmentionRequest(
     return refuse('elsewhere', 'The target is not a page on this site.');
   }
 
-  const document = options.documentAt(to.pathname);
+  // A comment's page is a page here, and what is said to it is said on the
+  // post it is under (TASK-319).
+  const commentId = commentIdAt(to.pathname);
+  const pathname =
+    commentId === undefined ? to.pathname : options.conversation.comment(commentId)?.post.permalink;
+  const document = pathname === undefined ? undefined : options.documentAt(pathname);
   if (document === undefined) return refuse('target', 'There is no page here at that address.');
 
   return { ok: true, source: from.href, target: to.href, document };
@@ -143,6 +152,8 @@ export interface VerifyWebmentionOptions {
   readonly dataDir: string;
   /** The site's public origin. */
   readonly baseUrl: string;
+  /** What says which reply on the post a source answers (TASK-319). */
+  readonly conversation: Pick<ConversationReader, 'replyNamed'>;
   /** The checker, when the site named one. */
   readonly checker?: CommentChecker | undefined;
   /** Who to tell when one lands in the queue, handed to the intake (TASK-55). */
@@ -209,7 +220,13 @@ export async function verifyWebmention(
       // links here.
       undefined;
 
-  const kind = entry?.kind ?? 'mention';
+  // The first of the things it answers that is a reply on this post. A source
+  // answering one is a reply here even when it never names the post itself.
+  const inReplyTo =
+    entry?.inReplyTo
+      .map((url) => options.conversation.replyNamed(incoming.document, url))
+      .find((id) => id !== undefined) ?? null;
+  const kind = inReplyTo === null ? (entry?.kind ?? 'mention') : 'reply';
   const author = {
     name:
       entry?.author.name !== undefined && entry.author.name !== ''
@@ -238,7 +255,7 @@ export async function verifyWebmention(
     author,
     content: { markdown: text, html },
     submitted: entry?.published ?? now.toISOString(),
-    inReplyTo: null,
+    inReplyTo,
     // The URL it was sent from rather than the entry's own `u-url`: this is
     // the identity a later webmention is matched against, and the sender is
     // the one who chose it.

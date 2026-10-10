@@ -1953,6 +1953,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     config: resolved,
     notifications,
     originalOf: (url) => replyContexts.read(url)?.original,
+    conversation,
   });
   content.events.on('change', (change) => {
     webmentions.handle(change);

@@ -45,7 +45,7 @@ export function webmentionEndpointFor(site: Record<string, unknown>): string | u
  */
 export function mountWebmentions(app: Hono<GeekityEnv>): void {
   app.post(WEBMENTION_PATH, async (c) => {
-    const { store, config, webmentions } = c.var;
+    const { store, config, webmentions, conversation } = c.var;
 
     if (!readSiteSettings(config.contentDir).webmentionsReceive) {
       // A 404 rather than a 403: a site that does not take webmentions has no
@@ -61,6 +61,7 @@ export function mountWebmentions(app: Hono<GeekityEnv>): void {
         baseUrl: config.baseUrl,
         documentAt: (pathname) => publicDocumentAt(store, pathname),
         syndicatedAt: (url) => postSyndicatedAt(url, store, syndicationCopies(config.contentDir)),
+        conversation,
       },
     );
 

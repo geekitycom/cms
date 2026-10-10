@@ -61,6 +61,8 @@ export interface SourceEntry {
   readonly url: string;
   /** A reply's `p-rsvp`, when it is one of the four values (TASK-198). */
   readonly rsvp?: RsvpValue;
+  /** Everything its `in-reply-to` names, a nested `h-cite` by its `url` (TASK-319). */
+  readonly inReplyTo: readonly string[];
 }
 
 /** The attributes that make an element a link to somewhere. */
@@ -131,6 +133,16 @@ export function sourceEntry(html: string, sourceUrl: string, target: string): So
     content,
     published: chosen === undefined ? null : instantOf(first(chosen, 'published')),
     url: (chosen === undefined ? undefined : first(chosen, 'url')?.text) ?? sourceUrl,
+    inReplyTo:
+      chosen === undefined
+        ? []
+        : (chosen.properties['in-reply-to'] ?? [])
+            .map((value) =>
+              value.item === undefined
+                ? value.text
+                : (first(value.item, 'url')?.text ?? value.text),
+            )
+            .filter((url) => url !== ''),
   };
 }
 

@@ -1237,6 +1237,12 @@ queue as everything else — through the same `commentChecker` seam, so a checke
 can tell one from a form submission by its `source`. Akismet is told it is a
 `webmention` rather than a `comment`.
 
+A reply whose `u-in-reply-to` names a reply already on the post (a comment by
+its own page or its `#comment-{id}` anchor, an earlier webmention by the page it
+was sent from, a fediverse reply by its url or id) threads under that reply, and
+moves with it when the source is edited and sent again. A webmention sent to a
+comment's page, `/comment/{id}/`, lands on that comment's post.
+
 The source URL is its identity. A page that sends its webmention again updates
 what it left rather than adding a second, and one whose link has gone — or which
 answers 404 or 410 — takes it away. Closing rules do not apply: a post that

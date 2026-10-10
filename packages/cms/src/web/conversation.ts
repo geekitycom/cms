@@ -242,6 +242,15 @@ export interface ConversationReader {
    * itself would.
    */
   readonly comment: (id: string) => CommentThread | undefined;
+  /**
+   * The id of the reply on a post that a URL names, or `undefined` (TASK-319):
+   * a comment by its own page or by the post's `#comment-` anchor, a
+   * webmention by the page it was sent from, a fediverse reply by its url or
+   * its id. Every stored comment counts whatever its status, because what a
+   * reply answers is a fact about it, and whether a reader may see the one it
+   * answers is decided when the thread is read.
+   */
+  readonly replyNamed: (document: Document, url: string) => string | undefined;
 }
 
 /** A native comment, what it answers and what answers it (TASK-318). */
@@ -272,6 +281,7 @@ export function createConversation(context: ConversationContext): ConversationRe
     counts: (documents) => commentCounts(context, documents),
     latest: (limit) => siteConversation(context, limit),
     comment: (id) => commentThread(context, id),
+    replyNamed: (document, url) => replyNamed(context, document, url),
   };
 }
 
@@ -326,7 +336,11 @@ interface Gathered {
   readonly answers: Interaction[];
 }
 
-function gather(context: ConversationContext, document: Document): Gathered {
+function gather(
+  context: ConversationContext,
+  document: Document,
+  native: readonly Interaction[] = approvedComments(context.admin, document),
+): Gathered {
   const objectId = activityStreamsId(document, context.baseUrl);
   // What a top-level answer names. The object id when the post has one, and
   // the permalink otherwise: a post that has never been delivered can still
@@ -334,7 +348,6 @@ function gather(context: ConversationContext, document: Document): Gathered {
   const root = objectId ?? document.permalink;
 
   const activities = objectId === undefined ? [] : activitiesAround(context.admin, objectId);
-  const native = approvedComments(context.admin, document);
   const naming = authorNaming(context.admin);
   const quotes =
     objectId === undefined
@@ -455,6 +468,43 @@ function commentThread(context: ConversationContext, id: string): CommentThread 
     comment: { ...comment, replies },
     ancestors: ancestorsOf(context.admin, post, said, comment),
   };
+}
+
+function replyNamed(
+  context: ConversationContext,
+  document: Document,
+  url: string,
+): string | undefined {
+  let named: URL;
+  try {
+    named = new URL(url, context.baseUrl);
+  } catch {
+    return undefined;
+  }
+  const commentId = commentNamedBy(named, document, context.baseUrl);
+
+  const everyComment = context.admin
+    .listCommentsFor(document.slug)
+    .map((comment) => interactionOf(comment, document.permalink));
+  return gather(context, document, everyComment).written.find(
+    (reply) =>
+      reply.id === commentId ||
+      reply.id === named.href ||
+      (reply.url !== null && absoluteUrl(reply.url, context.baseUrl) === named.href),
+  )?.id;
+}
+
+/** The comment a URL on this site names by its page or by its anchor on the post. */
+function commentNamedBy(url: URL, document: Document, baseUrl: string): string | undefined {
+  const post = new URL(absoluteUrl(document.permalink, baseUrl));
+  if (url.origin !== post.origin) return undefined;
+
+  const onItsPage = commentIdAt(url.pathname);
+  if (onItsPage !== undefined) return onItsPage;
+
+  const anchor = `#${commentAnchor('')}`;
+  if (url.pathname !== post.pathname || !url.hash.startsWith(anchor)) return undefined;
+  return decoded(url.hash.slice(anchor.length));
 }
 
 /**
@@ -757,6 +807,22 @@ export function commentPageHref(id: string): string {
 
 /** What every comment page's path starts with. */
 export const COMMENT_PAGE_PREFIX = '/comment/';
+
+/** The id of the comment whose page a path is, or `undefined` (TASK-319). */
+export function commentIdAt(pathname: string): string | undefined {
+  if (!pathname.startsWith(COMMENT_PAGE_PREFIX) || !pathname.endsWith('/')) return undefined;
+  const encoded = pathname.slice(COMMENT_PAGE_PREFIX.length, -1);
+  if (encoded === '' || encoded.includes('/')) return undefined;
+  return decoded(encoded);
+}
+
+function decoded(value: string): string | undefined {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Everything said in a conversation, at every depth and in no order: the

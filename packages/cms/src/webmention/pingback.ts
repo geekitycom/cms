@@ -91,7 +91,7 @@ export function mountPingbacks(app: Hono<GeekityEnv>): void {
 }
 
 async function answerPing(c: Context<GeekityEnv>): Promise<string | Fault> {
-  const { store, config, webmentions, renderer } = c.var;
+  const { store, config, webmentions, renderer, conversation } = c.var;
 
   const xml = await readBounded(c.req.raw, PINGBACK_MAX_BYTES);
   if (xml === undefined) {
@@ -114,6 +114,7 @@ async function answerPing(c: Context<GeekityEnv>): Promise<string | Fault> {
   const checked = checkWebmentionRequest(source, target, {
     baseUrl: config.baseUrl,
     documentAt: (pathname) => publicDocumentAt(store, pathname),
+    conversation,
   });
   if (!checked.ok) return { code: REQUEST_FAULTS[checked.problem], message: checked.message };
 
