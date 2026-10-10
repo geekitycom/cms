@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.29.0](https://github.com/geekitycom/cms/compare/v0.28.0...v0.29.0) (2026-10-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** SubmitCommentOptions.author, the SignedInAuthor type and the intake's 'moderator' CommentOrigin are removed. A signed-in reply is written with writeReplyPost or submitReplyPost as a reply post.
+* **cms:** FeedItemComments.count moved to FeedItemComments.replies.count, and the post feeds' source:comments now counts direct replies and points at /replies/{key}/, omitted when zero.
+* **cms:** the front page context no longer carries recentPosts, and recentPosts, RECENT_POSTS, startOfMonth and RecentPostsSource are no longer exported. A site theme's front-page.njk calls newestPosts(count) instead, for example {% set posts = newestPosts(5) %}.
+
+### Features
+
+* **cms:** backfill fediverse replies to replies from their replies collections ([b109215](https://github.com/geekitycom/cms/commit/b109215b5a2672845dbe75b379c7219f2f14aeb0))
+* **cms:** count a backlink through the homepage and the site's redirects ([2c27148](https://github.com/geekitycom/cms/commit/2c271487e254ad64b73042342a7e9400c49a3a48))
+* **cms:** give a page that takes comments a comments feed and advertise it ([98a47a0](https://github.com/geekitycom/cms/commit/98a47a01a21dfb1463bcbac9ffcc078049332822))
+* **cms:** give each native comment a page of its own at /comment/{id}/ ([37c1408](https://github.com/geekitycom/cms/commit/37c14080cc7d629ecc1aaa5f0017b89cb0f6b4bd))
+* **cms:** label fetched and delivered replies on the federation screen ([68e2fac](https://github.com/geekitycom/cms/commit/68e2faca2b5ec297f3123677c47cc8fdc564d59d))
+* **cms:** list the site's own posts that link to a post or page as backlinks ([57bf892](https://github.com/geekitycom/cms/commit/57bf8926ea78b805ca4dc034a428d7b69d9b27de))
+* **cms:** look up /replies/ keys in an index and 404 them where the conversation is hidden ([5e87217](https://github.com/geekitycom/cms/commit/5e87217e7522d8e67f574b36031a3627243a94e2))
+* **cms:** make a signed-in reply in a comment thread a reply post shown in the thread ([5998a53](https://github.com/geekitycom/cms/commit/5998a539d5e483400826ce78271ded893c4c3414))
+* **cms:** make every signed-in reply a reply post and send its notice once ([adfc27c](https://github.com/geekitycom/cms/commit/adfc27c1d1c8b0243077059ac93a18957afb670e))
+* **cms:** make the comments feeds a walkable tree in the source namespace ([cae63ca](https://github.com/geekitycom/cms/commit/cae63cabb85cc8213dcbb9336978a455248a2dc7))
+* **cms:** name the publication a post was first published on ([46f3658](https://github.com/geekitycom/cms/commit/46f3658b8b82f5acca6f5aff6d3512920fa9176f))
+* **cms:** send and receive salmentions so replies to replies reach the thread ([f8c8963](https://github.com/geekitycom/cms/commit/f8c8963eca9084c933ba5ab358a6d9513bd3ccd5))
+* **cms:** show only the page on a static front page and offer newestPosts(count) ([7fc0d10](https://github.com/geekitycom/cms/commit/7fc0d103d1cc080e55262f6d97f0ddde9c5ea83b))
+* **cms:** thread a received webmention under the reply it answers ([0f9307e](https://github.com/geekitycom/cms/commit/0f9307e5715651c785cd4cf9424c04a641d6bc3b))
+
+
+### Bug Fixes
+
+* **cms:** keep a moved page's replies feed and a moved draft's comments and sends ([68d69f2](https://github.com/geekitycom/cms/commit/68d69f239d6c658c45cdf234494913c3e7ebb404))
+* **cms:** let the Eleventy example build the default theme and its overrides ([432f76c](https://github.com/geekitycom/cms/commit/432f76c6deca0c3fed4fb08c7ff3000738d772d9))
+* **cms:** show a reply under a hidden comment in its thread under a placeholder ([6f437f2](https://github.com/geekitycom/cms/commit/6f437f2325ac71dd0b71b4391ce32481b302d0e8))
+* **cms:** take a moved post's comments along when its slug changes ([14624dd](https://github.com/geekitycom/cms/commit/14624dd0af9714a0b90ba7ee685e8f647f4f6fa4))
+* **cms:** tell a reply post's commenter when their pending comment is approved ([64f5d9c](https://github.com/geekitycom/cms/commit/64f5d9ceca7d725c1957b38f508ce51347abb055))
+* **cms:** watch the content tree with one recursive watch so no new file is missed ([a97641b](https://github.com/geekitycom/cms/commit/a97641bc326ab0a7aa0bf7eef64efc6b225b69e4))
+
+
+### Code Refactoring
+
+* **cms:** remove the signed-in native comment path and restating comments ([8ed8897](https://github.com/geekitycom/cms/commit/8ed889760a68c8d3bd78131c96ed4300c26e9b4c))
+
 ## [0.28.0](https://github.com/geekitycom/cms/compare/v0.27.0...v0.28.0) (2026-10-09)
 
 
