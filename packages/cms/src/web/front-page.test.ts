@@ -94,9 +94,6 @@ describe('a site whose homepage is a page', () => {
     const html = await response.text();
     assert.match(html, /Hello and welcome\./, 'the page’s own body is the front page');
     assert.match(html, /Welcome/);
-    // The archive is not what `/` is: the page's own words are the whole of
-    // it (TASK-317), and the paginated listing, which has a `page-title`
-    // heading, lives on the posts page now.
     assert.doesNotMatch(html, /Newest/, 'the posts are still listed at the root');
     assert.doesNotMatch(html, /class="page-title"/, 'the listing is still at the root');
   });

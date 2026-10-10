@@ -320,9 +320,6 @@ a:visited {
   color: var(--ink-muted);
 }
 
-/* The archive page (TASK-85). A stylesheet is an all-or-nothing override, so
-   the page kind the package added needs its rules here as well. */
-
 .archive h2 {
   margin-bottom: 0.4rem;
   font-size: 1.2rem;

@@ -1863,9 +1863,6 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     // asked per render for the reason the conversation is: a post published a
     // minute ago is already the neighbour of the one before it.
     neighbours: (document) => store.neighbours(document),
-    // And the newest posts, as many as a front page asks for (TASK-317). The
-    // query runs only when a theme calls `newestPosts`, so the packaged front
-    // page, which lists nothing, never runs it.
     newestPosts: (count) => store.listPosts({ limit: count }),
     // And every published post, for a page that says `archive: true`. The one
     // listing with no paging, so it is asked for only by the page that prints

@@ -45,9 +45,25 @@ const POSTS: Record<string, string> = {
  * A site with Ada, who has a profile with a Mastodon link, as a user. The
  * settings say whether she is the site's author.
  */
-async function site(settings: Record<string, unknown>): Promise<Cms> {
+async function site(
+  settings: Record<string, unknown>,
+  theme?: Record<string, string>,
+): Promise<Cms> {
   const contentDir = await temporaryDir('geekity-solo-content-');
   const dataDir = await temporaryDir('geekity-solo-data-');
+  let themesDir: string | undefined;
+  if (theme !== undefined) {
+    themesDir = await temporaryDir('geekity-solo-themes-');
+    for (const [relative, contents] of Object.entries({
+      'theme.json': JSON.stringify({ name: 'Fixture', kind: 'site' }),
+      ...theme,
+    })) {
+      const file = path.join(themesDir, 'fixture', relative);
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, contents, 'utf8');
+    }
+    settings = { ...settings, theme: 'fixture' };
+  }
   const files = {
     ...POSTS,
     '_data/site.json': `${JSON.stringify({ title: 'A Site', ...settings }, null, 2)}\n`,
@@ -70,7 +86,12 @@ async function site(settings: Record<string, unknown>): Promise<Cms> {
     },
   });
 
-  const instance = createCms({ contentDir, dataDir, watch: false });
+  const instance = createCms({
+    contentDir,
+    dataDir,
+    watch: false,
+    ...(themesDir === undefined ? {} : { themesDir }),
+  });
   started.push(instance);
   await instance.sync();
   return instance;
@@ -152,6 +173,23 @@ describe('a site whose author is a user (AC #2)', () => {
       assert.ok(claimsMe(home, '/author/ada/'), 'the homepage claims the author archive');
     });
   }
+
+  it('keeps the rel="me" claims under a site theme whose front page prints only its words', async () => {
+    const home = await body(
+      await site(
+        { ...FRONT_PAGE, ...SOLO },
+        {
+          'layouts/front-page.njk':
+            '{% extends "layouts/base.njk" %}{% block content %}{{ content | safe }}{% endblock %}',
+        },
+      ),
+      '/',
+    );
+
+    assert.match(home, /Hello and welcome\./, 'the override is the front page');
+    assert.ok(claimsMe(home, MASTODON), 'a Mastodon profile linking here verifies');
+    assert.ok(claimsMe(home, '/author/ada/'), 'the homepage claims the author archive');
+  });
 
   it('has the author archive claim the homepage back with rel="me"', async () => {
     const archive = await body(await site(SOLO), '/author/ada/');

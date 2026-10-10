@@ -575,15 +575,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     return { ...context, ...citedBy(document) };
   }
 
-  /**
-   * `newestPosts(count)`, the function a front page calls for the entries a
-   * listing prints, or nothing when the renderer was built without a source.
-   *
-   * A function rather than a list so the theme chooses the count and a front
-   * page that lists nothing runs no query. The first entry's image is fetched
-   * at once when the page's own words above it have none, because it is then
-   * the first image on the page.
-   */
   function newestPostsContext(page: Document): Record<string, unknown> {
     const source = options.newestPosts;
     if (source === undefined) return {};
@@ -793,8 +784,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // should say the URL this is served at rather than the one that
       // redirects here.
       url: '/',
-      // What a front page may list and link, for a theme that asks: the
-      // newest posts as listing entries, and the page carrying the listing.
       extra: { ...newestPostsContext(document), ...postsPageContext(), ...extra },
       viewer,
     });

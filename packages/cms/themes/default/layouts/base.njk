@@ -178,8 +178,6 @@
     {% if llmsTxt and atRoot %}
     <link rel="describedby" type="text/markdown" href="{{ llmsTxt | url }}">
     {% endif %}
-    {#- The solo author's identity claims, outside every block so a front page
-        that prints no bio still makes them (decision-45). -#}
     {% if atRoot and soloAuthor %}
     {% if soloAuthor.url %}
     <link rel="me" href="{{ soloAuthor.url | url }}">

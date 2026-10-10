@@ -1,11 +1,6 @@
 {#
   The front page: the page the Reading setting names, read at `/`.
 
-  The page's own title and words and nothing else (TASK-317, decision-44). The
-  title is an `h2` because `layouts/base.njk` heads the root path with the site
-  title. There is no Published line, because a front page is read as the site
-  rather than as a page somebody wrote on a Tuesday.
-
   A site that wants more on its front page overrides this file in its own
   theme. `newestPosts(count)` lists the newest published posts as listing
   entries and `postsPage` names the page carrying the listing; the theme README
