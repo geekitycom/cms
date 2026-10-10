@@ -135,6 +135,14 @@ feed readers and followers already know of it:
 | `guid`          | The WordPress guid, when it is not the post's `?p=` address, so feed readers see no old post as new.                                                                                             |
 | `migrated`      | `true` on everything but a scheduled post, so its arrival here, or a draft's publication later, sends nothing to anyone. A scheduled post publishes here as news, as it would have on WordPress. |
 
+**Expect one difference in a feed diff.** WordPress prints the escapes in a
+non-ASCII slug in lower case, as in `/2026/07/i-%e2%99%a5-rss/`. The site
+prints them in upper case, as in `/2026/07/i-%E2%99%A5-rss/`, in the RSS,
+Atom and JSON feeds, the comments feeds, `rel="canonical"`, `og:url`, the
+sitemap and the ActivityStreams `url`. RFC 3986 makes the two spellings the
+same URL, and both answer `200` with the post. A feed reader keys an item on
+its `guid`, which the import keeps, so the post does not show as new.
+
 A post in the status format has no title, so it reads as a note. The page
 WordPress served at the home URL becomes `homepage` in `_data/site.json`. The
 import sets that key only while the site has not set it, or still holds what
