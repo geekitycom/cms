@@ -4,10 +4,12 @@ title: Hide likes and boosts from comments and replies feeds
 status: To Do
 assignee: []
 created_date: '2026-10-10 21:34'
+updated_date: '2026-10-10 22:53'
 labels:
   - bug
 milestone: m-31
-dependencies: []
+dependencies:
+  - TASK-336
 references:
   - packages/cms/src/web/routes.ts
   - >-
@@ -31,7 +33,8 @@ Rule: a feed of comments or replies carries only conversational records, replies
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 /comments/feed/, every {permalink}feed/ and every /replies/{key}/ feed list replies and mentions only; likes, boosts and reposts are left out
-- [ ] #2 The reply counts the feeds advertise (source:comments, slash:comments) count only what those feeds list, and an item whose only responses are reactions advertises no replies feed
+- [ ] #2 The reply counts the feeds advertise (source:comments, and the counts decision-48 defines) count only what those feeds list, and an item whose only responses are reactions advertises no replies feed; decision-48's wording is updated to say so
 - [ ] #3 Reactions still show on the post or page, with their counts, exactly as before
-- [ ] #5 The README's feeds and replies feed sections say which comment kinds a feed carries
+- [ ] #4 The README's feeds and replies feed sections say which comment kinds a feed carries
+- [ ] #5 Tests pin all three feeds, including {permalink}feed/ and /replies/, which may already leave reactions out because a post's thread groups likes, boosts and reposts apart from replies (web/conversation.ts gather); the site-wide /comments/feed/ is the confirmed leak (siteConversation reads every approved comment record whatever its kind)
 <!-- AC:END -->

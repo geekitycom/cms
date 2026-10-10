@@ -4,6 +4,7 @@ title: 'Every comment has one 16-hex key, and migrated comments stay out of feed
 status: To Do
 assignee: []
 created_date: '2026-10-10 21:49'
+updated_date: '2026-10-10 22:53'
 labels:
   - bug
 milestone: m-31
@@ -21,7 +22,7 @@ ordinal: 295800
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Seen reviewing v0.29.0 for the andrewshell.org migration. Folds in what was TASK-337.
+Seen reviewing v0.29.0 for the andrewshell.org migration.
 
 **Today.** A comment's stored id goes verbatim into every URL about it: its page /comment/{id}/ (form comments only), its replies feed /replies/{id}/ (form comments) or /replies/{hash of guid}/ (everything else), and its thread anchor #comment-{id}. Ids come in three shapes:
 - a UUID for a new form comment or a webmention
@@ -39,6 +40,13 @@ The importer chose that because core treats an id that parses as a URL as the co
 - Core refuses a stored comment id that isn't 16 lowercase hex digits, naming the file and id.
 
 Decide and record what happens to form comments already stored with UUIDs since v0.29.0. Their page is their guid, so a new key changes their comments-feed guid. Migrate them in place and accept the change, or mark them migrated.
+
+**Review notes (2026-10-11), checked against the code:**
+- Imported fediverse comments are comment records with source activitypub, but a redelivered activity or a backfilled reply lands in the inbox log (ap_inbox), which has no knowledge of comment records. So "no duplicates" is enforced where the conversation is read: gather() must drop an inbox row whose activity or note id matches a migrated comment's origin. Webmentions already match a resend by sender URL (AdminStore.listCommentsAt), so they only need the origin stored.
+- The importer already keeps webmention_source_url as the comment's url (plugin-wordpress comments-import.ts urlOf); the webmention reactions without one are likely missing it in the export. For fediverse replies it keeps source_url before source_id, so the note id is lost when a web URL exists; likes and boosts keep neither.
+- A native reply under a migrated comment is in the feeds, so its source:inReplyTo needs the migrated parent's guid even though the parent is in no feed. An imported WordPress form comment (no origin elsewhere) gets a /comment/{key}/ page like a native form comment, and that page is its guid; any other migrated comment's guid is its origin URL.
+- Every stored id becoming 16 hex digits collapses decision-48's rule that a 16-hex segment is a key and anything else a native comment id; a new decision supersedes that part.
+- Recommended fate for UUID form comments stored since v0.29.0 (AC#8): re-key in place deterministically (key = first 16 hex of SHA-256 of the old id), rewriting any reply post whose in-reply-to names the old /comment/{uuid}/ page; no redirects, since no deployed site holds any (shll.me has no comments).
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -47,9 +55,12 @@ Decide and record what happens to form comments already stored with UUIDs since 
 - [ ] #2 Every comment is anchored as id="comment-{key}"; a form comment's page is /comment/{key}/; every replies feed is /replies/{key}/; source:comments, thread links and reply notices use these forms
 - [ ] #3 No URL the site prints (thread links and anchors, /comment/ pages, comments-feed links, /replies/ links) contains a percent-encoded URL
 - [ ] #4 plugin-wordpress writes each imported comment with migrated: true and the hash key of its WordPress comment URL; a site imported with 0.2.0 picks this up on a re-import or in place, without a clash per comment file
-- [ ] #9 plugin-wordpress keeps each comment's origin identity from the WXR (source_id, webmention_source_url) and keys fediverse and webmention comments by it; a webmention resend, a redelivered activity or a reply backfill for an imported comment matches it and adds no record
-- [ ] #5 A migrated comment shows on its page and in its thread as before, replies to it still thread under it, and it appears in no feed and no advertised reply count
-- [ ] #6 On the andrewshell.org import, /comments/feed/ and every {permalink}feed/ hold no imported comment, so a reader of WordPress's comments feed sees nothing new at cutover
-- [ ] #7 The fate of UUID-keyed form comments stored since v0.29.0 is decided and recorded
-- [ ] #8 The README's comments, replies feed and theme sections, and the plugin-wordpress README, describe the key rule and migrated comments
+- [ ] #5 plugin-wordpress keeps each comment's origin identity from the WXR (source_id, webmention_source_url) and keys fediverse and webmention comments by it; a webmention resend, a redelivered activity or a reply backfill for an imported comment matches it and adds no record
+- [ ] #6 A migrated comment shows on its page and in its thread as before, replies to it still thread under it, and it appears in no feed and no advertised reply count
+- [ ] #7 On the andrewshell.org import, /comments/feed/ and every {permalink}feed/ hold no imported comment, so a reader of WordPress's comments feed sees nothing new at cutover
+- [ ] #8 The fate of UUID-keyed form comments stored since v0.29.0 is decided and recorded
+- [ ] #9 The README's comments, replies feed and theme sections, and the plugin-wordpress README, describe the key rule and migrated comments
+- [ ] #10 gather() drops an inbox row (delivered or fetched) whose activity or note id is a migrated comment's origin, so a redelivery or backfill of an imported fediverse comment shows once
+- [ ] #11 A native reply under a migrated comment threads under it and, in the feeds, names the migrated comment's guid in source:inReplyTo: its /comment/{key}/ page for an imported WordPress form comment, its origin URL otherwise
+- [ ] #12 A decision records the key rule, migrated comments and the UUID re-key, superseding decision-48's id-or-key segment rule
 <!-- AC:END -->

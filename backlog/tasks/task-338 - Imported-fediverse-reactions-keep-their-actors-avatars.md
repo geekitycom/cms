@@ -4,10 +4,12 @@ title: Imported fediverse reactions keep their actors' avatars
 status: To Do
 assignee: []
 created_date: '2026-10-10 22:40'
+updated_date: '2026-10-10 22:53'
 labels:
   - enhancement
 milestone: m-31
-dependencies: []
+dependencies:
+  - TASK-336
 priority: low
 ordinal: 297800
 ---

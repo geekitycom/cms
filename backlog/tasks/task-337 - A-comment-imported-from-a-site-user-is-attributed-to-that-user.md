@@ -4,10 +4,12 @@ title: A comment imported from a site user is attributed to that user
 status: To Do
 assignee: []
 created_date: '2026-10-10 22:40'
+updated_date: '2026-10-10 22:53'
 labels:
   - enhancement
 milestone: m-31
-dependencies: []
+dependencies:
+  - TASK-336
 priority: low
 ordinal: 296800
 ---
@@ -21,6 +23,6 @@ Seen on the andrewshell.org import (2026-10-08 export). WordPress records who wr
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 plugin-wordpress records the Geekity user on an imported comment whose comment_user_id maps to one
-- [ ] #2 The thread shows such a comment as that user's, with their profile link and no rel=nofollow ugc, as it shows a user's reply post
+- [ ] #2 The thread shows such a comment as that user's, with their author archive as the profile link (as a reply post's author link is) and no rel=nofollow ugc
 - [ ] #3 On the andrewshell.org import, comments 4, 20, 22, 26 and 27 show as Andrew's
 <!-- AC:END -->
