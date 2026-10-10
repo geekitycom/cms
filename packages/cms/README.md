@@ -1002,7 +1002,7 @@ container never starts live:
 
 ```yaml
 services:
-  server:
+  geekity:
     environment:
       GEEKITY_DEV_MODE: 'true'
 ```
@@ -1011,7 +1011,7 @@ To go live, remove the variable, recreate the container (the file in the
 `data` volume keeps the mode on through the restart), then run:
 
 ```sh
-docker compose exec server geekity dev-mode off
+docker compose exec geekity geekity dev-mode off
 ```
 
 `geekity dev-mode status` in the same container says which state the site is
@@ -3104,15 +3104,17 @@ The three formats render one **feed item**, derived once per post, rather than
 each reading the file for itself. So they agree about the three things a reader
 actually keys on.
 
-**Identity.** A post is named by its ActivityStreams object id, which is its
-permalink (see [Federation](#federation)) or the `activitypub.id` the front
-matter stores for a post migrated from elsewhere. That id is RSS's `guid`,
-Atom's `id` and JSON Feed's `id`. The permalink is always the link: RSS's
-`link`, Atom's `link rel="alternate"` and JSON Feed's `url`. The two are the
-same URL for every post born on this CMS, and differ only for one carrying a
-stored id — which is what lets a migrated post keep the name its WordPress
+**Identity.** A post is named by the first of three things it has: the `guid`
+its front matter sets, when that parses as a URL; else the `activitypub.id`
+the front matter stores for a post migrated from elsewhere; else its permalink
+(see [Federation](#federation)). That name is RSS's `guid`, Atom's `id` and
+JSON Feed's `id`. The permalink is always the link: RSS's `link`, Atom's
+`link rel="alternate"` and JSON Feed's `url`. The two are the same URL for
+every post born on this CMS, and differ only for one carrying a stored id or a
+`guid` — which is what lets a migrated post keep the name its WordPress
 subscribers already hold. RSS's `isPermaLink` says which of the two a `guid`
-is: `true` when it is the permalink, `false` for a stored id like `?p=813`.
+is: `true` only when it equals the permalink, `false` for anything else, such
+as a stored `?p=813`.
 
 **Terms.** Every format lists the post's categories and then its tags, in file
 order, as one flat list: RSS's `category` elements, Atom's `category term`

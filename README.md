@@ -2462,7 +2462,7 @@ account can sign in straight away.
 
 ### 5. Bring a WordPress author across
 
-[Moving a site off the WordPress ActivityPub plugin](packages/cms/README.md#moving-a-site-off-the-wordpress-activitypub-plugin)
+[Moving a site from the WordPress ActivityPub plugin](packages/cms/README.md#moving-a-site-from-the-wordpress-activitypub-plugin)
 describes the cutover. In a container, the WordPress plugin and the user have
 to exist first, and the exported key pair is read from standard input so no
 copy of the private key is left inside the container:
