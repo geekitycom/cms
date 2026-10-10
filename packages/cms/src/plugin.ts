@@ -154,6 +154,13 @@ export interface PluginComment {
   readonly inReplyTo: string | null;
   /** Where it lives when it lives somewhere else, such as a webmention's source page. */
   readonly url: string | null;
+  /** Whether it was imported from another system: shown in its thread, in no feed. */
+  readonly migrated?: boolean;
+  /**
+   * Its name where it was first published, for an imported comment that has
+   * one: a fediverse note or activity id, or a webmention's source URL.
+   */
+  readonly origin?: string;
 }
 
 /** What {@link PluginSite.checkUpload} makes of a file. */

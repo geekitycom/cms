@@ -584,6 +584,30 @@ export interface CommentRecord {
    * TASK-320). Absent for every other comment.
    */
   via?: string;
+  /**
+   * Whether it was imported from another system (TASK-336), the word a
+   * migrated post uses. It was published before the site came here, so it is
+   * shown in its thread and carried by no feed. Absent for every other comment.
+   */
+  migrated?: true;
+  /**
+   * The name it has where it was first published, for a migrated comment
+   * that has one: a fediverse note or activity id, or a webmention's source.
+   * What the feeds call it when a native reply answers it, and what a later
+   * delivery of the same thing is recognised by. Absent for every other comment.
+   */
+  origin?: string;
+}
+
+/** A comment's {@link CommentRecord.migrated} and {@link CommentRecord.origin} as a record carries them: present only when set. */
+export function migratedFields(
+  migrated: boolean | null | undefined,
+  origin: string | null | undefined,
+): Pick<CommentRecord, 'migrated' | 'origin'> {
+  return {
+    ...(migrated === true ? { migrated: true } : {}),
+    ...(origin === undefined || origin === null || origin === '' ? {} : { origin }),
+  };
 }
 
 /** A comment's {@link CommentRecord.rsvp} as a record carries it: present only when there is one. */
@@ -1150,8 +1174,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         id, slug, permalink, source, kind, status,
         author_name, author_url, author_email,
         markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar, notify,
-        redacted, rsvp, via
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        redacted, rsvp, via, migrated, origin
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET
         slug = excluded.slug,
         permalink = excluded.permalink,
@@ -1171,7 +1195,9 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         notify = excluded.notify,
         redacted = excluded.redacted,
         rsvp = excluded.rsvp,
-        via = excluded.via
+        via = excluded.via,
+        migrated = excluded.migrated,
+        origin = excluded.origin
     `),
     deleteComment: db.prepare('DELETE FROM comments WHERE id = ?'),
     clearComments: db.prepare('DELETE FROM comments'),
@@ -1702,6 +1728,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         redactedColumn(comment.redacted),
         comment.rsvp ?? null,
         comment.via ?? null,
+        comment.migrated === true ? 1 : 0,
+        comment.origin ?? null,
       );
       written({
         kind: 'comment',
@@ -1745,6 +1773,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             redactedColumn(comment.redacted),
             comment.rsvp ?? null,
             comment.via ?? null,
+            comment.migrated === true ? 1 : 0,
+            comment.origin ?? null,
           );
         }
       });
@@ -2091,6 +2121,7 @@ function toComment(row: Record<string, unknown>): PostComment {
     ...redactedOf(row['redacted']),
     ...rsvpField(rsvpValue(row['rsvp'])),
     ...viaField(nullableText(row['via'])),
+    ...migratedFields(Number(row['migrated'] ?? 0) === 1, nullableText(row['origin'])),
   };
 }
 
@@ -2837,6 +2868,13 @@ const MIGRATIONS: readonly Migration[] = [
       DROP INDEX comments_replies_key;
       ALTER TABLE comments DROP COLUMN replies_key;
       ALTER TABLE comments DROP COLUMN keys_base;
+    `,
+  },
+  {
+    version: 27,
+    sql: `
+      ALTER TABLE comments ADD COLUMN migrated INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE comments ADD COLUMN origin TEXT;
     `,
   },
 ];

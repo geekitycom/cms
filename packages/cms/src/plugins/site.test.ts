@@ -153,6 +153,21 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
     ]);
   });
 
+  it('carries migrated and the origin identity both ways, and neither for a native comment', async () => {
+    const { site: plugin, admin } = await site();
+    const migrated = imported({ migrated: true, origin: 'https://mstdn.example/notes/1' });
+
+    await plugin.putComments('/2026/09/hello/', [migrated, imported({ id: '0000000000007005' })]);
+
+    assert.deepEqual(plugin.comments('/2026/09/hello/').comments, [
+      migrated,
+      imported({ id: '0000000000007005' }),
+    ]);
+    const stored = admin.getComment('0000000000007003');
+    assert.equal(stored?.migrated, true);
+    assert.equal(stored.origin, 'https://mstdn.example/notes/1');
+  });
+
   it('replaces a comment by id where it stands, appends a new one, and moves nothing else', async () => {
     const { site: plugin, contentDir, dataDir, admin } = await site();
     await plugin.putComments('/2026/09/hello/', [imported()]);

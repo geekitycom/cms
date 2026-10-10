@@ -476,6 +476,44 @@ describe('a comment key (decision-51)', () => {
   });
 });
 
+describe('a migrated comment (TASK-336)', () => {
+  it('keeps migrated and its origin in the file and the index, through a rebuild and a moderation', async () => {
+    const site = await records();
+    const note = 'https://remote.example/notes/1';
+    const stored = await addComment(
+      site,
+      ada({ id: '0123456789abcdef', source: 'activitypub', migrated: true, origin: note }),
+    );
+
+    const [entry] = (
+      JSON.parse(await readFile(commentsFile(site.contentDir, 'hello-world'), 'utf8')) as {
+        comments: Record<string, unknown>[];
+      }
+    ).comments;
+    assert.equal(entry?.['migrated'], true);
+    assert.equal(entry['origin'], note);
+    assert.deepEqual(site.admin.getComment(stored.id), stored);
+
+    site.admin.replaceComments([]);
+    rebuildCommentIndexes(site);
+    assert.deepEqual(site.admin.getComment(stored.id), stored);
+
+    const moved = await updateComment(site, stored.id, { status: 'approved' });
+    assert.equal(moved?.migrated, true);
+    assert.equal(moved.origin, note);
+    assert.deepEqual(readComments(site, 'hello-world')[0]?.origin, note);
+  });
+
+  it('is the only kind that says so: a native comment’s entry has neither field', async () => {
+    const site = await records();
+    await addComment(site, ada());
+
+    const source = await readFile(commentsFile(site.contentDir, 'hello-world'), 'utf8');
+    assert.ok(!source.includes('"migrated"'));
+    assert.ok(!source.includes('"origin"'));
+  });
+});
+
 describe('a comment file from before keys', () => {
   const POST = '/2026/09/hello-world/';
   const FORM = '0b7c3c9e-7d6a-4a51-9d5f-6f1f2b1c0a11';

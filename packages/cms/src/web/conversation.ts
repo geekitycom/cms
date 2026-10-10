@@ -22,7 +22,7 @@ import { authorContext, authorFeedHref, siteAuthorContext } from './authors.ts';
 import { activityStreamsId, isListed, isServed, permalinkOfObjectId } from './documents.ts';
 import { isKey, repliesFeedPath, repliesKey } from './feed-source.ts';
 import type { FeedComment } from './feeds.ts';
-import { COMMENT_PAGE_PREFIX, commentPageHref, feedGuid, replyGuid } from './guids.ts';
+import { COMMENT_PAGE_PREFIX, commentPageHref, feedGuid } from './guids.ts';
 import { absoluteUrl } from './negotiate.ts';
 import { sanitizeCommentHtml } from './sanitize.ts';
 
@@ -117,6 +117,17 @@ export interface Interaction {
    * `/replies/{key}/`.
    */
   readonly key: string;
+  /**
+   * What the comments feeds call it, and what a reply to it names in
+   * `source:inReplyTo`: a stored form comment's page, a stored comment's
+   * origin or else its url, and anything else's id.
+   */
+  readonly guid: string;
+  /**
+   * Whether it was imported from another system (TASK-336): shown in the
+   * thread like any other, and carried by no feed and no reply count.
+   */
+  readonly migrated: boolean;
   /** Where it came from. */
   readonly source: InteractionSource;
   /** Which of the three it is. */
@@ -482,6 +493,8 @@ function gather(
       answers.push({
         id,
         key: repliesKey(id),
+        guid: id,
+        migrated: false,
         source: 'activitypub',
         kind: 'reply',
         author,
@@ -513,6 +526,8 @@ function gather(
       (kind === 'like' ? likes : boosts).push({
         id,
         key: repliesKey(id),
+        guid: id,
+        migrated: false,
         source: 'activitypub',
         kind,
         author,
@@ -532,7 +547,7 @@ function gather(
   }
 
   for (const stored of context.admin.listCommentsFor(document.slug)) {
-    const comment = interactionOf(stored, document.permalink);
+    const comment = interactionOf(stored, document.permalink, context.baseUrl);
     if (stored.status !== 'approved') {
       held.set(comment.id, comment);
       continue;
@@ -694,7 +709,7 @@ function repliesIn(
   return {
     post,
     reply,
-    replies: directReplies(reply?.replies ?? thread).map((entry) => ({ ...entry, parent: reply })),
+    replies: repliesFed(reply?.replies ?? thread).map((entry) => ({ ...entry, parent: reply })),
   };
 }
 
@@ -861,6 +876,8 @@ function replyPostInteraction(
   return {
     id,
     key: repliesKey(id),
+    guid: id,
+    migrated: false,
     source: 'post',
     kind: 'reply',
     author: documentAuthor(context, post),
@@ -1002,9 +1019,10 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
     status: 'approved',
     limit: limit * OVERSCAN,
   })) {
+    if (stored.migrated === true) continue;
     const post = context.store.getBySlug(stored.slug);
     if (!shown(post)) continue;
-    said.push({ ...interactionOf(stored, post.permalink), post });
+    said.push({ ...interactionOf(stored, post.permalink, context.baseUrl), post });
   }
 
   // Each post's thread, read once: where each reply sits and what it carries
@@ -1049,7 +1067,7 @@ function directCounts(
   return new Map(
     documents.map((document) => [
       document.permalink,
-      directReplies(postConversation(context, document).replies).length,
+      repliesFed(postConversation(context, document).replies).length,
     ]),
   );
 }
@@ -1092,6 +1110,8 @@ function quotesOf(
       quotes.push({
         id: quote.id,
         key: repliesKey(quote.id),
+        guid: quote.id,
+        migrated: false,
         source: 'activitypub',
         kind: 'mention',
         author: naming(quote.actorId),
@@ -1118,6 +1138,8 @@ function federatedInteraction(
   return {
     id: reply.id,
     key: repliesKey(reply.id),
+    guid: reply.id,
+    migrated: false,
     source: 'activitypub',
     kind: 'reply',
     author,
@@ -1133,10 +1155,15 @@ function federatedInteraction(
 }
 
 /** One stored comment as the thread's own shape. */
-function interactionOf(comment: PostComment, permalink: string): Interaction {
+function interactionOf(comment: PostComment, permalink: string, baseUrl: string): Interaction {
   return {
     id: comment.id,
     key: comment.id,
+    guid:
+      comment.source === 'comment'
+        ? absoluteUrl(commentPageHref(comment.id), baseUrl)
+        : (comment.origin ?? comment.url ?? comment.id),
+    migrated: comment.migrated === true,
     source: comment.source,
     kind: comment.kind,
     author: {
@@ -1201,7 +1228,7 @@ export function spokenIn(conversation: Conversation): Placed[] {
   return [
     ...conversation.mentions.map((mention) => ({ ...mention, parent: null })),
     ...placed(conversation.replies),
-  ];
+  ].filter((entry) => !entry.migrated);
 }
 
 /** Every visible reply of a thread at any depth, each with the reply it sits under. */
@@ -1219,6 +1246,14 @@ function placed(replies: readonly ThreadReply[], parent: Interaction | null = nu
  */
 function directReplies(replies: readonly ThreadReply[]): Interaction[] {
   return replies.flatMap((reply) => (isWithheld(reply) ? directReplies(reply.replies) : [reply]));
+}
+
+/**
+ * The direct replies a feed carries and a count advertises: a migrated one
+ * was published before the site came here, so a reader must not see it as new.
+ */
+function repliesFed(replies: readonly ThreadReply[]): Interaction[] {
+  return directReplies(replies).filter((reply) => !reply.migrated);
 }
 
 /**
@@ -1245,10 +1280,10 @@ export function feedComments(
         ? thread === undefined
           ? undefined
           : feedGuid(thread, baseUrl)
-        : replyGuid(entry.parent, baseUrl);
-    const replies = directReplies(entry.replies);
+        : entry.parent.guid;
+    const replies = repliesFed(entry.replies);
     return {
-      id: replyGuid(entry, baseUrl),
+      id: entry.guid,
       url: absoluteUrl(entry.url ?? '/', baseUrl),
       author: entry.author.name,
       published: entry.published,

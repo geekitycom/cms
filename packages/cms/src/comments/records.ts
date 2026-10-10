@@ -6,6 +6,7 @@ import {
   COMMENT_KINDS,
   COMMENT_SOURCES,
   COMMENT_STATUSES,
+  migratedFields,
   REDACTED_FIELDS,
   rsvpField,
   viaField,
@@ -331,6 +332,7 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     ...redactedIn(value['redacted']),
     ...rsvpField(rsvpValue(value['rsvp'])),
     ...viaField(optionalText(value['via'])),
+    ...migratedFields(value['migrated'] === true, optionalText(value['origin'])),
   };
 }
 
@@ -1124,6 +1126,7 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
     ...rsvpField(comment.rsvp),
     ...viaField(comment.via),
+    ...migratedFields(comment.migrated, comment.origin),
   };
 }
 
@@ -1146,6 +1149,7 @@ function publishedEntryOf(comment: CommentRecord): PublishedComment {
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
     ...rsvpField(comment.rsvp),
     ...viaField(comment.via),
+    ...migratedFields(comment.migrated, comment.origin),
   };
 }
 

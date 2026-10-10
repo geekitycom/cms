@@ -9,6 +9,7 @@ import path from 'node:path';
 
 import { listUsers, setUserActorId } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
+import { migratedFields } from '../admin/store.ts';
 import type { AdminStore, CommentRecord } from '../admin/store.ts';
 import { acceptUpload, refusedUpload } from '../admin/uploads.ts';
 import { renderCommentMarkdown } from '../comments/markdown.ts';
@@ -136,6 +137,7 @@ function pluginCommentOf(comment: CommentRecord): PluginComment {
     submitted: comment.submitted,
     inReplyTo: comment.inReplyTo,
     url: comment.url,
+    ...migratedFields(comment.migrated, comment.origin),
   };
 }
 
@@ -152,5 +154,6 @@ function commentRecordOf(comment: PluginComment): CommentRecord {
     inReplyTo: comment.inReplyTo,
     url: comment.url,
     notify: false,
+    ...migratedFields(comment.migrated, comment.origin),
   };
 }

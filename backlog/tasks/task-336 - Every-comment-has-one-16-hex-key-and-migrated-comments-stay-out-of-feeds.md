@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-10 21:49'
-updated_date: '2026-10-10 23:15'
+updated_date: '2026-10-10 23:25'
 labels:
   - bug
 milestone: m-31
@@ -57,12 +57,12 @@ Decide and record what happens to form comments already stored with UUIDs since 
 - [x] #3 No URL the site prints (thread links and anchors, /comment/ pages, comments-feed links, /replies/ links) contains a percent-encoded URL
 - [ ] #4 plugin-wordpress writes each imported comment with migrated: true and the hash key of its WordPress comment URL; a site imported with 0.2.0 picks this up on a re-import or in place, without a clash per comment file
 - [ ] #5 plugin-wordpress keeps each comment's origin identity from the WXR (source_id, webmention_source_url) and keys fediverse and webmention comments by it; a webmention resend, a redelivered activity or a reply backfill for an imported comment matches it and adds no record
-- [ ] #6 A migrated comment shows on its page and in its thread as before, replies to it still thread under it, and it appears in no feed and no advertised reply count
+- [x] #6 A migrated comment shows on its page and in its thread as before, replies to it still thread under it, and it appears in no feed and no advertised reply count
 - [ ] #7 On the andrewshell.org import, /comments/feed/ and every {permalink}feed/ hold no imported comment, so a reader of WordPress's comments feed sees nothing new at cutover
 - [x] #8 The fate of UUID-keyed form comments stored since v0.29.0 is decided and recorded
 - [ ] #9 The README's comments, replies feed and theme sections, and the plugin-wordpress README, describe the key rule and migrated comments
 - [ ] #10 gather() drops an inbox row (delivered or fetched) whose activity or note id is a migrated comment's origin, so a redelivery or backfill of an imported fediverse comment shows once
-- [ ] #11 A native reply under a migrated comment threads under it and, in the feeds, names the migrated comment's guid in source:inReplyTo: its /comment/{key}/ page for an imported WordPress form comment, its origin URL otherwise
+- [x] #11 A native reply under a migrated comment threads under it and, in the feeds, names the migrated comment's guid in source:inReplyTo: its /comment/{key}/ page for an imported WordPress form comment, its origin URL otherwise
 - [x] #12 A decision records the key rule, migrated comments and the UUID re-key, superseding decision-48's id-or-key segment rule
 <!-- AC:END -->
 
@@ -83,6 +83,13 @@ Phase (a) of four: the core key rule (AC#1 core side, #2, #3, #8, #12). Phases (
 10. TDD per criterion; pnpm build/test/typecheck/lint/format:check; curl a scratch site.
 
 Revised in (a): step 8 dropped (the comments-feed ETag fingerprint already covers guids and replies links). Webmention key is the key of its source and post permalink, not of the source alone, because one source mentioning two posts would collide on the comments table's primary key.
+
+Phase (b), migrated comments out of feeds (AC#6, AC#11):
+1. Record shape: CommentRecord gains migrated?: true and origin?: string (absent otherwise, so existing files stay byte for byte), read and written by the comment file, the admin index (migration 27 adds two columns) and the plugin API (PluginComment.migrated, PluginComment.origin, optional), so phase (c) only has to fill them.
+2. Interaction gains guid and migrated. Each constructor sets its guid, which replaces replyGuid's switch: a stored comment's is its /comment/{key}/ page when its source is comment, else its origin, else its url; an inbox reply's or reply post's is its id.
+3. Feeds: feedComments, directReplies-based counts and repliesIn leave migrated entries out; the thread, the page and /comment/{key}/ do not. A native reply under a migrated entry keeps it as parent, so source:inReplyTo names its guid.
+4. Simplify: replyGuid goes from guids.ts; nothing else special-cases imported ids.
+5. TDD: records round trip, plugin round trip, a feeds test over migrated comments of every source; pnpm checks; curl a scratch site.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -107,4 +114,18 @@ Not done here: COMMENTS_FEED_REVISION was not moved, because the comments-feed f
 AC#1 stays open: the core side holds (minting, refusal, re-key), but the importer's origin keys and migrated flag are phase (c). AC#12 stays open until decision-51's body is filled.
 
 Verification: pnpm build, pnpm -r test (cms 5386 pass, plugin-wordpress 90 pass, all packages 0 fail after the plugin legacy-guid test was removed), pnpm -r typecheck, pnpm lint, pnpm format:check all pass. Scratch site under the scratchpad (site336) served with dist/cli.js: UUID, URL-id and webmention comments re-keyed at boot, email kept under the new key, reply post in-reply-to rewritten and still threaded; page anchors, /comment/ links, reply_to links, feed guids, source:inReplyTo and source:comments feedUrl all use keys; old /comment/{uuid}/, /comment/{encoded URL}/ and /replies/{uuid}/ answer 404; a new form comment got a 16-hex id; a restart wrote nothing.
+
+Phase (b), migrated comments out of feeds (2026-10-10).
+
+Built:
+- admin/store.ts: CommentRecord gains migrated?: true and origin?: string, absent otherwise so existing files stay byte for byte (migratedFields, the rsvpField/viaField pattern). The index carries both (migration 27 adds comments.migrated and comments.origin). comments/records.ts reads and writes both in the comment file; updateComment and a webmention resend keep them, since they spread the held entry.
+- plugin.ts/plugins/site.ts: PluginComment.migrated?: boolean and PluginComment.origin?: string, both ways, so phase (c) only has to fill them.
+- web/conversation.ts: Interaction gains guid and migrated. Each constructor sets its guid: a stored comment's is its /comment/{key}/ page when its source is comment, else its origin, else its url; an inbox reply's, a quote's and a reply post's is its id. feedComments names entry.guid and entry.parent.guid, so a native reply under a migrated comment names its page (form comment) or its origin, else its url, in source:inReplyTo. repliesFed (direct replies less migrated ones) is what counts (source:comments on post feeds), /replies/{key}/ items and each item's source:comments use; spokenIn and the site-wide latest leave migrated entries out. The thread, the page and /comment/{key}/ are unchanged, so a migrated comment shows and its replies thread under it. The feed ETags follow, since their fingerprints are built from the items and counts.
+- Deleted: replyGuid in web/guids.ts (its switch could not tell a stored activitypub record from an inbox one; the guid now lives where each entry is built). A stale guids.ts header line about the admin store keying /replies/ feeds went too. Nothing else special-cased imported ids: isPermaLink is the generic guid === link test.
+
+Choice: /replies/{key}/ of a migrated comment still answers, listing the native replies under it, though nothing advertises it, since the comment is in no feed. A native reply under a migrated top-level comment is in {permalink}feed/ and /comments/feed/ but reachable by no source:comments walk from the post.
+
+Verification: new web/migrated-comments.test.ts (red before the change: feeds held migrated items and counted them); records and plugin round-trip tests. pnpm build, pnpm -r test (cms 5399 pass, all packages 0 fail), pnpm -r typecheck, pnpm lint, pnpm format:check pass. Scratch site scratchpad/site336b on dist/cli.js: migrated form, fediverse, webmention and like comments all on the post page; /comment/{form key}/ 200 with the native reply and a reply post under it, /comment/{fediverse key}/ 404; {permalink}feed/ and /comments/feed/ hold only the three native comments and the reply post, with source:inReplyTo naming /comment/{key}/, the fediverse origin and the webmention source; /feed/ gives the post no source:comments; /replies/{post key}/ is empty. Server stopped.
+
+AC#6 and AC#11 checked. Task stays In Progress for phases (c) and (d).
 <!-- SECTION:NOTES:END -->

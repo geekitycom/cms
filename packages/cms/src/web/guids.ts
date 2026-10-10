@@ -1,5 +1,4 @@
 import type { Document } from '../content/document.ts';
-import type { InteractionSource } from './conversation.ts';
 import { absoluteUrl } from './negotiate.ts';
 
 /**
@@ -7,8 +6,8 @@ import { absoluteUrl } from './negotiate.ts';
  * id, a feed guid, a comment's page.
  *
  * Kept apart from the modules that serve them so the indexes can name things
- * the same way without importing the web layer: the content index and the
- * admin store key `/replies/` feeds by these guids (TASK-327).
+ * the same way without importing the web layer: the content index keys
+ * `/replies/` feeds by these guids (TASK-327).
  */
 
 /**
@@ -60,29 +59,6 @@ export function feedGuid(document: Document, baseUrl: string): string {
   return document.type === 'post'
     ? postObjectId(document, baseUrl)
     : absoluteUrl(document.permalink, baseUrl);
-}
-
-/**
- * The guid a reply has in the comments feeds: a native comment's page, which
- * is a permalink, a webmention's source page, and anything else's own id.
- */
-export function replyGuid(
-  reply: {
-    readonly id: string;
-    readonly source: InteractionSource;
-    readonly url: string | null;
-  },
-  baseUrl: string,
-): string {
-  switch (reply.source) {
-    case 'comment':
-      return absoluteUrl(commentPageHref(reply.id), baseUrl);
-    case 'webmention':
-      return reply.url ?? reply.id;
-    case 'activitypub':
-    case 'post':
-      return reply.id;
-  }
 }
 
 /** Where a native comment's own page is (TASK-318), by its key. */
