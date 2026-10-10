@@ -62,6 +62,8 @@ import {
   rebuildFederationIndexes,
   signedProfileLoader,
 } from './federation/index.ts';
+import { createReplyBackfill, signedRepliesLoader } from './federation/backfill.ts';
+import type { ReplyBackfill } from './federation/backfill.ts';
 import { citedPostReader } from './federation/cited-post.ts';
 import { handleLearner } from './federation/handles.ts';
 import type {
@@ -1478,6 +1480,13 @@ export interface Cms {
    */
   readonly actorProfiles: ActorProfileService;
   /**
+   * The fediverse replies nobody delivered, read off the `replies`
+   * collections of the fediverse replies in recent threads (TASK-321). Swept
+   * on a timer once the site serves; a site or a test reaches for it to sweep
+   * now or to wait.
+   */
+  readonly replyBackfill: ReplyBackfill;
+  /**
    * The sweep that removes commenter emails, address hashes and contact
    * messages once they outlive the periods in the site's settings (TASK-135).
    * Runs on a timer once the site serves; a site or a test reaches for it to
@@ -1923,6 +1932,20 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
 
   const learnHandles = handleLearner(federationContext);
 
+  // Somebody answering a fediverse reply addresses whoever they answer, not
+  // the site, so their answer is read off the replies collection of the note
+  // it answers, on a timer rather than while a page is drawn (TASK-321).
+  const replyBackfill = createReplyBackfill({
+    admin,
+    store,
+    conversation,
+    config: resolved,
+    load: signedRepliesLoader(federationContext),
+    heard: (actorId) => {
+      actorProfiles.capture(actorId);
+    },
+  });
+
   const delivery = createDeliveryService({
     federation,
     admin,
@@ -2219,6 +2242,10 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     // written before profiles were kept, and stale ones on a timer (TASK-184).
     actorProfiles.start();
 
+    // And the fediverse replies the inbox was never sent are read now and on
+    // a timer from here on (TASK-321).
+    replyBackfill.start();
+
     // And whatever personal data has outlived its period is removed now and
     // every few hours from here on (TASK-135).
     retention.start();
@@ -2236,6 +2263,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     digests.stop();
     avatars.stop();
     actorProfiles.stop();
+    replyBackfill.stop();
     retention.stop();
   }
 
@@ -2253,6 +2281,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     await replyContexts.settled();
     await avatars.settled();
     await actorProfiles.settled();
+    await replyBackfill.settled();
     await retention.settled();
     await notifier.settled();
   }
@@ -2278,6 +2307,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     replyContexts,
     avatars,
     actorProfiles,
+    replyBackfill,
     retention,
     notifier,
     indexNow,

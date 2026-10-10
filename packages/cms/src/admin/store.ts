@@ -244,6 +244,13 @@ export interface InboxActivity {
   readonly inReplyTo: string | null;
   /** When it arrived, as an ISO 8601 instant. */
   readonly receivedAt: string;
+  /**
+   * Whether the site read it rather than was told it: a reply found in a
+   * fediverse reply's `replies` collection (TASK-321), logged as the `Create`
+   * nobody delivered. Only these are the site's to remove when the remote
+   * server stops listing them.
+   */
+  readonly fetched: boolean;
   /** The activity as compacted JSON-LD, exactly as it was received. */
   readonly json: string;
 }
@@ -259,9 +266,11 @@ export interface InboxActivity {
  */
 export type NewInboxActivity = Omit<
   InboxActivity,
-  'id' | 'receivedAt' | 'inReplyTo' | 'recipient'
+  'id' | 'receivedAt' | 'inReplyTo' | 'recipient' | 'fetched'
 > & {
   receivedAt?: string | undefined;
+  /** Delivered, unless it says otherwise. */
+  fetched?: boolean | undefined;
   /**
    * Who it was addressed to, when the delivery said. Optional and `null` by
    * default: an activity that reached the shared inbox without naming one of
@@ -801,6 +810,8 @@ export interface AdminStore {
    * against.
    */
   logInboxActivity(activity: NewInboxActivity): InboxActivity;
+  /** Forget one logged activity by its row id. Returns `false` when there was none. */
+  deleteInboxActivity(id: number): boolean;
   /**
    * Make the inbound log index say exactly this, in one transaction, with the
    * row ids starting again from one.
@@ -1078,6 +1089,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     clearInboxActivities: db.prepare('DELETE FROM ap_inbox'),
     resetInboxSequence: db.prepare("DELETE FROM sqlite_sequence WHERE name = 'ap_inbox'"),
     countInboxActivities: db.prepare('SELECT COUNT(*) AS count FROM ap_inbox'),
+    deleteInboxActivity: db.prepare('DELETE FROM ap_inbox WHERE id = ? RETURNING *'),
     listInboxActivities: db.prepare(`
       SELECT * FROM ap_inbox
       ORDER BY received_at DESC, id DESC
@@ -1086,8 +1098,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     logInboxActivity: db.prepare(`
       INSERT INTO ap_inbox (
         activity_id, activity_type, actor_id, object_id, in_reply_to, reply_key, recipient,
-        received_at, json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        received_at, fetched, json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (activity_id) DO UPDATE SET
         activity_type = excluded.activity_type,
         actor_id = excluded.actor_id,
@@ -1096,6 +1108,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         reply_key = excluded.reply_key,
         recipient = excluded.recipient,
         received_at = excluded.received_at,
+        fetched = excluded.fetched,
         json = excluded.json
       RETURNING *
     `),
@@ -1530,6 +1543,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         replyKeyOf(activity),
         activity.recipient ?? null,
         activity.receivedAt ?? new Date().toISOString(),
+        activity.fetched === true ? 1 : 0,
         activity.json,
       ) as Record<string, unknown> | undefined;
       if (row === undefined) {
@@ -1541,6 +1555,17 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         about: [logged.objectId, logged.inReplyTo].filter((id) => id !== null),
       });
       return logged;
+    },
+
+    deleteInboxActivity(id) {
+      const row = statements.deleteInboxActivity.get(id) as Record<string, unknown> | undefined;
+      if (row === undefined) return false;
+      const deleted = toInboxActivity(row);
+      written({
+        kind: 'activity',
+        about: [deleted.objectId, deleted.inReplyTo].filter((about) => about !== null),
+      });
+      return true;
     },
 
     replaceInboxActivities(activities) {
@@ -1559,6 +1584,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             replyKeyOf(activity),
             activity.recipient ?? null,
             activity.receivedAt ?? new Date().toISOString(),
+            activity.fetched === true ? 1 : 0,
             activity.json,
           );
         }
@@ -2000,6 +2026,7 @@ function toInboxActivity(row: Record<string, unknown>): InboxActivity {
     inReplyTo: nullableText(row['in_reply_to']),
     recipient: nullableText(row['recipient']),
     receivedAt: String(row['received_at']),
+    fetched: Number(row['fetched']) === 1,
     json: String(row['json']),
   };
 }
@@ -2792,6 +2819,12 @@ const MIGRATIONS: readonly Migration[] = [
     // The page a salmention's nested reply was read out of (TASK-320).
     version: 24,
     sql: `ALTER TABLE comments ADD COLUMN via TEXT;`,
+  },
+  {
+    // Whether a logged reply was read off a remote server rather than
+    // delivered (TASK-321). Every row before this was delivered.
+    version: 25,
+    sql: `ALTER TABLE ap_inbox ADD COLUMN fetched INTEGER NOT NULL DEFAULT 0;`,
   },
 ];
 

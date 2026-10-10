@@ -180,7 +180,11 @@ describe('cms.drain()', () => {
     const { cms, contentDir, log } = await serving();
     const intervals = liveIntervals();
     await cms.serve();
-    assert.equal(intervals.live(), 4, 'digests, retention, avatars and actor profiles tick');
+    assert.equal(
+      intervals.live(),
+      5,
+      'digests, retention, avatars, actor profiles and the reply backfill tick',
+    );
     assert.notEqual(cms.scheduler.waitingFor(), undefined, 'the scheduler waits for the post');
     assert.deepEqual(log, ['start']);
 
@@ -200,7 +204,7 @@ describe('cms.drain()', () => {
     assert.equal(cms.store.listAll().length, 1, 'the watcher stopped');
 
     await cms.resume();
-    assert.equal(intervals.live(), 4, 'the interval timers are back');
+    assert.equal(intervals.live(), 5, 'the interval timers are back');
     intervals.restore();
     assert.notEqual(cms.scheduler.waitingFor(), undefined, 'the scheduler is back');
     assert.deepEqual(log, ['start', 'stop', 'start'], 'the plugin is back');

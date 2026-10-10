@@ -683,6 +683,50 @@ database.
 
 [FEP-044f]: https://codeberg.org/fediverse/fep/src/branch/main/fep/044f/fep-044f.md
 
+### Replies to fediverse replies
+
+Somebody who answers a fediverse reply on one of the site's posts addresses
+the person they answer, not the site, so their reply never reaches the inbox.
+Most servers list a note's replies in its `replies` collection, and the site
+reads those collections to bring such replies in. The sweep starts when
+the site serves and runs every hour, within these limits:
+
+| Limit    | Value    | Meaning                                                                                               |
+| -------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| Interval | 6 hours  | How long a thread is left alone after it was read.                                                    |
+| Age      | 30 days  | How old a post gets before its thread is no longer read, by the post's date.                          |
+| Depth    | 4 levels | How far below the post a fediverse reply may sit and still have its collection read.                  |
+| Pages    | 3        | How many pages of one collection are read. Mastodon's first page holds the author's own replies only. |
+
+Every request is signed as the site's first account, as the actor profile
+fetches are. A reply is kept only when it answers the note whose collection
+listed it, is addressed to the public, and is written by an actor on the
+note's own server. A note on the site's own origin is never fetched, because
+the site already knows what it published.
+
+A reply found this way is logged as the `Create` nobody delivered: a line in
+`content/_data/federation/inbox/{yyyy}-{mm}.jsonl` with `"fetched": true` in
+front of it, an `actor` taken from the note's `attributedTo` and the id
+`{note id}#fetched`. From there it is a reply like any other. It is threaded
+under the reply it answers with its own URL, counted, given a `/replies/` feed
+and listed on the federation screen, and its author's `Delete` takes it back.
+A note held once is never logged twice. The sweep skips a note the inbox
+already holds, and a delivery of a note the sweep fetched first replaces the
+fetched line.
+
+The site removes a fetched reply, with the fetched replies under it, when its
+server answers 404 or 410 for it, or when a collection read to its end no
+longer lists it. A delivered reply is never removed this way. A note with no
+`replies` collection, a server that answers with any other error, and a
+collection cut off by the page limit change nothing. The thread keeps what it
+holds, and the sweep goes on to the next reply.
+
+The site reads `replies` and not the conversation a note names in `context`
+([FEP-7888]), because Mastodon publishes `replies` and few servers publish a
+`context` collection yet.
+
+[FEP-7888]: https://codeberg.org/fediverse/fep/src/branch/main/fep/7888/fep-7888.md
+
 ### Relays
 
 A [Mastodon-style relay][fepae0c] boosts every public activity it is sent on to
