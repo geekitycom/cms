@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-08 14:39'
-updated_date: '2026-10-10 12:52'
+updated_date: '2026-10-10 13:14'
 labels:
   - comments
   - indieweb
@@ -58,4 +58,5 @@ Existing owner comments stay comments; only new replies become posts.
 - [ ] #9 A visitor's reply under a fediverse comment stays a native comment and sends nothing over ActivityPub; existing owner comments are left as comments
 - [ ] #10 doc-6 Native Comments and the CMS README describe the model, and a decision records it
 - [ ] #11 A reply post shown in a thread, Public or Unlisted, appears once in that post's comments feed and in /comments/feed/, linking to the reply post; the unlisted rule that keeps an unlisted post out of feeds does not remove it from comment feeds
+- [ ] #12 A reply post in the site's RSS feeds carries source:inReplyTo holding its in-reply-to target (a comment page, a sender URL, a Note id or a post), so a feed reader can see what it answers
 <!-- AC:END -->

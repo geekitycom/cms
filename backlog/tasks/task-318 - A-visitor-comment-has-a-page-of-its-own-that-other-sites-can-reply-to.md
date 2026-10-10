@@ -4,7 +4,7 @@ title: A visitor comment has a page of its own that other sites can reply to
 status: To Do
 assignee: []
 created_date: '2026-10-10 12:30'
-updated_date: '2026-10-10 12:58'
+updated_date: '2026-10-10 13:14'
 labels:
   - comments
   - indieweb
@@ -24,7 +24,7 @@ ordinal: 277800
 <!-- SECTION:DESCRIPTION:BEGIN -->
 A native comment, one a visitor left through the comment form, has only a fragment URL today: `permalink#comment-<id>` (web/conversation.ts). Another site that replies to it fetches that URL for its reply context and gets the whole post page, so whether it quotes the comment or the post depends on its parser. A webmention aimed at the fragment is resolved by path alone (webmention/receive.ts), so it cannot name the comment either.
 
-Give each native comment a page of its own, under its post or page, that serves the comment as the page's only h-entry, with u-in-reply-to pointing at the post. The comment's u-url becomes that page. The fragment anchor on the post page stays, so existing links keep scrolling to the comment.
+Give each native comment a page of its own at `/comment/{id}/`, its existing id, that serves the comment as the page's only h-entry, with u-in-reply-to pointing at the post. The comment's u-url becomes that page. The fragment anchor on the post page stays, so existing links keep scrolling to the comment.
 
 Only native visitor comments need this. A webmention reply's URL is its sender's page and a fediverse reply's URL is the remote Note, and both stay so: clicking their timestamp goes to their site. Replies from signed-in users become reply posts (TASK-300), which have URLs already.
 <!-- SECTION:DESCRIPTION:END -->
