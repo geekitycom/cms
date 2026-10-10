@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-10 19:37'
-updated_date: '2026-10-10 20:13'
+updated_date: '2026-10-10 20:17'
 labels:
   - federation
   - admin
@@ -48,6 +48,15 @@ Where it was read from: no new field. backfill.ts replyOf keeps only items whose
 Labels are on replies only. Likes and boosts are only ever delivered, so a badge on them would be noise.
 Verified: pnpm build, test (5383 pass, 0 fail), typecheck, lint, format:check. Scratch site under scratchpad/site334 with a seeded inbox log (one delivered reply, one fetched reply-to-reply): signed in and curled /admin/federation; the fetched row shows the fetched badge and links remote.example/users/ada/statuses/9, the delivered row shows the delivered badge. AC#2 is proven by the admin test through appendInboxActivity, the same function inbox.ts calls on a delivery; a signed live delivery was not sent.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-10 20:17
+---
+Orchestrator review: every fetched reply answers a fediverse reply, so its row read "something of ours". localPosts now takes the conversation reader's documentOf as a fallback and the row reads "in the thread on <post>" (LocalPost.inThread). The fetched-label test asserts it and failed first.
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 
