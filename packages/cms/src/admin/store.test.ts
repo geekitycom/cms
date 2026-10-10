@@ -1366,3 +1366,51 @@ describe('the /replies/ keys (TASK-327)', () => {
     assert.equal(upgraded.listRepliesByKey(keyOf('https://remote.example/notes/1')).length, 1);
   });
 });
+
+describe('moving the record of sent webmentions (TASK-332)', () => {
+  const OLD = 'https://blog.example/2026/09/hello/';
+  const NEW = 'https://blog.example/2026/09/greetings/';
+
+  function sent(
+    admin: AdminStore,
+    slug: string,
+    source: string,
+    target: string,
+    attemptedAt: string,
+  ): void {
+    admin.recordSentWebmention({
+      slug,
+      source,
+      target,
+      endpoint: null,
+      status: 'none',
+      error: null,
+      attemptedAt,
+    });
+  }
+
+  it('keeps the later attempt for a target both posts hold, and leaves nothing behind', async () => {
+    const admin = await store();
+    sent(admin, 'hello', OLD, 'https://a.example/', '2026-09-03T00:00:00.000Z');
+    sent(admin, 'hello', OLD, 'https://b.example/', '2026-09-05T00:00:00.000Z');
+    sent(admin, 'hello', OLD, 'https://c.example/', '2026-09-03T00:00:00.000Z');
+    sent(admin, 'greetings', NEW, 'https://a.example/', '2026-09-04T00:00:00.000Z');
+    sent(admin, 'greetings', NEW, 'https://b.example/', '2026-09-04T00:00:00.000Z');
+
+    admin.moveSentWebmentions({ slug: 'hello', source: OLD }, 'greetings');
+
+    assert.deepEqual(
+      admin.listSentWebmentions('greetings').map((row) => [row.target, row.source]),
+      [
+        ['https://a.example/', NEW],
+        ['https://b.example/', OLD],
+        ['https://c.example/', OLD],
+      ],
+    );
+    assert.deepEqual(admin.listSentWebmentions('hello'), []);
+    assert.deepEqual(admin.listSentWebmentionSources(), [
+      { slug: 'greetings', source: NEW },
+      { slug: 'greetings', source: OLD },
+    ]);
+  });
+});

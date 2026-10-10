@@ -174,6 +174,14 @@ export interface ContentSync {
    * for it.
    */
   announce(change: DocumentChange): Promise<void>;
+  /**
+   * Run `listener` each time the index settles: after every full scan, and
+   * after a run of watcher changes once no more are waiting. It runs on the
+   * sync's own queue, so no file is reconciled while it does, and a scan
+   * resolves only once it has finished. Returns the function that
+   * unsubscribes.
+   */
+  onSettled(listener: () => unknown): () => void;
   /** Walk the content directory once, reconciling every file and dropping rows whose file is gone. */
   sync(): Promise<SyncResult>;
   /**
@@ -351,15 +359,39 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
   // single re-parse and no two reconciles of one path ever interleave.
   const pending = new Map<string, NodeJS.Timeout>();
   let queue: Promise<void> = Promise.resolve();
+  let queued = 0;
   let watcher: FSWatcher | undefined;
 
   function enqueue<T>(work: () => Promise<T>): Promise<T> {
-    const run = queue.then(work);
+    queued += 1;
+    const run = queue.then(work).finally(() => {
+      queued -= 1;
+    });
     queue = run.then(
       () => undefined,
       () => undefined,
     );
     return run;
+  }
+
+  const settledListeners = new Set<() => unknown>();
+  let unsettled = false;
+
+  async function settle(): Promise<void> {
+    unsettled = false;
+    for (const listener of [...settledListeners]) {
+      try {
+        await listener();
+      } catch (error) {
+        logger.warn(`A settled listener threw: ${messageOf(error)}`);
+      }
+    }
+  }
+
+  async function scanAndSettle(): Promise<SyncResult> {
+    const result = await scan();
+    await settle();
+    return result;
   }
 
   /**
@@ -379,12 +411,15 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
             : await documentsUnder(relativePath);
           for (const documentPath of paths) {
             try {
-              await reconcile(documentPath, 'watch');
+              if (await reconcile(documentPath, 'watch')) unsettled = true;
             } catch (error) {
               if (error instanceof SkippedFile) continue;
               logger.warn(`Could not sync ${documentPath}: ${messageOf(error)}`);
             }
           }
+          // This run is the one left in the queue, and no path is waiting out
+          // its debounce: the burst is over.
+          if (unsettled && pending.size === 0 && queued === 1) await settle();
         });
       }, options.debounceMs ?? DEFAULT_DEBOUNCE_MS),
     );
@@ -485,8 +520,15 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
       return emitChange(events, store.now(), change);
     },
 
+    onSettled(listener) {
+      settledListeners.add(listener);
+      return () => {
+        settledListeners.delete(listener);
+      };
+    },
+
     sync() {
-      return enqueue(scan);
+      return enqueue(scanAndSettle);
     },
 
     // The watch goes first and the scan after it hears changes, so a file
@@ -494,7 +536,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     // reported by the watch.
     async start() {
       if (options.watch !== false) await startWatching();
-      return await enqueue(scan);
+      return await enqueue(scanAndSettle);
     },
 
     async stop() {

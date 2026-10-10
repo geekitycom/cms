@@ -63,7 +63,7 @@ export type {
   ReplyContextLogger,
   ReplyContextService,
 } from './reply-contexts.ts';
-export { createWebmentionService, SEND_TIMEOUT_MS } from './service.ts';
+export { createWebmentionService, followMovedWebmentions, SEND_TIMEOUT_MS } from './service.ts';
 export type {
   CreateWebmentionServiceOptions,
   WebmentionLogger,

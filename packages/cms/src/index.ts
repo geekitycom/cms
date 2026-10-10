@@ -110,7 +110,11 @@ import { createIndieAuthState } from './indieauth/grants.ts';
 import { mountTokenEndpoint, mountTokenInfoEndpoints } from './indieauth/token.ts';
 import { mountMicropub } from './micropub/endpoint.ts';
 import { mountMicropubMedia } from './micropub/media.ts';
-import { createReplyContextService, createWebmentionService } from './webmention/index.ts';
+import {
+  createReplyContextService,
+  createWebmentionService,
+  followMovedWebmentions,
+} from './webmention/index.ts';
 import { heldReplyContext } from './webmention/reply-context.ts';
 import { createReplyNotices } from './comments/reply-notices.ts';
 import {
@@ -1768,15 +1772,20 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     contentDir: resolved.contentDir,
     watch: resolved.watch,
   });
+  // A watched change waits for its burst to settle, as a scan does: a git
+  // pull that moves a post and adds another at its old URL must not hand the
+  // new post's comments to the moved one before the new one is indexed.
   content.events.on('change', async (change) => {
-    if (change.origin === 'scan' || change.next === undefined) return;
+    if (change.origin === 'scan' || change.origin === 'watch' || change.next === undefined) {
+      return;
+    }
     await followMovedComments(commentRecords, store, change.next);
+    followMovedWebmentions(admin, store, resolved.baseUrl);
   });
-  async function scan(walk: () => Promise<SyncResult>): Promise<SyncResult> {
-    const result = await walk();
-    followAllMovedComments(commentRecords, store);
-    return result;
-  }
+  content.onSettled(async () => {
+    await followAllMovedComments(commentRecords, store);
+    followMovedWebmentions(admin, store, resolved.baseUrl);
+  });
   // Email. Built whether or not the site has a provider or a credential, for
   // the reason the Akismet checker is: the settings and `data/mail.json` are
   // read per send, so a key pasted into the settings screen sends the next
@@ -2134,7 +2143,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     c.set('avatars', avatars);
     c.set('actorProfiles', actorProfiles);
     c.set('announce', (change) => content.announce(change));
-    c.set('rescan', () => scan(() => content.sync()));
+    c.set('rescan', () => content.sync());
     c.set('delivery', delivery);
     c.set('relays', relays);
     c.set('webmentions', webmentions);
@@ -2244,7 +2253,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
   async function startServices(): Promise<void> {
     // The index is brought up to date before the first request, so a site
     // never serves a stale document, and the watcher takes over from there.
-    await scan(() => content.start());
+    await content.start();
 
     // After the scan, because the catch-up reads the index: a post whose
     // date passed while nothing was running is published here, once.
@@ -2350,7 +2359,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     },
 
     sync() {
-      return scan(() => content.sync());
+      return content.sync();
     },
 
     async serve() {

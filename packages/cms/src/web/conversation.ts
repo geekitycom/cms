@@ -809,8 +809,9 @@ function rootOf(context: ConversationContext, document: Document): string {
 
 /**
  * Every URL a reply post's `in-reply-to` could name something here by, and the
- * id each one names: the post by its permalink and object id, and every entry
- * by its id, its url and, for a comment written here, its page and its anchor.
+ * id each one names: the post by its permalink, every URL it used to live at
+ * and its object id, and every entry by its id, its url and, for a comment
+ * written here, its page and its anchor.
  */
 function namesIn(
   context: ConversationContext,
@@ -819,10 +820,8 @@ function namesIn(
   replies: readonly Interaction[],
 ): Map<string, string> {
   const permalink = absoluteUrl(document.permalink, context.baseUrl);
-  const names = new Map<string, string>([
-    [permalink, root],
-    [root, root],
-  ]);
+  const former = (document.redirectFrom ?? []).map((url) => absoluteUrl(url, context.baseUrl));
+  const names = new Map<string, string>([permalink, ...former, root].map((url) => [url, root]));
   for (const reply of replies) {
     for (const name of namesOf(reply, permalink, context.baseUrl)) {
       if (!names.has(name)) names.set(name, reply.id);

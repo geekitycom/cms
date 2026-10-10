@@ -932,6 +932,14 @@ export interface AdminStore {
   listSentWebmentions(slug: string): SentWebmention[];
   /** How many of one post's targets stand at each status. */
   countSentWebmentionsByStatus(slug: string): Record<WebmentionSendStatus, number>;
+  /** Every (post, source) the sent webmentions are recorded under. */
+  listSentWebmentionSources(): Pick<SentWebmention, 'slug' | 'source'>[];
+  /**
+   * File what one post sent from one source under another post, as a post
+   * whose slug changed is (TASK-332). Where both hold an outcome for one
+   * target, the later attempt is the one kept.
+   */
+  moveSentWebmentions(from: Pick<SentWebmention, 'slug' | 'source'>, to: string): void;
   /** Every relay subscription, oldest first, however it stands. */
   listRelays(): Relay[];
   /** One relay subscription by the inbox it was made to, or `undefined`. */
@@ -1226,6 +1234,26 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     `),
     listSentWebmentions: db.prepare(
       'SELECT * FROM webmentions_sent WHERE slug = ? ORDER BY target',
+    ),
+    listSentWebmentionSources: db.prepare(
+      'SELECT DISTINCT slug, source FROM webmentions_sent ORDER BY slug, source',
+    ),
+    copySentWebmentions: db.prepare(`
+      INSERT INTO webmentions_sent (
+        slug, source, target, endpoint, status, error, attempted_at
+      )
+      SELECT :to, source, target, endpoint, status, error, attempted_at
+      FROM webmentions_sent WHERE slug = :slug AND source = :source
+      ON CONFLICT (slug, target) DO UPDATE SET
+        source = excluded.source,
+        endpoint = excluded.endpoint,
+        status = excluded.status,
+        error = excluded.error,
+        attempted_at = excluded.attempted_at
+      WHERE excluded.attempted_at > webmentions_sent.attempted_at
+    `),
+    deleteSentWebmentions: db.prepare(
+      'DELETE FROM webmentions_sent WHERE slug = :slug AND source = :source',
     ),
     countSentWebmentionsByStatus: db.prepare(`
       SELECT status, COUNT(*) AS count FROM webmentions_sent WHERE slug = ? GROUP BY status
@@ -1818,6 +1846,19 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     listSentWebmentions(slug) {
       const rows = statements.listSentWebmentions.all(slug) as Record<string, unknown>[];
       return rows.map(toSentWebmention);
+    },
+
+    listSentWebmentionSources() {
+      const rows = statements.listSentWebmentionSources.all() as Record<string, unknown>[];
+      return rows.map((row) => ({ slug: String(row['slug']), source: String(row['source']) }));
+    },
+
+    moveSentWebmentions(from, to) {
+      if (from.slug === to) return;
+      inTransaction(() => {
+        statements.copySentWebmentions.run({ ...from, to });
+        statements.deleteSentWebmentions.run(from);
+      });
     },
 
     countSentWebmentionsByStatus(slug) {

@@ -3002,9 +3002,20 @@ The list is in the file, so deleting `data/geekity.db` keeps it working.
 
 A URL in the list only redirects while nothing else lives there: a new document
 given that URL takes it over. Moving a document back to a URL in its list takes
-that URL off the list. A draft that was never published moves without leaving
-anything behind. Correcting a published post's date files it under the new
-day but keeps its URL.
+that URL off the list. A draft that was never published and has no comments
+moves without leaving anything behind; one with comments was read at its URL,
+so it keeps a `redirect_from` like a published one. Correcting a published
+post's date files it under the new day but keeps its URL.
+
+A moved document keeps its conversation. Its comments and stored webmentions
+move to its new slug, a reply post answering any URL in its `redirect_from`
+stays in its thread, and its feeds keep their guid: a post keeps its object id
+as its `activitypub.id`, and a page keeps the URL it left as its `guid`, so the
+`/replies/` feed a reader subscribed to keeps answering. The record of the
+webmentions a post has sent moves with it too. A move made by hand is followed
+the same way when the file names the old URL in `redirect_from`; a permalink
+changed by hand with no `redirect_from` leaves the old URL answering 404 and its
+comments where they were, until the file names it.
 
 ### Declared redirects
 

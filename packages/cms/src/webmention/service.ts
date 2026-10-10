@@ -7,6 +7,7 @@ import type {
   SentWebmention,
   WebmentionSendStatus,
 } from '../admin/store.ts';
+import { permalinkOwner } from '../comments/records.ts';
 import type { CommentNotices, CommentRecords } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
@@ -18,6 +19,7 @@ import { replyTarget } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { isFederatedDocument } from '../federation/article.ts';
+import { permalinkOfObjectId } from '../web/documents.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
 import { discoverEndpoint, WEBMENTION_USER_AGENT } from './discovery.ts';
 import { externalLinks, externalTarget } from './links.ts';
@@ -613,6 +615,26 @@ function isPublic(document: Document | undefined, now: Date): boolean {
  * and the federated list is the fallback for a trashed one standing behind a
  * live page.
  */
+/**
+ * File the outcomes of a post whose slug changed under the post it is now
+ * (TASK-332). Rows are keyed by slug, so a moved post would otherwise show
+ * nothing sent and leave its rows to whatever post takes the old slug. A row
+ * whose slug names no document belongs to the document its source names, by
+ * the redirect rule comment files follow.
+ */
+export function followMovedWebmentions(
+  admin: AdminStore,
+  store: ContentStore,
+  baseUrl: string,
+): void {
+  for (const recorded of admin.listSentWebmentionSources()) {
+    if (store.getBySlug(recorded.slug) !== undefined) continue;
+    const permalink = permalinkOfObjectId(recorded.source, baseUrl);
+    const owner = permalink === undefined ? undefined : permalinkOwner(store, permalink);
+    if (owner !== undefined) admin.moveSentWebmentions(recorded, owner.slug);
+  }
+}
+
 function postBySlug(store: ContentStore, slug: string): Document | undefined {
   const direct = store.getBySlug(slug);
   if (direct !== undefined) return direct;

@@ -767,29 +767,35 @@ export async function followMovedComments(
 ): Promise<void> {
   for (const permalink of document.redirectFrom ?? []) {
     const from = slugForPermalink(permalink);
-    if (from === undefined || from === document.slug) continue;
-    const to = ownerOf(store, readPost(records, from).post)?.slug;
-    if (to === undefined || to === from) continue;
-
-    const [first = '', second = ''] = [
-      commentsFile(records.contentDir, from),
-      commentsFile(records.contentDir, to),
-    ].sort();
-    await withFileLock(first, () =>
-      withFileLock(second, () => {
-        followFile(records, store, from);
-      }),
-    );
+    if (from !== undefined && from !== document.slug) await follow(records, store, from);
   }
 }
 
-export function followAllMovedComments(records: CommentRecords, store: ContentStore): void {
-  for (const slug of commentSlugs(records.contentDir)) followFile(records, store, slug);
+export async function followAllMovedComments(
+  records: CommentRecords,
+  store: ContentStore,
+): Promise<void> {
+  for (const slug of commentSlugs(records.contentDir)) await follow(records, store, slug);
+}
+
+async function follow(records: CommentRecords, store: ContentStore, from: string): Promise<void> {
+  const to = permalinkOwner(store, readPost(records, from).post)?.slug;
+  if (to === undefined || to === from) return;
+
+  const [first = '', second = ''] = [
+    commentsFile(records.contentDir, from),
+    commentsFile(records.contentDir, to),
+  ].sort();
+  await withFileLock(first, () =>
+    withFileLock(second, () => {
+      followFile(records, store, from);
+    }),
+  );
 }
 
 function followFile(records: CommentRecords, store: ContentStore, from: string): void {
   const left = readPost(records, from);
-  const owner = ownerOf(store, left.post);
+  const owner = permalinkOwner(store, left.post);
   if (owner === undefined || owner.slug === from) return;
 
   const held = readPost(records, owner.slug).comments;
@@ -806,7 +812,11 @@ function followFile(records: CommentRecords, store: ContentStore, from: string):
   }
 }
 
-function ownerOf(store: ContentStore, permalink: string): Document | undefined {
+/**
+ * The document a URL of this site belongs to: the one at it, else the one
+ * whose `redirect_from` names it.
+ */
+export function permalinkOwner(store: ContentStore, permalink: string): Document | undefined {
   if (permalink === '') return undefined;
   return store.getByPermalink(permalink) ?? store.getByFormerPermalink(permalink);
 }
