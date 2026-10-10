@@ -4205,10 +4205,24 @@ Layouts are yours. The directory data files name them — `posts.json` says
 Eleventy layout receives is the one this package's theme mirrors, so a layout
 can often be moved across with only its `{% extends %}` removed.
 
-The feeds are the one thing that does not carry over: `/feed/`, `/feed/atom/`
-and `/feed/json/` are generated in code here, not by a template, so an Eleventy
-build needs its own. `/sitemap.xml` and `/robots.txt` are the same story, and
-for the same reason. Everything else is the same directory.
+The default theme's own layouts and partials build too, copied into
+`content/_includes/` as `layouts/` and `partials/`: the config adds the theme's
+other filters (`absoluteUrl`, `asset`, `host`, `fediverseHandle`) and the
+`newestPosts(count)` a front page override lists posts with, so a site theme's
+`front-page.njk` calling `{% set posts = newestPosts(5) %}` builds. They get
+only the context the config gives, though: `collections.menus` rather than
+`menus`, the `conversation` filter rather than the key, and no comment form,
+search or listing pagination.
+
+Some things do not carry over. `/feed/`, `/feed/atom/` and `/feed/json/` are
+generated in code here, not by a template, so an Eleventy build needs its own;
+`/sitemap.xml` and `/robots.txt` are the same story, for the same reason. A
+comment's own page at `/comment/{id}/` is not written, since a build has no
+server to take a comment, so a comment links to its `#comment-{id}` anchor on
+the post. The site's own reply posts are not threaded under what they answer,
+and a document's backlinks are not listed: both read the CMS's index of every
+document, which the config's filters do not have. The config's header lists
+the same.
 
 ### The compatibility test
 

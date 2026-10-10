@@ -2056,7 +2056,9 @@ An Eleventy build of the same content gets the same thing from the same files:
 
 and then loops over exactly the keys above. The slug is what names the post's
 comment file under `content/_data/comments/`; the format is documented in
-backlog doc-6.
+backlog doc-6. Two things differ: a native comment's `url` is its
+`#comment-{id}` anchor, because a static build writes no comment pages, and
+the site's own reply posts (`source: "post"`) are not in the thread.
 
 ### A comment's own page
 
