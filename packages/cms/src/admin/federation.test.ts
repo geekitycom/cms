@@ -7,6 +7,8 @@ import { writeUsers } from './__testing__/users.ts';
 import { csrfField, FIRST_ADMIN, sandbox, signedIn, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import type { Cms } from '../index.ts';
+import { appendInboxActivity } from '../federation/records.ts';
+import type { FederationRecords } from '../federation/records.ts';
 
 /** The site under test. Its origin is what an ActivityStreams id is built on. */
 const BASE_URL = 'https://blog.example';
@@ -343,6 +345,58 @@ describe('recent inbox activity', () => {
     assert.doesNotMatch(html, /remote\.example\/follows\/1/, 'a Follow is not an interaction');
     assert.match(html, /Nothing has arrived/, 'and the list reads as empty');
   });
+
+  it('marks a reply the site read from a replies collection as fetched, and where from (TASK-334)', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    await writePost(cms, 'hello-world', 'Hello, world');
+    logReply(cms);
+    await appendInboxActivity(recordsOf(cms), JSON.stringify(answerCreate(ANSWER_FETCHED)), {
+      fetched: true,
+    });
+
+    const html = await federationScreen(agent);
+    const fetched = rowAbout(html, ANSWER_URL);
+    assert.match(fetched, />fetched</, 'the read reply is labelled fetched');
+    assert.doesNotMatch(fetched, />delivered</, 'and not delivered');
+    assert.match(
+      fetched,
+      new RegExp(`href="${REPLY_NOTE.replaceAll('.', '\\.')}"[^>]*>from the replies to`),
+      'it links the note whose replies it was read from',
+    );
+    assert.match(fetched, /in the thread on <a[^>]*>Hello, world</, 'it names the thread it is in');
+    assert.doesNotMatch(fetched, /something of ours/, 'rather than a post it does not answer');
+
+    const delivered = rowAbout(html, 'https://remote.example/@ada/9');
+    assert.match(delivered, />delivered</, 'the reply the inbox was sent is labelled delivered');
+    assert.doesNotMatch(delivered, />fetched</, 'and not fetched');
+  });
+
+  it('shows a delivered reply that replaced a fetched one as delivered (TASK-334)', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    await appendInboxActivity(recordsOf(cms), JSON.stringify(answerCreate(ANSWER_FETCHED)), {
+      fetched: true,
+    });
+    await appendInboxActivity(recordsOf(cms), JSON.stringify(answerCreate(ANSWER_DELIVERED)));
+
+    const html = await federationScreen(agent);
+    const rows = html.split('<li>').filter((row) => row.includes(ANSWER_URL));
+    assert.equal(rows.length, 1, 'the reply is listed once');
+    assert.match(rows[0] ?? '', />delivered</, 'as delivered');
+    assert.doesNotMatch(rows[0] ?? '', />fetched</, 'and no longer as fetched');
+  });
+
+  it('labels neither a like nor a boost, which only ever arrive delivered', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    logLike(cms);
+    logAnnounce(cms);
+
+    const html = await federationScreen(agent);
+    assert.doesNotMatch(html, />delivered</, 'no delivered label');
+    assert.doesNotMatch(html, />fetched</, 'no fetched label');
+  });
 });
 
 describe('per-post delivery status', () => {
@@ -471,6 +525,49 @@ describe('resending a post', () => {
     assert.equal(deliveries.length, 0, 'and nothing was sent');
   });
 });
+
+/** The reply `logReply` logs, whose `replies` collection the backfill reads. */
+const REPLY_NOTE = 'https://remote.example/users/ada/statuses/9';
+
+/** A reply to that reply, from somebody who addressed Ada and not the site. */
+const ANSWER_NOTE = 'https://remote.example/users/grace/statuses/10';
+const ANSWER_URL = 'https://remote.example/@grace/10';
+
+/** The `Create` the backfill logs for the answer, under its synthetic id. */
+const ANSWER_FETCHED = `${ANSWER_NOTE}#fetched`;
+
+/** The `Create` that delivers the same answer. */
+const ANSWER_DELIVERED = `${ANSWER_NOTE}/activity`;
+
+/** The answer to `REPLY_NOTE` as a `Create` with the given id. */
+function answerCreate(id: string): Record<string, unknown> {
+  return {
+    '@context': 'https://www.w3.org/ns/activitystreams',
+    id,
+    type: 'Create',
+    actor: 'https://remote.example/users/grace',
+    object: {
+      id: ANSWER_NOTE,
+      type: 'Note',
+      url: ANSWER_URL,
+      attributedTo: 'https://remote.example/users/grace',
+      content: '<p>Agreed.</p>',
+      inReplyTo: REPLY_NOTE,
+      to: ['https://www.w3.org/ns/activitystreams#Public'],
+    },
+  };
+}
+
+function recordsOf(cms: Cms): FederationRecords {
+  return { admin: cms.admin, contentDir: cms.config.contentDir };
+}
+
+/** The one recent-activity row that links `url`. */
+function rowAbout(html: string, url: string): string {
+  const rows = html.split('<li>').filter((row) => row.includes(url));
+  assert.equal(rows.length, 1, `one row links ${url}`);
+  return (rows[0] ?? '').split('</li>')[0] ?? '';
+}
 
 /** A like of `hello-world`, exactly as the inbox would have logged it. */
 function logLike(cms: Cms): void {

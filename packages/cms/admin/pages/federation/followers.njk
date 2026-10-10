@@ -1,7 +1,7 @@
 {# /admin/federation: who this site's people are to the fediverse, who follows
    each of them, what arrived in the inbox, and how what went out landed. #}
 {% extends "layouts/shell.njk" %}
-{% from "components/badge.njk" import status %}
+{% from "components/badge.njk" import badge, status %}
 {% from "components/button.njk" import button %}
 {% from "components/card.njk" import card %}
 {% from "components/table.njk" import table %}
@@ -154,11 +154,17 @@
               {{ entry.action }}
             {% endif %}
             {% if entry.post %}
-              <a class="link" href="{{ entry.post.editUrl }}">{{ entry.post.title }}</a>
+              {% if entry.post.inThread %}in the thread on {% endif %}<a class="link" href="{{ entry.post.editUrl }}">{{ entry.post.title }}</a>
             {% else %}
               <em>something of ours</em>
             {% endif %}
             <span class="whitespace-nowrap text-sm">{{ entry.receivedAt | date('html') }}</span>
+            {% if entry.via.kind == 'fetched' %}
+              {{ badge('fetched', color='info', style='soft') }}
+              {% if entry.via.from %}<a class="link text-sm" href="{{ entry.via.from }}">from the replies to the note it answers</a>{% endif %}
+            {% elif entry.via.kind == 'delivered' %}
+              {{ badge('delivered') }}
+            {% endif %}
           </li>
         {% endfor %}
       </ul>
