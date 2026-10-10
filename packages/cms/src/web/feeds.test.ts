@@ -1519,7 +1519,9 @@ describe('a post’s comments feed', () => {
     // No `url` on the note, so the note's own id is where it can be read.
     assert.equal(child(newest, 'link').text, 'https://remote.example/notes/2');
     assert.equal(child(newest, 'guid').text, 'https://remote.example/notes/2');
-    assert.equal(child(newest, 'guid').attributes['isPermaLink'], 'false');
+    // A guid that is the link is a permalink, whichever server it is on.
+    assert.equal(child(newest, 'guid').attributes['isPermaLink'], 'true');
+    assert.equal(child(oldest, 'guid').attributes['isPermaLink'], 'false');
     assert.equal(child(newest, 'pubDate').text, 'Wed, 02 Sep 2026 11:00:00 GMT');
 
     assert.equal(child(oldest, 'title').text, '@ada@remote.example');
@@ -1762,17 +1764,16 @@ describe('the comment pointers on a post feed', () => {
     assert.equal(child(hello, 'comments').text, 'https://example.com/2026/09/hello/#comments');
     assert.equal(child(hello, 'wfw:commentRss').text, 'https://example.com/2026/09/hello/feed/');
 
-    // And Dave Winer's, which carries the count as well as the URL.
+    // And Dave Winer's, which counts the direct replies and points at a feed
+    // of only those (TASK-324).
     const pointer = child(hello, 'source:comments');
     assert.equal(pointer.attributes['count'], '2');
-    assert.equal(pointer.attributes['feedUrl'], 'https://example.com/2026/09/hello/feed/');
+    assert.equal(pointer.attributes['feedUrl'], 'https://example.com/replies/5252e1a162088ff7/');
 
-    // A post nobody answered still says where its comments would be.
-    assert.equal(child(quiet, 'source:comments').attributes['count'], '0');
-    assert.equal(
-      child(quiet, 'source:comments').attributes['feedUrl'],
-      'https://example.com/2026/09/quiet/feed/',
-    );
+    // A post nobody answered still says where its comments would be, and has
+    // no replies to point at.
+    assert.equal(child(quiet, 'wfw:commentRss').text, 'https://example.com/2026/09/quiet/feed/');
+    assert.ok(!quiet.children.some((element) => element.name === 'source:comments'));
   });
 
   it('counts them on an archive feed too', async () => {

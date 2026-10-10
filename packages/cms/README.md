@@ -3154,6 +3154,7 @@ so a site moving off it keeps every subscriber it had:
 | `/category/{name}/feed/` | One category archive, the same three             |
 | `/comments/feed/`        | Every reply the site has been sent, in RSS       |
 | `{permalink}feed/`       | One post's replies, in RSS                       |
+| `/replies/{id or key}/`  | One item's direct replies, in RSS                |
 
 `/feed/` is RSS because that is the format nearly every existing subscriber
 holds. The two archive bases are settings (`tagBase`, `categoryBase`), so the
@@ -3279,10 +3280,13 @@ and the summary are the ones described above.
 understands Markdown should render from it rather than from `content:encoded`.
 It is the same text the ActivityStreams `Article` carries as its `source`.
 
-Every item also says where its comments are, three ways: `comments` is the page
-to read them on, `wfw:commentRss` (the [Well-Formed Web][wfw-ns] comment API) is
-the feed to poll, and `source:comments` is that same feed with a `count`
-attribute, so a reader can say "3 comments" without fetching anything.
+Every item also says where its comments are: `comments` is the page to read
+them on and `wfw:commentRss` (the [Well-Formed Web][wfw-ns] comment API) is the
+feed of the whole thread to poll. A post with replies also carries
+`source:comments`, whose `count` is how many replies answer the post directly
+and whose `feedUrl` is its `/replies/{key}/` feed holding only those (see
+[Walking a thread](#walking-a-thread)). A post nobody answered carries no
+`source:comments`.
 
 When the site has a license (Settings > General, or `license` in `site.json`),
 the channel carries a `creativeCommons:license` holding its URL, and every item
@@ -3320,12 +3324,30 @@ A channel carries the usual `title` (`Comments on: {post}`), `link`,
 `description`, `language`, `lastBuildDate`, `generator`, `atom:link rel="self"`
 and the same notify-server elements every other feed carries. An item carries the author's name as its `title` and `dc:creator`,
 the reply's `url` as its `link` (a comment left through the form links to its
-own page at `/comment/{id}/`) and its id as `guid isPermaLink="false"`, the
-`published` time the note gave (or when it arrived, if it gave none),
-`description` holding a plain-text excerpt and `content:encoded` holding the
-note. On the site-wide feed the title names the post as well: `{author} on
+own page at `/comment/{id}/`), a `guid`, the `published` time the note gave (or
+when it arrived, if it gave none), `description` holding a plain-text excerpt
+and `content:encoded` holding the note. The `guid` of a comment left through the
+form is its page, `isPermaLink="true"`; any other reply's is its own id: a
+fediverse note's id, a webmention's stored id, a reply post's object id. A
+comment imported from WordPress keeps the `guid` WordPress's comments feed
+published, so a reader sees nothing new after the move.
+`isPermaLink` is `true` exactly when the `guid` is the `link`.
+
+Each item also carries, from the [source namespace][source-ns]:
+
+- `source:inReplyTo`, the `guid` of what it answers in these feeds: the post's
+  feed `guid` for an answer to the post, else the `guid` of the reply it
+  answers. A reply under a comment a reader may not see (one waiting for a
+  moderator, spam or deleted) names the nearest reply above it a reader can
+  see, or the post, and is counted as that one's reply.
+- `source:comments`, only on an item with replies: `count` is how many answer
+  it directly and `feedUrl` its `/replies/` feed.
+- `<source url="…">Name</source>`, the core RSS element, when the site knows a
+  feed for the author: a webmention author's `h-card` URL or site, or a site
+  user's author feed `/author/{username}/feed/`. A comment left through the
+  form and a fediverse reply carry none. On the site-wide feed the title names the post as well: `{author} on
 {post}`, or `{author} replying to {parent author} on {post}` for an answer to
-another reply a reader can see.
+  another reply a reader can see.
 
 The author's name is the profile the site stored when that actor followed it,
 and otherwise the `@user@host` the actor's own URL implies. Naming them
@@ -3344,6 +3366,33 @@ is exported for a site that shows comments in its own templates.
 A reply to a post that has since been unpublished or moved to the trash
 disappears from `/comments/feed/`, and that post's own feed 404s with the post.
 `feedSize` caps both feeds.
+
+### Walking a thread
+
+`{permalink}feed/` is the whole thread, flat, which is what WordPress
+publishes and `wfw:commentRss` points at. A program that wants the tree
+(Dave Winer's [rss.chat][rss-chat] reads conversations this way) walks it one
+level at a time instead: from a post item's `source:comments` to a feed of the
+replies that answer the post directly, and from each of those items' own
+`source:comments` to the replies that answer it, until an item has none.
+Every reply a reader can see is reached once.
+
+Each of those feeds is at `/replies/{segment}/`, RSS 2.0, newest first, its
+items in the same shape as the comments feeds:
+
+- `/replies/{id}/` for a comment left through the form, by the same id as its
+  page at `/comment/{id}/`, percent-encoded.
+- `/replies/{key}/` for everything else: a post or a page, a webmention, a
+  fediverse reply or a reply post. A document has no id of its own and slugs
+  are not unique across posts and pages, so the key is the first 16 hex digits
+  of the SHA-256 of the item's feed `guid`.
+
+A segment of exactly 16 lowercase hex digits is a key, and anything else is a
+comment id. A comment whose id happens to look like a key is named by its key
+instead, so no segment can name two items. An item nobody answered answers an
+empty feed; a key or an id that names nothing a reader can see 404s.
+
+[rss-chat]: https://github.com/scripting/rss.chat
 
 ### Atom and JSON Feed
 
@@ -3634,8 +3683,10 @@ commentsRssFeed({
 
 `conversation.thread(document)` is the same reading for one post — the shape the
 theme's `conversation.njk` is handed — `spokenIn` flattens it into the entries a
-feed carries, and `conversation.counts(documents)` is the number `source:comments`
-puts beside each item of a post feed.
+feed carries, each with the reply it sits under, `conversation.counts(documents)`
+is the number of direct replies `source:comments` puts beside each item of a
+post feed, and `conversation.repliesTo(segment)` is what one `/replies/` feed
+holds.
 
 ## Sitemap and robots.txt
 

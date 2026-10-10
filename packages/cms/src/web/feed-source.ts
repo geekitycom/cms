@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { User } from '../admin/accounts.ts';
 import type { Document } from '../content/document.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
@@ -91,6 +93,35 @@ export function feedPathUnder(root: string, format: FeedFormat): string {
  */
 export function commentsFeedPath(permalink?: string): string {
   return feedPathUnder(permalink ?? COMMENTS_ROOT, 'rss');
+}
+
+/** What the path of every replies feed starts with (TASK-324). */
+export const REPLIES_ROOT = '/replies/';
+
+/**
+ * A replies key: the first 16 hex digits of the SHA-256 of an item's feed
+ * guid. 64 bits, so two items of one site sharing a key is a birthday event
+ * only past about four billion of them.
+ */
+const REPLIES_KEY = /^[0-9a-f]{16}$/;
+
+/** The key a replies feed names an item by, from its feed guid. */
+export function repliesKey(guid: string): string {
+  return createHash('sha256').update(guid).digest('hex').slice(0, 16);
+}
+
+/**
+ * Whether a `/replies/` segment is a key. Anything else is a native comment's
+ * id: a comment whose id happens to look like a key is named by its key
+ * instead, so no segment can name two items.
+ */
+export function isRepliesKey(segment: string): boolean {
+  return REPLIES_KEY.test(segment);
+}
+
+/** The URL of the feed of one item's direct replies, by its key or comment id. */
+export function repliesFeedPath(segment: string): string {
+  return `${REPLIES_ROOT}${encodeURIComponent(segment)}/`;
 }
 
 /** A feed URL taken apart: which listing it syndicates, and in what format. */
@@ -391,8 +422,17 @@ export interface CommentFeedSource {
 
 /** One comment, as a feed shows it. */
 export interface FeedComment {
-  /** The reply's own name in the fediverse: the `guid`. */
+  /**
+   * The `guid`: a native comment's page, else the reply's own name, the
+   * note's id in the fediverse or a webmention's stored id.
+   */
   id: string;
+  /** The guid of what it answers in these feeds: the post's, or a reply's. */
+  inReplyTo?: string | undefined;
+  /** Its direct replies, counted, and the feed holding only them. */
+  replies?: { count: number; feed: string } | undefined;
+  /** The feed its author publishes, when the site knows one. */
+  authorFeed?: string | undefined;
   /** Where it can be read. */
   url: string;
   /** Who wrote it. */

@@ -33,7 +33,7 @@ const ITEM: FeedItem = {
   comments: {
     page: 'https://example.com/2026/09/hello/#comments',
     feed: 'https://example.com/2026/09/hello/feed/',
-    count: 3,
+    replies: { count: 3, feed: 'https://example.com/replies/0123456789abcdef/' },
   },
 };
 
@@ -73,7 +73,7 @@ describe('an RSS item', () => {
       '      <category>meta</category>',
       '      <comments>https://example.com/2026/09/hello/#comments</comments>',
       '      <wfw:commentRss>https://example.com/2026/09/hello/feed/</wfw:commentRss>',
-      '      <source:comments count="3" feedUrl="https://example.com/2026/09/hello/feed/"/>',
+      '      <source:comments count="3" feedUrl="https://example.com/replies/0123456789abcdef/"/>',
       '      <description>A short summary.</description>',
       '      <content:encoded><![CDATA[<p>A <em>file-first</em> CMS.</p>\n]]></content:encoded>',
       '      <source:markdown><![CDATA[A *file-first* CMS.]]></source:markdown>',

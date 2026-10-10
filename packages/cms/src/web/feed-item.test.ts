@@ -160,8 +160,8 @@ describe('a feed item', () => {
     }
   });
 
-  it('is at revision 13, so feeds cached before RSS descriptions were escaped are refetched', () => {
-    assert.equal(FEED_ITEM_REVISION, 13);
+  it('is at revision 14, so feeds cached before source:comments named direct replies are refetched', () => {
+    assert.equal(FEED_ITEM_REVISION, 14);
   });
 
   it('titles a titled repost, like or bookmark with no words (TASK-256)', () => {
@@ -229,11 +229,11 @@ describe('a feed item', () => {
     assert.deepEqual(counted.comments, {
       page: 'https://example.com/2026/09/hello/#comments',
       feed: 'https://example.com/2026/09/hello/feed/',
-      count: 3,
+      replies: { count: 3, feed: 'https://example.com/replies/5252e1a162088ff7/' },
     });
 
     const uncounted = feedItem(post(), { ...CONTEXT, commentCounts: new Map() });
-    assert.equal(uncounted.comments?.count, 0);
+    assert.equal(uncounted.comments?.replies.count, 0);
   });
 
   it('resolves every URL against a site that lives in a subdirectory', () => {

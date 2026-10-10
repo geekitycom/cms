@@ -460,11 +460,14 @@ describe('a reply under a comment a reader may not see (TASK-325)', () => {
     assert.doesNotMatch(html, /Eve says so/);
   });
 
-  it('counts the visible replies, and only those, on the page and in the feed', async () => {
+  it('counts the visible replies on the page, and the direct ones in the feed', async () => {
     const html = await get(POST);
     assert.match(html, /<h2 class="comments-title">13 replies<\/h2>/);
 
+    // TOP, the three lifted from under hidden comments, the webmention, the
+    // imported comment and the note: a reply under a hidden one counts as the
+    // post's own (TASK-324).
     const feed = await get('/feed/');
-    assert.match(feed, /<source:comments count="13" /);
+    assert.match(feed, /<source:comments count="7" /);
   });
 });

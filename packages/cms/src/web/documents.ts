@@ -146,6 +146,18 @@ export function activityStreamsId(document: Document, baseUrl: string): string |
 }
 
 /**
+ * The guid every feed keys a document by (decision-12): a migrated post's
+ * stored `guid`, else its ActivityStreams id, else its permalink. The post
+ * feeds and the comments feeds both name it so, which is what lets a reply's
+ * `source:inReplyTo` name the item it answers (TASK-324).
+ */
+export function feedGuid(document: Document, baseUrl: string): string {
+  const guid = document.extra['guid'];
+  if (typeof guid === 'string' && URL.canParse(guid.trim())) return guid.trim();
+  return activityStreamsId(document, baseUrl) ?? absoluteUrl(document.permalink, baseUrl);
+}
+
+/**
  * The permalink an object id names, when it is one this site would have
  * minted: the path, with the base URL's own directory taken off it.
  *

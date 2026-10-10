@@ -61,6 +61,8 @@ import {
 } from './documents.ts';
 import {
   commentsFeedPath,
+  REPLIES_ROOT,
+  repliesFeedPath,
   commentsFeedResponse,
   feedPathUnder,
   feedResponse,
@@ -224,6 +226,9 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   // A native comment's own page (TASK-318), at a fixed path so a permalink
   // cannot take it.
   app.get(`${COMMENT_PAGE_PREFIX}:id/`, (c) => commentPage(c, c.req.param('id')));
+
+  // The feed of one item's direct replies (TASK-324), fixed for the same reason.
+  app.get(`${REPLIES_ROOT}:segment/`, (c) => repliesFeed(c, c.req.param('segment')));
 
   // The sitemap, its children and the robots file: fixed paths at the root of
   // the site, which is the only place a crawler looks, and routes for the same
@@ -1571,7 +1576,12 @@ function comments(c: Context<GeekityEnv>, document: Document | undefined): Respo
   // answers the same one.
   const found: readonly FeedComment[] = feedComments(
     document === undefined ? conversation.latest(limit) : spokenIn(conversation.thread(document)),
-    { baseUrl: config.baseUrl, limit, cited: (url) => c.var.replyContexts.read(url) },
+    {
+      baseUrl: config.baseUrl,
+      limit,
+      cited: (url) => c.var.replyContexts.read(url),
+      post: document,
+    },
   );
 
   const source: CommentFeedSource = {
@@ -1586,6 +1596,39 @@ function comments(c: Context<GeekityEnv>, document: Document | undefined): Respo
     baseUrl: config.baseUrl,
   };
 
+  return commentsFeedResponse(source, conditionalHeaders(c));
+}
+
+/**
+ * The feed of one item's direct replies (TASK-324): a post's or page's, or a
+ * reply's, so a reader can walk a thread one level at a time through
+ * `source:comments`. An item nobody answered has an empty feed; a segment
+ * naming nothing a reader can see 404s.
+ */
+function repliesFeed(c: Context<GeekityEnv>, segment: string): Response {
+  const { conversation, renderer, config } = c.var;
+  const found = conversation.repliesTo(segment);
+  if (found === undefined) return notFound(c);
+
+  const site = renderer.site();
+  const cited = (url: string) => c.var.replyContexts.read(url);
+  const label = postLabel(found.post, cited);
+  const source: CommentFeedSource = {
+    site,
+    comments: feedComments(found.replies, {
+      baseUrl: config.baseUrl,
+      limit: feedSize(site),
+      cited,
+      post: found.post,
+    }),
+    title:
+      found.reply === null
+        ? `Replies to: ${label}`
+        : `Replies to ${found.reply.author.name} on ${label}`,
+    href: found.reply?.url ?? found.post.permalink,
+    feedHref: repliesFeedPath(segment),
+    baseUrl: config.baseUrl,
+  };
   return commentsFeedResponse(source, conditionalHeaders(c));
 }
 

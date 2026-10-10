@@ -198,6 +198,7 @@ describe('a post’s conversation', () => {
       url: 'https://remote.example/users/ada',
       avatar: null,
       actorId: 'https://remote.example/users/ada',
+      feed: null,
     });
 
     // Newest last: the conversation reads down the page.
@@ -227,6 +228,7 @@ describe('a post’s conversation', () => {
       url: 'https://remote.example/@ada',
       avatar: avatarHref('https://remote.example/avatars/ada.png'),
       actorId: 'https://remote.example/users/ada',
+      feed: null,
     });
   });
 
@@ -699,13 +701,13 @@ describe('a quote of a post (TASK-171)', () => {
     assert.equal(conversation.counts.total, 1);
   });
 
-  it('is counted with the post’s answers', async () => {
+  it('is not counted among the post’s direct replies, which a quote is not', async () => {
     const { admin, contentDir, conversation: read } = await reader();
     await approve(contentDir);
     logQuote(admin);
     logReply(admin, { inReplyTo: POST, id: 'https://remote.example/notes/1' });
 
-    assert.equal(read.counts([hello(), second()]).get('/2026/09/hello/'), 2);
+    assert.equal(read.counts([hello(), second()]).get('/2026/09/hello/'), 1);
     assert.equal(read.counts([hello(), second()]).get('/2026/09/second/'), 0);
   });
 
@@ -942,10 +944,13 @@ Words.
 
     // Every entry a reader may see, and only those: the moderated one that was
     // never approved is in neither.
-    const guids = [...feed.matchAll(/<guid isPermaLink="false">([^<]+)<\/guid>/g)].map(
+    const guids = [...feed.matchAll(/<guid isPermaLink="(?:true|false)">([^<]+)<\/guid>/g)].map(
       (match) => match[1],
     );
-    assert.deepEqual(guids.sort(), [APPROVED, MENTIONED, NOTE].sort());
+    assert.deepEqual(
+      guids.sort(),
+      [`https://blog.example/comment/${APPROVED}/`, MENTIONED, NOTE].sort(),
+    );
 
     assert.ok(page.includes(`id="comment-${APPROVED}"`), 'the page shows the approved comment');
     assert.ok(page.includes(`id="comment-${NOTE}"`), 'the page shows the fediverse reply');
@@ -1190,7 +1195,8 @@ describe('reply posts in a conversation (TASK-300)', () => {
     assert.equal(visible(answer)?.source, 'post');
     assert.equal(visible(answer)?.url, '/2026/09/answer/');
     assert.equal(read.thread(hello()).counts.replies, 2);
-    assert.equal(read.counts([hello()]).get('/2026/09/hello/'), 2);
+    // Only the note answers the post directly; the reply post answers the note.
+    assert.equal(read.counts([hello()]).get('/2026/09/hello/'), 1);
   });
 
   it('ends at two reply posts that answer each other', async () => {

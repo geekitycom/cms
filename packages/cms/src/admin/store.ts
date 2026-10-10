@@ -819,15 +819,6 @@ export interface AdminStore {
   /** One post's comments, oldest first, whatever status they are at. */
   listCommentsFor(slug: string): PostComment[];
   /**
-   * How many of one post's comments stand at one status.
-   *
-   * A count rather than a list because that is what the feeds want: the RSS
-   * `source:comments` element carries a number per item, and reading every
-   * comment on every post of a feed page to arrive at it would be a page of
-   * text for a page of integers.
-   */
-  countCommentsFor(slug: string, status: CommentStatus): number;
-  /**
    * Comments across the site, newest first, optionally of one status and one
    * page of them. What the moderation screen and the site-wide feed read.
    */
@@ -1084,9 +1075,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     `),
     commentById: db.prepare('SELECT * FROM comments WHERE id = ?'),
     commentsAt: db.prepare('SELECT * FROM comments WHERE url = ? ORDER BY submitted_at'),
-    countCommentsFor: db.prepare(
-      'SELECT COUNT(*) AS count FROM comments WHERE slug = ? AND status = ?',
-    ),
     countCommentsByStatus: db.prepare(
       'SELECT status, COUNT(*) AS count FROM comments GROUP BY status',
     ),
@@ -1557,12 +1545,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         unknown
       >[];
       return rows.map(toComment);
-    },
-
-    countCommentsFor(slug, status) {
-      const row = statements.countCommentsFor.get(slug, status) as
-        Record<string, unknown> | undefined;
-      return Number(row?.['count'] ?? 0);
     },
 
     getComment(id) {

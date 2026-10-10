@@ -682,7 +682,7 @@ describe('the comments feeds', () => {
       ),
       'a pending comment is in no feed',
     );
-    assert.match(await (await cms.app.request('/feed/')).text(), /<source:comments count="0"/);
+    assert.doesNotMatch(await (await cms.app.request('/feed/')).text(), /<source:comments/);
   });
 });
 

@@ -63,6 +63,8 @@ export type {
   InteractionKind,
   InteractionSource,
   InteractionStatus,
+  Placed,
+  RepliesOf,
   SiteInteraction,
 } from './conversation.ts';
 export {
@@ -78,6 +80,9 @@ export {
   cdata,
   commentsFeedPath,
   commentsFeedResponse,
+  REPLIES_ROOT,
+  repliesFeedPath,
+  repliesKey,
   commentsRssFeed,
   COMMENTS_ROOT,
   COMMENTS_TITLE_PREFIX,
