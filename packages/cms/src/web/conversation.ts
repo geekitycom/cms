@@ -1434,7 +1434,7 @@ export function visibleReply(replies: readonly ThreadReply[], id: string): Inter
   return undefined;
 }
 
-function isWithheld(reply: ThreadReply): reply is WithheldReply {
+export function isWithheld(reply: ThreadReply): reply is WithheldReply {
   return 'withheld' in reply;
 }
 

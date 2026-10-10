@@ -1647,12 +1647,7 @@ function commentPage(c: Context<GeekityEnv>, id: string): Response {
 
   const now = store.now();
   if (isGone(found.post, now)) return gone(c);
-  if (
-    !isServed(found.post, now) ||
-    !answerable(found.post, commentPolicyOf(renderer.site()), now)
-  ) {
-    return notFound(c);
-  }
+  if (!isServed(found.post, now) || !showsConversation(c, found.post)) return notFound(c);
   return c.html(renderer.renderComment(found), 200, { 'x-robots-tag': 'noindex' });
 }
 

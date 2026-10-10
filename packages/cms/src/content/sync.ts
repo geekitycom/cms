@@ -417,7 +417,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     const started = watchTree(contentDir, {
       recursive: true,
       persistent: true,
-      ignore: (relativePath: string) => isIgnored(relativePath),
+      ignore: isIgnored,
     });
     watcher = started;
 

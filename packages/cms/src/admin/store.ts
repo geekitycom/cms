@@ -1550,21 +1550,14 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         throw new Error(`The activity "${activity.activityType}" was not written to the log.`);
       }
       const logged = toInboxActivity(row);
-      written({
-        kind: 'activity',
-        about: [logged.objectId, logged.inReplyTo].filter((id) => id !== null),
-      });
+      written(activityWrite(logged));
       return logged;
     },
 
     deleteInboxActivity(id) {
       const row = statements.deleteInboxActivity.get(id) as Record<string, unknown> | undefined;
       if (row === undefined) return false;
-      const deleted = toInboxActivity(row);
-      written({
-        kind: 'activity',
-        about: [deleted.objectId, deleted.inReplyTo].filter((about) => about !== null),
-      });
+      written(activityWrite(toInboxActivity(row)));
       return true;
     },
 
@@ -2827,6 +2820,14 @@ const MIGRATIONS: readonly Migration[] = [
     sql: `ALTER TABLE ap_inbox ADD COLUMN fetched INTEGER NOT NULL DEFAULT 0;`,
   },
 ];
+
+/** What {@link AdminStore.onConversationWrite} hears about one logged activity. */
+function activityWrite(activity: InboxActivity): ConversationWrite {
+  return {
+    kind: 'activity',
+    about: [activity.objectId, activity.inReplyTo].filter((id) => id !== null),
+  };
+}
 
 /** The `/replies/` key of a logged reply's note, or `null` for anything else. */
 function replyKeyOf(activity: Parameters<typeof replyIdOf>[0]): string | null {

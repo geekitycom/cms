@@ -25,6 +25,7 @@ import { verifyWebmention } from './receive.ts';
 import { selectedTargets, syndicationCopies, syndicationTargetsReader } from './syndication.ts';
 import type { SyndicationTarget } from './syndication.ts';
 import type { IncomingWebmention, WebmentionOutcome } from './receive.ts';
+import { isWithheld } from '../web/conversation.ts';
 import type { ConversationReader, ThreadReply, Upstream } from '../web/conversation.ts';
 
 /**
@@ -522,7 +523,7 @@ function toldOf(value: string | undefined): Salmentioned {
 function fingerprintOf(replies: readonly ThreadReply[]): string {
   const shape = (list: readonly ThreadReply[]): unknown[] =>
     list.map((reply) =>
-      'withheld' in reply
+      isWithheld(reply)
         ? [reply.id, shape(reply.replies)]
         : [
             reply.id,

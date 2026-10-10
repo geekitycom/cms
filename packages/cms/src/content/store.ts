@@ -1669,26 +1669,12 @@ const MIGRATIONS: readonly Migration[] = [
     sql: `
       -- The pages of the site each document links to (TASK-322), as the paths
       -- the links name rather than the documents they lead to, which are
-      -- matched when a document's backlinks are read. Like the \`/replies/\`
+      -- matched when a document's backlinks are read. A link keeps its query
+      -- (TASK-330), sorted as a redirect source's is, because the site answers
+      -- \`/?p=7\` with a redirect rather than with \`/\`. Like the \`/replies/\`
       -- keys they are read against the base URL, so forgetting every row's
       -- base is what makes the next open with one fill them from the stored
       -- HTML, with no scan of the files.
-      CREATE TABLE document_links (
-        path   TEXT NOT NULL REFERENCES documents (path) ON DELETE CASCADE,
-        target TEXT NOT NULL,
-        PRIMARY KEY (path, target)
-      );
-      CREATE INDEX document_links_target ON document_links (target);
-      UPDATE documents SET keys_base = NULL;
-    `,
-  },
-  {
-    version: 12,
-    sql: `
-      -- A link keeps its query (TASK-330), sorted as a redirect source's is,
-      -- because the site answers \`/?p=7\` with a redirect rather than with
-      -- \`/\`. Filled again from the stored HTML the way migration 11 was.
-      DROP TABLE document_links;
       CREATE TABLE document_links (
         path   TEXT NOT NULL REFERENCES documents (path) ON DELETE CASCADE,
         target TEXT NOT NULL,

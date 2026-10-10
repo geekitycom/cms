@@ -17,6 +17,7 @@ import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
+import { isWithheld } from '../web/conversation.ts';
 import type { ConversationReader, ThreadReply } from '../web/conversation.ts';
 import { isFederatedDocument } from './article.ts';
 import type { FederationContextData } from './federation.ts';
@@ -398,7 +399,7 @@ function level(replies: readonly ThreadReply[]): { id: string; depth: number }[]
   let current = replies;
   for (let depth = 1; depth <= BACKFILL_DEPTH && current.length > 0; depth += 1) {
     for (const reply of current) {
-      if ('source' in reply && reply.source === 'activitypub' && reply.kind === 'reply') {
+      if (!isWithheld(reply) && reply.source === 'activitypub' && reply.kind === 'reply') {
         found.push({ id: reply.id, depth });
       }
     }

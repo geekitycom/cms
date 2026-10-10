@@ -1,3 +1,4 @@
+import { isWebUrl } from '../content/enclosure.ts';
 import { rsvpValue } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
 import { classesOf, elementsIn, innerHtmlOf, isElement, parseHtml, textOf } from './html.ts';
@@ -211,15 +212,6 @@ function nestedReplies(entry: MicroformatItem, url: string, sourceUrl: string): 
   };
 
   return read(entry, url, 0);
-}
-
-function isWebUrl(value: string): boolean {
-  try {
-    const { protocol } = new URL(value);
-    return protocol === 'http:' || protocol === 'https:';
-  } catch {
-    return false;
-  }
 }
 
 /** What a nested reply says: its content, else its summary or its name. */
