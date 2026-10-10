@@ -122,3 +122,78 @@ describe('the backlinks of a post (TASK-322)', () => {
     assert.doesNotMatch(await page(cms, '/2026/09/target/'), /comments-area|reactions-section/);
   });
 });
+
+describe('backlinks through the homepage and the site’s redirects (TASK-330)', () => {
+  const IMPORTED: Record<string, string> = {
+    '_data/site.json': JSON.stringify({ title: 'A Site', homepage: 'welcome', theme: 'front' }),
+    '_data/redirects/imported.json': JSON.stringify({
+      '/?p=7': '/2019/05/first-post/',
+      '/?p=12': '/welcome/',
+      '/?page_id=12': '/welcome/',
+    }),
+    'pages/welcome.md': '---\ntitle: Welcome\npermalink: /welcome/\n---\n\nHello.\n',
+    'posts/first-post.md':
+      "---\ntitle: First post\ndate: '2019-05-01T09:00:00Z'\npermalink: /2019/05/first-post/\n---\n\nThe first.\n",
+    'posts/second-post.md':
+      "---\ntitle: Second post\ndate: '2019-06-01T09:00:00Z'\npermalink: /2019/06/second-post/\n---\n\nFollowing up [my first post](https://blog.example/?p=7) and [the front page](/).\n",
+  };
+
+  async function imported(): Promise<Cms> {
+    const contentDir = await box.dir('geekity-backlinks-imported-');
+    const themesDir = await box.dir('geekity-backlinks-imported-themes-');
+    const files: Record<string, string> = {
+      ...Object.fromEntries(
+        Object.entries(IMPORTED).map(([relative, contents]) => [
+          path.join(contentDir, relative),
+          contents,
+        ]),
+      ),
+      [path.join(themesDir, 'front', 'theme.json')]: JSON.stringify({
+        name: 'Front',
+        kind: 'site',
+      }),
+      [path.join(themesDir, 'front', 'layouts', 'front-page.njk')]:
+        '{% extends "layouts/base.njk" %}{% block content %}{{ content | safe }}{% include "partials/backlinks.njk" %}{% endblock %}',
+    };
+    for (const [file, contents] of Object.entries(files)) {
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, contents, 'utf8');
+    }
+    return await box.open({
+      contentDir,
+      themesDir,
+      dataDir: await box.dir('geekity-backlinks-imported-data-'),
+      baseUrl: BASE,
+      now: () => new Date(NOW),
+    });
+  }
+
+  it('lists an imported post’s ?p= link under the post the redirect leads to', async () => {
+    const cms = await imported();
+    const list = linkedFrom(await page(cms, '/2019/05/first-post/'));
+    assert.ok(
+      list?.includes('<a href="/2019/06/second-post/">Second post</a>'),
+      list ?? 'no Linked from section',
+    );
+  });
+
+  it('lists a link to / under the page the Reading setting makes the homepage, for a front page that prints them', async () => {
+    const cms = await imported();
+    const list = linkedFrom(await page(cms, '/'));
+    assert.ok(
+      list?.includes('<a href="/2019/06/second-post/">Second post</a>'),
+      list ?? 'no Linked from section',
+    );
+  });
+
+  it('drops the backlink when the redirect is taken out, with the linking post untouched', async () => {
+    const cms = await imported();
+    assert.ok(linkedFrom(await page(cms, '/2019/05/first-post/')) !== undefined);
+    await writeFile(
+      path.join(cms.config.contentDir, '_data', 'redirects', 'imported.json'),
+      JSON.stringify({ '/?p=12': '/welcome/' }),
+      'utf8',
+    );
+    assert.equal(linkedFrom(await page(cms, '/2019/05/first-post/')), undefined);
+  });
+});

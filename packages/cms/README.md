@@ -1318,7 +1318,12 @@ post on the same site does not go through moderation, does not add to a comment
 count and does not make an HTTP request to the site itself. The index records
 the link instead. The linked post or page then lists the linking one among its
 backlinks, which the default theme prints as "Linked from" under it, apart from
-the comments. A draft, future-dated, unlisted, private or trashed post is never
+the comments. A link counts for the document the site serves at its URL: a link
+to `/` counts for the page the Reading setting makes the homepage, and a link
+to a URL the site redirects, such as an imported `/?p=123`, counts for the
+document the redirect leads to. Redirects are followed when the backlinks are
+read, so editing a redirect file moves a backlink without touching the post
+that holds the link. A draft, future-dated, unlisted, private or trashed post is never
 a backlink. See `themes/default/README.md` for the `backlinks` context.
 
 **Receiving** advertises `/_geekity/webmention` two ways — a `Link` header on

@@ -129,7 +129,7 @@ import {
   SEARCH_PATH,
   SEARCH_QUERY_PARAM,
 } from './search.ts';
-import { findQueryRedirect, redirectLocation } from './redirects.ts';
+import { findPathRedirect, findQueryRedirect, redirectLocation } from './redirects.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { Taxonomy, TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
@@ -547,11 +547,8 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
 
   // And a URL the site itself says has moved (TASK-128), after every live
   // lookup and after the slash that would lead to one, so a declared source
-  // never shadows a live document. One asked for without its trailing slash
-  // reaches the target in one hop.
-  const declared = c.var.redirects.current().paths;
-  const redirect =
-    declared.get(pathname) ?? (pathname.endsWith('/') ? undefined : declared.get(`${pathname}/`));
+  // never shadows a live document.
+  const redirect = findPathRedirect(c.var.redirects.current(), pathname);
   if (redirect !== undefined) {
     return c.redirect(redirectLocation(redirect, search), redirect.status);
   }

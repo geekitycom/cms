@@ -10,7 +10,9 @@ import { VISIBILITIES, VISIBILITY_FRONT_MATTER_KEY } from './visibility.ts';
 import { repliesKey } from '../web/feed-source.ts';
 import { feedGuid, postObjectId } from '../web/guids.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
-import { ownSiteLinks, siteLinkKey } from '../webmention/links.ts';
+import { NO_REDIRECTS } from '../web/redirects.ts';
+import type { RedirectTable } from '../web/redirects.ts';
+import { linksInto, ownSiteLinks, siteLinkKey, spelling } from '../webmention/links.ts';
 
 export { DATABASE_FILE } from '../cache.ts';
 
@@ -43,6 +45,14 @@ export interface OpenContentStoreOptions {
    * every key out again; opening with none leaves new rows without keys.
    */
   baseUrl?: string | undefined;
+}
+
+/** What, beyond the index, decides which links land on a document. */
+export interface BacklinkSite {
+  /** The site's declared redirects, as they are now. */
+  readonly redirects?: RedirectTable | undefined;
+  /** Whether the document is the page the Reading setting shows at `/`. */
+  readonly home?: boolean | undefined;
 }
 
 /**
@@ -233,12 +243,15 @@ export interface ContentStore {
    *
    * A link names a path rather than a document, and is matched to one here,
    * on read: a link to the document's permalink, or to a `redirect_from` of it
-   * that still leads to it, whichever way the link was spelled. So a link
-   * written before its target existed counts once the target does, and a post
-   * that becomes public later counts from then, with nothing rewritten. A
-   * document linking to itself is not its own backlink.
+   * that still leads to it, whichever way the link was spelled; to `/` when
+   * `home` says the document is the homepage; and to any URL the site answers
+   * with a redirect that ends on one of those (TASK-330). So a link written
+   * before its target existed counts once the target does, a post that
+   * becomes public later counts from then, and an edited redirect file moves
+   * a backlink, with nothing rewritten. A document linking to itself is not
+   * its own backlink.
    */
-  listBacklinks(document: Document): Document[];
+  listBacklinks(document: Document, site?: BacklinkSite): Document[];
   /** Every indexed path, sorted. What a sync compares the content tree against. */
   listPaths(): string[];
   /** How many documents there are of each kind. */
@@ -594,7 +607,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       'SELECT * FROM documents WHERE permalink = ? ORDER BY trashed, path DESC LIMIT 1',
     ),
     deleteLinks: db.prepare('DELETE FROM document_links WHERE path = ?'),
-    insertLink: db.prepare('INSERT INTO document_links (path, target) VALUES (?, ?)'),
+    insertLink: db.prepare('INSERT INTO document_links (path, target, query) VALUES (?, ?, ?)'),
+    servedAt: db.prepare(
+      `SELECT 1 FROM documents WHERE permalink = ? AND ${SERVED_CLAUSE} LIMIT 1`,
+    ),
     deleteRedirects: db.prepare('DELETE FROM document_redirects WHERE path = ?'),
     insertRedirect: db.prepare(
       'INSERT INTO document_redirects (path, url, position) VALUES (?, ?, ?)',
@@ -780,8 +796,8 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     statements.deleteLinks.run(document.path);
     if (baseUrl === undefined) return;
     const pageUrl = absoluteUrl(document.permalink, baseUrl);
-    for (const target of ownSiteLinks(document.html, pageUrl, baseUrl)) {
-      statements.insertLink.run(document.path, target);
+    for (const { path, query } of ownSiteLinks(document.html, pageUrl, baseUrl)) {
+      statements.insertLink.run(document.path, path, query);
     }
   }
 
@@ -1099,14 +1115,39 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       return hydrateAll(statements.byRepliesKey.all(key, nowKey()) as Record<string, unknown>[]);
     },
 
-    listBacklinks(document) {
+    listBacklinks(document, site = {}) {
+      const now = nowKey();
+      const answeredAt = linkKeysOf(document);
+      if (site.home === true) answeredAt.push('/');
+      const into = linksInto(site.redirects ?? NO_REDIRECTS, answeredAt, (sitePath) =>
+        [sitePath, `${sitePath}/`].some(
+          (url) =>
+            statements.servedAt.get(url, now) !== undefined ||
+            statements.byFormerPermalink.get(url, now) !== undefined,
+        ),
+      );
       return select(
         [
           LISTED_CLAUSE,
           'path <> ?',
-          'path IN (SELECT path FROM document_links WHERE target IN (SELECT value FROM json_each(?)))',
+          `path IN (
+            SELECT path FROM document_links
+            WHERE target IN (SELECT value FROM json_each(?))
+              AND (query = '' OR target || '?' || query NOT IN (SELECT value FROM json_each(?)))
+            UNION
+            SELECT path FROM document_links
+            WHERE target IN (SELECT value FROM json_each(?))
+              AND target || '?' || query IN (SELECT value FROM json_each(?))
+          )`,
         ],
-        [nowKey(), document.path, JSON.stringify(linkKeysOf(document))],
+        [
+          now,
+          document.path,
+          JSON.stringify(into.paths),
+          JSON.stringify(into.intercepted),
+          JSON.stringify(into.queries.map((link) => link.path)),
+          JSON.stringify(into.queries.map(spelling)),
+        ],
         {},
       );
     },
@@ -1636,6 +1677,23 @@ const MIGRATIONS: readonly Migration[] = [
         path   TEXT NOT NULL REFERENCES documents (path) ON DELETE CASCADE,
         target TEXT NOT NULL,
         PRIMARY KEY (path, target)
+      );
+      CREATE INDEX document_links_target ON document_links (target);
+      UPDATE documents SET keys_base = NULL;
+    `,
+  },
+  {
+    version: 12,
+    sql: `
+      -- A link keeps its query (TASK-330), sorted as a redirect source's is,
+      -- because the site answers \`/?p=7\` with a redirect rather than with
+      -- \`/\`. Filled again from the stored HTML the way migration 11 was.
+      DROP TABLE document_links;
+      CREATE TABLE document_links (
+        path   TEXT NOT NULL REFERENCES documents (path) ON DELETE CASCADE,
+        target TEXT NOT NULL,
+        query  TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (path, target, query)
       );
       CREATE INDEX document_links_target ON document_links (target);
       UPDATE documents SET keys_base = NULL;

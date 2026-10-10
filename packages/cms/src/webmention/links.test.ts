@@ -51,9 +51,22 @@ describe('ownSiteLinks', () => {
       '<a href="mailto:me@blog.example">mail</a>';
 
     assert.deepEqual(ownSiteLinks(html, PAGE, BASE), [
-      '/2026/09/other',
-      '/2026/09/another',
-      '/café',
+      { path: '/2026/09/other', query: '' },
+      { path: '/2026/09/other', query: 'ref=feed' },
+      { path: '/2026/09/another', query: '' },
+      { path: '/café', query: '' },
+    ]);
+  });
+
+  it('keeps the query, sorted as a redirect source is, so /?p=7 is not a link to /', () => {
+    const html =
+      '<a href="/?p=7">by id</a>' +
+      '<a href="https://blog.example/?page_id=3&amp;a=1">a page by id</a>' +
+      '<a href="/?p=7#respond">the same id</a>';
+
+    assert.deepEqual(ownSiteLinks(html, PAGE, BASE), [
+      { path: '/', query: 'p=7' },
+      { path: '/', query: 'a=1&page_id=3' },
     ]);
   });
 
@@ -65,8 +78,8 @@ describe('ownSiteLinks', () => {
       '<a href="https://example.org/elsewhere/">outside the site</a>';
 
     assert.deepEqual(ownSiteLinks(html, 'https://example.org/blog/2026/09/hello/', base), [
-      '/2026/09/other',
-      '/about',
+      { path: '/2026/09/other', query: '' },
+      { path: '/about', query: '' },
     ]);
   });
 

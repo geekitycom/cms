@@ -8,6 +8,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import { isListed, isServed } from '../web/documents.ts';
+import { parseRedirects } from '../web/redirects.ts';
+import type { RedirectTable } from '../web/redirects.ts';
 import type { Document } from './document.ts';
 import { DuplicatePermalinkError, openContentStore } from './store.ts';
 import type { ContentStore } from './store.ts';
@@ -170,14 +172,14 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
@@ -206,7 +208,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
       // The hash of a file with no categories has not changed, so a sync would
       // leave a surviving row alone and never learn its categories. The row
       // has to go; the file it was derived from is still on disk.
@@ -235,7 +237,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
       assert.equal(upgraded.counts().total, 0, 'the stale HTML survived the upgrade');
     } finally {
       upgraded.close();
@@ -254,7 +256,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
       assert.equal(upgraded.counts().total, 0, 'a row without tag keys survived the upgrade');
       upgraded.upsert(post({ tags: ['OpenSource'] }));
       assert.equal(upgraded.countByTag('opensource'), 1);
@@ -293,7 +295,7 @@ describe('a reply target', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
       assert.equal(upgraded.counts().total, 0, 'a row with in-reply-to in extra survived');
     } finally {
       upgraded.close();
@@ -342,7 +344,7 @@ describe('former permalinks (TASK-127)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
       assert.equal(upgraded.counts().total, 0, 'a row with redirect_from in extra survived');
     } finally {
       upgraded.close();
@@ -1330,7 +1332,7 @@ describe('the permalink of a trashed document (TASK-195)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
       upgraded.upsert(again);
       assert.equal(upgraded.getByPermalink('/2026/09/hello-world/')?.title, 'Again');
       assert.throws(() => {
@@ -1560,7 +1562,7 @@ describe('the search index migration (TASK-22 AC #2)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
       assert.equal(upgraded.counts().total, 0, 'a row survived with no words indexed for it');
 
       upgraded.upsert(post());
@@ -1919,5 +1921,159 @@ describe('backlinks (TASK-322)', () => {
     index.clear();
     index.upsert(target());
     assert.deepEqual(backlinks(index), []);
+  });
+});
+
+describe('backlinks through the homepage and the site’s redirects (TASK-330)', () => {
+  const BASE = 'https://blog.example';
+
+  async function linked(): Promise<ContentStore> {
+    const index = openContentStore({ dataDir: await dataDir(), baseUrl: BASE });
+    openStores.push(index);
+    return index;
+  }
+
+  function redirects(...files: Record<string, string>[]): RedirectTable {
+    const { table, problems } = parseRedirects(
+      files.map((entries, index) => ({
+        path: `${String(index)}.json`,
+        text: JSON.stringify(entries),
+      })),
+    );
+    assert.deepEqual(problems, []);
+    return table;
+  }
+
+  const target = post({ path: 'posts/target.md', slug: 'target', permalink: '/2026/09/target/' });
+  const home = post({
+    type: 'page',
+    path: 'pages/welcome.md',
+    slug: 'welcome',
+    permalink: '/welcome/',
+  });
+
+  function linking(name: string, href: string): Document {
+    return post({
+      path: `posts/${name}.md`,
+      slug: name,
+      permalink: `/2026/09/${name}/`,
+      html: `<p>See <a href="${href}">this</a>.</p>`,
+    });
+  }
+
+  function backlinks(
+    index: ContentStore,
+    document: Document,
+    options: { redirects?: RedirectTable; home?: boolean } = {},
+  ): string[] {
+    return index
+      .listBacklinks(document, options)
+      .map((found) => found.path)
+      .sort();
+  }
+
+  it('counts a link to / for the page the Reading setting makes the homepage', async () => {
+    const index = await linked();
+    index.upsert(home);
+    index.upsert(target);
+    index.upsert(linking('root', '/'));
+    index.upsert(linking('absolute-root', `${BASE}`));
+    index.upsert(linking('own-permalink', '/welcome/'));
+
+    assert.deepEqual(backlinks(index, home, { home: true }), [
+      'posts/absolute-root.md',
+      'posts/own-permalink.md',
+      'posts/root.md',
+    ]);
+    assert.deepEqual(
+      backlinks(index, home),
+      ['posts/own-permalink.md'],
+      'a page that is not the homepage is not what / shows',
+    );
+    assert.deepEqual(backlinks(index, target, { home: false }), []);
+  });
+
+  it('counts an imported /?p= or /?page_id= link for the document the redirect leads to', async () => {
+    const index = await linked();
+    index.upsert(home);
+    index.upsert(target);
+    index.upsert(linking('by-id', '/?p=7'));
+    index.upsert(linking('by-page-id', `${BASE}/?page_id=3`));
+    index.upsert(linking('extra-query', '/?p=7&amp;utm_source=feed'));
+    index.upsert(linking('unknown-id', '/?p=8'));
+    const table = redirects({
+      '/?p=7': '/2026/09/target/',
+      '/?p=3': '/welcome/',
+      '/?page_id=3': '/welcome/',
+    });
+
+    assert.deepEqual(backlinks(index, target, { redirects: table }), ['posts/by-id.md']);
+    assert.deepEqual(
+      backlinks(index, home, { redirects: table, home: true }),
+      ['posts/by-page-id.md', 'posts/extra-query.md', 'posts/unknown-id.md'],
+      'a query no redirect names exactly is answered by / itself, as the site answers it',
+    );
+  });
+
+  it('follows a declared path redirect, through a chain and a former permalink', async () => {
+    const index = await linked();
+    const moved = post({
+      path: 'posts/target.md',
+      slug: 'target',
+      permalink: '/2026/09/target/',
+      redirectFrom: ['/2026/09/old-name/'],
+    });
+    index.upsert(moved);
+    index.upsert(linking('declared', '/old'));
+    index.upsert(linking('chained', '/older/?ref=1'));
+    index.upsert(linking('to-former', '/?p=7'));
+    const table = redirects(
+      { '/old/': '/2026/09/target/', '/older/': '/old/' },
+      { '/?p=7': '/2026/09/old-name/' },
+    );
+
+    assert.deepEqual(backlinks(index, moved, { redirects: table }), [
+      'posts/chained.md',
+      'posts/declared.md',
+      'posts/to-former.md',
+    ]);
+  });
+
+  it('leaves a declared path to the document the site serves there instead', async () => {
+    const index = await linked();
+    index.upsert(target);
+    index.upsert(post({ path: 'posts/taken.md', slug: 'taken', permalink: '/taken/' }));
+    index.upsert(
+      post({ path: 'posts/drafted.md', slug: 'drafted', permalink: '/drafted/', draft: true }),
+    );
+    index.upsert(linking('to-taken', '/taken/'));
+    index.upsert(linking('to-drafted', '/drafted/'));
+    const table = redirects({ '/taken/': '/2026/09/target/', '/drafted/': '/2026/09/target/' });
+
+    assert.deepEqual(backlinks(index, target, { redirects: table }), ['posts/to-drafted.md']);
+  });
+
+  it('moves or drops a backlink when its redirect changes, with the linking post untouched', async () => {
+    const index = await linked();
+    const other = post({ path: 'posts/other.md', slug: 'other', permalink: '/2026/09/other/' });
+    index.upsert(target);
+    index.upsert(other);
+    index.upsert(linking('by-id', '/?p=7'));
+    index.upsert(linking('by-path', '/old/'));
+
+    const before = redirects({ '/?p=7': '/2026/09/target/', '/old/': '/2026/09/target/' });
+    assert.deepEqual(backlinks(index, target, { redirects: before }), [
+      'posts/by-id.md',
+      'posts/by-path.md',
+    ]);
+
+    const retargeted = redirects({ '/?p=7': '/2026/09/other/', '/old/': '/2026/09/other/' });
+    assert.deepEqual(backlinks(index, target, { redirects: retargeted }), []);
+    assert.deepEqual(backlinks(index, other, { redirects: retargeted }), [
+      'posts/by-id.md',
+      'posts/by-path.md',
+    ]);
+
+    assert.deepEqual(backlinks(index, other, { redirects: redirects({}) }), []);
   });
 });

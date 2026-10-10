@@ -48,7 +48,8 @@ export interface RedirectTable {
   readonly queries: ReadonlyMap<string, Redirect>;
 }
 
-const EMPTY: RedirectTable = { paths: new Map(), queries: new Map() };
+/** A site that declares no redirects. */
+export const NO_REDIRECTS: RedirectTable = { paths: new Map(), queries: new Map() };
 
 /** Anything resolved against this is a site path; nothing is ever sent to it. */
 const SITE = 'http://site.invalid';
@@ -216,6 +217,18 @@ export function findQueryRedirect(
   return query === '' ? undefined : table.queries.get(`${pathname}?${query}`);
 }
 
+/**
+ * The redirect whose source names this path with no query, asked after every
+ * live lookup has missed. A path asked for without its trailing slash finds a
+ * source declared with one, so it reaches the target in one hop.
+ */
+export function findPathRedirect(table: RedirectTable, pathname: string): Redirect | undefined {
+  return (
+    table.paths.get(pathname) ??
+    (pathname.endsWith('/') ? undefined : table.paths.get(`${pathname}/`))
+  );
+}
+
 /** Where a redirect sends a request that came with `search`. */
 export function redirectLocation(redirect: Redirect, search: string): string {
   if (!redirect.passQuery || search === '' || search === '?') return redirect.location;
@@ -225,13 +238,15 @@ export function redirectLocation(redirect: Redirect, search: string): string {
     : `${redirect.location.slice(0, hash)}${search}${redirect.location.slice(hash)}`;
 }
 
-function sortedQuery(search: string): string {
+/** A query as a redirect source is keyed by: its parameters, sorted. */
+export function sortedQuery(search: string): string {
   const params = new URLSearchParams(search);
   params.sort();
   return params.toString();
 }
 
-function decodedPath(pathname: string): string {
+/** A path decoded as a request's is, or as it came when it does not decode. */
+export function decodedPath(pathname: string): string {
   try {
     return decodeURIComponent(pathname);
   } catch {
@@ -260,7 +275,7 @@ export function createRedirectSource(options: {
   const file = path.join(options.contentDir, ...REDIRECTS_FILE.split('/'));
   const dir = path.join(options.contentDir, ...REDIRECTS_DIR.split('/'));
   let cachedKey = JSON.stringify([]);
-  let cached: RedirectTable = EMPTY;
+  let cached: RedirectTable = NO_REDIRECTS;
 
   return {
     current() {

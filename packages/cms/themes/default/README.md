@@ -731,15 +731,24 @@ The CMS records it instead, and the linked document's context carries
 each as `{ title, url, date }`. `title` is the linking document's title, or a
 note's first words. `date` is absent for a page that has none. A link counts
 whether it is absolute or relative, with or without its trailing slash, a query
-or a fragment, and through a `redirect_from` of the target. A document that
-links to itself is not its own backlink. Drafts, future-dated, unlisted,
+or a fragment, and through a `redirect_from` of the target. A link to `/`
+counts for the page the Reading setting makes the homepage. A link to a URL the
+site answers with a redirect counts for the document the redirect leads to,
+whether the redirect is a `redirect_from` or an entry in `_data/redirects.json`
+or `_data/redirects/*.json`, `/?p=123` included. A link with a query names the
+query's redirect only when the query matches the redirect's source exactly, as
+a request does, so `/?p=123&ref=feed` is a link to `/`. A document that links
+to itself is not its own backlink. Drafts, future-dated, unlisted,
 private and trashed documents never appear. `backlinks` is always a list, and
 it is empty when nothing links to the document.
 
 `partials/backlinks.njk` prints a `section.backlinks` under the entry, apart
 from the conversation: an `h2` that says "Linked from", then an `ol` of links,
 each with its date in a `<time>`. It prints nothing for an empty list, so
-`layouts/post.njk` and `layouts/page.njk` include it with no condition:
+`layouts/post.njk` and `layouts/page.njk` include it with no condition. The
+front page has `backlinks` on its context too, but `layouts/front-page.njk`
+does not print them, because most of a site links home. A site theme that wants
+them there adds the same include to its own `layouts/front-page.njk`:
 
 ```njk
 {% include "partials/backlinks.njk" %}

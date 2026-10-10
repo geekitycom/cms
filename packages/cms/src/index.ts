@@ -94,6 +94,7 @@ import {
   createRenderer,
   createSiteDataSource,
   createThemeSource,
+  frontPageSlugs,
   maintenanceGate,
   mountHealth,
   mountPublicSite,
@@ -1899,8 +1900,20 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     neighbours: (document) => store.neighbours(document),
     // And the site's own posts and pages that link to it (TASK-322), asked per
     // render for the same reason: a post published a minute ago that cites
-    // this one is already one of its backlinks.
-    backlinks: (document) => store.listBacklinks(document),
+    // this one is already one of its backlinks, and so does one whose link
+    // reaches it through a redirect declared a minute ago (TASK-330). A link
+    // to `/` lands on the page the Reading setting puts there, which is the
+    // page its slug names, as the routes resolve it.
+    backlinks: (document) => {
+      const { homepage } = frontPageSlugs(siteData.read());
+      return store.listBacklinks(document, {
+        redirects: redirects.current(),
+        home:
+          document.type === 'page' &&
+          homepage !== '' &&
+          store.getBySlug(homepage)?.path === document.path,
+      });
+    },
     newestPosts: (count) => store.listPosts({ limit: count }),
     // And every published post, for a page that says `archive: true`. The one
     // listing with no paging, so it is asked for only by the page that prints
