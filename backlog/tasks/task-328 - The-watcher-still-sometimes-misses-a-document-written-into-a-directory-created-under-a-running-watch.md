@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-10 15:40'
-updated_date: '2026-10-10 16:31'
+updated_date: '2026-10-10 16:36'
 labels:
   - content
   - bug
@@ -57,6 +57,15 @@ Fix (packages/cms/src/content/sync.ts): chokidar is gone. The content tree is wa
 Tests: 'indexes documents written into new directories while the boot scan runs' writes three documents in new nested directories from a created listener during the boot scan. Against the TASK-313 sync.ts it failed 3 of 3 runs ('Timed out waiting for every document written during the boot scan to be indexed'), because chokidar started after the scan with ignoreInitial. With the fix it passes. 'indexes documents in several directories made at once under a running watch, and drops them when a directory goes' writes 12 documents across 3 depths and 2 trees at once, then rm -rf one tree. That test is load-dependent, so it passed against the TASK-313 code when the machine was idle.
 Verification: stress.sh 3x8 with 8 burners, 8 loops after the fix: 192 of 192 runs passed. Before the fix the uninstrumented baseline was 1 of 24, and instrumented runs failed 8 of 384. Linux (node:24 in Docker, /private/tmp/claude-501/-Users-andrewshell-code-geekity-cms/de00b8dd-0b8e-5cc8-a971-3c7d83854e94/scratchpad/linux.sh): sync.test.ts and migrated-site.test.ts passed 4 of 4 rounds, and the full workspace pnpm test passed (cms 5289/0). A real geekity serve on an empty content dir: mkdir -p of posts/2026/10/deep, pages/new and imported/posts with one document each served 200 within 1 s. After rm -rf imported, /imported-one/ returned 404, and no probe directory was left. The full gate passed: pnpm build, typecheck, lint and format:check. AC#3: /private/tmp/claude-501/-Users-andrewshell-code-geekity-cms/de00b8dd-0b8e-5cc8-a971-3c7d83854e94/scratchpad/full-runs.sh ran 10 consecutive full-workspace pnpm test runs from the repo root, and all 10 exited 0 in about 108 s each, every package fail 0 (cms pass 5289), with no watcher deadline message. Logs are in /private/tmp/claude-501/-Users-andrewshell-code-geekity-cms/de00b8dd-0b8e-5cc8-a971-3c7d83854e94/scratchpad/full-runs/1791648598.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-10 16:36
+---
+Orchestrator review: the startup probe made a content directory that cannot be written fail start(). The probe now warns and steps aside when mkdir fails ("starts over a content directory it cannot write to" in sync.test.ts, failing first). Also stressed the new watcher on Linux (node:24 container, 4 copies each of sync.test.ts and migrated-site.test.ts at once beside 4 CPU burners, 8 rounds): 64/64 runs passed.
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 
