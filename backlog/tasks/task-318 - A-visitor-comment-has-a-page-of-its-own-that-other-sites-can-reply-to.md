@@ -4,7 +4,7 @@ title: A visitor comment has a page of its own that other sites can reply to
 status: To Do
 assignee: []
 created_date: '2026-10-10 12:30'
-updated_date: '2026-10-10 12:52'
+updated_date: '2026-10-10 12:56'
 labels:
   - comments
   - indieweb
@@ -38,4 +38,7 @@ Only native visitor comments need this. A webmention reply's URL is its sender's
 - [ ] #5 The comment page is noindex and is absent from the sitemap, feeds and search
 - [ ] #6 doc-6 Native Comments and the CMS README describe the comment page
 - [ ] #7 In the post's comments feed and /comments/feed/, a native comment's item links to its own page rather than the #comment-<id> fragment
+- [ ] #8 Above the comment, its page shows the thread it belongs to, from the post down: the post's title (or wordless label), author, date and an excerpt linking to it, then each comment between the post and this one in order, with author, date and content, each linking to its own URL (its page, or a webmention or fediverse reply's own URL). The chain is marked up as nested h-cite in-reply-to, so a parser reads the same thread a person does
+- [ ] #9 An ancestor that is pending, spam or trashed is shown as a placeholder saying a comment is no longer shown, with no author or content, and the chain continues past it
+- [ ] #10 In /comments/feed/, an item that answers another comment names it, for example "{author} replying to {parent author} on {post}"; a top-level comment keeps "{author} on {post}"
 <!-- AC:END -->
