@@ -986,10 +986,16 @@ export interface AdminStore {
 /**
  * What {@link AdminStore.onConversationWrite} hears: a comment on the post of
  * that slug, or an activity naming these objects as what it is about or what
- * it answers.
+ * it answers. `approved` says this write is the one that approved the comment,
+ * so it is on the page now and was not before (TASK-333).
  */
 export type ConversationWrite =
-  | { readonly kind: 'comment'; readonly slug: string }
+  | {
+      readonly kind: 'comment';
+      readonly slug: string;
+      readonly id: string;
+      readonly approved: boolean;
+    }
   | { readonly kind: 'activity'; readonly about: readonly string[] };
 
 /**
@@ -1712,6 +1718,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     },
 
     putComment(comment) {
+      const before = statements.commentById.get(comment.id) as Record<string, unknown> | undefined;
       statements.putComment.run(
         comment.id,
         comment.slug,
@@ -1735,7 +1742,12 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         comment.via ?? null,
         ...commentKey(comment, options.baseUrl),
       );
-      written({ kind: 'comment', slug: comment.slug });
+      written({
+        kind: 'comment',
+        slug: comment.slug,
+        id: comment.id,
+        approved: comment.status === 'approved' && before?.['status'] !== 'approved',
+      });
       return comment;
     },
 
@@ -1743,7 +1755,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       const row = statements.commentById.get(id) as Record<string, unknown> | undefined;
       const slug = row === undefined ? undefined : String(row['slug']);
       const deleted = statements.deleteComment.run(id).changes > 0;
-      if (slug !== undefined) written({ kind: 'comment', slug });
+      if (slug !== undefined) written({ kind: 'comment', slug, id, approved: false });
       return deleted;
     },
 

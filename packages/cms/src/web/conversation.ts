@@ -833,13 +833,16 @@ function namesIn(
 function namesOf(reply: Interaction, permalink: string, baseUrl: string): string[] {
   const names = [reply.id];
   if (reply.url !== null) names.push(absoluteUrl(reply.url, baseUrl));
-  if (reply.source === 'comment') {
-    names.push(
-      absoluteUrl(commentPageHref(reply.id), baseUrl),
-      `${permalink}#${commentAnchor(reply.id)}`,
-    );
-  }
+  if (reply.source === 'comment') names.push(...commentNames(reply.id, permalink, baseUrl));
   return names;
+}
+
+/**
+ * The URLs a reply post can answer a native comment by: its own page, and its
+ * anchor on the post at this absolute permalink.
+ */
+export function commentNames(id: string, permalink: string, baseUrl: string): string[] {
+  return [absoluteUrl(commentPageHref(id), baseUrl), `${permalink}#${commentAnchor(id)}`];
 }
 
 /** A reply post as the thread's own shape, answering `inReplyTo`. */

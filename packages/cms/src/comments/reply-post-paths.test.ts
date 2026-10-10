@@ -7,13 +7,20 @@ import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, resolveNothing, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
-import { COMMENT_ADMIN_FIELDS, COMMENTS_PATH, COMMENTS_REPLY_PATH } from '../admin/comments.ts';
+import {
+  COMMENT_ADMIN_FIELDS,
+  COMMENTS_MODERATE_PATH,
+  COMMENTS_PATH,
+  COMMENTS_REPLY_PATH,
+} from '../admin/comments.ts';
 import type { Document } from '../content/document.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
+import { moderationLink, NOTIFICATION_FIELDS } from '../notifications/links.ts';
 import { COMMENT_POST_PATH } from './form.ts';
+import type { ModerationAction } from './moderate.ts';
 import { COMMENT_FIELDS } from './submission.ts';
 
 /**
@@ -439,5 +446,126 @@ describe('a reply post’s author link in a thread (AC #5)', () => {
     assert.ok(post !== undefined, 'the reply post is in the thread');
     assert.match(post, /href="\/author\/ada\/"/);
     assert.doesNotMatch(post, /nofollow|ugc/);
+  });
+});
+
+const PENDING = COMMENTS.replace('"status":"approved"', '"status":"pending"');
+
+/** A reply post on file answering Ann by this URL. */
+function answerOnFile(inReplyTo: string): Record<string, string> {
+  return {
+    'posts/2026-09-20-answer.md': frontMatter(
+      [
+        "title: ''",
+        "date: '2026-09-20T09:00:00Z'",
+        'permalink: /2026/09/answer/',
+        'author: ada',
+        `in-reply-to: ${inReplyTo}`,
+      ],
+      'Answered while Ann waited.',
+    ),
+  };
+}
+
+/** A moderator acts on Ann's comment from the queue. */
+async function moderate(cms: Cms, action: ModerationAction): Promise<void> {
+  const agent = await signedIn(cms);
+  const token = csrfField(await (await agent.get(COMMENTS_PATH)).text());
+  const response = await agent.post(COMMENTS_MODERATE_PATH, {
+    csrf_token: token ?? '',
+    [COMMENT_ADMIN_FIELDS.id]: ANN,
+    [COMMENT_ADMIN_FIELDS.action]: action,
+    [COMMENT_ADMIN_FIELDS.status]: 'pending',
+  });
+  assert.equal(response.status, 303);
+}
+
+describe('a reply post answering a pending comment (TASK-333)', () => {
+  it('tells its writer nothing while it waits, and once when it is approved', async () => {
+    const { cms, provider } = await site({ '_data/comments/hello-world.json': PENDING });
+    await fromModeration(cms, { [COMMENT_ADMIN_FIELDS.status]: 'pending' });
+    await settled(cms);
+    assert.equal(replyPosts(cms).length, 1, 'the reply post was written');
+    assert.equal(toldAnn(provider), 0, 'nothing while the comment waits');
+
+    await moderate(cms, 'approve');
+    await settled(cms);
+    assert.equal(toldAnn(provider), 1);
+    assert.match(provider.sent.at(-1)?.text ?? '', /Answering from the queue\./);
+  });
+
+  it('is told by the approve link in a message, for one naming the comment’s anchor', async () => {
+    const { cms, provider } = await site({
+      '_data/comments/hello-world.json': PENDING,
+      ...answerOnFile(`${BASE_URL}${POST_URL}#comment-${ANN}`),
+    });
+    await settled(cms);
+    assert.equal(toldAnn(provider), 0, 'nothing at boot');
+
+    const link = moderationLink(
+      { dataDir: cms.config.dataDir, baseUrl: BASE_URL, now: NOW },
+      ANN,
+      'approve',
+    );
+    const url = new URL(link);
+    const response = await cms.app.request(url.pathname, {
+      method: 'POST',
+      body: new URLSearchParams({
+        [NOTIFICATION_FIELDS.token]: url.searchParams.get('token') ?? '',
+        [NOTIFICATION_FIELDS.action]: 'approve',
+      }),
+    });
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.equal(cms.admin.getComment(ANN)?.status, 'approved');
+    await settled(cms);
+    assert.equal(toldAnn(provider), 1);
+    assert.match(provider.sent.at(-1)?.text ?? '', /Answered while Ann waited\./);
+  });
+
+  it('goes once across a second approval, an edit of the reply post and a restart', async () => {
+    const { cms, provider } = await site({
+      '_data/comments/hello-world.json': PENDING,
+      ...answerOnFile(ANN_PAGE),
+    });
+    await moderate(cms, 'approve');
+    await settled(cms);
+    assert.equal(toldAnn(provider), 1);
+
+    await moderate(cms, 'spam');
+    await moderate(cms, 'approve');
+    const edited = await micropub(cms, await micropubToken(cms), {
+      action: 'update',
+      url: `${BASE_URL}/2026/09/answer/`,
+      replace: { content: ['Answered while Ann waited, edited.'] },
+    });
+    assert.ok(edited.status < 300, await edited.clone().text());
+    await settled(cms);
+    assert.equal(toldAnn(provider), 1, 'a second approval and an edit tell nobody');
+
+    const again = await boot(cms.config.contentDir, cms.config.dataDir);
+    await moderate(again.cms, 'spam');
+    await moderate(again.cms, 'approve');
+    await settled(again.cms);
+    assert.equal(toldAnn(again.provider), 0, 'nor does an approval after a restart');
+  });
+
+  it('is not sent again on approval for a reply post already told about', async () => {
+    const { cms, provider } = await site();
+    await fromThread(cms);
+    await settled(cms);
+    assert.equal(toldAnn(provider), 1);
+
+    await moderate(cms, 'spam');
+    await moderate(cms, 'approve');
+    await settled(cms);
+    assert.equal(toldAnn(provider), 1);
+  });
+
+  it('sends nothing for a comment approved with no reply post under it', async () => {
+    const { cms, provider } = await site({ '_data/comments/hello-world.json': PENDING });
+    await moderate(cms, 'approve');
+    await settled(cms);
+    assert.equal(cms.admin.getComment(ANN)?.status, 'approved');
+    assert.deepEqual(provider.sent, []);
   });
 });

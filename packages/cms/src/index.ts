@@ -2011,6 +2011,9 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
   content.events.on('change', (change) => {
     replyNotices.handle(change);
   });
+  admin.onConversationWrite((written) => {
+    replyNotices.heard(written);
+  });
 
   // And the other half of it (TASK-60): a user who asked for an hourly or a
   // daily digest hears nothing above and one message per window from here,
