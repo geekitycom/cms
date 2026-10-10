@@ -1313,6 +1313,14 @@ it was showing. One outcome is recorded per link (`sent`, `none` for a page that
 takes none, or `failed`), shown per post on `/admin/federation`, and the Resend
 button there sends them again from the file as it now reads.
 
+**Links to the site's own pages** send no webmention. A post that cites another
+post on the same site does not go through moderation, does not add to a comment
+count and does not make an HTTP request to the site itself. The index records
+the link instead. The linked post or page then lists the linking one among its
+backlinks, which the default theme prints as "Linked from" under it, apart from
+the comments. A draft, future-dated, unlisted, private or trashed post is never
+a backlink. See `themes/default/README.md` for the `backlinks` context.
+
 **Receiving** advertises `/_geekity/webmention` two ways — a `Link` header on
 every representation of a document, and a `<link rel="webmention">` in the head
 — and takes a form `POST` of `source` and `target`. It answers `202` for

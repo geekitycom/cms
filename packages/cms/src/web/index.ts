@@ -45,6 +45,7 @@ export {
   themeName,
 } from './context.ts';
 export type {
+  BacklinkContext,
   DocumentContext,
   FrontPageSlugs,
   NeighbourContext,

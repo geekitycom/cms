@@ -61,7 +61,7 @@ import { readCitedStart } from '../webmention/cited-start.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
-import { locationContext, syndicationLinks } from './context.ts';
+import { backlinkContext, locationContext, syndicationLinks } from './context.ts';
 import { pingbackEndpointFor } from '../webmention/pingback.ts';
 import { webmentionEndpointFor } from '../webmention/routes.ts';
 
@@ -362,6 +362,13 @@ export interface CreateRendererOptions {
    * over one template wants.
    */
   neighbours?: ((document: Document) => DocumentNeighbours) | undefined;
+  /**
+   * The listed posts and pages of the site whose body links to a document,
+   * newest first, for `backlinks` on its page (TASK-322). Injected and asked
+   * per render for the reason the neighbours are; a renderer built without it
+   * lists none.
+   */
+  backlinks?: ((document: Document) => readonly Document[]) | undefined;
   /**
    * The newest `count` published posts, for `newestPosts` on the front page
    * (TASK-317). The theme chooses the count; the index decides what is
@@ -730,6 +737,12 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(writer === undefined ? {} : { siteAuthor: writer }),
       ...neighbourContext('previous', either.previous, options.replyContext),
       ...neighbourContext('next', either.next, options.replyContext),
+      // The site's own pages that link here (TASK-322): what a link between
+      // two of its posts is instead of a webmention. Always a list, so a
+      // theme asks `{% if backlinks.length %}`.
+      backlinks: (options.backlinks?.(document) ?? []).map((linking) =>
+        backlinkContext(linking, options.replyContext),
+      ),
       url,
       page: { ...context.page, url },
       ...(objectId === undefined ? {} : { activityStreams: objectId }),

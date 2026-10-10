@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { externalLinks } from './links.ts';
+import { externalLinks, ownSiteLinks, siteLinkKey } from './links.ts';
 
 const BASE = 'https://blog.example';
 
@@ -34,5 +34,45 @@ describe('externalLinks', () => {
   it('drops the fragment, which is not part of what a target is', () => {
     const html = '<a href="https://elsewhere.example/post#section">there</a>';
     assert.deepEqual(externalLinks(html, BASE), ['https://elsewhere.example/post']);
+  });
+});
+
+describe('ownSiteLinks', () => {
+  const PAGE = 'https://blog.example/2026/09/hello/';
+
+  it('names each page of the site a body links to as its path, however the link is spelled', () => {
+    const html =
+      '<a href="https://blog.example/2026/09/other/">absolute</a>' +
+      '<a href="/2026/09/other">no slash</a>' +
+      '<a href="/2026/09/other/?ref=feed#comments">query and fragment</a>' +
+      '<a href="../another/">relative to the page</a>' +
+      '<a href="/caf%C3%A9/">encoded</a>' +
+      '<a href="https://elsewhere.example/2026/09/other/">theirs</a>' +
+      '<a href="mailto:me@blog.example">mail</a>';
+
+    assert.deepEqual(ownSiteLinks(html, PAGE, BASE), [
+      '/2026/09/other',
+      '/2026/09/another',
+      '/café',
+    ]);
+  });
+
+  it('reads a root-relative link under the directory a site is served from', () => {
+    const base = 'https://example.org/blog/';
+    const html =
+      '<a href="/2026/09/other/">root-relative</a>' +
+      '<a href="https://example.org/blog/about/">absolute</a>' +
+      '<a href="https://example.org/elsewhere/">outside the site</a>';
+
+    assert.deepEqual(ownSiteLinks(html, 'https://example.org/blog/2026/09/hello/', base), [
+      '/2026/09/other',
+      '/about',
+    ]);
+  });
+
+  it('spells a permalink the way it spells a link to it', () => {
+    assert.equal(siteLinkKey('/2026/09/other/'), '/2026/09/other');
+    assert.equal(siteLinkKey('/2026/09/other'), '/2026/09/other');
+    assert.equal(siteLinkKey('/'), '/');
   });
 });

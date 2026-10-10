@@ -170,14 +170,14 @@ describe('migrations', () => {
     const second = openContentStore({ dataDir: dir });
     try {
       assert.deepEqual(second.getByPermalink('/2026/09/hello-world/'), post());
-      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      assert.deepEqual(appliedMigrations(second.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     } finally {
       second.close();
     }
 
     const third = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      assert.deepEqual(appliedMigrations(third.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       assert.equal(third.counts().total, 1);
     } finally {
       third.close();
@@ -206,7 +206,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       // The hash of a file with no categories has not changed, so a sync would
       // leave a surviving row alone and never learn its categories. The row
       // has to go; the file it was derived from is still on disk.
@@ -235,7 +235,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       assert.equal(upgraded.counts().total, 0, 'the stale HTML survived the upgrade');
     } finally {
       upgraded.close();
@@ -254,7 +254,7 @@ describe('migrations', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       assert.equal(upgraded.counts().total, 0, 'a row without tag keys survived the upgrade');
       upgraded.upsert(post({ tags: ['OpenSource'] }));
       assert.equal(upgraded.countByTag('opensource'), 1);
@@ -293,7 +293,7 @@ describe('a reply target', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       assert.equal(upgraded.counts().total, 0, 'a row with in-reply-to in extra survived');
     } finally {
       upgraded.close();
@@ -342,7 +342,7 @@ describe('former permalinks (TASK-127)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       assert.equal(upgraded.counts().total, 0, 'a row with redirect_from in extra survived');
     } finally {
       upgraded.close();
@@ -1330,7 +1330,7 @@ describe('the permalink of a trashed document (TASK-195)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       upgraded.upsert(again);
       assert.equal(upgraded.getByPermalink('/2026/09/hello-world/')?.title, 'Again');
       assert.throws(() => {
@@ -1560,7 +1560,7 @@ describe('the search index migration (TASK-22 AC #2)', () => {
 
     const upgraded = openContentStore({ dataDir: dir });
     try {
-      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      assert.deepEqual(appliedMigrations(upgraded.file), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       assert.equal(upgraded.counts().total, 0, 'a row survived with no words indexed for it');
 
       upgraded.upsert(post());
@@ -1775,5 +1775,149 @@ describe('the /replies/ keys (TASK-327)', () => {
     const keyed = openContentStore({ dataDir: dir, baseUrl: BASE });
     openStores.push(keyed);
     assert.equal(paths(keyed, `${BASE}/2026/09/hello-world/`).length, 1);
+  });
+});
+
+describe('backlinks (TASK-322)', () => {
+  const BASE = 'https://blog.example';
+
+  async function linked(): Promise<ContentStore> {
+    const index = openContentStore({ dataDir: await dataDir(), baseUrl: BASE });
+    openStores.push(index);
+    return index;
+  }
+
+  function target(overrides: Partial<Document> = {}): Document {
+    return post({
+      path: 'posts/target.md',
+      slug: 'target',
+      permalink: '/2026/09/target/',
+      ...overrides,
+    });
+  }
+
+  function linking(name: string, href: string, overrides: Partial<Document> = {}): Document {
+    return post({
+      path: `posts/${name}.md`,
+      slug: name,
+      permalink: `/2026/09/${name}/`,
+      html: `<p>See <a href="${href}">this</a>.</p>`,
+      ...overrides,
+    });
+  }
+
+  function backlinks(index: ContentStore, document: Document = target()): string[] {
+    return index.listBacklinks(document).map((found) => found.path);
+  }
+
+  it('lists the posts and pages linking to a document, newest first, however the link is spelled', async () => {
+    const index = await linked();
+    index.upsert(target());
+    index.upsert(linking('absolute', `${BASE}/2026/09/target/`, { date: '2026-09-03T09:00:00Z' }));
+    index.upsert(linking('relative', '/2026/09/target', { date: '2026-09-05T09:00:00Z' }));
+    index.upsert(linking('fragment', '../target/#comments', { date: '2026-09-04T09:00:00Z' }));
+    index.upsert(linking('query', '/2026/09/target/?ref=1', { date: '2026-09-06T09:00:00Z' }));
+    index.upsert(
+      linking('a-page', '/2026/09/target/', {
+        type: 'page',
+        path: 'pages/a-page.md',
+        permalink: '/a-page/',
+        date: '2026-09-01T09:00:00Z',
+      }),
+    );
+    index.upsert(linking('elsewhere', 'https://elsewhere.example/2026/09/target/'));
+    index.upsert(linking('another', '/2026/09/another/'));
+
+    assert.deepEqual(backlinks(index), [
+      'posts/query.md',
+      'posts/relative.md',
+      'posts/fragment.md',
+      'posts/absolute.md',
+      'pages/a-page.md',
+    ]);
+  });
+
+  it('counts a link to a former permalink, and not a post linking to itself', async () => {
+    const index = await linked();
+    const moved = target({
+      redirectFrom: ['/2026/09/old-name/'],
+      html: '<p><a href="/2026/09/target/">me</a> <a href="/2026/09/old-name/">me too</a></p>',
+    });
+    index.upsert(moved);
+    index.upsert(linking('to-the-old-name', '/2026/09/old-name'));
+
+    assert.deepEqual(backlinks(index, moved), ['posts/to-the-old-name.md']);
+  });
+
+  it('leaves a former permalink to the live document that holds it now', async () => {
+    const index = await linked();
+    const moved = target({ redirectFrom: ['/2026/09/taken/'] });
+    index.upsert(moved);
+    index.upsert(linking('taken', '/somewhere/', { permalink: '/2026/09/taken/' }));
+    index.upsert(linking('to-taken', '/2026/09/taken/'));
+
+    assert.deepEqual(backlinks(index, moved), []);
+  });
+
+  it('counts a link written before the document it names existed', async () => {
+    const index = await linked();
+    index.upsert(linking('early', '/2026/09/target/'));
+    index.upsert(target());
+    assert.deepEqual(backlinks(index), ['posts/early.md']);
+  });
+
+  it('never lists a draft, a scheduled, an unlisted, a private or a trashed post', async () => {
+    const index = await linked();
+    index.upsert(target());
+    index.upsert(linking('draft', '/2026/09/target/', { draft: true }));
+    index.upsert(linking('scheduled', '/2026/09/target/', { date: '2999-01-01T00:00:00Z' }));
+    index.upsert(linking('unlisted', '/2026/09/target/', { extra: { visibility: 'unlisted' } }));
+    index.upsert(linking('private', '/2026/09/target/', { extra: { visibility: 'private' } }));
+    index.upsert(
+      linking('trashed', '/2026/09/target/', {
+        path: '_trash/posts/trashed.md',
+      }),
+    );
+
+    assert.deepEqual(backlinks(index), []);
+  });
+
+  it('drops a backlink when the link is edited out, the post unpublished or deleted', async () => {
+    const index = await linked();
+    index.upsert(target());
+    index.upsert(linking('one', '/2026/09/target/'));
+    index.upsert(linking('two', '/2026/09/target/'));
+    index.upsert(linking('three', '/2026/09/target/'));
+    assert.equal(backlinks(index).length, 3);
+
+    index.upsert(linking('one', '/2026/09/another/'));
+    index.upsert(linking('two', '/2026/09/target/', { draft: true }));
+    index.remove('posts/three.md');
+    assert.deepEqual(backlinks(index), []);
+
+    index.upsert(linking('two', '/2026/09/target/'));
+    assert.deepEqual(backlinks(index), ['posts/two.md'], 'publishing it again brings it back');
+  });
+
+  it('works the links out for rows written before the index, or without a base', async () => {
+    const dir = await dataDir();
+    const unlinked = openContentStore({ dataDir: dir });
+    unlinked.upsert(target());
+    unlinked.upsert(linking('early', '/2026/09/target/'));
+    assert.deepEqual(backlinks(unlinked), []);
+    unlinked.close();
+
+    const linkedAgain = openContentStore({ dataDir: dir, baseUrl: BASE });
+    openStores.push(linkedAgain);
+    assert.deepEqual(backlinks(linkedAgain), ['posts/early.md']);
+  });
+
+  it('empties with the rest of the index', async () => {
+    const index = await linked();
+    index.upsert(target());
+    index.upsert(linking('one', '/2026/09/target/'));
+    index.clear();
+    index.upsert(target());
+    assert.deepEqual(backlinks(index), []);
   });
 });

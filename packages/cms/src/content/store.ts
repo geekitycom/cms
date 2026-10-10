@@ -9,6 +9,8 @@ import { tagKey, uniqueTags } from './tags.ts';
 import { VISIBILITIES, VISIBILITY_FRONT_MATTER_KEY } from './visibility.ts';
 import { repliesKey } from '../web/feed-source.ts';
 import { feedGuid, postObjectId } from '../web/guids.ts';
+import { absoluteUrl } from '../web/negotiate.ts';
+import { ownSiteLinks, siteLinkKey } from '../webmention/links.ts';
 
 export { DATABASE_FILE } from '../cache.ts';
 
@@ -225,6 +227,18 @@ export interface ContentStore {
    * indexed lookup, so a key that names nothing costs nothing else.
    */
   listByRepliesKey(key: string): Document[];
+  /**
+   * The listed posts and pages whose body links to `document`, newest first
+   * (TASK-322): its backlinks.
+   *
+   * A link names a path rather than a document, and is matched to one here,
+   * on read: a link to the document's permalink, or to a `redirect_from` of it
+   * that still leads to it, whichever way the link was spelled. So a link
+   * written before its target existed counts once the target does, and a post
+   * that becomes public later counts from then, with nothing rewritten. A
+   * document linking to itself is not its own backlink.
+   */
+  listBacklinks(document: Document): Document[];
   /** Every indexed path, sorted. What a sync compares the content tree against. */
   listPaths(): string[];
   /** How many documents there are of each kind. */
@@ -579,6 +593,8 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     byPermalink: db.prepare(
       'SELECT * FROM documents WHERE permalink = ? ORDER BY trashed, path DESC LIMIT 1',
     ),
+    deleteLinks: db.prepare('DELETE FROM document_links WHERE path = ?'),
+    insertLink: db.prepare('INSERT INTO document_links (path, target) VALUES (?, ?)'),
     deleteRedirects: db.prepare('DELETE FROM document_redirects WHERE path = ?'),
     insertRedirect: db.prepare(
       'INSERT INTO document_redirects (path, url, position) VALUES (?, ?, ?)',
@@ -665,13 +681,17 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
   let open = true;
 
-  /** Work out again every key worked out against another base, or none. */
-  function refreshRepliesKeys(baseUrl: string): void {
+  /**
+   * Work out again everything worked out against another base, or none: the
+   * `/replies/` keys and the links to the site's own pages.
+   */
+  function refreshAgainstBase(baseUrl: string): void {
     db.exec('BEGIN');
     try {
       for (const row of statements.rowsKeyedElsewhere.all(baseUrl) as Record<string, unknown>[]) {
         const document = toDocument(row, [], []);
         statements.writeKeys.run({ path: document.path, ...repliesKeysOf(document, baseUrl) });
+        writeLinks(document, baseUrl);
       }
       db.exec('COMMIT');
     } catch (error) {
@@ -680,7 +700,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     }
   }
 
-  if (options.baseUrl !== undefined) refreshRepliesKeys(options.baseUrl);
+  if (options.baseUrl !== undefined) refreshAgainstBase(options.baseUrl);
 
   let cachedSpellings: CachedSpellings | undefined;
   const staleKeys = new Set<string>();
@@ -756,6 +776,33 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     return rows.map(hydrateOne);
   }
 
+  function writeLinks(document: Document, baseUrl: string | undefined): void {
+    statements.deleteLinks.run(document.path);
+    if (baseUrl === undefined) return;
+    const pageUrl = absoluteUrl(document.permalink, baseUrl);
+    for (const target of ownSiteLinks(document.html, pageUrl, baseUrl)) {
+      statements.insertLink.run(document.path, target);
+    }
+  }
+
+  /**
+   * The paths a link to `document` may name: its permalink, and each of its
+   * former ones that the site still answers with it rather than with a live
+   * document holding it now or another document claiming it.
+   */
+  function linkKeysOf(document: Document): string[] {
+    const former = (document.redirectFrom ?? []).filter(
+      (url) =>
+        statements.byPermalink.get(url) === undefined &&
+        text(
+          (
+            statements.byFormerPermalink.get(url, nowKey()) as Record<string, unknown> | undefined
+          )?.['path'],
+        ) === document.path,
+    );
+    return [...new Set([document.permalink, ...former].map(siteLinkKey))];
+  }
+
   function writeOne(document: Document): void {
     const contentPath = document.path;
     markTagsStaleBeforeWrite(contentPath);
@@ -777,6 +824,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     (document.redirectFrom ?? []).forEach((url, position) => {
       statements.insertRedirect.run(contentPath, url, position);
     });
+    writeLinks(document, options.baseUrl);
     // The words it is found by. Replaced rather than updated, because an FTS5
     // table has no key to conflict on: the path is only a column in it.
     const words = searchText(document);
@@ -896,6 +944,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
         db.exec('DELETE FROM document_tags');
         db.exec('DELETE FROM document_categories');
         db.exec('DELETE FROM document_redirects');
+        db.exec('DELETE FROM document_links');
         db.exec('DELETE FROM documents');
         db.exec('COMMIT');
       } catch (error) {
@@ -1048,6 +1097,18 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
     listByRepliesKey(key) {
       return hydrateAll(statements.byRepliesKey.all(key, nowKey()) as Record<string, unknown>[]);
+    },
+
+    listBacklinks(document) {
+      return select(
+        [
+          LISTED_CLAUSE,
+          'path <> ?',
+          'path IN (SELECT path FROM document_links WHERE target IN (SELECT value FROM json_each(?)))',
+        ],
+        [nowKey(), document.path, JSON.stringify(linkKeysOf(document))],
+        {},
+      );
     },
 
     listPaths() {
@@ -1560,6 +1621,24 @@ const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE documents ADD COLUMN keys_base TEXT;
       CREATE INDEX documents_replies_key ON documents (replies_key);
       CREATE INDEX documents_reply_post_key ON documents (reply_post_key);
+    `,
+  },
+  {
+    version: 11,
+    sql: `
+      -- The pages of the site each document links to (TASK-322), as the paths
+      -- the links name rather than the documents they lead to, which are
+      -- matched when a document's backlinks are read. Like the \`/replies/\`
+      -- keys they are read against the base URL, so forgetting every row's
+      -- base is what makes the next open with one fill them from the stored
+      -- HTML, with no scan of the files.
+      CREATE TABLE document_links (
+        path   TEXT NOT NULL REFERENCES documents (path) ON DELETE CASCADE,
+        target TEXT NOT NULL,
+        PRIMARY KEY (path, target)
+      );
+      CREATE INDEX document_links_target ON document_links (target);
+      UPDATE documents SET keys_base = NULL;
     `,
   },
 ];

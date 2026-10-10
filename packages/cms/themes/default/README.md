@@ -39,6 +39,7 @@ themes/default/
     comment-form.njk  the form under a post or page that is taking comments
     contact-form.njk  the form on a page whose front matter says contact: true
     archive.njk       every post by month, on a page that says archive: true
+    backlinks.njk     the site's own posts and pages that link to this one
     search-form.njk   the search box, on the search page
     head-end.njk      empty: what a site adds to the end of every <head>
     body-end.njk      empty: what a site adds to the end of every <body>
@@ -713,13 +714,41 @@ its front matter names no `image`.
 </figure>
 ```
 
-After the entry a post prints `nav.blog-post-nav`: the `previous` and `next`
-posts as two cards, `rel="prev"` and `rel="next"`, each opening on a
-`span.blog-post-nav-label`, and nothing at all at the ends of the archive; then
-the conversation and the comment form. A page prints the conversation and the
-comment form too when it takes comments, and the contact form when its front
-matter asked for one. A page has no neighbours, no tags and no
-syndication links, because none of those are things a page has.
+After the entry a post prints its backlinks, then `nav.blog-post-nav`: the
+`previous` and `next` posts as two cards, `rel="prev"` and `rel="next"`, each
+opening on a `span.blog-post-nav-label`, and nothing at all at the ends of the
+archive; then the conversation and the comment form. A page prints its
+backlinks too, then the conversation and the comment form when it takes
+comments, and the contact form when its front matter asked for one. A page has
+no neighbours, no tags and no syndication links, because none of those are
+things a page has.
+
+### Backlinks
+
+A link from one of the site's posts or pages to another sends no webmention.
+The CMS records it instead, and the linked document's context carries
+`backlinks`: the listed posts and pages whose body links to it, newest first,
+each as `{ title, url, date }`. `title` is the linking document's title, or a
+note's first words. `date` is absent for a page that has none. A link counts
+whether it is absolute or relative, with or without its trailing slash, a query
+or a fragment, and through a `redirect_from` of the target. A document that
+links to itself is not its own backlink. Drafts, future-dated, unlisted,
+private and trashed documents never appear. `backlinks` is always a list, and
+it is empty when nothing links to the document.
+
+`partials/backlinks.njk` prints a `section.backlinks` under the entry, apart
+from the conversation: an `h2` that says "Linked from", then an `ol` of links,
+each with its date in a `<time>`. It prints nothing for an empty list, so
+`layouts/post.njk` and `layouts/page.njk` include it with no condition:
+
+```njk
+{% include "partials/backlinks.njk" %}
+```
+
+A site theme moves the list by including the partial somewhere else in its own
+layout, and leaves it out by overriding a layout without the include. To change
+the markup, add a `partials/backlinks.njk` to the site theme. That file replaces
+this one, as any other template is replaced.
 
 ### The bio
 
@@ -1537,6 +1566,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
 | `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                       |
 | `next`                                      | The published post after it. Absent on the newest post, and on a page.                                            |
+| `backlinks`                                 | The site's listed posts and pages that link to it, newest first, each `{ title, url, date }`. Empty with none.    |
 | `newestPosts`                               | A function, front page only: `newestPosts(5)` is the five newest published posts, as entries.                     |
 | `postsPage`                                 | The page carrying the listing, as `{ title, url }`, on the front page only. Absent when the site names none.      |
 | `archiveMonths`                             | Every published post as `{ month, posts }`, newest month first. Only on a page that says `archive: true`.         |

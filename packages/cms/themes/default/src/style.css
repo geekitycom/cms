@@ -873,6 +873,27 @@
     @apply target;
   }
 
+  /* The site's own posts that link to this one, under a small label. */
+  .backlinks {
+    @apply mt-12 font-sans text-sm;
+  }
+
+  .backlinks-title {
+    @apply mb-2 text-[0.72rem] font-normal tracking-[0.14em] text-muted uppercase;
+  }
+
+  .backlinks ol {
+    @apply list-none space-y-1 p-0;
+  }
+
+  .backlinks a {
+    @apply target;
+  }
+
+  .backlinks time {
+    @apply ms-1 text-muted;
+  }
+
   /* Pagination: two words, the newer at the start and the older at the end. */
   .pagination {
     @apply mt-12 flex flex-wrap gap-4 font-sans text-sm;

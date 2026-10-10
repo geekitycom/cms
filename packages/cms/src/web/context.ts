@@ -357,6 +357,29 @@ export interface NeighbourContext {
 }
 
 /**
+ * One of the site's own posts or pages that links to the document, as a theme
+ * lists it under "Linked from" (TASK-322): a link, and the date beside it.
+ * A link rather than a document context, for the reason a neighbour is one.
+ */
+export interface BacklinkContext {
+  /** What the link says: the linking document's title, or a note's first words. */
+  title: string;
+  /** Its URL path. */
+  url: string;
+  /** When it was published, absent for a page that has no date. */
+  date?: Date | undefined;
+}
+
+/** A backlink as {@link BacklinkContext} has it. */
+export function backlinkContext(document: Document, cited?: CitedPageReader): BacklinkContext {
+  return {
+    title: postLabel(document, cited),
+    url: document.permalink,
+    ...optional('date', toDate(document.date)),
+  };
+}
+
+/**
  * A document as a template sees it.
  *
  * Front matter goes on first so the keys the CMS models always win: a file

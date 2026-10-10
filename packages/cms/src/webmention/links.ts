@@ -1,3 +1,4 @@
+import { absoluteUrl } from '../web/negotiate.ts';
 import { elementsIn, parseHtml } from './html.ts';
 
 /**
@@ -28,6 +29,60 @@ export function externalLinks(html: string, baseUrl: string): string[] {
   }
 
   return [...found];
+}
+
+/**
+ * Every page of this site a rendered body links to, as the path a permalink
+ * is spelled with under {@link siteLinkKey}, each named once (TASK-322).
+ *
+ * These are the links {@link externalLinks} leaves out: nothing is sent for
+ * them, and the index keeps them as the linked page's backlinks instead. A
+ * root-relative link is read under the directory the site is served from, as
+ * the feeds read it; any other relative link is read against the page it is
+ * on, which is where a browser follows it from.
+ */
+export function ownSiteLinks(html: string, pageUrl: string, baseUrl: string): string[] {
+  const found = new Set<string>();
+
+  for (const element of elementsIn(parseHtml(html))) {
+    if (element.name !== 'a') continue;
+
+    const href = element.attributes['href'];
+    const rooted = href?.startsWith('/') === true && !href.startsWith('//');
+    const target = linkTarget(rooted ? absoluteUrl(href, baseUrl) : href, pageUrl);
+    const sitePath = target === undefined ? undefined : sitePathOf(target, baseUrl);
+    if (sitePath !== undefined) found.add(siteLinkKey(sitePath));
+  }
+
+  return [...found];
+}
+
+/**
+ * A site path as a link to it is matched: without its trailing slash, since
+ * the site answers both spellings with the same page.
+ */
+export function siteLinkKey(sitePath: string): string {
+  return sitePath.length > 1 && sitePath.endsWith('/') ? sitePath.slice(0, -1) : sitePath;
+}
+
+/**
+ * The path under the site's base an absolute URL names, decoded as a
+ * permalink is, or `undefined` for a URL that is not on the site.
+ */
+function sitePathOf(target: string, baseUrl: string): string | undefined {
+  const url = new URL(target);
+  const base = new URL(baseUrl);
+  if (url.origin !== base.origin) return undefined;
+
+  const directory = base.pathname.replace(/\/$/, '');
+  if (url.pathname !== directory && !url.pathname.startsWith(`${directory}/`)) return undefined;
+
+  const pathname = url.pathname.slice(directory.length) || '/';
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
 }
 
 /**

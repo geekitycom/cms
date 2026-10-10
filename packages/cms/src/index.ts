@@ -1244,6 +1244,7 @@ export type {
   AcceptRange,
   AssetResponseOptions,
   AuthorContext,
+  BacklinkContext,
   LinkLine,
   PublishedProfileLink,
   AuthorRequest,
@@ -1885,6 +1886,10 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
     // asked per render for the reason the conversation is: a post published a
     // minute ago is already the neighbour of the one before it.
     neighbours: (document) => store.neighbours(document),
+    // And the site's own posts and pages that link to it (TASK-322), asked per
+    // render for the same reason: a post published a minute ago that cites
+    // this one is already one of its backlinks.
+    backlinks: (document) => store.listBacklinks(document),
     newestPosts: (count) => store.listPosts({ limit: count }),
     // And every published post, for a page that says `archive: true`. The one
     // listing with no paging, so it is asked for only by the page that prints

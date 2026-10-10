@@ -1,0 +1,19 @@
+{#
+  The site's own posts and pages that link to this one (TASK-322), newest
+  first: what a link between two of its posts is instead of a webmention, so
+  it is listed apart from the conversation rather than counted in it.
+
+  `backlinks` is always a list, each entry `{ title, url, date }`, with no
+  `date` for a page that has none. An empty list prints nothing, so a layout
+  includes this unconditionally.
+#}
+{% if backlinks.length %}
+<section class="backlinks" aria-labelledby="backlinks-title">
+  <h2 id="backlinks-title" class="backlinks-title">Linked from</h2>
+  <ol>
+    {% for link in backlinks %}
+    <li><a href="{{ link.url | url }}">{{ link.title }}</a>{% if link.date %} <time datetime="{{ link.date | date("iso") }}">{{ link.date | date("readable") }}</time>{% endif %}</li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
