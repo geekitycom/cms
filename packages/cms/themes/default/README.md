@@ -20,6 +20,7 @@ themes/default/
     410.njk      what was at this URL was deleted
     500.njk      the request failed on the server
     503.njk      the site is in maintenance mode
+    comment.njk  a native comment on a page of its own
   partials/
     post-list.njk     the h-feed a listing is made of
     pagination.njk    previous/next pager
@@ -34,6 +35,7 @@ themes/default/
     menu.njk          one named menu, as a nav of links
     feeds.njk         macros for the feed links in <head>
     conversation.njk  the replies, likes and boosts under a post or an open page
+    comment.njk       one reply and its answers, as the thread and a comment page print it
     comment-form.njk  the form under a post or page that is taking comments
     contact-form.njk  the form on a page whose front matter says contact: true
     archive.njk       every post by month, on a page that says archive: true
@@ -1880,14 +1882,19 @@ section — a `div.reactions-section` of the likes, the boosts and the mentions
 as facepiles grouped by kind, and then the thread as
 `div#comments.comments-area` — and a site replaces it with a
 `partials/conversation.njk` of its own in the theme it wears, exactly as it
-replaces any other template. It defines three macros, `face(item, icon, href)`,
-`group(items, label, kind, icon, source)` and `comment(reply)`, and a layout
-that wants to place the pieces itself can import them:
+replaces any other template. It defines two macros, `face(item, icon, href)`
+and `group(items, label, kind, icon, source)`, and a layout that wants to place
+the pieces itself can import them:
 
 ```njk
-{% import "partials/conversation.njk" as thread with context %}
-{{ thread.group(conversation.likes, "Likes", "p-like", "❤️") }}
+{% import "partials/conversation.njk" as reactions with context %}
+{{ reactions.group(conversation.likes, "Likes", "p-like", "❤️") }}
 ```
+
+One reply and everything under it is `comment(reply, classes)` in
+`partials/comment.njk`, which the thread and a comment's own page both import.
+`classes` is the reply's microformat: `h-entry`, the default, under a post, and
+`p-comment h-cite` on a comment's page, where the comment is the one entry.
 
 ### The shape
 
@@ -1923,7 +1930,7 @@ Each entry — a reply, a like or a boost — is:
 | `author.url`     | Their profile page, the website a commenter typed, or a webmention author's `u-url`. May be `null`, so guard the link.                                                                                                                                                                                                                                                                                                                                                                |
 | `author.avatar`  | Their avatar, or `null`. The site knows one for a fediverse actor whose profile it holds and for a webmention whose `h-card` carried a `u-photo`. Always a same-origin `/_geekity/avatars/…` path, never the remote URL: see [Avatars](#avatars).                                                                                                                                                                                                                                     |
 | `author.actorId` | Their id, which is what identifies them however they are named. `null` for a native comment.                                                                                                                                                                                                                                                                                                                                                                                          |
-| `url`            | Where it can be read: the remote note's `url` for a fediverse reply or quote, the source page for a webmention, and `{permalink}#comment-{id}` — this page's own anchor — for a native comment.                                                                                                                                                                                                                                                                                       |
+| `url`            | Where it can be read: the remote note's `url` for a fediverse reply or quote, the source page for a webmention, and `/comment/{id}/`, its own page, for a native comment (see [A comment's own page](#a-comments-own-page)).                                                                                                                                                                                                                                                          |
 | `content`        | What it says, **already sanitised**, so print it with `\| safe`. Empty for a like or a boost.                                                                                                                                                                                                                                                                                                                                                                                         |
 | `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.                                                                                                                                                                                                                                                                                                                                                                                         |
 | `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -1989,6 +1996,34 @@ An Eleventy build of the same content gets the same thing from the same files:
 and then loops over exactly the keys above. The slug is what names the post's
 comment file under `content/_data/comments/`; the format is documented in
 backlog doc-6.
+
+### A comment's own page
+
+A comment left through the form has a page of its own at `/comment/{id}/`,
+with the id percent-encoded, which is its `url` everywhere: the thread's
+permalink, the comments feeds and what another site fetches when it replies
+to the comment. The anchor `#comment-{id}` on the post stays, so an old link
+still scrolls to it. A webmention and a fediverse reply have no such page:
+their `url` is where they came from.
+
+`layouts/comment.njk` draws it, with the comment as the page's one `h-entry`.
+It answers only while the post shows its conversation, and is `noindex` and on
+no list: not the sitemap, the post feeds or search. Its context:
+
+| Key         | What it holds                                                                                                                                                                                 |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `comment`   | The comment, an entry of the shape above, its `replies` nested at every depth by the thread's own rules.                                                                                      |
+| `ancestors` | What it answers, from the top-level comment down to its parent. An ancestor a reader may not see (waiting for a moderator, spam, deleted, withdrawn) is `null`, so the chain keeps its place. |
+| `post`      | The post it is on, as a listing entry is: `label`, `url`, `date`, `summary`, `author` and the rest.                                                                                           |
+| `threadUrl` | The comment's anchor on the post, for a link back to the whole conversation.                                                                                                                  |
+
+The packaged layout prints the chain above the comment as nested
+`u-in-reply-to h-cite`s: the comment cites its parent, which cites its own,
+down to the post, which is printed first, so a parser and a reader meet the
+thread in the same order. A `null` ancestor is a cite with no author and no
+words, saying the comment is no longer shown. The replies follow inside the
+entry as `comment(reply, "p-comment h-cite")`, with no Reply links, and a
+link to `threadUrl` ends the page.
 
 ### Avatars
 

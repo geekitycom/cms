@@ -12,8 +12,11 @@
   conversation".
 
   The macros come first because Nunjucks defines one where it stands rather
-  than hoisting it, and the two sections below call them.
+  than hoisting it, and the two sections below call them. One reply and
+  everything under it is `partials/comment.njk`, which a comment's own page
+  prints its replies with too.
 #}
+{% import "partials/comment.njk" as thread with context %}
 {#
   One face in a facepile: somebody's avatar, linked to wherever they are.
 
@@ -52,60 +55,6 @@
 {% endif %}
 {% endmacro %}
 
-{#
-  One reply and everything under it. A macro rather than an include so it can
-  call itself: a reply that answers a reply is the same thing one level in.
-#}
-{% macro comment(reply) %}
-<li id="comment-{{ reply.id }}" class="comment h-entry comment-{{ reply.source }}">
-  <article class="comment-body">
-    <footer class="comment-meta">
-      <div class="comment-author vcard p-author h-card">
-        {%- if reply.author.avatar %}
-        <img class="avatar u-photo" src="{{ reply.author.avatar }}" alt="" width="40" height="40" loading="lazy">
-        {%- else %}
-        <span class="comment-avatar-empty" aria-hidden="true">{{ reply.author.name | first | upper }}</span>
-        {%- endif %}
-        <b class="fn p-name">{% if reply.author.url %}<a class="url u-url" href="{{ reply.author.url }}" rel="nofollow ugc noopener noreferrer">{{ reply.author.name }}</a>{% else %}{{ reply.author.name }}{% endif %}</b>
-      </div>
-      <div class="comment-metadata">
-        {%- if reply.url %}
-        <a class="u-url" href="{{ reply.url }}"{% if reply.source != "comment" %} rel="nofollow noopener noreferrer"{% endif %}><time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time></a>
-        {%- else %}
-        <time class="dt-published" datetime="{{ reply.published | date("iso") }}">{{ reply.published | date }}</time>
-        {%- endif %}
-        {%- if reply.source == "webmention" %}
-        <span class="comment-source">via webmention</span>
-        {%- elif reply.source == "activitypub" %}
-        <span class="comment-source">via the fediverse</span>
-        {%- endif %}
-      </div>
-    </footer>
-    <div class="comment-content e-content">
-      {%- if reply.rsvp %}
-      <p class="comment-rsvp"><data class="p-rsvp" value="{{ reply.rsvp.value }}">{{ reply.rsvp.label }}</data></p>
-      {%- endif %}
-      {{ reply.content | safe }}
-    </div>
-    {#
-      Answering a comment on this site needs no JavaScript: the link carries
-      the comment's id to the form, which puts it in a hidden field. A
-      fediverse reply is answered on the server that holds it, and a webmention
-      is answered on the page that sent it, so neither gets such a link.
-    #}
-    {% if commentForm and reply.source == "comment" %}
-    <div class="reply"><a class="comment-reply-link" href="{{ page.url }}?reply_to={{ reply.id | urlencode }}#respond">Reply</a></div>
-    {% endif %}
-  </article>
-  {% if reply.replies.length %}
-  <ol class="children">
-    {% for child in reply.replies %}
-    {{ comment(child) }}
-    {% endfor %}
-  </ol>
-  {% endif %}
-</li>
-{% endmacro %}
 
 {#
   Who is coming to an event (TASK-200): each answer it was given, by a
@@ -158,7 +107,7 @@
 
   <ol class="comment-list">
     {% for reply in conversation.replies %}
-    {{ comment(reply) }}
+    {{ thread.comment(reply) }}
     {% endfor %}
   </ol>
 

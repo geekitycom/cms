@@ -761,7 +761,7 @@ describe('the site’s latest answers', () => {
       ['/2026/09/hello/', '/2026/09/hello/', '/2026/09/second/'],
     );
     assert.equal(latest[1]?.source, 'comment');
-    assert.equal(latest[1]?.url, '/2026/09/hello/#comment-comment-1');
+    assert.equal(latest[1]?.url, '/comment/comment-1/');
   });
 
   it('forgets an answer whose post is not there to read', async () => {
@@ -946,8 +946,8 @@ Words.
     // that sent it, wherever it is read.
     assert.ok(feed.includes(`<link>${SOURCE_PAGE}</link>`), 'the feed points at the source page');
     assert.ok(
-      feed.includes('<link>https://blog.example/2026/09/hello-world/#comment-' + APPROVED),
-      'the feed points at the comment on the page',
+      feed.includes(`<link>https://blog.example/comment/${APPROVED}/</link>`),
+      'the feed points at the comment’s own page',
     );
     assert.ok(feed.includes('<link>https://remote.example/@ada/1</link>'), 'and at the note');
   });

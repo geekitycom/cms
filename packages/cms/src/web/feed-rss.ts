@@ -297,8 +297,11 @@ export function commentsRssFeed(source: CommentFeedSource): string {
  */
 function commentItem(comment: FeedComment): string[] {
   const html = sanitizeCommentHtml(comment.html);
+  const replying = comment.replyingTo === undefined ? '' : ` replying to ${comment.replyingTo}`;
   const title =
-    comment.post === undefined ? comment.author : `${comment.author} on ${comment.post.title}`;
+    comment.post === undefined
+      ? comment.author
+      : `${comment.author}${replying} on ${comment.post.title}`;
 
   return [
     '    <item>',

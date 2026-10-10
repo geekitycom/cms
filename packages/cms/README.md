@@ -1075,6 +1075,24 @@ A checker that throws is treated as having no opinion and logged, so a service
 that is down never stops a site taking comments. `/admin/comments` is the
 moderation queue and the dashboard carries the number waiting.
 
+### A comment's own page
+
+A comment left through the form has a page of its own at `/comment/{id}/`,
+the comment's id percent-encoded. That page is the comment's URL in the thread
+and in both comments feeds, so a site that replies to the comment fetches the
+comment rather than the whole post. The `#comment-{id}` anchor on the post
+stays, so an old link still scrolls to it. A webmention or a fediverse reply
+has no such page: its URL is where it came from.
+
+The page holds the comment as its one `h-entry`, with `u-in-reply-to` the post
+or the comment it answers. Above it is the thread from the post down, each step
+a nested `u-in-reply-to h-cite`, and below it the replies to it at every depth.
+An ancestor a reader may not see is a placeholder saying the comment is no
+longer shown. The page answers only an approved comment, and only as the post
+would: 410 once the post is deleted, 404 while the post is not public or not
+showing its conversation. It is `noindex` and absent from the sitemap, the post
+feeds and search. Backlog doc-6 has the rules.
+
 ### Being told about one
 
 With mail configured, a comment or a webmention entering the queue emails every
@@ -2692,6 +2710,7 @@ Booting mounts the public site on the app. The routes are:
 | `/author/{username}/feed/` and siblings | The same, for one person.                                                                                              |
 | `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                                                                       |
 | `{permalink}feed/`                      | One post's replies, the same way.                                                                                      |
+| `/comment/{id}/`                        | One comment left through the form, on a page of its own: see [Comments](#comments). Noindex and on no list.            |
 | `/sitemap.xml`                          | Every public URL, for a search engine.                                                                                 |
 | `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                                      |
 | `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                                     |
@@ -3258,11 +3277,13 @@ nothing can ever have replied to one.
 A channel carries the usual `title` (`Comments on: {post}`), `link`,
 `description`, `language`, `lastBuildDate`, `generator`, `atom:link rel="self"`
 and the same notify-server elements every other feed carries. An item carries the author's name as its `title` and `dc:creator`,
-the reply's `url` as its `link` and its id as `guid isPermaLink="false"`, the
+the reply's `url` as its `link` (a comment left through the form links to its
+own page at `/comment/{id}/`) and its id as `guid isPermaLink="false"`, the
 `published` time the note gave (or when it arrived, if it gave none),
 `description` holding a plain-text excerpt and `content:encoded` holding the
 note. On the site-wide feed the title names the post as well: `{author} on
-{post}`.
+{post}`, or `{author} replying to {parent author} on {post}` for an answer to
+another reply a reader can see.
 
 The author's name is the profile the site stored when that actor followed it,
 and otherwise the `@user@host` the actor's own URL implies. Naming them

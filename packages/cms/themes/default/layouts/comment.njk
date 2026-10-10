@@ -1,0 +1,90 @@
+{#
+  A native comment on a page of its own (TASK-318), at `/comment/{id}/`: what
+  another site fetches when it replies to the comment, so the comment is the
+  page's one `h-entry`.
+
+  Above it is the thread it belongs to, from the post down, as nested
+  `u-in-reply-to h-cite`s: the comment cites its parent, which cites its own,
+  down to the post. A parser reads the chain a person reads, and the deepest
+  cite, printed first, is the post. An ancestor a reader may not see is in
+  `ancestors` as nothing, and stands in the chain with no author or words.
+  Below are its replies, cited in it with `p-comment`, then a link to the
+  whole thread on the post.
+
+  The context: `comment` is one entry of the thread as `partials/comment.njk`
+  prints it; `ancestors` is the chain from the top-level comment down to the
+  parent; `post` is the post as a listing entry is; `threadUrl` is the
+  comment's anchor on the post. The page is noindex and on no list.
+#}
+{% extends "layouts/base.njk" %}
+{% import "partials/comment.njk" as thread with context %}
+
+{% macro cited(index) %}
+{% if index < 0 %}
+{% set by = post.author or siteAuthor %}
+<div class="comment-step u-in-reply-to h-cite">
+  <p class="cite-line">
+    <a class="u-url p-name" href="{{ post.url | url }}">{{ post.label }}</a>
+    {%- if by %} by <span class="p-author h-card">{% if by.url %}<a class="u-url p-name" href="{{ by.url }}">{{ by.name }}</a>{% else %}<span class="p-name">{{ by.name }}</span>{% endif %}</span>{% endif %}
+    {%- if post.date %}, <time class="dt-published" datetime="{{ post.date | date("iso") }}">{{ post.date | date }}</time>{% endif %}
+  </p>
+  {% if post.summary %}
+  <blockquote class="cite-quote p-summary">{{ post.summary }}</blockquote>
+  {% endif %}
+</div>
+{% else %}
+{% set step = ancestors[index] %}
+<div class="comment-step u-in-reply-to h-cite">
+  {{ cited(index - 1) }}
+  {% if step %}
+  <p class="cite-line">
+    <span class="p-author h-card">{% if step.author.url %}<a class="u-url p-name" href="{{ step.author.url }}" rel="nofollow ugc noopener noreferrer">{{ step.author.name }}</a>{% else %}<span class="p-name">{{ step.author.name }}</span>{% endif %}</span>,
+    {%- if step.url %}
+    <a class="u-url" href="{{ step.url }}"{% if step.source != "comment" %} rel="nofollow noopener noreferrer"{% endif %}><time class="dt-published" datetime="{{ step.published | date("iso") }}">{{ step.published | date }}</time></a>
+    {%- else %}
+    <time class="dt-published" datetime="{{ step.published | date("iso") }}">{{ step.published | date }}</time>
+    {%- endif %}
+  </p>
+  <div class="cite-quote e-content">{{ step.content | safe }}</div>
+  {% else %}
+  <p class="cite-line comment-withheld">This comment is no longer shown.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% block content %}
+<article class="comment-page h-entry comment-{{ comment.source }}">
+  <h1 class="screen-reader-text">Comment by {{ comment.author.name }} on {{ post.label }}</h1>
+  <div class="cite comment-thread">
+    {{ cited(ancestors.length - 1) }}
+  </div>
+  <div class="comment-body">
+    <header class="comment-meta">
+      <div class="comment-author p-author h-card">
+        {%- if comment.author.avatar %}
+        <img class="avatar u-photo" src="{{ comment.author.avatar }}" alt="" width="40" height="40">
+        {%- else %}
+        <span class="comment-avatar-empty" aria-hidden="true">{{ comment.author.name | first | upper }}</span>
+        {%- endif %}
+        <b class="p-name">{% if comment.author.url %}<a class="u-url" href="{{ comment.author.url }}" rel="nofollow ugc noopener noreferrer">{{ comment.author.name }}</a>{% else %}{{ comment.author.name }}{% endif %}</b>
+      </div>
+      <div class="comment-metadata">
+        <a class="u-url" href="{{ comment.url }}"><time class="dt-published" datetime="{{ comment.published | date("iso") }}">{{ comment.published | date }}</time></a>
+      </div>
+    </header>
+    <div class="comment-content e-content">{{ comment.content | safe }}</div>
+  </div>
+  {% if comment.replies.length %}
+  <section class="comments-area">
+    <h2 class="comments-title">Replies</h2>
+    <ol class="comment-list">
+      {% for reply in comment.replies %}
+      {{ thread.comment(reply, "p-comment h-cite") }}
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+</article>
+<p class="comment-back"><a href="{{ threadUrl | url }}">The whole conversation on {{ post.label }}</a></p>
+{% endblock %}

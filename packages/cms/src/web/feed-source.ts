@@ -406,6 +406,11 @@ export interface FeedComment {
    * of a post's own — there, every item answers the same post.
    */
   post?: { title: string; permalink: string } | undefined;
+  /**
+   * Who wrote the reply it answers, on an item of the site-wide feed that
+   * answers one rather than the post (TASK-318).
+   */
+  replyingTo?: string | undefined;
 }
 
 /** Enough of any feed to say where it lives: what a header needs from one. */

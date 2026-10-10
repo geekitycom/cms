@@ -34,7 +34,8 @@ import {
 import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { ContactFormContext } from '../contact/form.ts';
-import type { Conversation } from './conversation.ts';
+import { commentAnchor, commentPageHref } from './conversation.ts';
+import type { CommentThread, Conversation } from './conversation.ts';
 import { activityStreamsId } from './documents.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type {
@@ -72,6 +73,7 @@ export const TEMPLATES = {
   category: 'layouts/category.njk',
   author: 'layouts/author.njk',
   search: 'layouts/search.njk',
+  comment: 'layouts/comment.njk',
   notFound: 'layouts/404.njk',
   gone: 'layouts/410.njk',
   serverError: 'layouts/500.njk',
@@ -215,6 +217,11 @@ export interface Renderer {
    * `snippet` of HTML showing where the words were found.
    */
   renderSearch(search: SearchPage): string;
+  /**
+   * A native comment's own page (TASK-318) through the comment layout: the
+   * comment, the thread above it from its post down, and its replies.
+   */
+  renderComment(thread: CommentThread): string;
   /** The 404 page, for a path that resolved to nothing. */
   renderNotFound(url: string): string;
   /** The 410 page, for the URL of a document that was deleted (TASK-195). */
@@ -915,6 +922,21 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         query: search.query,
         posts: items,
         pagination: { ...search.pagination, items },
+      });
+    },
+
+    renderComment({ post, comment, ancestors }) {
+      const url = commentPageHref(comment.id);
+      const on = entryContext(post, users(), { lead: false });
+      return render(TEMPLATES.comment, {
+        title: `${comment.author.name} on ${on.label}`,
+        url,
+        page: { url },
+        noindex: true,
+        comment,
+        ancestors,
+        post: on,
+        threadUrl: `${post.permalink}#${commentAnchor(comment.id)}`,
       });
     },
 

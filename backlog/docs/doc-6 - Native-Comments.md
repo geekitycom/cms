@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-09-29 23:14'
+updated_date: '2026-10-10 13:30'
 ---
 # Native comments
 
@@ -483,7 +483,13 @@ is that module — doc-4 calls it the conversation on the page — and
 - **`latest(limit)`** — the site's newest answers, each with the post it
   answers, for `/comments/feed/`. One about a post that has since been
   unpublished or trashed is left out: the feed would be showing a conversation
-  about nothing.
+  about nothing. Each also says who wrote the reply it answers, when it
+  answers one a reader can see, so the feed's item reads "Bob replying to Ada
+  on Hello" rather than "Bob on Hello".
+- **`comment(id)`** — one native comment as its own page reads it (TASK-318):
+  the comment with its replies threaded under it, the chain of what it answers
+  from the top-level comment down, and the post in whatever state it is in.
+  See "A comment's own page" below.
 
 A post's own comments feed is `thread` flattened by `spokenIn` — everything
 somebody actually said, at every depth, with the likes and boosts left out
@@ -507,6 +513,51 @@ unless a theme wants to — and `partials/comment-form.njk` renders the form
 under an open post. Threading needs no JavaScript: a Reply link carries the
 comment's id to the form as `?reply_to=`, and the CMS checks it names an
 approved comment on that very post before putting a name on the form.
+
+## A comment's own page
+
+A comment left through the form has a page of its own at `/comment/{id}/`, its
+id percent-encoded (an id imported from WordPress is a URL). It used to have
+only an anchor on the post, `{permalink}#comment-{id}`, and a site replying to
+it fetched that URL and got the whole post page, so whether its reply context
+quoted the comment or the post depended on its parser. The page is what the
+comment's `url` is now: the thread's permalink on the post, both comments
+feeds, and what a reply names. The anchor stays on the post, so an old link
+still scrolls to the comment.
+
+Only a native comment has one. A webmention's `url` is its sender's page and a
+fediverse reply's is the remote note, and they stay so: `/comment/{id}/` 404s
+for either.
+
+The page holds the comment as its one `h-entry`: author `h-card`, content,
+`dt-published`, and `u-url` the page. Above it is the thread from the post
+down, as nested `u-in-reply-to h-cite`s, so the comment's `in-reply-to` is its
+parent (or the post, for a top-level comment), whose own is the next one up,
+down to the post: its title or wordless label, author, date and excerpt. Below
+are its replies, nested at every depth as the thread nests them, each a
+`p-comment h-cite` of the entry, then a link to the comment on the post.
+
+What it shows follows the thread's rules:
+
+- **The comment.** An approved native comment answers 200. Pending, spam, a
+  deleted comment, an unknown id and a webmention 404.
+- **The post.** The page answers as the post would: 410 once the post is
+  deleted, 404 while it is a draft, scheduled or otherwise not served, and 404
+  while the post does not show its conversation (a page that does not take
+  comments).
+- **What it answers.** An ancestor a reader may not see, pending, spam,
+  deleted or a withdrawn fediverse note, is shown as a placeholder saying the
+  comment is no longer shown, with no author or words. The chain goes on past
+  it through what that comment answered while the site still knows it; a
+  deleted comment is known by nothing, so the chain goes from it to the post.
+- **Its replies.** The same list the post's thread is built from, threaded
+  from the comment rather than the post, so a reply waiting for a moderator is
+  absent from both.
+
+The page is `noindex`, in a meta tag and an `X-Robots-Tag` header, and on no
+list: not the sitemap, the post feeds or search. It is
+`layouts/comment.njk` in the theme, whose context the theme README documents
+under "A comment's own page".
 
 An Eleventy build of the same content directory shows the same thread:
 `docs/eleventy.config.example.js` reads the same files and its `conversation`

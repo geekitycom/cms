@@ -179,6 +179,11 @@ const RSVP_ACTIVITIES: Readonly<Record<string, RsvpValue | undefined>> = {
 export interface SiteInteraction extends Interaction {
   /** The post it answers. */
   readonly post: Document;
+  /**
+   * Who wrote the reply it answers, when it answers one a reader can see
+   * (TASK-318), and `null` for an answer to the post itself.
+   */
+  readonly replyingTo: string | null;
 }
 
 /** What reading a conversation needs: both indexes and the site's origin. */
@@ -230,6 +235,27 @@ export interface ConversationReader {
    * indexes have paged, so the pages are read until enough survive.
    */
   readonly latest: (limit: number) => SiteInteraction[];
+  /**
+   * One native comment as its own page reads it (TASK-318), or `undefined`
+   * for an id that names no approved comment written on this site. The post
+   * comes back in whatever state it is in, so the page can answer as the post
+   * itself would.
+   */
+  readonly comment: (id: string) => CommentThread | undefined;
+}
+
+/** A native comment, what it answers and what answers it (TASK-318). */
+export interface CommentThread {
+  /** The post it is on. */
+  readonly post: Document;
+  /** The comment, carrying its replies at every depth as the thread does. */
+  readonly comment: Interaction;
+  /**
+   * What it answers, from the top-level comment down to its parent. `null`
+   * is an ancestor a reader may not see: one waiting for a moderator, filed
+   * as spam, deleted or withdrawn.
+   */
+  readonly ancestors: readonly (Interaction | null)[];
 }
 
 /**
@@ -245,18 +271,9 @@ export function createConversation(context: ConversationContext): ConversationRe
     thread: (document) => postConversation(context, document),
     counts: (documents) => commentCounts(context, documents),
     latest: (limit) => siteConversation(context, limit),
+    comment: (id) => commentThread(context, id),
   };
 }
-
-/** A conversation with nothing in it, which is what most posts have. */
-const NOTHING: Conversation = {
-  replies: [],
-  likes: [],
-  boosts: [],
-  mentions: [],
-  rsvps: [],
-  counts: { replies: 0, likes: 0, boosts: 0, mentions: 0, rsvps: 0, total: 0 },
-};
 
 /**
  * The conversation under one post: everything said about it, from every source
@@ -267,6 +284,49 @@ const NOTHING: Conversation = {
  * can still have native comments, which hang off its permalink instead.
  */
 function postConversation(context: ConversationContext, document: Document): Conversation {
+  const said = gather(context, document);
+  const replies = threadOf(said);
+  sortThread(replies);
+  const { likes, boosts, mentions } = said;
+  likes.sort(byPublished);
+  boosts.sort(byPublished);
+  mentions.sort(byPublished);
+  const counted = countReplies(replies);
+  const rsvps = rsvpGroups(said.answers);
+  const answered = rsvps.reduce((sum, group) => sum + group.people.length, 0);
+
+  return {
+    replies,
+    likes,
+    boosts,
+    mentions,
+    rsvps,
+    counts: {
+      replies: counted,
+      likes: likes.length,
+      boosts: boosts.length,
+      mentions: mentions.length,
+      rsvps: answered,
+      total: counted + likes.length + boosts.length + mentions.length + answered,
+    },
+  };
+}
+
+/** Everything said about one post, sorted into its groups and not yet threaded. */
+interface Gathered {
+  /** What a top-level answer names. */
+  readonly root: string;
+  /** The replies, oldest first, withdrawn ones included. */
+  readonly written: Interaction[];
+  /** The ids of what an actor has taken back. */
+  readonly withdrawn: ReadonlySet<string>;
+  readonly likes: Interaction[];
+  readonly boosts: Interaction[];
+  readonly mentions: Interaction[];
+  readonly answers: Interaction[];
+}
+
+function gather(context: ConversationContext, document: Document): Gathered {
   const objectId = activityStreamsId(document, context.baseUrl);
   // What a top-level answer names. The object id when the post has one, and
   // the permalink otherwise: a post that has never been delivered can still
@@ -280,7 +340,6 @@ function postConversation(context: ConversationContext, document: Document): Con
     objectId === undefined
       ? []
       : quotesOf(context.admin, readAllQuoteAuthorizations(context.contentDir), objectId, naming);
-  if (activities.length === 0 && native.length === 0 && quotes.length === 0) return NOTHING;
 
   const withdrawn = withdrawnBy(activities);
   const written: Interaction[] = [];
@@ -368,30 +427,76 @@ function postConversation(context: ConversationContext, document: Document): Con
   // order the code happened to read them rather than in the order they were
   // written.
   written.sort(byPublished);
-  const replies = threadOf(written, root, withdrawn);
-  sortThread(replies);
-  likes.sort(byPublished);
-  boosts.sort(byPublished);
-  mentions.sort(byPublished);
-  const counted = countReplies(replies);
-  const rsvps = rsvpGroups(answers);
-  const answered = rsvps.reduce((sum, group) => sum + group.people.length, 0);
+  return { root, written, withdrawn, likes, boosts, mentions, answers };
+}
 
+/**
+ * One native comment's page: the comment, its replies threaded under it by
+ * the rule the post's thread uses, and the chain from it up to the post.
+ *
+ * Its replies are the same list threaded from the comment rather than from
+ * the post, so a reply the post's thread shows is shown here, and one it
+ * leaves out is left out here.
+ */
+function commentThread(context: ConversationContext, id: string): CommentThread | undefined {
+  const stored = context.admin.getComment(id);
+  if (stored?.source !== 'comment' || stored.status !== 'approved') return undefined;
+  const post = context.store.getBySlug(stored.slug);
+  if (post === undefined) return undefined;
+
+  const said = gather(context, post);
+  const comment = said.written.find((reply) => reply.id === id);
+  if (comment === undefined) return undefined;
+
+  const replies = threadOf(said, id);
+  sortThread(replies);
   return {
-    replies,
-    likes,
-    boosts,
-    mentions,
-    rsvps,
-    counts: {
-      replies: counted,
-      likes: likes.length,
-      boosts: boosts.length,
-      mentions: mentions.length,
-      rsvps: answered,
-      total: counted + likes.length + boosts.length + mentions.length + answered,
-    },
+    post,
+    comment: { ...comment, replies },
+    ancestors: ancestorsOf(context.admin, post, said, comment),
   };
+}
+
+/**
+ * What a reply answers, from the top of the thread down to its parent.
+ *
+ * An ancestor a reader may not see is a `null`, and the walk goes on through
+ * what that one answered when the site still knows it: a pending or spam
+ * comment is in the index, and a withdrawn note is still in the log. A deleted
+ * comment is known by nothing, so the chain stops at it and goes straight to
+ * the post. Each id is visited once, so a cycle ends.
+ */
+function ancestorsOf(
+  admin: AdminStore,
+  post: Document,
+  said: Gathered,
+  reply: Interaction,
+): (Interaction | null)[] {
+  const all = new Map(said.written.map((entry) => [entry.id, entry]));
+  const chain: (Interaction | null)[] = [];
+  const seen = new Set<string>([reply.id]);
+
+  for (let target = reply.inReplyTo; target !== null && target !== said.root;) {
+    if (seen.has(target)) break;
+    seen.add(target);
+
+    const known = all.get(target);
+    if (known !== undefined && !said.withdrawn.has(target)) {
+      chain.unshift(known);
+      target = known.inReplyTo;
+      continue;
+    }
+
+    chain.unshift(null);
+    if (known !== undefined) {
+      target = known.inReplyTo;
+      continue;
+    }
+    const held = admin.getComment(target);
+    target = held?.slug === post.slug ? held.inReplyTo : null;
+  }
+
+  return chain;
 }
 
 function rsvpGroups(answers: readonly Interaction[]): RsvpGroup[] {
@@ -425,7 +530,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
   const naming = authorNaming(context.admin);
   const posts = new PostsByObjectId(context);
   const now = context.store.now();
-  const said: SiteInteraction[] = [];
+  const said: (Interaction & { post: Document })[] = [];
 
   for (let offset = 0; said.length < limit;) {
     const page = context.admin.listReplies({ limit: limit * OVERSCAN, offset });
@@ -462,7 +567,26 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
     said.push({ ...interactionOf(stored, post.permalink), post });
   }
 
-  return newestFirst(said, limit);
+  const shown = new Map<string, ReadonlyMap<string, Interaction>>();
+  const repliesOn = (post: Document): ReadonlyMap<string, Interaction> => {
+    let found = shown.get(post.path);
+    if (found === undefined) {
+      const { written, withdrawn } = gather(context, post);
+      found = new Map(
+        written.filter((reply) => !withdrawn.has(reply.id)).map((reply) => [reply.id, reply]),
+      );
+      shown.set(post.path, found);
+    }
+    return found;
+  };
+
+  return newestFirst(said, limit).map((entry) => ({
+    ...entry,
+    replyingTo:
+      entry.inReplyTo === null
+        ? null
+        : (repliesOn(entry.post).get(entry.inReplyTo)?.author.name ?? null),
+  }));
 }
 
 /** How many answers each of these posts has, by permalink. */
@@ -596,11 +720,15 @@ function interactionOf(comment: PostComment, permalink: string): Interaction {
       avatar: comment.author.avatar === null ? null : avatarHref(comment.author.avatar),
       actorId: null,
     },
-    // Where it can be read. A comment written here lives here, at its own
-    // anchor; a webmention lives on the page it was sent from, and its `url`
-    // says so. A theme that prints `url` for a fediverse reply prints a
+    // Where it can be read. A comment written here has a page of its own
+    // (TASK-318); a webmention lives on the page it was sent from, and its
+    // `url` says so. A theme that prints `url` for a fediverse reply prints a
     // working link for either, and so does a feed.
-    url: comment.url ?? `${permalink}#${commentAnchor(comment.id)}`,
+    url:
+      comment.url ??
+      (comment.source === 'comment'
+        ? commentPageHref(comment.id)
+        : `${permalink}#${commentAnchor(comment.id)}`),
     content: comment.content.html,
     published: new Date(comment.submitted),
     inReplyTo: comment.inReplyTo,
@@ -621,6 +749,14 @@ function interactionOf(comment: PostComment, permalink: string): Interaction {
 export function commentAnchor(id: string): string {
   return `comment-${id}`;
 }
+
+/** Where a native comment's own page is (TASK-318). */
+export function commentPageHref(id: string): string {
+  return `${COMMENT_PAGE_PREFIX}${encodeURIComponent(id)}/`;
+}
+
+/** What every comment page's path starts with. */
+export const COMMENT_PAGE_PREFIX = '/comment/';
 
 /**
  * Everything said in a conversation, at every depth and in no order: the
@@ -655,7 +791,10 @@ export function spokenIn(conversation: Conversation): Interaction[] {
  * moment before it becomes bytes this site publishes.
  */
 export function feedComments(
-  said: readonly (Interaction & { post?: Document | undefined })[],
+  said: readonly (Interaction & {
+    post?: Document | undefined;
+    replyingTo?: string | null | undefined;
+  })[],
   options: { baseUrl: string; limit: number; cited: CitedPageReader },
 ): FeedComment[] {
   return newestFirst([...said], options.limit).map((entry) => ({
@@ -667,6 +806,9 @@ export function feedComments(
     ...(entry.post === undefined
       ? {}
       : { post: { title: postLabel(entry.post, options.cited), permalink: entry.post.permalink } }),
+    ...(entry.replyingTo === undefined || entry.replyingTo === null
+      ? {}
+      : { replyingTo: entry.replyingTo }),
   }));
 }
 
@@ -728,8 +870,9 @@ class PostsByObjectId {
 }
 
 /**
- * The replies as a thread: those answering the post at the top, each carrying
- * the replies that answer it, oldest first at every level.
+ * The replies as a thread: those answering `under` at the top, each carrying
+ * the replies that answer it, oldest first at every level. `under` is the
+ * post, or one reply for that reply's own page.
  *
  * Three things decide where a reply goes, and all three are what somebody
  * reading the page would expect:
@@ -744,21 +887,17 @@ class PostsByObjectId {
  * - A note the site was told about twice is one reply, because the map is
  *   keyed by the note's own id.
  */
-function threadOf(
-  written: readonly Interaction[],
-  objectId: string,
-  withdrawn: ReadonlySet<string>,
-): Interaction[] {
+function threadOf(said: Gathered, under: string = said.root): Interaction[] {
   const byId = new Map<string, Interaction>();
   const targets = new Map<string, string>();
-  for (const reply of written) {
-    targets.set(reply.id, reply.inReplyTo ?? objectId);
-    if (!withdrawn.has(reply.id)) byId.set(reply.id, reply);
+  for (const reply of said.written) {
+    targets.set(reply.id, reply.inReplyTo ?? said.root);
+    if (!said.withdrawn.has(reply.id)) byId.set(reply.id, reply);
   }
 
   const top: Interaction[] = [];
   for (const reply of byId.values()) {
-    const parent = surviving(reply, targets, byId, objectId);
+    const parent = surviving(reply, targets, byId, under);
     if (parent === undefined) continue;
     (parent === null ? top : parent.replies).push(reply);
   }

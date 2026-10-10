@@ -660,9 +660,7 @@ describe('the comments feeds', () => {
     assert.match(perPost, /<dc:creator>Ada Lovelace<\/dc:creator>/);
     assert.match(
       perPost,
-      new RegExp(
-        `<link>https://blog\\.example/2026/09/hello-world/#comment-${held?.id ?? ''}</link>`,
-      ),
+      new RegExp(`<link>https://blog\\.example/comment/${held?.id ?? ''}/</link>`),
     );
 
     const siteWide = await (await cms.app.request('/comments/feed/')).text();

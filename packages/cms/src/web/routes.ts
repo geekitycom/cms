@@ -28,6 +28,7 @@ import {
   UPLOAD_ASSET_PREFIX,
 } from './assets.ts';
 import { COMMENT_NOTICE_PARAM, COMMENT_REPLY_PARAM } from '../comments/form.ts';
+import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments/routes.ts';
 import { commenterOf } from '../comments/viewer.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
@@ -47,9 +48,10 @@ import {
   siteAuthorContext,
 } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
-import { feedComments, spokenIn } from './conversation.ts';
+import { COMMENT_PAGE_PREFIX, feedComments, spokenIn } from './conversation.ts';
 import {
   goneDocumentAt,
+  isGone,
   isListed,
   isServed,
   permalinkOfObjectId,
@@ -217,6 +219,10 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
 
   // The site-wide comments feed, for the same reason and at WordPress's URL.
   app.get(commentsFeedHref(undefined), (c) => comments(c, undefined));
+
+  // A native comment's own page (TASK-318), at a fixed path so a permalink
+  // cannot take it.
+  app.get(`${COMMENT_PAGE_PREFIX}:id/`, (c) => commentPage(c, c.req.param('id')));
 
   // The sitemap, its children and the robots file: fixed paths at the root of
   // the site, which is the only place a crawler looks, and routes for the same
@@ -1574,6 +1580,27 @@ function comments(c: Context<GeekityEnv>, document: Document | undefined): Respo
   };
 
   return commentsFeedResponse(source, conditionalHeaders(c));
+}
+
+/**
+ * One native comment on a page of its own (TASK-318), answering as its post
+ * would: 410 once the post is deleted, and 404 while it is not served or not
+ * showing its conversation. It is never listed anywhere, so it is noindex.
+ */
+function commentPage(c: Context<GeekityEnv>, id: string): Response {
+  const { conversation, renderer, store } = c.var;
+  const found = conversation.comment(id);
+  if (found === undefined) return notFound(c);
+
+  const now = store.now();
+  if (isGone(found.post, now)) return gone(c);
+  if (
+    !isServed(found.post, now) ||
+    !answerable(found.post, commentPolicyOf(renderer.site()), now)
+  ) {
+    return notFound(c);
+  }
+  return c.html(renderer.renderComment(found), 200, { 'x-robots-tag': 'noindex' });
 }
 
 /**
