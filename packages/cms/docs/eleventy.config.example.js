@@ -398,8 +398,8 @@ function guessedNameOf(actorId) {
 
 /**
  * One post's stored comments, as `content/_data/comments/{slug}.json` says
- * them (TASK-50), whatever their status. The file is named by the slug percent-encoded, which is the
- * slug itself for one that is plain ASCII.
+ * them (TASK-50), whatever their status. The file is named by the slug
+ * percent-encoded, which is the slug itself for one that is plain ASCII.
  *
  * Read from disk rather than through Eleventy's data cascade on purpose. A
  * namespaced `_data/comments/` directory would arrive as a global called

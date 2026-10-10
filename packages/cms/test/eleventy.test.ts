@@ -461,18 +461,13 @@ describe('the fixtures content directory under Eleventy', () => {
       'utf8',
     );
 
-    // The pending comment is still not printed, but the approved reply to it
-    // is, under a placeholder that keeps the pending comment's anchor.
     const held = placeholderAt(html, '01994c7a-0000-7000-8000-0000000ffff0');
     assert.ok(held.includes('<p>Answering one still held.</p>'), `under the held one: ${html}`);
     assert.ok(!held.includes('Still waiting for a moderator.'), 'which says nothing itself');
 
-    // A reply naming a comment the file no longer holds was answering one
-    // since deleted, and its placeholder goes under the post.
     const deleted = placeholderAt(html, '01994c7a-0000-7000-8000-0000000dead0');
     assert.ok(deleted.includes('<p>Answering one since deleted.</p>'), `under it: ${html}`);
 
-    // A hidden comment nobody visible answered leaves no trace.
     assert.ok(
       !html.includes('01994c7a-0000-7000-8000-000000005a40'),
       'the spam has no placeholder',
@@ -636,8 +631,6 @@ describe('the default theme under Eleventy', () => {
     const html = await readFile(path.join(dir, '_site', 'index.html'), 'utf8');
     assert.match(html, /The page the site shows at its root\./);
 
-    // The newest published posts, newest first, through the default theme's
-    // own list: the draft is not one of them.
     const titles = [
       ...html.matchAll(
         /<h3 class="feed-title p-name">\s*<a href="([^"]*)" class="u-url">([^<]*)<\/a>/g,

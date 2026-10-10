@@ -608,14 +608,6 @@ function isPublic(document: Document | undefined, now: Date): boolean {
 }
 
 /**
- * The post a slug names, the trash included, or `undefined`.
- *
- * The same lookup a resend of an ActivityPub delivery does, and for the same
- * reason: the newest document of that name is the post nine times out of ten,
- * and the federated list is the fallback for a trashed one standing behind a
- * live page.
- */
-/**
  * File the outcomes of a post whose slug changed under the post it is now
  * (TASK-332). Rows are keyed by slug, so a moved post would otherwise show
  * nothing sent and leave its rows to whatever post takes the old slug. A row
@@ -635,6 +627,14 @@ export function followMovedWebmentions(
   }
 }
 
+/**
+ * The post a slug names, the trash included, or `undefined`.
+ *
+ * The same lookup a resend of an ActivityPub delivery does, and for the same
+ * reason: the newest document of that name is the post nine times out of ten,
+ * and the federated list is the fallback for a trashed one standing behind a
+ * live page.
+ */
 function postBySlug(store: ContentStore, slug: string): Document | undefined {
   const direct = store.getBySlug(slug);
   if (direct !== undefined) return direct;
