@@ -4,6 +4,7 @@ title: A visitor comment has a page of its own that other sites can reply to
 status: To Do
 assignee: []
 created_date: '2026-10-10 12:30'
+updated_date: '2026-10-10 12:52'
 labels:
   - comments
   - indieweb
@@ -36,4 +37,5 @@ Only native visitor comments need this. A webmention reply's URL is its sender's
 - [ ] #4 A webmention or fediverse reply keeps its sender's URL as its u-url and gets no page of its own
 - [ ] #5 The comment page is noindex and is absent from the sitemap, feeds and search
 - [ ] #6 doc-6 Native Comments and the CMS README describe the comment page
+- [ ] #7 In the post's comments feed and /comments/feed/, a native comment's item links to its own page rather than the #comment-<id> fragment
 <!-- AC:END -->
