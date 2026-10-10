@@ -3,7 +3,7 @@ id: doc-6
 title: Native Comments
 type: specification
 created_date: '2026-09-04 22:29'
-updated_date: '2026-10-10 13:45'
+updated_date: '2026-10-10 14:04'
 ---
 # Native comments
 
@@ -543,6 +543,36 @@ under an open post. Threading needs no JavaScript: a Reply link carries the
 comment's id to the form as `?reply_to=`, and the CMS checks it names an
 approved comment on that very post before putting a name on the form.
 
+## A reply under a hidden comment
+
+A comment can be pending, spam or deleted while a reply to it is approved: a
+moderator approves the reply first, files the parent as spam later, or deletes
+it, and a webmention answering a comment is threaded under it whatever that
+comment's status (TASK-319). Such a reply is shown everywhere a reader looks,
+under a placeholder for its parent (TASK-325, decision-46):
+
+- **The thread on the post** prints the placeholder where the hidden comment
+  would be: its `#comment-{id}` anchor, no author, no words, "This comment is
+  no longer shown.", and the visible replies nested under it. A pending or spam
+  comment still says what it answers, so its placeholder goes there; a deleted
+  one is known by nothing, so its placeholder goes under the post. A
+  placeholder sits where its first visible reply's date puts it.
+- **A hidden comment with no visible reply under it prints nothing**: no empty
+  placeholders.
+- **The comment page** of the reply shows the same placeholder in its chain
+  above, and the comment page of the comment the hidden one answers shows the
+  placeholder among its replies. Its link to the whole conversation lands on
+  the reply's anchor, which the thread now prints.
+- **The comments feeds** — the post's and `/comments/feed/` — list the reply
+  and never the placeholder. The site's feed titles it "{author} on {post}",
+  since the comment it answers names nobody.
+- **The counts** — the thread's title and `source:comments` on a post feed —
+  count the visible replies only.
+
+A reply under a fediverse note its author withdrew keeps the older rule: it
+moves up to whatever that note answered, since a withdrawn note is the
+author's own retraction rather than a moderator's.
+
 ## A comment's own page
 
 A comment left through the form has a page of its own at `/comment/{id}/`, its
@@ -584,7 +614,8 @@ What it shows follows the thread's rules:
   deleted comment is known by nothing, so the chain goes from it to the post.
 - **Its replies.** The same list the post's thread is built from, threaded
   from the comment rather than the post, so a reply waiting for a moderator is
-  absent from both.
+  absent from both, and an approved reply to one is under the same
+  placeholder in both (see "A reply under a hidden comment").
 
 The page is `noindex`, in a meta tag and an `X-Robots-Tag` header, and on no
 list: not the sitemap, the post feeds or search. It is

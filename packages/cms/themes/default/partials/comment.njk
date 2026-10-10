@@ -5,8 +5,25 @@
   `classes` is the reply's microformat. Under a post each reply is an
   `h-entry` of its own. On a comment's own page (TASK-318) the comment is the
   page's one entry, so its replies are `p-comment h-cite` inside it.
+
+  A `withheld` entry (TASK-325) is a comment a reader may not see that has
+  visible replies under it. It keeps its anchor and prints `withheld()` in
+  place of an author and words, as a comment's own page does for an ancestor,
+  and is no microformat of its own.
 #}
+{% macro withheld() %}This comment is no longer shown.{% endmacro %}
+
 {% macro comment(reply, classes="h-entry") %}
+{% if reply.withheld %}
+<li id="comment-{{ reply.id }}" class="comment comment-placeholder">
+  <p class="comment-withheld">{{ withheld() }}</p>
+  <ol class="children">
+    {% for child in reply.replies %}
+    {{ comment(child, classes) }}
+    {% endfor %}
+  </ol>
+</li>
+{% else %}
 <li id="comment-{{ reply.id }}" class="comment {{ classes }} comment-{{ reply.source }}">
   <article class="comment-body">
     <footer class="comment-meta">
@@ -55,4 +72,5 @@
   </ol>
   {% endif %}
 </li>
+{% endif %}
 {% endmacro %}

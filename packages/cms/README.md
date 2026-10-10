@@ -1088,7 +1088,8 @@ The page holds the comment as its one `h-entry`, with `u-in-reply-to` the post
 or the comment it answers. Above it is the thread from the post down, each step
 a nested `u-in-reply-to h-cite`, and below it the replies to it at every depth.
 An ancestor a reader may not see is a placeholder saying the comment is no
-longer shown. The page answers only an approved comment, and only as the post
+longer shown, and the thread on the post prints the same placeholder above an
+approved reply to a pending, spam or deleted comment. The page answers only an approved comment, and only as the post
 would: 410 once the post is deleted, 404 while the post is not public or not
 showing its conversation. It is `noindex` and absent from the sitemap, the post
 feeds and search. Backlog doc-6 has the rules.

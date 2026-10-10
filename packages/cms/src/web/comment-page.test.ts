@@ -27,6 +27,8 @@ const DEEP_UNDER_LEAF = id('a6');
 const WEBMENTION_UNDER_LEAF = id('a7');
 const HELD = id('b1');
 const UNDER_HELD = id('b2');
+const HELD_REPLY = id('b3');
+const UNDER_HELD_REPLY = id('b4');
 const SPAM = id('c1');
 const UNDER_SPAM = id('c2');
 const UNDER_TRASHED = id('d2');
@@ -110,6 +112,8 @@ const FILES: Record<string, string> = {
       said(UNDER_TRASHED, 'Lou', 14, { inReplyTo: TRASHED }),
       said(WEBMENTION, 'Grace', 15, { source: 'webmention', url: SENDER }),
       said(IMPORTED, 'Old', 16),
+      said(HELD_REPLY, 'Quinn', 20, { inReplyTo: TOP, status: 'pending' }),
+      said(UNDER_HELD_REPLY, 'Rae', 21, { inReplyTo: HELD_REPLY }),
     ],
   }),
   '_data/comments/draft.json': JSON.stringify({
@@ -382,5 +386,85 @@ describe('the comments feeds (TASK-318 AC #7, AC #10)', () => {
 
     assert.ok(feed.includes('<title>Bob replying to Ada on Hello</title>'), 'a reply');
     assert.ok(feed.includes('<title>Ada on Hello</title>'), 'a top-level comment');
+  });
+});
+
+describe('a reply under a comment a reader may not see (TASK-325)', () => {
+  const HIDDEN = [
+    ['waiting for a moderator', HELD, UNDER_HELD, 'Hal', 'Ivy'],
+    ['filed as spam', SPAM, UNDER_SPAM, 'Jay', 'Kim'],
+    ['deleted', TRASHED, UNDER_TRASHED, undefined, 'Lou'],
+  ] as const;
+
+  for (const [why, parent, reply, hidden, shown] of HIDDEN) {
+    it(`is in the thread under a placeholder for a parent ${why}`, async () => {
+      const html = await get(POST);
+      const placeholder = new RegExp(
+        `<li id="comment-${parent}" class="comment comment-placeholder">\\s*` +
+          `<p class="comment-withheld">This comment is no longer shown\\.</p>\\s*` +
+          `<ol class="children">\\s*<li id="comment-${reply}"`,
+      );
+
+      assert.match(html, placeholder);
+      assert.match(html, new RegExp(`${shown} says so\\.`));
+      if (hidden !== undefined) assert.doesNotMatch(html, new RegExp(`${hidden} says so`));
+    });
+
+    it(`links its page to an anchor the thread prints, under a parent ${why}`, async () => {
+      const page = await get(pageOf(reply));
+      const thread = await get(POST);
+
+      assert.ok(page.includes(`href="${POST}#comment-${reply}"`), 'the page links the thread');
+      assert.ok(thread.includes(`id="comment-${reply}"`), 'the thread has the anchor');
+      assert.ok(thread.includes(`id="comment-${parent}"`), 'and the placeholder’s');
+    });
+
+    it(`is in both comments feeds under a parent ${why}, and the placeholder is not`, async () => {
+      for (const pathname of [`${POST}feed/`, '/comments/feed/']) {
+        const feed = await get(pathname);
+        assert.ok(feed.includes(`<link>${BASE_URL}${pageOf(reply)}</link>`), pathname);
+        assert.ok(!feed.includes(`${pageOf(parent)}</link>`), `${pathname} has no placeholder`);
+        assert.ok(!feed.includes('no longer shown'), `${pathname} says nothing of it`);
+      }
+      assert.ok(
+        (await get('/comments/feed/')).includes(`<title>${shown} on Hello</title>`),
+        'the site feed names no hidden author',
+      );
+    });
+  }
+
+  it('is under the same placeholder on the page of the comment the hidden one answers', async () => {
+    const page = await get(pageOf(TOP));
+    const thread = await get(POST);
+    const placeholder = new RegExp(
+      `<li id="comment-${HELD_REPLY}" class="comment comment-placeholder">\\s*` +
+        `<p class="comment-withheld">This comment is no longer shown\\.</p>\\s*` +
+        `<ol class="children">\\s*<li id="comment-${UNDER_HELD_REPLY}"`,
+    );
+
+    assert.match(page, placeholder);
+    assert.match(thread, placeholder);
+    assert.doesNotMatch(page, /Quinn says so/);
+    const entry = only(page, `${BASE_URL}${pageOf(TOP)}`);
+    const replies = (entry.properties['comment'] ?? []) as Item[];
+    assert.ok(
+      replies.some((reply) => first(reply, 'url') === `${BASE_URL}${pageOf(UNDER_HELD_REPLY)}`),
+      'the visible reply is one of the comment’s',
+    );
+  });
+
+  it('prints nothing for a hidden comment nobody visible answered', async () => {
+    const html = await get(POST);
+
+    assert.ok(!html.includes(`id="comment-${HELD_UNDER_LEAF}"`));
+    assert.doesNotMatch(html, /Eve says so/);
+  });
+
+  it('counts the visible replies, and only those, on the page and in the feed', async () => {
+    const html = await get(POST);
+    assert.match(html, /<h2 class="comments-title">13 replies<\/h2>/);
+
+    const feed = await get('/feed/');
+    assert.match(feed, /<source:comments count="13" /);
   });
 });

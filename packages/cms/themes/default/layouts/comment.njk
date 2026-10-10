@@ -47,7 +47,7 @@
   </p>
   <div class="cite-quote e-content">{{ step.content | safe }}</div>
   {% else %}
-  <p class="cite-line comment-withheld">This comment is no longer shown.</p>
+  <p class="cite-line comment-withheld">{{ thread.withheld() }}</p>
   {% endif %}
 </div>
 {% endif %}

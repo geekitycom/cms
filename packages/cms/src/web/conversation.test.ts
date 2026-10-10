@@ -14,7 +14,7 @@ import { authorizeQuote } from '../federation/quotes.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { createConversation } from './conversation.ts';
-import type { ConversationReader } from './conversation.ts';
+import type { ConversationReader, Interaction, ThreadReply } from './conversation.ts';
 import { avatarHref } from '../avatars/avatars.ts';
 
 const temporaryDirs: string[] = [];
@@ -58,6 +58,11 @@ const BASE_URL = 'https://blog.example';
 
 /** The post every test here is about, and the id the fediverse knows it by. */
 const POST = 'https://blog.example/2026/09/hello/';
+
+function visible(reply: ThreadReply | undefined): Interaction | undefined {
+  assert.ok(reply === undefined || !('withheld' in reply), 'a visible reply');
+  return reply;
+}
 
 function hello(): Document {
   return parseDocument(
@@ -168,7 +173,7 @@ describe('a post’s conversation', () => {
 
     assert.equal(conversation.counts.replies, 2);
     assert.equal(conversation.counts.total, 2);
-    const [first, second] = conversation.replies;
+    const [first, second] = conversation.replies.map(visible);
 
     assert.equal(first?.id, 'https://remote.example/notes/1');
     assert.equal(first?.source, 'activitypub');
@@ -210,7 +215,7 @@ describe('a post’s conversation', () => {
 
     const conversation = read.thread(hello());
 
-    assert.deepEqual(conversation.replies[0]?.author, {
+    assert.deepEqual(visible(conversation.replies[0])?.author, {
       name: 'Ada Lovelace',
       handle: '@ada@remote.example',
       url: 'https://remote.example/@ada',
@@ -363,7 +368,7 @@ describe('a post’s conversation', () => {
     const conversation = read.thread(hello());
 
     assert.equal(
-      conversation.replies[0]?.content,
+      visible(conversation.replies[0])?.content,
       '<p>Nice post <a href="https://elsewhere.example/" rel="nofollow noopener noreferrer">link</a></p>',
     );
   });

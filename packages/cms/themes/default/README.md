@@ -1935,14 +1935,23 @@ Each entry — a reply, a like or a boost — is:
 | `published`      | A `Date`: when it was published, or when it arrived if it did not say. Use the `date` filter.                                                                                                                                                                                                                                                                                                                                                                                         |
 | `inReplyTo`      | What it answers — the post's ActivityPub id, or another reply's — and `null` for a reaction.                                                                                                                                                                                                                                                                                                                                                                                          |
 | `status`         | `"published"`. On the record for the sources that moderate.                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `replies`        | The replies to this one, oldest first, nested as deep as the site has seen. One may be a placeholder: see below.                                                                                                                                                                                                                                                                                                                                                                      |
 | `rsvp`           | An RSVP: `{ value, label }`, its `p-rsvp` (`yes`, `no`, `maybe` or `interested`) and the words for it. Absent otherwise. A webmention reply that is an RSVP carries one, and the default theme prints it as a `data.p-rsvp` at the top of the comment's content. On an event, an RSVP is in `rsvps` rather than the thread, and so is a fediverse `Accept` (`yes`), `TentativeAccept` (`maybe`) or `Reject` (`no`) of the event. Each person is there once, with their latest answer. |
 
-Three rules decide what is in the thread, and they are the CMS's rather than a
+Four rules decide what is in the thread, and they are the CMS's rather than a
 theme's: a reply whose author deleted it is gone, and its own answers move up to
-whatever it was answering; a like is counted once per actor and disappears when
-that actor undoes it; and a note answering something this post has nothing to do
-with is left out.
+whatever it was answering; a comment a reader may not see (waiting for a
+moderator, spam or deleted) that has a visible reply under it is a placeholder,
+and one with none is not there at all; a like is counted once per actor and
+disappears when that actor undoes it; and a note answering something this post
+has nothing to do with is left out.
+
+A placeholder in `replies` is `{ id, withheld: true, replies }`: the hidden
+comment's id and the replies under it, and nothing that names its author or
+says what it said. Test `reply.withheld` before printing an author. A pending
+or spam comment's placeholder sits where the comment would; a deleted one's
+under the post, since nothing is known of what it answered. `counts.replies`
+and the comments feeds count and carry the visible replies only.
 
 `content` is safe to print whatever produced it, and safe for different reasons.
 A fediverse reply is HTML somebody else's server composed, rebuilt from an
@@ -1966,7 +1975,10 @@ when there is none) and the permalink as a `.comment-metadata` link around a
 ones written here — `source == "comment"` — when the post is still open; it
 carries the comment's id to the form as `?reply_to=`, so threading needs no
 JavaScript. A fediverse reply is answered on the server that holds it and a
-webmention on the page that sent it, so neither gets one.
+webmention on the page that sent it, so neither gets one. A placeholder is an
+`li.comment.comment-placeholder` with the hidden comment's anchor, a
+`p.comment-withheld` printing `withheld()` ("This comment is no longer
+shown."), and its replies in an `ol.children`; it is no microformat of its own.
 
 Above the thread, `group()` draws one `div.reaction-group` per kind that has
 anything — `p-like`, `p-repost` and `p-mention`, the source theme's classes — as
@@ -2021,7 +2033,7 @@ The packaged layout prints the chain above the comment as nested
 `u-in-reply-to h-cite`s: the comment cites its parent, which cites its own,
 down to the post, which is printed first, so a parser and a reader meet the
 thread in the same order. A `null` ancestor is a cite with no author and no
-words, saying the comment is no longer shown. The replies follow inside the
+words, printing the same `withheld()` the thread's placeholder does. The replies follow inside the
 entry as `comment(reply, "p-comment h-cite")`, with no Reply links, and a
 link to `threadUrl` ends the page.
 
