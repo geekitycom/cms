@@ -480,13 +480,17 @@ and its line is a `p.page-meta` rather than a `p.entry-meta`.
 **A post first published elsewhere says so.** A post whose front matter names
 its original with `canonical_href`, an absolute http or https URL such as a
 Substack essay's, has it on the context as `original` (TASK-293). The line
-then reads **Originally published at** and links the original's host as a
-second `u-url` of the h-entry, after the permalink's. It is no
+then reads **Originally published at** and links the original as a second
+`u-url` of the h-entry, after the permalink's. The link says the publication's
+name when the front matter gives one in `canonical_name`, such as `Smarter
+Engineers` for a guest post on someone else's Substack (TASK-316), and the
+original's host otherwise. It is no
 `u-syndication`, because the original is not a copy of this post, and
 original-post-discovery reads a copy's off-site `u-url` as its original. The
 same URL is the page's `rel="canonical"` and its `og:url`, so search engines
 credit the original. A value that is not an absolute http or https URL is
-ignored, and `geekity sync` names the file.
+ignored, and `geekity sync` names the file. So is a `canonical_name` with no
+valid `canonical_href` beside it.
 
 **Every post's page has one `h1`.** A post with a name of its own is headed by
 it, as above. So is a post with a title and no words, such as a titled like,
@@ -1478,7 +1482,7 @@ A document — one post, one page, or one entry of a listing — adds:
 | `event`                                     | An event's `{ start, end, location }`: `Date`s, and `{ kind: "place", name }` or `{ kind: "virtual", url }`.      |
 | `syndicateTo`                               | On a post's page, the syndication targets it selects, each `{ id, name, url }`. Empty with none.                  |
 | `syndication`                               | Its copies elsewhere, each `{ url, label }`: front matter `syndication`, and on its page the copies targets made. |
-| `original`                                  | Where it was first published, as `{ url, label }`: front matter `canonical_href`. Absent unless http or https.    |
+| `original`                                  | Where it was first published, `{ url, label }`: `canonical_href`, named by `canonical_name` or its host.          |
 | `author`                                    | Who wrote it, as a profile rather than a string. See [Bylines and author archives](#bylines-and-author-archives). |
 | `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                    |
 | `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                       |

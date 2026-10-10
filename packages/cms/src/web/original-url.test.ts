@@ -13,6 +13,7 @@ after(() => box.cleanup());
 
 const BASE = 'https://blog.example';
 const ORIGINAL = 'https://andrew.substack.com/p/on-writing';
+const GUEST = 'https://open.substack.com/pub/albexl/p/why-youre-great-at-setting-bad-goals';
 
 function post(slug: string, frontMatter: string[]): string {
   return [
@@ -37,6 +38,23 @@ const CONTENT: Record<string, string> = {
   'posts/relative.md': post('relative', ["canonical_href: '/elsewhere/'"]),
   'posts/mailto.md': post('mailto', ["canonical_href: 'mailto:me@example.com'"]),
   'posts/number.md': post('number', ['canonical_href: 7']),
+  'posts/named.md': post('named', [
+    `canonical_href: '${GUEST}'`,
+    "canonical_name: '  Smarter Engineers '",
+  ]),
+  'posts/blank-name.md': post('blank-name', [
+    `canonical_href: '${ORIGINAL}'`,
+    "canonical_name: '  '",
+  ]),
+  'posts/number-name.md': post('number-name', [
+    `canonical_href: '${ORIGINAL}'`,
+    'canonical_name: 7',
+  ]),
+  'posts/name-only.md': post('name-only', ["canonical_name: 'Smarter Engineers'"]),
+  'posts/name-bad-href.md': post('name-bad-href', [
+    "canonical_href: 'my substack'",
+    "canonical_name: 'Smarter Engineers'",
+  ]),
 };
 
 let cms: Cms;
@@ -121,6 +139,36 @@ describe('a post that names its original elsewhere (TASK-293)', () => {
       assert.deepEqual(entryOf(html, `${BASE}/2026/09/${slug}/`).properties['url'], [
         `${BASE}/2026/09/${slug}/`,
       ]);
+    });
+  }
+
+  it('names the original by its canonical_name, linking canonical_href (TASK-316)', async () => {
+    const permalink = `${BASE}/2026/09/named/`;
+    const html = await page('named');
+
+    assert.match(
+      html,
+      /Originally published at <a class="u-url" href="https:\/\/open\.substack\.com\/pub\/albexl\/p\/why-youre-great-at-setting-bad-goals">Smarter Engineers<\/a>/,
+    );
+    assert.equal(canonicalOf(html), GUEST);
+    assert.deepEqual(entryOf(html, permalink).properties['url'], [permalink, GUEST]);
+  });
+
+  for (const slug of ['blank-name', 'number-name']) {
+    it(`names the original by its host when canonical_name is no non-empty string: ${slug}`, async () => {
+      assert.match(
+        await page(slug),
+        /Originally published at <a class="u-url" href="https:\/\/andrew\.substack\.com\/p\/on-writing">andrew\.substack\.com<\/a>/,
+      );
+    });
+  }
+
+  for (const slug of ['name-only', 'name-bad-href']) {
+    it(`ignores a canonical_name without a valid canonical_href: ${slug}`, async () => {
+      const html = await page(slug);
+
+      assert.equal(canonicalOf(html), `${BASE}/2026/09/${slug}/`);
+      assert.doesNotMatch(html, /Originally published|Smarter Engineers/);
     });
   }
 

@@ -384,6 +384,28 @@ describe('a full scan', () => {
     assert.match(warnings[0] ?? '', /not an absolute http or https URL/);
   });
 
+  it('names a canonical_name that stands without a valid canonical_href, and says so once', async () => {
+    const warnings: string[] = [];
+    const dir = await contentDir({
+      'posts/2026-09-02-alone.md':
+        "---\ndate: '2026-09-02T09:00:00Z'\ncanonical_name: Smarter Engineers\n---\n\nWords.\n",
+      'posts/2026-09-03-named.md':
+        "---\ndate: '2026-09-03T09:00:00Z'\ncanonical_href: https://open.substack.example/p/essay\ncanonical_name: Smarter Engineers\n---\n\nWords.\n",
+    });
+    const { sync: content, store: index } = await sync(dir, {
+      logger: { warn: (message) => warnings.push(message) },
+    });
+
+    await content.sync();
+    await content.sync();
+
+    assert.equal(index.listPaths().length, 2, 'both are indexed');
+    assert.equal(warnings.length, 1, `one warning, for the one bad file: ${warnings.join(' | ')}`);
+    assert.match(warnings[0] ?? '', /posts\/2026-09-02-alone\.md/);
+    assert.match(warnings[0] ?? '', /canonical_name "Smarter Engineers"/);
+    assert.match(warnings[0] ?? '', /no absolute http or https canonical_href/);
+  });
+
   it('is a no-op on a content directory that does not exist', async () => {
     const { sync: content, store: index } = await sync(
       path.join(await temporaryDir('missing'), 'content'),
