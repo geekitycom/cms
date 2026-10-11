@@ -33,6 +33,7 @@ import type { Scope } from '../indieauth/request.ts';
 
 import type { ResolvedConfig } from '../config.ts';
 import { removeImageVariants } from '../images/variants.ts';
+import { isRecord } from '../util/guards.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import { userForAuthor } from '../web/authors.ts';
 import { syndicationTargetsReader } from '../webmention/syndication.ts';
@@ -296,10 +297,7 @@ async function micropubPost(c: Context<BearerEnv>): Promise<MicropubPost | Refus
     } catch {
       return invalid('The request body is not JSON.');
     }
-    const fields =
-      typeof body === 'object' && body !== null && !Array.isArray(body)
-        ? (body as Record<string, unknown>)
-        : {};
+    const fields = isRecord(body) ? body : {};
     const { action, url } = fields;
     if (action === undefined) {
       const request = fromJson(body);

@@ -2,6 +2,7 @@ import { readSiteSettings } from '../admin/settings.ts';
 import type { SiteSettings } from '../admin/settings.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
+import { messageOf } from '../util/errors.ts';
 import { createThemeSource } from '../web/themes.ts';
 import type { ThemeSource } from '../web/themes.ts';
 import { createBrevoProvider } from './brevo.ts';
@@ -445,11 +446,6 @@ function addressesOf(to: MailRecipient | readonly MailRecipient[]): MailAddress[
   if (typeof to === 'string') return [{ address: to }];
   if (Array.isArray(to)) return (to as readonly MailRecipient[]).map(addressOf);
   return [addressOf(to as MailRecipient)];
-}
-
-/** What a thrown value has to say for itself. */
-function messageOf(thrown: unknown): string {
-  return thrown instanceof Error ? thrown.message : String(thrown);
 }
 
 function ignore(): void {

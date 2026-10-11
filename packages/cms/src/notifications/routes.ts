@@ -3,6 +3,8 @@ import type { Context, Hono } from 'hono';
 import { isModerationAction, moderateComment } from '../comments/moderate.ts';
 import type { ModerationAction } from '../comments/moderate.ts';
 import type { GeekityEnv } from '../env.ts';
+import { stringOrEmpty } from '../util/forms.ts';
+import { escapeAttribute, escapeText } from '../util/html.ts';
 import {
   MODERATE_PATH,
   NOTIFICATION_FIELDS,
@@ -49,8 +51,12 @@ export function mountNotificationLinks(app: Hono<GeekityEnv>): void {
 async function moderationLanding(c: Context<GeekityEnv>, act: boolean): Promise<Response> {
   const { config, admin } = c.var;
   const submitted = act ? await c.req.parseBody() : {};
-  const token = act ? field(submitted[NOTIFICATION_FIELDS.token]) : (c.req.query('token') ?? '');
-  const named = act ? field(submitted[NOTIFICATION_FIELDS.action]) : (c.req.query('action') ?? '');
+  const token = act
+    ? stringOrEmpty(submitted[NOTIFICATION_FIELDS.token])
+    : (c.req.query('token') ?? '');
+  const named = act
+    ? stringOrEmpty(submitted[NOTIFICATION_FIELDS.action])
+    : (c.req.query('action') ?? '');
 
   const claim = readNotificationToken(config.dataDir, token, config.now());
   // The named action has to be the signed one. It is in the query so a person
@@ -108,7 +114,9 @@ async function moderationLanding(c: Context<GeekityEnv>, act: boolean): Promise<
 async function unsubscribeLanding(c: Context<GeekityEnv>, act: boolean): Promise<Response> {
   const { config } = c.var;
   const submitted = act ? await c.req.parseBody() : {};
-  const token = act ? field(submitted[NOTIFICATION_FIELDS.token]) : (c.req.query('token') ?? '');
+  const token = act
+    ? stringOrEmpty(submitted[NOTIFICATION_FIELDS.token])
+    : (c.req.query('token') ?? '');
 
   const claim = readNotificationToken(config.dataDir, token, config.now());
   if (claim === undefined || claim.action !== UNSUBSCRIBE_ACTION) {
@@ -124,7 +132,7 @@ async function unsubscribeLanding(c: Context<GeekityEnv>, act: boolean): Promise
       token,
       heading: 'Stop emailing you about replies?',
       author: claim.subject,
-      html: `<p>Nothing more will be sent to ${escapeHtml(claim.subject)} about replies to comments on this site. Your comments stay where they are.</p>`,
+      html: `<p>Nothing more will be sent to ${escapeText(claim.subject)} about replies to comments on this site. Your comments stay where they are.</p>`,
       button: 'Unsubscribe',
     });
   }
@@ -158,13 +166,13 @@ function confirm(
   return c.html(
     page(
       options.heading,
-      `<h1>${escapeHtml(options.heading)}</h1>
-      <p class="who">${escapeHtml(options.author)}</p>
+      `<h1>${escapeText(options.heading)}</h1>
+      <p class="who">${escapeText(options.author)}</p>
       <blockquote>${options.html}</blockquote>
       <form method="post">
-        <input type="hidden" name="${NOTIFICATION_FIELDS.action}" value="${escapeHtml(options.action)}" />
-        <input type="hidden" name="${NOTIFICATION_FIELDS.token}" value="${escapeHtml(options.token)}" />
-        <button type="submit">${escapeHtml(options.button)}</button>
+        <input type="hidden" name="${NOTIFICATION_FIELDS.action}" value="${escapeAttribute(options.action)}" />
+        <input type="hidden" name="${NOTIFICATION_FIELDS.token}" value="${escapeAttribute(options.token)}" />
+        <button type="submit">${escapeText(options.button)}</button>
       </form>`,
     ),
   );
@@ -172,13 +180,13 @@ function confirm(
 
 /** The page a finished action leaves behind. */
 function done(c: Context<GeekityEnv>, message: string): Response {
-  return c.html(page(message, `<h1>${escapeHtml(message)}</h1>`));
+  return c.html(page(message, `<h1>${escapeText(message)}</h1>`));
 }
 
 /** The page a link that buys nothing lands on. */
 function refuse(c: Context<GeekityEnv>, message: string): Response {
   c.status(400);
-  return c.html(page(message, `<h1>${escapeHtml(message)}</h1>`));
+  return c.html(page(message, `<h1>${escapeText(message)}</h1>`));
 }
 
 /**
@@ -197,7 +205,7 @@ function page(title: string, body: string): string {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex, nofollow" />
-<title>${escapeHtml(title)}</title>
+<title>${escapeText(title)}</title>
 <style>
   body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 2rem 1rem; max-width: 40rem; }
   h1 { font-size: 1.3rem; }
@@ -211,19 +219,4 @@ ${body}
 </body>
 </html>
 `;
-}
-
-/** Text as it may safely be printed into the page. */
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function field(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }

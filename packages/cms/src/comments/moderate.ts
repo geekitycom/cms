@@ -1,4 +1,5 @@
 import type { CommentStatus, PostComment } from '../admin/store.ts';
+import { messageOf } from '../util/errors.ts';
 import { deleteComment, updateComment } from './records.ts';
 import type { CommentRecords } from './records.ts';
 import type { CommentChecker, CommentReport } from './submission.ts';
@@ -114,8 +115,4 @@ async function tellChecker(
     const logger = options.logger ?? console;
     logger.warn(`The comment checker would not take the correction: ${messageOf(error)}`);
   }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

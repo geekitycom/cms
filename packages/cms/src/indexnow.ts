@@ -4,6 +4,7 @@ import type { Document } from './content/document.ts';
 import { isMigratedArrival } from './content/migrated.ts';
 import { holdOutbound } from './dev-mode.ts';
 import type { DocumentChange } from './content/sync.ts';
+import { messageOf } from './util/errors.ts';
 import { isPrivateHost } from './webmention/public-address.ts';
 import { isListed } from './web/documents.ts';
 import { indexNowKeyPath } from './web/indexnow.ts';
@@ -131,7 +132,7 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
         // A bad key or a URL from another host is not fixed by asking again.
         if (response.status !== 429 && response.status < 500) return failure;
       } catch (thrown) {
-        failure = thrown instanceof Error ? thrown.message : String(thrown);
+        failure = messageOf(thrown);
       }
       if (attempt < attempts) await wait(backoffMs(attempt));
     }

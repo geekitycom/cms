@@ -6,6 +6,7 @@
 
 import { parseSiteJson, readSiteJson, siteDataPath } from '../admin/settings.ts';
 import { updateFileAtomically } from '../files/atomic.ts';
+import { isRecord } from '../util/guards.ts';
 
 export const PLUGINS_KEY = 'plugins';
 
@@ -56,8 +57,4 @@ export async function updatePluginEntry(
 function pluginsOf(file: Record<string, unknown>): Record<string, unknown> {
   const plugins = file[PLUGINS_KEY];
   return isRecord(plugins) ? plugins : {};
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

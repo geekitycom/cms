@@ -9,6 +9,9 @@ import type {
   NewInboxActivity,
 } from '../admin/store.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
+import { messageOf } from '../util/errors.ts';
+import { nonEmptyStringOrNull } from '../util/forms.ts';
+import { isRecord } from '../util/guards.ts';
 import { uriOf } from './replies.ts';
 
 /**
@@ -519,19 +522,14 @@ function parseFollowers(source: string, file: string, username: string): Followe
       username,
       actorId,
       inboxId,
-      sharedInboxId: optionalText(follower['sharedInboxId']),
-      handle: optionalText(follower['handle']),
-      name: optionalText(follower['name']),
-      iconUrl: optionalText(follower['iconUrl']),
-      url: optionalText(follower['url']),
+      sharedInboxId: nonEmptyStringOrNull(follower['sharedInboxId']),
+      handle: nonEmptyStringOrNull(follower['handle']),
+      name: nonEmptyStringOrNull(follower['name']),
+      iconUrl: nonEmptyStringOrNull(follower['iconUrl']),
+      url: nonEmptyStringOrNull(follower['url']),
       followedAt: typeof follower['followedAt'] === 'string' ? follower['followedAt'] : '',
     };
   });
-}
-
-/** A value the file may have left out, as the text it holds or `null`. */
-function optionalText(value: unknown): string | null {
-  return typeof value === 'string' && value !== '' ? value : null;
 }
 
 /** Every month log a site has, oldest first. */
@@ -652,12 +650,4 @@ function activityTypeOf(value: unknown): string {
   } catch {
     return value;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

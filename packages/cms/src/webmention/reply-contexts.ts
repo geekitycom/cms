@@ -7,6 +7,8 @@ import { replyTarget } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { updateFileAtomically } from '../files/atomic.ts';
+import { messageOf } from '../util/errors.ts';
+import { isRecord } from '../util/guards.ts';
 import {
   copyCitedImage,
   copyCitedPicture,
@@ -201,9 +203,7 @@ export function createReplyContextService(
   let chain: Promise<unknown> = Promise.resolve();
   function enqueue(task: () => Promise<void>): void {
     chain = chain.then(task).catch((thrown: unknown) => {
-      logger.warn(
-        `A reply context failed: ${thrown instanceof Error ? thrown.message : String(thrown)}`,
-      );
+      logger.warn(`A reply context failed: ${messageOf(thrown)}`);
     });
   }
 
@@ -351,10 +351,6 @@ function parseContexts(text: string): Record<string, ReplyContext> {
     };
   }
   return contexts;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function stringOf(value: unknown): string | undefined {

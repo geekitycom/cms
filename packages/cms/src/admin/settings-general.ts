@@ -9,10 +9,11 @@
 
 import type { ResolvedConfig } from '../config.ts';
 import { iconSetting, siteIcons } from '../images/icons.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import { userForAuthor } from '../web/authors.ts';
 import { CREATIVE_COMMONS_LICENSES } from '../web/license.ts';
 import { listUsers } from './accounts.ts';
-import { bodyField, settingsPagePath } from './settings-page.ts';
+import { settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';
 import { effectiveBaseUrl, readSiteJson, SETTINGS_FIELDS } from './settings.ts';
 import type { SiteSettings } from './settings.ts';
@@ -72,10 +73,10 @@ export const GENERAL_SETTINGS: SettingsPage = {
   // The author is whoever the submitted username is, and nobody when it is
   // not a user, so the file only ever holds a username or no author at all.
   reads: ({ c, body, current }) => ({
-    author: siteAuthorUsername(c.var.config, bodyField(body[SETTINGS_FIELDS.author])),
+    author: siteAuthorUsername(c.var.config, stringOrEmpty(body[SETTINGS_FIELDS.author])),
     baseUrl:
       c.var.config.baseUrlSource === 'default'
-        ? bodyField(body[SETTINGS_FIELDS.baseUrl])
+        ? stringOrEmpty(body[SETTINGS_FIELDS.baseUrl])
         : current.baseUrl === ''
           ? c.var.config.baseUrl
           : current.baseUrl,

@@ -1,5 +1,6 @@
 import { discoverPostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
+import { isRecord } from '../util/guards.ts';
 import type { HeldAt } from '../web/conversation.ts';
 
 import type { CitedImage, CitedPicture, PictureSource } from './cited-picture.ts';
@@ -576,10 +577,6 @@ function resolved(href: string | undefined, base: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function pageSource(root: HtmlElement, base: string): Source {

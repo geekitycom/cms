@@ -6,6 +6,7 @@ import type { ActorProfile, AdminStore } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
+import { messageOf } from '../util/errors.ts';
 import type { FederationContextData } from './federation.ts';
 import { siteLoaders } from './site-loaders.ts';
 
@@ -227,8 +228,4 @@ export async function profileFrom(
 function linkHref(value: URL | Link | null): string | null {
   if (value === null) return null;
   return value instanceof URL ? value.href : (value.href?.href ?? null);
-}
-
-function messageOf(thrown: unknown): string {
-  return thrown instanceof Error ? thrown.message : String(thrown);
 }

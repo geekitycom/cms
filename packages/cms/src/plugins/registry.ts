@@ -30,6 +30,7 @@ import type {
   PluginSettingValues,
   PluginSiteInfo,
 } from '../plugin.ts';
+import { messageOf } from '../util/errors.ts';
 import { pluginFetch } from './fetch.ts';
 import type { PluginFetchOptions } from './fetch.ts';
 import {
@@ -475,7 +476,7 @@ function register(
     };
   } catch (error) {
     return {
-      problem: `Its register failed: ${error instanceof Error ? error.message : String(error)}`,
+      problem: `Its register failed: ${messageOf(error)}`,
       declared: NOTHING_DECLARED,
     };
   } finally {
@@ -511,7 +512,7 @@ async function lifecycle(plugin: Plugin, hook: 'start' | 'stop'): Promise<void> 
   try {
     await plugin[hook]?.();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = messageOf(error);
     console.warn(`The ${plugin.name} plugin's ${hook} failed: ${message}`);
   }
 }

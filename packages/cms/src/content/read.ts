@@ -1,3 +1,4 @@
+import { escapeAttribute, escapeText } from '../util/html.ts';
 import { isWebUrl } from './enclosure.ts';
 
 export const READ_OF_FRONT_MATTER_KEY = 'read-of';
@@ -65,23 +66,17 @@ export function readWorkFrontMatter({ name, author, uid, url }: ReadOf): ReadOf 
 export function readLine(read: Read | undefined): string {
   if (read === undefined) return '';
   const { status, of } = read;
-  const cited = `<cite class="p-name">${escapeHtml(of.name)}</cite>`;
+  const cited = `<cite class="p-name">${escapeText(of.name)}</cite>`;
   return (
     `<p class="read-line"><data class="p-read-status" value="${status}">` +
     `${READ_STATUS_LABELS[status]}</data>: <span class="p-read-of h-cite">` +
-    (of.url === undefined ? cited : `<a class="u-url" href="${escapeHtml(of.url)}">${cited}</a>`) +
-    (of.author === undefined ? '' : ` by <span class="p-author">${escapeHtml(of.author)}</span>`) +
+    (of.url === undefined
+      ? cited
+      : `<a class="u-url" href="${escapeAttribute(of.url)}">${cited}</a>`) +
+    (of.author === undefined ? '' : ` by <span class="p-author">${escapeText(of.author)}</span>`) +
     (of.uid === undefined
       ? ''
-      : `, <data class="p-uid" value="${escapeHtml(of.uid)}">${escapeHtml(uidLabel(of.uid))}</data>`) +
+      : `, <data class="p-uid" value="${escapeAttribute(of.uid)}">${escapeText(uidLabel(of.uid))}</data>`) +
     '</span></p>\n'
   );
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
 }

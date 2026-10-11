@@ -43,6 +43,11 @@ export function offsetForPage(pageNumber: number, size: number): number {
   return pageNumber * Math.max(1, size);
 }
 
+/** How many pages a listing of `total` needs at `size` a page. An empty listing still has one. */
+export function pageCount(total: number, size: number): number {
+  return Math.max(1, Math.ceil(total / Math.max(1, size)));
+}
+
 /**
  * The page count and the pager URLs for a listing.
  *
@@ -51,7 +56,7 @@ export function offsetForPage(pageNumber: number, size: number): number {
  */
 export function paginate(options: PaginateOptions): Pagination {
   const size = Math.max(1, options.size);
-  const totalPages = Math.max(1, Math.ceil(options.total / size));
+  const totalPages = pageCount(options.total, size);
   const pageNumber = options.pageNumber;
   const pages = Array.from({ length: totalPages }, (_, index) => options.hrefForPage(index));
 

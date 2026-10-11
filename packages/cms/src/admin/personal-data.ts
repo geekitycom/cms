@@ -14,6 +14,7 @@ import type { Context, Hono } from 'hono';
 import type { GeekityEnv } from '../env.ts';
 import { erasePersonalData, ERASED_NAME, findPersonalData } from '../privacy/erase.ts';
 import type { PersonalDataReport, PersonalDataStores } from '../privacy/erase.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { TOOLS_PATH, TOOLS_SECTION } from './tools.ts';
@@ -52,7 +53,7 @@ export function mountPersonalDataScreen(
 
   app.post(PERSONAL_DATA_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const email = field(body[PERSONAL_DATA_FIELDS.email]).trim();
+    const email = stringOrEmpty(body[PERSONAL_DATA_FIELDS.email]).trim();
 
     if (email === '') {
       c.status(400);
@@ -62,7 +63,7 @@ export function mountPersonalDataScreen(
       });
     }
 
-    if (field(body[PERSONAL_DATA_FIELDS.confirm]) === '') {
+    if (stringOrEmpty(body[PERSONAL_DATA_FIELDS.confirm]) === '') {
       return render(
         c,
         ADMIN_TEMPLATES.toolsPersonalData,
@@ -125,9 +126,4 @@ export function erasedMessage(report: PersonalDataReport): string {
 /** "1 comment", "2 comments". */
 function count(howMany: number, singular: string): string {
   return `${String(howMany)} ${howMany === 1 ? singular : `${singular}s`}`;
-}
-
-/** One submitted field as a string. */
-function field(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }

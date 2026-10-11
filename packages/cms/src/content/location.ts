@@ -1,3 +1,5 @@
+import { isRecord } from '../util/guards.ts';
+
 /** A point on the ground, as a `geo:` URI (RFC 5870) spells one. */
 export interface GeoPoint {
   readonly latitude: number;
@@ -291,8 +293,4 @@ function placeWords(place: PlaceWords): PlaceWords {
 
 function numberOf(value: unknown): number | undefined {
   return typeof value === 'number' ? value : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

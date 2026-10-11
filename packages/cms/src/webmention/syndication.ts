@@ -4,6 +4,7 @@ import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
+import { isRecord } from '../util/guards.ts';
 import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../web/locale.ts';
 
 /**
@@ -438,8 +439,4 @@ function webUrl(value: unknown): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

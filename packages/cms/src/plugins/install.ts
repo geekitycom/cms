@@ -17,6 +17,7 @@ import { gunzipSync } from 'node:zlib';
 import semver from 'semver';
 
 import { HOST_API_VERSION } from '../plugin.ts';
+import { messageOf } from '../util/errors.ts';
 import { readEnabledPlugins } from './enabled.ts';
 import { PLUGIN_ENTRY, PLUGIN_MANIFEST, readPluginManifest, scanPluginFolders } from './folder.ts';
 import type { PluginManifest } from './folder.ts';
@@ -203,10 +204,9 @@ export async function fetchPackument(name: string, registry: string): Promise<Pa
       headers: { accept: 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8' },
     });
   } catch (error) {
-    throw new Error(
-      `The registry at ${registry} could not be reached: ${error instanceof Error ? error.message : String(error)}.`,
-      { cause: error },
-    );
+    throw new Error(`The registry at ${registry} could not be reached: ${messageOf(error)}.`, {
+      cause: error,
+    });
   }
   if (response.status === 404) {
     throw new Error(`${name} is not on the registry at ${registry}.`);
@@ -327,10 +327,7 @@ function stagedManifest(staging: string, label: string, name: string): PluginMan
   try {
     manifest = readPluginManifest(staging);
   } catch (error) {
-    throw new Error(
-      `${label} was refused: ${error instanceof Error ? error.message : String(error)}`,
-      { cause: error },
-    );
+    throw new Error(`${label} was refused: ${messageOf(error)}`, { cause: error });
   }
   if (manifest === undefined) throw new Error(`${label} has no ${PLUGIN_MANIFEST}.`);
   if (manifest.name !== name) {

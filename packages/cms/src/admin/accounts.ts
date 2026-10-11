@@ -12,6 +12,7 @@ import {
   withNotification,
   withNotificationMode,
 } from '../notifications/preferences.ts';
+import { messageOf } from '../util/errors.ts';
 import { relText } from '../web/navigation.ts';
 import { adminTheme } from './admin-theme.ts';
 import type { AdminTheme } from './admin-theme.ts';
@@ -986,7 +987,7 @@ function notificationModesFrom(value: unknown): Record<string, string> | undefin
 
 /** What a damaged users file says, and what to do about it. */
 function unusableUsersFile(file: string, cause: unknown): Error {
-  const reason = cause instanceof Error ? cause.message : String(cause);
+  const reason = messageOf(cause);
   return new Error(
     `The users file ${file} could not be read: ${reason} It has deliberately not been ` +
       'replaced, because a site with no users offers first-run setup to whoever reaches it ' +

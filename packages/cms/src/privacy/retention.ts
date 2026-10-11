@@ -11,6 +11,7 @@ import {
 import type { ContactMessage } from '../contact/records.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
+import { messageOf } from '../util/errors.ts';
 import { outlived } from './policy.ts';
 import type { RetentionPolicy } from './policy.ts';
 
@@ -198,8 +199,4 @@ export function createRetentionService(options: CreateRetentionServiceOptions): 
       await sweeping;
     },
   };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

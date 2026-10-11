@@ -23,7 +23,7 @@ describe('the read line (TASK-233)', () => {
     });
 
     assert.match(line, /<cite class="p-name">Tom &amp; &lt;Jerry&gt;<\/cite>/);
-    assert.match(line, /<span class="p-author">A &quot;B&quot; C<\/span>/);
-    assert.match(line, /<data class="p-uid" value="doi:&quot;x&quot;">doi:&quot;x&quot;<\/data>/);
+    assert.match(line, /<span class="p-author">A "B" C<\/span>/);
+    assert.match(line, /<data class="p-uid" value="doi:&quot;x&quot;">doi:"x"<\/data>/);
   });
 });

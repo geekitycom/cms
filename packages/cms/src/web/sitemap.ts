@@ -2,6 +2,7 @@ import { escapeXml } from './feeds.ts';
 import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 import { absoluteUrl } from '../util/url.ts';
+import { pageCount } from './pagination.ts';
 
 /**
  * Where the sitemap and the robots file live, and what goes in them.
@@ -144,7 +145,7 @@ export function sitemapResponse(options: SitemapResponseOptions): Response | und
   const maxUrls = options.maxUrls ?? SITEMAP_MAX_URLS;
   const split = urls.length > maxUrls;
 
-  if (page !== undefined && (!split || page < 1 || page > chunkCount(urls.length, maxUrls))) {
+  if (page !== undefined && (!split || page < 1 || page > pageCount(urls.length, maxUrls))) {
     return undefined;
   }
 
@@ -172,18 +173,13 @@ export function sitemapResponse(options: SitemapResponseOptions): Response | und
   return new Response(body, { headers });
 }
 
-/** How many child sitemaps a URL count needs. */
-function chunkCount(total: number, maxUrls: number): number {
-  return Math.ceil(total / maxUrls);
-}
-
 /**
  * The children an index names: one per chunk, each dated by the newest thing
  * in it, so a crawler can skip a file whose contents it already has.
  */
 function childEntries(urls: readonly SitemapUrl[], maxUrls: number): SitemapUrl[] {
   const children: SitemapUrl[] = [];
-  for (let index = 0; index < chunkCount(urls.length, maxUrls); index += 1) {
+  for (let index = 0; index < pageCount(urls.length, maxUrls); index += 1) {
     const chunk = urls.slice(index * maxUrls, (index + 1) * maxUrls);
     children.push({ loc: sitemapChildPath(index + 1), lastmod: newest(chunk) });
   }

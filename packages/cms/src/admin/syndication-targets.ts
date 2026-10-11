@@ -22,6 +22,8 @@ import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
+import { stringOrEmpty } from '../util/forms.ts';
+import { isRecord } from '../util/guards.ts';
 import {
   checkSyndicationTarget,
   repeatedIdProblem,
@@ -137,7 +139,7 @@ export function mountSyndicationTargetsScreen(
       kind: 'save',
       form,
       index,
-      was: text(body[SYNDICATION_TARGET_FIELDS.was]),
+      was: stringOrEmpty(body[SYNDICATION_TARGET_FIELDS.was]),
     });
   });
 
@@ -150,7 +152,7 @@ export function mountSyndicationTargetsScreen(
     const body = await c.req.parseBody();
     const notice = await removeTarget(c.var.config.contentDir, {
       index: indexOf(body),
-      was: text(body[SYNDICATION_TARGET_FIELDS.was]),
+      was: stringOrEmpty(body[SYNDICATION_TARGET_FIELDS.was]),
     });
     flash(c, notice.kind === 'written' ? 'notice' : 'error', notice.message);
     return c.redirect(SYNDICATION_TARGETS_PATH, 303);
@@ -358,17 +360,17 @@ function emptyForm(): TargetForm {
 
 function formOf(body: Record<string, unknown>): TargetForm {
   return {
-    id: text(body[SYNDICATION_TARGET_FIELDS.id]),
-    name: text(body[SYNDICATION_TARGET_FIELDS.name]),
-    url: text(body[SYNDICATION_TARGET_FIELDS.url]),
-    tag: text(body[SYNDICATION_TARGET_FIELDS.tag]),
-    languages: text(body[SYNDICATION_TARGET_FIELDS.languages]),
+    id: stringOrEmpty(body[SYNDICATION_TARGET_FIELDS.id]),
+    name: stringOrEmpty(body[SYNDICATION_TARGET_FIELDS.name]),
+    url: stringOrEmpty(body[SYNDICATION_TARGET_FIELDS.url]),
+    tag: stringOrEmpty(body[SYNDICATION_TARGET_FIELDS.tag]),
+    languages: stringOrEmpty(body[SYNDICATION_TARGET_FIELDS.languages]),
   };
 }
 
 /** The entry a form names, or -1, which names none and so is refused as changed. */
 function indexOf(body: Record<string, unknown>): number {
-  const value = text(body[SYNDICATION_TARGET_FIELDS.entry]);
+  const value = stringOrEmpty(body[SYNDICATION_TARGET_FIELDS.entry]);
   return /^\d+$/.test(value) ? Number(value) : -1;
 }
 
@@ -377,12 +379,4 @@ function label(entry: SyndicationEntry | undefined): string {
   const raw = entry?.raw;
   const name = isRecord(raw) ? raw['name'] : undefined;
   return typeof name === 'string' && name.trim() !== '' ? name.trim() : 'The entry';
-}
-
-function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

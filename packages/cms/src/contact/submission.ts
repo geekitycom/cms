@@ -3,6 +3,7 @@ import type { CommentChecker, CommentVerdict } from '../comments/submission.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
 import { formTimingRefusal, hashClientAddress, trapped } from '../forms/protection.ts';
+import { messageOf } from '../util/errors.ts';
 import { contactProblems } from './form.ts';
 import type { ContactForm, ContactProblems } from './form.ts';
 import { addContactMessage } from './records.ts';
@@ -228,8 +229,4 @@ function asComment(
 
 function refused(refusal: ContactRefusal): ContactOutcome {
   return { kind: 'refused', refusal };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

@@ -25,6 +25,7 @@
  * exactly what the file says. {@link enclosureOf} is the one reading of it,
  * and the feeds, the theme and the federation read only what it returns.
  */
+import { isRecord } from '../util/guards.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 
 /** The front matter key the recording is under. */
@@ -210,9 +211,7 @@ function trimmed(value: unknown): string | undefined {
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? value : undefined;
 }
 
 function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {

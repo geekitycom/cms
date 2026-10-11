@@ -5,6 +5,7 @@ import type { CommentNotices, CommentRecords, ProposedComment } from '../comment
 import type { CommentChecker } from '../comments/submission.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
+import { escapeText } from '../util/html.ts';
 import { commentKeyAt } from '../web/conversation.ts';
 import type { ConversationReader } from '../web/conversation.ts';
 import { sanitizeCommentHtml } from '../web/sanitize.ts';
@@ -486,7 +487,7 @@ function hostOf(source: string): string {
 /** A line of text as the one paragraph of HTML it is. */
 function paragraph(text: string): string {
   if (text === '') return '';
-  return `<p>${text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</p>`;
+  return `<p>${escapeText(text)}</p>`;
 }
 
 function refuse(problem: RequestProblem, message: string): WebmentionRequest {

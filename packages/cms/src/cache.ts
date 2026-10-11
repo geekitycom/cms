@@ -2,6 +2,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { messageOf } from './util/errors.ts';
+
 /**
  * The one SQLite file a site has, and the rules for opening it.
  *
@@ -233,7 +235,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseSync {
 
 /** A SQLite failure, said in terms of the file and the way out. */
 function unusable(file: string, error: unknown): UnusableDatabaseError {
-  const detail = error instanceof Error ? error.message : String(error);
+  const detail = messageOf(error);
   return new UnusableDatabaseError(
     `${file} could not be opened as a database (${detail}). It holds nothing that is not read ` +
       'back from content/ and data/, so the fix is to delete it: run `geekity rebuild`, or ' +

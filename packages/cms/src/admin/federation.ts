@@ -17,6 +17,7 @@ import {
   syndicationTargetsReader,
 } from '../webmention/syndication.ts';
 import { accountOf, ACTOR_PATH, federationOrigin } from '../federation/paths.ts';
+import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { authorHref, profileContext, userForAuthor } from '../web/authors.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { postObjectId } from '../web/guids.ts';
@@ -623,9 +624,9 @@ function replyObject(
   if (typeof object !== 'object' || object === null) return null;
 
   return {
-    id: text(property(object, 'id')),
-    url: text(property(object, 'url')),
-    inReplyTo: text(property(object, 'inReplyTo')),
+    id: nonEmptyStringOrNull(property(object, 'id')),
+    url: nonEmptyStringOrNull(property(object, 'url')),
+    inReplyTo: nonEmptyStringOrNull(property(object, 'inReplyTo')),
   };
 }
 
@@ -677,11 +678,6 @@ export function localPosts(
 function property(value: unknown, key: string): unknown {
   if (typeof value !== 'object' || value === null) return undefined;
   return (value as Record<string, unknown>)[key];
-}
-
-/** A JSON-LD value as a string, or `null` for anything else. */
-function text(value: unknown): string | null {
-  return typeof value === 'string' && value !== '' ? value : null;
 }
 
 /** One relay subscription, as the panel renders it. */

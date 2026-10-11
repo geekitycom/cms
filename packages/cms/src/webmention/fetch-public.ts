@@ -1,3 +1,4 @@
+import { messageOf } from '../util/errors.ts';
 import { WEBMENTION_USER_AGENT } from './discovery.ts';
 import { publicHost } from './public-address.ts';
 import type { HostLookup } from './public-address.ts';
@@ -245,8 +246,4 @@ async function readWithin(
 
 function refuse(reason: string): PublicRefusal {
   return { ok: false, reason };
-}
-
-function messageOf(thrown: unknown): string {
-  return thrown instanceof Error ? thrown.message : String(thrown);
 }

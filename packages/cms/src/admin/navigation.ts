@@ -28,6 +28,7 @@
 import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import {
   menuItemLineProblem,
   menuItemsFromText,
@@ -216,8 +217,8 @@ export function mountNavigationScreen(
   // make a typo into a menu nothing renders.
   app.post(NAVIGATION_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const name = field(body[NAVIGATION_FIELDS.menu]).trim();
-    const items = field(body[NAVIGATION_FIELDS.items]);
+    const name = stringOrEmpty(body[NAVIGATION_FIELDS.menu]).trim();
+    const items = stringOrEmpty(body[NAVIGATION_FIELDS.items]);
 
     const settings = readSiteSettings(c.var.config.contentDir);
     const shown = navigationScreen({
@@ -258,7 +259,7 @@ export function mountNavigationScreen(
   // file really holds rather than a box that forgets itself.
   app.post(ADD_MENU_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const name = field(body[NAVIGATION_FIELDS.name]).trim();
+    const name = stringOrEmpty(body[NAVIGATION_FIELDS.name]).trim();
 
     const settings = readSiteSettings(c.var.config.contentDir);
     const problem = addMenuProblem(name, settings.menus);
@@ -306,7 +307,7 @@ export function mountNavigationScreen(
   // links can be typed, and the theme would go on asking for the name.
   app.post(DELETE_MENU_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const name = field(body[NAVIGATION_FIELDS.menu]).trim();
+    const name = stringOrEmpty(body[NAVIGATION_FIELDS.menu]).trim();
 
     const settings = readSiteSettings(c.var.config.contentDir);
     const shown = navigationScreen({
@@ -394,9 +395,4 @@ export function addMenuProblem(name: string, menus: NavigationMenus): string | u
 /** "1 item", "2 items". */
 function count(howMany: number, singular: string): string {
   return `${String(howMany)} ${howMany === 1 ? singular : `${singular}s`}`;
-}
-
-/** One submitted field as a string. */
-function field(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }

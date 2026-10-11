@@ -55,6 +55,7 @@ import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts'
 import { clientAddress, createLoginThrottle, describeWait, loginKeys } from './throttle.ts';
 import { mountToolsScreen } from './tools.ts';
 import { devModeOn } from '../dev-mode.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import { DEV_MODE_PATH, mountDevModeScreen } from './dev-mode.ts';
 import { mountPersonalDataScreen } from './personal-data.ts';
 import { mountEditorActions } from './editor-actions.ts';
@@ -210,9 +211,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
   app.post(SETUP_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const username = text(body[USERNAME_FIELD]).trim();
-    const password = text(body[PASSWORD_FIELD]);
-    const confirmation = text(body['password_confirmation']);
+    const username = stringOrEmpty(body[USERNAME_FIELD]).trim();
+    const password = stringOrEmpty(body[PASSWORD_FIELD]);
+    const confirmation = stringOrEmpty(body['password_confirmation']);
 
     const problem = setupProblem(username, password, confirmation);
     if (problem !== undefined) return refuseSetup(c, username, problem);
@@ -250,8 +251,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   app.post(LOGIN_PATH, async (c) => {
     const config = c.var.config;
     const body = await c.req.parseBody();
-    const username = text(body[USERNAME_FIELD]).trim();
-    const password = text(body[PASSWORD_FIELD]);
+    const username = stringOrEmpty(body[USERNAME_FIELD]).trim();
+    const password = stringOrEmpty(body[PASSWORD_FIELD]);
     const returnTo = returnPath(body[RETURN_TO_FIELD]);
 
     const address = clientAddress(c, config);
@@ -622,11 +623,6 @@ function decodePath(pathname: string): string {
 /** A `section` or a `child` off a render context, when the screen named one. */
 function name(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }
 
 /** What is wrong with a proposed first admin, or `undefined` when nothing is. */

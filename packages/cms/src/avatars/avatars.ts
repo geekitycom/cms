@@ -9,6 +9,7 @@ import type { ResolvedConfig } from '../config.ts';
 import { writeFileAtomically } from '../files/atomic.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
+import { messageOf } from '../util/errors.ts';
 import { findAsset } from '../web/assets.ts';
 import type { StaticAsset } from '../web/assets.ts';
 import { fetchPublic, webUrl } from '../webmention/fetch-public.ts';
@@ -342,8 +343,4 @@ async function within<T>(promise: Promise<T>, ms: number): Promise<T | undefined
   } finally {
     clearTimeout(timer);
   }
-}
-
-function messageOf(thrown: unknown): string {
-  return thrown instanceof Error ? thrown.message : String(thrown);
 }

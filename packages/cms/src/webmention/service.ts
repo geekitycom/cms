@@ -19,6 +19,7 @@ import { replyTarget } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { isFederatedDocument } from '../federation/article.ts';
+import { messageOf } from '../util/errors.ts';
 import { permalinkOfObjectId } from '../web/documents.ts';
 
 import { discoverEndpoint } from './discovery.ts';
@@ -638,10 +639,6 @@ function postBySlug(store: ContentStore, slug: string): Document | undefined {
   const direct = store.getBySlug(slug);
   if (direct !== undefined) return direct;
   return store.listFederated().find((document) => document.slug === slug);
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function ignore(): void {

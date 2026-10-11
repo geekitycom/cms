@@ -17,6 +17,7 @@ import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
+import { messageOf } from '../util/errors.ts';
 import { heldComment, isWithheld } from '../web/conversation.ts';
 import type { ConversationReader, ThreadReply } from '../web/conversation.ts';
 import { isFederatedDocument } from './article.ts';
@@ -421,8 +422,4 @@ function createOf(note: FetchedNote): string {
     actor: note.actorId,
     object: note.object,
   });
-}
-
-function messageOf(thrown: unknown): string {
-  return thrown instanceof Error ? thrown.message : String(thrown);
 }

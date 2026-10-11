@@ -21,6 +21,7 @@ import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { documentContent } from '../content/writer.ts';
+import { messageOf } from '../util/errors.ts';
 import { authorNames } from '../web/authors.ts';
 import { ActorUpdate, actorId, senderKeyPairs, userActor } from './actor.ts';
 import {
@@ -834,10 +835,6 @@ function federatedOrUndefined(document: Document | undefined, now: Date): Docume
 function typeNameOf(activity: Activity): string {
   const typeId = getTypeId(activity);
   return typeId.hash === '' ? typeId.href : typeId.hash.slice(1);
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function ignore(): void {

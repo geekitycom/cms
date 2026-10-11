@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { photoAlt } from '../content/photo.ts';
 import type { Photo } from '../content/photo.ts';
+import { isRecord } from '../util/guards.ts';
 import { imagesIn } from './markup.ts';
 import type { ShownImage } from './markup.ts';
 
@@ -144,8 +145,4 @@ function parseObject(text: string): Record<string, unknown> {
   } catch {
     return {};
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

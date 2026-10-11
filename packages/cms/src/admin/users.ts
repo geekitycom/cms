@@ -11,6 +11,7 @@ import {
   notificationEvent,
   notificationSwitches,
 } from '../notifications/preferences.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import {
   countUsers,
   createUser,
@@ -197,10 +198,10 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
 
   app.post(ADD_USER_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const username = field(body[USER_FIELDS.username]).trim();
-    const supplied = field(body[USER_FIELDS.password]);
-    const email = field(body[USER_FIELDS.email]).trim();
-    const generate = field(body[USER_FIELDS.generate]) !== '';
+    const username = stringOrEmpty(body[USER_FIELDS.username]).trim();
+    const supplied = stringOrEmpty(body[USER_FIELDS.password]);
+    const email = stringOrEmpty(body[USER_FIELDS.email]).trim();
+    const generate = stringOrEmpty(body[USER_FIELDS.generate]) !== '';
 
     const password = generate ? generatePassword() : supplied;
     const problems = addUserProblems(username, password, generate, email);
@@ -248,9 +249,9 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     if (session === undefined || user === undefined) return c.redirect(USERS_PATH, 303);
 
     const body = await c.req.parseBody();
-    const current = field(body[USER_FIELDS.currentPassword]);
-    const next = field(body[USER_FIELDS.newPassword]);
-    const confirmation = field(body[USER_FIELDS.newPasswordConfirmation]);
+    const current = stringOrEmpty(body[USER_FIELDS.currentPassword]);
+    const next = stringOrEmpty(body[USER_FIELDS.newPassword]);
+    const confirmation = stringOrEmpty(body[USER_FIELDS.newPasswordConfirmation]);
 
     const problems = changePasswordProblems({
       correct: verifyUserPassword(c.var.config.dataDir, user.username, current) !== undefined,
@@ -305,8 +306,8 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
   app.post(USER_EMAIL_PATH, async (c) => {
     const dataDir = c.var.config.dataDir;
     const body = await c.req.parseBody();
-    const id = Number(field(body[USER_FIELDS.userId]));
-    const email = field(body[USER_FIELDS.email]).trim();
+    const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
+    const email = stringOrEmpty(body[USER_FIELDS.email]).trim();
     const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
 
     if (target === undefined) {
@@ -349,7 +350,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
   app.post(USER_PROFILE_PATH, async (c) => {
     const dataDir = c.var.config.dataDir;
     const body = await c.req.parseBody();
-    const id = Number(field(body[USER_FIELDS.userId]));
+    const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
     const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
 
     if (target === undefined) {
@@ -358,12 +359,12 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     }
 
     const typed = {
-      displayName: field(body[USER_FIELDS.displayName]),
-      bio: field(body[USER_FIELDS.bio]),
-      avatar: field(body[USER_FIELDS.avatar]),
-      jobTitle: field(body[USER_FIELDS.jobTitle]),
-      location: field(body[USER_FIELDS.location]),
-      links: field(body[USER_FIELDS.links]),
+      displayName: stringOrEmpty(body[USER_FIELDS.displayName]),
+      bio: stringOrEmpty(body[USER_FIELDS.bio]),
+      avatar: stringOrEmpty(body[USER_FIELDS.avatar]),
+      jobTitle: stringOrEmpty(body[USER_FIELDS.jobTitle]),
+      location: stringOrEmpty(body[USER_FIELDS.location]),
+      links: stringOrEmpty(body[USER_FIELDS.links]),
     };
 
     const problem = profileLinkLineProblem(typed.links);
@@ -409,7 +410,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
   app.post(USER_NOTIFICATIONS_PATH, async (c) => {
     const dataDir = c.var.config.dataDir;
     const body = await c.req.parseBody();
-    const id = Number(field(body[USER_FIELDS.userId]));
+    const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
     const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
 
     if (target === undefined) {
@@ -417,7 +418,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       return c.redirect(USERS_PATH, 303);
     }
 
-    const name = field(body[USER_FIELDS.event]);
+    const name = stringOrEmpty(body[USER_FIELDS.event]);
     const event = notificationEvent(name);
     if (event === undefined) {
       flash(c, 'error', 'That is not something this site can tell anybody about.');
@@ -426,7 +427,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
 
     // An unticked checkbox submits no field at all, so its absence is the
     // answer rather than a missing one.
-    const on = field(body[USER_FIELDS.on]) !== '';
+    const on = stringOrEmpty(body[USER_FIELDS.on]) !== '';
     await setUserNotification({ dataDir, userId: target.id, event: name, on });
 
     flash(
@@ -450,7 +451,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
   app.post(USER_NOTIFICATION_MODE_PATH, async (c) => {
     const dataDir = c.var.config.dataDir;
     const body = await c.req.parseBody();
-    const id = Number(field(body[USER_FIELDS.userId]));
+    const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
     const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
 
     if (target === undefined) {
@@ -458,14 +459,14 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       return c.redirect(USERS_PATH, 303);
     }
 
-    const name = field(body[USER_FIELDS.event]);
+    const name = stringOrEmpty(body[USER_FIELDS.event]);
     const event = notificationEvent(name);
     if (event === undefined || !event.batched) {
       flash(c, 'error', 'That is not a notice this site can batch up.');
       return c.redirect(editUserPath(target.id), 303);
     }
 
-    const wanted = deliveryMode(field(body[USER_FIELDS.mode]));
+    const wanted = deliveryMode(stringOrEmpty(body[USER_FIELDS.mode]));
     if (wanted === undefined) {
       flash(c, 'error', 'That is not one of the choices.');
       return c.redirect(editUserPath(target.id), 303);
@@ -491,7 +492,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
     if (user === undefined) return c.redirect(USERS_PATH, 303);
 
     const body = await c.req.parseBody();
-    const wanted = field(body[USER_FIELDS.adminTheme]);
+    const wanted = stringOrEmpty(body[USER_FIELDS.adminTheme]);
     const theme = adminTheme(wanted);
     if (wanted !== '' && theme === undefined) {
       flash(c, 'error', 'That is not one of the themes.');
@@ -512,7 +513,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
   app.post(DELETE_USER_PATH, async (c) => {
     const dataDir = c.var.config.dataDir;
     const body = await c.req.parseBody();
-    const id = Number(field(body[USER_FIELDS.userId]));
+    const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
     const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
 
     const refusal = deleteUserRefusal({
@@ -772,11 +773,6 @@ function themeChoices(user: User): { value: string; label: string; chosen: boole
       chosen: user.adminTheme === name,
     })),
   ];
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function field(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }
 
 /**

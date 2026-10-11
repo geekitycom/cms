@@ -9,6 +9,7 @@ import type { ContentStore } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { MailService } from '../mail/service.ts';
+import { messageOf } from '../util/errors.ts';
 import { COMMENTS_NOTIFICATION } from './comments.ts';
 import { moderationLink } from './links.ts';
 import {
@@ -367,10 +368,6 @@ function digestTimesIn(source: string | undefined): Record<string, Record<string
   }
 
   return found;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function ignore(): void {

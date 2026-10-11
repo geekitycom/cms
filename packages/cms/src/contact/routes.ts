@@ -4,6 +4,7 @@ import { clientAddress, createLoginThrottle } from '../admin/throttle.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import { isServed } from '../web/documents.ts';
 import { sendContactMessage } from './delivery.ts';
 import {
@@ -156,17 +157,12 @@ function problemsOf(refusal: { kind: string; problems?: unknown }): Record<strin
 /** A submitted body as the form it is, every field a string. */
 function formOf(body: Record<string, unknown>): ContactForm {
   return {
-    page: text(body[CONTACT_FIELDS.page]),
-    name: text(body[CONTACT_FIELDS.name]),
-    email: text(body[CONTACT_FIELDS.email]),
-    subject: text(body[CONTACT_FIELDS.subject]),
-    message: text(body[CONTACT_FIELDS.message]),
-    trap: text(body[CONTACT_FIELDS.trap]),
-    loaded: text(body[CONTACT_FIELDS.loaded]),
+    page: stringOrEmpty(body[CONTACT_FIELDS.page]),
+    name: stringOrEmpty(body[CONTACT_FIELDS.name]),
+    email: stringOrEmpty(body[CONTACT_FIELDS.email]),
+    subject: stringOrEmpty(body[CONTACT_FIELDS.subject]),
+    message: stringOrEmpty(body[CONTACT_FIELDS.message]),
+    trap: stringOrEmpty(body[CONTACT_FIELDS.trap]),
+    loaded: stringOrEmpty(body[CONTACT_FIELDS.loaded]),
   };
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }

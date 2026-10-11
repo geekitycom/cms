@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { watch as watchTree } from 'node:fs';
 import type { FSWatcher } from 'node:fs';
-import { mkdir, readdir, readFile, rmdir, stat } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rmdir } from 'node:fs/promises';
 import path from 'node:path';
 
+import { messageOf } from '../util/errors.ts';
+import { exists, isNotFound } from '../util/files.ts';
 import type { Document, DocumentType } from './document.ts';
 import { handleDirectory } from './handles.ts';
 import {
@@ -604,26 +606,6 @@ async function readSource(file: string): Promise<string | undefined> {
     if (isNotFound(error)) return undefined;
     throw error;
   }
-}
-
-/** Whether a file is still on disk. */
-async function exists(file: string): Promise<boolean> {
-  try {
-    await stat(file);
-    return true;
-  } catch (error) {
-    if (isNotFound(error)) return false;
-    throw error;
-  }
-}
-
-function isNotFound(error: unknown): boolean {
-  const code = (error as { code?: unknown } | null)?.code;
-  return code === 'ENOENT' || code === 'ENOTDIR' || code === 'EISDIR';
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /**

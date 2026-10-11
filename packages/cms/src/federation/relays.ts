@@ -11,6 +11,7 @@ import type { AdminStore, Relay } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import type { ContentStore } from '../content/store.ts';
+import { messageOf } from '../util/errors.ts';
 import { actorId, senderKeyPairs } from './actor.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 
@@ -416,10 +417,6 @@ function originOf(value: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function ignore(): void {

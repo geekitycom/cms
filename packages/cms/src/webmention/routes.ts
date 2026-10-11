@@ -3,6 +3,7 @@ import type { Hono } from 'hono';
 import { readSiteSettings } from '../admin/settings.ts';
 import { clientAddress } from '../admin/throttle.ts';
 import type { GeekityEnv } from '../env.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { checkWebmentionRequest } from './receive.ts';
 import { postSyndicatedAt, syndicationCopies } from './syndication.ts';
@@ -55,8 +56,8 @@ export function mountWebmentions(app: Hono<GeekityEnv>): void {
 
     const body = await c.req.parseBody();
     const checked = checkWebmentionRequest(
-      text(body[WEBMENTION_FIELDS.source]),
-      text(body[WEBMENTION_FIELDS.target]),
+      stringOrEmpty(body[WEBMENTION_FIELDS.source]),
+      stringOrEmpty(body[WEBMENTION_FIELDS.target]),
       {
         baseUrl: config.baseUrl,
         documentAt: (pathname) => publicDocumentAt(store, pathname),
@@ -87,9 +88,4 @@ export function mountWebmentions(app: Hono<GeekityEnv>): void {
     c.header('allow', 'POST');
     return c.text('Send a webmention here with a POST carrying source and target.', 405);
   });
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }

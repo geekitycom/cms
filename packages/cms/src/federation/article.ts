@@ -48,6 +48,7 @@ import type { PostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
 import { respellTags } from '../content/tags.ts';
 import { visibilityOf } from '../content/visibility.ts';
+import { escapeAttribute, escapeText } from '../util/html.ts';
 import { userForAuthor } from '../web/authors.ts';
 import { isServed, permalinkOfObjectId } from '../web/documents.ts';
 import { postObjectId } from '../web/guids.ts';
@@ -347,7 +348,7 @@ export function postObject(
     return new Event({
       ...common,
       name: document.title === '' ? null : document.title,
-      summaries: summary === '' ? [] : inLanguage(escapeHtml(summary), language),
+      summaries: summary === '' ? [] : inLanguage(escapeText(summary), language),
       contents: inLanguage(document.html, language),
       startTime: toInstant(event.start) ?? null,
       endTime: toInstant(event.end) ?? null,
@@ -358,7 +359,7 @@ export function postObject(
   return new Article({
     ...common,
     name: document.title === '' ? null : document.title,
-    summaries: summary === '' ? [] : inLanguage(escapeHtml(summary), language),
+    summaries: summary === '' ? [] : inLanguage(escapeText(summary), language),
     contents: inLanguage(
       citing(document, context.data.cited) + readLine(readOf(document.extra)) + document.html,
       language,
@@ -508,8 +509,8 @@ function citing(document: Document, cited: CitedPageReader): string {
   }
   return lines
     .map(({ verb, url }) => {
-      const href = escapeHtml(url).replaceAll('"', '&quot;');
-      const name = escapeHtml(citedPageName(url, cited(url)));
+      const href = escapeAttribute(url);
+      const name = escapeText(citedPageName(url, cited(url)));
       return `<p>${verb} <a href="${href}">${name}</a></p>\n`;
     })
     .join('');
@@ -521,16 +522,12 @@ function noteContent(document: Document): string {
   if (title === '' || collapse(htmlToText(document.html)).startsWith(collapse(title))) {
     return document.html;
   }
-  const heading = `<p>${escapeHtml(title)}</p>`;
+  const heading = `<p>${escapeText(title)}</p>`;
   return document.html === '' ? heading : `${heading}\n${document.html}`;
 }
 
 function collapse(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
-}
-
-function escapeHtml(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
 /** One taxonomy term as a `Hashtag` pointing at its archive. */

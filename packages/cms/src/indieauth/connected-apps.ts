@@ -17,6 +17,7 @@ import { readSiteSettings, updateSiteSettings } from '../admin/settings.ts';
 import { ADMIN_TEMPLATES } from '../admin/templates.ts';
 import { CONNECTED_APPS_CHILD, CONNECTED_APPS_PATH } from '../admin/users.ts';
 import type { GeekityEnv } from '../env.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import { clientIdentifier, sameClient } from './client-id.ts';
 import { SCOPE_LABELS } from './consent.ts';
 import { SCOPES, siteBaseUrl } from './discovery.ts';
@@ -74,7 +75,7 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
   app.get(CONNECTED_APPS_PATH, (c) => render(c, ADMIN_TEMPLATES.connectedApps, screen(c)));
 
   app.post(ADD_CLIENT_WITHOUT_PKCE_PATH, async (c) => {
-    const value = text((await c.req.parseBody())[CLIENT_FIELD]).trim();
+    const value = stringOrEmpty((await c.req.parseBody())[CLIENT_FIELD]).trim();
     const refuse = (problem: string): Response => {
       c.status(400);
       return render(c, ADMIN_TEMPLATES.connectedApps, screen(c, { value, problem }));
@@ -96,7 +97,7 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
   });
 
   app.post(REMOVE_CLIENT_WITHOUT_PKCE_PATH, async (c) => {
-    const value = text((await c.req.parseBody())[CLIENT_FIELD]);
+    const value = stringOrEmpty((await c.req.parseBody())[CLIENT_FIELD]);
     let removed = false;
     await updateSiteSettings({
       contentDir: c.var.config.contentDir,
@@ -115,9 +116,9 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
     const { config } = c.var;
     const body = await c.req.parseBody({ all: true });
     const form: TokenForm = {
-      name: text(body['name']).trim(),
-      scopes: [body['scope'] ?? []].flat().map(text),
-      expires: text(body['expires']),
+      name: stringOrEmpty(body['name']).trim(),
+      scopes: [body['scope'] ?? []].flat().map(stringOrEmpty),
+      expires: stringOrEmpty(body['expires']),
     };
     const user =
       c.var.session?.userId == null
@@ -227,10 +228,6 @@ function screen(
       created: token !== undefined && 'created' in token ? token.created : undefined,
     },
   };
-}
-
-function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }
 
 /** One connection as the table shows it. */

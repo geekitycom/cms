@@ -5,6 +5,7 @@ import { isMigratedArrival } from './content/migrated.ts';
 import { holdOutbound } from './dev-mode.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { isFederatedDocument } from './federation/article.ts';
+import { messageOf } from './util/errors.ts';
 import { isListed } from './web/documents.ts';
 import { FEED_FORMATS, notifyEndpoints } from './web/feeds.ts';
 import type { NotifyServer } from './web/feeds.ts';
@@ -232,11 +233,6 @@ function termsOf(before: Document | undefined, after: Document | undefined): Tax
   }
 
   return terms;
-}
-
-/** What a thrown value has to say for itself. */
-function messageOf(thrown: unknown): string {
-  return thrown instanceof Error ? thrown.message : String(thrown);
 }
 
 function ignore(): void {

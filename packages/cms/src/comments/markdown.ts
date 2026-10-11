@@ -1,6 +1,8 @@
 import MarkdownIt from 'markdown-it';
 import type { MarkdownIt as MarkdownItInstance } from 'markdown-it';
 
+import { escapeAttribute, escapeText } from '../util/html.ts';
+
 /**
  * The Markdown a stranger is allowed to write.
  *
@@ -82,14 +84,4 @@ markdown.renderer.rules['image'] = (tokens, index, options, env, self) => {
 export function renderCommentMarkdown(body: string): string {
   const trimmed = body.trim();
   return trimmed === '' ? '' : markdown.render(trimmed);
-}
-
-/** A URL as an attribute value. */
-function escapeAttribute(value: string): string {
-  return escapeText(value).replaceAll('"', '&quot;');
-}
-
-/** Text as markup. */
-function escapeText(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }

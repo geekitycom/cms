@@ -1,3 +1,5 @@
+import { decodeEntities, escapeAttribute, escapeText } from '../util/html.ts';
+
 /**
  * Sanitising the HTML a stranger wrote.
  *
@@ -100,10 +102,10 @@ export function sanitizeCommentHtml(html: string): string {
   while (at < html.length) {
     const next = html.indexOf('<', at);
     if (next < 0) {
-      out.push(escapeText(html.slice(at)));
+      out.push(escapeText(decodeEntities(html.slice(at))));
       break;
     }
-    if (next > at) out.push(escapeText(html.slice(at, next)));
+    if (next > at) out.push(escapeText(decodeEntities(html.slice(at, next))));
     at = next;
 
     if (html.startsWith('<!--', at)) {
@@ -316,19 +318,6 @@ export function cleanPostHtml(html: string): string {
 }
 
 /**
- * A decoded attribute value as markup. Unlike {@link escapeText} it does not
- * decode again, so an address that only reads as a scheme after a second
- * decoding is written as the text it is.
- */
-function escapeAttribute(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
-}
-
-/**
  * A post's link or image address, or `undefined` when it names a scheme the
  * post may not use. A relative address has no scheme and is kept, unless it
  * opens with two slashes either way round: a browser reads `//host`, `/\host`
@@ -361,7 +350,7 @@ function keptAttributes(tag: Tag): string | undefined {
 
   const href = safeHref(tag.attributes['href']);
   if (href === undefined) return undefined;
-  return ` href="${escapeText(href)}" rel="${LINK_REL}"`;
+  return ` href="${escapeAttribute(href)}" rel="${LINK_REL}"`;
 }
 
 /** A link target, or `undefined` when it is not one this site will publish. */
@@ -430,63 +419,4 @@ function readTag(html: string, at: number): Tag | undefined {
 function unquote(value: string): string {
   const first = value[0];
   return (first === '"' || first === "'") && value.endsWith(first) ? value.slice(1, -1) : value;
-}
-
-/** The character references this module resolves before escaping again. */
-const ENTITIES: Readonly<Record<string, string>> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: ' ',
-};
-
-/**
- * Character references resolved.
- *
- * Text has to be decoded before it is escaped again, or `&amp;` in the input
- * would be published as `&amp;amp;`. A reference this module does not know is
- * left as the characters it is made of, which the escaping below then makes
- * safe.
- */
-function decodeEntities(value: string): string {
-  return value.replace(
-    /&(#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);/g,
-    (whole, body: string) => {
-      if (body.startsWith('#x') || body.startsWith('#X')) {
-        return codePoint(Number.parseInt(body.slice(2), 16)) ?? whole;
-      }
-      if (body.startsWith('#')) return codePoint(Number.parseInt(body.slice(1), 10)) ?? whole;
-      return ENTITIES[body] ?? whole;
-    },
-  );
-}
-
-/** One code point as a string, or `undefined` when it names no character. */
-function codePoint(value: number): string | undefined {
-  if (!Number.isInteger(value) || value < 0 || value > 0x10ffff) return undefined;
-  if (value >= 0xd800 && value <= 0xdfff) return undefined;
-  try {
-    return String.fromCodePoint(value);
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Text as markup: decoded, then escaped.
- *
- * Every one of the five characters is escaped, so the same function serves an
- * attribute value as well as a text node, and the result is well formed XML as
- * well as HTML. The apostrophe is written numerically because `&apos;` is not
- * one of HTML 4's named references.
- */
-function escapeText(value: string): string {
-  return decodeEntities(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 }

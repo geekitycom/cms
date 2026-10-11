@@ -17,8 +17,9 @@ import {
 } from '../mail/credentials.ts';
 import type { MailCredentials } from '../mail/credentials.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import { flash } from './flash.ts';
-import { bodyField, settingsPagePath } from './settings-page.ts';
+import { settingsPagePath } from './settings-page.ts';
 import type { MountSettingsOptions, SettingsPage } from './settings-page.ts';
 import { EMAIL_PATTERN, readSiteSettings, SETTINGS_PATH } from './settings.ts';
 import type { SiteSettings } from './settings.ts';
@@ -99,16 +100,16 @@ function mountMail(app: Hono<GeekityEnv>, _options: MountSettingsOptions): void 
     const { config } = c.var;
     const stored = readMailCredentials(config.dataDir);
 
-    if (bodyField(body[MAIL_FIELDS.action]) === MAIL_REMOVE) {
+    if (stringOrEmpty(body[MAIL_FIELDS.action]) === MAIL_REMOVE) {
       await removeMailCredentials(config.dataDir);
       flash(c, 'notice', 'The mail credentials are gone. No email is sent any more.');
       return c.redirect(here, 303);
     }
 
-    const apiKey = bodyField(body[MAIL_FIELDS.brevoApiKey]).trim();
-    const host = bodyField(body[MAIL_FIELDS.smtpHost]).trim();
-    const port = Number(bodyField(body[MAIL_FIELDS.smtpPort]).trim());
-    const password = bodyField(body[MAIL_FIELDS.smtpPassword]);
+    const apiKey = stringOrEmpty(body[MAIL_FIELDS.brevoApiKey]).trim();
+    const host = stringOrEmpty(body[MAIL_FIELDS.smtpHost]).trim();
+    const port = Number(stringOrEmpty(body[MAIL_FIELDS.smtpPort]).trim());
+    const password = stringOrEmpty(body[MAIL_FIELDS.smtpPassword]);
 
     if (host !== '' && (!Number.isInteger(port) || port < 1 || port > 65535)) {
       flash(c, 'error', 'An SMTP port is a whole number between 1 and 65535. Nothing was saved.');
@@ -129,8 +130,8 @@ function mountMail(app: Hono<GeekityEnv>, _options: MountSettingsOptions): void 
             smtp: {
               host,
               port,
-              secure: bodyField(body[MAIL_FIELDS.smtpSecure]) !== '',
-              user: bodyField(body[MAIL_FIELDS.smtpUser]).trim(),
+              secure: stringOrEmpty(body[MAIL_FIELDS.smtpSecure]) !== '',
+              user: stringOrEmpty(body[MAIL_FIELDS.smtpUser]).trim(),
               // A blank password keeps the stored one, so the port and the user
               // can be edited without retyping a secret the form was never
               // allowed to show.
@@ -163,7 +164,7 @@ function mountMail(app: Hono<GeekityEnv>, _options: MountSettingsOptions): void 
    */
   app.post(MAIL_TEST_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const to = bodyField(body[MAIL_TEST_FIELDS.to]).trim();
+    const to = stringOrEmpty(body[MAIL_TEST_FIELDS.to]).trim();
 
     if (!EMAIL_PATTERN.test(to)) {
       flash(c, 'error', 'Type the address to send the test message to.');

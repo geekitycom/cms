@@ -1,5 +1,6 @@
 import { SNIPPET_CLOSE, SNIPPET_OPEN } from '../content/search.ts';
 import type { SearchHit } from '../content/store.ts';
+import { escapeText } from '../util/html.ts';
 import { documentJson, JSON_SCHEMA_VERSION, representationHref } from './negotiate.ts';
 import type { DocumentJson, Representation } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
@@ -67,7 +68,7 @@ export function searchPageIndex(raw: string | undefined): number | undefined {
  * into `<mark>`, so the words of a post about markup are printed as words.
  */
 export function snippetHtml(snippet: string): string {
-  return escapeHtml(snippet)
+  return escapeText(snippet)
     .replaceAll(SNIPPET_OPEN, '<mark>')
     .replaceAll(SNIPPET_CLOSE, '</mark>');
 }
@@ -120,13 +121,4 @@ export function searchJson(options: SearchJsonOptions): SearchJson {
       snippet: snippetHtml(hit.snippet),
     })),
   };
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }

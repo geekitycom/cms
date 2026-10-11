@@ -97,15 +97,8 @@ export async function siteWithContent(
   return directory;
 }
 
+export { exists } from '../util/files.ts';
+
 export async function readJson(file: string): Promise<Record<string, unknown>> {
   return JSON.parse(await fs.readFile(file, 'utf8')) as Record<string, unknown>;
-}
-
-export async function exists(file: string): Promise<boolean> {
-  try {
-    await fs.stat(file);
-    return true;
-  } catch {
-    return false;
-  }
 }
