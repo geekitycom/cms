@@ -33,6 +33,9 @@ pnpm install
 pnpm dev
 ```
 
+On Node 25 or later, run `npm install --global corepack@latest` first. Those
+versions do not include Corepack.
+
 `pnpm dev` serves the demo site in `apps/demo`.
 [Developing Geekity CMS](docs/development.md) covers the workspace, the
 commands, the quality gates, CI and releasing. Commit messages follow the rules
