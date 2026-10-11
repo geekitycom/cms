@@ -2894,28 +2894,18 @@ const MIGRATIONS: readonly Migration[] = [
   },
   {
     // A comment's key is its id (decision-51), so the key worked out from its
-    // guid against the base URL has nothing left to say.
+    // guid against the base URL has nothing left to say. What a comment
+    // carries from elsewhere (TASK-336..338) gets a column of its own.
     version: 26,
     sql: `
       DROP INDEX comments_replies_key;
       ALTER TABLE comments DROP COLUMN replies_key;
       ALTER TABLE comments DROP COLUMN keys_base;
-    `,
-  },
-  {
-    version: 27,
-    sql: `
       ALTER TABLE comments ADD COLUMN migrated INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE comments ADD COLUMN origin TEXT;
+      ALTER TABLE comments ADD COLUMN user TEXT;
+      ALTER TABLE comments ADD COLUMN actor TEXT;
     `,
-  },
-  {
-    version: 28,
-    sql: `ALTER TABLE comments ADD COLUMN user TEXT;`,
-  },
-  {
-    version: 29,
-    sql: `ALTER TABLE comments ADD COLUMN actor TEXT;`,
   },
 ];
 
