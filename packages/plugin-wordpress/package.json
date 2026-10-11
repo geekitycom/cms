@@ -42,7 +42,6 @@
     "@fedify/fedify": "^2.4.0",
     "@fedify/vocab": "^2.4.0",
     "entities": "^8.0.0",
-    "js-yaml": "^5.4.2",
     "sax": "^1.6.1",
     "turndown": "^7.2.4"
   },
@@ -56,6 +55,7 @@
     "@types/node": "^26.6.4",
     "@types/sax": "^1.2.7",
     "esbuild": "^0.28.2",
+    "js-yaml": "^5.4.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

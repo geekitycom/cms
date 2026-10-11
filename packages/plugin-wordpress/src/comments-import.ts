@@ -1,4 +1,4 @@
-import { repliesKey, webmentionKey } from '@geekity/cms/plugin';
+import { isRecord, repliesKey, webmentionKey } from '@geekity/cms/plugin';
 import type { PluginCommandContext, PluginComment } from '@geekity/cms/plugin';
 
 import type {
@@ -195,7 +195,7 @@ function remoteActors(exported: WordPressExport): ReadonlyMap<string, RemoteActo
 function actorJson(content: string): Record<string, unknown> | undefined {
   try {
     const parsed: unknown = JSON.parse(content);
-    return isObject(parsed) ? parsed : undefined;
+    return isRecord(parsed) ? parsed : undefined;
   } catch {
     return undefined;
   }
@@ -211,12 +211,8 @@ function iconUrl(icon: unknown): string | null {
     }
     return null;
   }
-  if (!isObject(icon)) return null;
+  if (!isRecord(icon)) return null;
   return iconUrl(icon['url']) ?? iconUrl(icon['href']);
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function kindOf(source: Source, named: Kind): Kind {
