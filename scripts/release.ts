@@ -153,7 +153,7 @@ function refusal(pkg: WorkspacePackage, state: Exclude<TagState, 'released'>): s
   const what = `${pkg.name}@${pkg.version}`;
   switch (state) {
     case 'missing':
-      return `${what}: tag ${pkg.tag} does not exist. Run git pull --prune --tags; if release-please did not tag the release, tag it by hand as the README's Releasing section describes.`;
+      return `${what}: tag ${pkg.tag} does not exist. Run git pull --prune --tags; if release-please did not tag the release, tag it by hand as the Releasing section of docs/development.md describes.`;
     case 'not-in-history':
       return `${what}: tag ${pkg.tag} is not in the history of HEAD. Pull main and try again.`;
     case 'changed':

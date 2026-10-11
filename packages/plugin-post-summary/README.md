@@ -1,8 +1,8 @@
 # @geekity/plugin-post-summary
 
-A [Geekity CMS](../cms/README.md) plugin that suggests a post's title and
+A [Geekity CMS](https://github.com/geekitycom/cms/blob/main/packages/cms/README.md) plugin that suggests a post's title and
 description in the editor. It asks the language model that
-[`@geekity/plugin-llm`](../plugin-llm/README.md) connects the site to, and only
+[`@geekity/plugin-llm`](https://github.com/geekitycom/cms/blob/main/packages/plugin-llm/README.md) connects the site to, and only
 when the author presses a button. Nothing is sent when a post is saved or
 published.
 

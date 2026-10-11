@@ -1,6 +1,6 @@
 # @geekity/plugin-llm
 
-A [Geekity CMS](../cms/README.md) plugin that connects the site to a language
+A [Geekity CMS](https://github.com/geekitycom/cms/blob/main/packages/cms/README.md) plugin that connects the site to a language
 model. It speaks the OpenAI chat-completions API, so it works with OpenRouter,
 its default, and with OpenAI or Ollama by changing the base URL. It calls the
 provider with Node's built-in `fetch` and depends on no SDK.
