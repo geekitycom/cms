@@ -6,9 +6,8 @@
  * endpoints that support every parameter in it.
  */
 
-import { isRecord } from './connection.ts';
 import type { LlmConnection } from './connection.ts';
-import { withoutTrailingSlash } from '@geekity/cms/plugin';
+import { isRecord, withoutTrailingSlash } from '@geekity/cms/plugin';
 
 /** OpenRouter's reasoning efforts, least first. */
 export const REASONING_EFFORTS = [

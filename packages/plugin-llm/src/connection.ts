@@ -1,4 +1,4 @@
-import { withoutTrailingSlash } from '@geekity/cms/plugin';
+import { isRecord, withoutTrailingSlash } from '@geekity/cms/plugin';
 /**
  * One call to a provider that speaks the OpenAI chat-completions API
  * (decision-33), made with Node's built-in `fetch`, and what came of it as a
@@ -210,8 +210,4 @@ function hostOf(baseUrl: string): string {
 
 function failed(error: LlmFailure): { ok: false; error: LlmFailure } {
   return { ok: false, error };
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
