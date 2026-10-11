@@ -559,7 +559,8 @@ After the entry, a post prints:
 A page prints its backlinks too. Then it prints the conversation and the
 comment form when it takes comments, and the contact form when its front
 matter asks for one. A page has no neighbours, no tags and no syndication
-links.
+links. A page with no title prints no `h1`, and its header holds only the
+kicker (see [Titles](../content.md#titles)).
 
 ## Backlinks
 
@@ -868,7 +869,8 @@ the permalink that redirects there.
 It draws the page's own title and words, and nothing else (decision-44):
 
 1. `h2.section-title`, the page's title. It is an `h2` because
-   `layouts/base.njk` heads the root path with the site title as the `h1`.
+   `layouts/base.njk` heads the root path with the site title as the `h1`. A
+   page with no title prints no `h2`.
 2. `div.page-body.e-content`, the rendered body. There is no Published line,
    because the front page stands for the site, not for a dated piece of
    writing.
@@ -980,6 +982,10 @@ description, Open Graph and Twitter card tags, the site's icons and one JSON-LD
 graph. All of it is in the `head` block. An override that only adds a tag calls
 `{{ super() }}` first.
 
+**The title** is the page's title and the site title, as `Hello · Site`. A
+post with no title uses its `label` in place of a title. A page with no title,
+and the front page, use the site title alone.
+
 **The description** is the page's own `description` from the front matter,
 else the entry's `summary` (the line the feeds publish), else `site.tagline`.
 It prints once, as `<meta name="description">`. The Open Graph and Twitter
@@ -994,7 +1000,8 @@ mode gets a dark canvas, not a white flash, while the stylesheet loads.
 
 **The card.**
 
-- `og:title` is the page's title, or the site's title on the front page.
+- `og:title` is the page's title, or a post's `label` when it has no title. It
+  is the site's title on the front page and on a page with no title.
 - `og:site_name` is always the site's.
 - `og:type` is `article` on a rendered post or page, and `website` everywhere
   else, including a listing that carries a page's front matter.
@@ -1132,6 +1139,7 @@ graph holds:
     like a note's (TASK-264), or "Photo" when that photo has no alt text. The
     kicker still says Photo, and no heading prints.
   - "Untitled" is the last fallback.
+  - A page with no title has no headline.
   - Its `image` is the picture the Open Graph tags print, so the two always
     match (see [The head](#the-head)).
   - Its `license` is the page's license URL, the front matter's over the

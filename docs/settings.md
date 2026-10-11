@@ -443,7 +443,10 @@ choice and its two options come from WordPress:
 - **Your latest posts.** The archive at `/`, paginated at `/page/N/`. This is
   the default, and an empty `homepage` means this option.
 - **A static page.** The page is served at `/`. Its own permalink returns `301`
-  to `/`, so the front page has one URL, and the menu links it at `/`. The
+  to `/`, so the front page has one URL, and the menu links it at `/`. Its
+  Markdown and JSON are at `/index.md` and `/index.json`, and the same
+  representations under its permalink redirect there. See
+  [Content negotiation](public-site.md#content-negotiation). The
   default theme renders it with `layouts/front-page.njk`, which prints only the
   page's own title and words (decision-44). It lists no posts, prints no links
   and prints no bio.

@@ -25,7 +25,9 @@
 <article class="blog-post h-entry"{{ language.attr(lang) }}>
   <header class="post-header">
     {{ kicker.line("Page") }}
+    {% if title %}
     <h1 class="p-name">{{ title }}</h1>
+    {% endif %}
   </header>
 
   <section class="e-content">

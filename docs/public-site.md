@@ -23,7 +23,7 @@ Booting mounts the public site on the app. The routes are:
 | `/opensearch.xml`                       | The OpenSearch description, so a browser can offer the site's search from its address bar.                                               |
 | `/_geekity/oembed?url=…`                | The oEmbed card of the post or page at `url`, as JSON or with `format=xml`; a 404 for anything else.                                     |
 | `/_geekity/embed?url=…`                 | The same card as a page any site may frame, which the oEmbed `html` puts in an iframe; a 404 for anything else.                          |
-| `/llms.txt`                             | The site's pages and recent posts for a language model, each linked to its Markdown. See [llms.txt](#llmstxt).                           |
+| `/llms.txt`                             | Every page and post the site lists, for a language model, each linked to its Markdown. See [llms.txt](#llmstxt).                         |
 | `/{key}.txt`                            | The IndexNow key, while the site has IndexNow on. See [IndexNow](#indexnow).                                                             |
 | `/.well-known/security.txt`             | Where to report a vulnerability; a 404 until a security contact is set. See [security.txt](security.md#securitytxt-and-change-password). |
 | `/.well-known/change-password`          | A redirect to the signed-in user's change-password form, or to the login form.                                                           |
@@ -289,17 +289,17 @@ proxy, the header shows which layer sent each one.
 
 ## Content negotiation
 
-Every public URL is one resource with more than one body. A post or a page has
-three. A listing has two.
+Every public URL is one resource with more than one body. A post, a page and
+a listing each have three.
 
-| Media type         | Extension | Body                                             |
-| ------------------ | --------- | ------------------------------------------------ |
-| `text/html`        | —         | The document through the theme. The default.     |
-| `text/markdown`    | `.md`     | The file as it is stored, front matter included. |
-| `application/json` | `.json`   | The document as data, see below.                 |
+| Media type         | Extension | Body                                                                                |
+| ------------------ | --------- | ----------------------------------------------------------------------------------- |
+| `text/html`        | —         | The document through the theme. The default.                                        |
+| `text/markdown`    | `.md`     | The document as Markdown for a Markdown browser. See [The Markdown](#the-markdown). |
+| `application/json` | `.json`   | The document as data, see below.                                                    |
 
-Listings, which are `/`, `/page/N/`, `/tag/{tag}/` and `/tag/{tag}/page/N/`,
-offer HTML and JSON only, because a listing has no Markdown file.
+Listings are `/`, `/page/N/`, the posts page, the tag, category and author
+archives, and their pages.
 
 The server chooses the representation in this order:
 
@@ -313,6 +313,21 @@ The server chooses the representation in this order:
 4. A request that accepts none of the representations gets `406` with a JSON
    body listing what it could have asked for.
 
+A static homepage is served at `/` in every representation, at `/`,
+`/index.md` and `/index.json`. Its Markdown front matter says `permalink: /`
+and its JSON `url` is the site root, whatever permalink the page's file
+carries. Each URL under that permalink answers one `301` to the root form of
+the same representation:
+
+| Request (homepage permalink `/about/`) | Answer                 |
+| -------------------------------------- | ---------------------- |
+| `/about/`                              | `301` to `/`           |
+| `/about/index.md`, `/about.md`         | `301` to `/index.md`   |
+| `/about/index.json`, `/about.json`     | `301` to `/index.json` |
+
+A page that is not the homepage keeps its own URLs. The posts page's `index.md`
+and `index.json` are its listing's.
+
 The feeds are fixed routes and are not negotiated, because feed readers do not
 send useful `Accept` headers. See [Feeds](feeds.md).
 
@@ -321,6 +336,68 @@ curl -H 'Accept: text/markdown' https://example.com/2026/09/hello/
 curl https://example.com/2026/09/hello/index.json
 curl 'https://example.com/index.json?full=1'
 ```
+
+### The Markdown
+
+The Markdown representation is written for a Markdown browser such as
+[md.geekity.com](https://md.geekity.com/), which follows Dave Winer's
+Markdown Browser spec, and for language models. A Markdown browser does no
+content negotiation, so every link to a page of the site points at that
+page's `.md` URL.
+
+A document's Markdown has four parts:
+
+| Part         | What it holds                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Front matter | The file's front matter, with navigation added. See the table below.                                                            |
+| Header       | The theme's `partials/markdown-header.md.njk`. The default theme writes the title as a heading, and the bio where there is one. |
+| Body         | The stored body, with its links to the site's own pages pointing at their `.md` URLs.                                           |
+| Footer       | The theme's `partials/markdown-footer.md.njk`. The default theme writes a heading, a post's byline and the site's menus.        |
+
+The CMS adds these front matter keys:
+
+| Key               | Value                                                                                                |
+| ----------------- | ---------------------------------------------------------------------------------------------------- |
+| `home`            | `/index.md`, on every document and listing.                                                          |
+| `previous`        | A post's older neighbour, the same one the HTML post navigation links. On a listing, its newer page. |
+| `next`            | A post's newer neighbour. On a listing, its older page.                                              |
+| `author`          | The author's display name, when the post's `author` names a user.                                    |
+| `author_username` | That user's username, beside `author`.                                                               |
+
+Each of `previous` and `next` is absent when there is no neighbour on that
+side. A page has neither. All three URLs are root-relative `.md` URLs.
+
+A link in the body is rewritten when the site answers its target with a
+document or a listing. The CMS follows the target the way it answers a
+request: the homepage rule, `redirect_from`, the declared redirects and
+`/?p=ID`. A fragment is kept. These stay as they are written:
+
+- Links to other sites.
+- Images.
+- Code spans and code blocks.
+- Raw HTML.
+- Links to URLs with no Markdown, such as `/search/` and `/feed/`.
+
+An autolink or a bare URL to a page of the site becomes an inline link with
+the URL as its text.
+
+A listing's Markdown has the same front matter keys, the title as a heading,
+the site's tagline or the posts page's description as a quote, then the posts
+on that page, one line each:
+
+```markdown
+## Posts
+
+- [2026-09-03 Third post](/third/index.md): The third post's description.
+```
+
+On an author archive the header writes the author's bio under the heading.
+On a site whose author is a user, a homepage that lists the latest posts
+carries that bio too. A homepage that is a page shows only the page, as its
+HTML does. A site theme can add the bio there.
+
+A theme overrides either partial like any other template. See
+[The Markdown representation](theme/markdown.md).
 
 ### The JSON shape
 
@@ -518,27 +595,52 @@ No page links to the sitemap. `robots.txt` names it, and crawlers look there.
 
 `/llms.txt` describes the site for a language model, in the
 [llms.txt](https://llmstxt.org/) format. It holds the site's title as a heading
-and its tagline as a quote. Then it lists every public page by title and the
-posts the feeds carry, newest first. Each entry links to the document's
-Markdown, the format a model reads best:
+and its tagline as a quote. Three sections follow:
+
+| Section    | What it lists                                                                                   |
+| ---------- | ----------------------------------------------------------------------------------------------- |
+| Navigation | Every item of the site's menus, each URL once, in the order the menus are stored.               |
+| Pages      | Every listed page, sorted by name. A page's `description` follows its link.                     |
+| Posts      | Every listed post, newest first. Each link is followed by the post's date and its feed summary. |
+
+Each entry links to the document's Markdown, the format a model reads best.
+A menu item that links to another site, or to a URL with no Markdown, keeps its
+URL.
+The file lists the same documents as the [sitemap](#sitemap-and-robotstxt).
+Drafts, scheduled posts, unlisted and private documents and the trash stay
+out. A post or page without a title is named by the same label the site gives
+it everywhere else: its first words, else what it is, else `Untitled`.
+
+A post's date is its calendar day in the site's timezone. Its summary is the
+one the feeds carry: the post's `description`, else the first paragraph of its
+body cut to 55 words.
 
 ```markdown
 # Field Notes
 
 > Notes from the field.
 
+## Navigation
+
+- [About](https://example.com/about/index.md)
+- [Mastodon](https://mastodon.example/@me)
+
 ## Pages
 
 - [About](https://example.com/about/index.md): Who writes this.
 
-## Recent posts
+## Posts
 
-- [Third post](https://example.com/third/index.md)
+- [Third post](https://example.com/third/index.md): 2026-03-01. The third post's first paragraph.
 ```
 
-A document's `description` follows its link. A static homepage is listed at
-`/index.md`, because `/` is where it is published. The file is served as
-`text/markdown` and carries an `ETag` and a `Last-Modified`, the newest date
+The file is one document however large the site is. The llms.txt format has
+no pagination, so a site with thousands of posts serves a long file. The CMS
+builds it from the index with the same few queries however many documents the
+site has, and no lookup per document.
+
+A static homepage is listed at `/index.md`, because `/` is where it is
+published. The file is served as `text/markdown` and carries an `ETag` and a `Last-Modified`, the newest date
 among its entries. It answers a conditional request with 304, as the sitemap
 does.
 

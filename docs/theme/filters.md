@@ -10,6 +10,14 @@
 | `fediverseHandle`            | The fediverse handle of a username on this site, `@user@host`, the same account WebFinger answers for (TASK-202): `{{ siteAuthor.username \| fediverseHandle }}` gives `@ada@example.com`. The host is the `baseUrl` host, port included. An empty or non-string value gives the empty string.                                                                                                                                                                                      |
 | `host`                       | The hostname of a URL: `{{ "https://example.com/post" \| host }}` gives `example.com`. A value that does not parse as a URL is returned as it is. A non-string value gives the empty string.                                                                                                                                                                                                                                                                                        |
 
+The two Markdown partials also have these filters. See
+[The Markdown representation](markdown.md).
+
+| Filter           | What it does                                                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `escapeMarkdown` | Puts text on one line and escapes the characters that would start emphasis, code, a link or raw HTML, so a label prints as written. |
+| `markdownUrl`    | Gives a URL that the site answers with a document or a listing its `.md` URL, and leaves any other URL as it is.                    |
+
 ## The `date` filter
 
 `format` defaults to `readable`.

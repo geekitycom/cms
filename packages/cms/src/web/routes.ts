@@ -6,7 +6,9 @@ import { readSiteSettings, robotsPolicyOf } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
-import { serializeDocument } from '../content/writer.ts';
+import { calendarDayIn } from '../content/time.ts';
+import { rewriteMarkdownLinks } from '../content/markdown-links.ts';
+import { documentFrontMatter, normalizeBody } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { mountAvatars } from '../avatars/routes.ts';
 import { readAltTexts } from '../images/alt-text.ts';
@@ -36,6 +38,7 @@ import { devModeOn } from '../dev-mode.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
 import { mountPingbacks, pingbackEndpointFor } from '../webmention/pingback.ts';
+import { landing, siteLinkAt } from '../webmention/links.ts';
 import { mountWebmentions, WEBMENTION_PATH } from '../webmention/routes.ts';
 import { mountNotificationLinks } from '../notifications/routes.ts';
 import { advertiseIdentityEndpoints } from '../indieauth/discovery.ts';
@@ -50,7 +53,9 @@ import {
   siteAuthorContext,
 } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
+import { siteTimezone } from './context.ts';
 import { feedComments, spokenIn } from './conversation.ts';
+import { feedExcerpt } from './feed-item.ts';
 import { COMMENT_PAGE_PREFIX } from './guids.ts';
 import {
   goneDocumentAt,
@@ -113,13 +118,23 @@ import {
 import type { EmbedSubject } from './oembed.ts';
 import {
   generatedLlmsTxt,
-  llmsListingTxt,
   LLMS_TXT_LINK,
   LLMS_TXT_PATH,
   llmsTxtResponse,
   ownLlmsTxt,
 } from './llms.ts';
 import type { LlmsEntry, LlmsIndex } from './llms.ts';
+import {
+  bioOf,
+  entryList,
+  linkList,
+  markdownFile,
+  namedAuthor,
+  navigationFrontMatter,
+  oneLine,
+} from './markdown-page.ts';
+import type { MarkdownChrome, MarkdownLink, MarkdownUrl } from './markdown-page.ts';
+import { navigationLinks } from './navigation.ts';
 import { indexNowKeyPath, indexNowKeyResponse } from './indexnow.ts';
 import {
   searchHref,
@@ -130,7 +145,7 @@ import {
   SEARCH_PATH,
   SEARCH_QUERY_PARAM,
 } from './search.ts';
-import { findPathRedirect, findQueryRedirect, redirectLocation } from './redirects.ts';
+import { decodedPath, findPathRedirect, findQueryRedirect, redirectLocation } from './redirects.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
@@ -187,7 +202,7 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
     const response =
       home === undefined
         ? listing(c, { term: undefined, pageNumber: 0 })
-        : negotiateDocument(c, home, selectFromAccept(c, DOCUMENT_REPRESENTATIONS), '/');
+        : negotiateDocument(c, home, selectFromAccept(c, DOCUMENT_REPRESENTATIONS));
     // The home page is where a tool that found the site looks for its index
     // (TASK-149): a header, so it is found without parsing the page.
     if (readSiteSettings(c.var.config.contentDir).llmsTxt) {
@@ -285,7 +300,8 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   app.get(LLMS_TXT_PATH, (c) => {
     const { contentDir, baseUrl } = c.var.config;
     if (!readSiteSettings(contentDir).llmsTxt) return notFound(c);
-    const file = ownLlmsTxt(contentDir) ?? generatedLlmsTxt(llmsIndex(c), baseUrl);
+    const file =
+      ownLlmsTxt(contentDir) ?? generatedLlmsTxt(llmsIndex(c), baseUrl, markdownUrlFor(c, '/'));
     return llmsTxtResponse(file, conditionalHeaders(c));
   });
 
@@ -387,7 +403,7 @@ function embeddableAt(
 
   const document = publicDocumentAt(c.var.store, pathname);
   if (document === undefined || document.path === pages.posts?.path) return undefined;
-  return { document, href: document.path === pages.home?.path ? '/' : document.permalink };
+  return { document, href: servedPath(document, pages.home) };
 }
 
 /**
@@ -473,7 +489,8 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     // permalink in the file, so that a homepage put back to being an ordinary
     // page goes back to answering there, and that URL points at `/` while it
     // is the front page.
-    if (document.path === pages.home?.path) return c.redirect('/', 301);
+    const served = servedPath(document, pages.home);
+    if (served !== document.permalink) return c.redirect(encodePath(served), 301);
 
     // WordPress answered `?feed=rss2` on a permalink with that document's
     // comments feed, which is the only feed a document has here too. The other
@@ -491,27 +508,19 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   const { search } = new URL(c.req.url);
   const extension = splitRepresentationExtension(pathname);
   if (extension !== undefined) {
-    const canonicalRedirect = (candidate: string): string | undefined => {
-      const href = representationHref(encodePath(candidate), extension.representation);
+    const canonicalRedirect = (path: string): string | undefined => {
+      const href = representationHref(encodePath(path), extension.representation);
       return href === encodePath(pathname) ? undefined : `${href}${search}`;
     };
 
     for (const candidate of extension.paths) {
       // `/index.md` and `/index.json` are the front page's own
-      // representations on a site whose `/` is a page: the document is at `/`
-      // however it is asked for.
+      // representations on a site whose `/` is a page.
       const found = candidate === '/' ? pages.home : publicDocumentAt(store, candidate);
-      const servesListing = found !== undefined && found.path === pages.posts?.path;
-      if (found !== undefined && !servesListing) {
-        const canonical = canonicalRedirect(candidate);
-        if (canonical !== undefined) return c.redirect(canonical, 301);
-        return negotiateDocument(
-          c,
-          found,
-          extension.representation,
-          candidate === '/' ? '/' : undefined,
-        );
-      }
+      if (found === undefined || found.path === pages.posts?.path) continue;
+      const canonical = canonicalRedirect(servedPath(found, pages.home));
+      if (canonical !== undefined) return c.redirect(canonical, 301);
+      return negotiateDocument(c, found, extension.representation);
     }
 
     // `/index.json`, `/page/2/index.json`, `/tag/x/index.json`,
@@ -572,7 +581,7 @@ function movedHref(
 ): string | undefined {
   const document = store.getByFormerPermalink(pathname);
   if (document === undefined) return undefined;
-  const href = document.path === pages.home?.path ? '/' : encodePath(document.permalink);
+  const href = encodePath(servedPath(document, pages.home));
   return representation === undefined ? href : representationHref(href, representation);
 }
 
@@ -811,18 +820,19 @@ function selectFromAccept(
 /**
  * One document in one representation, or the 406 an impossible `Accept` earns.
  *
- * `href` is where it is being served, which is its own permalink everywhere
- * but the front page: a page serving as the homepage is read at `/`, and the
- * canonical URL, the alternates and the theme's own links have to say so.
+ * It is served at {@link servedPath}: a page serving as the homepage is read at
+ * `/`, and the canonical URL, the alternates, the theme's own links, the
+ * Markdown's front matter and the JSON's `url` have to say so.
  */
 function negotiateDocument(
   c: Context<GeekityEnv>,
   document: Document,
   representation: Representation | undefined,
-  href: string = document.permalink,
 ): Response {
+  const path = servedPath(document, frontPages(c).home);
+  const href = encodePath(path);
   if (representation === undefined) {
-    return notAcceptableResponse(encodePath(href), DOCUMENT_REPRESENTATIONS);
+    return notAcceptableResponse(href, DOCUMENT_REPRESENTATIONS);
   }
 
   // Who the request's session says is reading, when it says anybody
@@ -841,26 +851,27 @@ function negotiateDocument(
   const page =
     representation === 'html'
       ? c.var.renderer.renderPage(document, {
-          frontPage: href === '/',
+          frontPage: path === '/',
           extra: { ...commentNotice(c, document, viewer), ...(listed ? {} : { noindex: true }) },
           viewer,
         })
       : undefined;
 
+  const served = path === document.permalink ? document : { ...document, permalink: path };
   const markdown =
     representation === 'markdown' || representation === 'text'
-      ? documentMarkdown(document)
+      ? documentMarkdown(c, served)
       : undefined;
   const body =
     markdown ??
     (representation === 'json'
-      ? documentJson(document, { baseUrl: c.var.config.baseUrl })
+      ? documentJson(served, { baseUrl: c.var.config.baseUrl })
       : page?.html);
 
   const response = representationResponse({
     body,
     representation,
-    href: encodePath(href),
+    href,
     available: DOCUMENT_REPRESENTATIONS,
     noindex: !listed,
     // Where a webmention about this page is sent. It is a header rather than
@@ -959,7 +970,7 @@ function canonicalTarget(
     if (!isServed(document)) return undefined;
     // The homepage's own URL leads to `/` rather than to the redirect that
     // leads to `/`: one hop, the way `/page/1` reaches `/` in one.
-    return document.path === pages.home?.path ? '/' : encodePath(pathname);
+    return encodePath(servedPath(document, pages.home));
   }
 
   const moved = movedHref(store, pages, pathname, undefined);
@@ -1111,6 +1122,15 @@ function listingRequestAt(
 function listingRoot(pages: FrontPages): string | undefined {
   if (pages.posts !== undefined) return pages.posts.permalink;
   return pages.home === undefined ? '/' : undefined;
+}
+
+/**
+ * The path the public site serves a document at, in every representation:
+ * `/` for the page that is the homepage, whose own permalink redirects there,
+ * and the document's permalink otherwise.
+ */
+function servedPath(document: Document, home: Document | undefined): string {
+  return document.path === home?.path ? '/' : document.permalink;
 }
 
 /** The published page one slug names, or `undefined`. */
@@ -1331,8 +1351,7 @@ function listing(
     term?.term ??
     author?.user.profile?.displayName ??
     author?.user.username ??
-    request.document?.title ??
-    renderer.site().title;
+    (request.document?.title || renderer.site().title);
 
   if (representation === 'markdown' || representation === 'text') {
     return listingMarkdown(c, request, representation, { href, title, pagination, documents });
@@ -1386,19 +1405,36 @@ function listingMarkdown(
   const { next, previous } = page.pagination.href;
   const home = frontPages(c).home;
   const latestPosts = request.term === undefined && request.author === undefined;
-  const description =
-    request.document?.description ?? (latestPosts ? c.var.renderer.site().tagline : undefined);
-
-  const body = llmsListingTxt(
-    {
-      title: page.title,
-      description,
-      posts: page.documents.map((document) => llmsEntry(c, document, home)),
-      newer: previous === null ? undefined : representationHref(previous, 'markdown'),
-      older: next === null ? undefined : representationHref(next, 'markdown'),
-    },
-    c.var.config.baseUrl,
+  const description = oneLine(
+    request.document?.description ?? (latestPosts ? (c.var.renderer.site().tagline ?? '') : ''),
   );
+  const timezone = siteTimezone(c.var.renderer.site());
+  const url = decodedPath(page.href);
+  const markdownUrl = markdownUrlFor(c, url);
+
+  const newer = previous === null ? undefined : { label: 'Newer posts', url: previous };
+  const older = next === null ? undefined : { label: 'Older posts', url: next };
+  const author = request.author === undefined ? undefined : profileContext(request.author.user);
+  const chrome: MarkdownChrome = {
+    url,
+    title: page.title,
+    previous: newer,
+    next: older,
+    bio: bioOf(author),
+  };
+  const entries = page.documents.map((document) => ({
+    label: documentLabel(c, document),
+    url: servedPath(document, home),
+    date: document.date === undefined ? undefined : calendarDayIn(document.date, timezone),
+    description: document.description,
+  }));
+  const pager = [newer, older].filter((link) => link !== undefined);
+
+  const body = markdownPage(c, { title: page.title, permalink: url }, chrome, [
+    description === '' ? '' : `> ${description}`,
+    entries.length === 0 ? '' : `## Posts\n\n${entryList(entries, markdownUrl)}`,
+    pager.length === 0 ? '' : `## More posts\n\n${linkList(pager, markdownUrl)}`,
+  ]);
 
   return representationResponse({
     body,
@@ -1411,10 +1447,105 @@ function listingMarkdown(
   });
 }
 
-function documentMarkdown(document: Document): string {
-  const title = document.title.replace(/\s+/g, ' ').trim();
-  if (title === '' || /^#[ \t]/.test(document.body.trimStart())) return serializeDocument(document);
-  return serializeDocument({ ...document, body: `# ${title}\n\n${document.body}` });
+function documentMarkdown(c: Context<GeekityEnv>, document: Document): string {
+  const writer = authorContext(listUsers(c.var.config.dataDir), document.author);
+  const neighbours = document.type === 'post' ? c.var.store.neighbours(document) : {};
+  const link = (neighbour: Document | undefined): MarkdownLink | undefined =>
+    neighbour === undefined
+      ? undefined
+      : { label: documentLabel(c, neighbour), url: neighbour.permalink };
+
+  const title = oneLine(document.title);
+  const body = normalizeBody(document.body);
+  const chrome: MarkdownChrome = {
+    url: document.permalink,
+    title: title === '' || /^#[ \t]/.test(body.trimStart()) ? undefined : title,
+    previous: link(neighbours.previous),
+    next: link(neighbours.next),
+    byline:
+      document.type === 'post' && writer?.url !== undefined
+        ? { label: writer.name, url: writer.url }
+        : undefined,
+  };
+
+  return markdownPage(
+    c,
+    namedAuthor(documentFrontMatter(document), writer),
+    chrome,
+    [rewriteMarkdownLinks(body, markdownHrefFor(c, document.permalink))],
+    document.permalink === '/' ? document : undefined,
+  );
+}
+
+function markdownPage(
+  c: Context<GeekityEnv>,
+  frontMatter: Record<string, unknown>,
+  chrome: MarkdownChrome,
+  blocks: readonly string[],
+  frontPage?: Document,
+): string {
+  const markdownUrl = markdownUrlFor(c, chrome.url);
+  const { header, footer } = c.var.renderer.renderMarkdownChrome(chrome, {
+    markdownUrl,
+    frontPage,
+  });
+  return markdownFile({ ...frontMatter, ...navigationFrontMatter(chrome, markdownUrl) }, [
+    header,
+    ...blocks,
+    footer,
+  ]);
+}
+
+function markdownUrlFor(c: Context<GeekityEnv>, pageUrl: string): MarkdownUrl {
+  const href = markdownHrefFor(c, pageUrl);
+  return (url) => href(url) ?? url;
+}
+
+/**
+ * A link on the page at `pageUrl` as the Markdown URL of what it names, or
+ * `undefined` when it names nothing on this site with a Markdown
+ * representation.
+ *
+ * The link is followed the way the site answers a request for it: a query
+ * redirect, then whatever is served at the path, then a declared redirect, so
+ * `/?p=7`, a `redirect_from` and the homepage's own permalink all land on the
+ * `.md` of the document they reach. A fragment is kept.
+ */
+function markdownHrefFor(
+  c: Context<GeekityEnv>,
+  pageUrl: string,
+): (href: string) => string | undefined {
+  const { store, config, renderer } = c.var;
+  const pages = frontPages(c);
+  const bases = renderer.taxonomyBases();
+  const authors = authorsOf(c);
+  const table = c.var.redirects.current();
+  const page = absoluteUrl(pageUrl, config.baseUrl);
+
+  const servedAt = (sitePath: string): string | undefined => {
+    if (sitePath === '/') return '/';
+    const directory = sitePath.endsWith('/') ? sitePath : `${sitePath}/`;
+    for (const candidate of [directory, sitePath]) {
+      const document = publicDocumentAt(store, candidate) ?? store.getByFormerPermalink(candidate);
+      if (document !== undefined && isServed(document, store.now())) {
+        return servedPath(document, pages.home);
+      }
+    }
+    return listingRequestAt(store, pages, directory, bases, authors) === undefined
+      ? undefined
+      : directory;
+  };
+
+  return (href) => {
+    const link = siteLinkAt(href, page, config.baseUrl);
+    if (link === undefined) return undefined;
+    const landed = landing(table, link, (sitePath) => servedAt(sitePath) !== undefined);
+    const served = landed === undefined ? undefined : servedAt(landed);
+    if (served === undefined) return undefined;
+    const { pathname } = new URL(absoluteUrl(encodePath(served), config.baseUrl));
+    const hash = URL.parse(href, page)?.hash ?? '';
+    return `${representationHref(pathname, 'markdown')}${hash}`;
+  };
 }
 
 /**
@@ -1679,15 +1810,11 @@ function sitemap(c: Context<GeekityEnv>, page: number | undefined): Response {
  *
  * Everything here is spelled by the same functions the site's own links go
  * through — {@link homeHref}, the permalinks, {@link termHref} — and drawn
- * from the same queries the listings use, so a sitemap can never advertise a
- * URL the site does not serve. Nothing hidden reaches it either: the index's
- * listing queries already exclude drafts, the trash, posts whose date has not
- * arrived and unlisted documents, and {@link isListed} is asked again with the
- * store's own clock so the two answers cannot drift apart.
+ * from {@link listedDocuments}, so a sitemap can never advertise a URL the
+ * site does not serve, nor anything hidden.
  */
 function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
   const { store, renderer } = c.var;
-  const now = store.now();
   const size = renderer.pageSize();
   const bases = renderer.taxonomyBases();
   const pages = frontPages(c);
@@ -1705,7 +1832,7 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
     }
   };
 
-  const posts = store.listPosts().filter((document) => isListed(document, now));
+  const { posts, pages: documents } = listedDocuments(c);
 
   // The listing's pages, wherever it lives: under `/`, under the posts page,
   // or nowhere at all on a site whose homepage is a page and which named no
@@ -1717,10 +1844,6 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
   // And `/` itself when it is a page rather than the listing: the front page
   // is published at one URL, and it is this one.
   if (pages.home !== undefined) urls.push({ loc: '/', lastmod: lastModifiedOf(pages.home) });
-
-  const documents = store
-    .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
-    .filter((document) => isListed(document, now));
 
   for (const document of [...posts, ...documents]) {
     // The homepage answers at `/` and redirects from its own permalink, and
@@ -1745,37 +1868,53 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
 }
 
 /**
- * What a generated `/llms.txt` lists: every public page by title, then the
- * posts the feeds carry, newest first, each linked to its Markdown.
+ * Every post and every page the public site lists, posts newest first, read in
+ * one query: what the sitemap and `/llms.txt` both publish, so the two cannot
+ * disagree. The index's query already excludes drafts, the trash, documents
+ * whose date has not arrived and unlisted or private ones; {@link isListed} is
+ * asked again with the store's own clock so the two answers cannot drift apart.
+ */
+function listedDocuments(c: Context<GeekityEnv>): { posts: Document[]; pages: Document[] } {
+  const now = c.var.store.now();
+  const posts: Document[] = [];
+  const pages: Document[] = [];
+  for (const document of c.var.store.listListed()) {
+    if (!isListed(document, now)) continue;
+    (document.type === 'post' ? posts : pages).push(document);
+  }
+  return { posts, pages };
+}
+
+/**
+ * What a generated `/llms.txt` lists: every listed page by its label, then
+ * every listed post, newest first, with its date and the summary the feeds
+ * carry, each linked to its Markdown.
  *
  * The homepage is listed at `/`, which is where it is published; its own
  * permalink redirects there.
  */
 function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
-  const { store, renderer } = c.var;
-  const site = renderer.site();
-  const now = store.now();
+  const site = c.var.renderer.site();
+  const timezone = siteTimezone(site);
   const home = frontPages(c).home;
-
-  const entry = (document: Document): LlmsEntry => llmsEntry(c, document, home);
-
-  const pages = store
-    .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
-    .filter((document) => isListed(document, now))
-    .sort((a, b) => llmsLabel(c, a).localeCompare(llmsLabel(c, b)));
-  const posts = store
-    .listPosts({ limit: feedSize(site) })
-    .filter((document) => isListed(document, now));
+  const { posts, pages } = listedDocuments(c);
 
   return {
     title: site.title,
     description: site.tagline ?? '',
-    pages: pages.map(entry),
-    posts: posts.map(entry),
+    navigation: navigationLinks(site).map((item) => ({ title: item.label, href: item.url })),
+    pages: pages
+      .map((document) => llmsEntry(c, document, home))
+      .sort((a, b) => a.title.localeCompare(b.title)),
+    posts: posts.map((document) => ({
+      ...llmsEntry(c, document, home),
+      date: document.date === undefined ? undefined : calendarDayIn(document.date, timezone),
+      description: feedExcerpt(document),
+    })),
   };
 }
 
-function llmsLabel(c: Context<GeekityEnv>, document: Document): string {
+function documentLabel(c: Context<GeekityEnv>, document: Document): string {
   return postLabel(document, (url) => c.var.replyContexts.read(url));
 }
 
@@ -1785,11 +1924,8 @@ function llmsEntry(
   home: Document | undefined,
 ): LlmsEntry {
   return {
-    title: llmsLabel(c, document),
-    href: representationHref(
-      document.path === home?.path ? '/' : encodePath(document.permalink),
-      'markdown',
-    ),
+    title: documentLabel(c, document),
+    href: encodePath(servedPath(document, home)),
     description: document.description,
     lastModified: lastModifiedOf(document),
   };

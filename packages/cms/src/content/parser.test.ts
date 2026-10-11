@@ -277,11 +277,21 @@ describe('parseDocument', () => {
     assert.throws(() => parseDocument('Just a body.\n', { path: 'pages/none.md' }), /front matter/);
   });
 
-  it('refuses a page with no title', () => {
-    assert.throws(
-      () => parseDocument('---\npermalink: /a/\n---\n\nBody.\n', { path: 'pages/a.md' }),
-      /title/,
-    );
+  it('reads a page with no title as one whose title is empty (TASK-343)', () => {
+    const document = parseDocument('---\n{}\n---\n\nWelcome in.\n', { path: 'pages/landing.md' });
+
+    assert.equal(document.title, '');
+    assert.equal(document.slug, 'landing');
+    assert.equal(document.permalink, '/landing/');
+  });
+
+  it('reads an empty title on a page the same as a missing one (TASK-343)', () => {
+    const document = parseDocument("---\ntitle: ''\npermalink: /a/\n---\n\nBody.\n", {
+      path: 'pages/a.md',
+    });
+
+    assert.equal(document.title, '');
+    assert.equal(document.slug, 'a');
   });
 
   it('reads a post with no title as one whose title is empty', () => {

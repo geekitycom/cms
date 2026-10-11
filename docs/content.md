@@ -39,6 +39,39 @@ footnotes, heading ids and a language class on fenced code.
 The fixtures that this package and the Eleventy compatibility test both build
 from are in `packages/cms/test/fixtures/content/`.
 
+## Titles
+
+A title is optional on a post and on a page. A file with no `title`, or with
+`title: ''`, parses with an empty `document.title`. A post with no title is a
+note. A page with no title suits a static homepage or a landing page with no
+heading of its own. The editor saves either one. Without a title, it takes the
+slug from the first words of the body.
+
+**The label.** Where the site names an untitled document, it uses the
+document's label, `postLabel(document)`. The label is the title, else the first
+ten words of the text, else what a post with no words is (TASK-261), else
+"Untitled". An untitled page gets the same label as an untitled post with the
+same words.
+
+**Where an untitled page is named.** A page with no title has no name of its
+own. Its own heading and head print no name for it. Everything that links to it
+or lists it uses its label.
+
+| Where                                                                                                         | An untitled page shows                                   |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `<title>`, `og:title` and `twitter:title`                                                                     | The site title alone.                                    |
+| The `h1` of `layouts/page.njk` and the `h2` of `layouts/front-page.njk`                                       | No heading.                                              |
+| The JSON-LD `Article`                                                                                         | No `headline`.                                           |
+| The Markdown representation (`index.md`)                                                                      | No `#` heading.                                          |
+| The JSON representation (`index.json`)                                                                        | No `title` in `frontMatter`.                             |
+| The posts page's heading, `<title>` and Markdown heading                                                      | The site title.                                          |
+| The admin lists, the editor heading, the save and trash messages, and the homepage and posts page choices     | The label.                                               |
+| Search results, `llms.txt`, backlinks, the comments feed and its link, oEmbed and the contact message records | The label.                                               |
+| A menu item that points at the page                                                                           | The item's own label. A menu never reads a page's title. |
+
+Micropub creates posts only. It refuses a page's URL on an update, so it never
+creates or edits a page.
+
 ## Two directories: `content/` and `data/`
 
 Every file a site cannot afford to lose is in one of two directories

@@ -1,0 +1,24 @@
+{#
+  The end of every page's Markdown: a heading, then link lists.
+
+  `byline` is a post's author, a `label` and the `url` of their archive.
+  `navigation` is every item of every menu the site stores, each URL once,
+  each a `label` and a `url`; `menus` has them by menu name, as the HTML
+  does. `home`, `previous` and `next` are here too, though the
+  front matter already carries them for a Markdown browser.
+
+  Each link is a line of its own, with its own words, so the same data can be
+  written as a Gemini link line. Nothing is printed when there is nothing to
+  link.
+#}
+{% if byline or navigation.length %}
+## {{ site.title | escapeMarkdown }}
+
+{% if byline %}
+[Written by {{ byline.label | escapeMarkdown }}]({{ byline.url | markdownUrl }})
+
+{% endif %}
+{% for item in navigation %}
+- [{{ item.label | escapeMarkdown }}]({{ item.url | markdownUrl }})
+{% endfor %}
+{% endif %}

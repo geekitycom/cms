@@ -1,6 +1,7 @@
 import type { PostComment } from '../admin/store.ts';
 import type { CommentChecker, CommentVerdict } from '../comments/submission.ts';
 import type { Document } from '../content/document.ts';
+import { postLabel } from '../content/post-type.ts';
 import { formTimingRefusal, hashClientAddress, trapped } from '../forms/protection.ts';
 import { contactProblems } from './form.ts';
 import type { ContactForm, ContactProblems } from './form.ts';
@@ -123,7 +124,7 @@ export async function submitContactMessage(
     page: {
       slug: options.document.slug,
       permalink: options.document.permalink,
-      title: options.document.title,
+      title: postLabel(options.document),
     },
     from: { name: form.name.trim(), email: form.email.trim() },
     subject: form.subject.trim(),
@@ -170,7 +171,7 @@ async function ask(
       comment: asComment(proposed, now),
       post: {
         slug: options.document.slug,
-        title: options.document.title,
+        title: postLabel(options.document),
         url: absolute(options.document.permalink, options.baseUrl),
       },
       address: options.address,

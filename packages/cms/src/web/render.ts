@@ -48,7 +48,9 @@ import type {
   PhotoContext,
   SiteData,
 } from './context.ts';
-import { navigationMenus } from './navigation.ts';
+import { bioOf, escapeMarkdown, HOME_LINK } from './markdown-page.ts';
+import type { MarkdownChrome, MarkdownUrl } from './markdown-page.ts';
+import { navigationLinks, navigationMenus } from './navigation.ts';
 import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
 import { shareImage } from './share-image.ts';
@@ -103,6 +105,29 @@ export const OPTIONAL_TEMPLATES = {
   /** The listing on the posts page. Falls back to {@link TEMPLATES.home}. */
   postsPage: 'layouts/posts-page.njk',
 } as const;
+
+/**
+ * The two partials around a page's Markdown, found on the theme search path
+ * like every other template.
+ */
+export const MARKDOWN_TEMPLATES = {
+  header: 'partials/markdown-header.md.njk',
+  footer: 'partials/markdown-footer.md.njk',
+} as const;
+
+/** What {@link Renderer.renderMarkdownChrome} writes links with. */
+export interface MarkdownChromeOptions {
+  /** A canonical URL as the representation links it. */
+  markdownUrl: MarkdownUrl;
+  /** The page, when it is the site's front page: `newestPosts` is offered there. */
+  frontPage?: Document | undefined;
+}
+
+/** A page's Markdown header and footer, as the theme wrote them. */
+export interface MarkdownChromeText {
+  readonly header: string;
+  readonly footer: string;
+}
 
 /** A listing of documents, ready to render. */
 export interface Listing {
@@ -236,6 +261,13 @@ export interface Renderer {
    * is down on purpose. `until` is when the operator expects it back.
    */
   renderMaintenance(url: string, until: Date | undefined): string;
+  /**
+   * The header and footer of a page's Markdown, through
+   * {@link MARKDOWN_TEMPLATES} with autoescaping off: Markdown is not HTML.
+   * The partials get `site`, `menus`, `soloAuthor`, the chrome's links as
+   * data, and the `escapeMarkdown` and `markdownUrl` filters.
+   */
+  renderMarkdownChrome(chrome: MarkdownChrome, options: MarkdownChromeOptions): MarkdownChromeText;
   /** Any template by name, with the site data already in the context. */
   render(template: string, context?: Record<string, unknown>): string;
   /**
@@ -251,6 +283,12 @@ export interface Renderer {
   themeColors(): ThemeColors;
   /** The Nunjucks environment, for a site that wants to add its own filters. */
   readonly environment: Environment;
+  /**
+   * The twin the Markdown partials render through: the same loader and
+   * filters, autoescaping off, and the two Markdown filters. A filter added to
+   * `environment` is not seen here: add it to both when Markdown needs it too.
+   */
+  readonly markdownEnvironment: Environment;
 }
 
 /** What {@link CreateRendererOptions.syndication} answers for one post. */
@@ -449,6 +487,21 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     themeDirs: themes.current().dirs,
     baseUrl: config.baseUrl,
     noCache: config.watch,
+  });
+  const markdownEnvironment = createTemplateEnvironment({
+    themeDirs: themes.current().dirs,
+    baseUrl: config.baseUrl,
+    noCache: config.watch,
+    autoescape: false,
+  });
+  markdownEnvironment.addFilter('escapeMarkdown', (value: unknown) =>
+    escapeMarkdown(filterText(value)),
+  );
+  markdownEnvironment.addFilter('markdownUrl', function (this: unknown, value: unknown) {
+    const url = filterText(value);
+    const lookup = (this as { lookup?: (name: string) => unknown } | undefined)?.lookup;
+    const write = typeof lookup === 'function' ? lookup.call(this, 'markdownUrl') : undefined;
+    return typeof write === 'function' ? (write as MarkdownUrl)(url) : url;
   });
   const pages = options.pages ?? ((): readonly Document[] => []);
   const users = options.users ?? ((): readonly User[] => []);
@@ -659,7 +712,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     if (slug === '') return {};
 
     const found = pages().find((document) => document.slug === slug);
-    return found === undefined ? {} : { postsPage: { title: found.title, url: found.permalink } };
+    return found === undefined
+      ? {}
+      : { postsPage: { title: postLabel(found), url: found.permalink } };
   }
 
   /**
@@ -825,8 +880,35 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     return { ...form, loaded: mark };
   }
 
+  function renderMarkdownChrome(
+    chrome: MarkdownChrome,
+    { markdownUrl, frontPage }: MarkdownChromeOptions,
+  ): MarkdownChromeText {
+    const site = siteData.read();
+    useThemeDirs(markdownEnvironment, themes.current().dirs);
+    const soloAuthor = siteAuthorContext(users(), site.author);
+    const context = {
+      site,
+      menus: navigationMenus({ site, url: chrome.url }),
+      navigation: navigationLinks(site),
+      ...(soloAuthor === undefined ? {} : { soloAuthor }),
+      ...(frontPage === undefined ? {} : newestPostsContext(frontPage)),
+      home: HOME_LINK,
+      ...chrome,
+      bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),
+      staticFrontPage: frontPage !== undefined,
+      markdownUrl,
+    };
+    return {
+      header: markdownEnvironment.render(MARKDOWN_TEMPLATES.header, context),
+      footer: markdownEnvironment.render(MARKDOWN_TEMPLATES.footer, context),
+    };
+  }
+
   return {
     environment,
+    markdownEnvironment,
+    renderMarkdownChrome,
 
     site() {
       return siteData.read();
@@ -1011,6 +1093,13 @@ function neighbourContext(
 ): Record<string, NeighbourContext> | object {
   if (document === undefined) return {};
   return { [key]: { title: postLabel(document, cited), url: document.permalink } };
+}
+
+/** A filter's input as text: a string, number or boolean as written, anything else empty. */
+function filterText(value: unknown): string {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+    ? String(value)
+    : '';
 }
 
 /**

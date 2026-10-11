@@ -126,12 +126,82 @@ describe('a site whose homepage is a page', () => {
 
     const json = await cms.app.request('/index.json');
     assert.equal(json.status, 200);
-    const body = (await json.json()) as { url?: string };
-    assert.match(body.url ?? '', /\/welcome\/$/, 'the document is still itself');
 
     const negotiated = await cms.app.request('/', { headers: { accept: 'text/markdown' } });
     assert.equal(negotiated.status, 200);
     assert.match(negotiated.headers.get('content-type') ?? '', /text\/markdown/);
+  });
+
+  it('names itself / in its Markdown and its JSON, as its HTML does (TASK-345)', async () => {
+    const { cms } = await site({
+      ...CONTENT,
+      '_data/site.json': siteJson({ homepage: 'welcome' }),
+    });
+
+    for (const request of [
+      cms.app.request('/index.md'),
+      cms.app.request('/', { headers: { accept: 'text/markdown' } }),
+    ]) {
+      const text = await (await request).text();
+      assert.match(text, /^permalink: \/$/m, 'the front matter says where it is served');
+      assert.doesNotMatch(text, /\/welcome\//, 'not the permalink that redirects');
+    }
+
+    for (const request of [
+      cms.app.request('/index.json'),
+      cms.app.request('/', { headers: { accept: 'application/json' } }),
+    ]) {
+      const body = (await (await request).json()) as {
+        url?: string;
+        frontMatter?: { permalink?: string };
+      };
+      assert.equal(body.url, 'http://localhost:3000/');
+      assert.equal(body.frontMatter?.permalink, '/');
+    }
+
+    const html = await (await cms.app.request('/')).text();
+    assert.match(html, /<link rel="canonical" href="http:\/\/localhost:3000\/"/);
+  });
+
+  it('sends each representation at its own permalink to / in one hop (TASK-345)', async () => {
+    const { cms } = await site({
+      ...CONTENT,
+      '_data/site.json': siteJson({ homepage: 'welcome' }),
+    });
+
+    for (const [from, to] of [
+      ['/welcome/', '/'],
+      ['/welcome/index.md', '/index.md'],
+      ['/welcome.md', '/index.md'],
+      ['/welcome/index.json', '/index.json'],
+      ['/welcome.json', '/index.json'],
+      ['/welcome/index.md?x=1', '/index.md?x=1'],
+    ] as const) {
+      const response = await cms.app.request(from);
+      assert.equal(response.status, 301, from);
+      assert.equal(response.headers.get('location'), to, from);
+      assert.equal((await cms.app.request(to)).status, 200, `${from} lands on a page`);
+    }
+  });
+
+  it('leaves a page that is not the homepage at its own URLs (TASK-345)', async () => {
+    const { cms } = await site({
+      ...CONTENT,
+      'pages/about.md': page('About', 'about', 'About me.'),
+      '_data/site.json': siteJson({ homepage: 'welcome' }),
+    });
+
+    for (const path of ['/about/', '/about/index.md', '/about/index.json']) {
+      assert.equal((await cms.app.request(path)).status, 200, path);
+    }
+    const short = await cms.app.request('/about.md');
+    assert.equal(short.status, 301);
+    assert.equal(short.headers.get('location'), '/about/index.md');
+
+    const text = await (await cms.app.request('/about/index.md')).text();
+    assert.match(text, /^permalink: \/about\/$/m);
+    const body = (await (await cms.app.request('/about/index.json')).json()) as { url?: string };
+    assert.equal(body.url, 'http://localhost:3000/about/');
   });
 
   /**
@@ -368,9 +438,9 @@ describe('a site with a posts page', () => {
     const response = await cms.app.request('/news/', { headers: { accept: 'text/markdown' } });
     assert.equal(response.status, 200);
     const body = await response.text();
-    assert.match(body, /^# News\n/, 'headed by the page’s title, as its HTML is');
-    assert.match(body, /\[Newest\]\(http:\/\/localhost:3000\/2026\/\d\d\/newest\/index\.md\)/);
-    assert.match(body, /\[Older posts\]\(http:\/\/localhost:3000\/news\/page\/2\/index\.md\)/);
+    assert.match(body, /\n---\n\n# News\n/, 'headed by the page’s title, as its HTML is');
+    assert.match(body, /\[\d{4}-\d\d-\d\d Newest\]\(\/2026\/\d\d\/newest\/index\.md\)/);
+    assert.match(body, /\[Older posts\]\(\/news\/page\/2\/index\.md\)/);
 
     const extension = await cms.app.request('/news/index.md');
     assert.equal(await extension.text(), body, 'not the page’s own file');

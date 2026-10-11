@@ -11,6 +11,7 @@
 
 import type { Context } from 'hono';
 
+import { postLabel } from '../content/post-type.ts';
 import { isServed } from '../web/documents.ts';
 import type { GeekityEnv } from '../env.ts';
 import { settingsPagePath } from './settings-page.ts';
@@ -25,14 +26,14 @@ export interface PageChoice {
   title: string;
 }
 
-/** The published pages, by title, as the two picks offer them. */
+/** The published pages, by label, as the two picks offer them. */
 export function pageChoices(c: Context<GeekityEnv>): PageChoice[] {
   const now = c.var.store.now();
 
   return c.var.store
     .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
     .filter((document) => isServed(document, now))
-    .map((document) => ({ slug: document.slug, title: document.title }))
+    .map((document) => ({ slug: document.slug, title: postLabel(document) }))
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 

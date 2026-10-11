@@ -18,6 +18,7 @@ import type { Context, Hono } from 'hono';
 
 import { UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import type { UploadKind } from '../content/media.ts';
+import { postLabel } from '../content/post-type.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
@@ -221,7 +222,7 @@ export function referencesTo(store: ContentStore, url: string): MediaReference[]
     .filter((document) => mentionsUpload(document.body, url))
     .map((document) => ({
       path: document.path,
-      title: document.title === '' ? document.path : document.title,
+      title: postLabel(document),
       editUrl: documentEditorPath(document.type === 'page' ? PAGE_KIND : POST_KIND, document),
       trashed: isTrashedPath(document.path),
     }));

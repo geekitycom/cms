@@ -624,11 +624,6 @@ export async function writeDocument(
     return { outcome: 'refused', message, field };
   }
 
-  // A post with no title is a note; a page is always named.
-  if (form.title === '' && kind.type === 'page') {
-    return refused(`A ${kind.singular} needs a title.`, 'editor-title');
-  }
-
   // A post is a reply only when the target is a URL (Post Type Discovery), so
   // anything else would be saved as a reply that is not one.
   if (kind.type === 'post' && form.inReplyTo !== '' && replyTarget(form) === undefined) {

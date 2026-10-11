@@ -25,7 +25,8 @@ A document, which is one post, one page or one entry of a listing, adds:
 
 | Key                                         | What it holds                                                                                                                  |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `title`                                     | Display title.                                                                                                                 |
+| `title`                                     | Display title. Empty for an untitled post or page.                                                                             |
+| `label`                                     | What a link to it says: its title, else its first words or `Untitled` ([Titles](../content.md#titles)).                        |
 | `date`                                      | Publish date, a JavaScript `Date` at the UTC instant the file holds. Absent when the document has none.                        |
 | `updated`                                   | Last modified date, a `Date`, when the front matter has one.                                                                   |
 | `tags`                                      | The document's tags, in file order.                                                                                            |

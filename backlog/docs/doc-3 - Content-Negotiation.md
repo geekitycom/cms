@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-09 14:48'
+updated_date: '2026-10-11 14:36'
 ---
 # Content Negotiation
 
@@ -14,7 +14,7 @@ Every public content URL serves one document in several representations. The rep
 | Media type | Body | Notes |
 | --- | --- | --- |
 | `text/html` | rendered through the theme | default when nothing else matches |
-| `text/markdown` | the file as stored, front matter included, with `# {title}` between the front matter and the body unless the document has no title or its body already opens with a level-one heading | `Content-Disposition: inline`, charset utf-8; validated by its own bytes |
+| `text/markdown` | the document's front matter with navigation added, the theme's Markdown header, the stored body with its links to the site's own pages pointing at their `.md`, and the theme's Markdown footer (see [The Markdown layout](#the-markdown-layout)) | `Content-Disposition: inline`, charset utf-8; validated by its own bytes |
 | `text/plain` | the `text/markdown` body, labelled `text/plain; charset=utf-8` | `Content-Disposition: inline`; reached only by `Accept`, so it has no URL and is never advertised |
 | `application/json` | `{ "frontMatter": {...}, "markdown": "...", "html": "...", "url": "..." }` | stable shape, versioned via `"schema": 1` |
 | `application/activity+json` | the post's ActivityStreams `Article` | a published post only; its `id` is this URL (decision-13) |
@@ -38,10 +38,14 @@ Link: </2026/09/hello-world/index.md>; rel="alternate"; type="text/markdown",
 
 `/` is the site's latest posts until the Reading settings say otherwise. With a
 `homepage` set it is that page instead, negotiated like any other document —
-HTML, Markdown at `/index.md`, JSON at `/index.json` — and the page's own
-permalink answers `301` to `/`, so the front page has one URL. A theme may lay
-it out on its own with `layouts/front-page.njk`, which falls back to the page
-layout.
+HTML, Markdown at `/index.md`, JSON at `/index.json` — and served at `/` in
+every representation: the Markdown's front matter says `permalink: /` and the
+JSON's `url` is the site root, whatever permalink the file carries. Each of the
+page's own URLs answers one `301` to the root form of the same representation:
+`{permalink}` to `/`, `{permalink}index.md` and the short `.md` spelling to
+`/index.md`, `{permalink}index.json` and the short `.json` spelling to
+`/index.json` (TASK-345). A theme may lay it out on its own with
+`layouts/front-page.njk`, which falls back to the page layout.
 
 With a `postsPage` set as well, the listing moves to that page's permalink and
 paginates under it at `{permalink}page/N/`, with the page's own title and
@@ -76,24 +80,44 @@ because Fedify 404s the slashless form and falls through. `author` and `inbox`
 are reserved first URL segments: no document can be permalinked under them and
 no taxonomy base can take them.
 
+## The Markdown layout
+
+A Markdown representation is shaped for a Markdown browser (Dave Winer's Markdown Browser spec, as https://md.geekity.com/ implements it) and for language models (TASK-346). Code owns the contract and the theme owns the chrome:
+
+| Part | Owner | What it holds |
+| --- | --- | --- |
+| Front matter | code | The document's front matter. `author` is the display name and `author_username` the username beside it, when the name is a user. `home` is `/index.md`; a post has `previous` and `next` for the same neighbours as the HTML post navigation, absent at the ends. Root-relative `.md` URLs. |
+| Header | theme | `partials/markdown-header.md.njk`: the title as a heading unless the body opens with one, and the bio where there is one. |
+| Body | code | The stored body. Every inline link, autolink, bare URL and reference definition whose target the site answers with a document or a listing points at that target's `.md`, following the homepage rule, `redirect_from` and the declared redirects; a fragment is kept. Images, code, raw HTML and every other link are unchanged. |
+| Footer | theme | `partials/markdown-footer.md.njk`: a heading, a post's byline as a link line to the author's archive, and the site's navigation as a list. |
+
+The partials render with autoescaping off and get their links as data, a label and a canonical URL each, never as written Markdown. The `.md` is added only when a link is written, by the `markdownUrl` filter or by code, so a renderer of another format (gemtext) can take the same data. `escapeMarkdown` keeps a label literal.
+
 ## Collections
 
 Listing URLs (home, tag archives, author archives, paginated archives)
 negotiate too. HTML renders the theme's list template. JSON returns an array of the same document shape with `markdown` and `html` omitted unless `?full=1`.
 
-Markdown, at `{listing}/index.md` or by `Accept`, is the listing in the llms.txt shape, rendered from the listing itself rather than from `/llms.txt`, which a site may curate by hand. Every listing page, `/` included, is a heading with the title its HTML carries, a `> ` quote with the site's tagline on the latest posts or the posts page's description, then a `## Posts` list of the posts on that page as `- [title](absolute index.md URL): description`, then a `## More posts` list linking the newer and older pages' `index.md` where they exist:
+Markdown, at `{listing}/index.md` or by `Accept`, is rendered from the listing itself rather than from `/llms.txt`, which a site may curate by hand. Every listing page, `/` included, has the front matter `title`, `permalink`, `home`, and `previous` and `next` for its newer and older pages where they exist. The theme's header writes the title its HTML carries as a heading (and a bio, on an author archive and on a solo author site's `/`). Then come a `> ` quote with the site's tagline on the latest posts or the posts page's description, a `## Posts` list of the posts on that page as `- [YYYY-MM-DD title](root-relative index.md URL): description`, a `## More posts` list linking the newer and older pages' `index.md` where they exist, and the theme's footer:
 
 ```
+---
+title: notes
+permalink: /tag/notes/
+home: /index.md
+next: /tag/notes/page/2/index.md
+---
+
 # notes
 
 ## Posts
 
-- [One](https://example.com/one/index.md)
-- [Two](https://example.com/two/index.md)
+- [2026-09-03 One](/one/index.md)
+- [2026-09-02 Two](/two/index.md)
 
 ## More posts
 
-- [Older posts](https://example.com/tag/notes/page/2/index.md)
+- [Older posts](/tag/notes/page/2/index.md)
 ```
 
 The posts page's `index.md` and `index.json` are the listing's, as `Accept` at its URL is, not the page's own file. Listing Markdown is validated by an `ETag` over its bytes and dated by its newest post.

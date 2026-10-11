@@ -53,8 +53,9 @@
     `pagination`, and the posts page is a listing carrying a page's front
     matter, so it is a website like every other listing. -#}
 {% set metaDescription = description or summary or site.tagline %}
-{#- A note has no title, and is named here by its first words. -#}
-{% set pageTitle = title or label %}
+{#- A note has no title, and is named here by its first words. A page with no
+    title has no name of its own, so the site title stands alone. -#}
+{% set pageTitle = title or (label if type == "post" else "") %}
 {% set metaTitle = pageTitle or site.title %}
 {% set metaUrl = (page.url or "/") | absoluteUrl %}
 {% set metaImage = shareImage.url if shareImage else "" %}
@@ -151,7 +152,7 @@
     {{ feeds.feedLinks("/", site.title) }}
     {{ feeds.commentsFeedLink("/comments/feed/", site.title + " comments") }}
     {% if commentsFeed %}
-    {{ feeds.commentsFeedLink(commentsFeed, "Comments on: " + pageTitle) }}
+    {{ feeds.commentsFeedLink(commentsFeed, "Comments on: " + (pageTitle or label)) }}
     {% endif %}
     {% if activityStreams %}
     <link rel="alternate" type="application/activity+json" href="{{ activityStreams }}">

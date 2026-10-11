@@ -69,7 +69,10 @@ const HELLO_FILE = [
 
 const HELLO = { 'posts/2026-09-02-hello.md': HELLO_FILE };
 
-const HELLO_MARKDOWN = HELLO_FILE.replace('---\n\n', '---\n\n# Hello, World!\n\n');
+const HELLO_MARKDOWN = HELLO_FILE.replace(
+  'series: notebook\n---\n\n',
+  'series: notebook\nhome: /index.md\n---\n\n# Hello, World!\n\n',
+);
 
 describe('the Markdown representation', () => {
   it('serves the stored file under its title as a heading, front matter included', async () => {
@@ -93,8 +96,10 @@ describe('the Markdown representation', () => {
     const markdown = async (url: string): Promise<string> =>
       (await cms.app.request(url, { headers: { accept: 'text/markdown' } })).text();
 
-    assert.equal(await markdown('/note/'), note);
-    assert.equal(await markdown('/headed/'), headed);
+    const navigated = (file: string, neighbour: string): string =>
+      file.replace('\n---\n\n', `\nhome: /index.md\n${neighbour}\n---\n\n`);
+    assert.equal(await markdown('/note/'), navigated(note, 'next: /headed/index.md'));
+    assert.equal(await markdown('/headed/'), navigated(headed, 'previous: /note/index.md'));
   });
 
   it('keeps the stored body in the JSON', async () => {
@@ -581,16 +586,23 @@ describe('a listing as Markdown (TASK-289)', () => {
     assert.equal(
       await response.text(),
       [
+        '---',
+        'title: notes',
+        'permalink: /tag/notes/',
+        'home: /index.md',
+        'next: /tag/notes/page/2/index.md',
+        '---',
+        '',
         '# notes',
         '',
         '## Posts',
         '',
-        '- [One](https://example.com/one/index.md)',
-        '- [Two](https://example.com/two/index.md)',
+        '- [2026-09-03 One](/one/index.md)',
+        '- [2026-09-02 Two](/two/index.md)',
         '',
         '## More posts',
         '',
-        '- [Older posts](https://example.com/tag/notes/page/2/index.md)',
+        '- [Older posts](/tag/notes/page/2/index.md)',
         '',
       ].join('\n'),
     );
@@ -603,8 +615,9 @@ describe('a listing as Markdown (TASK-289)', () => {
       await cms.app.request('/tag/notes/page/2/', { headers: { accept: 'text/markdown' } })
     ).text();
 
-    assert.match(body, /^- \[Four\]\(https:\/\/example\.com\/four\/index\.md\)$/m);
-    assert.match(body, /^- \[Newer posts\]\(https:\/\/example\.com\/tag\/notes\/index\.md\)$/m);
+    assert.match(body, /^- \[2026-08-30 Four\]\(\/four\/index\.md\)$/m);
+    assert.match(body, /^- \[Newer posts\]\(\/tag\/notes\/index\.md\)$/m);
+    assert.match(body, /^previous: \/tag\/notes\/index\.md$/m);
     assert.doesNotMatch(body, /Older posts/);
   });
 
@@ -618,10 +631,10 @@ describe('a listing as Markdown (TASK-289)', () => {
       await cms.app.request('/page/2/', { headers: { accept: 'text/markdown' } })
     ).text();
 
-    assert.match(body, /^# Archive\n/);
-    assert.match(body, /\[Three\]/);
-    assert.match(body, /\[Newer posts\]\(https:\/\/example\.com\/index\.md\)/);
-    assert.match(body, /\[Older posts\]\(https:\/\/example\.com\/page\/3\/index\.md\)/);
+    assert.match(body, /\n---\n\n# Archive\n/);
+    assert.match(body, /\[2026-09-01 Three\]/);
+    assert.match(body, /\[Newer posts\]\(\/index\.md\)/);
+    assert.match(body, /\[Older posts\]\(\/page\/3\/index\.md\)/);
   });
 
   it('renders the home listing under the site’s title and tagline, not llms.txt', async () => {
@@ -641,18 +654,25 @@ describe('a listing as Markdown (TASK-289)', () => {
     assert.equal(
       await response.text(),
       [
+        '---',
+        'title: Archive',
+        'permalink: /',
+        'home: /index.md',
+        'next: /page/2/index.md',
+        '---',
+        '',
         '# Archive',
         '',
         '> Notes, mostly',
         '',
         '## Posts',
         '',
-        '- [One](https://example.com/one/index.md)',
-        '- [Two](https://example.com/two/index.md)',
+        '- [2026-09-03 One](/one/index.md)',
+        '- [2026-09-02 Two](/two/index.md)',
         '',
         '## More posts',
         '',
-        '- [Older posts](https://example.com/page/2/index.md)',
+        '- [Older posts](/page/2/index.md)',
         '',
       ].join('\n'),
     );
