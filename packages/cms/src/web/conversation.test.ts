@@ -200,6 +200,7 @@ describe('a post’s conversation', () => {
       avatar: null,
       actorId: 'https://remote.example/users/ada',
       feed: null,
+      username: null,
     });
 
     // Newest last: the conversation reads down the page.
@@ -230,6 +231,7 @@ describe('a post’s conversation', () => {
       avatar: avatarHref('https://remote.example/avatars/ada.png'),
       actorId: 'https://remote.example/users/ada',
       feed: null,
+      username: null,
     });
   });
 

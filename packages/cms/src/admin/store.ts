@@ -597,6 +597,18 @@ export interface CommentRecord {
    * delivery of the same thing is recognised by. Absent for every other comment.
    */
   origin?: string;
+  /**
+   * The site user who wrote it, by username, for a comment written by
+   * somebody signed in to the system it was imported from (TASK-337). The
+   * thread names them as it names their reply posts. Absent for every other
+   * comment.
+   */
+  user?: string;
+}
+
+/** A comment's {@link CommentRecord.user} as a record carries it: present only when there is one. */
+export function userField(user: string | null | undefined): Pick<CommentRecord, 'user'> {
+  return user === undefined || user === null || user === '' ? {} : { user };
 }
 
 /** A comment's {@link CommentRecord.migrated} and {@link CommentRecord.origin} as a record carries them: present only when set. */
@@ -1174,8 +1186,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         id, slug, permalink, source, kind, status,
         author_name, author_url, author_email,
         markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar, notify,
-        redacted, rsvp, via, migrated, origin
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        redacted, rsvp, via, migrated, origin, user
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET
         slug = excluded.slug,
         permalink = excluded.permalink,
@@ -1197,7 +1209,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         rsvp = excluded.rsvp,
         via = excluded.via,
         migrated = excluded.migrated,
-        origin = excluded.origin
+        origin = excluded.origin,
+        user = excluded.user
     `),
     deleteComment: db.prepare('DELETE FROM comments WHERE id = ?'),
     clearComments: db.prepare('DELETE FROM comments'),
@@ -1730,6 +1743,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         comment.via ?? null,
         comment.migrated === true ? 1 : 0,
         comment.origin ?? null,
+        comment.user ?? null,
       );
       written({
         kind: 'comment',
@@ -1775,6 +1789,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             comment.via ?? null,
             comment.migrated === true ? 1 : 0,
             comment.origin ?? null,
+            comment.user ?? null,
           );
         }
       });
@@ -2122,6 +2137,7 @@ function toComment(row: Record<string, unknown>): PostComment {
     ...rsvpField(rsvpValue(row['rsvp'])),
     ...viaField(nullableText(row['via'])),
     ...migratedFields(Number(row['migrated'] ?? 0) === 1, nullableText(row['origin'])),
+    ...userField(nullableText(row['user'])),
   };
 }
 
@@ -2876,6 +2892,10 @@ const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE comments ADD COLUMN migrated INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE comments ADD COLUMN origin TEXT;
     `,
+  },
+  {
+    version: 28,
+    sql: `ALTER TABLE comments ADD COLUMN user TEXT;`,
   },
 ];
 

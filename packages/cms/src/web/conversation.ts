@@ -18,7 +18,8 @@ import {
   replyFrom,
   REPLY_ACTIVITY_TYPE,
 } from '../federation/replies.ts';
-import { authorContext, authorFeedHref, siteAuthorContext } from './authors.ts';
+import { authorContext, authorFeedHref, profileContext, siteAuthorContext } from './authors.ts';
+import type { AuthorContext } from './authors.ts';
 import { activityStreamsId, isListed, isServed, permalinkOfObjectId } from './documents.ts';
 import { isKey, repliesFeedPath, repliesKey } from './feed-source.ts';
 import type { FeedComment } from './feeds.ts';
@@ -105,6 +106,12 @@ export interface InteractionAuthor {
    * publishes no feed the site knows of, so both are `null`.
    */
   readonly feed: string | null;
+  /**
+   * The site user they are, by username, else `null`: whoever a reply post
+   * is by, or whoever a stored comment names (TASK-337). A theme vouches for
+   * the link of a site user and of nobody else.
+   */
+  readonly username: string | null;
 }
 
 /** One thing somebody did to a post: a reply, a like or a boost. */
@@ -467,6 +474,7 @@ function gather(
   const root = rootOf(context, document);
 
   const stored = context.admin.listCommentsFor(document.slug);
+  const users = context.users();
   // What was imported from the fediverse is walked from too: an answer to an
   // imported note names the note, which no logged activity may carry.
   const origins = stored.flatMap((comment) =>
@@ -579,7 +587,7 @@ function gather(
   }
 
   for (const record of stored) {
-    const comment = interactionOf(record, document.permalink, context.baseUrl);
+    const comment = interactionOf(record, document.permalink, context.baseUrl, users);
     if (record.status !== 'approved') {
       held.set(comment.id, comment);
       continue;
@@ -928,13 +936,19 @@ function documentAuthor(context: ConversationContext, post: Document): Interacti
   const users = context.users();
   const site = readSiteSettings(context.contentDir);
   const author = authorContext(users, post.author) ?? siteAuthorContext(users, site.author);
+  return bylineAuthor(author, site.title);
+}
+
+/** A byline as the thread names its author, `fallback` when it names nobody. */
+function bylineAuthor(author: AuthorContext | undefined, fallback: string): InteractionAuthor {
   return {
-    name: author?.name ?? site.title,
+    name: author?.name ?? fallback,
     handle: null,
     url: author?.url ?? null,
     avatar: author?.avatar ?? null,
     actorId: null,
     feed: author?.username === undefined ? null : authorFeedHref(author.username, 'rss'),
+    username: author?.username ?? null,
   };
 }
 
@@ -1189,7 +1203,14 @@ function federatedInteraction(
 }
 
 /** One stored comment as the thread's own shape. */
-function interactionOf(comment: PostComment, permalink: string, baseUrl: string): Interaction {
+function interactionOf(
+  comment: PostComment,
+  permalink: string,
+  baseUrl: string,
+  users: readonly User[],
+): Interaction {
+  // A user the site no longer has is named as the comment was signed.
+  const user = users.find((candidate) => candidate.username === comment.user);
   return {
     id: comment.id,
     key: comment.id,
@@ -1200,18 +1221,22 @@ function interactionOf(comment: PostComment, permalink: string, baseUrl: string)
     migrated: comment.migrated === true,
     source: comment.source,
     kind: comment.kind,
-    author: {
-      name: comment.author.name,
-      // A commenter has no fediverse identity: they gave a name, maybe a
-      // website, and nothing that names them anywhere else.
-      handle: null,
-      url: comment.author.url,
-      // Only a webmention has one: it came out of the source page's `h-card`,
-      // and a form asks nobody for a picture.
-      avatar: comment.author.avatar === null ? null : avatarHref(comment.author.avatar),
-      actorId: null,
-      feed: comment.source === 'webmention' ? comment.author.url : null,
-    },
+    author:
+      user === undefined
+        ? {
+            name: comment.author.name,
+            // A commenter has no fediverse identity: they gave a name, maybe a
+            // website, and nothing that names them anywhere else.
+            handle: null,
+            url: comment.author.url,
+            // Only a webmention has one: it came out of the source page's `h-card`,
+            // and a form asks nobody for a picture.
+            avatar: comment.author.avatar === null ? null : avatarHref(comment.author.avatar),
+            actorId: null,
+            feed: comment.source === 'webmention' ? comment.author.url : null,
+            username: null,
+          }
+        : bylineAuthor(profileContext(user), comment.author.name),
     // Where it can be read. A comment written here has a page of its own
     // (TASK-318); a webmention lives on the page it was sent from, and its
     // `url` says so. A theme that prints `url` for a fediverse reply prints a
@@ -1650,6 +1675,7 @@ function authorNaming(admin: AdminStore): (actorId: string) => InteractionAuthor
       avatar: icon === null ? null : avatarHref(icon),
       actorId,
       feed: null,
+      username: null,
     };
     known.set(actorId, author);
     return author;

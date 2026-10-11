@@ -9,6 +9,7 @@ import {
   migratedFields,
   REDACTED_FIELDS,
   rsvpField,
+  userField,
   viaField,
 } from '../admin/store.ts';
 import type { AdminStore, CommentRecord, CommentStatus, PostComment } from '../admin/store.ts';
@@ -333,6 +334,7 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     ...rsvpField(rsvpValue(value['rsvp'])),
     ...viaField(optionalText(value['via'])),
     ...migratedFields(value['migrated'] === true, optionalText(value['origin'])),
+    ...userField(optionalText(value['user'])),
   };
 }
 
@@ -1157,6 +1159,7 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     ...rsvpField(comment.rsvp),
     ...viaField(comment.via),
     ...migratedFields(comment.migrated, comment.origin),
+    ...userField(comment.user),
   };
 }
 
@@ -1180,6 +1183,7 @@ function publishedEntryOf(comment: CommentRecord): PublishedComment {
     ...rsvpField(comment.rsvp),
     ...viaField(comment.via),
     ...migratedFields(comment.migrated, comment.origin),
+    ...userField(comment.user),
   };
 }
 

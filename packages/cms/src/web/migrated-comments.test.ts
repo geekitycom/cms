@@ -36,6 +36,9 @@ const WEBMENTION = id('a4');
 const UNDER_FORM = id('a5');
 const MENTION = id('a6');
 const LIKE = id('a7');
+const BY_ADA = id('a8');
+const BY_NOBODY = id('a9');
+const UNDER_ADA = id('aa');
 const NATIVE = id('b0');
 const NATIVE_UNDER_FORM = id('b1');
 const NATIVE_UNDER_FEDIVERSE = id('b2');
@@ -126,6 +129,18 @@ const FILES: Record<string, string> = {
         kind: 'like',
         url: 'https://remote.example/@lou',
       }),
+      said(BY_ADA, 'ada (signed in)', 8, {
+        ...MIGRATED,
+        user: 'ada',
+        author: { name: 'ada (signed in)', url: 'https://ada.example/', email: null, avatar: null },
+        content: { markdown: 'Thanks.', html: '<p>Thanks.</p>' },
+      }),
+      said(BY_NOBODY, 'Gone', 9, {
+        ...MIGRATED,
+        user: 'gone',
+        author: { name: 'Gone', url: 'https://gone.example/', email: null, avatar: null },
+      }),
+      said(UNDER_ADA, 'Ivy', 9, { ...MIGRATED, inReplyTo: BY_ADA }),
       said(NATIVE, 'Nia', 10),
       said(NATIVE_UNDER_FORM, 'Ola', 11, { inReplyTo: FORM }),
       said(NATIVE_UNDER_FEDIVERSE, 'Pip', 12, { inReplyTo: FEDIVERSE }),
@@ -202,6 +217,47 @@ describe('a migrated comment on its post', () => {
     for (const which of [FEDIVERSE, WEBMENTION]) {
       assert.equal((await cms.app.request(`/comment/${which}/`)).status, 404, which);
     }
+  });
+});
+
+/** The `<li>` the thread anchors a comment by, up to the next one. */
+function entryOf(page: string, which: string): string {
+  const start = page.indexOf(`<li id="comment-${which}"`);
+  assert.notEqual(start, -1, `${which} is in the thread`);
+  const next = page.indexOf('<li id="comment-', start + 1);
+  return page.slice(start, next === -1 ? undefined : next);
+}
+
+describe('a migrated comment a site user wrote', () => {
+  it('shows as theirs: their name, their author archive and no nofollow ugc', async () => {
+    const entry = entryOf(await body(POST), BY_ADA);
+    assert.match(entry, /<a class="url u-url" href="\/author\/ada\/">Ada<\/a>/);
+    assert.doesNotMatch(entry, /nofollow|ugc|ada\.example|signed in/);
+  });
+
+  it('shows as theirs on its own page too', async () => {
+    const page = await body(`/comment/${BY_ADA}/`);
+    assert.match(page, /<a class="u-url" href="\/author\/ada\/">Ada<\/a>/);
+    assert.doesNotMatch(page, /nofollow ugc|ada\.example/);
+  });
+
+  it('is cited as theirs on the page of a reply to it', async () => {
+    const page = await body(`/comment/${UNDER_ADA}/`);
+    assert.match(
+      page,
+      new RegExp(
+        `<a class="u-url p-name" href="/author/ada/">Ada</a></span>,\\s*<a class="u-url" href="/comment/${BY_ADA}/">`,
+      ),
+    );
+    assert.doesNotMatch(page, /nofollow ugc|ada\.example/);
+  });
+
+  it('keeps the name it was given when the site no longer has that user', async () => {
+    const entry = entryOf(await body(POST), BY_NOBODY);
+    assert.match(
+      entry,
+      /<a class="url u-url" href="https:\/\/gone\.example\/" rel="nofollow ugc noopener noreferrer">Gone<\/a>/,
+    );
   });
 });
 

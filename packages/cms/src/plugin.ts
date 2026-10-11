@@ -177,6 +177,8 @@ export interface PluginComment {
    * one: a fediverse note or activity id, or a webmention's source URL.
    */
   readonly origin?: string;
+  /** The site user who wrote it, by username, when it names one. */
+  readonly user?: string;
 }
 
 /** What {@link PluginSite.checkUpload} makes of a file. */
