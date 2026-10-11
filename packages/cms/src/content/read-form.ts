@@ -1,7 +1,7 @@
-import { isWebUrl } from '../content/enclosure.ts';
-import { isReadStatus, READ_STATUSES } from '../content/read.ts';
-import type { Read, ReadOf } from '../content/read.ts';
-import type { FieldError } from './editor-layout.ts';
+import { isWebUrl } from './enclosure.ts';
+import type { FieldError } from './form-error.ts';
+import { isReadStatus, READ_STATUSES } from './read.ts';
+import type { Read, ReadOf } from './read.ts';
 
 export interface ReadOfForm {
   name: string;
@@ -9,14 +9,6 @@ export interface ReadOfForm {
   uid: string;
   url: string;
 }
-
-export const READ_FIELDS = {
-  status: 'read-status',
-  name: 'read-of-name',
-  author: 'read-of-author',
-  uid: 'read-of-uid',
-  url: 'read-of-url',
-} as const;
 
 export const BLANK_READ_OF_FORM: ReadOfForm = { name: '', author: '', uid: '', url: '' };
 
@@ -26,16 +18,6 @@ export function readOfForm(of: ReadOf | undefined): ReadOfForm {
     author: of?.author ?? '',
     uid: of?.uid ?? '',
     url: of?.url ?? '',
-  };
-}
-
-export function submittedReadOfForm(body: Record<string, unknown>): ReadOfForm {
-  const field = (name: string): string => (typeof body[name] === 'string' ? body[name] : '').trim();
-  return {
-    name: field(READ_FIELDS.name),
-    author: field(READ_FIELDS.author),
-    uid: field(READ_FIELDS.uid),
-    url: field(READ_FIELDS.url),
   };
 }
 

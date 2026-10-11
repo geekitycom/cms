@@ -1,17 +1,6 @@
-import { COMMENT_SETTINGS } from './documents.ts';
-import type { EditorForm } from './documents.ts';
-
-export type EditorField = `editor-${string}`;
-
-export interface Refusal {
-  readonly message: string;
-  readonly field?: EditorField | undefined;
-}
-
-export interface FieldError {
-  readonly error: string;
-  readonly field: EditorField;
-}
+import { COMMENT_SETTINGS } from '../content/document-form.ts';
+import type { EditorForm } from '../content/document-form.ts';
+import type { EditorField } from '../content/form-error.ts';
 
 export type EditorGroup =
   | 'photos'

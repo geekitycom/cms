@@ -3,8 +3,8 @@ import type { Environment } from 'nunjucks';
 
 import { adminColorScheme } from '../admin/admin-theme.ts';
 import { ADMIN_ASSET_PREFIX } from '../admin/assets.ts';
-import { editorPath, newEditorPath, PAGE_KIND, POST_KIND } from '../admin/documents.ts';
-import type { DocumentKind } from '../admin/documents.ts';
+import { editorPath, newEditorPath, PAGE_SCREENS, POST_SCREENS } from '../admin/documents.ts';
+import type { DocumentScreens } from '../admin/documents.ts';
 import { LOGOUT_PATH } from '../admin/routes.ts';
 import { ADMIN_PREFIX } from '../admin/session.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from '../admin/templates.ts';
@@ -22,7 +22,10 @@ import { requestPath } from './routes.ts';
 import { formatDate } from './templates.ts';
 
 /** The editor screens each kind of document is written in. */
-const KINDS: Readonly<Record<DocumentType, DocumentKind>> = { post: POST_KIND, page: PAGE_KIND };
+const KINDS: Readonly<Record<DocumentType, DocumentScreens>> = {
+  post: POST_SCREENS,
+  page: PAGE_SCREENS,
+};
 
 /** Built on the first signed-in page; the admin's own is closed over by its mount. */
 let environment: Environment | undefined;
@@ -86,7 +89,7 @@ function renderBar(c: Context<GeekityEnv>, account: SignedInAccount): string {
       siteHref: '/',
       barLinks: [
         { label: 'View admin', url: ADMIN_PREFIX },
-        { label: '+ New', url: newEditorPath(POST_KIND) },
+        { label: '+ New', url: newEditorPath(POST_SCREENS) },
         ...(shown === undefined
           ? []
           : [

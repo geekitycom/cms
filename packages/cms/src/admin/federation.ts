@@ -22,7 +22,7 @@ import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { authorHref, profileContext, userForAuthor } from '../web/authors.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { postObjectId } from '../web/guids.ts';
-import { documentEditorPath, POST_KIND } from './documents.ts';
+import { documentEditorPath, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { readSiteSettings } from './settings.ts';
@@ -391,7 +391,7 @@ export function deliveryRows(
       post: {
         slug: document.slug,
         title: postLabel(document, context.cited),
-        editUrl: documentEditorPath(POST_KIND, document),
+        editUrl: documentEditorPath(POST_SCREENS, document),
         inThread: false,
       },
       author: context.author(document),
@@ -667,7 +667,7 @@ export function localPosts(
     return {
       slug: document.slug,
       title: postLabel(document, cited),
-      editUrl: documentEditorPath(POST_KIND, document),
+      editUrl: documentEditorPath(POST_SCREENS, document),
       inThread: own === undefined,
     };
   };

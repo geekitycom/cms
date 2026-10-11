@@ -7,7 +7,7 @@ import type { CommentRecords } from '../comments/records.ts';
 import type { GeekityEnv } from '../env.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { pageCount } from '../web/pagination.ts';
-import { documentEditorPath, documentSite, PAGE_KIND, POST_KIND } from './documents.ts';
+import { documentEditorPath, documentSite, PAGE_SCREENS, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
@@ -309,7 +309,7 @@ function commentRow(c: Context<GeekityEnv>, comment: PostComment): CommentRow {
     editUrl:
       document === undefined
         ? null
-        : documentEditorPath(document.type === 'page' ? PAGE_KIND : POST_KIND, document),
+        : documentEditorPath(document.type === 'page' ? PAGE_SCREENS : POST_SCREENS, document),
     inReplyTo: comment.inReplyTo,
   };
 }

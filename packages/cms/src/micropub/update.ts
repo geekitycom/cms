@@ -1,7 +1,7 @@
-import { formFor } from '../admin/documents.ts';
-import type { EditorForm } from '../admin/documents.ts';
-import { eventFrontMatter } from '../admin/event-field.ts';
-import { photoRows } from '../admin/photo-field.ts';
+import { formFor } from '../content/document-form.ts';
+import type { EditorForm } from '../content/document-form.ts';
+import { eventFrontMatter } from '../content/event-form.ts';
+import { photoRows } from '../content/photo-form.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { eventOf } from '../content/event.ts';

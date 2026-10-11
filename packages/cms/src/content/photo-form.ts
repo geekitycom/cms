@@ -9,28 +9,19 @@
  */
 import path from 'node:path';
 
-import type { Document } from '../content/document.ts';
-import { isUploadUrl, isWebUrl } from '../content/enclosure.ts';
-import { UPLOAD_MEDIA_TYPES } from '../content/media.ts';
-import { PHOTO_FRONT_MATTER_KEY, photosOf } from '../content/photo.ts';
-import type { Photo } from '../content/photo.ts';
-import type { AltTextLibrary } from '../images/alt-text.ts';
-import { uploadPath } from '../images/markup.ts';
 import { findUpload, UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
-import type { EditorField, FieldError } from './editor-layout.ts';
-import { listUploads } from './media.ts';
+import type { Document } from './document.ts';
+import { isUploadUrl, isWebUrl } from './enclosure.ts';
+import type { EditorField, FieldError } from './form-error.ts';
+import { UPLOAD_MEDIA_TYPES } from './media.ts';
+import { PHOTO_FRONT_MATTER_KEY, photosOf } from './photo.ts';
+import type { Photo } from './photo.ts';
 
 /** One photo's row, as the form has it. */
 export interface PhotoRow {
   url: string;
   alt: string;
 }
-
-/** The form field name prefixes; a row's index follows each. */
-export const PHOTO_FIELDS = { url: 'photo-url-', alt: 'photo-alt-' } as const;
-
-/** The empty row the editor adds so a form with no script can add a photo. */
-export const BLANK_PHOTO_ROW: PhotoRow = { url: '', alt: '' };
 
 /**
  * A post's photos as the editor shows them.
@@ -52,21 +43,6 @@ export function photoRows(document: Document): PhotoRow[] {
           : '';
     return { url, alt: '' };
   });
-}
-
-/** The photo rows out of a submitted form, in their numbered order, emptied ones gone. */
-export function readPhotoForm(body: Record<string, unknown>): PhotoRow[] {
-  const field = (name: string): string => (typeof body[name] === 'string' ? body[name] : '').trim();
-  return Object.keys(body)
-    .map((name) => new RegExp(`^${PHOTO_FIELDS.url}(\\d+)$`).exec(name)?.[1])
-    .filter((index) => index !== undefined)
-    .map(Number)
-    .sort((left, right) => left - right)
-    .map((index) => ({
-      url: field(`${PHOTO_FIELDS.url}${String(index)}`),
-      alt: field(`${PHOTO_FIELDS.alt}${String(index)}`),
-    }))
-    .filter((row) => row.url !== '');
 }
 
 /** The photos to write, or why one of them cannot be. */
@@ -92,25 +68,4 @@ export function resolvePhotos(
     photos.push(row.alt === '' ? { url: row.url } : { url: row.url, alt: row.alt });
   }
   return { photos };
-}
-
-/** A row as the editor prints it, with the library's alt text to show when the row has none. */
-export interface PhotoRowView extends PhotoRow {
-  libraryAlt: string;
-}
-
-/** The rows the editor prints: the post's photos, then a blank one to add another. */
-export function photoRowViews(rows: readonly PhotoRow[], library: AltTextLibrary): PhotoRowView[] {
-  return [...rows, BLANK_PHOTO_ROW].map((row) => {
-    const source = uploadPath(row.url);
-    const described = source === undefined ? undefined : library.get(source);
-    return { ...row, libraryAlt: described?.kind === 'described' ? described.text : '' };
-  });
-}
-
-/** The image uploads a photo can be, newest first. */
-export async function photoChoices(contentDir: string): Promise<string[]> {
-  return (await listUploads(contentDir))
-    .filter((file) => file.kind === 'image')
-    .map((file) => file.url);
 }

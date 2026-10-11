@@ -1,6 +1,6 @@
-import { geoPoint, geoProblem, parseGeoUri, postLocation } from '../content/location.ts';
-import type { GeoPoint, PostLocation } from '../content/location.ts';
-import type { FieldError } from './editor-layout.ts';
+import { geoPoint, geoProblem, parseGeoUri, postLocation } from './location.ts';
+import type { GeoPoint, PostLocation } from './location.ts';
+import type { FieldError } from './form-error.ts';
 
 export interface LocationForm {
   geo: string;
@@ -11,16 +11,6 @@ export interface LocationForm {
   country: string;
   checkin: boolean;
 }
-
-export const LOCATION_FIELDS = {
-  geo: 'location-geo',
-  accuracy: 'location-accuracy',
-  name: 'location-name',
-  locality: 'location-locality',
-  region: 'location-region',
-  country: 'location-country',
-  checkin: 'location-checkin',
-} as const satisfies Record<keyof LocationForm, string>;
 
 export const BLANK_LOCATION_FORM: LocationForm = {
   geo: '',
@@ -48,19 +38,6 @@ export function locationForm(location: PostLocation | undefined): LocationForm {
     region: location.region ?? '',
     country: location.country ?? '',
     checkin: location.checkin === true,
-  };
-}
-
-export function readLocationForm(body: Record<string, unknown>): LocationForm {
-  const field = (name: string): string => (typeof body[name] === 'string' ? body[name] : '').trim();
-  return {
-    geo: field(LOCATION_FIELDS.geo),
-    accuracy: field(LOCATION_FIELDS.accuracy),
-    name: field(LOCATION_FIELDS.name),
-    locality: field(LOCATION_FIELDS.locality),
-    region: field(LOCATION_FIELDS.region),
-    country: field(LOCATION_FIELDS.country),
-    checkin: body[LOCATION_FIELDS.checkin] !== undefined,
   };
 }
 

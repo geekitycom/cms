@@ -1,7 +1,6 @@
-import { randomBytes } from 'node:crypto';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { writeFileAtomically } from '../files/atomic.ts';
 import { exists } from '../util/files.ts';
 import type { Document, DocumentContent, DocumentType } from './document.ts';
 import { handleDirectory } from './handles.ts';
@@ -100,11 +99,8 @@ export interface SaveDocumentOptions {
  * The admin's write path, per doc-1: serialize, write the file atomically, then
  * update the index directly rather than waiting for the watcher.
  *
- * The temporary file is written in the same directory as its destination so the
- * rename is a rename and not a copy across devices, and a reader either sees
- * the old file or the whole new one, never a half-written one. The watcher
- * event that follows the rename is a no-op, because the hash already matches
- * what this put in the index.
+ * The watcher event that follows the rename is a no-op, because the hash
+ * already matches what this put in the index.
  */
 export async function saveDocument(options: SaveDocumentOptions): Promise<Document> {
   const relative = options.path.replace(/\\/g, '/');
@@ -120,16 +116,7 @@ export async function saveDocument(options: SaveDocumentOptions): Promise<Docume
     handles: handleDirectory(options.contentDir),
   });
 
-  await mkdir(path.dirname(file), { recursive: true });
-
-  const temporary = `${file}.${randomBytes(6).toString('hex')}.tmp`;
-  try {
-    await writeFile(temporary, source, 'utf8');
-    await rename(temporary, file);
-  } catch (error) {
-    await rm(temporary, { force: true });
-    throw error;
-  }
+  await writeFileAtomically(file, source);
 
   options.store.upsert(document);
   return document;

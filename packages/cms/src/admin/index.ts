@@ -39,29 +39,24 @@ export {
   usernameProblem,
 } from './credentials.ts';
 export {
-  blankForm,
   DOCUMENT_FILTERS,
   DOCUMENTS_PER_PAGE,
   documentFilter,
   editorPath,
-  EXCLUDE_KEY,
   findBySlug,
-  formFor,
   listingUrl,
   listOptionsFor,
   mountDocumentScreens,
   newEditorPath,
-  PAGE_KIND,
-  POST_KIND,
+  PAGE_SCREENS,
+  POST_SCREENS,
   returnPath,
-  splitTags,
 } from './documents.ts';
 export type {
   AdminRender,
   DocumentFilter,
-  DocumentKind,
   DocumentRow,
-  EditorForm,
+  DocumentScreens,
   MountDocumentScreensOptions,
 } from './documents.ts';
 export {

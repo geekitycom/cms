@@ -1,9 +1,10 @@
-import { blankForm, POST_KIND } from '../admin/documents.ts';
-import type { EditorForm } from '../admin/documents.ts';
-import { locationForm } from '../admin/location-field.ts';
-import type { PhotoRow } from '../admin/photo-field.ts';
-import { BLANK_READ_OF_FORM } from '../admin/read-field.ts';
-import type { ReadOfForm } from '../admin/read-field.ts';
+import { blankForm } from '../content/document-form.ts';
+import type { EditorForm } from '../content/document-form.ts';
+import { POST_KIND } from '../content/document-kind.ts';
+import { locationForm } from '../content/location-form.ts';
+import type { PhotoRow } from '../content/photo-form.ts';
+import { BLANK_READ_OF_FORM } from '../content/read-form.ts';
+import type { ReadOfForm } from '../content/read-form.ts';
 import { isWebUrl } from '../content/enclosure.ts';
 import type { KeptProperties } from '../content/kept-properties.ts';
 import { checkinFromMicropub, locationFromMicropub, postLocation } from '../content/location.ts';

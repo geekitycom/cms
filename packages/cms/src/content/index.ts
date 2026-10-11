@@ -1,5 +1,9 @@
 export { KNOWN_FRONT_MATTER_KEYS } from './document.ts';
 export type { ActivityPubMetadata, Document, DocumentContent, DocumentType } from './document.ts';
+export { blankForm, EXCLUDE_KEY, formFor, splitTags } from './document-form.ts';
+export type { EditorForm } from './document-form.ts';
+export { PAGE_KIND, POST_KIND } from './document-kind.ts';
+export type { DocumentKind } from './document-kind.ts';
 export {
   ENCLOSURE_FRONT_MATTER_KEY,
   enclosureOf,

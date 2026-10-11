@@ -29,7 +29,7 @@ import { isFile } from '../util/files.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../web/assets.ts';
 import { pageCount } from '../web/pagination.ts';
-import { documentEditorPath, PAGE_KIND, POST_KIND } from './documents.ts';
+import { documentEditorPath, PAGE_SCREENS, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
@@ -226,7 +226,7 @@ export function referencesTo(store: ContentStore, url: string): MediaReference[]
     .map((document) => ({
       path: document.path,
       title: postLabel(document),
-      editUrl: documentEditorPath(document.type === 'page' ? PAGE_KIND : POST_KIND, document),
+      editUrl: documentEditorPath(document.type === 'page' ? PAGE_SCREENS : POST_SCREENS, document),
       trashed: isTrashedPath(document.path),
     }));
 }

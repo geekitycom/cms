@@ -1,7 +1,7 @@
-import { EVENT_KEYS, eventOf } from '../content/event.ts';
-import type { PostEvent } from '../content/event.ts';
-import { toUtcInstant, wallClockIn } from '../content/time.ts';
-import type { FieldError } from './editor-layout.ts';
+import { EVENT_KEYS, eventOf } from './event.ts';
+import type { PostEvent } from './event.ts';
+import type { FieldError } from './form-error.ts';
+import { toUtcInstant, wallClockIn } from './time.ts';
 
 /**
  * The editor's event fields (TASK-200): when it starts and ends, as wall-clock
@@ -13,12 +13,6 @@ export interface EventForm {
   location: string;
 }
 
-export const EVENT_FIELDS = {
-  start: 'event-start',
-  end: 'event-end',
-  location: 'event-location',
-} as const;
-
 export const BLANK_EVENT_FORM: EventForm = { start: '', end: '', location: '' };
 
 export function eventForm(extra: Readonly<Record<string, unknown>>, timezone: string): EventForm {
@@ -29,15 +23,6 @@ export function eventForm(extra: Readonly<Record<string, unknown>>, timezone: st
     start: wallClockIn(event.start, timezone),
     end: event.end === undefined ? '' : wallClockIn(event.end, timezone),
     location: typeof location === 'string' ? location : '',
-  };
-}
-
-export function submittedEventForm(body: Record<string, unknown>): EventForm {
-  const field = (name: string): string => (typeof body[name] === 'string' ? body[name] : '').trim();
-  return {
-    start: field(EVENT_FIELDS.start),
-    end: field(EVENT_FIELDS.end),
-    location: field(EVENT_FIELDS.location),
   };
 }
 

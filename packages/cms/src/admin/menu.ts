@@ -18,7 +18,7 @@
 
 import { THEMES_PATH } from './appearance.ts';
 import { COMMENTS_PATH } from './comments.ts';
-import { newEditorPath, PAGE_KIND, POST_KIND } from './documents.ts';
+import { newEditorPath, PAGE_SCREENS, POST_SCREENS } from './documents.ts';
 import { FEDERATION_PATH, FEDERATION_SETTINGS_PATH } from './federation.ts';
 import { MEDIA_PATH } from './media.ts';
 import { MESSAGES_PATH } from './messages.ts';
@@ -101,8 +101,8 @@ export class UnknownAdminScreenError extends Error {
 export const ADMIN_SECTIONS: readonly AdminSection[] = [
   section('dashboard', 'Dashboard', [{ child: 'home', label: 'Home', url: ADMIN_PREFIX }]),
   section('posts', 'Posts', [
-    { child: 'all', label: 'All posts', url: POST_KIND.basePath },
-    { child: 'new', label: 'Add new', url: newEditorPath(POST_KIND) },
+    { child: 'all', label: 'All posts', url: POST_SCREENS.basePath },
+    { child: 'new', label: 'Add new', url: newEditorPath(POST_SCREENS) },
     // The terms live here rather than at the top level because that is what
     // they are about: a tag with no post on it is nothing.
     { child: 'categories', label: 'Categories', url: CATEGORY_KIND.basePath },
@@ -111,8 +111,8 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     { child: SYNDICATION_TARGETS_CHILD, label: 'Syndication', url: SYNDICATION_TARGETS_PATH },
   ]),
   section('pages', 'Pages', [
-    { child: 'all', label: 'All pages', url: PAGE_KIND.basePath },
-    { child: 'new', label: 'Add new', url: newEditorPath(PAGE_KIND) },
+    { child: 'all', label: 'All pages', url: PAGE_SCREENS.basePath },
+    { child: 'new', label: 'Add new', url: newEditorPath(PAGE_SCREENS) },
   ]),
   // After Pages, because a menu is mostly a list of them, and above Media for
   // the same reason: it is content the site arranges rather than a setting.

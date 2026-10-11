@@ -5,9 +5,10 @@ import { after, describe, it } from 'node:test';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
+import { blankForm } from '../content/document-form.ts';
+import { POST_KIND } from '../content/document-kind.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
-import { blankForm, POST_KIND } from './documents.ts';
 import { openGroups } from './editor-layout.ts';
 
 const box = sandbox();

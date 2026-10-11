@@ -27,9 +27,12 @@ import type {
   PluginPostType,
 } from '../plugin.ts';
 import { messageOf } from '../util/errors.ts';
-import { resolveEvent } from './event-field.ts';
-import type { DocumentKind, EditorForm } from './documents.ts';
-import { PAGE_KIND, POST_KIND, splitTags, submittedForm } from './documents.ts';
+import { splitTags } from '../content/document-form.ts';
+import type { EditorForm } from '../content/document-form.ts';
+import { PAGE_KIND, POST_KIND } from '../content/document-kind.ts';
+import type { DocumentKind } from '../content/document-kind.ts';
+import { resolveEvent } from '../content/event-form.ts';
+import { submittedForm } from './documents.ts';
 import { PLUGINS_PATH } from './plugins.ts';
 import { readSiteSettings } from './settings.ts';
 

@@ -2,8 +2,6 @@ import type { Context, Hono, MiddlewareHandler } from 'hono';
 
 import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
-import { moveDocumentFile, POST_KIND, writeDocument } from '../admin/documents.ts';
-import type { EditorForm } from '../admin/documents.ts';
 import { deleteUpload } from '../admin/media.ts';
 import {
   largestUploadLimit,
@@ -15,6 +13,8 @@ import {
 import { readSiteSettings } from '../admin/settings.ts';
 
 import type { Document } from '../content/document.ts';
+import type { EditorForm } from '../content/document-form.ts';
+import { POST_KIND } from '../content/document-kind.ts';
 import { keptProperties } from '../content/kept-properties.ts';
 import type { KeptProperties } from '../content/kept-properties.ts';
 import { postLocations } from '../content/locations.ts';
@@ -23,7 +23,9 @@ import type { PermalinkFile } from '../content/permalink-file.ts';
 import type { PostType } from '../content/post-type.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
+import { moveDocumentFile } from '../content/trash.ts';
 import { VISIBILITIES } from '../content/visibility.ts';
+import { writeDocument } from '../content/write.ts';
 import { logMicropubRequest } from '../indieauth/activity-log.ts';
 import { insufficientScope, requireBearer } from '../indieauth/bearer.ts';
 import type { BearerEnv, Scopes } from '../indieauth/bearer.ts';
