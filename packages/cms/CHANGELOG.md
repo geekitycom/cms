@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.30.0](https://github.com/geekitycom/cms/compare/v0.29.0...v0.30.0) (2026-10-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** comment ids, anchors, /comment/ and /replies/ URLs are 16-hex keys, re-keyed at boot; openAdminStore no longer takes baseUrl, and ConversationReader.replyNamed returns the entry rather than its id.
+
+### Features
+
+* **cms:** fold an imported like or boost with the same actor's later one by actor id ([c539ce1](https://github.com/geekitycom/cms/commit/c539ce18861870f9e812d67fd12f3d50265d0feb))
+* **cms:** give every comment and repliable item one 16-hex key ([047b78f](https://github.com/geekitycom/cms/commit/047b78f6dab1e9dcb020164f73ac8a5d94d31a61))
+* **cms:** keep migrated comments out of every feed and reply count ([784792a](https://github.com/geekitycom/cms/commit/784792a493065c6c116dbb756e27b50fdf179a43))
+* **cms:** let plugins rename comments and key them by the site's rule ([9b979f6](https://github.com/geekitycom/cms/commit/9b979f6c0c95e0c54e5496ca03b517351f2a212e))
+* **cms:** name the site user who wrote a comment and show it as theirs ([28e006e](https://github.com/geekitycom/cms/commit/28e006ea931e214fa706e7eb26a9e305529ff7af))
+* **cms:** show a redelivered or backfilled copy of an imported fediverse comment once ([7d58df2](https://github.com/geekitycom/cms/commit/7d58df2d225adbac5020dca4eba3e55f78e51d1a))
+
+
+### Bug Fixes
+
+* **cms:** keep likes, boosts and reposts out of the comments and replies feeds ([223abe7](https://github.com/geekitycom/cms/commit/223abe745051fa107cfc455771869df923928e4f))
+* **cms:** match term archive paths case-insensitively and fall through for unused terms ([50e23c4](https://github.com/geekitycom/cms/commit/50e23c43169eaba2e28db9e9db5adbba6c2fd83a))
+* **cms:** name an imported fediverse comment by the handle its actor id implies ([1eb5f94](https://github.com/geekitycom/cms/commit/1eb5f94cbaafc51417d30fba96d7d763102654b1))
+
 ## [0.29.0](https://github.com/geekitycom/cms/compare/v0.28.0...v0.29.0) (2026-10-10)
 
 

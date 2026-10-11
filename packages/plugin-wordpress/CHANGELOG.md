@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.2.0...plugin-wordpress-v0.3.0) (2026-10-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** comment ids, anchors, /comment/ and /replies/ URLs are 16-hex keys, re-keyed at boot; openAdminStore no longer takes baseUrl, and ConversationReader.replyNamed returns the entry rather than its id.
+
+### Features
+
+* **cms:** give every comment and repliable item one 16-hex key ([047b78f](https://github.com/geekitycom/cms/commit/047b78f6dab1e9dcb020164f73ac8a5d94d31a61))
+* **cms:** show a redelivered or backfilled copy of an imported fediverse comment once ([7d58df2](https://github.com/geekitycom/cms/commit/7d58df2d225adbac5020dca4eba3e55f78e51d1a))
+* **plugin-wordpress:** attribute comments written signed in to the site user by login ([b9bf223](https://github.com/geekitycom/cms/commit/b9bf223149cb45045092efd75c12bf85e338e09d))
+* **plugin-wordpress:** give imported fediverse comments their actor's avatar and id ([d7d75d4](https://github.com/geekitycom/cms/commit/d7d75d4dbd39a27d87c44ecec9bd53e0ac6b9f5c))
+* **plugin-wordpress:** mark imported comments migrated and key them by their origin ([aa39239](https://github.com/geekitycom/cms/commit/aa3923953f214fd4a031ed369b565b26a2f1aa90))
+
+
+### Bug Fixes
+
+* **plugin-wordpress:** point the static front page's ?p= and ?page_id= redirects at / ([4e5bf46](https://github.com/geekitycom/cms/commit/4e5bf4697ba8792e21324b34a675745b12976786))
+
 ## [0.2.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.1.1...plugin-wordpress-v0.2.0) (2026-10-09)
 
 
