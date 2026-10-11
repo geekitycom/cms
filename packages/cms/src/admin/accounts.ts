@@ -327,6 +327,41 @@ export async function createUser(input: CreateUserInput): Promise<User> {
 }
 
 /**
+ * What a setter changes on one user: each key it names is set, and a key set
+ * to `undefined` is taken off.
+ */
+export type UserChange = Partial<Omit<StoredUser, 'id' | 'username' | 'createdAt'>>;
+
+/**
+ * Apply one change to the user with this id, inside the queued write. Returns
+ * `false`, without calling `change`, when there is no such user.
+ *
+ * `change` is handed the user as the file holds them at the moment of the
+ * write, and everybody else, so a rule about the whole file is checked and
+ * acted on as one step.
+ */
+export async function updateUser(
+  dataDir: string,
+  userId: number,
+  change: (user: StoredUser, everyone: readonly StoredUser[]) => UserChange,
+): Promise<boolean> {
+  let found = false;
+
+  await write(dataDir, (contents) => ({
+    ...contents,
+    users: contents.users.map((user) => {
+      if (user.id !== userId) return user;
+      found = true;
+      // A key the change sets to `undefined` is dropped by JSON.stringify on
+      // the way to disk, which is how an optional field comes off the file.
+      return { ...user, ...change(user, contents.users) };
+    }),
+  }));
+
+  return found;
+}
+
+/**
  * Hash a new password and put it on a user, replacing the old one. Returns
  * `false` when there is no such user. Sessions are left alone; deciding which
  * of them a password change should end is the caller's business.
@@ -342,19 +377,7 @@ export async function setUserPassword(input: {
   // Hashed before the write rather than inside it, so a hash that throws
   // leaves the stored one alone.
   const hash = hashPassword(input.password);
-  let changed = false;
-
-  await write(input.dataDir, (contents) => {
-    changed = contents.users.some((user) => user.id === input.userId);
-    return {
-      ...contents,
-      users: contents.users.map((user) =>
-        user.id === input.userId ? { ...user, passwordHash: hash } : user,
-      ),
-    };
-  });
-
-  return changed;
+  return updateUser(input.dataDir, input.userId, () => ({ passwordHash: hash }));
 }
 
 /**
@@ -375,21 +398,9 @@ export async function setUserEmail(input: {
   email: string;
 }): Promise<boolean> {
   const email = input.email.trim();
-  let changed = false;
-
-  await write(input.dataDir, (contents) => {
-    changed = contents.users.some((user) => user.id === input.userId);
-    return {
-      ...contents,
-      users: contents.users.map((user) => {
-        if (user.id !== input.userId) return user;
-        const { email: _removed, ...rest } = user;
-        return email === '' ? rest : { ...rest, email };
-      }),
-    };
-  });
-
-  return changed;
+  return updateUser(input.dataDir, input.userId, () => ({
+    email: email === '' ? undefined : email,
+  }));
 }
 
 /**
@@ -410,22 +421,8 @@ export async function setUserProfile(input: {
   /** Everything the profile should say from now on. */
   profile: UserProfile;
 }): Promise<boolean> {
-  const next = cleanProfile(input.profile);
-  let changed = false;
-
-  await write(input.dataDir, (contents) => {
-    changed = contents.users.some((user) => user.id === input.userId);
-    return {
-      ...contents,
-      users: contents.users.map((user) => {
-        if (user.id !== input.userId) return user;
-        const { profile: _removed, ...rest } = user;
-        return next === undefined ? rest : { ...rest, profile: next };
-      }),
-    };
-  });
-
-  return changed;
+  const profile = cleanProfile(input.profile);
+  return updateUser(input.dataDir, input.userId, () => ({ profile }));
 }
 
 /**
@@ -484,22 +481,9 @@ export async function setUserNotification(input: {
   /** Whether they want it. */
   on: boolean;
 }): Promise<boolean> {
-  let changed = false;
-
-  await write(input.dataDir, (contents) => {
-    changed = contents.users.some((user) => user.id === input.userId);
-    return {
-      ...contents,
-      users: contents.users.map((user) => {
-        if (user.id !== input.userId) return user;
-        const { notifications: _removed, ...rest } = user;
-        const next = withNotification(user.notifications, input.event, input.on);
-        return next === undefined ? rest : { ...rest, notifications: next };
-      }),
-    };
-  });
-
-  return changed;
+  return updateUser(input.dataDir, input.userId, (user) => ({
+    notifications: withNotification(user.notifications, input.event, input.on),
+  }));
 }
 
 /**
@@ -522,22 +506,9 @@ export async function setUserNotificationMode(input: {
   /** How often they want it. */
   mode: string;
 }): Promise<boolean> {
-  let changed = false;
-
-  await write(input.dataDir, (contents) => {
-    changed = contents.users.some((user) => user.id === input.userId);
-    return {
-      ...contents,
-      users: contents.users.map((user) => {
-        if (user.id !== input.userId) return user;
-        const { notificationModes: _removed, ...rest } = user;
-        const next = withNotificationMode(user.notificationModes, input.event, input.mode);
-        return next === undefined ? rest : { ...rest, notificationModes: next };
-      }),
-    };
-  });
-
-  return changed;
+  return updateUser(input.dataDir, input.userId, (user) => ({
+    notificationModes: withNotificationMode(user.notificationModes, input.event, input.mode),
+  }));
 }
 
 /**
@@ -553,21 +524,7 @@ export async function setUserAdminTheme(input: {
   /** The theme, or `undefined` to follow the system. */
   theme: AdminTheme | undefined;
 }): Promise<boolean> {
-  let changed = false;
-
-  await write(input.dataDir, (contents) => {
-    changed = contents.users.some((user) => user.id === input.userId);
-    return {
-      ...contents,
-      users: contents.users.map((user) => {
-        if (user.id !== input.userId) return user;
-        const { adminTheme: _removed, ...rest } = user;
-        return input.theme === undefined ? rest : { ...rest, adminTheme: input.theme };
-      }),
-    };
-  });
-
-  return changed;
+  return updateUser(input.dataDir, input.userId, () => ({ adminTheme: input.theme }));
 }
 
 /**
@@ -609,29 +566,21 @@ export async function setUserActorId(input: {
   /** The id they were published under, query string and all. */
   actorId: string;
 }): Promise<boolean> {
+  const mine = findUser(input.dataDir, input.username);
+  if (mine === undefined) throw new UnknownUserError(input.username);
   let changed = false;
 
-  await write(input.dataDir, (contents) => {
-    const mine = contents.users.find((user) => user.username === input.username);
-    if (mine === undefined) throw new UnknownUserError(input.username);
-
-    const holder = contents.users.find(
-      (user) => user.id !== mine.id && user.actorId === input.actorId,
+  const found = await updateUser(input.dataDir, mine.id, (user, everyone) => {
+    const holder = everyone.find(
+      (other) => other.id !== user.id && other.actorId === input.actorId,
     );
     if (holder !== undefined) {
       throw new ConflictingActorIdError(holder.username, `The actor id ${input.actorId}`);
     }
-
-    changed = mine.actorId !== input.actorId;
-    if (!changed) return contents;
-
-    return {
-      ...contents,
-      users: contents.users.map((user) =>
-        user.id === mine.id ? { ...user, actorId: input.actorId } : user,
-      ),
-    };
+    changed = user.actorId !== input.actorId;
+    return { actorId: input.actorId };
   });
+  if (!found) throw new UnknownUserError(input.username);
 
   return changed;
 }
