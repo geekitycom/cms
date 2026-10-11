@@ -230,6 +230,7 @@ themes/analytics/
 ```
 
 ```njk
+{% if not devMode and not signedIn %}
 <script defer src="https://cloud.umami.is/script.js" data-website-id="your-website-id"></script>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
 <script>
@@ -238,7 +239,15 @@ themes/analytics/
   gtag('js', new Date());
   gtag('config', 'G-XXXXXXXXXX');
 </script>
+{% endif %}
 ```
+
+The `if` keeps two kinds of visit out of the counts. `devMode` is true while
+the site is in dev mode. A site built or migrated in dev mode keeps its
+production identity, and dev mode cannot hold a pageview, because the reader's
+browser sends it, not the site. `signedIn` is true when the reader is signed in
+to the admin, so an author who reads their own site is not counted. Both keys
+are described in [Template context](#template-context).
 
 Then wear the theme, either with Activate on **Appearance > Themes** or with
 `"theme": "analytics"` in `content/_data/site.json`. A site that already wears
@@ -1530,18 +1539,20 @@ an Eleventy build needs few edits. It is part of the package's semver contract.
 
 Every template gets:
 
-| Key           | What it holds                                                                                                                                                                                           |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `site`        | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available. |
-| `menus`       | Every menu the site stores, by name, marked for this page: `menus.primary`, `menus.footer`, and any other name. See [Navigation](#navigation).                                                          |
-| `siteAuthor`  | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                      |
-| `soloAuthor`  | The site author's profile, on every page of a site whose Site author setting names a user. **Absent** on a site with several authors. See [The bio](#the-bio).                                          |
-| `icons`       | The site's icons, as `{ rel, sizes, type, href }`. Empty until the site has an icon or an avatar to derive them from. See [The head](#the-head).                                                        |
-| `theme`       | The colours the theme declares, as `{ colorScheme, themeColor: { light, dark } }`, each absent when no theme declares it. See [The manifest](#the-manifest).                                            |
-| `shareImage`  | The picture a shared link shows, as `{ url, alt, size: { width, height }, card }`. `size` is absent when it is not known. **Absent** when there is no picture. See [The head](#the-head).               |
-| `llmsTxt`     | The path of `/llms.txt`, while the site serves it. **Absent** when the site has turned it off. The default theme links it from the front page only.                                                     |
-| `license`     | The page's license as `{ name, url }`: the page's `license` front matter, else the site's. **Undefined** with none. It replaces the raw front matter value on the context.                              |
-| `siteLicense` | The site's own license as `{ name, url }`, whatever the page says. **Undefined** with none.                                                                                                             |
+| Key           | What it holds                                                                                                                                                                                                                                                                                                                    |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `site`        | `content/_data/site.json`, if the site has one, over the defaults `title` and `url`. Any key in the file is readable, so `site.tagline`, `site.author` and anything else a site adds are all available.                                                                                                                          |
+| `menus`       | Every menu the site stores, by name, marked for this page: `menus.primary`, `menus.footer`, and any other name. See [Navigation](#navigation).                                                                                                                                                                                   |
+| `siteAuthor`  | Who the page is by, as a profile. **Absent** when nobody matches. See [Bylines and author archives](#bylines-and-author-archives).                                                                                                                                                                                               |
+| `soloAuthor`  | The site author's profile, on every page of a site whose Site author setting names a user. **Absent** on a site with several authors. See [The bio](#the-bio).                                                                                                                                                                   |
+| `icons`       | The site's icons, as `{ rel, sizes, type, href }`. Empty until the site has an icon or an avatar to derive them from. See [The head](#the-head).                                                                                                                                                                                 |
+| `theme`       | The colours the theme declares, as `{ colorScheme, themeColor: { light, dark } }`, each absent when no theme declares it. See [The manifest](#the-manifest).                                                                                                                                                                     |
+| `shareImage`  | The picture a shared link shows, as `{ url, alt, size: { width, height }, card }`. `size` is absent when it is not known. **Absent** when there is no picture. See [The head](#the-head).                                                                                                                                        |
+| `llmsTxt`     | The path of `/llms.txt`, while the site serves it. **Absent** when the site has turned it off. The default theme links it from the front page only.                                                                                                                                                                              |
+| `license`     | The page's license as `{ name, url }`: the page's `license` front matter, else the site's. **Undefined** with none. It replaces the raw front matter value on the context.                                                                                                                                                       |
+| `siteLicense` | The site's own license as `{ name, url }`, whatever the page says. **Undefined** with none.                                                                                                                                                                                                                                      |
+| `devMode`     | `true` while the site is in dev mode, from the config or from `geekity dev-mode on`, as `geekity dev-mode status` reports it. It is read on every render, so `geekity dev-mode off` changes it on the next request.                                                                                                              |
+| `signedIn`    | `true` when the page is drawn for a reader signed in to the admin: a live session for a user who still exists. That page is sent `Cache-Control: private, no-store` with no validator, so no shared cache gives it to anybody else. `false` for everybody else, and in the editor's preview, which sets `editorPreview` instead. |
 
 A document — one post, one page, or one entry of a listing — adds:
 

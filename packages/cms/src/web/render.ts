@@ -1,9 +1,11 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
 import type { Environment } from 'nunjucks';
 
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
+import { devModeOn } from '../dev-mode.ts';
 import type { Document } from '../content/document.ts';
 import { citationsOf, citesAnImage, previewShown } from '../content/citation.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
@@ -418,6 +420,16 @@ export interface RenderedPage {
   readonly fingerprint: string;
 }
 
+// Set at the public site's door (the admin bar) rather than passed to every
+// render method: a listing, the 404 and the 500 are drawn for the same reader
+// as the post, and none of them is handed the request.
+const signedInReader = new AsyncLocalStorage<true>();
+
+/** Run `draw` as the request of a signed-in reader, so its pages say `signedIn`. */
+export function drawnForSignedInReader<T>(draw: () => T): T {
+  return signedInReader.run(true, draw);
+}
+
 /** Half the time a form stays submittable: the oldest stamp a 304 hands back. */
 const STAMP_WINDOW_MS = (MAXIMUM_FORM_AGE_SECONDS * 1000) / 2;
 
@@ -519,6 +531,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(siteOwner === undefined ? {} : { soloAuthor: siteOwner }),
       ...context,
       ...licenseContext(site, context),
+      // After the caller's context, so no front matter can spell either one.
+      devMode: devModeOn(config),
+      signedIn: signedInReader.getStore() === true,
     });
   }
 

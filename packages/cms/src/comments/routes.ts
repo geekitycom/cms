@@ -8,7 +8,6 @@ import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
 import { documentSite } from '../admin/documents.ts';
 import { isServed } from '../web/documents.ts';
-import { PRIVATE_CACHE_CONTROL } from '../web/negotiate.ts';
 import {
   COMMENT_NOTICE_PARAM,
   COMMENT_NOTICES,
@@ -30,7 +29,7 @@ import {
 } from './submission.ts';
 import type { CommentForm, CommentRefusal, CommentThrottle } from './submission.ts';
 import { submitReplyPost } from './reply-post.ts';
-import { signedInCommenter } from './viewer.ts';
+import { commenterOf } from './viewer.ts';
 
 /**
  * The one public endpoint comments add: where the form under a post posts to.
@@ -71,7 +70,8 @@ export function mountComments(app: Hono<GeekityEnv>): void {
     const form = formOf(body);
     // Who the session says this is, read before anything else is decided: it
     // settles the token, the attribution and where the comment lands.
-    const viewer = signedInCommenter(c);
+    const account = c.var.signedIn;
+    const viewer = account === undefined ? undefined : commenterOf(account);
 
     // A form that acts on nobody's behalf needs no token, and the public one
     // still carries none. This one posts under somebody's name, so without a
@@ -205,13 +205,7 @@ function drawnFor(form: CommentFormContext, viewer: CommentViewer | undefined): 
   return viewer === undefined ? form : signedInCommentForm(form, viewer);
 }
 
-/**
- * The post's own page, rendered again with this form on it.
- *
- * A page drawn for a named reader says so, for the reason the rendered post
- * does: it is one person's page rather than the post, and nothing in front of
- * the site may hold it and hand it to the next reader.
- */
+/** The post's own page, rendered again with this form on it. */
 function page(
   c: Context<GeekityEnv>,
   document: Document,
@@ -220,7 +214,6 @@ function page(
   form: CommentFormContext,
 ): Response {
   c.status(status);
-  if (viewer !== undefined) c.header('cache-control', PRIVATE_CACHE_CONTROL);
   return c.html(c.var.renderer.renderDocument(document, { commentForm: form }, viewer));
 }
 

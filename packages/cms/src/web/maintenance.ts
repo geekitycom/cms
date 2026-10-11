@@ -1,12 +1,12 @@
 import type { Context, MiddlewareHandler } from 'hono';
 
 import { ADMIN_PREFIX } from '../admin/session.ts';
-import { signedInCommenter } from '../comments/viewer.ts';
+import { signedInAccount } from '../comments/viewer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { THEME_ASSET_PREFIX } from './assets.ts';
 import { representationOf } from './errors.ts';
 import { HEALTH_PATH } from './health.ts';
-import { CONTENT_TYPES } from './negotiate.ts';
+import { CONTENT_TYPES, PRIVATE_CACHE_CONTROL } from './negotiate.ts';
 import { requestPath } from './routes.ts';
 import { CHANGE_PASSWORD_WELL_KNOWN_PATH, SECURITY_TXT_PATH } from './well-known.ts';
 
@@ -19,12 +19,6 @@ const DEFAULT_RETRY_AFTER_SECONDS = 600;
 
 /** Never stored: a cached 503 would outlive the maintenance it announced. */
 const NO_STORE = 'no-store';
-
-/**
- * A signed-in admin's view of the public site during maintenance is theirs
- * alone, so no shared cache may keep it and hand it to a stranger.
- */
-const PRIVATE_NO_STORE = 'private, no-store';
 
 const STATIC_PAGE = `<!doctype html>
 <html lang="en">
@@ -91,9 +85,9 @@ export const maintenanceGate: MiddlewareHandler<GeekityEnv> = async (c, next) =>
   const pathname = requestPath(c);
   if (window === undefined || isExempt(pathname)) return await next();
 
-  if (signedInCommenter(c) !== undefined) {
+  if (signedInAccount(c) !== undefined) {
     await next();
-    c.res.headers.set('cache-control', PRIVATE_NO_STORE);
+    c.res.headers.set('cache-control', PRIVATE_CACHE_CONTROL);
     return;
   }
 
