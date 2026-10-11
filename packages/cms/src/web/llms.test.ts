@@ -30,8 +30,9 @@ interface SiteOptions {
 }
 
 /**
- * A synced CMS with two pages, three published posts, a draft and a post
- * whose date has not come.
+ * A synced CMS with three public pages, four published posts, and a document
+ * of each kind the public site keeps out of its lists: a draft, a post whose
+ * date has not come, unlisted, private and trashed posts and pages.
  */
 async function site(options: SiteOptions = {}): Promise<{ cms: Cms; contentDir: string }> {
   const contentDir = await mkdtemp(path.join(tmpdir(), 'geekity-llms-content-'));
@@ -55,13 +56,30 @@ async function site(options: SiteOptions = {}): Promise<{ cms: Cms; contentDir: 
     `---\ntitle: Colophon\npermalink: /colophon/\n---\n\nHow it is made.\n`,
     'utf8',
   );
+  const hiddenPages: [file: string, front: string][] = [
+    ['pages/hushed.md', 'title: Hushed page\npermalink: /hushed-page/\nvisibility: unlisted'],
+    ['pages/secret.md', 'title: Secret page\npermalink: /secret-page/\nvisibility: private'],
+    ['_trash/pages/binned.md', 'title: Binned page\npermalink: /binned-page/'],
+  ];
+  for (const [file, front] of hiddenPages) {
+    await mkdir(path.dirname(path.join(contentDir, file)), { recursive: true });
+    await writeFile(path.join(contentDir, file), `---\n${front}\n---\n\nHidden.\n`, 'utf8');
+  }
+  await writeFile(
+    path.join(contentDir, 'pages', 'untitled.md'),
+    `---\npermalink: /untitled-page/\n---\n\nA page that never got a name.\n`,
+    'utf8',
+  );
   await mkdir(path.join(contentDir, 'posts'), { recursive: true });
   const posts: [slug: string, front: string][] = [
-    ['first', `title: First post\ndate: '2026-01-01T09:00:00Z'`],
+    ['untitled', `date: '2025-12-01T09:00:00Z'`],
+    ['first', `title: First post\ndate: '2026-01-01T03:00:00Z'`],
     ['second', `title: Second [post]\ndate: '2026-02-01T09:00:00Z'\ndescription: "Two\n  lines."`],
     ['third', `title: Third post\ndate: '2026-03-01T09:00:00Z'`],
     ['secret', `title: Secret draft\ndate: '2026-03-02T09:00:00Z'\ndraft: true`],
     ['later', `title: From the future\ndate: '2999-01-01T09:00:00Z'`],
+    ['hushed', `title: Hushed post\ndate: '2026-02-02T09:00:00Z'\nvisibility: unlisted`],
+    ['private', `title: Private post\ndate: '2026-02-03T09:00:00Z'\nvisibility: private`],
   ];
   for (const [slug, front] of posts) {
     await writeFile(
@@ -70,6 +88,12 @@ async function site(options: SiteOptions = {}): Promise<{ cms: Cms; contentDir: 
       'utf8',
     );
   }
+  await mkdir(path.join(contentDir, '_trash', 'posts'), { recursive: true });
+  await writeFile(
+    path.join(contentDir, '_trash', 'posts', 'binned.md'),
+    `---\ntitle: Binned post\ndate: '2026-02-04T09:00:00Z'\npermalink: /binned/\n---\n\nGone.\n`,
+    'utf8',
+  );
   if (options.ownFile !== undefined) {
     await writeFile(path.join(contentDir, 'llms.txt'), options.ownFile, 'utf8');
   }
@@ -106,13 +130,14 @@ describe('what /llms.txt lists (AC #1)', () => {
     assert.match(body, /^# Field Notes\n\n> Notes from the field\.\n/);
   });
 
-  it('lists the pages and the recent posts, newest first, each linked to its .md URL', async () => {
+  it('lists every page and every post, newest first, each linked to its .md URL', async () => {
     const { cms } = await site();
     const body = await llms(cms);
 
-    const pages = body.slice(body.indexOf('## Pages'), body.indexOf('## Recent posts'));
-    const posts = body.slice(body.indexOf('## Recent posts'));
+    const pages = body.slice(body.indexOf('## Pages'), body.indexOf('## Posts'));
+    const posts = body.slice(body.indexOf('## Posts'));
     assert.deepEqual(links(pages), [
+      { label: 'A page that never got a name.', url: `${BASE}/untitled-page/index.md` },
       { label: 'About', url: `${BASE}/about/index.md` },
       { label: 'Colophon', url: `${BASE}/colophon/index.md` },
     ]);
@@ -120,10 +145,50 @@ describe('what /llms.txt lists (AC #1)', () => {
       { label: 'Third post', url: `${BASE}/third/index.md` },
       { label: 'Second \\[post\\]', url: `${BASE}/second/index.md` },
       { label: 'First post', url: `${BASE}/first/index.md` },
+      { label: 'Body of untitled.', url: `${BASE}/untitled/index.md` },
     ]);
-    assert.match(body, /^- \[About\]\(\S+\): Who writes this\.$/m, 'a description follows');
-    assert.match(body, /^- \[Second \\\[post\\\]\]\(\S+\): Two lines\.$/m, 'on one line');
-    assert.doesNotMatch(body, /Secret draft|From the future/, 'nothing unpublished');
+    assert.doesNotMatch(body, /Recent posts/);
+  });
+
+  it('gives a page its description and a post its date and the excerpt the feeds carry', async () => {
+    const { cms } = await site();
+    const body = await llms(cms);
+    assert.match(body, /^- \[About\]\(\S+\): Who writes this\.$/m);
+    assert.match(body, /^- \[Colophon\]\(\S+\)$/m, 'a page without a description');
+    assert.match(body, /^- \[Third post\]\(\S+\): 2026-03-01\. Body of third\.$/m);
+    assert.match(body, /^- \[Second \\\[post\\\]\]\(\S+\): 2026-02-01\. Two lines\.$/m);
+    assert.match(body, /^- \[Body of untitled\.\]\(\S+\): 2025-12-01\. Body of untitled\.$/m);
+  });
+
+  it('dates a post by its day in the site’s timezone', async () => {
+    const { cms } = await site({ siteJson: { timezone: 'America/Chicago' } });
+    assert.match(await llms(cms), /^- \[First post\]\(\S+\): 2025-12-31\. Body of first\.$/m);
+  });
+
+  it('leaves out what the sitemap leaves out', async () => {
+    const { cms } = await site();
+    const body = await llms(cms);
+    for (const hidden of [
+      'Secret draft',
+      'From the future',
+      'Hushed post',
+      'Private post',
+      'Binned post',
+      'Hushed page',
+      'Secret page',
+      'Binned page',
+    ]) {
+      assert.doesNotMatch(body, new RegExp(hidden), hidden);
+    }
+
+    const sitemap = await (await cms.app.request('/sitemap.xml')).text();
+    const listed = links(body).map(({ url }) => url.replace(/index\.md$/, ''));
+    const mapped = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
+    assert.deepEqual(
+      listed.toSorted(),
+      mapped.filter((url) => url !== `${BASE}/`).toSorted(),
+      'the same documents as the sitemap',
+    );
   });
 
   it('links only URLs that serve that document as Markdown', async () => {
@@ -135,14 +200,10 @@ describe('what /llms.txt lists (AC #1)', () => {
     }
   });
 
-  it('lists as many recent posts as the feeds carry', async () => {
+  it('lists every post however few the feeds carry', async () => {
     const { cms } = await site({ siteJson: { feedSize: 2 } });
     const body = await llms(cms);
-    const posts = links(body.slice(body.indexOf('## Recent posts')));
-    assert.deepEqual(
-      posts.map((link) => link.label),
-      ['Third post', 'Second \\[post\\]'],
-    );
+    assert.equal(links(body.slice(body.indexOf('## Posts'))).length, 4);
   });
 
   it('links a static homepage at the front page’s own Markdown URL', async () => {

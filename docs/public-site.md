@@ -23,7 +23,7 @@ Booting mounts the public site on the app. The routes are:
 | `/opensearch.xml`                       | The OpenSearch description, so a browser can offer the site's search from its address bar.                                               |
 | `/_geekity/oembed?url=…`                | The oEmbed card of the post or page at `url`, as JSON or with `format=xml`; a 404 for anything else.                                     |
 | `/_geekity/embed?url=…`                 | The same card as a page any site may frame, which the oEmbed `html` puts in an iframe; a 404 for anything else.                          |
-| `/llms.txt`                             | The site's pages and recent posts for a language model, each linked to its Markdown. See [llms.txt](#llmstxt).                           |
+| `/llms.txt`                             | Every page and post the site lists, for a language model, each linked to its Markdown. See [llms.txt](#llmstxt).                         |
 | `/{key}.txt`                            | The IndexNow key, while the site has IndexNow on. See [IndexNow](#indexnow).                                                             |
 | `/.well-known/security.txt`             | Where to report a vulnerability; a 404 until a security contact is set. See [security.txt](security.md#securitytxt-and-change-password). |
 | `/.well-known/change-password`          | A redirect to the signed-in user's change-password form, or to the login form.                                                           |
@@ -518,9 +518,22 @@ No page links to the sitemap. `robots.txt` names it, and crawlers look there.
 
 `/llms.txt` describes the site for a language model, in the
 [llms.txt](https://llmstxt.org/) format. It holds the site's title as a heading
-and its tagline as a quote. Then it lists every public page by title and the
-posts the feeds carry, newest first. Each entry links to the document's
-Markdown, the format a model reads best:
+and its tagline as a quote. Two sections follow:
+
+| Section | What it lists                                                                                   |
+| ------- | ----------------------------------------------------------------------------------------------- |
+| Pages   | Every listed page, sorted by name. A page's `description` follows its link.                     |
+| Posts   | Every listed post, newest first. Each link is followed by the post's date and its feed summary. |
+
+Each entry links to the document's Markdown, the format a model reads best.
+The file lists the same documents as the [sitemap](#sitemap-and-robotstxt).
+Drafts, scheduled posts, unlisted and private documents and the trash stay
+out. A post or page without a title is named by the same label the site gives
+it everywhere else: its first words, else what it is, else `Untitled`.
+
+A post's date is its calendar day in the site's timezone. Its summary is the
+one the feeds carry: the post's `description`, else the first paragraph of its
+body cut to 55 words.
 
 ```markdown
 # Field Notes
@@ -531,14 +544,18 @@ Markdown, the format a model reads best:
 
 - [About](https://example.com/about/index.md): Who writes this.
 
-## Recent posts
+## Posts
 
-- [Third post](https://example.com/third/index.md)
+- [Third post](https://example.com/third/index.md): 2026-03-01. The third post's first paragraph.
 ```
 
-A document's `description` follows its link. A static homepage is listed at
-`/index.md`, because `/` is where it is published. The file is served as
-`text/markdown` and carries an `ETag` and a `Last-Modified`, the newest date
+The file is one document however large the site is. The llms.txt format has
+no pagination, so a site with thousands of posts serves a long file. The CMS
+builds it from the index with the same few queries however many documents the
+site has, and no lookup per document.
+
+A static homepage is listed at `/index.md`, because `/` is where it is
+published. The file is served as `text/markdown` and carries an `ETag` and a `Last-Modified`, the newest date
 among its entries. It answers a conditional request with 304, as the sitemap
 does.
 

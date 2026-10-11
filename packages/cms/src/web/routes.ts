@@ -6,6 +6,7 @@ import { readSiteSettings, robotsPolicyOf } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
+import { calendarDayIn } from '../content/time.ts';
 import { serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { mountAvatars } from '../avatars/routes.ts';
@@ -50,7 +51,9 @@ import {
   siteAuthorContext,
 } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
+import { siteTimezone } from './context.ts';
 import { feedComments, spokenIn } from './conversation.ts';
+import { feedExcerpt } from './feed-item.ts';
 import { COMMENT_PAGE_PREFIX } from './guids.ts';
 import {
   goneDocumentAt,
@@ -1678,15 +1681,11 @@ function sitemap(c: Context<GeekityEnv>, page: number | undefined): Response {
  *
  * Everything here is spelled by the same functions the site's own links go
  * through — {@link homeHref}, the permalinks, {@link termHref} — and drawn
- * from the same queries the listings use, so a sitemap can never advertise a
- * URL the site does not serve. Nothing hidden reaches it either: the index's
- * listing queries already exclude drafts, the trash, posts whose date has not
- * arrived and unlisted documents, and {@link isListed} is asked again with the
- * store's own clock so the two answers cannot drift apart.
+ * from {@link listedDocuments}, so a sitemap can never advertise a URL the
+ * site does not serve, nor anything hidden.
  */
 function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
   const { store, renderer } = c.var;
-  const now = store.now();
   const size = renderer.pageSize();
   const bases = renderer.taxonomyBases();
   const pages = frontPages(c);
@@ -1704,7 +1703,7 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
     }
   };
 
-  const posts = store.listPosts().filter((document) => isListed(document, now));
+  const { posts, pages: documents } = listedDocuments(c);
 
   // The listing's pages, wherever it lives: under `/`, under the posts page,
   // or nowhere at all on a site whose homepage is a page and which named no
@@ -1716,10 +1715,6 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
   // And `/` itself when it is a page rather than the listing: the front page
   // is published at one URL, and it is this one.
   if (pages.home !== undefined) urls.push({ loc: '/', lastmod: lastModifiedOf(pages.home) });
-
-  const documents = store
-    .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
-    .filter((document) => isListed(document, now));
 
   for (const document of [...posts, ...documents]) {
     // The homepage answers at `/` and redirects from its own permalink, and
@@ -1744,33 +1739,48 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
 }
 
 /**
- * What a generated `/llms.txt` lists: every public page by title, then the
- * posts the feeds carry, newest first, each linked to its Markdown.
+ * Every post and every page the public site lists, posts newest first, read in
+ * one query: what the sitemap and `/llms.txt` both publish, so the two cannot
+ * disagree. The index's query already excludes drafts, the trash, documents
+ * whose date has not arrived and unlisted or private ones; {@link isListed} is
+ * asked again with the store's own clock so the two answers cannot drift apart.
+ */
+function listedDocuments(c: Context<GeekityEnv>): { posts: Document[]; pages: Document[] } {
+  const now = c.var.store.now();
+  const posts: Document[] = [];
+  const pages: Document[] = [];
+  for (const document of c.var.store.listListed()) {
+    if (!isListed(document, now)) continue;
+    (document.type === 'post' ? posts : pages).push(document);
+  }
+  return { posts, pages };
+}
+
+/**
+ * What a generated `/llms.txt` lists: every listed page by its label, then
+ * every listed post, newest first, with its date and the summary the feeds
+ * carry, each linked to its Markdown.
  *
  * The homepage is listed at `/`, which is where it is published; its own
  * permalink redirects there.
  */
 function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
-  const { store, renderer } = c.var;
-  const site = renderer.site();
-  const now = store.now();
+  const site = c.var.renderer.site();
+  const timezone = siteTimezone(site);
   const home = frontPages(c).home;
-
-  const entry = (document: Document): LlmsEntry => llmsEntry(c, document, home);
-
-  const pages = store
-    .listAll({ type: 'page', draft: false, trashed: false, scheduled: false })
-    .filter((document) => isListed(document, now))
-    .sort((a, b) => llmsLabel(c, a).localeCompare(llmsLabel(c, b)));
-  const posts = store
-    .listPosts({ limit: feedSize(site) })
-    .filter((document) => isListed(document, now));
+  const { posts, pages } = listedDocuments(c);
 
   return {
     title: site.title,
     description: site.tagline ?? '',
-    pages: pages.map(entry),
-    posts: posts.map(entry),
+    pages: pages
+      .map((document) => llmsEntry(c, document, home))
+      .sort((a, b) => a.title.localeCompare(b.title)),
+    posts: posts.map((document) => ({
+      ...llmsEntry(c, document, home),
+      date: document.date === undefined ? undefined : calendarDayIn(document.date, timezone),
+      description: feedExcerpt(document),
+    })),
   };
 }
 

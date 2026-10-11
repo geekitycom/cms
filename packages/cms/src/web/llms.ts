@@ -7,9 +7,10 @@ import type { ConditionalHeaders } from './negotiate.ts';
 /**
  * `/llms.txt` (TASK-149): the site described for a language model, in the
  * llmstxt.org shape. A heading with the site's title, its tagline as a quote,
- * then its pages and its recent posts as lists of links, each to the Markdown
- * the site already serves for that document, which is what a model wants to
- * read.
+ * then every page and every post the site lists (TASK-344) as lists of links,
+ * each to the Markdown the site already serves for that document, which is
+ * what a model wants to read. One file however large the site: the format has
+ * no pagination.
  *
  * A fixed route at the root for the reason `robots.txt` is one: it is the only
  * place a tool looks, and no permalink may take it.
@@ -35,6 +36,8 @@ export interface LlmsEntry {
   /** The site-relative URL of the document's Markdown. */
   href: string;
   description?: string | undefined;
+  /** A post's calendar day, `YYYY-MM-DD`, written ahead of its description. */
+  date?: string | undefined;
   /** When it last changed, for the file's `Last-Modified`. */
   lastModified?: Date | undefined;
 }
@@ -45,7 +48,7 @@ export interface LlmsIndex {
   /** The site's tagline, or empty for none. */
   description: string;
   pages: readonly LlmsEntry[];
-  /** Newest first. */
+  /** Every listed post, newest first. */
   posts: readonly LlmsEntry[];
 }
 
@@ -70,7 +73,7 @@ export function llmsTxt(index: LlmsIndex, baseUrl: string): string {
     `# ${oneLine(index.title)}`,
     ...(description === '' ? [] : [`> ${description}`]),
     ...section('Pages', index.pages, baseUrl),
-    ...section('Recent posts', index.posts, baseUrl),
+    ...section('Posts', index.posts, baseUrl),
   ]);
 }
 
@@ -147,9 +150,11 @@ function section(heading: string, entries: readonly LlmsEntry[], baseUrl: string
 }
 
 function entryLine(entry: LlmsEntry, baseUrl: string): string {
-  const description = oneLine(entry.description ?? '');
+  const notes = [entry.date, oneLine(entry.description ?? '')]
+    .filter((note) => note !== undefined && note !== '')
+    .join('. ');
   const link = `- [${escapeLinkText(oneLine(entry.title))}](${absoluteUrl(entry.href, baseUrl)})`;
-  return description === '' ? link : `${link}: ${description}`;
+  return notes === '' ? link : `${link}: ${notes}`;
 }
 
 /** A list item is one line, so a folded description is unfolded. */

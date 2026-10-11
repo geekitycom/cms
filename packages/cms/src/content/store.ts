@@ -145,6 +145,11 @@ export interface ContentStore {
   /** Published, untrashed, already-due, listed posts, newest first. */
   listPosts(options?: ListOptions): Document[];
   /**
+   * Every post and page the public site lists, newest first, undated pages
+   * last: what the sitemap and `llms.txt` publish, in one query.
+   */
+  listListed(): Document[];
+  /**
    * The published posts either side of one by date: what a theme links as
    * previous and next under an entry.
    *
@@ -615,7 +620,9 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     insertRedirect: db.prepare(
       'INSERT INTO document_redirects (path, url, position) VALUES (?, ?, ?)',
     ),
-    redirectsFor: db.prepare('SELECT url FROM document_redirects WHERE path = ? ORDER BY position'),
+    redirectsForPaths: db.prepare(
+      'SELECT path, url FROM document_redirects WHERE path IN (SELECT value FROM json_each(?)) ORDER BY path, position',
+    ),
     byFormerPermalink: db.prepare(`
       SELECT documents.* FROM documents
       JOIN document_redirects ON document_redirects.path = documents.path
@@ -630,7 +637,9 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     bySlug: db.prepare(
       `SELECT * FROM documents WHERE slug = ? ORDER BY date_sort DESC, path DESC LIMIT 1`,
     ),
-    tagsFor: db.prepare('SELECT tag, key FROM document_tags WHERE path = ? ORDER BY position'),
+    tagsForPaths: db.prepare(
+      'SELECT path, tag, key FROM document_tags WHERE path IN (SELECT value FROM json_each(?)) ORDER BY path, position',
+    ),
     keysFor: db.prepare('SELECT key FROM document_tags WHERE path = ?'),
     spellings: db.prepare(tagSpellingsSql('')),
     spellingsOfKeys: db.prepare(
@@ -640,8 +649,8 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
       tagSpellingsSql('WHERE spelled.key = :key AND spelled.path <> :excluding'),
     ),
     dataVersion: db.prepare('PRAGMA data_version'),
-    categoriesFor: db.prepare(
-      'SELECT category FROM document_categories WHERE path = ? ORDER BY position',
+    categoriesForPaths: db.prepare(
+      'SELECT path, category FROM document_categories WHERE path IN (SELECT value FROM json_each(?)) ORDER BY path, position',
     ),
     paths: db.prepare('SELECT path FROM documents ORDER BY path'),
     counts: db.prepare(`
@@ -761,35 +770,36 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     for (const row of statements.keysFor.all(contentPath)) staleKeys.add(String(row['key']));
   }
 
-  function tagsOf(contentPath: string): string[] {
-    const spellings = siteSpellings();
-    return statements.tagsFor
-      .all(contentPath)
-      .map((row) => spellings.get(String(row['key'])) ?? String(row['tag']));
-  }
-
-  function categoriesOf(contentPath: string): string[] {
-    return statements.categoriesFor.all(contentPath).map((row) => String(row['category']));
-  }
-
   function hydrate(row: Record<string, unknown> | undefined): Document | undefined {
-    if (row === undefined) return undefined;
-    return hydrateOne(row);
+    return row === undefined ? undefined : hydrateAll([row])[0];
   }
 
-  function hydrateOne(row: Record<string, unknown>): Document {
-    const contentPath = String(row['path']);
-    const redirectFrom = statements.redirectsFor
-      .all(contentPath)
-      .map((redirect) => String(redirect['url']));
-    return {
-      ...toDocument(row, tagsOf(contentPath), categoriesOf(contentPath)),
-      ...(redirectFrom.length === 0 ? {} : { redirectFrom }),
-    };
-  }
-
+  /**
+   * Rows as documents, their tags, categories and former permalinks read in
+   * one query each for the whole list: a listing of the entire site costs
+   * four queries, not three more per document.
+   */
   function hydrateAll(rows: Record<string, unknown>[]): Document[] {
-    return rows.map(hydrateOne);
+    if (rows.length === 0) return [];
+    const paths = JSON.stringify(rows.map((row) => String(row['path'])));
+    const spellings = siteSpellings();
+    const tags = byPath(
+      statements.tagsForPaths.all(paths),
+      (row) => spellings.get(String(row['key'])) ?? String(row['tag']),
+    );
+    const categories = byPath(statements.categoriesForPaths.all(paths), (row) =>
+      String(row['category']),
+    );
+    const redirects = byPath(statements.redirectsForPaths.all(paths), (row) => String(row['url']));
+
+    return rows.map((row) => {
+      const contentPath = String(row['path']);
+      const redirectFrom = redirects.get(contentPath);
+      return {
+        ...toDocument(row, tags.get(contentPath) ?? [], categories.get(contentPath) ?? []),
+        ...(redirectFrom === undefined ? {} : { redirectFrom }),
+      };
+    });
   }
 
   function writeLinks(document: Document, baseUrl: string | undefined): void {
@@ -997,6 +1007,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
     listPosts(options = {}) {
       return select(["type = 'post'", LISTED_CLAUSE], [nowKey()], options);
+    },
+
+    listListed() {
+      return select([LISTED_CLAUSE], [nowKey()], {});
     },
 
     neighbours(document) {
@@ -1238,7 +1252,10 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
         options.limit ?? -1,
         options.offset ?? 0,
       ) as Record<string, unknown>[];
-      return rows.map((row) => ({ document: hydrateOne(row), snippet: String(row['snippet']) }));
+      return hydrateAll(rows).map((document, index) => ({
+        document,
+        snippet: String(rows[index]?.['snippet']),
+      }));
     },
 
     countSearch(query) {
@@ -1411,6 +1428,21 @@ function toRow(document: Document): Record<string, string | number | null> {
     html: document.html,
     hash: document.hash,
   };
+}
+
+/** Rows of a side table grouped by the document they belong to, in row order. */
+function byPath(
+  rows: Record<string, unknown>[],
+  value: (row: Record<string, unknown>) => string,
+): Map<string, string[]> {
+  const grouped = new Map<string, string[]>();
+  for (const row of rows) {
+    const contentPath = String(row['path']);
+    const values = grouped.get(contentPath);
+    if (values === undefined) grouped.set(contentPath, [value(row)]);
+    else values.push(value(row));
+  }
+  return grouped;
 }
 
 /**

@@ -522,6 +522,75 @@ describe('listPosts', () => {
   });
 });
 
+describe('listListed (TASK-344)', () => {
+  it('returns every listed post and page in one list, newest first, each with its own terms', async () => {
+    const index = await store();
+    index.upsertAll([
+      post({
+        path: 'posts/old.md',
+        permalink: '/old/',
+        title: 'Old',
+        date: '2026-01-01T09:00:00Z',
+        tags: ['b', 'a'],
+        categories: ['second', 'first'],
+        redirectFrom: ['/was-old/', '/older/'],
+      }),
+      post({
+        path: 'posts/new.md',
+        permalink: '/new/',
+        title: 'New',
+        date: '2026-03-01T09:00:00Z',
+        tags: [],
+        categories: [],
+      }),
+      post({
+        type: 'page',
+        path: 'pages/about.md',
+        permalink: '/about/',
+        title: 'About',
+        date: undefined,
+        tags: ['c'],
+      }),
+      post({ path: 'posts/draft.md', permalink: '/draft/', title: 'Draft', draft: true }),
+      post({
+        path: 'posts/later.md',
+        permalink: '/later/',
+        title: 'Later',
+        date: '2999-01-01T09:00:00Z',
+      }),
+      post({
+        path: 'posts/hushed.md',
+        permalink: '/hushed/',
+        title: 'Hushed',
+        extra: { visibility: 'unlisted' },
+      }),
+      post({
+        type: 'page',
+        path: 'pages/secret.md',
+        permalink: '/secret/',
+        title: 'Secret',
+        extra: { visibility: 'private' },
+      }),
+      post({ path: '_trash/posts/binned.md', permalink: '/binned/', title: 'Binned' }),
+    ]);
+
+    const listed = index.listListed();
+    assert.deepEqual(titles(listed), ['New', 'Old', 'About']);
+    const [newest, old, about] = listed;
+    assert.deepEqual([newest?.tags, newest?.categories, newest?.redirectFrom], [[], [], undefined]);
+    assert.deepEqual(
+      [old?.tags, old?.categories, old?.redirectFrom],
+      [
+        ['b', 'a'],
+        ['second', 'first'],
+        ['/was-old/', '/older/'],
+      ],
+    );
+    assert.deepEqual(about?.tags, ['c']);
+    assert.ok(listed.every((document) => isListed(document, index.now())));
+  });
+});
+
 describe('neighbours', () => {
   it('answers with the published posts either side of one by date', async () => {
     const index = await populated();
