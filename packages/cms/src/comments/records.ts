@@ -3,14 +3,12 @@ import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import {
-  actorField,
   COMMENT_KINDS,
   COMMENT_SOURCES,
   COMMENT_STATUSES,
-  migratedFields,
+  importedFields,
   REDACTED_FIELDS,
   rsvpField,
-  userField,
   viaField,
 } from '../admin/store.ts';
 import type { AdminStore, CommentRecord, CommentStatus, PostComment } from '../admin/store.ts';
@@ -22,7 +20,7 @@ import type { ContentStore } from '../content/store.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { hashClientAddress } from '../forms/protection.ts';
 import { isKey, repliesKey, webmentionKey } from '../web/feed-source.ts';
-import { COMMENT_PAGE_PREFIX } from '../web/guids.ts';
+import { COMMENT_PAGE_PREFIX, commentPageHref } from '../web/guids.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
 
 /**
@@ -334,9 +332,12 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     ...redactedIn(value['redacted']),
     ...rsvpField(rsvpValue(value['rsvp'])),
     ...viaField(optionalText(value['via'])),
-    ...migratedFields(value['migrated'] === true, optionalText(value['origin'])),
-    ...userField(optionalText(value['user'])),
-    ...actorField(optionalText(value['actor'])),
+    ...importedFields({
+      migrated: value['migrated'] === true,
+      origin: optionalText(value['origin']),
+      user: optionalText(value['user']),
+      actor: optionalText(value['actor']),
+    }),
   };
 }
 
@@ -1061,7 +1062,7 @@ export function migrateCommentKeys(
       const key = isKey(id) ? id : repliesKey(id);
       if (!keyed.has(key) || id === key) keyed.set(key, contact);
     }
-    const stale = keyed.size !== contacts.size || [...contacts.keys()].some((id) => !isKey(id));
+    const stale = [...contacts.keys()].some((id) => !isKey(id));
 
     const writePrivate = (written: ReadonlyMap<string, CommentContact>): void => {
       writeFileAtomicallySync(privateFile, contactsJson(written), {
@@ -1090,7 +1091,7 @@ function renamer(keys: ReadonlyMap<string, string>): (text: string) => string {
   const swaps = [...keys]
     .sort(([left], [right]) => right.length - left.length)
     .flatMap(([id, key]) => [
-      [`${COMMENT_PAGE_PREFIX}${encodeURIComponent(id)}/`, `${COMMENT_PAGE_PREFIX}${key}/`],
+      [`${COMMENT_PAGE_PREFIX}${encodeURIComponent(id)}/`, commentPageHref(key)],
       [`#comment-${id}`, `#comment-${key}`],
     ]);
   return (text) => swaps.reduce((said, [from = '', to = '']) => said.replaceAll(from, to), text);
@@ -1160,9 +1161,7 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
     ...rsvpField(comment.rsvp),
     ...viaField(comment.via),
-    ...migratedFields(comment.migrated, comment.origin),
-    ...userField(comment.user),
-    ...actorField(comment.actor),
+    ...importedFields(comment),
   };
 }
 
@@ -1185,9 +1184,7 @@ function publishedEntryOf(comment: CommentRecord): PublishedComment {
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
     ...rsvpField(comment.rsvp),
     ...viaField(comment.via),
-    ...migratedFields(comment.migrated, comment.origin),
-    ...userField(comment.user),
-    ...actorField(comment.actor),
+    ...importedFields(comment),
   };
 }
 

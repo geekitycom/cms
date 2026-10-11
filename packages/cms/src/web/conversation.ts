@@ -498,15 +498,11 @@ function gather(
   // One like per actor, so a like imported from the site this one replaced
   // and the same person's like delivered here are one.
   const reacted = new Set(
-    stored.flatMap((comment) => {
-      const kind =
-        comment.kind === 'like'
-          ? 'like'
-          : comment.kind === 'boost' || comment.kind === 'repost'
-            ? 'boost'
-            : undefined;
-      return kind !== undefined && comment.actor !== undefined ? [`${kind}\0${comment.actor}`] : [];
-    }),
+    stored.flatMap(({ kind, actor }) =>
+      actor === undefined || (kind !== 'like' && kind !== 'boost' && kind !== 'repost')
+        ? []
+        : [`${kind === 'like' ? 'like' : 'boost'}\0${actor}`],
+    ),
   );
   const isEvent = postTypeOf(document) === 'event';
 
@@ -516,12 +512,8 @@ function gather(
       if (activity.objectId !== objectId) continue;
       if (activity.activityId !== null && withdrawn.has(activity.activityId)) continue;
       const author = naming(activity.actorId);
-      const id = activity.activityId ?? `${activity.actorId}#rsvp`;
       answers.push({
-        id,
-        key: repliesKey(id),
-        guid: id,
-        migrated: false,
+        ...unstored(activity.activityId ?? `${activity.actorId}#rsvp`),
         source: 'activitypub',
         kind: 'reply',
         author,
@@ -554,12 +546,8 @@ function gather(
       }
       reacted.add(key);
       const author = naming(activity.actorId);
-      const id = activity.activityId ?? `${activity.actorId}#${kind}`;
       (kind === 'like' ? likes : boosts).push({
-        id,
-        key: repliesKey(id),
-        guid: id,
-        migrated: false,
+        ...unstored(activity.activityId ?? `${activity.actorId}#${kind}`),
         source: 'activitypub',
         kind,
         author,
@@ -913,10 +901,7 @@ function replyPostInteraction(
   inReplyTo: string,
 ): Interaction {
   return {
-    id,
-    key: repliesKey(id),
-    guid: id,
-    migrated: false,
+    ...unstored(id),
     source: 'post',
     kind: 'reply',
     author: documentAuthor(context, post),
@@ -1154,10 +1139,7 @@ function quotesOf(
       if (quote?.id !== approval.quote || quote.quoted !== objectId) continue;
 
       quotes.push({
-        id: quote.id,
-        key: repliesKey(quote.id),
-        guid: quote.id,
-        migrated: false,
+        ...unstored(quote.id),
         source: 'activitypub',
         kind: 'mention',
         author: naming(quote.actorId),
@@ -1182,10 +1164,7 @@ function federatedInteraction(
   author: InteractionAuthor,
 ): Interaction {
   return {
-    id: reply.id,
-    key: repliesKey(reply.id),
-    guid: reply.id,
-    migrated: false,
+    ...unstored(reply.id),
     source: 'activitypub',
     kind: 'reply',
     author,
@@ -1198,6 +1177,11 @@ function federatedInteraction(
     status: 'published',
     replies: [],
   };
+}
+
+/** The names of an entry no stored comment holds: its id is its guid, and its key that guid's. */
+function unstored(id: string): Pick<Interaction, 'id' | 'key' | 'guid' | 'migrated'> {
+  return { id, key: repliesKey(id), guid: id, migrated: false };
 }
 
 /** One stored comment as the thread's own shape. */
@@ -1506,7 +1490,7 @@ function threadOf(said: Gathered, under: string = said.root): ThreadReply[] {
     withheld.set(id, undefined);
     const list = siblings(said.held.get(id)?.inReplyTo ?? said.root, id, true);
     if (list === undefined) return undefined;
-    const key = said.held.get(id)?.key ?? (isKey(id) ? id : repliesKey(id));
+    const key = isKey(id) ? id : repliesKey(id);
     const entry: WithheldReply = { id, key, withheld: true, replies: [] };
     list.push(entry);
     withheld.set(id, entry);

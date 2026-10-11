@@ -613,24 +613,23 @@ export interface CommentRecord {
   actor?: string;
 }
 
-/** A comment's {@link CommentRecord.user} as a record carries it: present only when there is one. */
-export function userField(user: string | null | undefined): Pick<CommentRecord, 'user'> {
-  return user === undefined || user === null || user === '' ? {} : { user };
-}
-
-/** A comment's {@link CommentRecord.actor} as a record carries it: present only when there is one. */
-export function actorField(actor: string | null | undefined): Pick<CommentRecord, 'actor'> {
-  return actor === undefined || actor === null || actor === '' ? {} : { actor };
-}
-
-/** A comment's {@link CommentRecord.migrated} and {@link CommentRecord.origin} as a record carries them: present only when set. */
-export function migratedFields(
-  migrated: boolean | null | undefined,
-  origin: string | null | undefined,
-): Pick<CommentRecord, 'migrated' | 'origin'> {
+/**
+ * What a comment brought from the system it was imported from, as a record
+ * carries it: each of {@link CommentRecord.migrated}, `origin`, `user` and
+ * `actor` present only when set.
+ */
+export function importedFields(fields: {
+  readonly migrated?: boolean | null | undefined;
+  readonly origin?: string | null | undefined;
+  readonly user?: string | null | undefined;
+  readonly actor?: string | null | undefined;
+}): Pick<CommentRecord, 'migrated' | 'origin' | 'user' | 'actor'> {
+  const { migrated, origin, user, actor } = fields;
   return {
     ...(migrated === true ? { migrated: true } : {}),
-    ...(origin === undefined || origin === null || origin === '' ? {} : { origin }),
+    ...(origin ? { origin } : {}),
+    ...(user ? { user } : {}),
+    ...(actor ? { actor } : {}),
   };
 }
 
@@ -1733,32 +1732,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
 
     putComment(comment) {
       const before = statements.commentById.get(comment.id) as Record<string, unknown> | undefined;
-      statements.putComment.run(
-        comment.id,
-        comment.slug,
-        comment.permalink,
-        comment.source,
-        comment.kind,
-        comment.status,
-        comment.author.name,
-        comment.author.url,
-        comment.author.email,
-        comment.content.markdown,
-        comment.content.html,
-        comment.submitted,
-        comment.addressHash,
-        comment.inReplyTo,
-        comment.url,
-        comment.author.avatar,
-        comment.notify ? 1 : 0,
-        redactedColumn(comment.redacted),
-        comment.rsvp ?? null,
-        comment.via ?? null,
-        comment.migrated === true ? 1 : 0,
-        comment.origin ?? null,
-        comment.user ?? null,
-        comment.actor ?? null,
-      );
+      statements.putComment.run(...commentColumns(comment));
       written({
         kind: 'comment',
         slug: comment.slug,
@@ -1780,32 +1754,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       inTransaction(() => {
         statements.clearComments.run();
         for (const comment of comments) {
-          statements.putComment.run(
-            comment.id,
-            comment.slug,
-            comment.permalink,
-            comment.source,
-            comment.kind,
-            comment.status,
-            comment.author.name,
-            comment.author.url,
-            comment.author.email,
-            comment.content.markdown,
-            comment.content.html,
-            comment.submitted,
-            comment.addressHash,
-            comment.inReplyTo,
-            comment.url,
-            comment.author.avatar,
-            comment.notify ? 1 : 0,
-            redactedColumn(comment.redacted),
-            comment.rsvp ?? null,
-            comment.via ?? null,
-            comment.migrated === true ? 1 : 0,
-            comment.origin ?? null,
-            comment.user ?? null,
-            comment.actor ?? null,
-          );
+          statements.putComment.run(...commentColumns(comment));
         }
       });
     },
@@ -2151,9 +2100,12 @@ function toComment(row: Record<string, unknown>): PostComment {
     ...redactedOf(row['redacted']),
     ...rsvpField(rsvpValue(row['rsvp'])),
     ...viaField(nullableText(row['via'])),
-    ...migratedFields(Number(row['migrated'] ?? 0) === 1, nullableText(row['origin'])),
-    ...userField(nullableText(row['user'])),
-    ...actorField(nullableText(row['actor'])),
+    ...importedFields({
+      migrated: Number(row['migrated'] ?? 0) === 1,
+      origin: nullableText(row['origin']),
+      user: nullableText(row['user']),
+      actor: nullableText(row['actor']),
+    }),
   };
 }
 
@@ -2908,6 +2860,36 @@ const MIGRATIONS: readonly Migration[] = [
     `,
   },
 ];
+
+/** A comment as the values of the comments table's columns, in the order `putComment` names them. */
+function commentColumns(comment: PostComment): (string | number | null)[] {
+  return [
+    comment.id,
+    comment.slug,
+    comment.permalink,
+    comment.source,
+    comment.kind,
+    comment.status,
+    comment.author.name,
+    comment.author.url,
+    comment.author.email,
+    comment.content.markdown,
+    comment.content.html,
+    comment.submitted,
+    comment.addressHash,
+    comment.inReplyTo,
+    comment.url,
+    comment.author.avatar,
+    comment.notify ? 1 : 0,
+    redactedColumn(comment.redacted),
+    comment.rsvp ?? null,
+    comment.via ?? null,
+    comment.migrated === true ? 1 : 0,
+    comment.origin ?? null,
+    comment.user ?? null,
+    comment.actor ?? null,
+  ];
+}
 
 /** What {@link AdminStore.onConversationWrite} hears about one logged activity. */
 function activityWrite(activity: InboxActivity): ConversationWrite {
