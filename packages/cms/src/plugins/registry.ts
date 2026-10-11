@@ -31,6 +31,7 @@ import type {
   PluginSiteInfo,
 } from '../plugin.ts';
 import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import { pluginFetch } from './fetch.ts';
 import type { PluginFetchOptions } from './fetch.ts';
 import {
@@ -266,12 +267,7 @@ export function createPluginRegistry(
 
   const startAttempted: Plugin[] = [];
   let closed = false;
-  let queue: Promise<void> = Promise.resolve();
-
-  function serialized(step: () => Promise<void>): Promise<void> {
-    queue = queue.then(step);
-    return queue;
-  }
+  const steps = createSerialQueue();
 
   async function stopFrom(shouldStop: (name: string) => boolean): Promise<void> {
     for (const entry of [...startAttempted].reverse()) {
@@ -311,7 +307,7 @@ export function createPluginRegistry(
     },
 
     reconcile(enabled) {
-      return serialized(async () => {
+      return steps.run(async () => {
         if (closed) return;
         const running = active(enabled);
         await stopFrom((name) => !running.has(name));
@@ -324,7 +320,7 @@ export function createPluginRegistry(
     },
 
     close() {
-      return serialized(async () => {
+      return steps.run(async () => {
         closed = true;
         await stopFrom(() => true);
       });

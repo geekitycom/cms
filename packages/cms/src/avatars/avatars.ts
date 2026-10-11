@@ -10,6 +10,7 @@ import { writeFileAtomically } from '../files/atomic.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
 import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import { findAsset } from '../web/assets.ts';
 import type { StaticAsset } from '../web/assets.ts';
 import { fetchPublic, webUrl } from '../webmention/fetch-public.ts';
@@ -161,7 +162,7 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
   const directory = path.join(config.dataDir, AVATAR_DIRECTORY);
 
   const inFlight = new Map<string, Promise<boolean>>();
-  let sweeping: Promise<void> = Promise.resolve();
+  const sweeps = createSerialQueue();
   let handle: unknown;
 
   const imageName = (source: string): string => `${hashOf(source)}.webp`;
@@ -253,11 +254,9 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
     },
 
     sweep() {
-      const next = sweeping.then(sweepOnce).catch((thrown: unknown) => {
+      return sweeps.run(sweepOnce).catch((thrown: unknown) => {
         logger.warn(`The avatar sweep failed: ${messageOf(thrown)}`);
       });
-      sweeping = next;
-      return next;
     },
 
     start() {
@@ -272,7 +271,7 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
     },
 
     async settled() {
-      await sweeping;
+      await sweeps.settled();
       await Promise.all([...inFlight.values()]);
     },
   };

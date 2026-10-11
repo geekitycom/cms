@@ -8,6 +8,7 @@ import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { updateFileAtomically } from '../files/atomic.ts';
 import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import { isRecord } from '../util/guards.ts';
 import {
   copyCitedImage,
@@ -200,9 +201,9 @@ export function createReplyContextService(
 
   const describedForSave = new Set<string>();
 
-  let chain: Promise<unknown> = Promise.resolve();
+  const work = createSerialQueue();
   function enqueue(task: () => Promise<void>): void {
-    chain = chain.then(task).catch((thrown: unknown) => {
+    work.run(task).catch((thrown: unknown) => {
       logger.warn(`A reply context failed: ${messageOf(thrown)}`);
     });
   }
@@ -274,7 +275,7 @@ export function createReplyContextService(
     },
 
     settled() {
-      return chain.then(ignore);
+      return work.settled();
     },
   };
 }
@@ -373,8 +374,4 @@ function optional<K extends string>(key: K, value: string | undefined): Partial<
 
 function noneHeld(): undefined {
   return undefined;
-}
-
-function ignore(): void {
-  // Deliberately empty: every failure is already logged against its target.
 }

@@ -7,6 +7,7 @@ import type { ResolvedConfig } from '../config.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
 import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import type { FederationContextData } from './federation.ts';
 import { siteLoaders } from './site-loaders.ts';
 
@@ -114,7 +115,7 @@ export function createActorProfileService(
   const inFlight = new Map<string, Promise<void>>();
   /** When each actor last failed to load, in milliseconds. Lost on restart, which only means one more try. */
   const failedAt = new Map<string, number>();
-  let sweeping: Promise<void> = Promise.resolve();
+  const sweeps = createSerialQueue();
   let handle: unknown;
 
   const now = (): number => config.now().getTime();
@@ -172,11 +173,9 @@ export function createActorProfileService(
     },
 
     sweep() {
-      const next = sweeping.then(sweepOnce).catch((thrown: unknown) => {
+      return sweeps.run(sweepOnce).catch((thrown: unknown) => {
         logger.warn(`The actor profile sweep failed: ${messageOf(thrown)}`);
       });
-      sweeping = next;
-      return next;
     },
 
     start() {
@@ -191,7 +190,7 @@ export function createActorProfileService(
     },
 
     async settled() {
-      await sweeping;
+      await sweeps.settled();
       await Promise.all([...inFlight.values()]);
     },
   };

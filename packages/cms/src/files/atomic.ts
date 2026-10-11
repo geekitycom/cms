@@ -2,6 +2,9 @@ import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from '
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { createSerialQueue } from '../util/queue.ts';
+import type { SerialQueue } from '../util/queue.ts';
+
 /**
  * Writing a file the way decision-9 needs it written.
  *
@@ -54,14 +57,6 @@ export type ProduceFileContents = (
   current: string | undefined,
 ) => FileContents | Promise<FileContents>;
 
-/** One path's queue: what the next task waits on, and how many are in it. */
-interface FileQueue {
-  /** Settles when everything queued so far has finished, however it finished. */
-  last: Promise<unknown>;
-  /** How many tasks are queued or running. The last one out drops the entry. */
-  waiting: number;
-}
-
 /**
  * A write refused because its directory is read-only for now: a worker that
  * is handing over to a new one under `geekity serve` (TASK-288) writes
@@ -106,7 +101,7 @@ function assertWritable(file: string): void {
 }
 
 /** Every path with a write queued, keyed by its resolved absolute path. */
-const queues = new Map<string, FileQueue>();
+const queues = new Map<string, SerialQueue>();
 
 /**
  * Write a file atomically, behind whatever is already being written to it.
@@ -220,20 +215,13 @@ export function readFileIfPresentSync(file: string): string | undefined {
 /** Run a task once every task already queued for this path has finished. */
 function enqueue<T>(file: string, task: () => Promise<T>): Promise<T> {
   const key = path.resolve(file);
-  const queue = queues.get(key) ?? { last: Promise.resolve(), waiting: 0 };
-  queue.waiting += 1;
+  const queue = queues.get(key) ?? createSerialQueue();
   queues.set(key, queue);
 
-  // The chain is of settled promises: a task that throws still lets the next
-  // one run, and its rejection reaches only the caller that queued it.
-  const next = queue.last.then(task, task);
-  queue.last = next.catch(() => undefined);
-
-  return next.finally(() => {
+  return queue.run(task).finally(() => {
     // The last one out turns the light off, so a process that has been running
     // for a year does not hold an entry per file it has ever written.
-    queue.waiting -= 1;
-    if (queue.waiting === 0 && queues.get(key) === queue) queues.delete(key);
+    if (queue.pending() === 0 && queues.get(key) === queue) queues.delete(key);
   });
 }
 

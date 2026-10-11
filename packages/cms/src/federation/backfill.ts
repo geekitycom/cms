@@ -18,6 +18,7 @@ import type { ContentStore } from '../content/store.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
 import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import { heldComment, isWithheld } from '../web/conversation.ts';
 import type { ConversationReader, ThreadReply } from '../web/conversation.ts';
 import { isFederatedDocument } from './article.ts';
@@ -261,7 +262,7 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
   const logger = options.logger ?? console;
   const records: FederationRecords = { admin, contentDir: config.contentDir };
 
-  let sweeping: Promise<void> = Promise.resolve();
+  const sweeps = createSerialQueue();
   let handle: unknown;
 
   async function sweepOnce(): Promise<void> {
@@ -367,11 +368,9 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
 
   return {
     sweep() {
-      const next = sweeping.then(sweepOnce).catch((thrown: unknown) => {
+      return sweeps.run(sweepOnce).catch((thrown: unknown) => {
         logger.warn(`The reply backfill failed: ${messageOf(thrown)}`);
       });
-      sweeping = next;
-      return next;
     },
 
     start() {
@@ -386,7 +385,7 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
     },
 
     async settled() {
-      await sweeping;
+      await sweeps.settled();
     },
   };
 }

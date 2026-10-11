@@ -5,6 +5,7 @@ import { mkdir, readdir, readFile, rmdir } from 'node:fs/promises';
 import path from 'node:path';
 
 import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import { exists, isNotFound } from '../util/files.ts';
 import type { Document, DocumentType } from './document.ts';
 import { handleDirectory } from './handles.ts';
@@ -360,21 +361,8 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
   // the same queue as a full scan, so a burst of writes to one file costs a
   // single re-parse and no two reconciles of one path ever interleave.
   const pending = new Map<string, NodeJS.Timeout>();
-  let queue: Promise<void> = Promise.resolve();
-  let queued = 0;
+  const queue = createSerialQueue();
   let watcher: FSWatcher | undefined;
-
-  function enqueue<T>(work: () => Promise<T>): Promise<T> {
-    queued += 1;
-    const run = queue.then(work).finally(() => {
-      queued -= 1;
-    });
-    queue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
-  }
 
   const settledListeners = new Set<() => unknown>();
   let unsettled = false;
@@ -407,7 +395,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
       relativePath,
       setTimeout(() => {
         pending.delete(relativePath);
-        void enqueue(async () => {
+        void queue.run(async () => {
           const paths = isDocumentPath(relativePath)
             ? [relativePath]
             : await documentsUnder(relativePath);
@@ -421,7 +409,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
           }
           // This run is the one left in the queue, and no path is waiting out
           // its debounce: the burst is over.
-          if (unsettled && pending.size === 0 && queued === 1) await settle();
+          if (unsettled && pending.size === 0 && queue.pending() === 1) await settle();
         });
       }, options.debounceMs ?? DEFAULT_DEBOUNCE_MS),
     );
@@ -530,7 +518,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     },
 
     sync() {
-      return enqueue(scanAndSettle);
+      return queue.run(scanAndSettle);
     },
 
     // The watch goes first and the scan after it hears changes, so a file
@@ -538,7 +526,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     // reported by the watch.
     async start() {
       if (options.watch !== false) await startWatching();
-      return await enqueue(scanAndSettle);
+      return await queue.run(scanAndSettle);
     },
 
     async stop() {
@@ -550,7 +538,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
 
       // Anything already past its debounce is allowed to finish, so stopping
       // never leaves a half-applied write behind.
-      await queue;
+      await queue.settled();
     },
   };
 }

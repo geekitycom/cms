@@ -12,6 +12,7 @@ import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import type { ContentStore } from '../content/store.ts';
 import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import { actorId, senderKeyPairs } from './actor.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 
@@ -118,16 +119,10 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
   const { federation, admin, store, config } = options;
   const logger = options.logger ?? console;
 
-  // Follows and undos are chained rather than run at once, for the reason
+  // Follows and undos are queued rather than run at once, for the reason
   // deliveries are: a relay that is told to unfollow before it has been told
-  // to follow keeps the subscription. The chain never rejects.
-  let chain: Promise<unknown> = Promise.resolve();
-
-  function enqueue<T>(task: () => Promise<T>): Promise<T> {
-    const result = chain.then(task);
-    chain = result.then(ignore, ignore);
-    return result;
-  }
+  // to follow keeps the subscription.
+  const subscriptions = createSerialQueue();
 
   /** A context outside any request, which is where a follow is sent from. */
   function relayContext(): Context<FederationContextData> {
@@ -317,11 +312,11 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
     async retry(inboxId) {
       const relay = admin.getRelay(inboxId);
       if (relay === undefined) return undefined;
-      return await enqueue(() => follow(relay));
+      return await subscriptions.run(() => follow(relay));
     },
 
     settled() {
-      return chain.then(ignore);
+      return subscriptions.settled();
     },
   };
 
@@ -333,7 +328,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
    * written to its record by then.
    */
   function queue(task: () => Promise<unknown>): void {
-    enqueue(task).catch((thrown: unknown) => {
+    subscriptions.run(task).catch((thrown: unknown) => {
       logger.warn(`A relay subscription failed: ${messageOf(thrown)}`);
     });
   }
@@ -417,9 +412,4 @@ function originOf(value: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function ignore(): void {
-  // Deliberately empty: the chain must not reject, and a failure has already
-  // been logged and written to the record it happened to.
 }
