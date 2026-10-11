@@ -1521,6 +1521,19 @@ take a path the site already answers on: `page`, `feed`, `admin`, `ap`,
 feeds, every link the theme renders and the `Hashtag` hrefs on the
 ActivityStreams `Article` on the next request; the old base 404s.
 
+An archive path matches its term without regard to case. A tag's archive lives
+at its lower-case spelling, and a category's at the spelling the site uses, so
+`/category/rsscloud/` and `/category/rsscloud/feed/` answer `301` at
+`/category/rssCloud/` and `/category/rssCloud/feed/`. WordPress lower-cased
+every slug, so this is what keeps an imported site's archive and feed URLs
+working. Two categories that differ only in case stay apart, and each answers
+at its own spelling. An archive path, a page of one, or a feed of one whose
+term no published post carries is not an archive. That request goes on to the
+recorded renames (`taxonomyRedirects`), then to the redirects in
+`content/_data/redirects.json` and `content/_data/redirects/*.json`, and only
+then answers 404. So a migration can send the archive of a category it
+dropped, and each of its feeds, anywhere it likes.
+
 How the site sends email is a setting; the key or password that makes it work
 is not. `mailProvider` picks `none`, Brevo's transactional API or any SMTP
 server, and the From name, From address and reply-to go in `site.json` with
