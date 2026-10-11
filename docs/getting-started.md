@@ -6,6 +6,21 @@ Node 24 or newer, the active LTS line. The content index is built on
 `node:sqlite`, and Node 24 is the first line where `node:sqlite` boots without
 an `ExperimentalWarning`.
 
+You also need pnpm. Corepack installs it for you. Node 24 includes Corepack, so
+turn it on:
+
+```sh
+corepack enable
+```
+
+Node 25 and later do not include Corepack. Install it from npm first, then turn
+it on:
+
+```sh
+npm install --global corepack@latest
+corepack enable
+```
+
 ## A new site
 
 ```sh
