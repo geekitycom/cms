@@ -226,8 +226,10 @@ A key is the first 16 hex digits of a SHA-256.
 | A like or repost with no protocol   | `source_id`, such as a Bluesky `at://` URI                                     | The origin and the post's permalink   |
 | A comment left on the page          | None                                                                           | `https://example.com/?p=ID#comment-N` |
 
-So a webmention sent again is the comment the site already holds. A
-fediverse reply's `url` stays the note's web page. A comment left on the page
+So a webmention sent again is the comment the site already holds, and so is
+a fediverse reply or reaction delivered again or read by the site's reply
+backfill: it shows once, as the imported comment, and answers to the note
+thread under it. A fediverse reply's `url` stays the note's web page. A comment left on the page
 has a page of its own, `/comment/{key}/`.
 
 The import merges by comment id. A rerun adds the comments WordPress received

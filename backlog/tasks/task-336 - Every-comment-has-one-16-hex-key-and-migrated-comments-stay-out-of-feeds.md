@@ -1,11 +1,11 @@
 ---
 id: TASK-336
 title: 'Every comment has one 16-hex key, and migrated comments stay out of feeds'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-10 21:49'
-updated_date: '2026-10-10 23:50'
+updated_date: '2026-10-11 00:03'
 labels:
   - bug
 milestone: m-31
@@ -60,8 +60,8 @@ Decide and record what happens to form comments already stored with UUIDs since 
 - [x] #6 A migrated comment shows on its page and in its thread as before, replies to it still thread under it, and it appears in no feed and no advertised reply count
 - [x] #7 On the andrewshell.org import, /comments/feed/ and every {permalink}feed/ hold no imported comment, so a reader of WordPress's comments feed sees nothing new at cutover
 - [x] #8 The fate of UUID-keyed form comments stored since v0.29.0 is decided and recorded
-- [ ] #9 The README's comments, replies feed and theme sections, and the plugin-wordpress README, describe the key rule and migrated comments
-- [ ] #10 gather() drops an inbox row (delivered or fetched) whose activity or note id is a migrated comment's origin, so a redelivery or backfill of an imported fediverse comment shows once
+- [x] #9 The README's comments, replies feed and theme sections, and the plugin-wordpress README, describe the key rule and migrated comments
+- [x] #10 gather() drops an inbox row (delivered or fetched) whose activity or note id is a migrated comment's origin, so a redelivery or backfill of an imported fediverse comment shows once
 - [x] #11 A native reply under a migrated comment threads under it and, in the feeds, names the migrated comment's guid in source:inReplyTo: its /comment/{key}/ page for an imported WordPress form comment, its origin URL otherwise
 - [x] #12 A decision records the key rule, migrated comments and the UUID re-key, superseding decision-48's id-or-key segment rule
 <!-- AC:END -->
@@ -98,6 +98,14 @@ Phase (c), plugin-wordpress import (AC#1 importer side, #4, #5 except the inbox 
 4. Re-import over a 0.2.0 import: per post, rename every held comment whose id is a former key of an imported comment (the re-keyed WordPress URL) to its new key; move import.json entries recorded under a former name (the URL 0.2.0 used, or the re-keyed key) to the new key, keeping the record's verdict when the held comment is still what 0.2.0 wrote; an owned comment the site edited keeps its content but gets migrated and origin.
 5. README: keys, migrated, origin, anchors.
 6. TDD: origin/key/migrated per source; 0.2.0 shape + boot + re-import gives one record per comment; real WXR scratch site: no imported comment in /comments/feed/ or any {permalink}feed/; real 0.2.0 import (git worktree at plugin-wordpress-v0.2.0) then boot then re-import.
+
+Phase (d), inbox dedupe (AC#10, rest of AC#5, AC#9 core README):
+1. One helper in web/conversation.ts, heldComment(admin, id): the stored comment whose origin is this fediverse id, found by its key (repliesKey(id)) and confirmed by its origin.
+2. gather(): an inbox reply (delivered or fetched; compared by note id) or reaction (by activity id) that a stored comment holds is dropped; the stored record wins. A reaction folds with a migrated one by the same person (author URL). The walk is seeded with the thread's activitypub origins, and an inbox reply whose inReplyTo is a held origin threads under the stored record.
+3. siteConversation drops a held inbox reply; documentNamed finds a held origin's post, so a reply to an imported note is in /comments/feed/.
+4. backfill: level() reads an activitypub reply's collection by its guid (a migrated record's origin, not its key), and a note a stored comment holds is not logged.
+5. Tests in federation/backfill.test.ts; README (comments, replies feed, theme) and themes/default/README.md describe keys and migrated comments.
+6. pnpm checks; scratch site with the real WXR plus a redelivered Create and Like curl'd.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -157,4 +165,25 @@ Verification: new tests in plugin-wordpress comments-import.test.ts (origin/key/
 Scratch sites from the real WXR: site336c (fresh import, served on dist/cli.js): /comments/feed/ and all 16 {permalink}feed/ answer 200 with no item and no imported id, origin or url in them; with one form comment's migrated flag removed (positive control, a copy) that comment appears in both feeds; the 13 imported replies are anchored on their posts. site336d: plugin-wordpress 0.2.0 (git worktree at plugin-wordpress-v0.2.0 on its own core) imported the WXR, the new core booted (ids re-keyed), the new plugin re-imported: 68 written ('written again with its key, migrated and its origin'), 0 clash, 68 records, 68 import.json entries all keys, and content/_data/comments and data/comments byte-identical to the fresh import; another run 0 written. site336e: same without the boot (the CLI migrates first): same result. Servers stopped; worktree removed.
 
 AC#5 checked on the orchestrator's split: the importer keeps and keys by the origin, and a webmention resend matches (tested); the redelivered activity and reply backfill half is enforced in gather() and proved under AC#10 in phase (d). AC#9 stays open: the plugin-wordpress README is done, the core README's comments, replies feed and theme sections are not this phase's.
+
+Phase (d), inbox dedupe and the core READMEs (2026-10-10).
+
+Built:
+- web/conversation.ts heldComment(admin, id): the stored comment whose origin is this fediverse note or activity id, found by its key (repliesKey(id), since an imported fediverse comment is keyed by its origin) and confirmed by its origin. The one rule used by gather, siteConversation, documentNamed and the backfill.
+- gather(): an inbox reply (delivered or fetched; compared by note id, so a fetched line's {note id}#fetched is covered) or reaction (by activity id) that a stored comment holds is dropped, so the stored record wins with its moderation and anchor. The log walk (activitiesAround now takes several seeds) starts from the thread's activitypub origins too, so an answer to an imported note that no logged Create carries is found; an inbox reply whose inReplyTo is a held origin threads under the stored record. Likes and boosts are one per person by author URL (the actor's profile page when the site holds it, else the actor id), and the thread's imported activitypub reactions are seeded into that set, so the same person's like under a new activity id folds into the imported one.
+- siteConversation drops a held inbox reply; documentNamed finds a held origin's post, so an answer to an imported note is in /comments/feed/ (and its count) and names the note in source:inReplyTo.
+- federation/backfill.ts: level() names each fediverse reply by its guid, so an imported reply's collection is read by its note id rather than its key (before, the backfill asked for a 16-hex key and learned nothing); a note a stored comment holds is not logged.
+- README (Keys, Migrated comments, A comment's own page, Comments feeds, Walking a thread, Replies to fediverse replies, URL tables) and themes/default/README.md (id, guid, migrated rows; the like rule; the imported-reaction rule) describe the key rule and migrated comments. The stale id-or-key segment rule and the claim that an imported comment keeps its WordPress guid are gone.
+
+Not folded: a re-like by an actor whose profile the site does not hold under a new activity id shows beside the imported like, because the imported like carries only the profile page (comment_author_url) and the inbox row only the actor id. A same-id redelivery always folds.
+
+Verification: six new tests in federation/backfill.test.ts (redelivered Create shows once and is in no feed; earlier fetched line shows once; the backfill reads the imported note by its origin, threads Bob under the imported record, does not log the note, and feeds Bob; a collection listing the imported note does not log it; a redelivered Like shows once; a re-like under a new id from a known actor folds), each red before the change, and each guard (backfill held check, documentNamed, site feed, walk seed, reaction held, fold seed) seen failing a test when removed. pnpm build, pnpm test (cms 5407, plugin-wordpress 94, all 0 fail), pnpm typecheck, pnpm lint, pnpm format:check pass. Scratch site scratchpad/site336f: fresh import of the real WXR with dist/cli.js and plugin-wordpress, plus inbox lines for a redelivered Create of the imported elettrona reply, a fetched reply from bob answering that note, and a redelivered Announce of an imported boost; served: the post page shows the imported reply once (anchor comment-1ff76a7b231fd7f3, no redelivered text), Bob nested under it, Boosts 2 (not 3), '2 replies'; /comments/feed/ and the post's feed hold one item, Bob's, with source:inReplyTo naming the imported note's id. Server stopped.
+
+plugin-wordpress README: the sentence that named only a webmention resend now names a redelivered or backfilled fediverse reply or reaction too.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Every comment and repliable item has one 16-hex key (decision-51, superseding decision-48's id-or-key segment rule): a form comment's is minted at random, a webmention's is the hash of its source and post, a fediverse item's and a document's the hash of its guid; core refuses any other stored id, and UUID and 0.2.0 URL ids are re-keyed in place at boot. Anchors, /comment/{key}/, /replies/{key}/ and every printed URL use the key, unencoded. Comments imported from another system carry migrated: true and their origin; they show on the page and in the thread but are in no feed and no advertised count, and a native reply under one names its guid in source:inReplyTo. plugin-wordpress marks every imported comment migrated, keeps source_id and webmention_source_url as origin, keys by it, and renames a 0.2.0 import in place without clashes. A webmention resend, a redelivered Create or Like, and a backfilled note matching an imported comment's origin show once as the stored comment (heldComment in web/conversation.ts, used by the thread, the site feed and the backfill), and answers to an imported note thread under it. Verified by unit and integration tests (cms 5407, plugin-wordpress 94, 0 fail), pnpm build/typecheck/lint/format:check, and scratch sites built from the real andrewshell.org WXR: no imported comment in /comments/feed/ or any {permalink}feed/, a 0.2.0 import upgraded with no clash, and redelivered and backfilled fediverse copies shown once.
+<!-- SECTION:FINAL_SUMMARY:END -->

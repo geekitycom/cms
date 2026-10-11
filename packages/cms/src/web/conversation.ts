@@ -466,7 +466,14 @@ function gather(
   const objectId = activityStreamsId(document, context.baseUrl);
   const root = rootOf(context, document);
 
-  const activities = objectId === undefined ? [] : activitiesAround(context.admin, objectId);
+  const stored = context.admin.listCommentsFor(document.slug);
+  // What was imported from the fediverse is walked from too: an answer to an
+  // imported note names the note, which no logged activity may carry.
+  const origins = stored.flatMap((comment) =>
+    comment.source === 'activitypub' && comment.origin !== undefined ? [comment.origin] : [],
+  );
+  const activities =
+    objectId === undefined ? [] : activitiesAround(context.admin, [objectId, ...origins]);
   const naming = authorNaming(context.admin);
   const quotes =
     objectId === undefined
@@ -480,7 +487,21 @@ function gather(
   const mentions: Interaction[] = [...quotes];
   const answers: Interaction[] = [];
   const held = new Map<string, Interaction>();
-  const reacted = new Set<string>();
+  // One like per person, by their profile page, so a like imported from the
+  // site this one replaced and the same person's like delivered here are one.
+  const reacted = new Set(
+    stored.flatMap((comment) => {
+      const kind =
+        comment.kind === 'like'
+          ? 'like'
+          : comment.kind === 'boost' || comment.kind === 'repost'
+            ? 'boost'
+            : undefined;
+      return comment.source === 'activitypub' && kind !== undefined && comment.author.url !== null
+        ? [`${kind}\0${comment.author.url}`]
+        : [];
+    }),
+  );
   const isEvent = postTypeOf(document) === 'event';
 
   for (const activity of activities) {
@@ -514,14 +535,19 @@ function gather(
       // Only a reaction to the post itself: a like of one of the replies
       // belongs to that reply's own conversation, wherever it is shown.
       if (activity.objectId !== objectId) continue;
-      // One like per actor, however many times it was delivered, and none at
-      // all once its actor has taken it back.
-      const key = `${kind}\0${activity.actorId}`;
+      // One like per person, however many times it was delivered, and none
+      // at all once its actor has taken it back.
+      const author = naming(activity.actorId);
+      const key = `${kind}\0${author.url}`;
       if (reacted.has(key)) continue;
       if (activity.activityId !== null && withdrawn.has(activity.activityId)) continue;
+      if (
+        activity.activityId !== null &&
+        heldComment(context.admin, activity.activityId) !== undefined
+      ) {
+        continue;
+      }
       reacted.add(key);
-
-      const author = naming(activity.actorId);
       const id = activity.activityId ?? `${activity.actorId}#${kind}`;
       (kind === 'like' ? likes : boosts).push({
         id,
@@ -542,13 +568,19 @@ function gather(
     }
 
     const reply = replyFrom(activity);
-    if (reply === undefined) continue;
-    written.push(federatedInteraction(reply, naming(activity.actorId)));
+    if (reply === undefined || heldComment(context.admin, reply.id) !== undefined) continue;
+    const parent = heldComment(context.admin, reply.inReplyTo);
+    written.push(
+      federatedInteraction(
+        parent === undefined ? reply : { ...reply, inReplyTo: parent.id },
+        naming(activity.actorId),
+      ),
+    );
   }
 
-  for (const stored of context.admin.listCommentsFor(document.slug)) {
-    const comment = interactionOf(stored, document.permalink, context.baseUrl);
-    if (stored.status !== 'approved') {
+  for (const record of stored) {
+    const comment = interactionOf(record, document.permalink, context.baseUrl);
+    if (record.status !== 'approved') {
       held.set(comment.id, comment);
       continue;
     }
@@ -788,7 +820,8 @@ function documentNamed(context: ConversationContext, url: string, depth = 0): Do
     return found ?? context.store.getByStoredObjectId(named.href);
   }
 
-  const [comment] = context.admin.listCommentsAt(named.href);
+  const comment =
+    context.admin.listCommentsAt(named.href)[0] ?? heldComment(context.admin, named.href);
   if (comment !== undefined) return context.store.getBySlug(comment.slug);
 
   for (const activity of context.admin.listActivitiesAbout([named.href])) {
@@ -994,7 +1027,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
 
     for (const activity of page) {
       const reply = replyFrom(activity);
-      if (reply === undefined) continue;
+      if (reply === undefined || heldComment(context.admin, reply.id) !== undefined) continue;
       // A note answering another note is as much this post's as one answering
       // the post, so the post is found the way a reply post finds its thread.
       const post = documentNamed(context, reply.inReplyTo);
@@ -1196,6 +1229,18 @@ function interactionOf(comment: PostComment, permalink: string, baseUrl: string)
       ? {}
       : { rsvp: { value: comment.rsvp, label: RSVP_LABELS[comment.rsvp] } }),
   };
+}
+
+/**
+ * The stored comment holding a fediverse note or activity id as its origin:
+ * one imported from the site this one replaced, keyed by that id as it would
+ * have been had it arrived here (TASK-336). A delivery or a fetch of the same
+ * id is that comment again, and the stored one wins, since it is the one the
+ * moderator decided on and the thread anchors.
+ */
+export function heldComment(admin: AdminStore, id: string): PostComment | undefined {
+  const comment = admin.getComment(repliesKey(id));
+  return comment?.origin === id ? comment : undefined;
 }
 
 /**
@@ -1511,10 +1556,10 @@ const REACTIONS: Readonly<Record<string, InteractionKind | undefined>> = {
  * stops when a round finds nothing new, which it must, because a row is
  * collected once and there are finitely many.
  */
-function activitiesAround(admin: AdminStore, objectId: string): InboxActivity[] {
+function activitiesAround(admin: AdminStore, objectIds: readonly string[]): InboxActivity[] {
   const collected = new Map<number, InboxActivity>();
-  const asked = new Set<string>([objectId]);
-  let frontier: string[] = [objectId];
+  const asked = new Set<string>(objectIds);
+  let frontier: string[] = [...asked];
 
   while (frontier.length > 0) {
     const next: string[] = [];

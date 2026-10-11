@@ -711,8 +711,9 @@ front of it, an `actor` taken from the note's `attributedTo` and the id
 under the reply it answers with its own URL, counted, given a `/replies/` feed
 and listed on the federation screen, and its author's `Delete` takes it back.
 A note held once is never logged twice. The sweep skips a note the inbox
-already holds, and a delivery of a note the sweep fetched first replaces the
-fetched line.
+already holds or the site holds as a [migrated comment](#migrated-comments),
+and a delivery of a note the sweep fetched first replaces the fetched line. An
+imported fediverse reply's collection is read by its note id, its `origin`.
 
 The site removes a fetched reply, with the fetched replies under it, when its
 server answers 404 or 410 for it, or when a collection read to its end no
@@ -1079,6 +1080,53 @@ from a version that kept the email in the comment file has it moved there on
 the next boot, and so does an email somebody types into a comment file by
 hand.
 
+### Keys
+
+Every comment has one key, 16 lowercase hex digits (decision-51). It is the
+comment's `id` in its file, its anchor `#comment-{key}` on the post, its
+replies feed `/replies/{key}/` and, for a comment left through the form, its
+page `/comment/{key}/`. No URL the site prints carries an id of any other shape.
+
+| Comment                                         | Its key                                                                                     |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Left through the form                           | 16 random hex digits, minted when it is submitted.                                          |
+| A webmention                                    | The first 16 hex digits of the SHA-256 of its source URL, a space and the post's permalink. |
+| A fediverse reply, like or boost                | The first 16 hex digits of the SHA-256 of its note or activity id.                          |
+| Imported, with an identity elsewhere (`origin`) | The key the same comment would get arriving here, from its `origin`.                        |
+| Imported, with none (a WordPress form comment)  | The first 16 hex digits of the SHA-256 of its old comment URL.                              |
+
+A comment file holding any other id is refused, naming the file and the id. A
+site upgrading from 0.29 has its UUID ids, and the URL ids plugin-wordpress
+0.2.0 wrote, re-keyed in place on the next boot to the key of the old id; the
+replies naming them, the emails in `data/comments/` and any Markdown linking
+`/comment/{old}/` or `#comment-{old}` follow. Nothing redirects from the old
+URLs. A site whose ids are all keys reads its files and writes nothing.
+
+### Migrated comments
+
+A comment imported from another system carries `migrated: true`, and `origin`
+when it had an identity elsewhere: a fediverse reply's note id, a like's or a
+boost's activity id, a webmention's source URL. plugin-wordpress writes both.
+
+A migrated comment shows on its post, in its thread and on its own page like
+any other, and replies to it thread under it. It is in no feed and no count a
+feed advertises: not `/comments/feed/`, not `{permalink}feed/`, not
+`/replies/{key}/` and not `source:comments`. It was published before the site
+moved here, so a reader of the old comments feed sees nothing new at cutover. A
+native reply under it is news, and names it in `source:inReplyTo` by its guid:
+its `/comment/{key}/` page for an imported form comment, its `origin`
+otherwise, else its `url`.
+
+The same comment arriving again is the one the site holds, and the stored one
+wins, with the moderator's decision on it. A resent webmention is matched by
+its source. A redelivered `Create` or `Like`, and a note the
+[reply backfill](#replies-to-fediverse-replies) reads, are matched by their
+note or activity id against the stored comment's `origin`, so the inbox line is
+not shown and the backfill does not log the note. A like or a boost from the
+same person as an imported one, by their profile page, is the same reaction.
+An answer to an imported fediverse note threads under the imported comment,
+and the backfill reads that note's `replies` collection by its `origin`.
+
 Three settings and one front-matter key decide whether a post is still taking
 them, and they are read in one place so the form and the endpoint can never
 disagree:
@@ -1121,10 +1169,10 @@ moderation queue and the dashboard carries the number waiting.
 
 ### A comment's own page
 
-A comment left through the form has a page of its own at `/comment/{id}/`,
-the comment's id percent-encoded. That page is the comment's URL in the thread
+A comment left through the form has a page of its own at `/comment/{key}/`
+(see [Keys](#keys)). That page is the comment's URL in the thread
 and in both comments feeds, so a site that replies to the comment fetches the
-comment rather than the whole post. The `#comment-{id}` anchor on the post
+comment rather than the whole post. The `#comment-{key}` anchor on the post
 stays, so an old link still scrolls to it. A webmention or a fediverse reply
 has no such page: its URL is where it came from.
 
@@ -1150,7 +1198,7 @@ what it answers. Its `in-reply-to` is what it answers:
 | Answering          | `in-reply-to`                     | It also                                                  |
 | ------------------ | --------------------------------- | -------------------------------------------------------- |
 | The post           | The post's permalink              |                                                          |
-| A native comment   | The comment's `/comment/{id}/`    | Emails the commenter once, if they asked about replies.  |
+| A native comment   | The comment's `/comment/{key}/`   | Emails the commenter once, if they asked about replies.  |
 | A webmention reply | The page the webmention came from | Sends that page a webmention.                            |
 | A fediverse reply  | The note's id                     | Federates in reply to the note, addressed to its author. |
 | A reply post       | The reply post's permalink        |                                                          |
@@ -1339,10 +1387,10 @@ can tell one from a form submission by its `source`. Akismet is told it is a
 `webmention` rather than a `comment`.
 
 A reply whose `u-in-reply-to` names a reply already on the post (a comment by
-its own page or its `#comment-{id}` anchor, an earlier webmention by the page it
+its own page or its `#comment-{key}` anchor, an earlier webmention by the page it
 was sent from, a fediverse reply by its url or id) threads under that reply, and
 moves with it when the source is edited and sent again. A webmention sent to a
-comment's page, `/comment/{id}/`, lands on that comment's post.
+comment's page, `/comment/{key}/`, lands on that comment's post.
 
 The source URL is its identity. A page that sends its webmention again updates
 what it left rather than adding a second, and one whose link has gone — or which
@@ -2817,7 +2865,7 @@ Booting mounts the public site on the app. The routes are:
 | `/author/{username}/feed/` and siblings | The same, for one person.                                                                                              |
 | `/comments/feed/`                       | Every reply the inbox has been sent, as RSS 2.0.                                                                       |
 | `{permalink}feed/`                      | One post's replies, the same way.                                                                                      |
-| `/comment/{id}/`                        | One comment left through the form, on a page of its own: see [Comments](#comments). Noindex and on no list.            |
+| `/comment/{key}/`                       | One comment left through the form, on a page of its own: see [Comments](#comments). Noindex and on no list.            |
 | `/sitemap.xml`                          | Every public URL, for a search engine.                                                                                 |
 | `/sitemap-{n}.xml`                      | One file of a sitemap too big to be a single one.                                                                      |
 | `/robots.txt`                           | What a crawler may have, and where the sitemap is.                                                                     |
@@ -3231,7 +3279,7 @@ so a site moving off it keeps every subscriber it had:
 | `/category/{name}/feed/` | One category archive, the same three             |
 | `/comments/feed/`        | Every reply the site has been sent, in RSS       |
 | `{permalink}feed/`       | One post's replies, in RSS                       |
-| `/replies/{id or key}/`  | One item's direct replies, in RSS                |
+| `/replies/{key}/`        | One item's direct replies, in RSS                |
 
 `/feed/` is RSS because that is the format nearly every existing subscriber
 holds. The two archive bases are settings (`tagBase`, `categoryBase`), so the
@@ -3396,7 +3444,8 @@ the page draws under the post, so they carry what a reader sees there:
   post its author approved;
 - reply posts written on this site that answer the post or a reply under it.
 
-Likes, boosts and reposts are counted on the page and are in no feed.
+Likes, boosts and reposts are counted on the page and are in no feed, and
+neither is a [migrated comment](#migrated-comments).
 
 Both are RSS 2.0 and nothing else: a comments feed has no Atom or JSON spelling
 here, so `{permalink}feed/atom/` 404s. A post has a comments feed whether or
@@ -3413,13 +3462,12 @@ A channel carries the usual `title` (`Comments on: {post}`), `link`,
 `description`, `language`, `lastBuildDate`, `generator`, `atom:link rel="self"`
 and the same notify-server elements every other feed carries. An item carries the author's name as its `title` and `dc:creator`,
 the reply's `url` as its `link` (a comment left through the form links to its
-own page at `/comment/{id}/`), a `guid`, the `published` time the reply gave (or
+own page at `/comment/{key}/`), a `guid`, the `published` time the reply gave (or
 when it arrived, if it gave none), `description` holding a plain-text excerpt
 and `content:encoded` holding the reply. The `guid` of a comment left through the
-form is its page, `isPermaLink="true"`; any other reply's is its own id: a
-fediverse note's id, a webmention's stored id, a reply post's object id. A
-comment imported from WordPress keeps the `guid` WordPress's comments feed
-published, so a reader sees nothing new after the move.
+form is its page, `isPermaLink="true"`; a fediverse note's is its id, a
+webmention's its source URL, a reply post's its object id. A migrated comment
+is in neither feed, so its old `guid` never has to survive the move.
 `isPermaLink` is `true` exactly when the `guid` is the `link`.
 
 Each item also carries, from the [source namespace][source-ns]:
@@ -3468,20 +3516,14 @@ replies that answer the post directly, and from each of those items' own
 `source:comments` to the replies that answer it, until an item has none.
 Every reply a reader can see is reached once.
 
-Each of those feeds is at `/replies/{segment}/`, RSS 2.0, newest first, its
-items in the same shape as the comments feeds:
-
-- `/replies/{id}/` for a comment left through the form, by the same id as its
-  page at `/comment/{id}/`, percent-encoded.
-- `/replies/{key}/` for everything else: a post or a page, a webmention, a
-  fediverse reply or a reply post. A document has no id of its own and slugs
-  are not unique across posts and pages, so the key is the first 16 hex digits
-  of the SHA-256 of the item's feed `guid`.
-
-A segment of exactly 16 lowercase hex digits is a key, and anything else is a
-comment id. A comment whose id happens to look like a key is named by its key
-instead, so no segment can name two items. An item nobody answered answers an
-empty feed; a key or an id that names nothing a reader can see 404s.
+Each of those feeds is `/replies/{key}/`, RSS 2.0, newest first, its items in
+the same shape as the comments feeds. A comment's key is its id (see
+[Keys](#keys)); a post's, a page's, a fediverse reply's or a reply post's is
+the first 16 hex digits of the SHA-256 of its feed `guid`, since a document has
+no id of its own and slugs are not unique across posts and pages. An item
+nobody answered answers an empty feed; a segment that is no key, or a key that
+names nothing a reader can see, 404s. A migrated comment's feed still answers,
+with the native replies under it, though no feed links to it.
 
 [rss-chat]: https://github.com/scripting/rss.chat
 
@@ -4217,8 +4259,8 @@ search or listing pagination.
 Some things do not carry over. `/feed/`, `/feed/atom/` and `/feed/json/` are
 generated in code here, not by a template, so an Eleventy build needs its own;
 `/sitemap.xml` and `/robots.txt` are the same story, for the same reason. A
-comment's own page at `/comment/{id}/` is not written, since a build has no
-server to take a comment, so a comment links to its `#comment-{id}` anchor on
+comment's own page at `/comment/{key}/` is not written, since a build has no
+server to take a comment, so a comment links to its `#comment-{key}` anchor on
 the post. The site's own reply posts are not threaded under what they answer,
 and a document's backlinks are not listed: both read the CMS's index of every
 document, which the config's filters do not have. The config's header lists
