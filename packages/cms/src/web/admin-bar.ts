@@ -17,6 +17,7 @@ import { siteLocale, siteTimezone } from './context.ts';
 import { hiddenReason } from './documents.ts';
 import type { HiddenReason } from './documents.ts';
 import { PRIVATE_CACHE_CONTROL } from './negotiate.ts';
+import { drawnForSignedInReader } from './render.ts';
 import { requestPath } from './routes.ts';
 import { formatDate } from './templates.ts';
 
@@ -33,7 +34,8 @@ let environment: Environment | undefined;
  * Where the public site's pages learn who is reading them. An anonymous request
  * goes through untouched, so what everybody else is sent, headers and bytes, is what
  * it was before the bar existed. For a signed-in one the account is put on the
- * context for the handlers, and whatever HTML they answer with, a document, a
+ * context for the handlers, every page they draw has `signedIn` in its
+ * template context, and whatever HTML they answer with, a document, a
  * listing, a search, the 404 or the 500, gets the bar straight after its
  * `<body>` tag, the `geekity-admin-bar` class on `<html>`, and the headers of
  * a page drawn for one reader: private, no-store, and no validator. Anything
@@ -53,7 +55,7 @@ export const publicAdminBar: MiddlewareHandler<GeekityEnv> = async (c, next) => 
   if (account === undefined) return await next();
 
   c.set('signedIn', account);
-  await next();
+  await drawnForSignedInReader(next);
 
   if (c.var.frameable === true) return;
   if (!(c.res.headers.get('content-type') ?? '').startsWith('text/html')) return;

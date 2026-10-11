@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
 import type { Environment } from 'nunjucks';
@@ -12,6 +13,7 @@ import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { visibilityOf } from '../content/visibility.ts';
+import { devModeOn } from '../dev-mode.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
 import { iconSetting, siteIcons } from '../images/icons.ts';
 import { LLMS_TXT_PATH } from './llms.ts';
@@ -418,6 +420,13 @@ export interface RenderedPage {
   readonly fingerprint: string;
 }
 
+const signedInReader = new AsyncLocalStorage<true>();
+
+/** Run `draw` as the request of a signed-in reader, so its pages say `signedIn`. */
+export function drawnForSignedInReader<T>(draw: () => T): T {
+  return signedInReader.run(true, draw);
+}
+
 /** Half the time a form stays submittable: the oldest stamp a 304 hands back. */
 const STAMP_WINDOW_MS = (MAXIMUM_FORM_AGE_SECONDS * 1000) / 2;
 
@@ -519,6 +528,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(siteOwner === undefined ? {} : { soloAuthor: siteOwner }),
       ...context,
       ...licenseContext(site, context),
+      devMode: devModeOn(config),
+      signedIn: signedInReader.getStore() === true,
     });
   }
 

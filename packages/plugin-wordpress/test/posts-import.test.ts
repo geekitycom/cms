@@ -247,6 +247,27 @@ describe('the posts and pages import', () => {
     assert.deepEqual(front['tags'], ['WPUS']);
   });
 
+  it('takes a title and term names as the text WordPress displayed, entities decoded (TASK-341)', async () => {
+    const imported = await (
+      await site()
+    ).run([
+      {
+        id: 10,
+        slug: 'fish',
+        title: 'Fish &amp; Chips &#8211; Where&#8217;s the AI?',
+        terms: [
+          { taxonomy: 'category', slug: 'food-drink', name: 'Food &amp; Drink' },
+          { taxonomy: 'post_tag', slug: 'q-a', name: 'Q&amp;A' },
+        ],
+      },
+    ]);
+
+    const front = await imported.frontMatter('posts/2024-03-05-fish.md');
+    assert.equal(front['title'], 'Fish & Chips – Where’s the AI?');
+    assert.deepEqual(front['categories'], ['Food & Drink']);
+    assert.deepEqual(front['tags'], ['Q&A']);
+  });
+
   it('keeps the ActivityPub id and the announce state WordPress federated under', async () => {
     const imported = await (
       await site()

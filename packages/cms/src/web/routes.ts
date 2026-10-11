@@ -32,6 +32,7 @@ import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments/routes.ts';
 import { commenterOf } from '../comments/viewer.ts';
 import type { CommentViewer } from '../comments/form.ts';
+import { devModeOn } from '../dev-mode.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
 import { mountPingbacks, pingbackEndpointFor } from '../webmention/pingback.ts';
@@ -867,10 +868,7 @@ function negotiateDocument(
     // parsing the page, and because the JSON and Markdown representations of a
     // post have no head to put one in (TASK-51).
     links: webmentionLinks(c),
-    // A page drawn for one named reader is that reader's page rather than the
-    // post, so nothing shared may hold it and it carries no validator. A page
-    // drawn for everybody is exactly what it has always been.
-    ...(viewer === undefined ? {} : { private: true }),
+    ...(drawnForSomebody(c, representation) ? { private: true } : {}),
     // The JSON is the file, so the file's hash and dates validate it. The HTML
     // also draws the theme, the conversation, the neighbours and whatever else
     // the site holds, none of which the file's hash sees, so it is validated by
@@ -1370,7 +1368,7 @@ function listing(
       ? {
           etag: representationEtag(
             representation,
-            listingFingerprint(href, pagination, documents, full),
+            listingFingerprint(href, pagination, documents, full, devModeOn(c.var.config)),
           ),
           lastModified: latestModified(documents),
         }
@@ -1474,7 +1472,7 @@ function search(c: Context<GeekityEnv>, representation: Representation | undefin
       ? {
           etag: representationEtag(
             representation,
-            listingFingerprint(href, pagination, documents, full),
+            listingFingerprint(href, pagination, documents, full, devModeOn(c.var.config)),
           ),
           lastModified: latestModified(documents),
         }
@@ -1515,9 +1513,11 @@ function listingFingerprint(
   pagination: Pagination,
   documents: readonly Document[],
   full: boolean,
+  devMode: boolean,
 ): string {
   return [
     href,
+    ...(devMode ? ['dev mode'] : []),
     `${String(pagination.pageNumber)}/${String(pagination.totalPages)}/${String(pagination.total)}`,
     full ? 'full' : 'summary',
     ...documents.map((document) => document.hash),

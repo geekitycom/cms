@@ -1,11 +1,10 @@
-import type { Context, Hono } from 'hono';
+import type { Hono } from 'hono';
 
-import { findUserById } from '../admin/accounts.ts';
 import { LOGIN_PATH } from '../admin/routes.ts';
-import { sessionIdFrom } from '../admin/session.ts';
 import { effectiveBaseUrl, readSiteSettings } from '../admin/settings.ts';
 import type { SiteSettings } from '../admin/settings.ts';
 import { editUserPath } from '../admin/users.ts';
+import { signedInAccount } from '../comments/viewer.ts';
 import type { GeekityEnv } from '../env.ts';
 
 /** RFC 9116's location for a site's vulnerability disclosure contacts. */
@@ -48,14 +47,6 @@ export function securityTxt(input: {
   return `${lines.join('\n')}\n`;
 }
 
-/** The id of the user a live session on this request is signed in as. */
-function signedInUserId(c: Context<GeekityEnv>): number | undefined {
-  const id = sessionIdFrom(c);
-  const session = id === undefined ? undefined : c.var.admin.getSession(id);
-  if (session?.userId == null) return undefined;
-  return findUserById(c.var.config.dataDir, session.userId)?.id;
-}
-
 /** Mount `/.well-known/security.txt` and `/.well-known/change-password`. */
 export function mountWellKnown(app: Hono<GeekityEnv>): void {
   app.get(SECURITY_TXT_PATH, (c) => {
@@ -72,7 +63,7 @@ export function mountWellKnown(app: Hono<GeekityEnv>): void {
 
   // Where it lands depends on the cookie, so no cache may keep one answer.
   app.get(CHANGE_PASSWORD_WELL_KNOWN_PATH, (c) => {
-    const userId = signedInUserId(c);
+    const userId = signedInAccount(c)?.user.id;
     c.header('Cache-Control', 'no-store');
     return c.redirect(
       userId === undefined ? LOGIN_PATH : `${editUserPath(userId)}#${CHANGE_PASSWORD_FRAGMENT}`,

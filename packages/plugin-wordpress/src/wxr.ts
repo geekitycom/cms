@@ -1,3 +1,4 @@
+import { decodeHTML } from 'entities';
 import sax from 'sax';
 
 export interface WordPressExport {
@@ -141,7 +142,7 @@ function readAuthor(read: FieldReader): WordPressAuthor {
     id: read.integer('wp:author_id'),
     login: read.text('wp:author_login'),
     email: read.text('wp:author_email'),
-    displayName: read.text('wp:author_display_name'),
+    displayName: read.displayed('wp:author_display_name'),
   };
 }
 
@@ -150,7 +151,7 @@ function readItem(read: FieldReader): WordPressItem {
     id: read.integer('wp:post_id'),
     type: read.required('wp:post_type'),
     status: read.text('wp:status'),
-    title: read.text('title'),
+    title: read.displayed('title'),
     link: read.text('link'),
     guid: read.text('guid'),
     slug: read.text('wp:post_name'),
@@ -168,7 +169,7 @@ function readItem(read: FieldReader): WordPressItem {
     terms: children(read.element, 'category').map((element) => ({
       taxonomy: element.attributes['domain'] ?? '',
       slug: element.attributes['nicename'] ?? '',
-      name: element.text,
+      name: decodeHTML(element.text),
     })),
     meta: readMeta(read.element, 'wp:postmeta'),
     comments: children(read.element, 'wp:comment').map((element) => {
@@ -178,7 +179,7 @@ function readItem(read: FieldReader): WordPressItem {
         parent: comment.integer('wp:comment_parent', 0),
         type: comment.text('wp:comment_type'),
         approved: comment.text('wp:comment_approved'),
-        author: comment.text('wp:comment_author'),
+        author: comment.displayed('wp:comment_author'),
         authorEmail: comment.text('wp:comment_author_email'),
         authorUrl: comment.text('wp:comment_author_url'),
         authorIp: comment.text('wp:comment_author_IP'),
@@ -213,6 +214,14 @@ class FieldReader {
 
   text(name: string): string {
     return child(this.element, name)?.text.trim() ?? '';
+  }
+
+  /**
+   * A field WordPress stores as HTML and prints unescaped, such as a name or
+   * a title, as the text a reader saw. A URL is stored raw and is not one.
+   */
+  displayed(name: string): string {
+    return decodeHTML(this.text(name));
   }
 
   optional(name: string): string | undefined {

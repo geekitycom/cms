@@ -202,6 +202,10 @@ as comments. Each lands under the post as one the site received itself would:
 | `pingback`, `trackback`                                   | A mention, linked to the page that pinged.                     |
 | `comment` with no protocol                                | A comment left on the page.                                    |
 
+A commenter's name is the text WordPress showed: WordPress stores a name as
+HTML, so `Andy Sylvester&#039;s Web` arrives as `Andy Sylvester's Web`. A post's
+title and its tag and category names arrive the same way.
+
 A reply keeps the comment it answers. An approved comment is approved here,
 and one WordPress held for moderation waits here too. Spam and trash are left
 out and named in the report. A commenter's email goes only to
