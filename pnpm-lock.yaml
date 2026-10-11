@@ -405,6 +405,9 @@ importers:
       '@fedify/vocab':
         specifier: ^2.4.0
         version: 2.4.0
+      entities:
+        specifier: ^8.0.0
+        version: 8.0.0
       js-yaml:
         specifier: ^5.4.2
         version: 5.4.2

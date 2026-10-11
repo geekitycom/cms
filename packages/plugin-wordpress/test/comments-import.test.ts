@@ -865,6 +865,53 @@ describe('the comments and reactions import', () => {
     assert.equal(cms.admin.listCommentsFor('i-♥-rss').length, imported.length + 1);
   });
 
+  describe('a name WordPress stored as HTML (TASK-341)', () => {
+    const RIVER = 'Cry me a river – Andy Sylvester’s Web';
+    const named = (n: number, author: string): TestComment => ({
+      ...webmention(n, 'mention', `https://sylvester.example/${String(n)}/`, 'Linked here.'),
+      author,
+    });
+    const post = (authors: readonly string[]): TestItem => ({
+      ...THE_POST,
+      comments: authors.map((author, n) => named(n + 1, author)),
+    });
+    const names = async (wp: Site) =>
+      (await wp.comments(FILE)).map((comment) => comment.author.name);
+
+    it('stores the name as WordPress displayed it, and the page shows no entity', async () => {
+      const wp = await site();
+      await wp.run([
+        post(['Cry me a river &#8211; Andy Sylvester&#8217;s Web', 'I &#x1fa77; RSS &#039;24']),
+      ]);
+
+      assert.deepEqual(await names(wp), [RIVER, "I 🩷 RSS '24"]);
+      const cms = await wp.serve();
+      const page = await (await cms.app.request('/2024/03/i-%E2%99%A5-rss/')).text();
+      assert.match(page, /Cry me a river – Andy Sylvester’s Web/);
+      assert.doesNotMatch(page, /&amp;#|&#8211;|&#039;|&#8217;/);
+    });
+
+    it('rewrites a name a 0.3.0 import stored with its entities, and keeps one the site edited', async () => {
+      const wp = await site();
+      // `&amp;#8211;` decodes to `&#8211;`, the name 0.3.0 stored for `&#8211;`.
+      await wp.run([post(['A &amp;#8211; B', 'C &amp;#8211; D'])]);
+      assert.deepEqual(await names(wp), ['A &#8211; B', 'C &#8211; D']);
+      const records = { admin: wp.admin, contentDir: wp.contentDir, dataDir: wp.dataDir };
+      const [, edited] = await wp.comments(FILE);
+      await updateComment(records, edited?.id ?? '', {
+        author: { name: 'Named here', url: null, email: null, avatar: null },
+      });
+
+      const rows = await wp.run([post(['A &#8211; B', 'C &#8211; D'])]);
+
+      assert.deepEqual(await names(wp), ['A – B', 'Named here']);
+      assert.deepEqual(
+        rows.filter((row) => row.path === `_data/comments/${FILE}`).map((row) => row.outcome),
+        ['written', 'conflict'],
+      );
+    });
+  });
+
   it('skips a comment on a post the import leaves out, naming it', async () => {
     const wp = await site();
     const rows = await wp.run([
