@@ -7,6 +7,7 @@
  * (decision-9), and both of these are facts the site cannot work out again.
  */
 
+import { isRecord } from '@geekity/cms/plugin';
 import type { PluginDataFolder, PluginSite } from '@geekity/cms/plugin';
 
 /** Where the plugin's REST namespace lives, on the site's origin. */
@@ -230,8 +231,4 @@ function requestsFrom(value: unknown): WordPressRequests {
 
 function isWordPressRoute(name: string): name is WordPressRoute {
   return (WORDPRESS_ROUTES as readonly string[]).includes(name);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

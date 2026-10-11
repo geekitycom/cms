@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import { repliesKey } from '@geekity/cms/plugin';
+import { isRecord, repliesKey, writeFileAtomically } from '@geekity/cms/plugin';
 import type {
   PluginCommandContext,
   PluginComment,
@@ -256,7 +256,7 @@ async function writeOne(
   const next = sha256(file.contents);
   const decision = decide(current === undefined ? undefined : sha256(current), recorded, next);
 
-  if (decision.action === 'write') await writeAtomically(absolute, file.contents);
+  if (decision.action === 'write') await writeFileAtomically(absolute, file.contents);
   if (decision.action !== 'leave' && recorded !== next) {
     record.files.set(relative, next);
     await saveRecord(data, record);
@@ -312,7 +312,7 @@ async function writeEntries(
     }
     rows.push({ outcome: decision.outcome, item, path: file, why });
   }
-  if (changed) await writeAtomically(absolute, `${JSON.stringify(held, null, 2)}\n`);
+  if (changed) await writeFileAtomically(absolute, `${JSON.stringify(held, null, 2)}\n`);
   return rows;
 }
 
@@ -410,10 +410,8 @@ function carryOver(
 
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, inner: unknown) =>
-    inner !== null && typeof inner === 'object' && !Array.isArray(inner)
-      ? Object.fromEntries(
-          Object.entries(inner as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1)),
-        )
+    isRecord(inner)
+      ? Object.fromEntries(Object.entries(inner).sort(([a], [b]) => (a < b ? -1 : 1)))
       : inner,
   );
 }
@@ -435,13 +433,6 @@ async function readIfPresent(file: string): Promise<Buffer | undefined> {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw error;
   }
-}
-
-async function writeAtomically(file: string, contents: string | Uint8Array): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true });
-  const temporary = `${file}.${process.pid.toString(36)}.tmp`;
-  await writeFile(temporary, contents);
-  await rename(temporary, file);
 }
 
 function sha256(contents: string | Uint8Array): string {

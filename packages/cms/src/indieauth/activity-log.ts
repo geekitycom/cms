@@ -28,6 +28,8 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { findUserById } from '../admin/accounts.ts';
 import type { GeekityEnv } from '../env.ts';
 import { readFileIfPresentSync, updateFileAtomically, withFileLock } from '../files/atomic.ts';
+import { messageOf } from '../util/errors.ts';
+import { isRecord } from '../util/guards.ts';
 import type { Bearer } from './bearer.ts';
 
 /** The log, relative to `dataDir`. */
@@ -224,7 +226,7 @@ function recordActivity(describe: Describe): MiddlewareHandler<ActivityEnv> {
 }
 
 function warn(error: unknown): void {
-  const reason = error instanceof Error ? error.message : String(error);
+  const reason = messageOf(error);
   console.warn(`Could not write the IndieAuth and Micropub activity log: ${reason}`);
 }
 
@@ -293,10 +295,6 @@ function fromForm(form: FormData): CarriedField[] {
     );
   }
   return fields.slice(0, CARRIED_LIMIT);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** A Micropub JSON body's fields: its `properties` one by one, then everything else. */

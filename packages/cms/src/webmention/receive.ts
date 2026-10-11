@@ -5,13 +5,16 @@ import type { CommentNotices, CommentRecords, ProposedComment } from '../comment
 import type { CommentChecker } from '../comments/submission.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
+import { escapeText } from '../util/html.ts';
 import { commentKeyAt } from '../web/conversation.ts';
 import type { ConversationReader } from '../web/conversation.ts';
 import { sanitizeCommentHtml } from '../web/sanitize.ts';
-import { readCapped, WEBMENTION_USER_AGENT } from './discovery.ts';
+import { DISCOVERY_MAX_BYTES } from './discovery.ts';
+import { fetchPublic } from './fetch-public.ts';
 import { linksTo, sourceEntry } from './microformats.ts';
 import type { NestedReply } from './microformats.ts';
 import { isPrivateHost } from './public-address.ts';
+import type { HostLookup } from './public-address.ts';
 
 /**
  * Taking a webmention somebody sent this site.
@@ -117,11 +120,6 @@ export function checkWebmentionRequest(
     return refuse('same', 'The source and the target are the same page.');
   }
 
-  // A source on a loopback or private address is not somebody else's page: it
-  // is this network, and fetching it would make the site a way of reaching
-  // machines nobody outside can reach. This stops the obvious spelling of that
-  // and not a name that resolves to one — a receiver that has to be sure needs
-  // to check the address it actually connects to.
   if (isPrivateHost(from.hostname)) return refuse('source', 'The source is not a public URL.');
 
   const site = webUrl(options.baseUrl);
@@ -162,6 +160,7 @@ export interface VerifyWebmentionOptions {
   readonly notices?: CommentNotices | undefined;
   /** The clock. */
   readonly now: Date;
+  readonly lookup: HostLookup;
   /** Where failures are reported. */
   readonly logger: { warn(message: string): void };
 }
@@ -200,7 +199,7 @@ export async function verifyWebmention(
   const { incoming, records, now } = options;
   const held = heldWebmention(records, incoming.document.slug, incoming.source);
 
-  const fetched = await readSource(incoming.source);
+  const fetched = await readSource(incoming.source, options.lookup);
   if (fetched.kind === 'unreachable') {
     options.logger.warn(
       `Could not read ${incoming.source} to verify a webmention: ${fetched.reason}`,
@@ -414,32 +413,30 @@ type FetchedSource =
   | { kind: 'unreachable'; reason: string };
 
 /** Fetch a source page, following redirects and reading no more than a page. */
-async function readSource(source: string): Promise<FetchedSource> {
-  let response: Response;
-  try {
-    response = await fetch(source, {
-      headers: { accept: 'text/html, */*;q=0.8', 'user-agent': WEBMENTION_USER_AGENT },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
-    });
-  } catch (thrown) {
-    return { kind: 'unreachable', reason: messageOf(thrown) };
-  }
+async function readSource(source: string, lookup: HostLookup): Promise<FetchedSource> {
+  const fetched = await fetchPublic(source, {
+    lookup,
+    signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
+    maxBytes: DISCOVERY_MAX_BYTES,
+    overflow: 'truncate',
+    accept: 'text/html, */*;q=0.8',
+    contentType: { pattern: /^/, name: 'anything' },
+  });
 
-  if (!response.ok) {
-    await response.body?.cancel();
+  if (!fetched.ok) {
     // A page the server says is not there is a page that is not linking here.
     // A server that is broken is a different thing and takes nothing with it.
-    if (response.status >= 400 && response.status < 500) return { kind: 'gone' };
-    return { kind: 'unreachable', reason: `answered ${String(response.status)}` };
+    if (fetched.status !== undefined && fetched.status >= 400 && fetched.status < 500) {
+      return { kind: 'gone' };
+    }
+    return { kind: 'unreachable', reason: fetched.reason };
   }
 
-  const type = response.headers.get('content-type') ?? '';
   return {
     kind: 'read',
-    body: await readCapped(response),
-    url: response.url === '' ? source : response.url,
-    html: /^\s*(text\/html|application\/xhtml\+xml)/i.test(type),
+    body: new TextDecoder().decode(fetched.body),
+    url: fetched.url,
+    html: /^\s*(text\/html|application\/xhtml\+xml)/i.test(fetched.type),
   };
 }
 
@@ -486,13 +483,9 @@ function hostOf(source: string): string {
 /** A line of text as the one paragraph of HTML it is. */
 function paragraph(text: string): string {
   if (text === '') return '';
-  return `<p>${text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</p>`;
+  return `<p>${escapeText(text)}</p>`;
 }
 
 function refuse(problem: RequestProblem, message: string): WebmentionRequest {
   return { ok: false, problem, message };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

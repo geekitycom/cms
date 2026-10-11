@@ -144,8 +144,8 @@ export type {
   JsonFeedItem,
   NotifyServer,
 } from './feeds.ts';
+export { absoluteUrl } from '../util/url.ts';
 export {
-  absoluteUrl,
   ACTIVITY_STREAMS_MEDIA_TYPES,
   alternateLinks,
   contentEtag,

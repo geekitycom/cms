@@ -12,8 +12,9 @@ import type { Actor } from '@fedify/vocab';
 
 import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
+import { escapeAttribute, escapeText } from '../util/html.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { authorHref, profileContext } from '../web/authors.ts';
-import { absoluteUrl } from '../web/negotiate.ts';
 import { attributionDomainOf, handleHref } from './paths.ts';
 
 /**
@@ -243,7 +244,7 @@ export async function userActor(
       (link) =>
         new PropertyValue({
           name: link.label,
-          value: `<a href="${escapeHtml(link.href)}" rel="me nofollow noopener">${escapeHtml(link.href)}</a>`,
+          value: `<a href="${escapeAttribute(link.href)}" rel="me nofollow noopener">${escapeText(link.href)}</a>`,
         }),
     ),
     // A blog's author accepts every follower, and says so, rather than leaving
@@ -355,16 +356,6 @@ export class ActorUpdate extends Update {
 function contextList(context: unknown): unknown[] {
   if (context === undefined) return [];
   return Array.isArray(context) ? context : [context];
-}
-
-/** The five characters that cannot travel unescaped inside an attribute. */
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 }
 
 /** A URL, or `null` when the string is empty or is not one. */

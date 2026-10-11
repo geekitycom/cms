@@ -1,5 +1,5 @@
 import type { Document } from '../content/document.ts';
-import { absoluteUrl } from './negotiate.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The names this site gives things to the world outside it: a post's object

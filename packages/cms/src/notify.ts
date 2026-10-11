@@ -5,10 +5,12 @@ import { isMigratedArrival } from './content/migrated.ts';
 import { holdOutbound } from './dev-mode.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { isFederatedDocument } from './federation/article.ts';
+import { messageOf } from './util/errors.ts';
+import { createSerialQueue } from './util/queue.ts';
+import { absoluteUrl } from './util/url.ts';
 import { isListed } from './web/documents.ts';
 import { FEED_FORMATS, notifyEndpoints } from './web/feeds.ts';
 import type { NotifyServer } from './web/feeds.ts';
-import { absoluteUrl } from './web/negotiate.ts';
 import { feedHref } from './web/routes.ts';
 import { TAXONOMIES, termKey } from './web/taxonomy.ts';
 import type { TaxonomyTerm } from './web/taxonomy.ts';
@@ -103,15 +105,7 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
   const { config } = options;
   const logger = options.logger ?? console;
 
-  // Pings are chained rather than sent at once, and the chain never rejects:
-  // one server that hangs delays the next ping and nothing else.
-  let chain: Promise<unknown> = Promise.resolve();
-
-  function enqueue<T>(task: () => Promise<T>): Promise<T> {
-    const result = chain.then(task);
-    chain = result.then(ignore, ignore);
-    return result;
-  }
+  const pings = createSerialQueue();
 
   /** The server the settings name, or `undefined` when they name none. */
   function server(): NotifyServer | undefined {
@@ -151,7 +145,7 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
         return { server: endpoint.base, pings: [] };
       }
 
-      return await enqueue(async () => {
+      return await pings.run(async () => {
         const sent: NotifyPing[] = [];
         for (const url of wanted) {
           const result = await ping(endpoint, url);
@@ -199,8 +193,8 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
       if (urls.length > 0) void this.notify(urls);
     },
 
-    async settled() {
-      await chain;
+    settled() {
+      return pings.settled();
     },
   };
 }
@@ -231,13 +225,4 @@ function termsOf(before: Document | undefined, after: Document | undefined): Tax
   }
 
   return terms;
-}
-
-/** What a thrown value has to say for itself. */
-function messageOf(thrown: unknown): string {
-  return thrown instanceof Error ? thrown.message : String(thrown);
-}
-
-function ignore(): void {
-  // A failed ping is already logged; the chain carries on regardless.
 }

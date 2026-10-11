@@ -62,7 +62,7 @@ export function readQuoteAuthorizations(
   if (source === undefined) return [];
 
   const parsed: unknown = JSON.parse(source);
-  if (!Array.isArray(parsed) || !parsed.every(isRecord)) {
+  if (!Array.isArray(parsed) || !parsed.every(isQuoteAuthorization)) {
     throw new Error(`${file} should be a list of quote approvals, one object per quote.`);
   }
   return parsed;
@@ -77,7 +77,7 @@ export function readAllQuoteAuthorizations(contentDir: string): QuoteAuthorizati
 
 const FIELDS = ['id', 'quote', 'post', 'request', 'actor', 'authorizedAt'] as const;
 
-function isRecord(value: unknown): value is QuoteAuthorizationRecord {
+function isQuoteAuthorization(value: unknown): value is QuoteAuthorizationRecord {
   if (typeof value !== 'object' || value === null) return false;
   const entry = value as Record<string, unknown>;
   return FIELDS.every((field) => typeof entry[field] === 'string' && entry[field] !== '');

@@ -22,6 +22,7 @@ import type { Context, Hono } from 'hono';
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import {
@@ -222,13 +223,8 @@ function pageForm(
   current: SiteSettings,
 ): SettingsForm {
   const form = formFromSettings(current);
-  for (const name of page.fields) form[name] = bodyField(body[SETTINGS_FIELDS[name]]);
+  for (const name of page.fields) form[name] = stringOrEmpty(body[SETTINGS_FIELDS[name]]);
   return { ...form, ...page.reads?.({ c, body, current }) };
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-export function bodyField(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }
 
 /**

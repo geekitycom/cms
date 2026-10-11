@@ -1,3 +1,5 @@
+import { escapeAttribute, escapeText } from '../util/html.ts';
+
 export type Video =
   | { provider: 'youtube'; id: string; start?: number }
   | { provider: 'vimeo'; id: string; hash?: string };
@@ -62,11 +64,11 @@ export function videoEmbedHtml(video: Video, href: string): string {
   const { src, title } = playerOf(video);
   return [
     `<figure class="video-embed video-embed-${video.provider}">`,
-    `<iframe src="${escapeHtml(src)}" width="560" height="315"`,
+    `<iframe src="${escapeAttribute(src)}" width="560" height="315"`,
     ` title="${title}" loading="lazy"`,
     ' allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"',
     ' referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>',
-    `<figcaption><a href="${escapeHtml(href)}">${escapeHtml(href)}</a></figcaption>`,
+    `<figcaption><a href="${escapeAttribute(href)}">${escapeText(href)}</a></figcaption>`,
     '</figure>',
   ].join('');
 }
@@ -88,8 +90,4 @@ function playerOf(video: Video): { src: string; title: string } {
       };
     }
   }
-}
-
-function escapeHtml(text: string): string {
-  return text.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
 }

@@ -2,6 +2,7 @@ import type { StatementSync } from 'node:sqlite';
 
 import { databaseFile, openDatabase } from '../cache.ts';
 import type { Migration } from '../cache.ts';
+import { absoluteUrl } from '../util/url.ts';
 import type { ActivityPubMetadata, Document, DocumentType } from './document.ts';
 import { featuredPosts, PINNED_FRONT_MATTER_KEY } from './pinned.ts';
 import { searchExpression, searchText, SNIPPET_CLOSE, SNIPPET_OPEN } from './search.ts';
@@ -9,7 +10,6 @@ import { tagKey, uniqueTags } from './tags.ts';
 import { VISIBILITIES, VISIBILITY_FRONT_MATTER_KEY } from './visibility.ts';
 import { repliesKey } from '../web/feed-source.ts';
 import { feedGuid, postObjectId } from '../web/guids.ts';
-import { absoluteUrl } from '../web/negotiate.ts';
 import { NO_REDIRECTS } from '../web/redirects.ts';
 import type { RedirectTable } from '../web/redirects.ts';
 import { linksInto, ownSiteLinks, siteLinkKey, spelling } from '../webmention/links.ts';
@@ -750,7 +750,9 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     for (const row of rows) byKey.set(String(row['key']), String(row['tag']));
     staleKeys.clear();
 
-    const nextScheduledAt = text((statements.nextDue.get(now) as Record<string, unknown>)['due']);
+    const nextScheduledAt = stringOrUndefined(
+      (statements.nextDue.get(now) as Record<string, unknown>)['due'],
+    );
     cachedSpellings = { byKey, dataVersion, workedOutAt: now, nextScheduledAt };
     return byKey;
   }
@@ -820,7 +822,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
     const former = (document.redirectFrom ?? []).filter(
       (url) =>
         statements.byPermalink.get(url) === undefined &&
-        text(
+        stringOrUndefined(
           (
             statements.byFormerPermalink.get(url, nowKey()) as Record<string, unknown> | undefined
           )?.['path'],
@@ -1036,7 +1038,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
 
     nextDue() {
       const row = statements.nextDue.get(nowKey()) as Record<string, unknown>;
-      return text(row['due']);
+      return stringOrUndefined(row['due']);
     },
 
     listDueSince(after) {
@@ -1219,7 +1221,7 @@ export function openContentStore(options: OpenContentStoreOptions): ContentStore
         { key: tagKey(tag), excluding: options.excluding },
         nowKey(),
       );
-      return text(row?.['tag']);
+      return stringOrUndefined(row?.['tag']);
     },
 
     listCategories() {
@@ -1458,14 +1460,14 @@ function toDocument(row: Record<string, unknown>, tags: string[], categories: st
     slug: String(row['slug']),
     permalink: String(row['permalink']),
     title: String(row['title']),
-    ...optional('date', text(row['date'])),
-    ...optional('updated', text(row['updated'])),
+    ...optional('date', stringOrUndefined(row['date'])),
+    ...optional('updated', stringOrUndefined(row['updated'])),
     tags,
     categories,
     draft: row['draft'] === 1,
-    ...optional('description', text(row['description'])),
-    ...optional('author', text(row['author'])),
-    ...optional('inReplyTo', text(row['in_reply_to'])),
+    ...optional('description', stringOrUndefined(row['description'])),
+    ...optional('author', stringOrUndefined(row['author'])),
+    ...optional('inReplyTo', stringOrUndefined(row['in_reply_to'])),
     ...optional('activitypub', json<ActivityPubMetadata>(row['activitypub'])),
     extra: json<Record<string, unknown>>(row['extra']) ?? {},
     body: String(row['body']),
@@ -1474,7 +1476,7 @@ function toDocument(row: Record<string, unknown>, tags: string[], categories: st
   };
 }
 
-function text(value: unknown): string | undefined {
+function stringOrUndefined(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
@@ -1499,7 +1501,11 @@ function translateWriteError(
   if (!isUniqueViolation(error, 'documents.permalink')) return error;
 
   const row = pathForPermalink.get(document.permalink) as Record<string, unknown> | undefined;
-  return new DuplicatePermalinkError(document.permalink, document.path, text(row?.['path']));
+  return new DuplicatePermalinkError(
+    document.permalink,
+    document.path,
+    stringOrUndefined(row?.['path']),
+  );
 }
 
 function isUniqueViolation(error: unknown, column: string): boolean {

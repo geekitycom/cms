@@ -21,6 +21,8 @@ import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { documentContent } from '../content/writer.ts';
+import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import { authorNames } from '../web/authors.ts';
 import { ActorUpdate, actorId, senderKeyPairs, userActor } from './actor.ts';
 import {
@@ -166,16 +168,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
    */
   const synchronous = config.federation.queue === null;
 
-  // Deliveries are chained rather than run in parallel, and the chain never
-  // rejects: a failure is recorded against the followers it happened to and
-  // the next activity still goes out.
-  let chain: Promise<unknown> = Promise.resolve();
-
-  function enqueue<T>(task: () => Promise<T>): Promise<T> {
-    const result = chain.then(task);
-    chain = result.then(ignore, ignore);
-    return result;
-  }
+  const deliveryQueue = createSerialQueue();
 
   /** A context outside any request, which is where a delivery happens from. */
   function deliveryContext(
@@ -537,40 +530,42 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       // for one. A relay counts: it is holding a copy of the profile too.
       if (deliveryTargets(admin, user.username).length === 0) return undefined;
 
-      return await enqueue(async () => {
-        const context = deliveryContext();
-        const id = actorId(context, user);
-        const actor = await userActor(context, user, { baseUrl: config.baseUrl });
+      return await deliveryQueue
+        .run(async () => {
+          const context = deliveryContext();
+          const id = actorId(context, user);
+          const actor = await userActor(context, user, { baseUrl: config.baseUrl });
 
-        // The revision is the moment rather than a hash of the profile: an
-        // avatar removed and put back is the same profile twice, and both
-        // times the followers have to be told rather than recognise an id
-        // they have already seen and skip it.
-        const activityId = updateActivityId(id, new Date().toISOString());
-        const activity = new ActorUpdate({
-          id: activityId,
-          actor: id,
-          object: actor,
-          to: PUBLIC_COLLECTION,
-          cc: context.getFollowersUri(user.username),
-        });
+          // The revision is the moment rather than a hash of the profile: an
+          // avatar removed and put back is the same profile twice, and both
+          // times the followers have to be told rather than recognise an id
+          // they have already seen and skip it.
+          const activityId = updateActivityId(id, new Date().toISOString());
+          const activity = new ActorUpdate({
+            id: activityId,
+            actor: id,
+            object: actor,
+            to: PUBLIC_COLLECTION,
+            cc: context.getFollowersUri(user.username),
+          });
 
-        return await fanOut(context, user, activity, {
-          activityId: activityId.href,
-          activityType: 'Update',
-          // The object is the actor, not a post, and there is no slug to
-          // record: that is what keeps an actor Update out of the federation
-          // screen's per-post delivery table, which is built from the posts
-          // the content index holds.
-          objectId: id.href,
-          slug: null,
+          return await fanOut(context, user, activity, {
+            activityId: activityId.href,
+            activityType: 'Update',
+            // The object is the actor, not a post, and there is no slug to
+            // record: that is what keeps an actor Update out of the federation
+            // screen's per-post delivery table, which is built from the posts
+            // the content index holds.
+            objectId: id.href,
+            slug: null,
+          });
+        })
+        .catch((thrown: unknown) => {
+          // A profile update is a side effect of saving the settings, and losing
+          // it must not lose the save.
+          logger.warn(`The actor update could not be delivered: ${messageOf(thrown)}`);
+          return undefined;
         });
-      }).catch((thrown: unknown) => {
-        // A profile update is a side effect of saving the settings, and losing
-        // it must not lose the save.
-        logger.warn(`The actor update could not be delivered: ${messageOf(thrown)}`);
-        return undefined;
-      });
     },
 
     async resend(slug) {
@@ -583,7 +578,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       const announced = wasAnnounced(document);
       if (!announced && (!published || isMigrated(document))) return undefined;
 
-      return await enqueue(async () => {
+      return await deliveryQueue.run(async () => {
         const context = deliveryContext();
 
         if (!published) {
@@ -636,7 +631,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     },
 
     settled() {
-      return chain.then(ignore);
+      return deliveryQueue.settled();
     },
   };
 
@@ -648,7 +643,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
    * in the database by the time one gets this far.
    */
   function queue(task: () => Promise<unknown>): void {
-    enqueue(task).catch((thrown: unknown) => {
+    deliveryQueue.run(task).catch((thrown: unknown) => {
       logger.warn(`A delivery failed: ${messageOf(thrown)}`);
     });
   }
@@ -834,13 +829,4 @@ function federatedOrUndefined(document: Document | undefined, now: Date): Docume
 function typeNameOf(activity: Activity): string {
   const typeId = getTypeId(activity);
   return typeId.hash === '' ? typeId.href : typeId.hash.slice(1);
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function ignore(): void {
-  // Deliberately empty: the chain must not reject, and a failure has already
-  // been recorded against the followers it happened to.
 }

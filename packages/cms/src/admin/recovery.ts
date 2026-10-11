@@ -2,6 +2,8 @@ import type { Context, Hono } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
+import { stringOrEmpty } from '../util/forms.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { findUserById, findUserByIdentifier, setUserPassword } from './accounts.ts';
 import { passwordProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
@@ -109,7 +111,7 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
   app.post(FORGOT_PATH, async (c) => {
     const config = c.var.config;
     const body = await c.req.parseBody();
-    const identifier = field(body[RECOVERY_FIELDS.identifier]).trim();
+    const identifier = stringOrEmpty(body[RECOVERY_FIELDS.identifier]).trim();
 
     const address = clientAddress(c, config);
     const keys = loginKeys(identifier, address);
@@ -177,9 +179,9 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
   app.post(RESET_PATH, async (c) => {
     const dataDir = c.var.config.dataDir;
     const body = await c.req.parseBody();
-    const token = field(body[RECOVERY_FIELDS.token]);
-    const password = field(body[RECOVERY_FIELDS.password]);
-    const confirmation = field(body[RECOVERY_FIELDS.passwordConfirmation]);
+    const token = stringOrEmpty(body[RECOVERY_FIELDS.token]);
+    const password = stringOrEmpty(body[RECOVERY_FIELDS.password]);
+    const confirmation = stringOrEmpty(body[RECOVERY_FIELDS.passwordConfirmation]);
 
     // Checked before the password rules, so a stale link is a stale link
     // whatever was typed into it — and so a refused form never spends one.
@@ -287,12 +289,7 @@ export function newPasswordProblem(password: string, confirmation: string): stri
 
 /** The link that goes in the message, absolute because it is read elsewhere. */
 export function resetLink(baseUrl: string, token: string): string {
-  const url = new URL(RESET_PATH, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
+  const url = new URL(absoluteUrl(RESET_PATH, baseUrl));
   url.searchParams.set(RECOVERY_FIELDS.token, token);
   return url.href;
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function field(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }

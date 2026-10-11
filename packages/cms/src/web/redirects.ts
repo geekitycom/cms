@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { MiddlewareHandler } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
+import { messageOf } from '../util/errors.ts';
 
 /**
  * The site's own redirects, relative to the content directory (TASK-128).
@@ -123,7 +124,7 @@ function entriesOf(text: string): unknown[] | string {
   try {
     parsed = JSON.parse(text);
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = messageOf(error);
     return `it is not valid JSON (${reason}).`;
   }
   if (Array.isArray(parsed)) return parsed as unknown[];

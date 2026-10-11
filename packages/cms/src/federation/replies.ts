@@ -9,6 +9,7 @@
  */
 
 import type { InboxActivity } from '../admin/store.ts';
+import { isRecord } from '../util/guards.ts';
 
 /** The activity type a reply arrives as. A comment is a note somebody created. */
 export const REPLY_ACTIVITY_TYPE = 'Create';
@@ -282,8 +283,4 @@ function languageText(value: unknown): string | undefined {
     if (found !== undefined) return found;
   }
   return undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

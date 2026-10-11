@@ -4,7 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { pluginDataFolder } from '@geekity/cms';
+import {
+  documentContent,
+  parseDocument,
+  pluginDataFolder,
+  serializeDocument,
+  slugify,
+} from '@geekity/cms';
 import type { PluginCommandContext, PluginSite } from '@geekity/cms/plugin';
 import { load } from 'js-yaml';
 
@@ -671,5 +677,60 @@ describe('the posts and pages import', () => {
       second.rows.every((row) => row.outcome === 'unchanged'),
       JSON.stringify(second.rows),
     );
+  });
+  it('slugs a title with accents as the editor would when WordPress gave no slug', async () => {
+    const imported = await (
+      await site()
+    ).run([
+      {
+        id: 7,
+        slug: '',
+        status: 'draft',
+        title: 'Café crème & Smørrebrød',
+        link: `${SITE}/?p=7`,
+      },
+    ]);
+
+    assert.equal(slugify('Café crème & Smørrebrød'), 'cafe-creme-smorrebrod');
+    assert.ok(
+      (await imported.files()).includes('posts/2024-03-05-cafe-creme-smorrebrod.md'),
+      JSON.stringify(await imported.files()),
+    );
+  });
+
+  it('writes each document as the site would save it unchanged', async () => {
+    const imported = await (
+      await site()
+    ).run([
+      {
+        id: 10,
+        slug: 'hello',
+        title: 'Hello: a "post"',
+        dateGmt: '2024-03-05 14:30:00',
+        modifiedGmt: '2024-04-01 08:00:00',
+        guid: 'https://old.example/essays/hello/',
+        terms: [
+          { taxonomy: 'category', slug: 'essays', name: 'Essays' },
+          { taxonomy: 'post_tag', slug: 'rss', name: 'RSS' },
+        ],
+        meta: [FEDERATED, { key: '_wp_old_slug', value: 'hi' }],
+        content: '<p>Body of 10.</p>\n\n<p>Second paragraph.</p>',
+      },
+      { id: 11, slug: 'a-draft', status: 'draft', title: 'Draft', link: `${SITE}/?p=11` },
+      {
+        id: 12,
+        slug: 'a-status',
+        terms: [{ taxonomy: 'post_format', slug: 'post-format-status', name: 'Status' }],
+      },
+      { id: 20, type: 'page', slug: 'about', title: 'About', link: `${SITE}/about/`, content: '' },
+    ]);
+
+    const written = (await imported.files()).filter((file) => file.endsWith('.md'));
+    assert.equal(written.length, 4);
+    for (const file of written) {
+      const text = await imported.file(file);
+      const resaved = serializeDocument(documentContent(parseDocument(text, { path: file })));
+      assert.equal(resaved, text, file);
+    }
   });
 });

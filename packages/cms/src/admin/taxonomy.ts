@@ -20,6 +20,7 @@ import { saveDocument } from '../content/save.ts';
 import type { TermUsage } from '../content/store.ts';
 import { documentContent } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import {
   forgetTerm,
   recordTermRename,
@@ -123,8 +124,8 @@ export function mountTaxonomyScreens(
 
   app.post(renamePath(kind), async (c) => {
     const body = await c.req.parseBody();
-    const from = field(body[TAXONOMY_FIELDS.term]).trim();
-    const to = field(body[TAXONOMY_FIELDS.to]).trim();
+    const from = stringOrEmpty(body[TAXONOMY_FIELDS.term]).trim();
+    const to = stringOrEmpty(body[TAXONOMY_FIELDS.to]).trim();
 
     const problem = renameProblem({
       kind,
@@ -146,7 +147,7 @@ export function mountTaxonomyScreens(
     // and only a form that says it has been seen goes through.
     const target =
       termKey(kind.taxonomy, to) === termKey(kind.taxonomy, from) ? [] : carriers(c, kind, to);
-    if (target.length > 0 && field(body[TAXONOMY_FIELDS.confirm]) === '') {
+    if (target.length > 0 && stringOrEmpty(body[TAXONOMY_FIELDS.confirm]) === '') {
       return render(
         c,
         ADMIN_TEMPLATES.taxonomy,
@@ -179,7 +180,7 @@ export function mountTaxonomyScreens(
 
   app.post(deletePath(kind), async (c) => {
     const body = await c.req.parseBody();
-    const term = field(body[TAXONOMY_FIELDS.term]).trim();
+    const term = stringOrEmpty(body[TAXONOMY_FIELDS.term]).trim();
 
     if (term === '' || carriers(c, kind, term).length === 0) {
       // Nothing was typed to send back, so this is a flash rather than a 400
@@ -332,11 +333,6 @@ async function recordRedirects(
       taxonomyRedirects: change(settings.taxonomyRedirects),
     }),
   });
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function field(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }
 
 /** Everything the taxonomy template renders. */

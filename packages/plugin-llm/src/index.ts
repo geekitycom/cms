@@ -6,7 +6,7 @@
  * and its screen shows the last call and has a Test connection button.
  */
 
-import { definePlugin } from '@geekity/cms/plugin';
+import { definePlugin, withoutTrailingSlash } from '@geekity/cms/plugin';
 import type {
   PluginDataFolder,
   PluginScreen,
@@ -182,7 +182,7 @@ function llmScreen(
             {
               paragraph: [
                 'Calls go to ',
-                { code: `${now.baseUrl.replace(/\/+$/, '')}/chat/completions` },
+                { code: `${withoutTrailingSlash(now.baseUrl)}/chat/completions` },
                 ' and ask for ',
                 { code: now.model },
                 ' unless they name a model. ',

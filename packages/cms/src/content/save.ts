@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { exists } from '../util/files.ts';
 import type { Document, DocumentContent, DocumentType } from './document.ts';
 import { handleDirectory } from './handles.ts';
 import { parseDocument } from './parser.ts';
@@ -203,13 +204,4 @@ function calendarDay(date: string | Date): string {
     throw new TypeError(`A post filename needs an ISO 8601 date, received ${JSON.stringify(date)}`);
   }
   return match[1];
-}
-
-async function exists(file: string): Promise<boolean> {
-  try {
-    await access(file);
-    return true;
-  } catch {
-    return false;
-  }
 }

@@ -9,6 +9,8 @@ import type { ContentStore } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { MailService } from '../mail/service.ts';
+import { messageOf } from '../util/errors.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { COMMENTS_NOTIFICATION } from './comments.ts';
 import { moderationLink } from './links.ts';
 import {
@@ -208,7 +210,7 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
     const document = store.getBySlug(comment.slug);
     return {
       title: document === undefined ? comment.slug : postLabel(document, options.cited),
-      url: absolute(comment.permalink, config.baseUrl),
+      url: absoluteUrl(comment.permalink, config.baseUrl),
     };
   }
 
@@ -269,7 +271,7 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
     if (pending.length === 0) return 0;
 
     const listed = pending.slice(0, maxItems);
-    const queueUrl = absolute('/admin/comments', config.baseUrl);
+    const queueUrl = absoluteUrl('/admin/comments', config.baseUrl);
 
     for (const recipient of due) {
       void mail.send({
@@ -366,19 +368,6 @@ function digestTimesIn(source: string | undefined): Record<string, Record<string
   }
 
   return found;
-}
-
-/** A site-root path as an absolute URL. */
-function absolute(pathname: string, baseUrl: string): string {
-  try {
-    return new URL(pathname, baseUrl).href;
-  } catch {
-    return pathname;
-  }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function ignore(): void {

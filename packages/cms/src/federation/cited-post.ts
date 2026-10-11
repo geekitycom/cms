@@ -2,6 +2,7 @@ import type { Context } from '@fedify/fedify';
 import { Article, Document, Image, isActor, Note, Page, Question } from '@fedify/vocab';
 import type { Link } from '@fedify/vocab';
 
+import { escapeText } from '../util/html.ts';
 import type { FediverseLookup, FediversePost } from '../webmention/reply-context.ts';
 import type { FederationContextData } from './federation.ts';
 import { profileFrom } from './profiles.ts';
@@ -41,7 +42,7 @@ export function citedPostReader(contextOf: () => Context<FederationContextData>)
     return {
       ...(object.name === null ? {} : { name: object.name.toString() }),
       ...(warning !== ''
-        ? { html: `<p>${escapeHtml(warning)}</p>` }
+        ? { html: `<p>${escapeText(warning)}</p>` }
         : object.content === null
           ? {}
           : { html: object.content.toString() }),
@@ -80,8 +81,4 @@ async function firstImage(
 function hrefOf(value: URL | Link | null): string | undefined {
   if (value === null) return undefined;
   return value instanceof URL ? value.href : value.href?.href;
-}
-
-function escapeHtml(text: string): string {
-  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }

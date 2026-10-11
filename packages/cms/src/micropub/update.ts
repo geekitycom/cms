@@ -13,7 +13,7 @@ import type { KeptProperties } from '../content/kept-properties.ts';
 import type { PostLocations } from '../content/locations.ts';
 import type { PermalinkFile } from '../content/permalink-file.ts';
 import { visibilityOf } from '../content/visibility.ts';
-import { absoluteUrl } from '../web/negotiate.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { syndicateToOf } from '../webmention/syndication.ts';
 import { createForm, keptPrivately, keptRefusal, propertyName } from './create.ts';
 import type { CreateSite } from './create.ts';

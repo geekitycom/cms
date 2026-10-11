@@ -7,6 +7,7 @@
  */
 
 import type { PluginDataFolder, PluginFetchInit } from '@geekity/cms/plugin';
+import { withoutTrailingSlash } from '@geekity/cms/plugin';
 
 /** The file in the plugin's data folder that keeps the counts. */
 const CACHE_FILE = 'followers.json';
@@ -85,7 +86,7 @@ export async function followerCounts(
 }
 
 async function askTagsPub(key: string, lookup: FollowerLookup): Promise<FollowerCount> {
-  const url = `${lookup.server.replace(/\/+$/, '')}/user/${encodeURIComponent(key)}/followers`;
+  const url = `${withoutTrailingSlash(lookup.server)}/user/${encodeURIComponent(key)}/followers`;
   try {
     const response = await lookup.fetch(url, {
       headers: { accept: 'application/activity+json', 'user-agent': lookup.userAgent },

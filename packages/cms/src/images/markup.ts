@@ -1,3 +1,5 @@
+import { messageOf } from '../util/errors.ts';
+import { decodeEntities } from '../util/html.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import {
   describeImage,
@@ -139,7 +141,7 @@ export function siteImageRecord(config: ImageConfig, source: string): DescribedI
   const record = describeImage(config, source);
   if (record === undefined && config.imageOptimization) {
     void generateImageVariants(config, source).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = messageOf(error);
       console.warn(`Could not derive image variants for ${source}: ${message}`);
     });
   }
@@ -267,14 +269,4 @@ function parseAttributes(attributes: string): Map<string, string> {
   }
 
   return parsed;
-}
-
-/** The five entities markdown-it writes into an attribute, back as characters. */
-function decodeEntities(value: string): string {
-  return value
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&');
 }

@@ -11,6 +11,7 @@ import type { DocumentChange } from './content/sync.ts';
 import type { MailProvider } from './mail/provider.ts';
 import type { MailLogger } from './mail/service.ts';
 import type { Plugin } from './plugin.ts';
+import { withoutTrailingSlash } from './util/url.ts';
 import { systemHostLookup } from './webmention/public-address.ts';
 import type { HostLookup } from './webmention/public-address.ts';
 
@@ -1036,11 +1037,7 @@ function resolveBaseUrl(
       `config.baseUrl must be an absolute URL, received ${JSON.stringify(chosen)}`,
     );
   }
-  return parsed.origin + stripTrailingSlash(parsed.pathname);
-}
-
-function stripTrailingSlash(value: string): string {
-  return value.endsWith('/') ? value.slice(0, -1) : value;
+  return parsed.origin + withoutTrailingSlash(parsed.pathname);
 }
 
 function firstNonEmpty(...values: (string | undefined)[]): string | undefined {

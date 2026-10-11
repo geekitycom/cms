@@ -7,6 +7,7 @@ import { ADMIN_PREFIX } from '../admin/session.ts';
 import { effectiveBaseUrl, readSiteSettings } from '../admin/settings.ts';
 import { ADMIN_TEMPLATES } from '../admin/templates.ts';
 import type { GeekityEnv } from '../env.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import { isPrivateHost } from '../webmention/public-address.ts';
 import {
   logAuthorizationRedemption,
@@ -163,7 +164,7 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
     if (user === undefined) return c.redirect(ADMIN_PREFIX, 302);
     const body = await c.req.parseBody({ all: true });
 
-    const pending = c.var.indieauth.consents.take(text(body['request']));
+    const pending = c.var.indieauth.consents.take(stringOrEmpty(body['request']));
     if (pending?.userId !== user.id) {
       return refuse(
         c,
@@ -173,14 +174,14 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
 
     const { request } = pending;
     const baseUrl = effectiveBaseUrl(config, readSiteSettings(config.contentDir));
-    if (text(body['decision']) !== 'approve') {
+    if (stringOrEmpty(body['decision']) !== 'approve') {
       return c.redirect(
         answer(request.redirectUri, baseUrl, { error: 'access_denied', state: request.state }),
         303,
       );
     }
 
-    const ticked = new Set([body['scope']].flat().map(text));
+    const ticked = new Set([body['scope']].flat().map(stringOrEmpty));
     const code = c.var.indieauth.codes.put({
       clientId: request.clientId,
       ...(pending.clientName === undefined ? {} : { clientName: pending.clientName }),
@@ -240,8 +241,4 @@ function answer(
 /** The CSP source that lets a form's redirect reach `url`. */
 function formActionSource(url: URL): string {
   return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : url.protocol;
-}
-
-function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }

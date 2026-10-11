@@ -3,6 +3,7 @@ import type { KeyObject } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import { exportJwk } from '@fedify/fedify';
+import { isRecord, messageOf } from '@geekity/cms/plugin';
 import type { PluginFollower, PluginKeyAlgorithm, PluginSite } from '@geekity/cms/plugin';
 
 import { WORDPRESS_ACTIVITYPUB_BASE } from './records.ts';
@@ -476,10 +477,6 @@ function uriOf(value: unknown): string | null {
   return URL.parse(value)?.href ?? null;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 /** A key file's contents and what writing them would amount to. */
 interface PlannedKey extends ImportedKey {
   /** The JWK to write, or `undefined` when the file already holds it. */
@@ -609,8 +606,4 @@ function sameKeyFile(held: string, incoming: string): boolean {
   } catch {
     return false;
   }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

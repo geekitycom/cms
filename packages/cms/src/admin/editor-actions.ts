@@ -26,6 +26,7 @@ import type {
   PluginEditorSuggestion,
   PluginPostType,
 } from '../plugin.ts';
+import { messageOf } from '../util/errors.ts';
 import { resolveEvent } from './event-field.ts';
 import type { DocumentKind, EditorForm } from './documents.ts';
 import { PAGE_KIND, POST_KIND, splitTags, submittedForm } from './documents.ts';
@@ -143,7 +144,7 @@ function offered(action: PluginEditorAction, draft: PluginEditorDraft): boolean 
   try {
     return action.offers?.(draft) ?? true;
   } catch (error) {
-    console.warn(`An editor action's offers failed: ${describe(error)}`);
+    console.warn(`An editor action's offers failed: ${messageOf(error)}`);
     return false;
   }
 }
@@ -187,7 +188,7 @@ export function mountEditorActions(app: Hono<GeekityEnv>): void {
       }
       return c.json(answerOf(suggestion));
     } catch (error) {
-      return c.json({ ok: false, message: `${action.label} failed: ${describe(error)}` }, 500);
+      return c.json({ ok: false, message: `${action.label} failed: ${messageOf(error)}` }, 500);
     }
   });
 }
@@ -219,8 +220,4 @@ function recentTitles(c: Context<GeekityEnv>, own: string): string[] {
     if (titles.length === RECENT_TITLES) break;
   }
   return titles;
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

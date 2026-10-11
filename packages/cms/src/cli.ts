@@ -45,6 +45,7 @@ import {
   readMaintenance,
 } from './maintenance.ts';
 import { devModeOn, enterDevMode, leaveDevMode } from './dev-mode.ts';
+import { messageOf } from './util/errors.ts';
 
 export type Command =
   | 'serve'
@@ -896,7 +897,7 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
     process.stdout.write(`Geekity is serving ${cms.config.baseUrl} on port ${String(port)}\n`);
     worker.serving(cms);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = messageOf(error);
     channel.send({ type: 'boot-failed', error: message }, () => process.exit(1));
   }
   return 0;
@@ -1243,9 +1244,7 @@ async function usage(configPath: string | undefined): Promise<string> {
   try {
     found = await pluginCommands(resolveConfig(await loadConfig(process.cwd(), configPath)));
   } catch (error) {
-    process.stderr.write(
-      `Plugin commands are not listed: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
+    process.stderr.write(`Plugin commands are not listed: ${messageOf(error)}\n`);
     return USAGE;
   }
   if (found.length === 0) return USAGE;
@@ -1399,7 +1398,7 @@ if (isEntryPoint()) {
       if (code !== 0) process.exitCode = code;
     })
     .catch((error: unknown) => {
-      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      process.stderr.write(`${messageOf(error)}\n`);
       process.exit(1);
     });
 }

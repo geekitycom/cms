@@ -10,6 +10,7 @@ import {
   formTimingRefusal,
   trapped,
 } from '../forms/protection.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { renderCommentMarkdown } from './markdown.ts';
 import { intakeComment } from './records.ts';
 import type { CommentNotices, CommentRecords, ProposedComment } from './records.ts';
@@ -378,7 +379,7 @@ export async function submitComment(options: SubmitCommentOptions): Promise<Comm
     comment: proposed,
     post: {
       title: postLabel(document, options.cited),
-      url: absolute(document.permalink, options.baseUrl),
+      url: absoluteUrl(document.permalink, options.baseUrl),
     },
     dataDir: options.dataDir,
     baseUrl: options.baseUrl,
@@ -456,15 +457,6 @@ export function normalizeWebsite(value: string): string | undefined {
 function isEmail(value: string): boolean {
   if (value.length > MAXIMUM_URL_LENGTH) return false;
   return /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(value);
-}
-
-/** A site-root path as an absolute URL. */
-function absolute(pathname: string, baseUrl: string): string {
-  try {
-    return new URL(pathname, baseUrl).href;
-  } catch {
-    return pathname;
-  }
 }
 
 function refused(refusal: CommentRefusal): CommentOutcome {

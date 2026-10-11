@@ -2,6 +2,10 @@ import { readSiteSettings } from '../admin/settings.ts';
 import type { SiteSettings } from '../admin/settings.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
+import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
+import { retry } from '../util/retry.ts';
+import type { Tried } from '../util/retry.ts';
 import { createThemeSource } from '../web/themes.ts';
 import type { ThemeSource } from '../web/themes.ts';
 import { createBrevoProvider } from './brevo.ts';
@@ -183,9 +187,6 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
   const logger = options.logger ?? console;
   const attempts = Math.max(1, options.attempts ?? DEFAULT_MAIL_ATTEMPTS);
   const backoffMs = options.backoffMs ?? defaultMailBackoffMs;
-  const wait =
-    options.wait ??
-    ((ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms)));
 
   const templates =
     options.templates ??
@@ -200,15 +201,7 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
       noCache: config.watch,
     });
 
-  // Messages are chained rather than sent at once, and the chain never
-  // rejects: one provider that hangs delays the next message and nothing else.
-  let chain: Promise<unknown> = Promise.resolve();
-
-  function enqueue<T>(task: () => Promise<T>): Promise<T> {
-    const result = chain.then(task);
-    chain = result.then(ignore, ignore);
-    return result;
-  }
+  const messages = createSerialQueue();
 
   /**
    * The provider that would carry the next message, built from the file as it
@@ -257,41 +250,39 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
       };
     }
     const where = `"${message.subject}" to ${to.join(', ')} via ${carrier.name}`;
-    let lastError = '';
 
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      const which = `attempt ${String(attempt)} of ${String(attempts)}`;
-      try {
-        const delivery = await carrier.deliver(message);
-        logger.info(`Sent ${where} (${which}): ${delivery.messageId ?? 'no message id'}`);
-        return {
-          ok: true,
+    const result = await retry(
+      { attempts, backoffMs, wait: options.wait },
+      async (attempt): Promise<Tried<MailResult>> => {
+        const which = `attempt ${String(attempt)} of ${String(attempts)}`;
+        const sent = {
           skipped: false,
           held: false,
           provider: carrier.name,
           to,
           subject: message.subject,
           attempts: attempt,
-          ...(delivery.messageId === undefined ? {} : { messageId: delivery.messageId }),
         };
-      } catch (thrown) {
-        lastError = messageOf(thrown);
-        logger.warn(`Could not send ${where} (${which}): ${lastError}`);
-        if (attempt < attempts) await wait(backoffMs(attempt));
-      }
-    }
+        try {
+          const delivery = await carrier.deliver(message);
+          logger.info(`Sent ${where} (${which}): ${delivery.messageId ?? 'no message id'}`);
+          const messageId =
+            delivery.messageId === undefined ? {} : { messageId: delivery.messageId };
+          return { value: { ok: true, ...sent, ...messageId }, retry: false };
+        } catch (thrown) {
+          const error = messageOf(thrown);
+          logger.warn(`Could not send ${where} (${which}): ${error}`);
+          return { value: { ok: false, ...sent, error }, retry: true };
+        }
+      },
+    );
 
-    logger.warn(`Gave up sending ${where} after ${String(attempts)} attempts: ${lastError}`);
-    return {
-      ok: false,
-      skipped: false,
-      held: false,
-      provider: carrier.name,
-      to,
-      subject: message.subject,
-      attempts,
-      error: lastError,
-    };
+    if (!result.ok) {
+      logger.warn(
+        `Gave up sending ${where} after ${String(attempts)} attempts: ${result.error ?? ''}`,
+      );
+    }
+    return result;
   }
 
   /**
@@ -330,7 +321,7 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
       });
     }
 
-    return enqueue(async () => {
+    return messages.run(async () => {
       const settings = readSiteSettings(config.contentDir);
 
       let body: { subject: string; text: string; html?: string | undefined };
@@ -407,8 +398,8 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
       }));
     },
 
-    async settled() {
-      await chain;
+    settled() {
+      return messages.settled();
     },
   };
 }
@@ -445,13 +436,4 @@ function addressesOf(to: MailRecipient | readonly MailRecipient[]): MailAddress[
   if (typeof to === 'string') return [{ address: to }];
   if (Array.isArray(to)) return (to as readonly MailRecipient[]).map(addressOf);
   return [addressOf(to as MailRecipient)];
-}
-
-/** What a thrown value has to say for itself. */
-function messageOf(thrown: unknown): string {
-  return thrown instanceof Error ? thrown.message : String(thrown);
-}
-
-function ignore(): void {
-  // A failed send is already logged; the queue carries on regardless.
 }

@@ -7,6 +7,7 @@
 import type { Cms } from '../index.ts';
 import { pluginsFingerprint } from '../plugins/folder.ts';
 import type { PluginFolder } from '../plugins/folder.ts';
+import { messageOf } from '../util/errors.ts';
 import { EXIT_FOR_REPLACEMENT, isSupervisorMessage } from './protocol.ts';
 import type { SupervisorMessage, WorkerMessage } from './protocol.ts';
 import type { ReloadOutcome, Supervision } from './supervision.ts';
@@ -143,8 +144,4 @@ export function processChannel(): WorkerChannel {
       process.on('disconnect', handler);
     },
   };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

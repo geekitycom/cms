@@ -75,7 +75,11 @@ describe('sanitising a comment', () => {
       '<p>5 &lt; 6 &amp; 7 &gt; 4</p>',
     );
     assert.equal(sanitizeCommentHtml('a < b'), 'a &lt; b');
-    assert.equal(sanitizeCommentHtml('<p>&#39;quoted&#39;</p>'), '<p>&#39;quoted&#39;</p>');
+    assert.equal(sanitizeCommentHtml('<p>&#39;quoted&#39;</p>'), "<p>'quoted'</p>");
+    assert.equal(
+      sanitizeCommentHtml('<a href="https://example.com/?q=&#39;x&#39;">it</a>'),
+      '<a href="https://example.com/?q=&#39;x&#39;" rel="nofollow noopener noreferrer">it</a>',
+    );
   });
 
   it('closes what the note left open, so the result is well formed', () => {

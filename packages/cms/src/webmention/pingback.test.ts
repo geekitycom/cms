@@ -11,6 +11,7 @@ import type { CommentVerdict } from '../comments/submission.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { PINGBACK_MAX_BYTES, PINGBACK_PATH } from './pingback.ts';
+import type { HostLookup } from './public-address.ts';
 import { WEBMENTION_PATH } from './routes.ts';
 
 const BASE_URL = 'https://blog.example';
@@ -52,6 +53,10 @@ interface Page {
 }
 
 const pages = new Map<string, Page>();
+
+const lookup: HostLookup = (hostname) =>
+  Promise.resolve(hostname.endsWith('.internal.example') ? ['10.0.0.5'] : ['203.0.113.7']);
+
 const fetched: string[] = [];
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -123,6 +128,7 @@ async function site(
     baseUrl: BASE_URL,
     watch: false,
     now: () => NOW,
+    hostLookup: lookup,
     ...config,
   });
   started.push(instance);
@@ -337,6 +343,15 @@ describe('the faults a pingback is answered with', () => {
     pages.set('https://them.example/note', { status: 503 });
 
     assert.equal(await faultOf(await ping(cms, 'https://them.example/note')), 0);
+  });
+
+  it('a generic fault, and nothing fetched, for a source that resolves to a private address', async () => {
+    const cms = await site();
+    pages.set('https://wiki.internal.example/note', { body: linkingTo(POST_URL) });
+
+    assert.equal(await faultOf(await ping(cms, 'https://wiki.internal.example/note')), 0);
+    assert.deepEqual(fetched, []);
+    assert.equal(mentionsOf(cms).length, 0);
   });
 
   it('the XML-RPC interop codes for an unknown method or the wrong arguments', async () => {

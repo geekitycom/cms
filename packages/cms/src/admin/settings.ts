@@ -16,6 +16,8 @@ import { sourceFile } from '../images/paths.ts';
 import { clientIdentifier } from '../indieauth/client-id.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
+import { isFileSync } from '../util/files.ts';
+import { isRecord } from '../util/guards.ts';
 import { SITE_DATA_FILE } from '../web/context.ts';
 import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from '../web/feed-source.ts';
 import type { UpdatePeriod } from '../web/feed-source.ts';
@@ -1257,17 +1259,9 @@ function iconProblem(icon: string, context: SettingsContext): string | undefined
   if (context.contentDir === undefined) return undefined;
 
   const file = sourceFile({ contentDir: context.contentDir }, parsed.source);
-  return file !== undefined && isFile(file)
+  return file !== undefined && isFileSync(file)
     ? undefined
     : `There is no upload at ${icon}. Upload the picture on the Media screen first.`;
-}
-
-function isFile(file: string): boolean {
-  try {
-    return statSync(file).isFile();
-  } catch {
-    return false;
-  }
 }
 
 /** What is wrong with a submitted Content-Signal choice. */
@@ -1643,9 +1637,7 @@ export function parseSiteJson(source: string): Record<string, unknown> {
   } catch {
     return {};
   }
-  return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
-    ? (parsed as Record<string, unknown>)
-    : {};
+  return isRecord(parsed) ? parsed : {};
 }
 
 /** The three retention periods, as the sweep reads them. */

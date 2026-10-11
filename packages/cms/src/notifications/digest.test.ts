@@ -539,3 +539,21 @@ describe('the timer', () => {
     assert.equal(cleared, 1, 'stopping cleared it');
   });
 });
+
+describe('a site served under a path', () => {
+  it('links the post, the queue and every action under that path', async () => {
+    const box = await site({ config: { baseUrl: 'https://example.com/blog/' } });
+    await digestUser(box, 'ada', 'ada@example.com');
+    await comment(box, 'Grace Hopper', 'A thought about this.');
+
+    await runDigests(box);
+
+    const links =
+      onlyMessage(box.provider)
+        .text.match(/https?:\/\/\S+/g)
+        ?.map((link) => link.replace(/[.,]$/, '')) ?? [];
+    assert.ok(links.includes('https://example.com/blog/2026/09/hello-world/'), links.join('\n'));
+    assert.ok(links.includes('https://example.com/blog/admin/comments'), links.join('\n'));
+    for (const link of links) assert.match(link, /^https:\/\/example\.com\/blog(\/|$)/);
+  });
+});

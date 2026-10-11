@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { access, mkdir, readFile, rename, rm } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { Context, Hono } from 'hono';
@@ -69,9 +69,9 @@ import type { DocumentChange } from '../content/sync.ts';
 import type { GeekityEnv } from '../env.ts';
 import { readAltTexts, undescribedImages, undescribedPhotos } from '../images/alt-text.ts';
 import type { UndescribedImage } from '../images/alt-text.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { isServed } from '../web/documents.ts';
 import { LANG_FRONT_MATTER_KEY } from '../web/locale.ts';
-import { absoluteUrl } from '../web/negotiate.ts';
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
 import { commentsFile } from '../comments/records.ts';
 import { CONTACT_FRONT_MATTER_KEY } from '../contact/form.ts';
@@ -136,6 +136,8 @@ import {
 import type { EventForm } from './event-field.ts';
 import { eventOf } from '../content/event.ts';
 import type { PostEvent } from '../content/event.ts';
+import { exists } from '../util/files.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import {
   SYNDICATE_TO_FRONT_MATTER_KEY,
   syndicateToOf,
@@ -415,10 +417,10 @@ export function mountDocumentScreens(
     if (document === undefined) return c.notFound();
 
     const body = await c.req.parseBody();
-    const action = text(body['action']);
+    const action = stringOrEmpty(body['action']);
 
     if (action === 'trash' || action === 'restore') {
-      return moveDocument(c, { kind, document, action, returnTo: text(body['return']) });
+      return moveDocument(c, { kind, document, action, returnTo: stringOrEmpty(body['return']) });
     }
     return saveFromForm(c, { kind, render, document, body });
   });
@@ -434,29 +436,31 @@ export function submittedForm(
   contentDir: string,
 ): EditorForm {
   return {
-    title: text(body['title']).trim(),
-    slug: text(body['slug']).trim(),
-    permalink: text(body['permalink']).trim(),
-    date: text(body['date']).trim(),
-    tags: text(body['tags']).trim(),
-    categories: text(body['categories']).trim(),
-    description: text(body['description']).trim(),
-    author: text(body['author']).trim(),
-    inReplyTo: text(body['in-reply-to']).trim(),
-    rsvp: kind.type === 'post' ? text(body[RSVP_FRONT_MATTER_KEY]).trim() : '',
-    ...citationFields((property) => (kind.type === 'post' ? text(body[property]).trim() : '')),
-    readStatus: kind.type === 'post' ? text(body[READ_FIELDS.status]).trim() : '',
+    title: stringOrEmpty(body['title']).trim(),
+    slug: stringOrEmpty(body['slug']).trim(),
+    permalink: stringOrEmpty(body['permalink']).trim(),
+    date: stringOrEmpty(body['date']).trim(),
+    tags: stringOrEmpty(body['tags']).trim(),
+    categories: stringOrEmpty(body['categories']).trim(),
+    description: stringOrEmpty(body['description']).trim(),
+    author: stringOrEmpty(body['author']).trim(),
+    inReplyTo: stringOrEmpty(body['in-reply-to']).trim(),
+    rsvp: kind.type === 'post' ? stringOrEmpty(body[RSVP_FRONT_MATTER_KEY]).trim() : '',
+    ...citationFields((property) =>
+      kind.type === 'post' ? stringOrEmpty(body[property]).trim() : '',
+    ),
+    readStatus: kind.type === 'post' ? stringOrEmpty(body[READ_FIELDS.status]).trim() : '',
     readOf: kind.type === 'post' ? submittedReadOfForm(body) : BLANK_READ_OF_FORM,
     event: kind.type === 'post' ? submittedEventForm(body) : BLANK_EVENT_FORM,
-    lang: text(body['lang']).trim(),
+    lang: stringOrEmpty(body['lang']).trim(),
     draft: body['draft'] !== undefined,
-    visibility: formVisibility(text(body['visibility'])),
+    visibility: formVisibility(stringOrEmpty(body['visibility'])),
     exclude: body['exclude'] !== undefined,
     contact: body['contact'] !== undefined,
     pinned: kind.type === 'post' && body['pinned'] !== undefined,
     previewHidden: kind.type === 'post' && body[PREVIEW_FRONT_MATTER_KEY] !== undefined,
-    citedAlt: kind.type === 'post' ? text(body[CITED_ALT_FRONT_MATTER_KEY]).trim() : '',
-    comments: commentSetting(text(body['comments'])),
+    citedAlt: kind.type === 'post' ? stringOrEmpty(body[CITED_ALT_FRONT_MATTER_KEY]).trim() : '',
+    comments: commentSetting(stringOrEmpty(body['comments'])),
     enclosure: kind.type === 'post' ? readEnclosureForm(body) : BLANK_ENCLOSURE_FORM,
     photos: kind.type === 'post' ? readPhotoForm(body) : [],
     location: kind.type === 'post' ? readLocationForm(body) : BLANK_LOCATION_FORM,
@@ -466,8 +470,8 @@ export function submittedForm(
             .filter((target) => body[syndicateToField(target)] !== undefined)
             .map((target) => target.id)
         : [],
-    body: normalizeBody(text(body['body'])),
-    hash: text(body['hash']),
+    body: normalizeBody(stringOrEmpty(body['body'])),
+    hash: stringOrEmpty(body['hash']),
   };
 }
 
@@ -495,7 +499,7 @@ async function saveFromForm(
 
   const form = submittedForm(kind, body, contentDir);
 
-  const action = text(body['action']);
+  const action = stringOrEmpty(body['action']);
   // The buttons doc-5 names are shortcuts past the checkbox: Save draft and
   // Publish say what they do, and Update leaves the decision to the checkbox.
   const draft = action === 'save-draft' ? true : action === 'publish' ? false : form.draft;
@@ -1702,15 +1706,6 @@ async function freeTrashPath(contentDir: string, relative: string): Promise<stri
   }
 }
 
-async function exists(file: string): Promise<boolean> {
-  try {
-    await access(file);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** Report a move that did not happen and go back where the form came from. */
 function backTo(c: Context<GeekityEnv>, options: MoveDocumentOptions, message: string): Response {
   flash(c, 'error', message);
@@ -1735,11 +1730,6 @@ export function returnPath(value: string): string | undefined {
 
 function optional<K extends string, V>(key: K, value: V | undefined): Record<K, V> | object {
   return value === undefined ? {} : ({ [key]: value } as Record<K, V>);
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }
 
 /**

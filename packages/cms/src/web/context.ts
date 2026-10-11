@@ -25,6 +25,8 @@ import { readAltTexts } from '../images/alt-text.ts';
 import { siteImageMarkup } from '../images/markup.ts';
 import type { ImageLoading } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
+import { isRecord } from '../util/guards.ts';
+import { escapeAttribute } from '../util/html.ts';
 import type { AuthorContext } from './authors.ts';
 import { feedExcerpt } from './feed-item.ts';
 import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from './locale.ts';
@@ -534,9 +536,7 @@ export function createSiteDataSource(config: ResolvedConfig): SiteDataSource {
 function parseSiteFile(text: string): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(text);
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return isRecord(parsed) ? parsed : {};
   } catch {
     return {};
   }
@@ -704,14 +704,6 @@ export function citedPictureContext(
     shownInFull: shownInFull(property, picture),
     imgHtml: siteImageMarkup(images, tag),
   };
-}
-
-function escapeAttribute(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('"', '&quot;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
 }
 
 function enclosureContext(document: Document): EnclosureContext | undefined {

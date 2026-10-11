@@ -11,6 +11,7 @@ import { defaultPermalink, slugify } from '../content/slug.ts';
 import { calendarDayIn, toUtcInstant } from '../content/time.ts';
 import { normalizeBody } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import { authorContext } from '../web/authors.ts';
 import { documentContext } from '../web/context.ts';
 import { findUserById, listUsers } from './accounts.ts';
@@ -38,7 +39,7 @@ export const PREVIEW_PATH = `${ADMIN_PREFIX}/preview`;
 export function mountPreview(app: Hono<GeekityEnv>): void {
   app.post(PREVIEW_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const type: DocumentType = text(body['type']) === 'page' ? 'page' : 'post';
+    const type: DocumentType = stringOrEmpty(body['type']) === 'page' ? 'page' : 'post';
     const document = previewDocument(c, { type, body });
 
     return c.html(
@@ -71,14 +72,16 @@ function previewDocument(
   const { type, body } = input;
 
   const timezone = readSiteSettings(c.var.config.contentDir).timezone;
-  const title = text(body['title']).trim();
+  const title = stringOrEmpty(body['title']).trim();
   // The editor's field is wall-clock time in the site's zone (decision-11), so
   // the preview reads it the way the save will and shows the date the saved
   // post would show rather than one the server's own zone invented.
   const date =
-    type === 'post' ? orNow(text(body['date']).trim(), timezone, c.var.store.now()) : undefined;
-  const slug = slugify(text(body['slug']).trim()) || slugify(title) || 'preview';
-  const markdown = normalizeBody(text(body['body']));
+    type === 'post'
+      ? orNow(stringOrEmpty(body['date']).trim(), timezone, c.var.store.now())
+      : undefined;
+  const slug = slugify(stringOrEmpty(body['slug']).trim()) || slugify(title) || 'preview';
+  const markdown = normalizeBody(stringOrEmpty(body['body']));
 
   return {
     type,
@@ -90,22 +93,24 @@ function previewDocument(
       type,
       slug,
       date: date === undefined ? undefined : (calendarDayIn(date, timezone) ?? date),
-      submitted: text(body['permalink']).trim(),
+      submitted: stringOrEmpty(body['permalink']).trim(),
     }),
     title: title === '' ? 'Untitled' : title,
     ...(date === undefined ? {} : { date }),
-    tags: splitTags(text(body['tags'])),
-    categories: splitTags(text(body['categories'])),
+    tags: splitTags(stringOrEmpty(body['tags'])),
+    categories: splitTags(stringOrEmpty(body['categories'])),
     draft: body['draft'] !== undefined,
-    ...(text(body['description']) === '' ? {} : { description: text(body['description']).trim() }),
-    ...(currentUsername(c) === undefined ? {} : { author: currentUsername(c) }),
-    ...(text(body['in-reply-to']).trim() === ''
+    ...(stringOrEmpty(body['description']) === ''
       ? {}
-      : { inReplyTo: text(body['in-reply-to']).trim() }),
+      : { description: stringOrEmpty(body['description']).trim() }),
+    ...(currentUsername(c) === undefined ? {} : { author: currentUsername(c) }),
+    ...(stringOrEmpty(body['in-reply-to']).trim() === ''
+      ? {}
+      : { inReplyTo: stringOrEmpty(body['in-reply-to']).trim() }),
     extra: {
       ...Object.fromEntries(
         CITATION_PROPERTIES.flatMap((property) => {
-          const cited = text(body[property]).trim();
+          const cited = stringOrEmpty(body[property]).trim();
           return cited === '' ? [] : [[property, cited]];
         }),
       ),
@@ -135,7 +140,10 @@ function previewRsvp(body: Record<string, unknown>): Record<string, unknown> {
 }
 
 function previewRead(body: Record<string, unknown>): Record<string, unknown> {
-  const resolved = resolveRead(text(body[READ_FIELDS.status]).trim(), submittedReadOfForm(body));
+  const resolved = resolveRead(
+    stringOrEmpty(body[READ_FIELDS.status]).trim(),
+    submittedReadOfForm(body),
+  );
   if (!('read' in resolved) || resolved.read === undefined) return {};
   return {
     [READ_OF_FRONT_MATTER_KEY]: resolved.read.of,
@@ -172,9 +180,4 @@ function currentUsername(c: Context<GeekityEnv>): string | undefined {
   const userId = c.var.session?.userId;
   if (userId == null) return undefined;
   return findUserById(c.var.config.dataDir, userId)?.username;
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }

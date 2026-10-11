@@ -9,6 +9,7 @@ import {
   writeFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 
 /**
  * A contact message as the file that holds it.
@@ -296,24 +297,19 @@ function messageFrom(source: string, id: string): ContactMessage | undefined {
 
   return {
     id,
-    received: text(file['received']),
+    received: stringOrEmpty(file['received']),
     status: status === 'spam' ? 'spam' : 'received',
     read: file['read'] === true,
     page: {
-      slug: text(page['slug']),
-      permalink: text(page['permalink']),
-      title: text(page['title']),
+      slug: stringOrEmpty(page['slug']),
+      permalink: stringOrEmpty(page['permalink']),
+      title: stringOrEmpty(page['title']),
     },
-    from: { name: text(from['name']), email: text(from['email']) },
-    subject: text(file['subject']),
-    message: text(file['message']),
+    from: { name: stringOrEmpty(from['name']), email: stringOrEmpty(from['email']) },
+    subject: stringOrEmpty(file['subject']),
+    message: stringOrEmpty(file['message']),
     addressHash: typeof addressHash === 'string' && addressHash !== '' ? addressHash : null,
   };
-}
-
-/** One value as a string, or the empty one. */
-function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }
 
 /** One value as an object, or an empty one. */

@@ -1,6 +1,5 @@
-import { dump } from 'js-yaml';
-
-import type { PluginCommandContext } from '@geekity/cms/plugin';
+import { serializeDocument, slugify, withTrailingSlash } from '@geekity/cms/plugin';
+import type { DocumentContent, PluginCommandContext } from '@geekity/cms/plugin';
 
 import { IMPORT_REDIRECTS_FILE } from './content-import.ts';
 import type {
@@ -134,17 +133,18 @@ function importPostsAndPages(
     }
 
     const body = convertBody(item.content);
-    const front = frontMatter(item, disposition, {
+    const document = documentOf(item, disposition, {
       permalink,
       formerly: formerPermalinks(item, permalink),
       author,
       inReplyTo: body.inReplyTo,
       home,
+      body: media.rewrite(body.markdown),
     });
     files.push({
       item,
       path: unique(taken, fileName(item), item),
-      contents: document(front, media.rewrite(body.markdown)),
+      contents: serializeDocument(document),
     });
 
     if (frontPage && !disposition.draft) {
@@ -171,13 +171,12 @@ export interface Home {
 
 export function homeOf(exported: WordPressExport): Home {
   const base = exported.site.baseBlogUrl || exported.site.link;
-  const url = new URL(base.endsWith('/') ? base : `${base}/`);
+  const url = new URL(withTrailingSlash(base));
   return { href: url.href, pathname: url.pathname };
 }
 
 function sameUrl(a: string, b: string): boolean {
-  const slash = (url: string) => (url.endsWith('/') ? url : `${url}/`);
-  return slash(a) === slash(b);
+  return withTrailingSlash(a) === withTrailingSlash(b);
 }
 
 /** Whether WordPress gave the item a pretty URL rather than its `?p=` or `?page_id=` one. */
@@ -202,10 +201,7 @@ function decodedSegment(slug: string): string {
 function slugOf(item: WordPressItem): string {
   const slug = decodedSegment(item.slug).replaceAll('/', '-');
   if (slug !== '') return slug;
-  const fromTitle = item.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  const fromTitle = slugify(item.title);
   return fromTitle === '' ? String(item.id) : fromTitle;
 }
 
@@ -334,7 +330,7 @@ function isAbsoluteUrl(value: string): boolean {
   return protocol === 'https:' || protocol === 'http:';
 }
 
-function frontMatter(
+function documentOf(
   item: WordPressItem,
   disposition: Extract<Disposition, { kind: 'import' }>,
   derived: {
@@ -343,8 +339,9 @@ function frontMatter(
     author: string | undefined;
     inReplyTo: string | undefined;
     home: Home;
+    body: string;
   },
-): Record<string, unknown> {
+): DocumentContent {
   const isPost = item.type === 'post';
   const isStatus = item.terms.some(
     (term) => term.taxonomy === 'post_format' && term.slug === 'post-format-status',
@@ -361,29 +358,29 @@ function frontMatter(
   const guid =
     isPost && item.guid !== shortlink && isAbsoluteUrl(item.guid) ? item.guid : undefined;
 
-  const front: Record<string, unknown> = {};
-  if (title !== '') front['title'] = title;
-  if (date !== undefined) front['date'] = date;
-  if (date !== undefined && item.modifiedGmt !== undefined && item.modifiedGmt !== date) {
-    front['updated'] = item.modifiedGmt;
-  }
-  front['permalink'] = derived.permalink;
-  if (derived.formerly.length > 0) front['redirect_from'] = derived.formerly;
-  if (terms('post_tag').length > 0) front['tags'] = terms('post_tag');
-  if (terms('category').length > 0) front['categories'] = terms('category');
-  if (disposition.draft) front['draft'] = true;
-  if (derived.author !== undefined) front['author'] = derived.author;
-  if (derived.inReplyTo !== undefined) front['in-reply-to'] = derived.inReplyTo;
-  if (objectId !== undefined) {
-    front['activitypub'] =
-      federated && date !== undefined ? { id: objectId, published: date } : { id: objectId };
-  }
-  if (guid !== undefined) front['guid'] = guid;
-  if (disposition.migrated) front['migrated'] = true;
-  return front;
-}
-
-function document(front: Record<string, unknown>, body: string): string {
-  const yaml = dump(front, { lineWidth: -1, noRefs: true });
-  return body === '' ? `---\n${yaml}---\n` : `---\n${yaml}---\n\n${body}\n`;
+  const extra: Record<string, unknown> = {};
+  if (guid !== undefined) extra['guid'] = guid;
+  if (disposition.migrated) extra['migrated'] = true;
+  return {
+    title,
+    ...(date === undefined ? {} : { date }),
+    ...(date !== undefined && item.modifiedGmt !== undefined && item.modifiedGmt !== date
+      ? { updated: item.modifiedGmt }
+      : {}),
+    permalink: derived.permalink,
+    redirectFrom: [...derived.formerly],
+    tags: terms('post_tag'),
+    categories: terms('category'),
+    draft: disposition.draft,
+    ...(derived.author === undefined ? {} : { author: derived.author }),
+    ...(derived.inReplyTo === undefined ? {} : { inReplyTo: derived.inReplyTo }),
+    ...(objectId === undefined
+      ? {}
+      : {
+          activitypub:
+            federated && date !== undefined ? { id: objectId, published: date } : { id: objectId },
+        }),
+    extra,
+    body: derived.body,
+  };
 }

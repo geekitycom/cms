@@ -19,6 +19,10 @@ import type { RsvpValue } from '../content/rsvp.ts';
 import type { ContentStore } from '../content/store.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { hashClientAddress } from '../forms/protection.ts';
+import { messageOf } from '../util/errors.ts';
+import { nonEmptyStringOrNull } from '../util/forms.ts';
+import { isRecord } from '../util/guards.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { isKey, repliesKey, webmentionKey } from '../web/feed-source.ts';
 import { COMMENT_PAGE_PREFIX, commentPageHref } from '../web/guids.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
@@ -253,7 +257,7 @@ function contactsIn(source: string | undefined): Map<string, CommentContact> {
 
   for (const [id, value] of Object.entries(parsed['comments'])) {
     if (!isRecord(value)) continue;
-    const email = optionalText(value['email']);
+    const email = nonEmptyStringOrNull(value['email']);
     if (email !== null) contacts.set(id, { email, notify: value['notify'] === true });
   }
   return contacts;
@@ -313,30 +317,30 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     status: oneOf(value['status'], COMMENT_STATUSES, 'pending'),
     author: {
       name,
-      url: optionalText(author['url']),
-      email: optionalText(author['email']),
-      avatar: optionalText(author['avatar']),
+      url: nonEmptyStringOrNull(author['url']),
+      email: nonEmptyStringOrNull(author['email']),
+      avatar: nonEmptyStringOrNull(author['avatar']),
     },
     content: {
       markdown: typeof content['markdown'] === 'string' ? content['markdown'] : '',
       html: typeof content['html'] === 'string' ? content['html'] : '',
     },
     submitted: typeof value['submitted'] === 'string' ? value['submitted'] : '',
-    addressHash: optionalText(value['addressHash']),
-    inReplyTo: optionalText(value['inReplyTo']),
-    url: optionalText(value['url']),
+    addressHash: nonEmptyStringOrNull(value['addressHash']),
+    inReplyTo: nonEmptyStringOrNull(value['inReplyTo']),
+    url: nonEmptyStringOrNull(value['url']),
     // An entry that does not say means one that never asked: a comment file
     // written before TASK-55 shipped, or edited by hand, has nobody waiting on
     // it, and defaulting the other way would email people who never opted in.
     notify: value['notify'] === true,
     ...redactedIn(value['redacted']),
     ...rsvpField(rsvpValue(value['rsvp'])),
-    ...viaField(optionalText(value['via'])),
+    ...viaField(nonEmptyStringOrNull(value['via'])),
     ...importedFields({
       migrated: value['migrated'] === true,
-      origin: optionalText(value['origin']),
-      user: optionalText(value['user']),
-      actor: optionalText(value['actor']),
+      origin: nonEmptyStringOrNull(value['origin']),
+      user: nonEmptyStringOrNull(value['user']),
+      actor: nonEmptyStringOrNull(value['actor']),
     }),
   };
 }
@@ -659,7 +663,7 @@ async function ask(
     post: {
       slug: comment.slug,
       title: post?.title ?? comment.slug,
-      url: post?.url ?? absolute(comment.permalink, options.baseUrl),
+      url: post?.url ?? absoluteUrl(comment.permalink, options.baseUrl),
     },
     address: options.address,
     userAgent: options.userAgent,
@@ -688,19 +692,6 @@ function announce(notices: CommentNotices | undefined, stored: PostComment): voi
   // A comment the site let straight through is on the page already, so
   // whoever it answers hears about it now rather than at a moderator's hand.
   else if (stored.status === 'approved') notices.replyApproved(stored);
-}
-
-/** A site-root path as an absolute URL. */
-function absolute(pathname: string, baseUrl: string): string {
-  try {
-    return new URL(pathname, baseUrl).href;
-  } catch {
-    return pathname;
-  }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -963,7 +954,7 @@ export function migrateCommentEmails(
       if (!('notify' in entry) && !(author !== undefined && 'email' in author)) return entry;
 
       stripped = true;
-      const email = optionalText(author?.['email']);
+      const email = nonEmptyStringOrNull(author?.['email']);
       const id = entry['id'];
       if (typeof id === 'string' && id !== '' && email !== null) {
         found.set(id, { email, notify: entry['notify'] === true });
@@ -1193,16 +1184,7 @@ function commentsJson(permalink: string, comments: readonly PublishedComment[]):
   return `${JSON.stringify({ post: permalink, comments }, null, 2)}\n`;
 }
 
-/** A value the file may have left out, as the text it holds or `null`. */
-function optionalText(value: unknown): string | null {
-  return typeof value === 'string' && value !== '' ? value : null;
-}
-
 /** A stored enumeration value, or the fallback for one this version does not know. */
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return allowed.includes(value as T) ? (value as T) : fallback;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

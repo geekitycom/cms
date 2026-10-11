@@ -3,6 +3,7 @@ import { Environment, FileSystemLoader } from 'nunjucks';
 import { citedHost } from '../content/citation.ts';
 import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
 import { accountOf } from '../federation/paths.ts';
+import { absoluteUrl, withoutTrailingSlash, withTrailingSlash } from '../util/url.ts';
 import { themeAssetUrl } from './assets.ts';
 import { siteLocale, siteTimezone } from './context.ts';
 import type { SiteData } from './context.ts';
@@ -129,8 +130,7 @@ function addFilters(
   baseUrl: string,
   loader: FileSystemLoader,
 ): Environment {
-  const base = new URL(baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
-  const basePath = base.pathname === '/' ? '' : base.pathname.replace(/\/$/, '');
+  const basePath = withoutTrailingSlash(new URL(withTrailingSlash(baseUrl)).pathname);
 
   environment.addFilter(
     'date',
@@ -185,16 +185,9 @@ function addFilters(
   );
 
   // A fully qualified URL, for canonical links, feeds and ActivityPub ids.
-  // The base path goes on first, because a root-relative URL resolved against
-  // an origin would otherwise throw the subdirectory away.
-  environment.addFilter('absoluteUrl', (value: unknown) => {
-    const pathname = withBasePath(value);
-    try {
-      return new URL(pathname, base).href;
-    } catch {
-      return pathname;
-    }
-  });
+  environment.addFilter('absoluteUrl', (value: unknown) =>
+    absoluteUrl(typeof value === 'string' ? value : '', baseUrl),
+  );
 
   // `{{ siteAuthor.username | fediverseHandle }}`: a user's own account on
   // this site, `@ada@example.com`, exactly as WebFinger answers for it

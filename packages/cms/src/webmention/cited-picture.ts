@@ -11,6 +11,7 @@ import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import { stripMetadata } from '../content/metadata/index.ts';
 import { generateImageVariants, removeImageVariants } from '../images/variants.ts';
 import type { ImageConfig } from '../images/variants.ts';
+import { messageOf } from '../util/errors.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../web/assets.ts';
 import { fetchPublic } from './fetch-public.ts';
 import type { HostLookup } from './public-address.ts';
@@ -106,7 +107,7 @@ export async function copyCitedImage(
   try {
     await generateImageVariants(options.config, `${CITED_PICTURE_DIRECTORY}/${name}`);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = messageOf(error);
     console.warn(`Copied ${name} but could not derive its variants: ${message}`);
   }
 

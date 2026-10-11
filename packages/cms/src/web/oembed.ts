@@ -2,12 +2,13 @@ import { createHash } from 'node:crypto';
 
 import type { Document } from '../content/document.ts';
 import type { ImageConfig } from '../images/paths.ts';
+import { absoluteUrl } from '../util/url.ts';
 import type { AuthorContext } from './authors.ts';
 import { siteLocale, siteTimezone } from './context.ts';
 import type { SiteData } from './context.ts';
 import { feedExcerpt } from './feed-item.ts';
 import { escapeXml } from './feed-xml.ts';
-import { absoluteUrl, contentEtag, isNotModified } from './negotiate.ts';
+import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 import { shareImage } from './share-image.ts';
 import { formatDate } from './templates.ts';

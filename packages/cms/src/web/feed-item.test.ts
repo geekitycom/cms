@@ -93,6 +93,12 @@ describe('a feed item', () => {
     assert.equal(item.summary, 'Fish & chips, twice.');
   });
 
+  it('resolves numeric references in the excerpt, so a reader is not shown the reference', () => {
+    const item = feedItem(post({ html: '<p>It&#8217;s &#x201C;done&#x201D;.</p>\n' }), CONTEXT);
+
+    assert.equal(item.summary, 'It\u2019s \u201Cdone\u201D.');
+  });
+
   it('carries the publish and modification instants, and neither when there is no date', () => {
     const dated = feedItem(post({ updated: '2026-09-03T10:00:00Z' }), CONTEXT);
     assert.equal(dated.published?.toISOString(), '2026-09-02T09:00:00.000Z');

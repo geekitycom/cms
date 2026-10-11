@@ -1,4 +1,5 @@
 import type { ModerationAction } from '../comments/moderate.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { signNotificationToken } from './tokens.ts';
 
 /**
@@ -91,8 +92,7 @@ function linkTo(
   subject: string,
   lifetimeSeconds: number,
 ): string {
-  const base = context.baseUrl.endsWith('/') ? context.baseUrl : `${context.baseUrl}/`;
-  const url = new URL(pathname, base);
+  const url = new URL(absoluteUrl(pathname, context.baseUrl));
   url.searchParams.set(NOTIFICATION_FIELDS.action, action);
   url.searchParams.set(
     NOTIFICATION_FIELDS.token,

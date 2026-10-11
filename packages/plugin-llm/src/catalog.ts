@@ -6,8 +6,8 @@
  * endpoints that support every parameter in it.
  */
 
-import { isRecord } from './connection.ts';
 import type { LlmConnection } from './connection.ts';
+import { isRecord, withoutTrailingSlash } from '@geekity/cms/plugin';
 
 /** OpenRouter's reasoning efforts, least first. */
 export const REASONING_EFFORTS = [
@@ -76,7 +76,7 @@ async function readModels(
   signal: AbortSignal | undefined,
 ): Promise<ReadonlyMap<string, ReasoningModel> | undefined> {
   try {
-    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/models`, {
+    const response = await fetch(`${withoutTrailingSlash(baseUrl)}/models`, {
       headers: { accept: 'application/json' },
       signal: AbortSignal.any([
         AbortSignal.timeout(LOOKUP_TIMEOUT_MS),

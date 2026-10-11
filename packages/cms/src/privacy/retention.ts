@@ -11,6 +11,8 @@ import {
 import type { ContactMessage } from '../contact/records.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
+import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import { outlived } from './policy.ts';
 import type { RetentionPolicy } from './policy.ts';
 
@@ -132,7 +134,7 @@ export function createRetentionService(options: CreateRetentionServiceOptions): 
   const { admin, config } = options;
   const timers = options.timers ?? systemNotificationTimers;
   const logger = options.logger ?? console;
-  let sweeping: Promise<unknown> = Promise.resolve();
+  const sweeps = createSerialQueue();
   let handle: unknown;
 
   async function sweepOnce(): Promise<RetentionReport> {
@@ -175,12 +177,10 @@ export function createRetentionService(options: CreateRetentionServiceOptions): 
 
   return {
     sweep() {
-      const next = sweeping.then(sweepOnce).catch((thrown: unknown) => {
+      return sweeps.run(sweepOnce).catch((thrown: unknown) => {
         logger.warn(`The retention sweep failed: ${messageOf(thrown)}`);
         return NOTHING;
       });
-      sweeping = next;
-      return next;
     },
 
     start() {
@@ -195,11 +195,7 @@ export function createRetentionService(options: CreateRetentionServiceOptions): 
     },
 
     async settled() {
-      await sweeping;
+      await sweeps.settled();
     },
   };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

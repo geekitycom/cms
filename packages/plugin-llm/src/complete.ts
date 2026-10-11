@@ -9,7 +9,9 @@ import { Validator } from '@cfworker/json-schema';
 
 import { effortFor } from './catalog.ts';
 import type { ModelCatalog, ReasoningEffort } from './catalog.ts';
-import { chatCompletion, describeFailure, isRecord } from './connection.ts';
+import { isRecord } from '@geekity/cms/plugin';
+
+import { chatCompletion, describeFailure } from './connection.ts';
 import type { LlmConnection, LlmFailure } from './connection.ts';
 
 /**

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import { resolveNothing } from '../admin/__testing__/harness.ts';
+import { resolvePublic } from '../admin/__testing__/harness.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import type { PostComment } from '../admin/store.ts';
 import { addComment, rebuildCommentIndexes, updateComment } from '../comments/records.ts';
@@ -161,7 +161,7 @@ async function site(
     baseUrl: BASE_URL,
     watch: false,
     now: () => NOW,
-    hostLookup: resolveNothing,
+    hostLookup: resolvePublic,
     ...(options.checker === undefined ? {} : { commentChecker: options.checker }),
   });
   started.push(instance);

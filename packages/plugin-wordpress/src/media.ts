@@ -1,4 +1,5 @@
 import type { WordPressExport, WordPressItem } from './wxr.ts';
+import { withoutTrailingSlash } from '@geekity/cms/plugin';
 
 export const WORDPRESS_UPLOADS = '/wp-content/uploads/';
 
@@ -53,7 +54,7 @@ export function wordPressMedia(
       .map((url) => new URL(url).host.toLowerCase()),
   );
   for (const host of otherHosts(origins)) hosts.add(host);
-  const pattern = uploadsPattern(`${site.pathname.replace(/\/+$/, '')}${WORDPRESS_UPLOADS}`);
+  const pattern = uploadsPattern(`${withoutTrailingSlash(site.pathname)}${WORDPRESS_UPLOADS}`);
 
   const originalOf = (upload: UploadPath): UploadPath =>
     variantCandidates(upload).find((candidate) => originals.has(candidate)) ?? upload;

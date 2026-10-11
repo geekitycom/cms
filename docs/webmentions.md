@@ -29,6 +29,14 @@ The sender records one outcome per link:
 `/admin/federation` shows the outcomes per post. The Resend button there sends
 them again from the file as it reads now.
 
+**Only public addresses are fetched.** This covers the target page the sender
+reads for an endpoint, the endpoint it posts to, and the source the receiver
+verifies. Before each request, and again before following each redirect, the
+site resolves the host name. It refuses the request when any address is
+loopback, private, link-local or reserved. A refused endpoint is recorded as
+`failed`. A refused source is treated as unreachable, so nothing already stored
+from it changes.
+
 **Links to the site's own pages** send no webmention. A post that cites another
 post on the same site does not go through moderation, does not add to a comment
 count, and does not make an HTTP request to the site itself. The index records

@@ -2,9 +2,10 @@ import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import { escapeLinkText } from '../content/markdown-links.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { oneLine } from './markdown-page.ts';
 import type { MarkdownUrl } from './markdown-page.ts';
-import { absoluteUrl, contentEtag, isNotModified } from './negotiate.ts';
+import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 
 /**

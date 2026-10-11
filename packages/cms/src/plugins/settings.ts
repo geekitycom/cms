@@ -14,6 +14,7 @@ import path from 'node:path';
 
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import type { PluginSettingField } from '../plugin.ts';
+import { isRecord } from '../util/guards.ts';
 import { readPluginEntry, updatePluginEntry } from './enabled.ts';
 
 export const SECRETS_FILE = 'secrets.json';
@@ -260,9 +261,7 @@ function parseRecord(text: string | undefined): Record<string, unknown> {
   if (text === undefined) return {};
   try {
     const parsed: unknown = JSON.parse(text);
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return isRecord(parsed) ? parsed : {};
   } catch {
     return {};
   }

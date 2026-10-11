@@ -16,8 +16,9 @@ import {
 } from '../comments/akismet.ts';
 import type { AkismetKeyRecord } from '../comments/akismet.ts';
 import type { GeekityEnv } from '../env.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import { flash } from './flash.ts';
-import { bodyField, settingsPagePath } from './settings-page.ts';
+import { settingsPagePath } from './settings-page.ts';
 import type { MountSettingsOptions, SettingsPage } from './settings-page.ts';
 import { effectiveBaseUrl, readSiteSettings, SETTINGS_PATH } from './settings.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -82,13 +83,13 @@ function mountAkismet(app: Hono<GeekityEnv>, _options: MountSettingsOptions): vo
     const body = await c.req.parseBody();
     const { config } = c.var;
 
-    if (bodyField(body[AKISMET_FIELDS.action]) === AKISMET_REMOVE) {
+    if (stringOrEmpty(body[AKISMET_FIELDS.action]) === AKISMET_REMOVE) {
       await removeAkismetKey(config.dataDir);
       flash(c, 'notice', 'The Akismet key is gone. Nothing is sent to Akismet any more.');
       return c.redirect(here, 303);
     }
 
-    const key = bodyField(body[AKISMET_FIELDS.key]).trim();
+    const key = stringOrEmpty(body[AKISMET_FIELDS.key]).trim();
     if (key === '') {
       flash(c, 'error', 'An Akismet key cannot be empty. Use Remove key to turn Akismet off.');
       return c.redirect(here, 303);

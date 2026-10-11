@@ -1,5 +1,5 @@
 import type { SiteData } from './context.ts';
-import { excerptFromHtml, excerptHtml, feedItems } from './feed-item.ts';
+import { excerptFromHtml, feedItems } from './feed-item.ts';
 import type { FeedItem } from './feed-item.ts';
 import {
   contentTypeOf,
@@ -25,9 +25,11 @@ import {
   WFW_NAMESPACE,
 } from './feed-xml.ts';
 import { resolveLicense } from './license.ts';
-import { absoluteUrl, latestModified } from './negotiate.ts';
+import { latestModified } from './negotiate.ts';
 import { isCaptions } from '../content/enclosure.ts';
 import type { AlternateEnclosure, Enclosure } from '../content/enclosure.ts';
+import { escapeText } from '../util/html.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { sanitizeCommentHtml } from './sanitize.ts';
 
 /**
@@ -171,7 +173,7 @@ export function rssItem(item: FeedItem): string[] {
     ...commentPointers(item),
     ...optionalElement('creativeCommons:license', item.license?.url, 3),
     ...(item.enclosure === undefined ? [] : recordingElements(item.enclosure)),
-    element('description', excerptHtml(item.summary), 3),
+    element('description', escapeText(item.summary), 3),
     `      <content:encoded>${cdata(item.html)}</content:encoded>`,
     // The source of the item, per the namespace: a reader that understands
     // Markdown should render from this rather than from the HTML above. It is
@@ -335,7 +337,7 @@ function commentItem(comment: FeedComment): string[] {
     ...sourceComments(comment.replies),
     // A comment never carries a description, so its summary is always an
     // excerpt of what it says.
-    element('description', excerptHtml(excerptFromHtml(html)), 3),
+    element('description', escapeText(excerptFromHtml(html)), 3),
     `      <content:encoded>${cdata(html)}</content:encoded>`,
     '    </item>',
   ];

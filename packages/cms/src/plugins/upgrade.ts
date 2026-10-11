@@ -1,5 +1,6 @@
 import semver from 'semver';
 
+import { messageOf } from '../util/errors.ts';
 import { readPluginManifest, scanPluginFolders } from './folder.ts';
 import { addPlugin, CORE_PACKAGE, fetchPackument, requirementNotes } from './install.ts';
 import type { AddAdvice } from './install.ts';
@@ -83,7 +84,7 @@ export async function upgradePlugins(options: UpgradeOptions): Promise<UpgradeRe
       try {
         document = await fetchPackument(name, registry);
       } catch (error) {
-        results.set(name, skipped(name, error instanceof Error ? error.message : String(error)));
+        results.set(name, skipped(name, messageOf(error)));
         return;
       }
       const newer = newerReleases(name, current.version, document);
@@ -143,7 +144,7 @@ export async function upgradePlugins(options: UpgradeOptions): Promise<UpgradeRe
           status: 'failed',
           from: result.from,
           to: release.version,
-          reason: error instanceof Error ? error.message : String(error),
+          reason: messageOf(error),
         });
       }
     }
@@ -195,7 +196,7 @@ function installedRelease(directory: string): PluginRelease | string {
     }
     return manifest;
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    return messageOf(error);
   }
 }
 

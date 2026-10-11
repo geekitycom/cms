@@ -5,6 +5,8 @@ import { isModerationAction, moderateComment } from '../comments/moderate.ts';
 import { writeReplyPost } from '../comments/reply-post.ts';
 import type { CommentRecords } from '../comments/records.ts';
 import type { GeekityEnv } from '../env.ts';
+import { stringOrEmpty } from '../util/forms.ts';
+import { pageCount } from '../web/pagination.ts';
 import { documentEditorPath, documentSite, PAGE_KIND, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
@@ -133,7 +135,7 @@ export function mountCommentsScreen(
       })
       .map((comment) => commentRow(c, comment));
 
-    const pages = Math.max(1, Math.ceil(counts[status] / COMMENTS_PER_PAGE));
+    const pages = pageCount(counts[status], COMMENTS_PER_PAGE);
 
     return render(c, ADMIN_TEMPLATES.comments, {
       section: COMMENTS_SECTION,
@@ -160,14 +162,14 @@ export function mountCommentsScreen(
 
   app.post(COMMENTS_MODERATE_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const back = listUrl(statusOf(text(body[COMMENT_ADMIN_FIELDS.status])));
-    const comment = c.var.admin.getComment(text(body[COMMENT_ADMIN_FIELDS.id]));
+    const back = listUrl(statusOf(stringOrEmpty(body[COMMENT_ADMIN_FIELDS.status])));
+    const comment = c.var.admin.getComment(stringOrEmpty(body[COMMENT_ADMIN_FIELDS.id]));
     if (comment === undefined) {
       flash(c, 'error', 'That comment is not here any more.');
       return c.redirect(back, 303);
     }
 
-    const action = text(body[COMMENT_ADMIN_FIELDS.action]);
+    const action = stringOrEmpty(body[COMMENT_ADMIN_FIELDS.action]);
     if (!isModerationAction(action)) {
       flash(c, 'error', 'That is not something a comment can be.');
       return c.redirect(back, 303);
@@ -214,14 +216,14 @@ export function mountCommentsScreen(
 
   app.post(COMMENTS_REPLY_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const back = listUrl(statusOf(text(body[COMMENT_ADMIN_FIELDS.status])));
-    const parent = c.var.admin.getComment(text(body[COMMENT_ADMIN_FIELDS.id]));
+    const back = listUrl(statusOf(stringOrEmpty(body[COMMENT_ADMIN_FIELDS.status])));
+    const parent = c.var.admin.getComment(stringOrEmpty(body[COMMENT_ADMIN_FIELDS.id]));
     if (parent === undefined) {
       flash(c, 'error', 'That comment is not here any more.');
       return c.redirect(back, 303);
     }
 
-    const markdown = text(body[COMMENT_ADMIN_FIELDS.body]).trim();
+    const markdown = stringOrEmpty(body[COMMENT_ADMIN_FIELDS.body]).trim();
     if (markdown === '') {
       flash(c, 'error', 'A reply needs something in it.');
       return c.redirect(back, 303);
@@ -237,7 +239,7 @@ export function mountCommentsScreen(
       document,
       answered: parent,
       body: markdown,
-      listed: text(body[COMMENT_ADMIN_FIELDS.listed]) !== '',
+      listed: stringOrEmpty(body[COMMENT_ADMIN_FIELDS.listed]) !== '',
     });
     if (written.outcome !== 'saved') {
       const message = written.outcome === 'refused' ? written.message : 'That reply was not saved.';
@@ -310,9 +312,4 @@ function commentRow(c: Context<GeekityEnv>, comment: PostComment): CommentRow {
         : documentEditorPath(document.type === 'page' ? PAGE_KIND : POST_KIND, document),
     inReplyTo: comment.inReplyTo,
   };
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }

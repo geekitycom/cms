@@ -30,6 +30,8 @@ import type {
   PluginSettingValues,
   PluginSiteInfo,
 } from '../plugin.ts';
+import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import { pluginFetch } from './fetch.ts';
 import type { PluginFetchOptions } from './fetch.ts';
 import {
@@ -265,12 +267,7 @@ export function createPluginRegistry(
 
   const startAttempted: Plugin[] = [];
   let closed = false;
-  let queue: Promise<void> = Promise.resolve();
-
-  function serialized(step: () => Promise<void>): Promise<void> {
-    queue = queue.then(step);
-    return queue;
-  }
+  const steps = createSerialQueue();
 
   async function stopFrom(shouldStop: (name: string) => boolean): Promise<void> {
     for (const entry of [...startAttempted].reverse()) {
@@ -310,7 +307,7 @@ export function createPluginRegistry(
     },
 
     reconcile(enabled) {
-      return serialized(async () => {
+      return steps.run(async () => {
         if (closed) return;
         const running = active(enabled);
         await stopFrom((name) => !running.has(name));
@@ -323,7 +320,7 @@ export function createPluginRegistry(
     },
 
     close() {
-      return serialized(async () => {
+      return steps.run(async () => {
         closed = true;
         await stopFrom(() => true);
       });
@@ -475,7 +472,7 @@ function register(
     };
   } catch (error) {
     return {
-      problem: `Its register failed: ${error instanceof Error ? error.message : String(error)}`,
+      problem: `Its register failed: ${messageOf(error)}`,
       declared: NOTHING_DECLARED,
     };
   } finally {
@@ -511,7 +508,7 @@ async function lifecycle(plugin: Plugin, hook: 'start' | 'stop'): Promise<void> 
   try {
     await plugin[hook]?.();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = messageOf(error);
     console.warn(`The ${plugin.name} plugin's ${hook} failed: ${message}`);
   }
 }

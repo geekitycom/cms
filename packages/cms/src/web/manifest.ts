@@ -1,7 +1,8 @@
 import { manifestIcons } from '../images/icons.ts';
 import type { ManifestIcon } from '../images/icons.ts';
 import type { ImageConfig } from '../images/paths.ts';
-import { absoluteUrl, contentEtag, isNotModified } from './negotiate.ts';
+import { absoluteUrl } from '../util/url.ts';
+import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 import type { ThemeColors } from './themes.ts';
 

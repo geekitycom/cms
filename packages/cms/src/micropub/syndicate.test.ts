@@ -11,7 +11,7 @@ import { after, describe, it } from 'node:test';
 import matter from 'gray-matter';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
+import { FIRST_ADMIN, resolvePublic, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { findUser } from '../admin/accounts.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
@@ -52,6 +52,7 @@ async function site(files: Readonly<Record<string, string>> = {}): Promise<Site>
     dataDir: await box.dir('geekity-micropub-syndicate-data-'),
     baseUrl: BASE,
     now: () => NOW,
+    hostLookup: resolvePublic,
   });
   await signedIn(cms);
   const ada = findUser(cms.config.dataDir, FIRST_ADMIN.username);

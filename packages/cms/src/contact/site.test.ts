@@ -469,3 +469,24 @@ describe('the defences in front of the contact form', () => {
     assert.equal(listContactMessages(dataDir)[0]?.status, 'received');
   });
 });
+
+describe('a site served under a path', () => {
+  it('links the page and the inbox under that path', async () => {
+    const provider = createMemoryMailProvider();
+    const { cms, contentDir } = await site(PAGES, {
+      ...mailing(provider),
+      baseUrl: 'https://example.com/blog/',
+    });
+    await writeContactEmail(contentDir, 'inbox@example.org');
+
+    await send(cms, submission());
+    await cms.mail.settled();
+
+    const links =
+      provider.sent[0]?.text.match(/https?:\/\/\S+/g)?.map((link) => link.replace(/[.,]$/, '')) ??
+      [];
+    assert.ok(links.includes('https://example.com/blog/contact/'), links.join('\n'));
+    assert.ok(links.includes('https://example.com/blog/admin/messages'), links.join('\n'));
+    for (const link of links) assert.match(link, /^https:\/\/example\.com\/blog(\/|$)/);
+  });
+});

@@ -12,6 +12,7 @@ import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
+import type { HostLookup } from './public-address.ts';
 import { WEBMENTION_PATH } from './routes.ts';
 
 /**
@@ -74,6 +75,11 @@ interface Page {
 }
 
 const pages = new Map<string, Page>();
+const requested: string[] = [];
+
+const lookup: HostLookup = (hostname) =>
+  Promise.resolve(hostname.endsWith('.internal.example') ? ['127.0.0.1'] : ['203.0.113.7']);
+
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 
@@ -87,6 +93,7 @@ after(async () => {
 
 beforeEach(() => {
   pages.clear();
+  requested.length = 0;
 });
 
 function routeTheWeb(): () => void {
@@ -97,23 +104,19 @@ function routeTheWeb(): () => void {
 
   /** What the make-believe web answers, with no network anywhere near it. */
   function answer(input: string | URL | Request): Response {
-    let url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-
-    for (let hop = 0; hop < 5; hop += 1) {
-      const page = pages.get(url);
-      if (page?.redirectTo === undefined) break;
-      url = new URL(page.redirectTo, url).href;
-    }
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    requested.push(url);
 
     const page = pages.get(url);
     if (page === undefined) return new Response('missing', { status: 404 });
+    if (page.redirectTo !== undefined) {
+      return new Response(null, { status: 302, headers: { location: page.redirectTo } });
+    }
 
-    const response = new Response(page.status === 410 ? 'gone' : (page.body ?? ''), {
+    return new Response(page.status === 410 ? 'gone' : (page.body ?? ''), {
       status: page.status ?? 200,
       headers: { 'content-type': page.contentType ?? 'text/html; charset=utf-8' },
     });
-    Object.defineProperty(response, 'url', { value: url });
-    return response;
   }
 
   return () => {
@@ -159,6 +162,7 @@ async function site(
     baseUrl: BASE_URL,
     watch: false,
     now: () => NOW,
+    hostLookup: lookup,
     ...config,
   });
   started.push(instance);
@@ -391,6 +395,32 @@ describe('verifying a webmention', () => {
     await sendAndSettle(cms, 'https://them.example/old');
 
     assert.equal(stored(cms).length, 1);
+  });
+
+  it('fetches nothing from a source whose name resolves to a private address', async () => {
+    const cms = await site();
+    pages.set('https://wiki.internal.example/note', {
+      body: reply(`<a href="${POST_URL}">there</a>`),
+    });
+
+    const response = await sendAndSettle(cms, 'https://wiki.internal.example/note');
+
+    assert.equal(response.status, 202);
+    assert.deepEqual(requested, []);
+    assert.equal(stored(cms).length, 0);
+  });
+
+  it('stops at a redirect to a private address', async () => {
+    const cms = await site();
+    pages.set('https://them.example/moved', { redirectTo: 'http://wiki.internal.example/note' });
+    pages.set('http://wiki.internal.example/note', {
+      body: reply(`<a href="${POST_URL}">there</a>`),
+    });
+
+    await sendAndSettle(cms, 'https://them.example/moved');
+
+    assert.deepEqual(requested, ['https://them.example/moved']);
+    assert.equal(stored(cms).length, 0);
   });
 
   it('stores nothing when the source only writes the target out as text', async () => {

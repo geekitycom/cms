@@ -40,6 +40,8 @@ import type {
 import { resolvePluginSettings, savePluginSettings, SECRETS_FILE } from '../plugins/settings.ts';
 import type { ResolvedSetting } from '../plugins/settings.ts';
 import { pluginSite } from '../plugins/site.ts';
+import { messageOf } from '../util/errors.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import { findUserById, verifyUserPassword } from './accounts.ts';
 import type { AdminRender } from './documents.ts';
 import { formatInTimezone } from './formatting.ts';
@@ -251,10 +253,10 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     const installer = pluginInstaller(c.var.config);
     if (installer.state !== 'on') return refuse(c, INSTALLER_REFUSALS[installer.state]);
     const body = await c.req.parseBody();
-    const name = field(body[PACKAGE_FIELD]).trim();
-    const version = field(body[VERSION_FIELD]).trim();
+    const name = stringOrEmpty(body[PACKAGE_FIELD]).trim();
+    const version = stringOrEmpty(body[VERSION_FIELD]).trim();
     const typed = { package: name, version };
-    const user = confirmedUser(c, field(body[PASSWORD_FIELD]));
+    const user = confirmedUser(c, stringOrEmpty(body[PASSWORD_FIELD]));
     if (user === undefined) {
       return drawPluginsScreen(
         c,
@@ -318,8 +320,8 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     const installer = pluginInstaller(c.var.config);
     if (installer.state !== 'on') return refuse(c, INSTALLER_REFUSALS[installer.state]);
     const body = await c.req.parseBody();
-    const name = field(body[PLUGIN_FIELD]);
-    const user = confirmedUser(c, field(body[PASSWORD_FIELD]));
+    const name = stringOrEmpty(body[PLUGIN_FIELD]);
+    const user = confirmedUser(c, stringOrEmpty(body[PASSWORD_FIELD]));
     if (user === undefined) {
       const verb = action === 'remove' ? 'removed' : 'updated';
       return await drawConfirm(c, installer.pluginsDir, action, name, `${WRONG_PASSWORD} ${verb}.`);
@@ -515,7 +517,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
       });
       flash(c, outcome.ok ? 'notice' : 'error', outcome.message);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = messageOf(error);
       flash(c, 'error', `${action.label} failed: ${message}`);
     }
     return c.redirect(back, 303);
@@ -715,12 +717,4 @@ function changeView(entry: PluginChangeEntry, timezone: string) {
     name: entry.name,
     versions,
   };
-}
-
-function field(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

@@ -7,6 +7,7 @@ import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
 import { documentSite } from '../admin/documents.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import { isServed } from '../web/documents.ts';
 import {
   COMMENT_NOTICE_PARAM,
@@ -291,21 +292,16 @@ export function commentFormFor(options: {
 /** A submitted body as the form it is, every field a string. */
 function formOf(body: Record<string, unknown>): CommentForm {
   return {
-    post: text(body[COMMENT_FIELDS.post]),
-    name: text(body[COMMENT_FIELDS.name]),
-    email: text(body[COMMENT_FIELDS.email]),
-    url: text(body[COMMENT_FIELDS.url]),
-    body: text(body[COMMENT_FIELDS.body]),
-    inReplyTo: text(body[COMMENT_FIELDS.inReplyTo]),
-    trap: text(body[COMMENT_FIELDS.trap]),
-    loaded: text(body[COMMENT_FIELDS.loaded]),
-    notify: text(body[COMMENT_FIELDS.notify]),
-    csrf: text(body[COMMENT_FIELDS.csrf]),
-    listed: text(body[COMMENT_FIELDS.listed]),
+    post: stringOrEmpty(body[COMMENT_FIELDS.post]),
+    name: stringOrEmpty(body[COMMENT_FIELDS.name]),
+    email: stringOrEmpty(body[COMMENT_FIELDS.email]),
+    url: stringOrEmpty(body[COMMENT_FIELDS.url]),
+    body: stringOrEmpty(body[COMMENT_FIELDS.body]),
+    inReplyTo: stringOrEmpty(body[COMMENT_FIELDS.inReplyTo]),
+    trap: stringOrEmpty(body[COMMENT_FIELDS.trap]),
+    loaded: stringOrEmpty(body[COMMENT_FIELDS.loaded]),
+    notify: stringOrEmpty(body[COMMENT_FIELDS.notify]),
+    csrf: stringOrEmpty(body[COMMENT_FIELDS.csrf]),
+    listed: stringOrEmpty(body[COMMENT_FIELDS.listed]),
   };
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }

@@ -147,8 +147,20 @@ changes.
 
 ### Writing a plugin
 
-A plugin package imports only `@geekity/cms/plugin`, and only its types and
-`definePlugin`. Its default export is the plugin:
+A plugin package imports only `@geekity/cms/plugin`. Besides its types and
+`definePlugin`, that module exports the helpers core uses, so a plugin does not
+need its own copy:
+
+- `slugify`: the slug the editor gives a title.
+- `serializeDocument`: the Markdown file the site writes for a
+  `DocumentContent`. When the site reads a file written this way and writes it
+  back with no changes, the bytes stay the same.
+- `writeFileAtomically`: writes to a temporary file beside the target, then
+  renames it over the target.
+- `isRecord`, `messageOf`, `withTrailingSlash`, `withoutTrailingSlash`.
+- `repliesKey` and `webmentionKey`: the keys of a comment.
+
+Its default export is the plugin:
 
 ```ts
 import { definePlugin } from '@geekity/cms/plugin';

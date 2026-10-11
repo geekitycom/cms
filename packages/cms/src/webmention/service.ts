@@ -19,9 +19,12 @@ import { replyTarget } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { isFederatedDocument } from '../federation/article.ts';
+import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { permalinkOfObjectId } from '../web/documents.ts';
-import { absoluteUrl } from '../web/negotiate.ts';
-import { discoverEndpoint, WEBMENTION_USER_AGENT } from './discovery.ts';
+import { discoverEndpoint } from './discovery.ts';
+import { requestPublic } from './fetch-public.ts';
 import { externalLinks, externalTarget } from './links.ts';
 import { verifyWebmention } from './receive.ts';
 import { selectedTargets, syndicationCopies, syndicationTargetsReader } from './syndication.ts';
@@ -89,7 +92,7 @@ export interface CreateWebmentionServiceOptions {
    */
   config: Pick<
     ResolvedConfig,
-    'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'now' | 'commentChecker'
+    'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'now' | 'commentChecker' | 'hostLookup'
   >;
   /** Where failures are reported. Defaults to `console`. */
   logger?: WebmentionLogger | undefined;
@@ -170,20 +173,9 @@ export function createWebmentionService(
     dataDir: config.dataDir,
   };
 
-  // Incoming checks run one after another too, and on a chain of their own: a
-  // page of this site's own that is slow to answer must not hold up the check
-  // on a webmention somebody is waiting to see appear.
-  let checking: Promise<unknown> = Promise.resolve();
+  const checks = createSerialQueue();
 
-  // Sends are chained rather than run at once, and the chain never rejects:
-  // one page that hangs delays the next and nothing else.
-  let chain: Promise<unknown> = Promise.resolve();
-
-  function enqueue<T>(task: () => Promise<T>): Promise<T> {
-    const result = chain.then(task);
-    chain = result.then(ignore, ignore);
-    return result;
-  }
+  const sends = createSerialQueue();
 
   /** Whether the site is sending webmentions at all, as the file says now. */
   function sending(): boolean {
@@ -204,40 +196,36 @@ export function createWebmentionService(
    * page made a copy of the post, where the copy is.
    */
   async function tell(slug: string, source: string, target: string): Promise<Told> {
-    const endpoint = await discoverEndpoint(target);
+    const endpoint = await discoverEndpoint(target, config.hostLookup);
     if (endpoint === undefined) {
       // Not a failure: most of the web takes no webmentions, and recording it
       // is what tells a person why nothing went.
       return { sent: record(slug, source, target, null, 'none', null) };
     }
 
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/x-www-form-urlencoded',
-          accept: 'text/html, application/json;q=0.9, */*;q=0.8',
-          'user-agent': WEBMENTION_USER_AGENT,
-        },
-        body: new URLSearchParams({ source, target }).toString(),
-        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-      });
+    const answered = await requestPublic(endpoint, {
+      lookup: config.hostLookup,
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'text/html, application/json;q=0.9, */*;q=0.8',
+      },
+      body: new URLSearchParams({ source, target }).toString(),
+    });
 
-      if (!response.ok) {
-        const error = `${endpoint} answered ${String(response.status)}`;
-        logger.warn(`Could not send a webmention for ${source}: ${error}`);
-        return { sent: record(slug, source, target, endpoint, 'failed', error) };
-      }
-
-      return {
-        sent: record(slug, source, target, endpoint, 'sent', null),
-        copy: copyOf(response, endpoint),
-      };
-    } catch (thrown) {
-      const error = messageOf(thrown);
+    const failed = (error: string): Told => {
       logger.warn(`Could not send a webmention for ${source}: ${error}`);
       return { sent: record(slug, source, target, endpoint, 'failed', error) };
-    }
+    };
+    if (!answered.ok) return failed(answered.reason);
+    const { response, url } = answered;
+    if (!response.ok) return failed(`${endpoint} answered ${String(response.status)}`);
+
+    return {
+      sent: record(slug, source, target, endpoint, 'sent', null),
+      copy: copyOf(response, url),
+    };
   }
 
   /** Write one outcome down. */
@@ -304,16 +292,18 @@ export function createWebmentionService(
     changed.set(document.path, document);
     if (looking) return;
     looking = true;
-    enqueue(async () => {
-      looking = false;
-      const documents = [...changed.values()];
-      changed.clear();
-      for (const one of documents) {
-        for (const upstream of options.conversation.upstreams(one)) await salmention(upstream);
-      }
-    }).catch((thrown: unknown) => {
-      logger.warn(`A salmention failed: ${messageOf(thrown)}`);
-    });
+    sends
+      .run(async () => {
+        looking = false;
+        const documents = [...changed.values()];
+        changed.clear();
+        for (const one of documents) {
+          for (const upstream of options.conversation.upstreams(one)) await salmention(upstream);
+        }
+      })
+      .catch((thrown: unknown) => {
+        logger.warn(`A salmention failed: ${messageOf(thrown)}`);
+      });
   }
 
   /**
@@ -391,17 +381,19 @@ export function createWebmentionService(
         : undefined;
     const current = isNowPublic ? change.next : undefined;
 
-    enqueue(async () => {
-      if (moved !== undefined) await copies.forget(moved);
-      await keepCopies(
-        document.permalink,
-        [change.previous, change.next],
-        current,
-        await tellAll(document.slug, source, links),
-      );
-    }).catch((thrown: unknown) => {
-      logger.warn(`A webmention failed: ${messageOf(thrown)}`);
-    });
+    sends
+      .run(async () => {
+        if (moved !== undefined) await copies.forget(moved);
+        await keepCopies(
+          document.permalink,
+          [change.previous, change.next],
+          current,
+          await tellAll(document.slug, source, links),
+        );
+      })
+      .catch((thrown: unknown) => {
+        logger.warn(`A webmention failed: ${messageOf(thrown)}`);
+      });
   }
 
   return {
@@ -437,7 +429,7 @@ export function createWebmentionService(
 
       const links = targetsOf([document], targets(), config.baseUrl, siteLanguage(), originalOf);
 
-      return await enqueue(async () => {
+      return await sends.run(async () => {
         const outcomes = await tellAll(slug, source, links);
         const current = isPublic(document, config.now()) ? document : undefined;
         await keepCopies(document.permalink, [document], current, outcomes);
@@ -446,7 +438,7 @@ export function createWebmentionService(
     },
 
     receive(incoming) {
-      const checked = checking.then(async (): Promise<WebmentionOutcome> => {
+      return checks.run(async (): Promise<WebmentionOutcome> => {
         try {
           const outcome = await verifyWebmention({
             incoming,
@@ -461,6 +453,7 @@ export function createWebmentionService(
             // worth ignoring.
             notices: options.notifications,
             now: config.now(),
+            lookup: config.hostLookup,
             logger,
           });
 
@@ -474,8 +467,6 @@ export function createWebmentionService(
           return { kind: 'unreachable', reason };
         }
       });
-      checking = checked;
-      return checked;
     },
 
     originalFound(copy, original) {
@@ -488,14 +479,16 @@ export function createWebmentionService(
         }
         const source = absoluteUrl(document.permalink, config.baseUrl);
         if (held(source, [target])) continue;
-        enqueue(() => tell(document.slug, source, target)).catch((thrown: unknown) => {
-          logger.warn(`A webmention failed: ${messageOf(thrown)}`);
-        });
+        sends
+          .run(() => tell(document.slug, source, target))
+          .catch((thrown: unknown) => {
+            logger.warn(`A webmention failed: ${messageOf(thrown)}`);
+          });
       }
     },
 
-    settled() {
-      return Promise.all([chain, checking]).then(ignore);
+    async settled() {
+      await Promise.all([sends.settled(), checks.settled()]);
     },
   };
 }
@@ -639,13 +632,4 @@ function postBySlug(store: ContentStore, slug: string): Document | undefined {
   const direct = store.getBySlug(slug);
   if (direct !== undefined) return direct;
   return store.listFederated().find((document) => document.slug === slug);
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function ignore(): void {
-  // Deliberately empty: the chain must not reject, and every failure is
-  // already recorded against the target it happened to.
 }

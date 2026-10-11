@@ -1,3 +1,4 @@
+import { absoluteUrl } from '../util/url.ts';
 import { siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { feedItems } from './feed-item.ts';
@@ -22,7 +23,7 @@ import {
 } from './feed-xml.ts';
 import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
-import { absoluteUrl, latestModified } from './negotiate.ts';
+import { latestModified } from './negotiate.ts';
 
 /**
  * Atom 1.0: the feed and its entries, rendered from {@link FeedItem}s.

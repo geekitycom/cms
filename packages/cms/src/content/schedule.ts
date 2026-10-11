@@ -1,3 +1,4 @@
+import { messageOf } from '../util/errors.ts';
 import type { Document } from './document.ts';
 import { dateSortKey } from './store.ts';
 import type { ContentStore } from './store.ts';
@@ -307,10 +308,6 @@ export function createScheduler(options: CreateSchedulerOptions): Scheduler {
       await running.catch(ignore);
     },
   };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function ignore(): void {

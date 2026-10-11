@@ -1,5 +1,6 @@
 import { ADMIN_PREFIX } from '../admin/session.ts';
-import { absoluteUrl, contentEtag, isNotModified } from './negotiate.ts';
+import { absoluteUrl } from '../util/url.ts';
+import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 import { SITEMAP_PATH } from './sitemap.ts';
 

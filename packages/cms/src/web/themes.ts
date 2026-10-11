@@ -2,6 +2,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { messageOf } from '../util/errors.ts';
+
 /**
  * Where a theme is, and what makes a directory one.
  *
@@ -147,7 +149,7 @@ export function readTheme(dir: string): ThemeRead {
   try {
     parsed = JSON.parse(source);
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
+    const detail = messageOf(error);
     return { ok: false, reason: `${manifestFile} is not valid JSON: ${detail}` };
   }
 

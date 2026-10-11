@@ -1,4 +1,4 @@
-import { absoluteUrl } from '../web/negotiate.ts';
+import { absoluteUrl, withoutTrailingSlash } from '../util/url.ts';
 import {
   decodedPath,
   findPathRedirect,
@@ -251,7 +251,7 @@ function sitePathOf(target: string, baseUrl: string): string | undefined {
   const base = new URL(baseUrl);
   if (url.origin !== base.origin) return undefined;
 
-  const directory = base.pathname.replace(/\/$/, '');
+  const directory = withoutTrailingSlash(base.pathname);
   if (url.pathname !== directory && !url.pathname.startsWith(`${directory}/`)) return undefined;
 
   return decodedPath(url.pathname.slice(directory.length) || '/');

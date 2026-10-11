@@ -3,6 +3,8 @@ import type { CommentChecker, CommentVerdict } from '../comments/submission.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
 import { formTimingRefusal, hashClientAddress, trapped } from '../forms/protection.ts';
+import { messageOf } from '../util/errors.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { contactProblems } from './form.ts';
 import type { ContactForm, ContactProblems } from './form.ts';
 import { addContactMessage } from './records.ts';
@@ -172,7 +174,7 @@ async function ask(
       post: {
         slug: options.document.slug,
         title: postLabel(options.document),
-        url: absolute(options.document.permalink, options.baseUrl),
+        url: absoluteUrl(options.document.permalink, options.baseUrl),
       },
       address: options.address,
       userAgent: options.userAgent,
@@ -225,19 +227,6 @@ function asComment(
   };
 }
 
-/** A site-root path as an absolute URL. */
-function absolute(pathname: string, baseUrl: string): string {
-  try {
-    return new URL(pathname, baseUrl).href;
-  } catch {
-    return pathname;
-  }
-}
-
 function refused(refusal: ContactRefusal): ContactOutcome {
   return { kind: 'refused', refusal };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

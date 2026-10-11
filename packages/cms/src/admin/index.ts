@@ -227,7 +227,7 @@ export type {
   SettingsProblems,
   SiteSettings,
 } from './settings.ts';
-export { bodyField, mountSettingsPage, settingsPagePath, settingsScreen } from './settings-page.ts';
+export { mountSettingsPage, settingsPagePath, settingsScreen } from './settings-page.ts';
 export type { MountSettingsOptions, SettingsPage, SubmittedBody } from './settings-page.ts';
 export { ALL_SETTINGS_PAGES, mountSettings, SETTINGS_PAGES } from './settings-pages.ts';
 export { GENERAL_SETTINGS } from './settings-general.ts';

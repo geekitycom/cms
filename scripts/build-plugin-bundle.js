@@ -48,6 +48,13 @@ const NATIVE_LOADERS = [
   'nan',
 ];
 
+/**
+ * Packages whose modules only define things, though their package.json does
+ * not say so. Core's serializeDocument imports js-yaml, and without this every
+ * plugin that imports anything from `@geekity/cms/plugin` would carry it.
+ */
+const SIDE_EFFECT_FREE = /^js-yaml$/;
+
 const packageDir = process.cwd();
 const require = createRequire(path.join(packageDir, 'package.json'));
 const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
@@ -97,7 +104,7 @@ const result = await build({
   banner: {
     js: "import { createRequire as __geekityRequire } from 'node:module';\nconst require = __geekityRequire(import.meta.url);",
   },
-  plugins: [refuseNativeModules()],
+  plugins: [refuseNativeModules(), sideEffectFree(SIDE_EFFECT_FREE)],
   logLevel: 'silent',
 }).catch((error) => error);
 if (result instanceof Error) {
@@ -173,6 +180,25 @@ function refuseNativeModules() {
         if (!args.path.includes(`${path.sep}node_modules${path.sep}`)) return undefined;
         const name = nativePackage(args.path);
         return name === undefined ? undefined : { errors: [{ text: refusal(name) }] };
+      });
+    },
+  };
+}
+
+function sideEffectFree(filter) {
+  return {
+    name: 'side-effect-free',
+    setup(build) {
+      build.onResolve({ filter }, async (args) => {
+        if (args.pluginData === 'side-effect-free') return undefined;
+        const resolved = await build.resolve(args.path, {
+          kind: args.kind,
+          resolveDir: args.resolveDir,
+          importer: args.importer,
+          pluginData: 'side-effect-free',
+        });
+        if (resolved.errors.length > 0) return { errors: resolved.errors };
+        return { path: resolved.path, sideEffects: false };
       });
     },
   };

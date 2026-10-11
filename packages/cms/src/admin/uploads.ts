@@ -12,6 +12,7 @@ import type { GeekityEnv } from '../env.ts';
 import type { AltText } from '../images/alt-text.ts';
 import { generateImageVariants } from '../images/variants.ts';
 import type { ImageConfig } from '../images/variants.ts';
+import { messageOf } from '../util/errors.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../web/assets.ts';
 import { ADMIN_PREFIX } from './session.ts';
 
@@ -139,7 +140,7 @@ export async function storeUpload(
   try {
     await generateImageVariants(config, `${month}/${name}`);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = messageOf(error);
     console.warn(`Stored ${month}/${name} but could not derive its variants: ${message}`);
   }
 

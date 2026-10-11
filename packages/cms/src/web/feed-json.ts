@@ -3,8 +3,8 @@ import { feedItems } from './feed-item.ts';
 import type { FeedItem } from './feed-item.ts';
 import { feedLanguage, notifyServerOf } from './feed-source.ts';
 import type { FeedSource } from './feed-source.ts';
-import { absoluteUrl } from './negotiate.ts';
 import type { Enclosure } from '../content/enclosure.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * JSON Feed 1.1: the document, its items, and the vocabulary they are spelled

@@ -26,6 +26,7 @@ import type { ContentStore } from '../content/store.ts';
 import type { SyncResult } from '../content/sync.ts';
 import type { GeekityEnv } from '../env.ts';
 import { rebuildFederationIndexes } from '../federation/records.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
@@ -163,7 +164,7 @@ export function mountToolsScreen(app: Hono<GeekityEnv>, options: MountToolsOptio
     // Offered rather than done, the way a merge is on the taxonomy screens:
     // for as long as the scan runs the site answers 404 for every document,
     // and that is not something to find out about afterwards.
-    if (field(body[TOOLS_FIELDS.confirm]) === '') {
+    if (stringOrEmpty(body[TOOLS_FIELDS.confirm]) === '') {
       return render(c, ADMIN_TEMPLATES.toolsContentIndex, { ...screen(c), confirm: true });
     }
 
@@ -245,9 +246,4 @@ function count(howMany: number, singular: string, plural = `${singular}s`): stri
 function totalComments(admin: AdminStore): number {
   const counts = admin.countCommentsByStatus();
   return counts.pending + counts.approved + counts.spam;
-}
-
-/** One submitted field as a string. */
-function field(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }

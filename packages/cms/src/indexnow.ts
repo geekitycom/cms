@@ -4,10 +4,13 @@ import type { Document } from './content/document.ts';
 import { isMigratedArrival } from './content/migrated.ts';
 import { holdOutbound } from './dev-mode.ts';
 import type { DocumentChange } from './content/sync.ts';
+import { messageOf } from './util/errors.ts';
+import { createSerialQueue } from './util/queue.ts';
+import { retry } from './util/retry.ts';
+import { absoluteUrl } from './util/url.ts';
 import { isPrivateHost } from './webmention/public-address.ts';
 import { isListed } from './web/documents.ts';
 import { indexNowKeyPath } from './web/indexnow.ts';
-import { absoluteUrl } from './web/negotiate.ts';
 
 /** The shared endpoint: a submission here reaches every IndexNow engine. */
 export const INDEXNOW_ENDPOINT = 'https://api.indexnow.org/indexnow';
@@ -74,7 +77,7 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
 
   const pending = new Set<string>();
   let timer: NodeJS.Timeout | undefined;
-  let chain: Promise<unknown> = Promise.resolve();
+  const batches = createSerialQueue();
 
   /** Read per batch, so the settings screen takes effect on the next publish. */
   function sending(): Sending | undefined {
@@ -96,7 +99,7 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
 
     const urls = [...pending];
     pending.clear();
-    chain = chain.then(() => submit(urls)).then(ignore, ignore);
+    void batches.run(() => submit(urls)).catch(ignore);
   }
 
   async function submit(urls: readonly string[]): Promise<void> {
@@ -116,9 +119,8 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
   }
 
   /** One batch, tried until it is accepted, refused, or out of attempts. Answers why it failed. */
-  async function post(body: Sending & { urlList: string[] }): Promise<string | undefined> {
-    let failure = '';
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+  function post(body: Sending & { urlList: string[] }): Promise<string | undefined> {
+    return retry({ attempts, backoffMs }, async () => {
       try {
         const response = await send(endpoint, {
           method: 'POST',
@@ -126,16 +128,16 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
-        if (response.ok) return undefined;
-        failure = `${endpoint} answered ${String(response.status)}`;
+        if (response.ok) return { value: undefined, retry: false };
         // A bad key or a URL from another host is not fixed by asking again.
-        if (response.status !== 429 && response.status < 500) return failure;
+        return {
+          value: `${endpoint} answered ${String(response.status)}`,
+          retry: response.status === 429 || response.status >= 500,
+        };
       } catch (thrown) {
-        failure = thrown instanceof Error ? thrown.message : String(thrown);
+        return { value: messageOf(thrown), retry: true };
       }
-      if (attempt < attempts) await wait(backoffMs(attempt));
-    }
-    return failure;
+    });
   }
 
   return {
@@ -166,7 +168,7 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
 
     async settled() {
       flush();
-      await chain;
+      await batches.settled();
     },
 
     close() {
@@ -183,10 +185,4 @@ function publicUrl(document: Document | undefined, now: Date, baseUrl: string): 
   return absoluteUrl(document.permalink, baseUrl);
 }
 
-function wait(ms: number): Promise<void> {
-  return ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function ignore(): void {
-  // A failed batch is already logged; the chain carries on regardless.
-}
+function ignore(): void {}

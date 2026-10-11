@@ -10,6 +10,7 @@ import {
   updateFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
+import { messageOf } from '../util/errors.ts';
 
 /**
  * The algorithms an actor holds a key pair for, in the order Fedify wants them:
@@ -293,7 +294,7 @@ function publicHalfOf(jwk: JsonWebKey): JsonWebKey {
 function unusableKey(file: string, cause: unknown): Error {
   return new Error(
     `The actor key file ${file} could not be read as a JWK private key: ` +
-      `${cause instanceof Error ? cause.message : String(cause)}. ` +
+      `${messageOf(cause)}. ` +
       'It has deliberately not been replaced, because a new key would change the ' +
       'actor’s identity and every follower would stop verifying the site. Restore ' +
       'the file from a backup, or delete it to ask for a new key on purpose.',

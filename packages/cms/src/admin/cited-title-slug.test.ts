@@ -4,6 +4,7 @@ import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
 import { findUser } from './accounts.ts';
+import { updateSiteSettings } from './settings.ts';
 import { CITED_SLUG_TIMEOUT_MS } from '../webmention/reply-contexts.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
@@ -169,6 +170,10 @@ describe('a new untitled post that cites a page is named after its title (TASK-2
 
   it('keeps the fetched context and does not fetch the target again after the save', async () => {
     const { cms, contentDir } = await site();
+    await updateSiteSettings({
+      contentDir,
+      change: (settings) => ({ ...settings, webmentionsSend: false }),
+    });
     assert.equal(
       await micropubSlug(cms, [['like-of', VIDEO]]),
       'liked-rick-astley-never-gonna-give',

@@ -4,7 +4,6 @@ export {
   discoverEndpoint,
   endpointInHeader,
   endpointInHtml,
-  readCapped,
   WEBMENTION_USER_AGENT,
 } from './discovery.ts';
 export {

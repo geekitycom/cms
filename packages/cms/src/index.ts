@@ -118,6 +118,7 @@ import {
 } from './webmention/index.ts';
 import { heldReplyContext } from './webmention/reply-context.ts';
 import { createReplyNotices } from './comments/reply-notices.ts';
+import { messageOf } from './util/errors.ts';
 import {
   selectedTargets,
   syndicationCopies,
@@ -1349,7 +1350,6 @@ export {
   linksTo,
   parseHtml,
   rawTextOf,
-  readCapped,
   SEND_TIMEOUT_MS,
   sourceEntry,
   textOf,
@@ -2243,7 +2243,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
       const result = hook(change);
       if (result instanceof Promise) {
         result.catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : String(error);
+          const message = messageOf(error);
           console.warn(`A ${event} hook rejected: ${message}`);
         });
       }

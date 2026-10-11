@@ -15,6 +15,7 @@ import { readAltTexts } from '../images/alt-text.ts';
 import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
 import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
+import { absoluteUrl } from '../util/url.ts';
 import {
   ASSET_VERSION_PARAM,
   assetNotModified,
@@ -82,7 +83,6 @@ import {
 } from './feeds.ts';
 import type { CommentFeedSource, FeedComment, FeedFormat, FeedSource } from './feeds.ts';
 import {
-  absoluteUrl,
   DOCUMENT_REPRESENTATIONS,
   documentJson,
   LISTING_REPRESENTATIONS,
@@ -98,7 +98,7 @@ import {
   splitRepresentationExtension,
 } from './negotiate.ts';
 import type { ConditionalHeaders, Representation } from './negotiate.ts';
-import { offsetForPage, paginate } from './pagination.ts';
+import { offsetForPage, pageCount, paginate } from './pagination.ts';
 import type { Pagination } from './pagination.ts';
 import { TEMPLATES } from './render.ts';
 import { robotsResponse, ROBOTS_PATH } from './robots.ts';
@@ -980,7 +980,7 @@ function canonicalTarget(
   if (listing === undefined) return undefined;
 
   const total = countListing(store, listing);
-  const totalPages = Math.max(1, Math.ceil(total / renderer.pageSize()));
+  const totalPages = pageCount(total, renderer.pageSize());
   if (listing.pageNumber >= totalPages) return undefined;
 
   return listingHref(listing, listing.pageNumber, bases, listing.document?.permalink ?? '/');
@@ -1825,7 +1825,7 @@ function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
     documents: readonly Document[],
     hrefForPage: (index: number) => string,
   ): void => {
-    const totalPages = Math.max(1, Math.ceil(documents.length / size));
+    const totalPages = pageCount(documents.length, size);
     for (let index = 0; index < totalPages; index += 1) {
       const onPage = documents.slice(index * size, (index + 1) * size);
       urls.push({ loc: hrefForPage(index), lastmod: latestModified(onPage) });

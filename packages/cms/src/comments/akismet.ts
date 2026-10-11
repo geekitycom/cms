@@ -2,6 +2,7 @@ import { rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import { readFileIfPresentSync, writeFileAtomically } from '../files/atomic.ts';
+import { messageOf } from '../util/errors.ts';
 import { COMMENT_FIELDS } from './submission.ts';
 import type { CommentChecker, CommentReport, CommentSubmission } from './submission.ts';
 
@@ -346,10 +347,6 @@ function blogLang(language: string): string {
 /** Whatever Akismet said was wrong, as a sentence to append to a log line. */
 function help(answer: AkismetAnswer): string {
   return answer.debugHelp === undefined ? '' : ` ${answer.debugHelp}`;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** One answer from Akismet, reduced to what any caller here needs. */

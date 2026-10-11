@@ -3,8 +3,6 @@ import { dump } from 'js-yaml';
 import { KNOWN_FRONT_MATTER_KEYS } from './document.ts';
 import type { DocumentContent } from './document.ts';
 
-const KNOWN_KEYS = new Set<string>(KNOWN_FRONT_MATTER_KEYS);
-
 /**
  * Turn a Document back into the text of its Markdown file.
  *
@@ -89,7 +87,7 @@ export function documentFrontMatter(document: DocumentContent): Record<string, u
   if (activitypub !== undefined) data['activitypub'] = activitypub;
 
   for (const [key, value] of Object.entries(document.extra)) {
-    if (KNOWN_KEYS.has(key)) continue;
+    if ((KNOWN_FRONT_MATTER_KEYS as readonly string[]).includes(key)) continue;
     if (value === undefined) continue;
     data[key] = value;
   }

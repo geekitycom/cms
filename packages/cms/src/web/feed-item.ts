@@ -9,6 +9,8 @@ import { RSVP_PHRASES, rsvpLine, rsvpOf } from '../content/rsvp.ts';
 import type { Photo } from '../content/photo.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
 import { replyTarget, showsTitle } from '../content/post-type.ts';
+import { decodeEntities } from '../util/html.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { absoluteHtmlUrls } from './absolute-urls.ts';
@@ -18,7 +20,7 @@ import { escapeXml } from './feed-xml.ts';
 import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
 import { canonicalLocale, documentLanguage } from './locale.ts';
-import { absoluteUrl, lastModifiedOf } from './negotiate.ts';
+import { lastModifiedOf } from './negotiate.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 
@@ -96,9 +98,6 @@ export interface FeedItem {
    * else an excerpt of the rendered body. Never the whole post — the content is
    * where that goes — and empty only for a post with nothing to summarise,
    * which is the one case a format leaves the element out.
-   *
-   * Plain text, never markup: a format that reads its summary as HTML prints
-   * {@link excerptHtml} of it.
    */
   summary: string;
   /**
@@ -399,39 +398,11 @@ export function excerptFromHtml(html: string): string {
   // What separates the words is the whitespace the renderer already put
   // between its block tags, which the collapse below turns into single spaces.
   const paragraph = /<p[^>]*>([\s\S]*?)<\/p>/i.exec(html)?.[1] ?? html;
-  const text = decodeHtmlText(paragraph.replace(/<[^>]*>/g, ''))
+  const text = decodeEntities(paragraph.replace(/<[^>]*>/g, ''))
     .replace(/\s+/g, ' ')
     .trim();
   if (text === '') return '';
 
   const words = text.split(' ');
   return words.length <= EXCERPT_WORDS ? text : `${words.slice(0, EXCERPT_WORDS).join(' ')} …`;
-}
-
-/**
- * An excerpt as HTML that shows exactly its text, for the RSS description,
- * which readers render as markup.
- *
- * The excerpt has had its entities resolved, so text that was inert on the
- * page (`&lt;img&gt;`, a code span) is a tag again until this escapes it. Only
- * `&`, `<` and `>`: a text node needs no more, and `&apos;` is not HTML 4.
- */
-export function excerptHtml(text: string): string {
-  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-}
-
-/**
- * The five named entities the Markdown renderer emits, resolved.
- *
- * An excerpt is text rather than markup, so `&amp;` in the rendered HTML has
- * to become `&` here before the XML escaping puts it back: leaving it would
- * publish a summary reading "Fish &amp;amp; chips".
- */
-function decodeHtmlText(value: string): string {
-  return value
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#(?:39|x27);/g, "'")
-    .replace(/&amp;/g, '&');
 }

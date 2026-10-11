@@ -25,7 +25,10 @@ import type { GeekityEnv } from '../env.ts';
 import { readAltTexts, writeAltText } from '../images/alt-text.ts';
 import type { AltText } from '../images/alt-text.ts';
 import { removeImageVariants } from '../images/variants.ts';
+import { isFile } from '../util/files.ts';
+import { stringOrEmpty } from '../util/forms.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../web/assets.ts';
+import { pageCount } from '../web/pagination.ts';
 import { documentEditorPath, PAGE_KIND, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
@@ -355,15 +358,15 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
 
   app.post(MEDIA_ALT_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const relative = field(body[MEDIA_FIELDS.path]);
+    const relative = stringOrEmpty(body[MEDIA_FIELDS.path]).trim();
     const file = relative === '' ? undefined : resolveUpload(c.var.config.contentDir, relative);
 
-    if (file === undefined || !(await exists(file))) {
+    if (file === undefined || !(await isFile(file))) {
       flash(c, 'error', 'That is not a file in this site’s uploads.');
       return c.redirect(MEDIA_PATH, 303);
     }
 
-    const text = field(body[MEDIA_FIELDS.alt]).replace(/\s+/g, ' ');
+    const text = stringOrEmpty(body[MEDIA_FIELDS.alt]).trim().replace(/\s+/g, ' ');
     const alt: AltText | undefined =
       body[MEDIA_FIELDS.decorative] !== undefined
         ? { kind: 'decorative' }
@@ -373,12 +376,12 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
     await writeAltText(c.var.config.contentDir, relative, alt);
 
     flash(c, 'notice', altSavedMessage(relative, alt));
-    return c.redirect(mediaPageUrl(pageNumber(field(body[MEDIA_FIELDS.page]))), 303);
+    return c.redirect(mediaPageUrl(pageNumber(stringOrEmpty(body[MEDIA_FIELDS.page]).trim())), 303);
   });
 
   app.post(MEDIA_DELETE_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const relative = field(body[MEDIA_FIELDS.path]);
+    const relative = stringOrEmpty(body[MEDIA_FIELDS.path]).trim();
     const file = relative === '' ? undefined : resolveUpload(c.var.config.contentDir, relative);
 
     if (file === undefined) {
@@ -392,7 +395,7 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
     // A file something still points at is offered rather than deleted: the
     // bytes do not come back, and the documents naming them are the whole
     // reason to think twice.
-    if (references.length > 0 && field(body[MEDIA_FIELDS.confirm]) === '') {
+    if (references.length > 0 && stringOrEmpty(body[MEDIA_FIELDS.confirm]).trim() === '') {
       return render(
         c,
         ADMIN_TEMPLATES.media,
@@ -441,7 +444,7 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
       mediaMaxBytes: c.var.config.uploadMediaMaxBytes,
       total: files.length,
       page,
-      pages: Math.max(1, Math.ceil(files.length / MEDIA_PER_PAGE)),
+      pages: pageCount(files.length, MEDIA_PER_PAGE),
       previousUrl: page > 1 ? mediaPageUrl(page - 1) : undefined,
       nextUrl: start + MEDIA_PER_PAGE < files.length ? mediaPageUrl(page + 1) : undefined,
       // Reference counts are one index scan per file on the page rather than
@@ -462,15 +465,6 @@ function altSavedMessage(relative: string, alt: AltText | undefined): string {
   return `Saved the alt text for ${relative}.`;
 }
 
-/** Whether a path is a file that exists. */
-async function exists(file: string): Promise<boolean> {
-  try {
-    return (await stat(file)).isFile();
-  } catch {
-    return false;
-  }
-}
-
 /** The URL of one page of the library. Page one is the screen's own URL. */
 export function mediaPageUrl(page: number): string {
   return page > 1 ? `${MEDIA_PATH}?page=${String(page)}` : MEDIA_PATH;
@@ -480,9 +474,4 @@ export function mediaPageUrl(page: number): string {
 function pageNumber(value: string | undefined): number {
   const parsed = Number(value ?? '1');
   return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : 1;
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function field(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
 }

@@ -549,3 +549,22 @@ describe('what a comment file gives away', () => {
     }
   });
 });
+
+describe('a site served under a path', () => {
+  it('links the post and every moderation action under that path', async () => {
+    const box = await site({
+      email: 'ada@example.com',
+      config: { baseUrl: 'https://example.com/blog/' },
+    });
+
+    await submit(box, submission());
+
+    const links =
+      onlyMessage(box.provider)
+        .text.match(/https?:\/\/\S+/g)
+        ?.map((link) => link.replace(/[.,]$/, '')) ?? [];
+    assert.ok(links.includes('https://example.com/blog/2026/09/hello-world/'), links.join('\n'));
+    assert.ok(links.length > 1, 'the message carries its moderation links');
+    for (const link of links) assert.match(link, /^https:\/\/example\.com\/blog(\/|$)/);
+  });
+});

@@ -9,6 +9,8 @@ import {
 } from '../contact/records.ts';
 import type { ContactMessage, ContactStatus } from '../contact/records.ts';
 import type { GeekityEnv } from '../env.ts';
+import { stringOrEmpty } from '../util/forms.ts';
+import { pageCount } from '../web/pagination.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
@@ -113,7 +115,7 @@ export function mountMessagesScreen(
       .slice((page - 1) * MESSAGES_PER_PAGE, page * MESSAGES_PER_PAGE)
       .map((message) => messageRow(message, timezone));
 
-    const pages = Math.max(1, Math.ceil(counts[status] / MESSAGES_PER_PAGE));
+    const pages = pageCount(counts[status], MESSAGES_PER_PAGE);
 
     return render(c, ADMIN_TEMPLATES.messages, {
       section: MESSAGES_SECTION,
@@ -141,14 +143,14 @@ export function mountMessagesScreen(
 
   app.post(MESSAGES_READ_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const back = listUrl(statusOf(text(body[MESSAGE_FIELDS.status])));
+    const back = listUrl(statusOf(stringOrEmpty(body[MESSAGE_FIELDS.status])));
     // A checkbox submits nothing at all when it is clear, which is what the
     // empty string here means: this button marks the message unread again.
-    const read = text(body[MESSAGE_FIELDS.read]) !== '';
+    const read = stringOrEmpty(body[MESSAGE_FIELDS.read]) !== '';
 
     const updated = await setContactMessageRead(
       c.var.config.dataDir,
-      text(body[MESSAGE_FIELDS.id]),
+      stringOrEmpty(body[MESSAGE_FIELDS.id]),
       read,
     );
 
@@ -169,8 +171,8 @@ export function mountMessagesScreen(
 
   app.post(MESSAGES_DELETE_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const back = listUrl(statusOf(text(body[MESSAGE_FIELDS.status])));
-    const id = text(body[MESSAGE_FIELDS.id]);
+    const back = listUrl(statusOf(stringOrEmpty(body[MESSAGE_FIELDS.status])));
+    const id = stringOrEmpty(body[MESSAGE_FIELDS.id]);
 
     // Read before it goes, so the flash can say whose message it was. An id
     // that is not one never reaches the filesystem: the records module refuses
@@ -226,9 +228,4 @@ function messageRow(message: ContactMessage, timezone: string): MessageRow {
     // subject comes back with `Re:` on it the way a reply would.
     replyUrl: `mailto:${encodeURIComponent(message.from.email)}?subject=${encodeURIComponent(`Re: ${subject}`)}`,
   };
-}
-
-/** A form field as a string. A file upload, or a missing field, is the empty one. */
-function text(value: unknown): string {
-  return typeof value === 'string' ? value : '';
 }

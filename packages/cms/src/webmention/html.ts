@@ -1,3 +1,5 @@
+import { decodeEntities, escapeAttribute, escapeText } from '../util/html.ts';
+
 /**
  * Somebody else's page, as a tree small enough to ask questions of.
  *
@@ -224,7 +226,7 @@ function markupOf(node: HtmlNode): string {
   if (!isElement(node)) return escapeText(node.text);
 
   const attributes = Object.entries(node.attributes)
-    .map(([name, value]) => ` ${name}="${escapeText(value)}"`)
+    .map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`)
     .join('');
   if (VOID_ELEMENTS.has(node.name)) return `<${node.name}${attributes}>`;
   return `<${node.name}${attributes}>${innerHtmlOf(node)}</${node.name}>`;
@@ -295,50 +297,4 @@ function readTag(source: string, at: number): Tag | undefined {
 function unquote(value: string): string {
   const first = value[0];
   return (first === '"' || first === "'") && value.endsWith(first) ? value.slice(1, -1) : value;
-}
-
-/** The character references this module resolves. */
-const ENTITIES: Readonly<Record<string, string>> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: ' ',
-};
-
-/** Character references resolved; one this module does not know is left alone. */
-function decodeEntities(value: string): string {
-  if (!value.includes('&')) return value;
-
-  return value.replace(
-    /&(#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);/g,
-    (whole, body: string) => {
-      if (body.startsWith('#x') || body.startsWith('#X')) {
-        return codePoint(Number.parseInt(body.slice(2), 16)) ?? whole;
-      }
-      if (body.startsWith('#')) return codePoint(Number.parseInt(body.slice(1), 10)) ?? whole;
-      return ENTITIES[body] ?? whole;
-    },
-  );
-}
-
-/** One code point as a string, or `undefined` when it names no character. */
-function codePoint(value: number): string | undefined {
-  if (!Number.isInteger(value) || value < 0 || value > 0x10ffff) return undefined;
-  if (value >= 0xd800 && value <= 0xdfff) return undefined;
-  try {
-    return String.fromCodePoint(value);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Text as markup again, so a rebuilt fragment says what the page said. */
-function escapeText(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
 }

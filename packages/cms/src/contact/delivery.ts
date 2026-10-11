@@ -1,6 +1,7 @@
 import { listUsers } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { MailService } from '../mail/service.ts';
+import { absoluteUrl } from '../util/url.ts';
 import type { ContactMessage } from './records.ts';
 
 /**
@@ -96,18 +97,9 @@ export function sendContactMessage(options: SendContactMessageOptions): void {
       from: { name: message.from.name, email: message.from.email },
       page: {
         ...message.page,
-        url: absolute(message.page.permalink, options.baseUrl),
+        url: absoluteUrl(message.page.permalink, options.baseUrl),
       },
-      messagesUrl: absolute('/admin/messages', options.baseUrl),
+      messagesUrl: absoluteUrl('/admin/messages', options.baseUrl),
     },
   });
-}
-
-/** A site-root path as an absolute URL. */
-function absolute(pathname: string, baseUrl: string): string {
-  try {
-    return new URL(pathname, baseUrl).href;
-  } catch {
-    return pathname;
-  }
 }

@@ -1,7 +1,8 @@
 import { discoverPostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
+import { isRecord } from '../util/guards.ts';
+import { absoluteUrl } from '../util/url.ts';
 import type { HeldAt } from '../web/conversation.ts';
-import { absoluteUrl } from '../web/negotiate.ts';
 import type { CitedImage, CitedPicture, PictureSource } from './cited-picture.ts';
 import { readCitedStart } from './cited-start.ts';
 import { fetchPublic, webUrl } from './fetch-public.ts';
@@ -228,7 +229,7 @@ async function readPage(url: string, limits: Limits): Promise<PageRead> {
     },
     headersOnly: IMAGE_TYPE,
   });
-  if (!fetched.ok) return fetched;
+  if (!fetched.ok) return { ok: false, reason: fetched.reason };
   if (fetched.read === 'headers') return { ok: true, image: fetched.url };
   const root = parseHtml(new TextDecoder().decode(fetched.body));
   const entry = fetched.truncated ? undefined : citedEntry(root, fetched.url);
@@ -575,10 +576,6 @@ function resolved(href: string | undefined, base: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function pageSource(root: HtmlElement, base: string): Source {

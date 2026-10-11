@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url';
 
 import { HOST_API_VERSION } from '../plugin.ts';
 import type { Plugin } from '../plugin.ts';
+import { messageOf } from '../util/errors.ts';
 import type { InstalledPlugin } from './registry.ts';
 
 export const PLUGIN_ENTRY = 'index.js';
@@ -190,10 +191,6 @@ function placeholder(name: string, version = ''): Plugin {
     hostApi: HOST_API_VERSION,
     register() {},
   };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function folder(pluginsDir: string, name: string): PluginFolder {
