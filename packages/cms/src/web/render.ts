@@ -48,7 +48,7 @@ import type {
   PhotoContext,
   SiteData,
 } from './context.ts';
-import { escapeMarkdown } from './markdown-page.ts';
+import { bioOf, escapeMarkdown, HOME_LINK } from './markdown-page.ts';
 import type { MarkdownChrome, MarkdownUrl } from './markdown-page.ts';
 import { navigationLinks, navigationMenus } from './navigation.ts';
 import { resolveLicense } from './license.ts';
@@ -893,7 +893,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       navigation: navigationLinks(site),
       ...(soloAuthor === undefined ? {} : { soloAuthor }),
       ...(frontPage === undefined ? {} : newestPostsContext(frontPage)),
+      home: HOME_LINK,
       ...chrome,
+      bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),
       markdownUrl,
     };
     return {

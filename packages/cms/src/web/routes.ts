@@ -124,8 +124,16 @@ import {
   ownLlmsTxt,
 } from './llms.ts';
 import type { LlmsEntry, LlmsIndex } from './llms.ts';
-import { entryList, linkList, markdownFile, navigationFrontMatter } from './markdown-page.ts';
-import type { MarkdownBio, MarkdownChrome, MarkdownLink, MarkdownUrl } from './markdown-page.ts';
+import {
+  bioOf,
+  entryList,
+  linkList,
+  markdownFile,
+  namedAuthor,
+  navigationFrontMatter,
+  oneLine,
+} from './markdown-page.ts';
+import type { MarkdownChrome, MarkdownLink, MarkdownUrl } from './markdown-page.ts';
 import { navigationLinks } from './navigation.ts';
 import { indexNowKeyPath, indexNowKeyResponse } from './indexnow.ts';
 import {
@@ -1412,10 +1420,9 @@ function listingMarkdown(
   const chrome: MarkdownChrome = {
     url,
     title: page.title,
-    home: HOME_LINK,
     previous: newer,
     next: older,
-    bio: bioOf(author ?? (url === '/' ? soloAuthorOf(c) : undefined)),
+    bio: bioOf(author),
   };
   const entries = page.documents.map((document) => ({
     label: documentLabel(c, document),
@@ -1442,18 +1449,13 @@ function listingMarkdown(
   });
 }
 
-/** Where every page's Markdown says home is. */
-const HOME_LINK: MarkdownLink = { label: 'Home', url: '/' };
-
 /**
  * One document's Markdown: its front matter with the author named and the
  * relations a Markdown browser reads, the theme's header and footer, and its
  * body with every link to a page of this site pointing at that page's `.md`.
  */
 function documentMarkdown(c: Context<GeekityEnv>, document: Document): string {
-  const users = listUsers(c.var.config.dataDir);
-  const writer = authorContext(users, document.author);
-  const front = document.permalink === '/';
+  const writer = authorContext(listUsers(c.var.config.dataDir), document.author);
   const neighbours = document.type === 'post' ? c.var.store.neighbours(document) : {};
   const link = (neighbour: Document | undefined): MarkdownLink | undefined =>
     neighbour === undefined
@@ -1465,14 +1467,12 @@ function documentMarkdown(c: Context<GeekityEnv>, document: Document): string {
   const chrome: MarkdownChrome = {
     url: document.permalink,
     title: title === '' || /^#[ \t]/.test(body.trimStart()) ? undefined : title,
-    home: HOME_LINK,
     previous: link(neighbours.previous),
     next: link(neighbours.next),
     byline:
       document.type === 'post' && writer?.url !== undefined
         ? { label: writer.name, url: writer.url }
         : undefined,
-    bio: front ? bioOf(soloAuthorOf(c, users)) : undefined,
   };
 
   return markdownPage(
@@ -1480,30 +1480,8 @@ function documentMarkdown(c: Context<GeekityEnv>, document: Document): string {
     namedAuthor(documentFrontMatter(document), writer),
     chrome,
     [rewriteMarkdownLinks(body, markdownHrefFor(c, document.permalink))],
-    front ? document : undefined,
+    document.permalink === '/' ? document : undefined,
   );
-}
-
-/**
- * Front matter with `author` as the person's display name and their username
- * kept beside it, so a reader sees the name and a program can still find the
- * account.
- */
-function namedAuthor(
-  frontMatter: Record<string, unknown>,
-  writer: AuthorContext | undefined,
-): Record<string, unknown> {
-  if (writer?.username === undefined || !('author' in frontMatter)) return frontMatter;
-  const named: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(frontMatter)) {
-    if (key !== 'author') {
-      named[key] = value;
-      continue;
-    }
-    named['author'] = writer.name;
-    named['author_username'] = writer.username;
-  }
-  return named;
 }
 
 /** A page's Markdown, its header and footer drawn by the theme. */
@@ -1524,24 +1502,6 @@ function markdownPage(
     ...blocks,
     footer,
   ]);
-}
-
-/** The person a solo author site speaks for, or `undefined` on any other site. */
-function soloAuthorOf(
-  c: Context<GeekityEnv>,
-  users: readonly User[] = listUsers(c.var.config.dataDir),
-): AuthorContext | undefined {
-  return siteAuthorContext(users, c.var.renderer.site().author);
-}
-
-function bioOf(person: AuthorContext | undefined): MarkdownBio | undefined {
-  if (person === undefined) return undefined;
-  return {
-    name: person.name,
-    url: person.url,
-    note: person.bio,
-    links: (person.links ?? []).map((link) => ({ label: link.label, url: link.href })),
-  };
 }
 
 /**
@@ -1598,10 +1558,6 @@ function markdownHrefFor(
     const hash = URL.parse(href, page)?.hash ?? '';
     return `${representationHref(pathname, 'markdown')}${hash}`;
   };
-}
-
-function oneLine(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
 }
 
 /**

@@ -1,6 +1,8 @@
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+import { escapeLinkText } from '../content/markdown-links.ts';
+import { oneLine } from './markdown-page.ts';
 import type { MarkdownUrl } from './markdown-page.ts';
 import { absoluteUrl, contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
@@ -149,13 +151,4 @@ function entryLine(entry: LlmsEntry, link: (href: string) => string): string {
     .join('. ');
   const line = `- [${escapeLinkText(oneLine(entry.title))}](${link(entry.href)})`;
   return notes === '' ? line : `${line}: ${notes}`;
-}
-
-/** A list item is one line, so a folded description is unfolded. */
-function oneLine(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
-}
-
-function escapeLinkText(text: string): string {
-  return text.replace(/[\\[\]]/g, (character) => `\\${character}`);
 }

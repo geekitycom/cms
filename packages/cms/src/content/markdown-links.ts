@@ -52,7 +52,7 @@ export function rewriteMarkdownLinks(
     if (target === undefined) continue;
     const destination = /[\s()<>]/.test(target) ? `<${target}>` : target;
     const text =
-      link.bare === undefined ? destination : `[${escapeLabel(link.bare)}](${destination})`;
+      link.bare === undefined ? destination : `[${escapeLinkText(link.bare)}](${destination})`;
     edits.push({ start: link.start, end: link.end, text });
   }
 
@@ -151,7 +151,7 @@ function toSource(offsets: readonly { at: number; offset: number }[], position: 
   return line.offset + position - line.at;
 }
 
-function escapeLabel(text: string): string {
+export function escapeLinkText(text: string): string {
   return text.replace(/[\\[\]]/g, (character) => `\\${character}`);
 }
 

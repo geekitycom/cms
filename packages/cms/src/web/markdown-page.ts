@@ -1,5 +1,7 @@
 import { dump } from 'js-yaml';
 
+import type { AuthorContext } from './authors.ts';
+
 /**
  * The Markdown representation of a page (TASK-346): front matter, the theme's
  * header, the page's own Markdown and the theme's footer.
@@ -37,7 +39,6 @@ export interface MarkdownChrome {
   readonly url: string;
   /** The heading the header writes, absent when the body opens with its own. */
   readonly title?: string | undefined;
-  readonly home: MarkdownLink;
   readonly previous?: MarkdownLink | undefined;
   readonly next?: MarkdownLink | undefined;
   /** A post's author, linked to their archive. */
@@ -56,16 +57,52 @@ export interface MarkdownEntry extends MarkdownLink {
 /** A canonical URL as the representation writes it: its `.md` when it has one. */
 export type MarkdownUrl = (url: string) => string;
 
+/** Where every page's Markdown says home is. */
+export const HOME_LINK: MarkdownLink = { label: 'Home', url: '/' };
+
 /** The relations a Markdown browser reads from front matter. */
 export function navigationFrontMatter(
   chrome: MarkdownChrome,
   markdownUrl: MarkdownUrl,
 ): Record<string, string> {
   return {
-    home: markdownUrl(chrome.home.url),
+    home: markdownUrl(HOME_LINK.url),
     ...(chrome.previous === undefined ? {} : { previous: markdownUrl(chrome.previous.url) }),
     ...(chrome.next === undefined ? {} : { next: markdownUrl(chrome.next.url) }),
   };
+}
+
+export function bioOf(person: AuthorContext | undefined): MarkdownBio | undefined {
+  if (person === undefined) return undefined;
+  return {
+    name: person.name,
+    url: person.url,
+    note: person.bio,
+    links: (person.links ?? []).map((link) => ({ label: link.label, url: link.href })),
+  };
+}
+
+/**
+ * Front matter with `author` as the person's display name and their username
+ * kept beside it, so a reader sees the name and a program can still find the
+ * account.
+ */
+export function namedAuthor(
+  frontMatter: Record<string, unknown>,
+  writer: AuthorContext | undefined,
+): Record<string, unknown> {
+  if (writer?.username === undefined) return frontMatter;
+  const { name, username } = writer;
+  return Object.fromEntries(
+    Object.entries(frontMatter).flatMap(([key, value]) =>
+      key === 'author'
+        ? [
+            ['author', name],
+            ['author_username', username],
+          ]
+        : [[key, value]],
+    ),
+  );
 }
 
 /** Front matter and blocks as one file; empty blocks are left out. */
@@ -87,9 +124,7 @@ export function markdownFile(
 export function entryList(entries: readonly MarkdownEntry[], markdownUrl: MarkdownUrl): string {
   return entries
     .map((entry) => {
-      const label = [entry.date, oneLine(entry.label)]
-        .filter((part) => part !== undefined)
-        .join(' ');
+      const label = [entry.date, entry.label].filter((part) => part !== undefined).join(' ');
       const link = `- [${escapeMarkdown(label)}](${markdownUrl(entry.url)})`;
       const description = oneLine(entry.description ?? '');
       return description === '' ? link : `${link}: ${description}`;
@@ -116,6 +151,6 @@ export function escapeMarkdown(text: string): string {
     .replace(/^(\d+)([.)])/, '$1\\$2');
 }
 
-function oneLine(text: string): string {
+export function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
