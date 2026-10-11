@@ -21,7 +21,7 @@ const markdown: MarkdownItInstance = new MarkdownIt({ html: true, linkify: true 
   .use(schemedLinksOnly)
   .use(videoEmbeds);
 
-function schemedLinksOnly(md: MarkdownItInstance): void {
+export function schemedLinksOnly(md: MarkdownItInstance): void {
   md.linkify.set({ fuzzyLink: false, fuzzyEmail: false, fuzzyIP: false });
   for (const schema of ['ftp:', '//', 'mailto:']) md.linkify.add(schema, null);
 }

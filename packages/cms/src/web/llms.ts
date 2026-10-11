@@ -1,15 +1,16 @@
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+import type { MarkdownUrl } from './markdown-page.ts';
 import { absoluteUrl, contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 
 /**
  * `/llms.txt` (TASK-149): the site described for a language model, in the
  * llmstxt.org shape. A heading with the site's title, its tagline as a quote,
- * then every page and every post the site lists (TASK-344) as lists of links,
- * each to the Markdown the site already serves for that document, which is
- * what a model wants to read. One file however large the site: the format has
+ * then the site's navigation (TASK-346) and every page and every post the site
+ * lists (TASK-344) as lists of links, each to the Markdown the site already
+ * serves for what it names, which is what a model wants to read. One file however large the site: the format has
  * no pagination.
  *
  * A fixed route at the root for the reason `robots.txt` is one: it is the only
@@ -33,7 +34,10 @@ const LLMS_TXT_CONTENT_TYPE = 'text/markdown; charset=utf-8';
 /** One document the file lists. */
 export interface LlmsEntry {
   title: string;
-  /** The site-relative URL of the document's Markdown. */
+  /**
+   * The canonical URL of what it names; the writer links its Markdown. A
+   * navigation entry may name another site.
+   */
   href: string;
   description?: string | undefined;
   /** A post's calendar day, `YYYY-MM-DD`, written ahead of its description. */
@@ -47,6 +51,8 @@ export interface LlmsIndex {
   title: string;
   /** The site's tagline, or empty for none. */
   description: string;
+  /** The site's menus, every item once. */
+  navigation: readonly LlmsEntry[];
   pages: readonly LlmsEntry[];
   /** Every listed post, newest first. */
   posts: readonly LlmsEntry[];
@@ -58,41 +64,25 @@ export interface LlmsTxtFile {
   lastModified: Date | undefined;
 }
 
-export interface LlmsListing {
-  title: string;
-  description?: string | undefined;
-  posts: readonly LlmsEntry[];
-  newer?: string | undefined;
-  older?: string | undefined;
-}
-
 /** The index as llms.txt Markdown, every link absolute. */
-export function llmsTxt(index: LlmsIndex, baseUrl: string): string {
+export function llmsTxt(index: LlmsIndex, baseUrl: string, markdownUrl: MarkdownUrl): string {
   const description = oneLine(index.description);
+  const link = (href: string): string => absoluteUrl(markdownUrl(href), baseUrl);
   return markdownFile([
     `# ${oneLine(index.title)}`,
     ...(description === '' ? [] : [`> ${description}`]),
-    ...section('Pages', index.pages, baseUrl),
-    ...section('Posts', index.posts, baseUrl),
-  ]);
-}
-
-export function llmsListingTxt(listing: LlmsListing, baseUrl: string): string {
-  const pager: LlmsEntry[] = [
-    ...(listing.newer === undefined ? [] : [{ title: 'Newer posts', href: listing.newer }]),
-    ...(listing.older === undefined ? [] : [{ title: 'Older posts', href: listing.older }]),
-  ];
-  const description = oneLine(listing.description ?? '');
-  return markdownFile([
-    `# ${oneLine(listing.title)}`,
-    ...(description === '' ? [] : [`> ${description}`]),
-    ...section('Posts', listing.posts, baseUrl),
-    ...section('More posts', pager, baseUrl),
+    ...section('Navigation', index.navigation, link),
+    ...section('Pages', index.pages, link),
+    ...section('Posts', index.posts, link),
   ]);
 }
 
 /** A generated file, dated by the newest entry in it. */
-export function generatedLlmsTxt(index: LlmsIndex, baseUrl: string): LlmsTxtFile {
+export function generatedLlmsTxt(
+  index: LlmsIndex,
+  baseUrl: string,
+  markdownUrl: MarkdownUrl,
+): LlmsTxtFile {
   let lastModified: Date | undefined;
   for (const entry of [...index.pages, ...index.posts]) {
     if (entry.lastModified === undefined) continue;
@@ -100,7 +90,7 @@ export function generatedLlmsTxt(index: LlmsIndex, baseUrl: string): LlmsTxtFile
       lastModified = entry.lastModified;
     }
   }
-  return { body: llmsTxt(index, baseUrl), lastModified };
+  return { body: llmsTxt(index, baseUrl, markdownUrl), lastModified };
 }
 
 /**
@@ -143,18 +133,22 @@ function markdownFile(blocks: readonly string[]): string {
   return `${blocks.join('\n\n')}\n`;
 }
 
-function section(heading: string, entries: readonly LlmsEntry[], baseUrl: string): string[] {
+function section(
+  heading: string,
+  entries: readonly LlmsEntry[],
+  link: (href: string) => string,
+): string[] {
   return entries.length === 0
     ? []
-    : [`## ${heading}`, entries.map((entry) => entryLine(entry, baseUrl)).join('\n')];
+    : [`## ${heading}`, entries.map((entry) => entryLine(entry, link)).join('\n')];
 }
 
-function entryLine(entry: LlmsEntry, baseUrl: string): string {
+function entryLine(entry: LlmsEntry, link: (href: string) => string): string {
   const notes = [entry.date, oneLine(entry.description ?? '')]
     .filter((note) => note !== undefined && note !== '')
     .join('. ');
-  const link = `- [${escapeLinkText(oneLine(entry.title))}](${absoluteUrl(entry.href, baseUrl)})`;
-  return notes === '' ? link : `${link}: ${notes}`;
+  const line = `- [${escapeLinkText(oneLine(entry.title))}](${link(entry.href)})`;
+  return notes === '' ? line : `${line}: ${notes}`;
 }
 
 /** A list item is one line, so a folded description is unfolded. */

@@ -267,6 +267,24 @@ export function siteMenus(site: SiteData): NavigationMenus {
 }
 
 /**
+ * Every item of every menu the site stores, in the order the menus are stored,
+ * each URL once: the site's way around as one list of links, which the
+ * Markdown footer and `/llms.txt` both print (TASK-346).
+ */
+export function navigationLinks(site: SiteData): NavigationItem[] {
+  const seen = new Set<string>();
+  const links: NavigationItem[] = [];
+  for (const items of Object.values(siteMenus(site))) {
+    for (const item of items) {
+      if (seen.has(item.url)) continue;
+      seen.add(item.url);
+      links.push(item);
+    }
+  }
+  return links;
+}
+
+/**
  * A `menus` value as the menus it names, ignoring anything that is not one.
  *
  * One spelling for the site data a render reads and the `menus` the settings

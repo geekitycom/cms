@@ -1,0 +1,29 @@
+{#
+  The top of every page's Markdown (TASK-346): the `.md` a Markdown browser
+  or a language model reads. The CMS writes the front matter above this and
+  the page's own Markdown below it; a site theme overrides this file to
+  change what comes between.
+
+  Autoescaping is off: this is Markdown, not HTML. Print text through
+  `escapeMarkdown` so a label stays literal, and a link through `markdownUrl`,
+  which gives a page of this site its `.md` URL and leaves any other URL as
+  it is.
+
+  `title` is the heading, absent when the page's own Markdown opens with one.
+  `bio` is the person the page speaks for, on an author archive and on a solo
+  author site's homepage: `name`, `url`, `note` and `links` (each a `label`
+  and a `url`).
+#}
+{% if title %}
+# {{ title | escapeMarkdown }}
+
+{% endif %}
+{% if bio %}
+{% if bio.note %}
+{{ bio.note | escapeMarkdown }}
+
+{% endif %}
+{% for link in bio.links %}
+- [{{ link.label | escapeMarkdown }}]({{ link.url | markdownUrl }})
+{% endfor %}
+{% endif %}

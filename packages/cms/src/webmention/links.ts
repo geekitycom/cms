@@ -55,28 +55,36 @@ export interface SiteLink {
  * (TASK-322).
  *
  * These are the links {@link externalLinks} leaves out: nothing is sent for
- * them, and the index keeps them as the linked page's backlinks instead. A
- * root-relative link is read under the directory the site is served from, as
- * the feeds read it; any other relative link is read against the page it is
- * on, which is where a browser follows it from.
+ * them, and the index keeps them as the linked page's backlinks instead.
  */
 export function ownSiteLinks(html: string, pageUrl: string, baseUrl: string): SiteLink[] {
   const found = new Map<string, SiteLink>();
 
   for (const element of elementsIn(parseHtml(html))) {
     if (element.name !== 'a') continue;
-
-    const href = element.attributes['href'];
-    const rooted = href?.startsWith('/') === true && !href.startsWith('//');
-    const target = linkTarget(rooted ? absoluteUrl(href, baseUrl) : href, pageUrl);
-    const sitePath = target === undefined ? undefined : sitePathOf(target, baseUrl);
-    if (target === undefined || sitePath === undefined) continue;
-
-    const link = { path: siteLinkKey(sitePath), query: sortedQuery(new URL(target).search) };
-    found.set(spelling(link), link);
+    const link = siteLinkAt(element.attributes['href'], pageUrl, baseUrl);
+    if (link !== undefined) found.set(spelling(link), link);
   }
 
   return [...found.values()];
+}
+
+/**
+ * One `href` on a page as the link to this site it is, or `undefined` for one
+ * that leaves the site. A root-relative link is read under the directory the
+ * site is served from, as the feeds read it; any other relative link is read
+ * against the page it is on.
+ */
+export function siteLinkAt(
+  href: string | undefined,
+  pageUrl: string,
+  baseUrl: string,
+): SiteLink | undefined {
+  const rooted = href?.startsWith('/') === true && !href.startsWith('//');
+  const target = linkTarget(rooted ? absoluteUrl(href, baseUrl) : href, pageUrl);
+  const sitePath = target === undefined ? undefined : sitePathOf(target, baseUrl);
+  if (target === undefined || sitePath === undefined) return undefined;
+  return { path: siteLinkKey(sitePath), query: sortedQuery(new URL(target).search) };
 }
 
 /**
@@ -152,9 +160,11 @@ const MAX_HOPS = 20;
 
 /**
  * The path a link ends on once every redirect it meets has been followed, or
- * `undefined` for one that leaves the site.
+ * `undefined` for one that leaves the site. `answers` says whether the site
+ * serves something at a path, which stops the walk the way a live document
+ * shadows a redirect.
  */
-function landing(
+export function landing(
   table: RedirectTable,
   link: SiteLink,
   answers: (sitePath: string) => boolean,

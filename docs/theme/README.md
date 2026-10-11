@@ -44,6 +44,8 @@ themes/default/
     search-form.njk   the search box, on the search page
     head-end.njk      empty: what a site adds to the end of every <head>
     body-end.njk      empty: what a site adds to the end of every <body>
+    markdown-header.md.njk  the top of every page's Markdown
+    markdown-footer.md.njk  the end of every page's Markdown
   mail/
     test.*.njk              the Send test email message
     password-reset.*.njk    the forgot-password link
@@ -102,6 +104,7 @@ properties. See [Colours](page-shell.md#colours).
 - [Adding to every page](adding-to-every-page.md). The head-end and body-end partials, analytics and scripts.
 - [The page shell](page-shell.md). The base layout, entries, listings, the head, colours, code and video.
 - [Mail templates](mail-templates.md). The messages the site sends, and how to override them.
+- [The Markdown representation](markdown.md). The header and footer of every page's Markdown.
 - [Template context](template-context.md). Every key a template is handed.
 - [Bylines and author archives](bylines.md). Who an entry is by, and the author pages.
 - [Navigation](navigation.md). Menu areas and how the theme prints them.

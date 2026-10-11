@@ -438,9 +438,9 @@ describe('a site with a posts page', () => {
     const response = await cms.app.request('/news/', { headers: { accept: 'text/markdown' } });
     assert.equal(response.status, 200);
     const body = await response.text();
-    assert.match(body, /^# News\n/, 'headed by the page’s title, as its HTML is');
-    assert.match(body, /\[Newest\]\(http:\/\/localhost:3000\/2026\/\d\d\/newest\/index\.md\)/);
-    assert.match(body, /\[Older posts\]\(http:\/\/localhost:3000\/news\/page\/2\/index\.md\)/);
+    assert.match(body, /\n---\n\n# News\n/, 'headed by the page’s title, as its HTML is');
+    assert.match(body, /\[\d{4}-\d\d-\d\d Newest\]\(\/2026\/\d\d\/newest\/index\.md\)/);
+    assert.match(body, /\[Older posts\]\(\/news\/page\/2\/index\.md\)/);
 
     const extension = await cms.app.request('/news/index.md');
     assert.equal(await extension.text(), body, 'not the page’s own file');

@@ -151,7 +151,7 @@ describe('a page with no title (TASK-343)', () => {
 
   it('gives an untitled page no heading in Markdown and no title in JSON (AC #4)', async () => {
     const markdown = await (await cms.app.request('/about/index.md')).text();
-    assert.doesNotMatch(markdown, /^#/m);
+    assert.doesNotMatch(markdown, /^# /m);
     assert.doesNotMatch(markdown, /^title:/m);
     const json = (await (await cms.app.request('/about/index.json')).json()) as {
       frontMatter: Record<string, unknown>;

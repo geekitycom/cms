@@ -26,6 +26,7 @@ lists every file in this folder. Each topic has a page of its own:
 - [Adding to every page](https://github.com/geekitycom/cms/blob/main/docs/theme/adding-to-every-page.md)
 - [The page shell](https://github.com/geekitycom/cms/blob/main/docs/theme/page-shell.md)
 - [Mail templates](https://github.com/geekitycom/cms/blob/main/docs/theme/mail-templates.md)
+- [The Markdown representation](https://github.com/geekitycom/cms/blob/main/docs/theme/markdown.md)
 - [Template context](https://github.com/geekitycom/cms/blob/main/docs/theme/template-context.md)
 - [Bylines and author archives](https://github.com/geekitycom/cms/blob/main/docs/theme/bylines.md)
 - [Navigation](https://github.com/geekitycom/cms/blob/main/docs/theme/navigation.md)

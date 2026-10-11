@@ -7,7 +7,8 @@ import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import { calendarDayIn } from '../content/time.ts';
-import { serializeDocument } from '../content/writer.ts';
+import { rewriteMarkdownLinks } from '../content/markdown-links.ts';
+import { documentFrontMatter, normalizeBody } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { mountAvatars } from '../avatars/routes.ts';
 import { readAltTexts } from '../images/alt-text.ts';
@@ -37,6 +38,7 @@ import { devModeOn } from '../dev-mode.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
 import { mountPingbacks, pingbackEndpointFor } from '../webmention/pingback.ts';
+import { landing, siteLinkAt } from '../webmention/links.ts';
 import { mountWebmentions, WEBMENTION_PATH } from '../webmention/routes.ts';
 import { mountNotificationLinks } from '../notifications/routes.ts';
 import { advertiseIdentityEndpoints } from '../indieauth/discovery.ts';
@@ -116,13 +118,15 @@ import {
 import type { EmbedSubject } from './oembed.ts';
 import {
   generatedLlmsTxt,
-  llmsListingTxt,
   LLMS_TXT_LINK,
   LLMS_TXT_PATH,
   llmsTxtResponse,
   ownLlmsTxt,
 } from './llms.ts';
 import type { LlmsEntry, LlmsIndex } from './llms.ts';
+import { entryList, linkList, markdownFile, navigationFrontMatter } from './markdown-page.ts';
+import type { MarkdownBio, MarkdownChrome, MarkdownLink, MarkdownUrl } from './markdown-page.ts';
+import { navigationLinks } from './navigation.ts';
 import { indexNowKeyPath, indexNowKeyResponse } from './indexnow.ts';
 import {
   searchHref,
@@ -133,7 +137,7 @@ import {
   SEARCH_PATH,
   SEARCH_QUERY_PARAM,
 } from './search.ts';
-import { findPathRedirect, findQueryRedirect, redirectLocation } from './redirects.ts';
+import { decodedPath, findPathRedirect, findQueryRedirect, redirectLocation } from './redirects.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
@@ -288,7 +292,8 @@ export function mountPublicSite(app: Hono<GeekityEnv>): void {
   app.get(LLMS_TXT_PATH, (c) => {
     const { contentDir, baseUrl } = c.var.config;
     if (!readSiteSettings(contentDir).llmsTxt) return notFound(c);
-    const file = ownLlmsTxt(contentDir) ?? generatedLlmsTxt(llmsIndex(c), baseUrl);
+    const file =
+      ownLlmsTxt(contentDir) ?? generatedLlmsTxt(llmsIndex(c), baseUrl, markdownUrlFor(c, '/'));
     return llmsTxtResponse(file, conditionalHeaders(c));
   });
 
@@ -849,7 +854,7 @@ function negotiateDocument(
   const served = path === document.permalink ? document : { ...document, permalink: path };
   const markdown =
     representation === 'markdown' || representation === 'text'
-      ? documentMarkdown(served)
+      ? documentMarkdown(c, served)
       : undefined;
   const body =
     markdown ??
@@ -1394,19 +1399,37 @@ function listingMarkdown(
   const { next, previous } = page.pagination.href;
   const home = frontPages(c).home;
   const latestPosts = request.term === undefined && request.author === undefined;
-  const description =
-    request.document?.description ?? (latestPosts ? c.var.renderer.site().tagline : undefined);
-
-  const body = llmsListingTxt(
-    {
-      title: page.title,
-      description,
-      posts: page.documents.map((document) => llmsEntry(c, document, home)),
-      newer: previous === null ? undefined : representationHref(previous, 'markdown'),
-      older: next === null ? undefined : representationHref(next, 'markdown'),
-    },
-    c.var.config.baseUrl,
+  const description = oneLine(
+    request.document?.description ?? (latestPosts ? (c.var.renderer.site().tagline ?? '') : ''),
   );
+  const timezone = siteTimezone(c.var.renderer.site());
+  const url = decodedPath(page.href);
+  const markdownUrl = markdownUrlFor(c, url);
+
+  const newer = previous === null ? undefined : { label: 'Newer posts', url: previous };
+  const older = next === null ? undefined : { label: 'Older posts', url: next };
+  const author = request.author === undefined ? undefined : profileContext(request.author.user);
+  const chrome: MarkdownChrome = {
+    url,
+    title: page.title,
+    home: HOME_LINK,
+    previous: newer,
+    next: older,
+    bio: bioOf(author ?? (url === '/' ? soloAuthorOf(c) : undefined)),
+  };
+  const entries = page.documents.map((document) => ({
+    label: documentLabel(c, document),
+    url: servedPath(document, home),
+    date: document.date === undefined ? undefined : calendarDayIn(document.date, timezone),
+    description: document.description,
+  }));
+  const pager = [newer, older].filter((link) => link !== undefined);
+
+  const body = markdownPage(c, { title: page.title, permalink: url }, chrome, [
+    description === '' ? '' : `> ${description}`,
+    entries.length === 0 ? '' : `## Posts\n\n${entryList(entries, markdownUrl)}`,
+    pager.length === 0 ? '' : `## More posts\n\n${linkList(pager, markdownUrl)}`,
+  ]);
 
   return representationResponse({
     body,
@@ -1419,10 +1442,166 @@ function listingMarkdown(
   });
 }
 
-function documentMarkdown(document: Document): string {
-  const title = document.title.replace(/\s+/g, ' ').trim();
-  if (title === '' || /^#[ \t]/.test(document.body.trimStart())) return serializeDocument(document);
-  return serializeDocument({ ...document, body: `# ${title}\n\n${document.body}` });
+/** Where every page's Markdown says home is. */
+const HOME_LINK: MarkdownLink = { label: 'Home', url: '/' };
+
+/**
+ * One document's Markdown: its front matter with the author named and the
+ * relations a Markdown browser reads, the theme's header and footer, and its
+ * body with every link to a page of this site pointing at that page's `.md`.
+ */
+function documentMarkdown(c: Context<GeekityEnv>, document: Document): string {
+  const users = listUsers(c.var.config.dataDir);
+  const writer = authorContext(users, document.author);
+  const front = document.permalink === '/';
+  const neighbours = document.type === 'post' ? c.var.store.neighbours(document) : {};
+  const link = (neighbour: Document | undefined): MarkdownLink | undefined =>
+    neighbour === undefined
+      ? undefined
+      : { label: documentLabel(c, neighbour), url: neighbour.permalink };
+
+  const title = oneLine(document.title);
+  const body = normalizeBody(document.body);
+  const chrome: MarkdownChrome = {
+    url: document.permalink,
+    title: title === '' || /^#[ \t]/.test(body.trimStart()) ? undefined : title,
+    home: HOME_LINK,
+    previous: link(neighbours.previous),
+    next: link(neighbours.next),
+    byline:
+      document.type === 'post' && writer?.url !== undefined
+        ? { label: writer.name, url: writer.url }
+        : undefined,
+    bio: front ? bioOf(soloAuthorOf(c, users)) : undefined,
+  };
+
+  return markdownPage(
+    c,
+    namedAuthor(documentFrontMatter(document), writer),
+    chrome,
+    [rewriteMarkdownLinks(body, markdownHrefFor(c, document.permalink))],
+    front ? document : undefined,
+  );
+}
+
+/**
+ * Front matter with `author` as the person's display name and their username
+ * kept beside it, so a reader sees the name and a program can still find the
+ * account.
+ */
+function namedAuthor(
+  frontMatter: Record<string, unknown>,
+  writer: AuthorContext | undefined,
+): Record<string, unknown> {
+  if (writer?.username === undefined || !('author' in frontMatter)) return frontMatter;
+  const named: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(frontMatter)) {
+    if (key !== 'author') {
+      named[key] = value;
+      continue;
+    }
+    named['author'] = writer.name;
+    named['author_username'] = writer.username;
+  }
+  return named;
+}
+
+/** A page's Markdown, its header and footer drawn by the theme. */
+function markdownPage(
+  c: Context<GeekityEnv>,
+  frontMatter: Record<string, unknown>,
+  chrome: MarkdownChrome,
+  blocks: readonly string[],
+  frontPage?: Document,
+): string {
+  const markdownUrl = markdownUrlFor(c, chrome.url);
+  const { header, footer } = c.var.renderer.renderMarkdownChrome(chrome, {
+    markdownUrl,
+    frontPage,
+  });
+  return markdownFile({ ...frontMatter, ...navigationFrontMatter(chrome, markdownUrl) }, [
+    header,
+    ...blocks,
+    footer,
+  ]);
+}
+
+/** The person a solo author site speaks for, or `undefined` on any other site. */
+function soloAuthorOf(
+  c: Context<GeekityEnv>,
+  users: readonly User[] = listUsers(c.var.config.dataDir),
+): AuthorContext | undefined {
+  return siteAuthorContext(users, c.var.renderer.site().author);
+}
+
+function bioOf(person: AuthorContext | undefined): MarkdownBio | undefined {
+  if (person === undefined) return undefined;
+  return {
+    name: person.name,
+    url: person.url,
+    note: person.bio,
+    links: (person.links ?? []).map((link) => ({ label: link.label, url: link.href })),
+  };
+}
+
+/**
+ * {@link markdownHrefFor}, keeping a URL that names nothing with a Markdown
+ * representation as it is.
+ */
+function markdownUrlFor(c: Context<GeekityEnv>, pageUrl: string): MarkdownUrl {
+  const href = markdownHrefFor(c, pageUrl);
+  return (url) => href(url) ?? url;
+}
+
+/**
+ * A link on the page at `pageUrl` as the Markdown URL of what it names, or
+ * `undefined` when it names nothing on this site with a Markdown
+ * representation.
+ *
+ * The link is followed the way the site answers a request for it: a query
+ * redirect, then whatever is served at the path, then a declared redirect, so
+ * `/?p=7`, a `redirect_from` and the homepage's own permalink all land on the
+ * `.md` of the document they reach. A fragment is kept.
+ */
+function markdownHrefFor(
+  c: Context<GeekityEnv>,
+  pageUrl: string,
+): (href: string) => string | undefined {
+  const { store, config, renderer } = c.var;
+  const pages = frontPages(c);
+  const bases = renderer.taxonomyBases();
+  const authors = authorsOf(c);
+  const table = c.var.redirects.current();
+  const page = absoluteUrl(pageUrl, config.baseUrl);
+
+  const servedAt = (sitePath: string): string | undefined => {
+    if (sitePath === '/') return '/';
+    const directory = sitePath.endsWith('/') ? sitePath : `${sitePath}/`;
+    for (const candidate of [directory, sitePath]) {
+      const document = publicDocumentAt(store, candidate) ?? store.getByFormerPermalink(candidate);
+      if (document !== undefined && isServed(document, store.now())) {
+        return servedPath(document, pages.home);
+      }
+    }
+    return listingRequestAt(store, pages, directory, bases, authors) === undefined
+      ? undefined
+      : directory;
+  };
+
+  return (href) => {
+    const link = siteLinkAt(href, page, config.baseUrl);
+    if (link === undefined) return undefined;
+    const landed = landing(table, link, (sitePath) => servedAt(sitePath) !== undefined);
+    const served = landed === undefined ? undefined : servedAt(landed);
+    if (served === undefined) return undefined;
+    const { pathname } = new URL(absoluteUrl(encodePath(served), config.baseUrl));
+    const hash = URL.parse(href, page)?.hash ?? '';
+    return `${representationHref(pathname, 'markdown')}${hash}`;
+  };
+}
+
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -1779,6 +1958,7 @@ function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
   return {
     title: site.title,
     description: site.tagline ?? '',
+    navigation: navigationLinks(site).map((item) => ({ title: item.label, href: item.url })),
     pages: pages
       .map((document) => llmsEntry(c, document, home))
       .sort((a, b) => a.title.localeCompare(b.title)),
@@ -1790,7 +1970,7 @@ function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
   };
 }
 
-function llmsLabel(c: Context<GeekityEnv>, document: Document): string {
+function documentLabel(c: Context<GeekityEnv>, document: Document): string {
   return postLabel(document, (url) => c.var.replyContexts.read(url));
 }
 
@@ -1800,8 +1980,8 @@ function llmsEntry(
   home: Document | undefined,
 ): LlmsEntry {
   return {
-    title: llmsLabel(c, document),
-    href: representationHref(encodePath(servedPath(document, home)), 'markdown'),
+    title: documentLabel(c, document),
+    href: encodePath(servedPath(document, home)),
     description: document.description,
     lastModified: lastModifiedOf(document),
   };

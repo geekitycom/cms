@@ -289,17 +289,17 @@ proxy, the header shows which layer sent each one.
 
 ## Content negotiation
 
-Every public URL is one resource with more than one body. A post or a page has
-three. A listing has two.
+Every public URL is one resource with more than one body. A post, a page and
+a listing each have three.
 
-| Media type         | Extension | Body                                             |
-| ------------------ | --------- | ------------------------------------------------ |
-| `text/html`        | —         | The document through the theme. The default.     |
-| `text/markdown`    | `.md`     | The file as it is stored, front matter included. |
-| `application/json` | `.json`   | The document as data, see below.                 |
+| Media type         | Extension | Body                                                                                |
+| ------------------ | --------- | ----------------------------------------------------------------------------------- |
+| `text/html`        | —         | The document through the theme. The default.                                        |
+| `text/markdown`    | `.md`     | The document as Markdown for a Markdown browser. See [The Markdown](#the-markdown). |
+| `application/json` | `.json`   | The document as data, see below.                                                    |
 
-Listings, which are `/`, `/page/N/`, `/tag/{tag}/` and `/tag/{tag}/page/N/`,
-offer HTML and JSON only, because a listing has no Markdown file.
+Listings are `/`, `/page/N/`, the posts page, the tag, category and author
+archives, and their pages.
 
 The server chooses the representation in this order:
 
@@ -336,6 +336,67 @@ curl -H 'Accept: text/markdown' https://example.com/2026/09/hello/
 curl https://example.com/2026/09/hello/index.json
 curl 'https://example.com/index.json?full=1'
 ```
+
+### The Markdown
+
+The Markdown representation is written for a Markdown browser such as
+[md.geekity.com](https://md.geekity.com/), which follows Dave Winer's
+Markdown Browser spec, and for language models. A Markdown browser does no
+content negotiation, so every link to a page of the site points at that
+page's `.md` URL.
+
+A document's Markdown has four parts:
+
+| Part         | What it holds                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Front matter | The file's front matter, with navigation added. See the table below.                                                            |
+| Header       | The theme's `partials/markdown-header.md.njk`. The default theme writes the title as a heading, and the bio where there is one. |
+| Body         | The stored body, with its links to the site's own pages pointing at their `.md` URLs.                                           |
+| Footer       | The theme's `partials/markdown-footer.md.njk`. The default theme writes a heading, a post's byline and the site's menus.        |
+
+The CMS adds these front matter keys:
+
+| Key               | Value                                                                                                |
+| ----------------- | ---------------------------------------------------------------------------------------------------- |
+| `home`            | `/index.md`, on every document and listing.                                                          |
+| `previous`        | A post's older neighbour, the same one the HTML post navigation links. On a listing, its newer page. |
+| `next`            | A post's newer neighbour. On a listing, its older page.                                              |
+| `author`          | The author's display name, when the post's `author` names a user.                                    |
+| `author_username` | That user's username, beside `author`.                                                               |
+
+Each of `previous` and `next` is absent when there is no neighbour on that
+side. A page has neither. All three URLs are root-relative `.md` URLs.
+
+A link in the body is rewritten when the site answers its target with a
+document or a listing. The CMS follows the target the way it answers a
+request: the homepage rule, `redirect_from`, the declared redirects and
+`/?p=ID`. A fragment is kept. These stay as they are written:
+
+- Links to other sites.
+- Images.
+- Code spans and code blocks.
+- Raw HTML.
+- Links to URLs with no Markdown, such as `/search/` and `/feed/`.
+
+An autolink or a bare URL to a page of the site becomes an inline link with
+the URL as its text.
+
+A listing's Markdown has the same front matter keys, the title as a heading,
+the site's tagline or the posts page's description as a quote, then the posts
+on that page, one line each:
+
+```markdown
+## Posts
+
+- [2026-09-03 Third post](/third/index.md): The third post's description.
+```
+
+On an author archive the header writes the author's bio under the heading.
+On a site whose author is a user, the homepage carries that bio too, whether
+the homepage is the latest posts or a page.
+
+A theme overrides either partial like any other template. See
+[The Markdown representation](theme/markdown.md).
 
 ### The JSON shape
 
@@ -533,14 +594,17 @@ No page links to the sitemap. `robots.txt` names it, and crawlers look there.
 
 `/llms.txt` describes the site for a language model, in the
 [llms.txt](https://llmstxt.org/) format. It holds the site's title as a heading
-and its tagline as a quote. Two sections follow:
+and its tagline as a quote. Three sections follow:
 
-| Section | What it lists                                                                                   |
-| ------- | ----------------------------------------------------------------------------------------------- |
-| Pages   | Every listed page, sorted by name. A page's `description` follows its link.                     |
-| Posts   | Every listed post, newest first. Each link is followed by the post's date and its feed summary. |
+| Section    | What it lists                                                                                   |
+| ---------- | ----------------------------------------------------------------------------------------------- |
+| Navigation | Every item of the site's menus, each URL once, in the order the menus are stored.               |
+| Pages      | Every listed page, sorted by name. A page's `description` follows its link.                     |
+| Posts      | Every listed post, newest first. Each link is followed by the post's date and its feed summary. |
 
 Each entry links to the document's Markdown, the format a model reads best.
+A menu item that links to another site, or to a URL with no Markdown, keeps its
+URL.
 The file lists the same documents as the [sitemap](#sitemap-and-robotstxt).
 Drafts, scheduled posts, unlisted and private documents and the trash stay
 out. A post or page without a title is named by the same label the site gives
@@ -554,6 +618,11 @@ body cut to 55 words.
 # Field Notes
 
 > Notes from the field.
+
+## Navigation
+
+- [About](https://example.com/about/index.md)
+- [Mastodon](https://mastodon.example/@me)
 
 ## Pages
 
