@@ -3444,8 +3444,13 @@ the page draws under the post, so they carry what a reader sees there:
   post its author approved;
 - reply posts written on this site that answer the post or a reply under it.
 
-Likes, boosts and reposts are counted on the page and are in no feed, and
-neither is a [migrated comment](#migrated-comments).
+That is replies and mentions. Likes, boosts and reposts say nothing, so they
+are shown and counted on the page and are in no feed, and no `source:comments`
+count includes them: a post answered only with reactions advertises no replies
+feed. An RSVP to an event is shown with the people answering, not in the
+thread, so it is in no feed either, words or not; an RSVP sent to a post that
+is no event is a reply like any other. Neither feed carries a
+[migrated comment](#migrated-comments).
 
 Both are RSS 2.0 and nothing else: a comments feed has no Atom or JSON spelling
 here, so `{permalink}feed/atom/` 404s. A post has a comments feed whether or
@@ -3517,7 +3522,9 @@ replies that answer the post directly, and from each of those items' own
 Every reply a reader can see is reached once.
 
 Each of those feeds is `/replies/{key}/`, RSS 2.0, newest first, its items in
-the same shape as the comments feeds. A comment's key is its id (see
+the same shape as the comments feeds. It carries replies only: a mention
+answers nothing in the thread, and a like, a boost, a repost or an event's RSVP
+is in no feed. A comment's key is its id (see
 [Keys](#keys)); a post's, a page's, a fediverse reply's or a reply post's is
 the first 16 hex digits of the SHA-256 of its feed `guid`, since a document has
 no id of its own and slugs are not unique across posts and pages. An item

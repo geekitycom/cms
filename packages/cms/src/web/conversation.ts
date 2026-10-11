@@ -1048,29 +1048,30 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
     }
   }
 
-  for (const stored of context.admin.listComments({
-    status: 'approved',
-    limit: limit * OVERSCAN,
-  })) {
-    if (stored.migrated === true) continue;
-    const post = context.store.getBySlug(stored.slug);
-    if (!shown(post)) continue;
-    said.push({ ...interactionOf(stored, post.permalink, context.baseUrl), post });
-  }
-
   // Each post's thread, read once: where each reply sits and what it carries
   // is the thread's to say, so the site's feed and the post's agree.
   const threads = new Map<string, ReadonlyMap<string, Placed>>();
   const placedOn = (post: Document): ReadonlyMap<string, Placed> => {
     let found = threads.get(post.path);
     if (found === undefined) {
-      found = new Map(
-        placed(postConversation(context, post).replies).map((reply) => [reply.id, reply]),
-      );
+      found = new Map(saidIn(postConversation(context, post)).map((reply) => [reply.id, reply]));
       threads.set(post.path, found);
     }
     return found;
   };
+
+  // A stored comment is taken from its post's thread rather than read on its
+  // own, so a reaction or an event's RSVP, which the thread holds apart, is
+  // left out here as it is from the post's feed.
+  for (const stored of context.admin.listComments({
+    status: 'approved',
+    limit: limit * OVERSCAN,
+  })) {
+    const post = context.store.getBySlug(stored.slug);
+    if (!shown(post)) continue;
+    const entry = placedOn(post).get(stored.id);
+    if (entry !== undefined) said.push({ ...entry, post });
+  }
 
   // A reply post is in the feed of the thread it is shown in, unlisted or
   // not: the thread is listed, and the reply post is one of its answers.
@@ -1081,7 +1082,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
     if (reply !== undefined) said.push({ ...reply, post });
   }
 
-  return newestFirst(said, limit).map((entry) => {
+  return newestFirst(said.filter(conversational), limit).map((entry) => {
     const thread = placedOn(entry.post);
     return {
       ...(thread.get(entry.id) ?? { ...entry, parent: null }),
@@ -1260,20 +1261,28 @@ export function commentKeyAt(pathname: string): string | undefined {
   return isKey(key) ? key : undefined;
 }
 
-/**
- * Everything said in a conversation, at every depth and in no order: the
- * replies and the mentions.
- *
- * The likes and the boosts are left out because they say nothing. A feed item
- * is somebody's words, and "@ada liked this" has none to carry — a reader
- * polling a comments feed would get an entry with an empty body and no way to
- * tell what it was for.
- */
+/** What a post's comments feed carries, at every depth and in no order. */
 export function spokenIn(conversation: Conversation): Placed[] {
+  return saidIn(conversation).filter(conversational);
+}
+
+/** The mentions and every visible reply of a conversation, each with its parent. */
+function saidIn(conversation: Conversation): Placed[] {
   return [
     ...conversation.mentions.map((mention) => ({ ...mention, parent: null })),
     ...placed(conversation.replies),
-  ].filter((entry) => !entry.migrated);
+  ];
+}
+
+/**
+ * Whether a feed carries it and a reply count counts it (TASK-335): somebody's
+ * words, a reply or a mention, said here. A like, a boost or a repost says
+ * nothing — "@ada liked this" would be an item with an empty body — and a
+ * migrated entry was published before the site came here, so a reader must
+ * not see it as new.
+ */
+function conversational(entry: Interaction): boolean {
+  return !entry.migrated && (entry.kind === 'reply' || entry.kind === 'mention');
 }
 
 /** Every visible reply of a thread at any depth, each with the reply it sits under. */
@@ -1293,12 +1302,9 @@ function directReplies(replies: readonly ThreadReply[]): Interaction[] {
   return replies.flatMap((reply) => (isWithheld(reply) ? directReplies(reply.replies) : [reply]));
 }
 
-/**
- * The direct replies a feed carries and a count advertises: a migrated one
- * was published before the site came here, so a reader must not see it as new.
- */
+/** The direct replies a feed carries and a count advertises. */
 function repliesFed(replies: readonly ThreadReply[]): Interaction[] {
-  return directReplies(replies).filter((reply) => !reply.migrated);
+  return directReplies(replies).filter(conversational);
 }
 
 /**
