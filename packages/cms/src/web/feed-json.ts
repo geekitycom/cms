@@ -3,7 +3,6 @@ import { feedItems } from './feed-item.ts';
 import type { FeedItem } from './feed-item.ts';
 import { feedLanguage, notifyServerOf } from './feed-source.ts';
 import type { FeedSource } from './feed-source.ts';
-
 import type { Enclosure } from '../content/enclosure.ts';
 import { absoluteUrl } from '../util/url.ts';
 

@@ -18,15 +18,14 @@ import {
   replyFrom,
   REPLY_ACTIVITY_TYPE,
 } from '../federation/replies.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { authorContext, authorFeedHref, profileContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import { activityStreamsId, isListed, isServed, permalinkOfObjectId } from './documents.ts';
 import { isKey, repliesFeedPath, repliesKey } from './feed-source.ts';
 import type { FeedComment } from './feeds.ts';
 import { COMMENT_PAGE_PREFIX, commentPageHref, feedGuid } from './guids.ts';
-
 import { sanitizeCommentHtml } from './sanitize.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The conversation under a post, in one shape whatever it is made of, and the

@@ -3,12 +3,12 @@ import { Environment, FileSystemLoader } from 'nunjucks';
 import { citedHost } from '../content/citation.ts';
 import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
 import { accountOf } from '../federation/paths.ts';
+import { absoluteUrl, withoutTrailingSlash, withTrailingSlash } from '../util/url.ts';
 import { themeAssetUrl } from './assets.ts';
 import { siteLocale, siteTimezone } from './context.ts';
 import type { SiteData } from './context.ts';
 import { canonicalLocale, DEFAULT_LOCALE, pluralForm } from './locale.ts';
 import { themeSearchPath } from './themes.ts';
-import { absoluteUrl, withoutTrailingSlash, withTrailingSlash } from '../util/url.ts';
 
 /** Where a {@link createTemplateEnvironment} looks, and how it caches. */
 export interface CreateTemplateEnvironmentOptions {

@@ -1,8 +1,8 @@
 import { discoverPostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
 import { isRecord } from '../util/guards.ts';
+import { absoluteUrl } from '../util/url.ts';
 import type { HeldAt } from '../web/conversation.ts';
-
 import type { CitedImage, CitedPicture, PictureSource } from './cited-picture.ts';
 import { readCitedStart } from './cited-start.ts';
 import { fetchPublic, webUrl } from './fetch-public.ts';
@@ -12,7 +12,6 @@ import { citedEntry, citedEvent } from './microformats.ts';
 import type { CitedEntry, CitedEvent } from './microformats.ts';
 import { publicHost } from './public-address.ts';
 import type { HostLookup } from './public-address.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Reply context: what a reply shows of the post it answers (TASK-123).

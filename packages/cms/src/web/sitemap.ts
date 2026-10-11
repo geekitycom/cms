@@ -1,7 +1,7 @@
+import { absoluteUrl } from '../util/url.ts';
 import { escapeXml } from './feeds.ts';
 import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
-import { absoluteUrl } from '../util/url.ts';
 import { pageCount } from './pagination.ts';
 
 /**

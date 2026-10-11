@@ -18,11 +18,11 @@ import semver from 'semver';
 
 import { HOST_API_VERSION } from '../plugin.ts';
 import { messageOf } from '../util/errors.ts';
+import { withTrailingSlash } from '../util/url.ts';
 import { readEnabledPlugins } from './enabled.ts';
 import { PLUGIN_ENTRY, PLUGIN_MANIFEST, readPluginManifest, scanPluginFolders } from './folder.ts';
 import type { PluginManifest } from './folder.ts';
 import { PACKAGE_NAME } from './registry.ts';
-import { withTrailingSlash } from '../util/url.ts';
 
 export const DEFAULT_REGISTRY = 'https://registry.npmjs.org/';
 

@@ -21,8 +21,8 @@ import type { DocumentChange } from '../content/sync.ts';
 import { isFederatedDocument } from '../federation/article.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { permalinkOfObjectId } from '../web/documents.ts';
-
 import { discoverEndpoint } from './discovery.ts';
 import { requestPublic } from './fetch-public.ts';
 import { externalLinks, externalTarget } from './links.ts';
@@ -32,7 +32,6 @@ import type { SyndicationTarget } from './syndication.ts';
 import type { IncomingWebmention, WebmentionOutcome } from './receive.ts';
 import { isWithheld } from '../web/conversation.ts';
 import type { ConversationReader, ThreadReply, Upstream } from '../web/conversation.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Telling the pages a post links to that it links to them.

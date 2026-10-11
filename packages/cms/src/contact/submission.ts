@@ -4,11 +4,11 @@ import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
 import { formTimingRefusal, hashClientAddress, trapped } from '../forms/protection.ts';
 import { messageOf } from '../util/errors.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { contactProblems } from './form.ts';
 import type { ContactForm, ContactProblems } from './form.ts';
 import { addContactMessage } from './records.ts';
 import type { ContactMessage } from './records.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * What happens between somebody pressing Send and a message existing.

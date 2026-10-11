@@ -1,6 +1,6 @@
 import type { ModerationAction } from '../comments/moderate.ts';
-import { signNotificationToken } from './tokens.ts';
 import { absoluteUrl } from '../util/url.ts';
+import { signNotificationToken } from './tokens.ts';
 
 /**
  * The URLs a notification puts in front of somebody, and what they cost.

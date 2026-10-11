@@ -1,6 +1,7 @@
 import { citationsOf } from '../content/citation.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
 import { replyTarget } from '../content/post-type.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { atomFeed } from './feed-atom.ts';
@@ -12,7 +13,6 @@ import type { CommentFeedSource, FeedFormat, FeedIdentity, FeedSource } from './
 import { contentEtag, isNotModified, latestModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 import { resolveLicense } from './license.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 const COMMENTS_FEED_REVISION = 4;
 

@@ -6,6 +6,7 @@ import type { ContentStore } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { GeekityEnv } from '../env.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { listUsers } from './accounts.ts';
 import type { User } from './accounts.ts';
 import { avatarUrl } from '../federation/actor.ts';
@@ -21,7 +22,6 @@ import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { authorHref, profileContext, userForAuthor } from '../web/authors.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { postObjectId } from '../web/guids.ts';
-
 import { documentEditorPath, POST_KIND } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
@@ -37,7 +37,6 @@ import type {
   WebmentionSendStatus,
 } from './store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /** Where the federation screen lives. */
 export const FEDERATION_PATH = `${ADMIN_PREFIX}/federation`;

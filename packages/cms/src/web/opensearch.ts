@@ -1,11 +1,11 @@
 import { iconSetting, siteIconSource } from '../images/icons.ts';
 import type { ImageConfig } from '../images/paths.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { FAVICON_PATH } from './manifest.ts';
 import { escapeXml } from './feed-xml.ts';
 import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 import { SEARCH_PATH } from './search.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The OpenSearch description (TASK-204): what a browser reads to offer the

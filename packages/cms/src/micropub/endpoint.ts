@@ -30,10 +30,10 @@ import type { BearerEnv, Scopes } from '../indieauth/bearer.ts';
 import { MICROPUB_MEDIA_PATH, MICROPUB_PATH, siteBaseUrl } from '../indieauth/discovery.ts';
 import type { GeekityEnv } from '../env.ts';
 import type { Scope } from '../indieauth/request.ts';
-
 import type { ResolvedConfig } from '../config.ts';
 import { removeImageVariants } from '../images/variants.ts';
 import { isRecord } from '../util/guards.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import { userForAuthor } from '../web/authors.ts';
 import { syndicationTargetsReader } from '../webmention/syndication.ts';
@@ -42,7 +42,6 @@ import { createForm, fromForm, fromJson } from './create.ts';
 import type { CreatedForm, CreateRequest, Property } from './create.ts';
 import { micropubType, parseChanges, sourceProperties, updateForm } from './update.ts';
 import type { Change } from './update.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 const ANY_TYPE: readonly Property[] = [
   'content',

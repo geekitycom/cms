@@ -1,3 +1,4 @@
+import { absoluteUrl, withoutTrailingSlash } from '../util/url.ts';
 import {
   decodedPath,
   findPathRedirect,
@@ -7,8 +8,6 @@ import {
 } from '../web/redirects.ts';
 import type { RedirectTable } from '../web/redirects.ts';
 import { elementsIn, parseHtml } from './html.ts';
-import { absoluteUrl } from '../util/url.ts';
-import { withoutTrailingSlash } from '../util/url.ts';
 
 /**
  * Which pages a post talks about.

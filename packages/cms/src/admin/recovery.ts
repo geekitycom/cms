@@ -3,6 +3,7 @@ import type { Context, Hono } from 'hono';
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
 import { stringOrEmpty } from '../util/forms.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { findUserById, findUserByIdentifier, setUserPassword } from './accounts.ts';
 import { passwordProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
@@ -12,7 +13,6 @@ import type { Session } from './store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { clientAddress, describeWait, loginKeys } from './throttle.ts';
 import type { LoginThrottle } from './throttle.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Forgetting a password, and getting back in without a shell.

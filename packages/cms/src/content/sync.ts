@@ -5,8 +5,8 @@ import { mkdir, readdir, readFile, rmdir } from 'node:fs/promises';
 import path from 'node:path';
 
 import { messageOf } from '../util/errors.ts';
-import { createSerialQueue } from '../util/queue.ts';
 import { exists, isNotFound } from '../util/files.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import type { Document, DocumentType } from './document.ts';
 import { handleDirectory } from './handles.ts';
 import {

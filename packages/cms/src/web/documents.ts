@@ -3,8 +3,8 @@ import { scheduledFor } from '../content/schedule.ts';
 import { isTrashedPath } from '../content/store.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import type { ContentStore } from '../content/store.ts';
-import { postObjectId } from './guids.ts';
 import { withoutTrailingSlash } from '../util/url.ts';
+import { postObjectId } from './guids.ts';
 
 /**
  * Why the public site does not serve a document at its URL.

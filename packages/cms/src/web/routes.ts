@@ -15,6 +15,7 @@ import { readAltTexts } from '../images/alt-text.ts';
 import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
 import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
+import { absoluteUrl } from '../util/url.ts';
 import {
   ASSET_VERSION_PARAM,
   assetNotModified,
@@ -147,7 +148,6 @@ import {
 import { decodedPath, findPathRedirect, findQueryRedirect, redirectLocation } from './redirects.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Register the public site on a Hono app.

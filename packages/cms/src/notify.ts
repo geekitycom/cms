@@ -7,14 +7,13 @@ import type { DocumentChange } from './content/sync.ts';
 import { isFederatedDocument } from './federation/article.ts';
 import { messageOf } from './util/errors.ts';
 import { createSerialQueue } from './util/queue.ts';
+import { absoluteUrl } from './util/url.ts';
 import { isListed } from './web/documents.ts';
 import { FEED_FORMATS, notifyEndpoints } from './web/feeds.ts';
 import type { NotifyServer } from './web/feeds.ts';
-
 import { feedHref } from './web/routes.ts';
 import { TAXONOMIES, termKey } from './web/taxonomy.ts';
 import type { TaxonomyTerm } from './web/taxonomy.ts';
-import { absoluteUrl } from './util/url.ts';
 
 /**
  * How long one ping is given before it is abandoned.

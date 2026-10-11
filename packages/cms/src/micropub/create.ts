@@ -12,11 +12,10 @@ import { isReadStatus, READ_STATUSES } from '../content/read.ts';
 import { isVisibility } from '../content/visibility.ts';
 import { normalizeBody } from '../content/writer.ts';
 import { isRecord } from '../util/guards.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
-
 import type { SyndicationTarget } from '../webmention/syndication.ts';
 import { cleanMarkdown, markdownFromHtml } from './content.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * A Micropub create (TASK-164), whichever way it was encoded: the one
@@ -341,7 +340,7 @@ function photoRow(value: unknown, baseUrl: string): PhotoRow | undefined {
   let url: unknown = value;
   let alt: unknown = '';
   if (isRecord(value)) {
-    ({ value: url, alt = '' } = value as Record<string, unknown>);
+    ({ value: url, alt = '' } = value);
   }
   if (typeof url !== 'string' || typeof alt !== 'string' || !isWebUrl(url.trim())) return undefined;
   const uploads = absoluteUrl(UPLOAD_ASSET_PREFIX, baseUrl);

@@ -7,10 +7,10 @@ import type { DocumentChange } from './content/sync.ts';
 import { messageOf } from './util/errors.ts';
 import { createSerialQueue } from './util/queue.ts';
 import { retry } from './util/retry.ts';
+import { absoluteUrl } from './util/url.ts';
 import { isPrivateHost } from './webmention/public-address.ts';
 import { isListed } from './web/documents.ts';
 import { indexNowKeyPath } from './web/indexnow.ts';
-import { absoluteUrl } from './util/url.ts';
 
 /** The shared endpoint: a submission here reaches every IndexNow engine. */
 export const INDEXNOW_ENDPOINT = 'https://api.indexnow.org/indexnow';

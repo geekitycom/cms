@@ -10,10 +10,10 @@ import {
   formTimingRefusal,
   trapped,
 } from '../forms/protection.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { renderCommentMarkdown } from './markdown.ts';
 import { intakeComment } from './records.ts';
 import type { CommentNotices, CommentRecords, ProposedComment } from './records.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * What happens between somebody pressing Post and a proposed comment.

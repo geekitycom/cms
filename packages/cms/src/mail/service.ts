@@ -257,20 +257,24 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
       { attempts, backoffMs, wait: options.wait },
       async (attempt): Promise<Tried<MailResult>> => {
         const which = `attempt ${String(attempt)} of ${String(attempts)}`;
-        const sent = { skipped: false, held: false, provider: carrier.name, to, attempts: attempt };
+        const sent = {
+          skipped: false,
+          held: false,
+          provider: carrier.name,
+          to,
+          subject: message.subject,
+          attempts: attempt,
+        };
         try {
           const delivery = await carrier.deliver(message);
           logger.info(`Sent ${where} (${which}): ${delivery.messageId ?? 'no message id'}`);
           const messageId =
             delivery.messageId === undefined ? {} : { messageId: delivery.messageId };
-          return {
-            value: { ok: true, ...sent, subject: message.subject, ...messageId },
-            retry: false,
-          };
+          return { value: { ok: true, ...sent, ...messageId }, retry: false };
         } catch (thrown) {
           const error = messageOf(thrown);
           logger.warn(`Could not send ${where} (${which}): ${error}`);
-          return { value: { ok: false, ...sent, subject: message.subject, error }, retry: true };
+          return { value: { ok: false, ...sent, error }, retry: true };
         }
       },
     );

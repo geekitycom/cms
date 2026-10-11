@@ -7,6 +7,7 @@ import type { User } from '../admin/accounts.ts';
 import type { Document } from '../content/document.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { authorHref, parseAuthorPath } from '../web/authors.ts';
 import { goneDocumentAt, isGone, publicDocumentAt } from '../web/documents.ts';
 import { prefersActivityStreams } from '../web/negotiate.ts';
@@ -15,7 +16,6 @@ import { actorAliases, actorId, userActor } from './actor.ts';
 import { isFederatedDocument, postObject, postTombstone } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { accountOf, handleHref } from './paths.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Put Fedify in front of the rest of the app.

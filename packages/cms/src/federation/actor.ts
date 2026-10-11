@@ -13,10 +13,9 @@ import type { Actor } from '@fedify/vocab';
 import { listUsers } from '../admin/accounts.ts';
 import type { User } from '../admin/accounts.ts';
 import { escapeAttribute, escapeText } from '../util/html.ts';
-import { authorHref, profileContext } from '../web/authors.ts';
-
-import { attributionDomainOf, handleHref } from './paths.ts';
 import { absoluteUrl } from '../util/url.ts';
+import { authorHref, profileContext } from '../web/authors.ts';
+import { attributionDomainOf, handleHref } from './paths.ts';
 
 /**
  * A user as the fediverse sees them (decision-14).

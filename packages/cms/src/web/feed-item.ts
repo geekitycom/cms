@@ -10,6 +10,7 @@ import type { Photo } from '../content/photo.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
 import { replyTarget, showsTitle } from '../content/post-type.ts';
 import { decodeEntities } from '../util/html.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { authorName, siteAuthorName } from './authors.ts';
 import type { SiteData } from './context.ts';
 import { absoluteHtmlUrls } from './absolute-urls.ts';
@@ -22,7 +23,6 @@ import { canonicalLocale, documentLanguage } from './locale.ts';
 import { lastModifiedOf } from './negotiate.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * One post as a feed shows it, in one shape whatever format the feed is.

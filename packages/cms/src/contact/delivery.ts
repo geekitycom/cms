@@ -1,8 +1,8 @@
 import { listUsers } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { MailService } from '../mail/service.ts';
-import type { ContactMessage } from './records.ts';
 import { absoluteUrl } from '../util/url.ts';
+import type { ContactMessage } from './records.ts';
 
 /**
  * Where a contact message is sent, and what it looks like when it gets there.

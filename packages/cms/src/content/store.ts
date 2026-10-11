@@ -2,6 +2,7 @@ import type { StatementSync } from 'node:sqlite';
 
 import { databaseFile, openDatabase } from '../cache.ts';
 import type { Migration } from '../cache.ts';
+import { absoluteUrl } from '../util/url.ts';
 import type { ActivityPubMetadata, Document, DocumentType } from './document.ts';
 import { featuredPosts, PINNED_FRONT_MATTER_KEY } from './pinned.ts';
 import { searchExpression, searchText, SNIPPET_CLOSE, SNIPPET_OPEN } from './search.ts';
@@ -9,11 +10,9 @@ import { tagKey, uniqueTags } from './tags.ts';
 import { VISIBILITIES, VISIBILITY_FRONT_MATTER_KEY } from './visibility.ts';
 import { repliesKey } from '../web/feed-source.ts';
 import { feedGuid, postObjectId } from '../web/guids.ts';
-
 import { NO_REDIRECTS } from '../web/redirects.ts';
 import type { RedirectTable } from '../web/redirects.ts';
 import { linksInto, ownSiteLinks, siteLinkKey, spelling } from '../webmention/links.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 export { DATABASE_FILE } from '../cache.ts';
 

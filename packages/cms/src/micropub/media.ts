@@ -10,10 +10,9 @@ import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts'
 import { logMediaRequest } from '../indieauth/activity-log.ts';
 import type { BearerEnv } from '../indieauth/bearer.ts';
 import { MICROPUB_MEDIA_PATH, siteBaseUrl } from '../indieauth/discovery.ts';
-import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
-
-import { requireSiteToken } from './endpoint.ts';
 import { absoluteUrl } from '../util/url.ts';
+import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
+import { requireSiteToken } from './endpoint.ts';
 
 /** Each user's most recent upload, relative to `dataDir`. */
 export const LAST_UPLOADS_FILE = 'micropub-media.json';

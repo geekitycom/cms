@@ -11,9 +11,9 @@ import type { DocumentChange } from './content/sync.ts';
 import type { MailProvider } from './mail/provider.ts';
 import type { MailLogger } from './mail/service.ts';
 import type { Plugin } from './plugin.ts';
+import { withoutTrailingSlash } from './util/url.ts';
 import { systemHostLookup } from './webmention/public-address.ts';
 import type { HostLookup } from './webmention/public-address.ts';
-import { withoutTrailingSlash } from './util/url.ts';
 
 /**
  * Something a site wants to happen when the index changes.

@@ -2,13 +2,12 @@ import { blankForm, POST_KIND, writeDocument } from '../admin/documents.ts';
 import type { DocumentSite, WriteOutcome } from '../admin/documents.ts';
 import { readSiteSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { visibleReply } from '../web/conversation.ts';
 import { commentPageHref } from '../web/guids.ts';
 import type { Conversation, Interaction } from '../web/conversation.ts';
-
 import { commentKeys, commentProblems } from './submission.ts';
 import type { CommentForm, CommentRefusal, CommentThrottle } from './submission.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * What a signed-in user's reply becomes (TASK-300, decision-47), from the

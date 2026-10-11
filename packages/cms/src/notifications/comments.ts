@@ -7,10 +7,10 @@ import type { ContentStore } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { MailService } from '../mail/service.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { moderationLink, unsubscribeLink } from './links.ts';
 import { hasOptedOut } from './optouts.ts';
 import { isBatchedMode, notificationMode, notificationRecipients } from './preferences.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The two messages a comment sets off, and the rules about who gets them.

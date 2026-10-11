@@ -10,6 +10,7 @@ import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { MailService } from '../mail/service.ts';
 import { messageOf } from '../util/errors.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { COMMENTS_NOTIFICATION } from './comments.ts';
 import { moderationLink } from './links.ts';
 import {
@@ -18,7 +19,6 @@ import {
   notificationMode,
   notificationRecipients,
 } from './preferences.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * One message a window instead of one message a comment.

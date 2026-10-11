@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 
 import type { Document } from '../content/document.ts';
 import { documentFrontMatter } from '../content/writer.ts';
-import { matchesEtag } from './assets.ts';
 import { absoluteUrl } from '../util/url.ts';
+import { matchesEtag } from './assets.ts';
 
 /**
  * Which of a resource's representations a request asked for.

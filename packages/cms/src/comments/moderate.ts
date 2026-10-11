@@ -1,9 +1,9 @@
 import type { CommentStatus, PostComment } from '../admin/store.ts';
 import { messageOf } from '../util/errors.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { deleteComment, updateComment } from './records.ts';
 import type { CommentRecords } from './records.ts';
 import type { CommentChecker, CommentReport } from './submission.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The three things that can be done to a stored comment, in one place.

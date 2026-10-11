@@ -29,8 +29,8 @@ import { latestModified } from './negotiate.ts';
 import { isCaptions } from '../content/enclosure.ts';
 import type { AlternateEnclosure, Enclosure } from '../content/enclosure.ts';
 import { escapeText } from '../util/html.ts';
-import { sanitizeCommentHtml } from './sanitize.ts';
 import { absoluteUrl } from '../util/url.ts';
+import { sanitizeCommentHtml } from './sanitize.ts';
 
 /**
  * RSS 2.0: the post feed, the comments feed, and the channel they share.

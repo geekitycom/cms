@@ -22,10 +22,10 @@ import { hashClientAddress } from '../forms/protection.ts';
 import { messageOf } from '../util/errors.ts';
 import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { isRecord } from '../util/guards.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { isKey, repliesKey, webmentionKey } from '../web/feed-source.ts';
 import { COMMENT_PAGE_PREFIX, commentPageHref } from '../web/guids.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
-import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Native comments as the files that hold them, and the one door into them.
