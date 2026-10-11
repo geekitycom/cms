@@ -45,7 +45,7 @@ const FILES: Record<string, string> = {
     post: '/2026/09/coffee/',
     comments: [
       {
-        id: '00000000-0000-4000-8000-000000000001',
+        id: '0000000000000001',
         source: 'comment',
         kind: 'reply',
         status: 'approved',

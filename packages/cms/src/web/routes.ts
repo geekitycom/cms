@@ -131,7 +131,7 @@ import {
 } from './search.ts';
 import { findPathRedirect, findQueryRedirect, redirectLocation } from './redirects.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
-import type { Taxonomy, TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
+import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
 /**
  * Register the public site on a Hono app.
@@ -448,7 +448,7 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     const canonical = feedTargetHref(target, format, bases);
     if (
       !feedRequest.canonical ||
-      isCarriedTagFeedInAnotherCasing(store, target, canonical, pathname)
+      (target.kind === 'listing' && canonical !== encodePath(pathname))
     ) {
       return c.redirect(canonical, 301);
     }
@@ -529,12 +529,14 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
 
   // Nothing lives here, so a URL something used to live at leads on to where
   // it lives now. Asked only after every live lookup, which is what lets a new
-  // document take an old URL over.
+  // document take an old URL over, and a term that comes back into use beat
+  // the record of what it was renamed to.
   const formerly =
     movedHref(store, pages, pathname, undefined) ??
     extension?.paths
       .map((candidate) => movedHref(store, pages, candidate, extension.representation))
-      .find((href) => href !== undefined);
+      .find((href) => href !== undefined) ??
+    renamedTermHref(c, pathname, bases);
   if (formerly !== undefined) return c.redirect(`${formerly}${search}`, 301);
 
   const deleted = [pathname, ...(extension?.paths ?? [])].some(
@@ -578,9 +580,10 @@ function movedHref(
  * `undefined` when the path is not one.
  *
  * `/{base}/x/page/1/` collapses onto the archive root the way `/page/1/`
- * collapses onto the home page, and an archive nothing carries 404s rather
- * than redirecting first: a URL that leads nowhere should cost one 404, not a
- * redirect and then a 404.
+ * collapses onto the home page, and any other casing of a term collapses onto
+ * the site's spelling of it (TASK-339). A term nothing carries is not an
+ * archive at all, so the request goes on to the renames and the declared
+ * redirects that may know where it went.
  */
 function taxonomyArchive(
   c: Context<GeekityEnv>,
@@ -593,18 +596,9 @@ function taxonomyArchive(
   const request = parseListingPath(c.var.store, pathname, bases, authors);
   if (request?.term === undefined) return undefined;
 
-  // An archive that answers is served; only once nothing carries the term is
-  // the record of renames consulted, so a term that comes back into use — or
-  // one that was merged into and then recreated — beats what it used to be
-  // called. One hop: the list is stored with its chains already collapsed.
-  if (countListing(c.var.store, request) === 0) {
-    const moved = movedTerm(c, request.term);
-    if (moved !== undefined) return c.redirect(termHref(moved, request.pageNumber, bases), 301);
-  }
-
   const canonical = termHref(request.term, request.pageNumber, bases);
   if (canonical !== encodePath(pathname)) {
-    return countListing(c.var.store, request) === 0 ? notFound(c) : c.redirect(canonical, 301);
+    return c.redirect(`${canonical}${new URL(c.req.url).search}`, 301);
   }
 
   return listing(c, request);
@@ -653,12 +647,28 @@ function authorArchive(
 }
 
 /**
- * Where a term with nothing left under it went, or `undefined` when the site
- * records no such rename.
+ * Where a renamed term's archive page or feed lives now, or `undefined` when
+ * the path is neither or the site records no rename of its term.
+ *
+ * One hop: the list is stored with its chains already collapsed. A subscriber
+ * to the old feed follows it to the new one, exactly as a reader of the archive
+ * does.
  */
-function movedTerm(c: Context<GeekityEnv>, term: TaxonomyTerm): TaxonomyTerm | undefined {
-  const moved = redirectedTerm(c.var.renderer.termRedirects(), term);
-  return moved === undefined ? undefined : { taxonomy: term.taxonomy, term: moved };
+function renamedTermHref(
+  c: Context<GeekityEnv>,
+  pathname: string,
+  bases: TaxonomyBases,
+): string | undefined {
+  const feedPath = splitFeedPath(pathname);
+  const asked = parseTermPath(feedPath?.root ?? pathname, bases);
+  if (asked === undefined || (feedPath !== undefined && asked.pageNumber !== 0)) return undefined;
+
+  const to = redirectedTerm(c.var.renderer.termRedirects(), asked.term);
+  if (to === undefined) return undefined;
+  const moved: TaxonomyTerm = { taxonomy: asked.term.taxonomy, term: to };
+  return feedPath === undefined
+    ? termHref(moved, asked.pageNumber, bases)
+    : feedHref(moved, feedPath.format, bases);
 }
 
 /** What a feed URL syndicates. */
@@ -941,15 +951,7 @@ function canonicalTarget(
   // leads to `/feed/` in the same one hop rather than to a second redirect.
   const feedRequest = parseFeedPath(c, pathname, bases, authors);
   if (feedRequest !== undefined) {
-    const { target } = feedRequest;
-    if (
-      target.kind === 'listing' &&
-      target.subject.term !== undefined &&
-      countListing(store, target.subject) === 0
-    ) {
-      return undefined;
-    }
-    return feedTargetHref(target, feedRequest.format, bases);
+    return feedTargetHref(feedRequest.target, feedRequest.format, bases);
   }
 
   const pages = frontPages(c);
@@ -968,11 +970,7 @@ function canonicalTarget(
   const listing = listingRequestAt(store, pages, pathname, bases, authors);
   if (listing === undefined) return undefined;
 
-  // The home listing and an author archive both exist with nothing on them; a
-  // taxonomy archive does not.
   const total = countListing(store, listing);
-  if (listing.term !== undefined && total === 0) return undefined;
-
   const totalPages = Math.max(1, Math.ceil(total / renderer.pageSize()));
   if (listing.pageNumber >= totalPages) return undefined;
 
@@ -1179,10 +1177,29 @@ function parseListingPath(
     return found === undefined ? undefined : { author: found, pageNumber: byAuthor.pageNumber };
   }
 
+  // A taxonomy archive exists only while a published post carries the term,
+  // so a term nothing carries is not a listing, whatever its path says.
+  const asked = parseTermPath(pathname, bases);
+  if (asked === undefined) return undefined;
+  const spelled = carriedSpelling(store, asked.term);
+  return spelled === undefined
+    ? undefined
+    : { term: { ...asked.term, term: spelled }, pageNumber: asked.pageNumber };
+}
+
+/**
+ * `/{base}/x/` and `/{base}/x/page/N/` as the term and page they name, as the
+ * path spells them, whether or not anything carries the term.
+ */
+function parseTermPath(
+  pathname: string,
+  bases: TaxonomyBases,
+): { term: TaxonomyTerm; pageNumber: number } | undefined {
+  const segments = pathname.split('/').filter((segment) => segment !== '');
   const taxonomy = taxonomyForSegment(segments[0], bases);
   const named = segments[1];
   if (taxonomy === undefined || named === undefined) return undefined;
-  const term: TaxonomyTerm = { taxonomy, term: asTheSiteSpellsIt(store, taxonomy, named) };
+  const term: TaxonomyTerm = { taxonomy, term: named };
 
   if (segments.length === 2) return { term, pageNumber: 0 };
   if (segments.length === 4 && segments[2] === PAGE_SEGMENT) {
@@ -1192,22 +1209,22 @@ function parseListingPath(
   return undefined;
 }
 
-function asTheSiteSpellsIt(store: ContentStore, taxonomy: Taxonomy, term: string): string {
-  return taxonomy === 'tag' ? (store.tagSpelling(term) ?? term) : term;
-}
-
-function isCarriedTagFeedInAnotherCasing(
-  store: ContentStore,
-  target: FeedTarget,
-  canonical: string,
-  pathname: string,
-): boolean {
-  return (
-    target.kind === 'listing' &&
-    target.subject.term?.taxonomy === 'tag' &&
-    canonical !== encodePath(pathname) &&
-    countListing(store, target.subject) > 0
-  );
+/**
+ * How the site spells a term some published post carries, matched without
+ * regard to case, or `undefined` when none carries it (TASK-339).
+ *
+ * A tag's casings are one term (TASK-308). A category stays as spelled, so a
+ * category carried in exactly the asked spelling wins, and otherwise the most
+ * used one that differs only in case: WordPress lower-cased every slug, so an
+ * imported `/category/rsscloud/` names the category spelled `rssCloud`.
+ */
+function carriedSpelling(store: ContentStore, term: TaxonomyTerm): string | undefined {
+  if (term.taxonomy === 'tag') {
+    return store.countByTag(term.term) > 0 ? store.tagSpelling(term.term) : undefined;
+  }
+  if (store.countByCategory(term.term) > 0) return term.term;
+  const key = term.term.toLowerCase();
+  return store.listCategories().find(({ category }) => category.toLowerCase() === key)?.category;
 }
 
 /** How many published documents a listing holds. */
@@ -1298,11 +1315,7 @@ function listing(
   const asked = queryFeedFormat(c);
   if (asked !== undefined) return c.redirect(listingFeedHref(request, asked, bases), 301);
 
-  // A taxonomy archive only exists while something carries the term; the home
-  // listing and a person's archive exist even with nothing on them.
   const total = countListing(store, request);
-  if (term !== undefined && total === 0) return notFound(c);
-
   const href = listingHref(request, request.pageNumber, bases, root);
   const pagination = paginate({
     total,
@@ -1523,15 +1536,6 @@ function feed(c: Context<GeekityEnv>, format: FeedFormat, subject: ListingSubjec
   const site = renderer.site();
   const bases = renderer.taxonomyBases();
   const { term, author } = subject;
-
-  if (term !== undefined && countListing(store, subject) === 0) {
-    // A subscriber to a renamed archive's feed follows it to the new one
-    // rather than being dropped, exactly as a reader of the archive does.
-    const moved = movedTerm(c, term);
-    if (moved === undefined) return notFound(c);
-    return c.redirect(feedHref(moved, format, bases), 301);
-  }
-
   const documents = listListing(store, subject, { limit: feedSize(site) });
   const href = listingHref(subject, 0, bases);
   // What the feed calls itself: the site, and then the term or the person it

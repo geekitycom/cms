@@ -17,7 +17,7 @@ const REPOST = 'c';
 const MENTION = 'd';
 
 function id(prefix: string, which: string): string {
-  return `00000000-0000-4000-8000-${prefix}${which.repeat(12 - prefix.length)}`;
+  return `${prefix}${which.repeat(16 - prefix.length)}`;
 }
 
 function page(name: string, frontMatter: string[]): string {
@@ -139,7 +139,7 @@ describe('a page that takes comments', () => {
     assert.match(onPost, /p-mention/);
     assert.equal(
       onPage
-        .replaceAll('00000000-0000-4000-8000-2', '00000000-0000-4000-8000-1')
+        .replaceAll(/\b2([a-d]{15})\b/g, '1$1')
         .replaceAll('/open/', '/2026/09/twin/')
         .trim(),
       onPost.trim(),

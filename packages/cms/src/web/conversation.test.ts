@@ -44,7 +44,7 @@ async function reader(): Promise<{
 }> {
   const dataDir = await temporaryDir('geekity-conversation-');
   const contentDir = await temporaryDir('geekity-conversation-content-');
-  const admin = openAdminStore({ dataDir, baseUrl: BASE_URL });
+  const admin = openAdminStore({ dataDir });
   const posts = openContentStore({ dataDir, baseUrl: BASE_URL });
   stores.push(admin, posts);
   return {
@@ -200,6 +200,7 @@ describe('a post’s conversation', () => {
       avatar: null,
       actorId: 'https://remote.example/users/ada',
       feed: null,
+      username: null,
     });
 
     // Newest last: the conversation reads down the page.
@@ -230,6 +231,7 @@ describe('a post’s conversation', () => {
       avatar: avatarHref('https://remote.example/avatars/ada.png'),
       actorId: 'https://remote.example/users/ada',
       feed: null,
+      username: null,
     });
   });
 
@@ -931,9 +933,9 @@ Words.
     return cms;
   }
 
-  const APPROVED = '00000000-0000-4000-8000-000000000001';
-  const PENDING = '00000000-0000-4000-8000-000000000002';
-  const MENTIONED = '00000000-0000-4000-8000-000000000003';
+  const APPROVED = '0000000000000001';
+  const PENDING = '0000000000000002';
+  const MENTIONED = '0000000000000003';
   const NOTE = 'https://remote.example/notes/1';
   const SOURCE_PAGE = 'https://grace.example/2026/09/about-that/';
 
@@ -950,11 +952,12 @@ Words.
     );
     assert.deepEqual(
       guids.sort(),
-      [`https://blog.example/comment/${APPROVED}/`, MENTIONED, NOTE].sort(),
+      [`https://blog.example/comment/${APPROVED}/`, SOURCE_PAGE, NOTE].sort(),
     );
 
     assert.ok(page.includes(`id="comment-${APPROVED}"`), 'the page shows the approved comment');
-    assert.ok(page.includes(`id="comment-${NOTE}"`), 'the page shows the fediverse reply');
+    const noteKey = createHash('sha256').update(NOTE).digest('hex').slice(0, 16);
+    assert.ok(page.includes(`id="comment-${noteKey}"`), 'the page shows the fediverse reply');
     assert.ok(page.includes(SOURCE_PAGE), 'the page shows the webmention');
     assert.ok(!page.includes('Pending words'), 'the page shows nothing nobody approved');
     assert.ok(!feed.includes('Pending words'), 'the feed shows nothing nobody approved');
@@ -1249,7 +1252,7 @@ describe('what a /replies/ key names (TASK-327)', () => {
     const { admin, posts, contentDir } = await reader();
     posts.upsert(hello());
     indexComment(admin, hello(), {
-      id: 'comment-1',
+      id: '00000000000000c1',
       name: 'Ada',
       html: '<p>Hi.</p>',
       submitted: '2026-09-02T12:00:00.000Z',
@@ -1265,10 +1268,11 @@ describe('what a /replies/ key names (TASK-327)', () => {
 
     assert.equal(read.repliesTo('0123456789abcdef'), undefined, 'an unknown key');
     assert.equal(read.repliesTo(keyOf(POST))?.reply, null, 'the post itself');
+    assert.equal(read.repliesTo('00000000000000c1')?.reply?.id, '00000000000000c1', 'a comment');
     assert.equal(
-      read.repliesTo(keyOf(`${BASE_URL}/comment/comment-1/`))?.reply?.id,
-      'comment-1',
-      'a native comment',
+      read.repliesTo(keyOf(`${BASE_URL}/comment/00000000000000c1/`)),
+      undefined,
+      'a comment is named by its key alone, not the key of its page',
     );
     assert.equal(
       read.repliesTo(keyOf('https://remote.example/notes/1'))?.reply?.id,

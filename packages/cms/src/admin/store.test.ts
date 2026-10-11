@@ -7,14 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import { openAdminStore } from './store.ts';
-import type {
-  AdminStore,
-  NewDelivery,
-  NewFollower,
-  NewInboxActivity,
-  NewRelay,
-  PostComment,
-} from './store.ts';
+import type { AdminStore, NewDelivery, NewFollower, NewInboxActivity, NewRelay } from './store.ts';
 
 const temporaryDirs: string[] = [];
 const openStores: AdminStore[] = [];
@@ -1260,29 +1253,6 @@ describe('the /replies/ keys (TASK-327)', () => {
     return createHash('sha256').update(guid).digest('hex').slice(0, 16);
   }
 
-  function comment(overrides: Partial<PostComment> = {}): PostComment {
-    return {
-      id: 'c-1',
-      slug: 'hello',
-      permalink: '/2026/09/hello/',
-      source: 'comment',
-      kind: 'reply',
-      status: 'approved',
-      author: { name: 'Ann', url: null, email: null, avatar: null },
-      content: { markdown: 'Hi.', html: '<p>Hi.</p>' },
-      submitted: '2026-09-03T10:00:00.000Z',
-      addressHash: null,
-      inReplyTo: null,
-      url: null,
-      notify: false,
-      ...overrides,
-    };
-  }
-
-  function ids(admin: AdminStore, guid: string): string[] {
-    return admin.listCommentsByRepliesKey(keyOf(guid)).map((found) => found.id);
-  }
-
   function note(id: string, inReplyTo: string | undefined): NewInboxActivity {
     return {
       activityId: `${id}/activity`,
@@ -1292,42 +1262,6 @@ describe('the /replies/ keys (TASK-327)', () => {
       json: JSON.stringify({ type: 'Create', object: { id, type: 'Note', inReplyTo } }),
     };
   }
-
-  it('finds a comment by its page and a webmention by its id, until it is forgotten', async () => {
-    const dir = await temporaryDir();
-    const admin = openAdminStore({ dataDir: dir, baseUrl: BASE });
-    openStores.push(admin);
-    admin.putComment(comment());
-    admin.putComment(comment({ id: 'w-1', source: 'webmention' }));
-    admin.putComment(comment({ id: 'https://old.example/?c=9' }));
-
-    assert.deepEqual(ids(admin, `${BASE}/comment/c-1/`), ['c-1']);
-    assert.deepEqual(ids(admin, 'w-1'), ['w-1']);
-    assert.deepEqual(ids(admin, 'https://old.example/?c=9'), ['https://old.example/?c=9']);
-
-    admin.deleteComment('c-1');
-    assert.deepEqual(ids(admin, `${BASE}/comment/c-1/`), []);
-    admin.replaceComments([comment({ id: 'c-2' })]);
-    assert.deepEqual(ids(admin, 'w-1'), []);
-    assert.deepEqual(ids(admin, `${BASE}/comment/c-2/`), ['c-2']);
-  });
-
-  it('keeps comment keys across a restart and works them out again for a new base', async () => {
-    const dir = await temporaryDir();
-    const unkeyed = openAdminStore({ dataDir: dir });
-    unkeyed.putComment(comment());
-    assert.deepEqual(ids(unkeyed, `${BASE}/comment/c-1/`), [], 'no base, no key');
-    unkeyed.close();
-
-    const keyed = openAdminStore({ dataDir: dir, baseUrl: BASE });
-    assert.deepEqual(ids(keyed, `${BASE}/comment/c-1/`), ['c-1']);
-    keyed.close();
-
-    const moved = openAdminStore({ dataDir: dir, baseUrl: 'https://new.example' });
-    openStores.push(moved);
-    assert.deepEqual(ids(moved, `${BASE}/comment/c-1/`), []);
-    assert.deepEqual(ids(moved, 'https://new.example/comment/c-1/'), ['c-1']);
-  });
 
   it('finds a logged reply by its note, and nothing that is not a reply', async () => {
     const admin = await store();
@@ -1353,10 +1287,7 @@ describe('the /replies/ keys (TASK-327)', () => {
     const legacy = new DatabaseSync(path.join(dir, 'geekity.db'));
     legacy.exec(`
       DELETE FROM admin_migrations WHERE version = 23;
-      DROP INDEX comments_replies_key;
       DROP INDEX ap_inbox_reply_key;
-      ALTER TABLE comments DROP COLUMN replies_key;
-      ALTER TABLE comments DROP COLUMN keys_base;
       ALTER TABLE ap_inbox DROP COLUMN reply_key;
     `);
     legacy.close();

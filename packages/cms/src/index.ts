@@ -82,6 +82,7 @@ import {
   followAllMovedComments,
   followMovedComments,
   migrateCommentEmails,
+  migrateCommentKeys,
   rebuildCommentIndexes,
 } from './comments/index.ts';
 import { contactFormFor } from './contact/index.ts';
@@ -520,6 +521,7 @@ export {
   intakeComment,
   isModerationAction,
   migrateCommentEmails,
+  migrateCommentKeys,
   MAXIMUM_BODY_LENGTH,
   MAXIMUM_FORM_AGE_SECONDS,
   MAXIMUM_NAME_LENGTH,
@@ -551,6 +553,7 @@ export type {
   CommentForm,
   CommentFormContext,
   CommentEmailMigrationReport,
+  CommentKeyMigrationReport,
   CommentIndexReport,
   CommentIntakeOutcome,
   CommentNotices,
@@ -1650,7 +1653,7 @@ function openCache(resolved: ResolvedConfig): { store: ContentStore; admin: Admi
     const { dataDir, baseUrl } = resolved;
     const store = openContentStore({ dataDir, baseUrl, now: resolved.now });
     try {
-      return { store, admin: openAdminStore({ dataDir, baseUrl }) };
+      return { store, admin: openAdminStore({ dataDir }) };
     } catch (error) {
       store.close();
       throw error;
@@ -1711,6 +1714,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
   // same reason the federation one is.
   const commentRecords = { admin, contentDir: resolved.contentDir, dataDir: resolved.dataDir };
   migrateCommentEmails(commentRecords);
+  migrateCommentKeys(commentRecords);
   rebuildCommentIndexes(commentRecords);
 
   // And, once the files are the whole story, that every user's keys are

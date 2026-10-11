@@ -1,11 +1,12 @@
-import { randomUUID } from 'node:crypto';
-import { readdirSync, rmSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import {
   COMMENT_KINDS,
   COMMENT_SOURCES,
   COMMENT_STATUSES,
+  importedFields,
   REDACTED_FIELDS,
   rsvpField,
   viaField,
@@ -18,6 +19,8 @@ import type { RsvpValue } from '../content/rsvp.ts';
 import type { ContentStore } from '../content/store.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { hashClientAddress } from '../forms/protection.ts';
+import { isKey, repliesKey, webmentionKey } from '../web/feed-source.ts';
+import { COMMENT_PAGE_PREFIX, commentPageHref } from '../web/guids.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
 
 /**
@@ -135,7 +138,7 @@ export type NewComment = Omit<CommentRecord, 'id'> & {
   slug: string;
   /** That post's permalink, which the file records and the feeds link to. */
   permalink: string;
-  /** Its id, when a caller has one. Minted when it does not. */
+  /** Its key, when a caller has one. Minted when it does not. */
   id?: string | undefined;
 };
 
@@ -207,6 +210,15 @@ function writePost(
   permalink: string,
   comments: readonly CommentRecord[],
 ): void {
+  const file = commentsFile(records.contentDir, slug);
+  for (const comment of comments) {
+    if (!isKey(comment.id)) {
+      throw new Error(
+        `${file}: comment id "${comment.id}" is not a key of 16 lowercase hex digits.`,
+      );
+    }
+  }
+
   const contacts = new Map<string, CommentContact>();
   for (const comment of comments) {
     if (comment.author.email !== null) {
@@ -223,10 +235,7 @@ function writePost(
     rmSync(privateFile, { force: true });
   }
 
-  writeFileAtomicallySync(
-    commentsFile(records.contentDir, slug),
-    commentsJson(permalink, comments.map(publishedEntryOf)),
-  );
+  writeFileAtomicallySync(file, commentsJson(permalink, comments.map(publishedEntryOf)));
 }
 
 /** The emails a private file holds, by comment id. A damaged file holds none. */
@@ -323,6 +332,12 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     ...redactedIn(value['redacted']),
     ...rsvpField(rsvpValue(value['rsvp'])),
     ...viaField(optionalText(value['via'])),
+    ...importedFields({
+      migrated: value['migrated'] === true,
+      origin: optionalText(value['origin']),
+      user: optionalText(value['user']),
+      actor: optionalText(value['actor']),
+    }),
   };
 }
 
@@ -336,9 +351,9 @@ function redactedIn(value: unknown): Pick<CommentRecord, 'redacted'> {
 /**
  * Record a comment: append it to its post's file and index it.
  *
- * The id is minted here unless the caller brought one, and it is a UUID rather
- * than a counter so two comments written at once on two machines holding the
- * same content directory can never be given the same name.
+ * The key is minted here unless the caller brought one, and it is random
+ * rather than a counter so two comments written at once on two machines
+ * holding the same content directory are never given the same name.
  */
 export async function addComment(
   records: CommentRecords,
@@ -379,6 +394,46 @@ export async function putComments(
     }
     writePost(records, slug, post, next);
     for (const comment of comments) records.admin.putComment({ ...comment, slug, permalink: post });
+  });
+}
+
+/**
+ * Give comments on one post new ids: each one `renames` maps keeps its place
+ * under its new id, its email in `data/` follows it, and every reply naming
+ * its old id names the new one. Refuses a new id the post already holds.
+ */
+export async function renameComments(
+  records: CommentRecords,
+  slug: string,
+  renames: ReadonlyMap<string, string>,
+): Promise<void> {
+  const file = commentsFile(records.contentDir, slug);
+
+  await withFileLock(file, () => {
+    const held = readPost(records, slug);
+    const ids = new Set(held.comments.map((comment) => comment.id));
+    const moved = new Map([...renames].filter(([from, to]) => from !== to && ids.has(from)));
+    if (moved.size === 0) return;
+    for (const [from, to] of moved) {
+      if (ids.has(to)) {
+        throw new Error(`${file}: comment "${from}" cannot take id "${to}", which another has.`);
+      }
+    }
+
+    const changed: CommentRecord[] = [];
+    const next = held.comments.map((entry) => {
+      const id = moved.get(entry.id) ?? entry.id;
+      const inReplyTo =
+        entry.inReplyTo === null ? null : (moved.get(entry.inReplyTo) ?? entry.inReplyTo);
+      if (id === entry.id && inReplyTo === entry.inReplyTo) return entry;
+      const renamed = { ...entry, id, inReplyTo };
+      changed.push(renamed);
+      return renamed;
+    });
+    writePost(records, slug, held.post, next);
+    for (const from of moved.keys()) records.admin.deleteComment(from);
+    for (const comment of changed)
+      records.admin.putComment({ ...comment, slug, permalink: held.post });
   });
 }
 
@@ -538,7 +593,11 @@ export async function intakeComment(options: IntakeCommentOptions): Promise<Comm
       : { kind: 'stored', comment: moved, created: false };
   }
 
-  const stored = await addComment(records, { ...proposed, status });
+  const stored = await addComment(records, {
+    ...proposed,
+    status,
+    id: origin === 'webmention' ? webmentionKey(comment.url, comment.permalink) : undefined,
+  });
   announce(options.notices, stored);
   return { kind: 'stored', comment: stored, created: true };
 }
@@ -930,6 +989,136 @@ export function migrateCommentEmails(
   return { files };
 }
 
+/** What giving the stored comments keys changed. */
+export interface CommentKeyMigrationReport {
+  /** How many comments were given a key. */
+  comments: number;
+}
+
+/**
+ * Give every stored comment whose id is not a key the key of that id
+ * (decision-51): the first 16 hex digits of its SHA-256, so every boot works
+ * out the same one. A UUID a form comment or a webmention was given before
+ * keys, and a URL an import wrote, both become keys this way.
+ *
+ * What names an old id follows it: a comment's `inReplyTo`, the email `data/`
+ * keeps for it, and a document naming its old page or anchor, such as a reply
+ * post's `in-reply-to`. The documents go first, then for each post the private
+ * file with both keys, the comment file, and the private file with the new key
+ * alone, so a boot stopped anywhere loses nothing and the next one finishes
+ * the job. A site whose ids are all keys has its files read and none written.
+ *
+ * Synchronous, like the other boot migrations, and run before anything else
+ * can be writing a comment.
+ */
+export function migrateCommentKeys(
+  records: Pick<CommentRecords, 'contentDir' | 'dataDir'>,
+): CommentKeyMigrationReport {
+  const keys = new Map<string, string>();
+  const held: {
+    slug: string;
+    file: string;
+    parsed: Record<string, unknown>;
+    entries: unknown[];
+  }[] = [];
+  for (const slug of commentSlugs(records.contentDir)) {
+    const file = commentsFile(records.contentDir, slug);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(readFileIfPresentSync(file) ?? '');
+    } catch {
+      continue;
+    }
+    if (!isRecord(parsed) || !Array.isArray(parsed['comments'])) continue;
+    for (const entry of parsed['comments']) {
+      const id = isRecord(entry) ? entry['id'] : undefined;
+      if (typeof id === 'string' && id !== '' && !isKey(id)) keys.set(id, repliesKey(id));
+    }
+    held.push({ slug, file, parsed, entries: parsed['comments'] });
+  }
+
+  const renamed = renamer(keys);
+  if (keys.size > 0) rewriteDocuments(records.contentDir, renamed);
+
+  for (const { slug, file, parsed, entries } of held) {
+    const rekeyed = entries.map((entry: unknown) => {
+      if (!isRecord(entry)) return entry;
+      const id = entry['id'];
+      const inReplyTo = entry['inReplyTo'];
+      return {
+        ...entry,
+        ...(typeof id === 'string' && keys.has(id) ? { id: keys.get(id) } : {}),
+        ...(typeof inReplyTo === 'string'
+          ? { inReplyTo: keys.get(inReplyTo) ?? renamed(inReplyTo) }
+          : {}),
+      };
+    });
+    const changed = JSON.stringify(rekeyed) !== JSON.stringify(entries);
+
+    const privateFile = commentEmailsFile(records.dataDir, slug);
+    const contacts = contactsIn(readFileIfPresentSync(privateFile));
+    const keyed = new Map<string, CommentContact>();
+    for (const [id, contact] of contacts) {
+      const key = isKey(id) ? id : repliesKey(id);
+      if (!keyed.has(key) || id === key) keyed.set(key, contact);
+    }
+    const stale = [...contacts.keys()].some((id) => !isKey(id));
+
+    const writePrivate = (written: ReadonlyMap<string, CommentContact>): void => {
+      writeFileAtomicallySync(privateFile, contactsJson(written), {
+        mode: COMMENT_EMAILS_FILE_MODE,
+      });
+    };
+    if (changed) {
+      if (stale) writePrivate(new Map([...contacts, ...keyed]));
+      writeFileAtomicallySync(
+        file,
+        `${JSON.stringify({ ...parsed, comments: rekeyed }, null, 2)}\n`,
+      );
+    }
+    if (stale) writePrivate(keyed);
+  }
+
+  return { comments: keys.size };
+}
+
+/**
+ * Text with every old comment page and anchor in it naming the comment by its
+ * key. The longest ids go first, so an id that begins another cannot take a
+ * piece of it.
+ */
+function renamer(keys: ReadonlyMap<string, string>): (text: string) => string {
+  const swaps = [...keys]
+    .sort(([left], [right]) => right.length - left.length)
+    .flatMap(([id, key]) => [
+      [`${COMMENT_PAGE_PREFIX}${encodeURIComponent(id)}/`, commentPageHref(key)],
+      [`#comment-${id}`, `#comment-${key}`],
+    ]);
+  return (text) => swaps.reduce((said, [from = '', to = '']) => said.replaceAll(from, to), text);
+}
+
+/** Every Markdown file under the content directory, rewritten where `renamed` changes it. */
+function rewriteDocuments(contentDir: string, renamed: (text: string) => string): void {
+  let names: string[];
+  try {
+    names = readdirSync(contentDir, { recursive: true, encoding: 'utf8' });
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    if (!/\.(md|markdown)$/i.test(name) || name.split(path.sep).includes('node_modules')) continue;
+    const file = path.join(contentDir, name);
+    let text: string;
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    const next = renamed(text);
+    if (next !== text) writeFileAtomicallySync(file, next);
+  }
+}
+
 /** A copy of a record without one key, every other key where it was. */
 function without(record: Record<string, unknown>, key: string): Record<string, unknown> {
   return Object.fromEntries(Object.entries(record).filter(([name]) => name !== key));
@@ -958,7 +1147,7 @@ function commentFiles(contentDir: string): string[] {
 /** A new comment as the record it becomes, id and all. */
 function commentRecordOf(comment: NewComment): CommentRecord {
   return {
-    id: comment.id ?? randomUUID(),
+    id: comment.id ?? randomBytes(8).toString('hex'),
     source: comment.source,
     kind: comment.kind,
     status: comment.status,
@@ -972,6 +1161,7 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
     ...rsvpField(comment.rsvp),
     ...viaField(comment.via),
+    ...importedFields(comment),
   };
 }
 
@@ -994,6 +1184,7 @@ function publishedEntryOf(comment: CommentRecord): PublishedComment {
     ...(comment.redacted === undefined ? {} : { redacted: [...comment.redacted] }),
     ...rsvpField(comment.rsvp),
     ...viaField(comment.via),
+    ...importedFields(comment),
   };
 }
 

@@ -9,6 +9,7 @@
  * as a server in authorized fetch mode does.
  */
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
@@ -189,6 +190,7 @@ interface Site {
 async function site(
   log = deliveredLine(A, ADA, POST),
   clock = { at: new Date('2026-09-29T12:00:00Z') },
+  extra: Record<string, string> = {},
 ): Promise<Site> {
   const contentDir = await box.dir('geekity-backfill-content-');
   const dataDir = await box.dir('geekity-backfill-data-');
@@ -205,6 +207,7 @@ async function site(
     ].join('\n'),
     '_data/site.json': JSON.stringify({ title: 'A Site', baseUrl: BASE_URL, author: LOCAL_USER }),
     '_data/federation/inbox/2026-09.jsonl': log,
+    ...extra,
   };
   for (const [relative, contents] of Object.entries(files)) {
     const file = path.join(contentDir, ...relative.split('/'));
@@ -245,6 +248,18 @@ function tree(cms: Cms, contentDir: string): unknown[] {
       reply.replies.length === 0 ? reply.id : { [reply.id]: shape(reply.replies) },
     );
   return shape(reader.thread(post).replies);
+}
+
+function conversationOf(cms: Cms, contentDir: string) {
+  const post = cms.store.getByPermalink(PERMALINK);
+  assert.ok(post);
+  return createConversation({
+    admin: cms.admin,
+    store: cms.store,
+    contentDir,
+    baseUrl: BASE_URL,
+    users: () => [],
+  }).thread(post);
 }
 
 function creates(cms: Cms, noteId: string) {
@@ -574,5 +589,180 @@ describe('a server that publishes nothing or fails (AC #4)', () => {
     assert.equal(warnings.length, 1);
     assert.match(warnings[0] ?? '', /the server fell over/);
     assert.deepEqual(tree(cms, contentDir), [{ [A]: [B] }]);
+  });
+});
+
+describe('a fediverse comment imported from another site (TASK-336 AC #10)', () => {
+  const ADA_PAGE = 'https://mastodon.social/@ada';
+  const LIKE = `${ADA}#likes/1`;
+
+  function keyOf(origin: string): string {
+    return createHash('sha256').update(origin).digest('hex').slice(0, 16);
+  }
+
+  const IMPORTED = keyOf(A);
+  const IMPORTED_LIKE = keyOf(LIKE);
+
+  /** Ada's reply and like as plugin-wordpress imports them: migrated, keyed by their origin. */
+  const comments = {
+    '_data/comments/hello.json': JSON.stringify({
+      post: PERMALINK,
+      comments: [
+        {
+          id: IMPORTED,
+          source: 'activitypub',
+          kind: 'reply',
+          status: 'approved',
+          author: { name: 'Ada', url: ADA_PAGE, email: null, avatar: null },
+          content: { markdown: 'Ada, as imported.', html: '<p>Ada, as imported.</p>' },
+          submitted: '2026-09-21T10:00:00.000Z',
+          addressHash: null,
+          inReplyTo: null,
+          url: pageOf(A),
+          notify: false,
+          migrated: true,
+          origin: A,
+        },
+        {
+          id: IMPORTED_LIKE,
+          source: 'activitypub',
+          kind: 'like',
+          status: 'approved',
+          author: { name: 'Ada', url: ADA_PAGE, email: null, avatar: null },
+          content: { markdown: '… liked this!', html: '<p>… liked this!</p>' },
+          submitted: '2026-09-21T10:01:00.000Z',
+          addressHash: null,
+          inReplyTo: null,
+          url: ADA_PAGE,
+          notify: false,
+          migrated: true,
+          origin: LIKE,
+          actor: ADA,
+        },
+      ],
+    }),
+  };
+
+  function fetchedLine(id: string, actor: string, inReplyTo: string): string {
+    const line = JSON.parse(deliveredLine(id, actor, inReplyTo)) as Record<string, unknown>;
+    return `${JSON.stringify({ ...line, id: `${id}#fetched`, recipient: null, fetched: true })}\n`;
+  }
+
+  function likeLine(id: string, actor: string): string {
+    return `${JSON.stringify({
+      receivedAt: '2026-09-22T10:05:00.000Z',
+      recipient: LOCAL_USER,
+      '@context': AS,
+      id,
+      type: 'Like',
+      actor,
+      object: POST,
+    })}\n`;
+  }
+
+  async function guids(cms: Cms, pathname: string): Promise<string[]> {
+    const response = await cms.app.request(pathname);
+    assert.equal(response.status, 200, `GET ${pathname} answered ${String(response.status)}`);
+    return [...(await response.text()).matchAll(/<guid[^>]*>([^<]*)<\/guid>/g)].map(
+      (match) => match[1] ?? '',
+    );
+  }
+
+  it('shows once, as the imported comment, when its Create is delivered again', async () => {
+    const { cms, contentDir } = await site(deliveredLine(A, ADA, POST), undefined, comments);
+
+    assert.deepEqual(tree(cms, contentDir), [IMPORTED]);
+    const page = await (await cms.app.request(PERMALINK)).text();
+    assert.match(page, /Ada, as imported\./);
+    assert.doesNotMatch(page, /Ada says hello\./);
+    assert.ok(!(await guids(cms, '/comments/feed/')).includes(A), 'the site feed has no copy');
+    assert.ok(!(await guids(cms, `${PERMALINK}feed/`)).includes(A), 'the post feed has no copy');
+  });
+
+  it('shows once when an earlier backfill logged it as fetched', async () => {
+    const { cms, contentDir } = await site(fetchedLine(A, ADA, POST), undefined, comments);
+
+    assert.deepEqual(tree(cms, contentDir), [IMPORTED]);
+    assert.ok(!(await guids(cms, '/comments/feed/')).includes(A));
+  });
+
+  it('has its replies read by its origin and threaded under it, and they are fed', async () => {
+    serveNote(note(A, POST, 'Ada says hello.'), [B]);
+    serveNote(note(B, A, 'Bob answers Ada.'), []);
+    const { cms, contentDir } = await site('', undefined, comments);
+
+    await cms.replyBackfill.sweep();
+
+    assert.ok(requested.includes(A), 'read Ada’s note by its id, not by its key');
+    assert.equal(creates(cms, A).length, 0, 'the imported note is not logged');
+    assert.deepEqual(tree(cms, contentDir), [{ [IMPORTED]: [B] }]);
+    const site_ = await guids(cms, '/comments/feed/');
+    assert.ok(site_.includes(B), 'Bob’s answer is news on the site feed');
+    assert.ok(!site_.includes(A));
+    assert.ok((await guids(cms, `${PERMALINK}feed/`)).includes(B), 'and on the post feed');
+  });
+
+  it('is not logged when another note’s collection lists it', async () => {
+    serveNote(note(C, POST, 'Carol says hello.'), [A]);
+    serveNote(note(A, C, 'Ada says hello.'), []);
+    const { cms, contentDir } = await site(deliveredLine(C, CAROL, POST), undefined, comments);
+
+    await cms.replyBackfill.sweep();
+
+    assert.equal(creates(cms, A).length, 0);
+    assert.deepEqual(tree(cms, contentDir).sort(), [C, IMPORTED].sort());
+  });
+
+  it('counts an imported like once when the Like is delivered again', async () => {
+    const { cms, contentDir } = await site(likeLine(LIKE, ADA), undefined, comments);
+
+    const { likes } = conversationOf(cms, contentDir);
+    assert.deepEqual(
+      likes.map((like) => like.id),
+      [IMPORTED_LIKE],
+    );
+  });
+
+  for (const held of [false, true]) {
+    it(`counts one like from Ada when she likes the post again under a new id, ${held ? 'her profile held' : 'with no profile of her held'}`, async () => {
+      const { cms, contentDir } = await site(likeLine(`${ADA}#likes/2`, ADA), undefined, comments);
+      if (held) {
+        cms.admin.putActorProfile({
+          actorId: ADA,
+          handle: '@ada@mastodon.social',
+          name: 'Ada',
+          iconUrl: null,
+          url: ADA_PAGE,
+          fetchedAt: '2026-09-22T10:00:00.000Z',
+        });
+      }
+
+      const { likes } = conversationOf(cms, contentDir);
+      assert.deepEqual(
+        likes.map((like) => like.id),
+        [IMPORTED_LIKE],
+      );
+    });
+  }
+
+  it('names an imported like by the handle its actor id implies', async () => {
+    const { cms, contentDir } = await site('', undefined, comments);
+
+    const { likes } = conversationOf(cms, contentDir);
+    assert.equal(likes[0]?.author.handle, '@ada@mastodon.social');
+  });
+
+  it('counts a like from somebody else as theirs', async () => {
+    const { cms, contentDir } = await site(
+      likeLine(`${CAROL}#likes/1`, CAROL),
+      undefined,
+      comments,
+    );
+
+    const { likes } = conversationOf(cms, contentDir);
+    assert.deepEqual(
+      likes.map((like) => like.id).sort(),
+      [IMPORTED_LIKE, `${CAROL}#likes/1`].sort(),
+    );
   });
 });

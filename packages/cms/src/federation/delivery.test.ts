@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -2245,7 +2246,7 @@ Words.
     const response = await agent.post('/_geekity/comments', {
       post: 'watched',
       body: 'Answering Carol from the thread.',
-      in_reply_to: STATUS_ID,
+      in_reply_to: createHash('sha256').update(STATUS_ID).digest('hex').slice(0, 16),
       csrf_token: token,
     });
     assert.equal(response.status, 303, await response.text());

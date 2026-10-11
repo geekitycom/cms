@@ -18,11 +18,12 @@ import {
   replyFrom,
   REPLY_ACTIVITY_TYPE,
 } from '../federation/replies.ts';
-import { authorContext, authorFeedHref, siteAuthorContext } from './authors.ts';
+import { authorContext, authorFeedHref, profileContext, siteAuthorContext } from './authors.ts';
+import type { AuthorContext } from './authors.ts';
 import { activityStreamsId, isListed, isServed, permalinkOfObjectId } from './documents.ts';
-import { isRepliesKey, repliesFeedPath, repliesKey } from './feed-source.ts';
+import { isKey, repliesFeedPath, repliesKey } from './feed-source.ts';
 import type { FeedComment } from './feeds.ts';
-import { COMMENT_PAGE_PREFIX, commentPageHref, feedGuid, replyGuid } from './guids.ts';
+import { COMMENT_PAGE_PREFIX, commentPageHref, feedGuid } from './guids.ts';
 import { absoluteUrl } from './negotiate.ts';
 import { sanitizeCommentHtml } from './sanitize.ts';
 
@@ -105,12 +106,35 @@ export interface InteractionAuthor {
    * publishes no feed the site knows of, so both are `null`.
    */
   readonly feed: string | null;
+  /**
+   * The site user they are, by username, else `null`: whoever a reply post
+   * is by, or whoever a stored comment names (TASK-337). A theme vouches for
+   * the link of a site user and of nobody else.
+   */
+  readonly username: string | null;
 }
 
 /** One thing somebody did to a post: a reply, a like or a boost. */
 export interface Interaction {
   /** What it is called: the note's id, and what a reply to it names. */
   readonly id: string;
+  /**
+   * Its key (decision-51): a stored comment's id, else the key of its guid.
+   * The one thing in its anchor, `#comment-{key}`, and its replies feed,
+   * `/replies/{key}/`.
+   */
+  readonly key: string;
+  /**
+   * What the comments feeds call it, and what a reply to it names in
+   * `source:inReplyTo`: a stored form comment's page, a stored comment's
+   * origin or else its url, and anything else's id.
+   */
+  readonly guid: string;
+  /**
+   * Whether it was imported from another system (TASK-336): shown in the
+   * thread like any other, and carried by no feed and no reply count.
+   */
+  readonly migrated: boolean;
   /** Where it came from. */
   readonly source: InteractionSource;
   /** Which of the three it is. */
@@ -144,8 +168,10 @@ export interface Interaction {
  * visible reply sits under it.
  */
 export interface WithheldReply {
-  /** The hidden comment's id, so its anchor on the post is still there. */
+  /** The hidden comment's id. */
   readonly id: string;
+  /** Its key, so its anchor on the post is still there. */
+  readonly key: string;
   readonly withheld: true;
   /** The replies under it, oldest first, at least one of them visible. */
   readonly replies: ThreadReply[];
@@ -286,14 +312,14 @@ export interface ConversationReader {
    */
   readonly comment: (id: string) => CommentThread | undefined;
   /**
-   * The id of the reply on a post that a URL names, or `undefined` (TASK-319):
+   * The reply on a post that a URL names, or `undefined` (TASK-319):
    * a comment by its own page or by the post's `#comment-` anchor, a
    * webmention by the page it was sent from, a fediverse reply by its url or
    * its id. Every stored comment counts whatever its status, because what a
    * reply answers is a fact about it, and whether a reader may see the one it
    * answers is decided when the thread is read.
    */
-  readonly replyNamed: (document: Document, url: string) => string | undefined;
+  readonly replyNamed: (document: Document, url: string) => Interaction | undefined;
   /**
    * What a URL names on this site, while a reader may see it: a reply (a
    * comment by its page or its anchor, a webmention by the page it was sent
@@ -303,11 +329,10 @@ export interface ConversationReader {
    */
   readonly heldAt: (url: string) => HeldAt | undefined;
   /**
-   * What a `/replies/` segment names and its direct replies (TASK-324), or
-   * `undefined`: a key names a served post or page, or a reply a reader can
-   * see, by its feed guid; anything else is a native comment's id.
+   * What a key names and its direct replies (TASK-324, decision-51), or
+   * `undefined`: a served post or page, or a reply a reader can see.
    */
-  readonly repliesTo: (segment: string) => RepliesOf | undefined;
+  readonly repliesTo: (key: string) => RepliesOf | undefined;
   /**
    * The document whose conversation a URL is in (TASK-320): the post a
    * comment's page or anchor is on, the post a webmention was sent to, the
@@ -448,7 +473,15 @@ function gather(
   const objectId = activityStreamsId(document, context.baseUrl);
   const root = rootOf(context, document);
 
-  const activities = objectId === undefined ? [] : activitiesAround(context.admin, objectId);
+  const stored = context.admin.listCommentsFor(document.slug);
+  const users = context.users();
+  // What was imported from the fediverse is walked from too: an answer to an
+  // imported note names the note, which no logged activity may carry.
+  const origins = stored.flatMap((comment) =>
+    comment.source === 'activitypub' && comment.origin !== undefined ? [comment.origin] : [],
+  );
+  const activities =
+    objectId === undefined ? [] : activitiesAround(context.admin, [objectId, ...origins]);
   const naming = authorNaming(context.admin);
   const quotes =
     objectId === undefined
@@ -462,7 +495,15 @@ function gather(
   const mentions: Interaction[] = [...quotes];
   const answers: Interaction[] = [];
   const held = new Map<string, Interaction>();
-  const reacted = new Set<string>();
+  // One like per actor, so a like imported from the site this one replaced
+  // and the same person's like delivered here are one.
+  const reacted = new Set(
+    stored.flatMap(({ kind, actor }) =>
+      actor === undefined || (kind !== 'like' && kind !== 'boost' && kind !== 'repost')
+        ? []
+        : [`${kind === 'like' ? 'like' : 'boost'}\0${actor}`],
+    ),
+  );
   const isEvent = postTypeOf(document) === 'event';
 
   for (const activity of activities) {
@@ -472,7 +513,7 @@ function gather(
       if (activity.activityId !== null && withdrawn.has(activity.activityId)) continue;
       const author = naming(activity.actorId);
       answers.push({
-        id: activity.activityId ?? `${activity.actorId}#rsvp`,
+        ...unstored(activity.activityId ?? `${activity.actorId}#rsvp`),
         source: 'activitypub',
         kind: 'reply',
         author,
@@ -492,16 +533,21 @@ function gather(
       // Only a reaction to the post itself: a like of one of the replies
       // belongs to that reply's own conversation, wherever it is shown.
       if (activity.objectId !== objectId) continue;
-      // One like per actor, however many times it was delivered, and none at
-      // all once its actor has taken it back.
+      // One like per actor, however many times it was delivered, and none
+      // at all once its actor has taken it back.
       const key = `${kind}\0${activity.actorId}`;
       if (reacted.has(key)) continue;
       if (activity.activityId !== null && withdrawn.has(activity.activityId)) continue;
+      if (
+        activity.activityId !== null &&
+        heldComment(context.admin, activity.activityId) !== undefined
+      ) {
+        continue;
+      }
       reacted.add(key);
-
       const author = naming(activity.actorId);
       (kind === 'like' ? likes : boosts).push({
-        id: activity.activityId ?? `${activity.actorId}#${kind}`,
+        ...unstored(activity.activityId ?? `${activity.actorId}#${kind}`),
         source: 'activitypub',
         kind,
         author,
@@ -516,13 +562,19 @@ function gather(
     }
 
     const reply = replyFrom(activity);
-    if (reply === undefined) continue;
-    written.push(federatedInteraction(reply, naming(activity.actorId)));
+    if (reply === undefined || heldComment(context.admin, reply.id) !== undefined) continue;
+    const parent = heldComment(context.admin, reply.inReplyTo);
+    written.push(
+      federatedInteraction(
+        parent === undefined ? reply : { ...reply, inReplyTo: parent.id },
+        naming(activity.actorId),
+      ),
+    );
   }
 
-  for (const stored of context.admin.listCommentsFor(document.slug)) {
-    const comment = interactionOf(stored, document.permalink);
-    if (stored.status !== 'approved') {
+  for (const record of stored) {
+    const comment = interactionOf(record, document.permalink, context.baseUrl, users);
+    if (record.status !== 'approved') {
       held.set(comment.id, comment);
       continue;
     }
@@ -597,8 +649,8 @@ function replyNamed(
   context: ConversationContext,
   document: Document,
   url: string,
-): string | undefined {
-  return namedIn(context, document, gather(context, document), url)?.id;
+): Interaction | undefined {
+  return namedIn(context, document, gather(context, document), url);
 }
 
 /** The entry of a gathered conversation a URL names, held ones included. */
@@ -614,11 +666,11 @@ function namedIn(
   } catch {
     return undefined;
   }
-  const commentId = commentNamedBy(named, document, context.baseUrl);
+  const key = keyNamedBy(named, document, context.baseUrl);
 
   return [...said.written, ...said.held.values()].find(
     (reply) =>
-      reply.id === commentId ||
+      reply.key === key ||
       reply.id === named.href ||
       (reply.url !== null && absoluteUrl(reply.url, context.baseUrl) === named.href),
   );
@@ -638,36 +690,31 @@ function heldAt(context: ConversationContext, url: string): HeldAt | undefined {
   return { kind: 'reply', post, reply };
 }
 
-function repliesTo(context: ConversationContext, segment: string): RepliesOf | undefined {
-  if (!isRepliesKey(segment)) {
-    const stored = context.admin.getComment(segment);
-    if (stored?.source !== 'comment') return undefined;
-    const post = context.store.getBySlug(stored.slug);
-    return post === undefined ? undefined : repliesIn(context, post, segment);
-  }
+function repliesTo(context: ConversationContext, key: string): RepliesOf | undefined {
+  if (!isKey(key)) return undefined;
 
   // Each source's index is asked in turn, so a key naming nothing costs three
   // lookups and no more (TASK-327).
-  const [document] = context.store.listByRepliesKey(segment);
+  const [document] = context.store.listByRepliesKey(key);
   if (document !== undefined) {
-    if (repliesKey(feedGuid(document, context.baseUrl)) === segment) {
+    if (repliesKey(feedGuid(document, context.baseUrl)) === key) {
       return repliesIn(context, document, null);
     }
     const root = threadRootOf(context, document);
-    return root === undefined ? undefined : repliesIn(context, root, rootOf(context, document));
+    return root === undefined ? undefined : repliesIn(context, root, key);
   }
 
-  const [comment] = context.admin.listCommentsByRepliesKey(segment);
+  const comment = context.admin.getComment(key);
   if (comment !== undefined) {
     const post = context.store.getBySlug(comment.slug);
-    return post === undefined ? undefined : repliesIn(context, post, comment.id);
+    return post === undefined ? undefined : repliesIn(context, post, key);
   }
 
-  for (const activity of context.admin.listRepliesByKey(segment)) {
+  for (const activity of context.admin.listRepliesByKey(key)) {
     const reply = replyFrom(activity);
     if (reply === undefined) continue;
     const post = documentNamed(context, reply.id);
-    return post === undefined ? undefined : repliesIn(context, post, reply.id);
+    return post === undefined ? undefined : repliesIn(context, post, key);
   }
   return undefined;
 }
@@ -679,16 +726,16 @@ function repliesTo(context: ConversationContext, segment: string): RepliesOf | u
 function repliesIn(
   context: ConversationContext,
   post: Document,
-  id: string | null,
+  key: string | null,
 ): RepliesOf | undefined {
   if (!isServed(post, context.store.now())) return undefined;
   const thread = postConversation(context, post).replies;
-  const reply = id === null ? null : visibleReply(thread, id);
+  const reply = key === null ? null : visibleReply(thread, key);
   if (reply === undefined) return undefined;
   return {
     post,
     reply,
-    replies: directReplies(reply?.replies ?? thread).map((entry) => ({ ...entry, parent: reply })),
+    replies: repliesFed(reply?.replies ?? thread).map((entry) => ({ ...entry, parent: reply })),
   };
 }
 
@@ -757,9 +804,9 @@ function documentNamed(context: ConversationContext, url: string, depth = 0): Do
   }
 
   if (named.origin === new URL(context.baseUrl).origin) {
-    const id = commentIdAt(named.pathname);
-    if (id !== undefined) {
-      const comment = context.admin.getComment(id);
+    const key = commentKeyAt(named.pathname);
+    if (key !== undefined) {
+      const comment = context.admin.getComment(key);
       return comment === undefined ? undefined : context.store.getBySlug(comment.slug);
     }
     const permalink = permalinkOfObjectId(`${named.origin}${named.pathname}`, context.baseUrl);
@@ -767,7 +814,8 @@ function documentNamed(context: ConversationContext, url: string, depth = 0): Do
     return found ?? context.store.getByStoredObjectId(named.href);
   }
 
-  const [comment] = context.admin.listCommentsAt(named.href);
+  const comment =
+    context.admin.listCommentsAt(named.href)[0] ?? heldComment(context.admin, named.href);
   if (comment !== undefined) return context.store.getBySlug(comment.slug);
 
   for (const activity of context.admin.listActivitiesAbout([named.href])) {
@@ -853,7 +901,7 @@ function replyPostInteraction(
   inReplyTo: string,
 ): Interaction {
   return {
-    id,
+    ...unstored(id),
     source: 'post',
     kind: 'reply',
     author: documentAuthor(context, post),
@@ -871,27 +919,33 @@ function documentAuthor(context: ConversationContext, post: Document): Interacti
   const users = context.users();
   const site = readSiteSettings(context.contentDir);
   const author = authorContext(users, post.author) ?? siteAuthorContext(users, site.author);
+  return bylineAuthor(author, site.title);
+}
+
+/** A byline as the thread names its author, `fallback` when it names nobody. */
+function bylineAuthor(author: AuthorContext | undefined, fallback: string): InteractionAuthor {
   return {
-    name: author?.name ?? site.title,
+    name: author?.name ?? fallback,
     handle: null,
     url: author?.url ?? null,
     avatar: author?.avatar ?? null,
     actorId: null,
     feed: author?.username === undefined ? null : authorFeedHref(author.username, 'rss'),
+    username: author?.username ?? null,
   };
 }
 
-/** The comment a URL on this site names by its page or by its anchor on the post. */
-function commentNamedBy(url: URL, document: Document, baseUrl: string): string | undefined {
+/** The key a URL on this site names by a comment's page or by an anchor on the post. */
+function keyNamedBy(url: URL, document: Document, baseUrl: string): string | undefined {
   const post = new URL(absoluteUrl(document.permalink, baseUrl));
   if (url.origin !== post.origin) return undefined;
 
-  const onItsPage = commentIdAt(url.pathname);
+  const onItsPage = commentKeyAt(url.pathname);
   if (onItsPage !== undefined) return onItsPage;
 
   const anchor = `#${commentAnchor('')}`;
   if (url.pathname !== post.pathname || !url.hash.startsWith(anchor)) return undefined;
-  return decoded(url.hash.slice(anchor.length));
+  return url.hash.slice(anchor.length);
 }
 
 /**
@@ -970,7 +1024,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
 
     for (const activity of page) {
       const reply = replyFrom(activity);
-      if (reply === undefined) continue;
+      if (reply === undefined || heldComment(context.admin, reply.id) !== undefined) continue;
       // A note answering another note is as much this post's as one answering
       // the post, so the post is found the way a reply post finds its thread.
       const post = documentNamed(context, reply.inReplyTo);
@@ -991,28 +1045,30 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
     }
   }
 
-  for (const stored of context.admin.listComments({
-    status: 'approved',
-    limit: limit * OVERSCAN,
-  })) {
-    const post = context.store.getBySlug(stored.slug);
-    if (!shown(post)) continue;
-    said.push({ ...interactionOf(stored, post.permalink), post });
-  }
-
   // Each post's thread, read once: where each reply sits and what it carries
   // is the thread's to say, so the site's feed and the post's agree.
   const threads = new Map<string, ReadonlyMap<string, Placed>>();
   const placedOn = (post: Document): ReadonlyMap<string, Placed> => {
     let found = threads.get(post.path);
     if (found === undefined) {
-      found = new Map(
-        placed(postConversation(context, post).replies).map((reply) => [reply.id, reply]),
-      );
+      found = new Map(saidIn(postConversation(context, post)).map((reply) => [reply.id, reply]));
       threads.set(post.path, found);
     }
     return found;
   };
+
+  // A stored comment is taken from its post's thread rather than read on its
+  // own, so a reaction or an event's RSVP, which the thread holds apart, is
+  // left out here as it is from the post's feed.
+  for (const stored of context.admin.listComments({
+    status: 'approved',
+    limit: limit * OVERSCAN,
+  })) {
+    const post = context.store.getBySlug(stored.slug);
+    if (!shown(post)) continue;
+    const entry = placedOn(post).get(stored.id);
+    if (entry !== undefined) said.push({ ...entry, post });
+  }
 
   // A reply post is in the feed of the thread it is shown in, unlisted or
   // not: the thread is listed, and the reply post is one of its answers.
@@ -1023,7 +1079,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
     if (reply !== undefined) said.push({ ...reply, post });
   }
 
-  return newestFirst(said, limit).map((entry) => {
+  return newestFirst(said.filter(conversational), limit).map((entry) => {
     const thread = placedOn(entry.post);
     return {
       ...(thread.get(entry.id) ?? { ...entry, parent: null }),
@@ -1042,7 +1098,7 @@ function directCounts(
   return new Map(
     documents.map((document) => [
       document.permalink,
-      directReplies(postConversation(context, document).replies).length,
+      repliesFed(postConversation(context, document).replies).length,
     ]),
   );
 }
@@ -1083,7 +1139,7 @@ function quotesOf(
       if (quote?.id !== approval.quote || quote.quoted !== objectId) continue;
 
       quotes.push({
-        id: quote.id,
+        ...unstored(quote.id),
         source: 'activitypub',
         kind: 'mention',
         author: naming(quote.actorId),
@@ -1108,7 +1164,7 @@ function federatedInteraction(
   author: InteractionAuthor,
 ): Interaction {
   return {
-    id: reply.id,
+    ...unstored(reply.id),
     source: 'activitypub',
     kind: 'reply',
     author,
@@ -1123,24 +1179,41 @@ function federatedInteraction(
   };
 }
 
+function unstored(id: string): Pick<Interaction, 'id' | 'key' | 'guid' | 'migrated'> {
+  return { id, key: repliesKey(id), guid: id, migrated: false };
+}
+
 /** One stored comment as the thread's own shape. */
-function interactionOf(comment: PostComment, permalink: string): Interaction {
+function interactionOf(
+  comment: PostComment,
+  permalink: string,
+  baseUrl: string,
+  users: readonly User[],
+): Interaction {
+  // A user the site no longer has is named as the comment was signed.
+  const user = users.find((candidate) => candidate.username === comment.user);
   return {
     id: comment.id,
+    key: comment.id,
+    guid:
+      comment.source === 'comment'
+        ? absoluteUrl(commentPageHref(comment.id), baseUrl)
+        : (comment.origin ?? comment.url ?? comment.id),
+    migrated: comment.migrated === true,
     source: comment.source,
     kind: comment.kind,
-    author: {
-      name: comment.author.name,
-      // A commenter has no fediverse identity: they gave a name, maybe a
-      // website, and nothing that names them anywhere else.
-      handle: null,
-      url: comment.author.url,
-      // Only a webmention has one: it came out of the source page's `h-card`,
-      // and a form asks nobody for a picture.
-      avatar: comment.author.avatar === null ? null : avatarHref(comment.author.avatar),
-      actorId: null,
-      feed: comment.source === 'webmention' ? comment.author.url : null,
-    },
+    author:
+      user === undefined
+        ? {
+            name: comment.author.name,
+            handle: comment.actor === undefined ? null : (actorHandle(comment.actor) ?? null),
+            url: comment.author.url,
+            avatar: comment.author.avatar === null ? null : avatarHref(comment.author.avatar),
+            actorId: comment.actor ?? null,
+            feed: comment.source === 'webmention' ? comment.author.url : null,
+            username: null,
+          }
+        : bylineAuthor(profileContext(user), comment.author.name),
     // Where it can be read. A comment written here has a page of its own
     // (TASK-318); a webmention lives on the page it was sent from, and its
     // `url` says so. A theme that prints `url` for a fediverse reply prints a
@@ -1162,45 +1235,56 @@ function interactionOf(comment: PostComment, permalink: string): Interaction {
 }
 
 /**
- * The `id` a comment is anchored at on the page.
+ * The stored comment holding a fediverse note or activity id as its origin:
+ * one imported from the site this one replaced, keyed by that id as it would
+ * have been had it arrived here (TASK-336). A delivery or a fetch of the same
+ * id is that comment again, and the stored one wins, since it is the one the
+ * moderator decided on and the thread anchors.
+ */
+export function heldComment(admin: AdminStore, id: string): PostComment | undefined {
+  const comment = admin.getComment(repliesKey(id));
+  return comment?.origin === id ? comment : undefined;
+}
+
+/**
+ * The `id` a thread entry is anchored at on the page, by its key.
  *
  * Prefixed rather than bare so a comment can never collide with a heading
  * anchor the post's own Markdown produced.
  */
-export function commentAnchor(id: string): string {
-  return `comment-${id}`;
+export function commentAnchor(key: string): string {
+  return `comment-${key}`;
 }
 
-/** The id of the comment whose page a path is, or `undefined` (TASK-319). */
-export function commentIdAt(pathname: string): string | undefined {
+/** The key of the comment whose page a path is, or `undefined` (TASK-319). */
+export function commentKeyAt(pathname: string): string | undefined {
   if (!pathname.startsWith(COMMENT_PAGE_PREFIX) || !pathname.endsWith('/')) return undefined;
-  const encoded = pathname.slice(COMMENT_PAGE_PREFIX.length, -1);
-  if (encoded === '' || encoded.includes('/')) return undefined;
-  return decoded(encoded);
+  const key = pathname.slice(COMMENT_PAGE_PREFIX.length, -1);
+  return isKey(key) ? key : undefined;
 }
 
-function decoded(value: string): string | undefined {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Everything said in a conversation, at every depth and in no order: the
- * replies and the mentions.
- *
- * The likes and the boosts are left out because they say nothing. A feed item
- * is somebody's words, and "@ada liked this" has none to carry — a reader
- * polling a comments feed would get an entry with an empty body and no way to
- * tell what it was for.
- */
+/** What a post's comments feed carries, at every depth and in no order. */
 export function spokenIn(conversation: Conversation): Placed[] {
+  return saidIn(conversation).filter(conversational);
+}
+
+/** The mentions and every visible reply of a conversation, each with its parent. */
+function saidIn(conversation: Conversation): Placed[] {
   return [
     ...conversation.mentions.map((mention) => ({ ...mention, parent: null })),
     ...placed(conversation.replies),
   ];
+}
+
+/**
+ * Whether a feed carries it and a reply count counts it (TASK-335): somebody's
+ * words, a reply or a mention, said here. A like, a boost or a repost says
+ * nothing — "@ada liked this" would be an item with an empty body — and a
+ * migrated entry was published before the site came here, so a reader must
+ * not see it as new.
+ */
+function conversational(entry: Interaction): boolean {
+  return !entry.migrated && (entry.kind === 'reply' || entry.kind === 'mention');
 }
 
 /** Every visible reply of a thread at any depth, each with the reply it sits under. */
@@ -1220,17 +1304,9 @@ function directReplies(replies: readonly ThreadReply[]): Interaction[] {
   return replies.flatMap((reply) => (isWithheld(reply) ? directReplies(reply.replies) : [reply]));
 }
 
-/**
- * The `/replies/` feed of one reply: a native comment's by its id, anything
- * else's by the key of its guid, as is a native comment whose id would read
- * as a key.
- */
-function repliesHrefOf(reply: Interaction, baseUrl: string): string {
-  return repliesFeedPath(
-    reply.source === 'comment' && !isRepliesKey(reply.id)
-      ? reply.id
-      : repliesKey(replyGuid(reply, baseUrl)),
-  );
+/** The direct replies a feed carries and a count advertises. */
+function repliesFed(replies: readonly ThreadReply[]): Interaction[] {
+  return directReplies(replies).filter(conversational);
 }
 
 /**
@@ -1257,10 +1333,10 @@ export function feedComments(
         ? thread === undefined
           ? undefined
           : feedGuid(thread, baseUrl)
-        : replyGuid(entry.parent, baseUrl);
-    const replies = directReplies(entry.replies);
+        : entry.parent.guid;
+    const replies = repliesFed(entry.replies);
     return {
-      id: replyGuid(entry, baseUrl),
+      id: entry.guid,
       url: absoluteUrl(entry.url ?? '/', baseUrl),
       author: entry.author.name,
       published: entry.published,
@@ -1271,7 +1347,7 @@ export function feedComments(
         : {
             replies: {
               count: replies.length,
-              feed: absoluteUrl(repliesHrefOf(entry, baseUrl), baseUrl),
+              feed: absoluteUrl(repliesFeedPath(entry.key), baseUrl),
             },
           }),
       ...(entry.author.feed === null
@@ -1413,7 +1489,8 @@ function threadOf(said: Gathered, under: string = said.root): ThreadReply[] {
     withheld.set(id, undefined);
     const list = siblings(said.held.get(id)?.inReplyTo ?? said.root, id, true);
     if (list === undefined) return undefined;
-    const entry: WithheldReply = { id, withheld: true, replies: [] };
+    const key = isKey(id) ? id : repliesKey(id);
+    const entry: WithheldReply = { id, key, withheld: true, replies: [] };
     list.push(entry);
     withheld.set(id, entry);
     return entry;
@@ -1426,11 +1503,14 @@ function threadOf(said: Gathered, under: string = said.root): ThreadReply[] {
   return top;
 }
 
-/** The entry of a thread with this id that a reader can see, at any depth. */
-export function visibleReply(replies: readonly ThreadReply[], id: string): Interaction | undefined {
+/** The entry of a thread with this key that a reader can see, at any depth. */
+export function visibleReply(
+  replies: readonly ThreadReply[],
+  key: string,
+): Interaction | undefined {
   for (const reply of replies) {
-    if (!isWithheld(reply) && reply.id === id) return reply;
-    const found = visibleReply(reply.replies, id);
+    if (!isWithheld(reply) && reply.key === key) return reply;
+    const found = visibleReply(reply.replies, key);
     if (found !== undefined) return found;
   }
   return undefined;
@@ -1484,10 +1564,10 @@ const REACTIONS: Readonly<Record<string, InteractionKind | undefined>> = {
  * stops when a round finds nothing new, which it must, because a row is
  * collected once and there are finitely many.
  */
-function activitiesAround(admin: AdminStore, objectId: string): InboxActivity[] {
+function activitiesAround(admin: AdminStore, objectIds: readonly string[]): InboxActivity[] {
   const collected = new Map<number, InboxActivity>();
-  const asked = new Set<string>([objectId]);
-  let frontier: string[] = [objectId];
+  const asked = new Set<string>(objectIds);
+  let frontier: string[] = [...asked];
 
   while (frontier.length > 0) {
     const next: string[] = [];
@@ -1572,6 +1652,7 @@ function authorNaming(admin: AdminStore): (actorId: string) => InteractionAuthor
       avatar: icon === null ? null : avatarHref(icon),
       actorId,
       feed: null,
+      username: null,
     };
     known.set(actorId, author);
     return author;

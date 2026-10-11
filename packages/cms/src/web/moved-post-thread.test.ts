@@ -16,10 +16,10 @@ const BASE_URL = 'https://blog.example';
 const POST = '/2026/09/hello/';
 const FILE = 'posts/2026-09-02-hello.md';
 
-const ADA = '00000000-0000-4000-8000-0000000000a1';
-const BOB = '00000000-0000-4000-8000-0000000000a2';
-const GRACE = '00000000-0000-4000-8000-0000000000e1';
-const CY = '00000000-0000-4000-8000-0000000000c1';
+const ADA = '00000000000000a1';
+const BOB = '00000000000000a2';
+const GRACE = '00000000000000e1';
+const CY = '00000000000000c1';
 const NOTE = 'https://remote.example/notes/1';
 
 function markdown(frontMatter: string[], body: string): string {

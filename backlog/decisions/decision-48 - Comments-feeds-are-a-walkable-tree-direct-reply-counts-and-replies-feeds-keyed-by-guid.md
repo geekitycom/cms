@@ -50,3 +50,27 @@ The comments feeds are one reading of `ConversationReader.thread`.
   ETag moves once.
 - In the feeds, a reply under a hidden comment reads as answering the nearest
   visible ancestor.
+
+## Amended (2026-10-11)
+
+decision-51 (one 16-hex key per item) and TASK-335 changed parts of this
+decision. Where they differ, the following holds:
+
+- Every visible reply has a guid. A native form comment's is its
+  `/comment/{key}/` page. A migrated comment's is its origin, or else its url
+  (decision-51). Any other reply's is its own id.
+- `/replies/{key}/` serves an item's direct replies that a feed carries. The
+  key is the item's key (decision-51). There is no id-or-key segment rule.
+- The post feeds' `source:comments` counts the direct replies a feed carries,
+  points at the key feed, and is left out at zero. So an item whose only
+  responses are reactions advertises no replies feed.
+- A feed carries what was said: replies and mentions (TASK-335). Likes,
+  boosts, reposts, an RSVP to an event, and a migrated comment are in no
+  comments feed, no `/replies/` feed and no count. An RSVP to an event is
+  shown with the people answering, not in the thread, words or not. An RSVP
+  to a post that is not an event is a reply. One predicate, `conversational`
+  in `web/conversation.ts`, decides it for every feed and count, and
+  `/comments/feed/` takes each stored comment from its post's thread, so the
+  site feed and a post's feed cannot disagree.
+- A post with 30 boosts and no replies has an empty comments feed and no
+  `source:comments`.

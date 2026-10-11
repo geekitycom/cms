@@ -1,5 +1,4 @@
 import type { Document } from '../content/document.ts';
-import type { InteractionSource } from './conversation.ts';
 import { absoluteUrl } from './negotiate.ts';
 
 /**
@@ -7,8 +6,8 @@ import { absoluteUrl } from './negotiate.ts';
  * id, a feed guid, a comment's page.
  *
  * Kept apart from the modules that serve them so the indexes can name things
- * the same way without importing the web layer: the content index and the
- * admin store key `/replies/` feeds by these guids (TASK-327).
+ * the same way without importing the web layer: the content index keys
+ * `/replies/` feeds by these guids (TASK-327).
  */
 
 /**
@@ -62,25 +61,9 @@ export function feedGuid(document: Document, baseUrl: string): string {
     : absoluteUrl(document.permalink, baseUrl);
 }
 
-/**
- * The guid a reply has in the comments feeds: a native comment's page, which
- * is a permalink, and anything else's own id. A comment imported with a URL
- * for an id keeps it, as a migrated post keeps its stored `guid`: it is the
- * guid WordPress's comments feed already published, so a reader sees nothing
- * new.
- */
-export function replyGuid(
-  reply: { readonly id: string; readonly source: InteractionSource },
-  baseUrl: string,
-): string {
-  return reply.source === 'comment' && !URL.canParse(reply.id)
-    ? absoluteUrl(commentPageHref(reply.id), baseUrl)
-    : reply.id;
-}
-
-/** Where a native comment's own page is (TASK-318). */
-export function commentPageHref(id: string): string {
-  return `${COMMENT_PAGE_PREFIX}${encodeURIComponent(id)}/`;
+/** Where a native comment's own page is (TASK-318), by its key. */
+export function commentPageHref(key: string): string {
+  return `${COMMENT_PAGE_PREFIX}${key}/`;
 }
 
 /** What every comment page's path starts with. */

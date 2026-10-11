@@ -204,15 +204,63 @@ as comments. Each lands under the post as one the site received itself would:
 
 A reply keeps the comment it answers. An approved comment is approved here,
 and one WordPress held for moderation waits here too. Spam and trash are left
-out and named in the report. Each comment keeps the id WordPress's comments
-feed gave it, `https://example.com/?p=ID#comment-N`, so a feed reader sees
-nothing it has not seen. A commenter's email goes only to `data/comments/`.
-Nothing is announced: no moderator is emailed and nothing is delivered.
+out and named in the report. A commenter's email goes only to
+`data/comments/`. Nothing is announced: no moderator is emailed and nothing is
+delivered.
+
+Every imported comment is `migrated: true`. It shows on its post and in its
+thread like any other comment, and replies to it thread under it. It is in no
+feed: not `/comments/feed/`, not a post's `{permalink}feed/`, not a
+`/replies/{key}/` feed, and not in the reply counts the feeds give. A reader
+of WordPress's comments feed sees nothing new when the site moves.
+
+Each comment keeps its `origin`, the name it was first published under, and
+its id is the key the site gives the same comment when it arrives here itself.
+A key is the first 16 hex digits of a SHA-256.
+
+| Comment                             | `origin`                                                                       | Id, the key of                        |
+| ----------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------- |
+| A fediverse reply                   | The note, `source_id`                                                          | The origin                            |
+| A fediverse like or boost           | The activity, `source_id`                                                      | The origin                            |
+| A webmention, pingback or trackback | The page that linked here: `webmention_source_url`, or a pingback's author URL | The origin and the post's permalink   |
+| A like or repost with no protocol   | `source_id`, such as a Bluesky `at://` URI                                     | The origin and the post's permalink   |
+| A comment left on the page          | None                                                                           | `https://example.com/?p=ID#comment-N` |
+
+So a webmention sent again is the comment the site already holds, and so is
+a fediverse reply or reaction delivered again or read by the site's reply
+backfill: it shows once, as the imported comment, and answers to the note
+thread under it. A fediverse reply's `url` stays the note's web page. A comment left on the page
+has a page of its own, `/comment/{key}/`.
+
+A fediverse comment names its actor in `_activitypub_remote_actor_id`: one of
+the export's `ap_actor` items, the ActivityPub plugin's cached copy of that
+actor's profile. The import reads that profile and gives the comment its
+`actor`, the actor's id, and its `author.avatar`, the actor's icon. The page
+shows the icon through the site's avatar cache, so a like or a boost shows a
+face, and a like delivered here since from the same actor is counted with the
+imported one. A comment whose actor is not in the export imports without
+either.
+
+A comment written signed in to WordPress names its writer in
+`comment_user_id`. When that WordPress user's login is a user on this site, the
+rule a post's author follows, the comment keeps that user as its `user`. The
+thread then shows it as theirs, as it shows their reply posts: their display
+name and avatar, and a link to their author archive with no `rel="nofollow
+ugc"`. It stays an imported comment.
 
 The import merges by comment id. A rerun adds the comments WordPress received
 since and picks up one edited there. It leaves alone a comment this site
-received itself, and an imported one a moderator approved, filed as spam,
-edited or deleted.
+received itself, and the words and status of an imported one a moderator
+approved, filed as spam, edited or deleted. It still marks such a comment
+migrated and gives it its origin, its user and its actor.
+
+**Upgrading from 0.2.0.** Version 0.2.0 used each comment's WordPress URL as
+its id. The site gives every such id the key of that URL when it next boots,
+or when it next runs a plugin command. A rerun of the import then moves each
+fediverse comment and webmention to the key of its origin, in its place, and
+any reply here that names it follows. Each comment stays one record. The
+import's record of what it wrote, `import.json`, moves to the new keys, so the
+rerun reports no clash.
 
 ### Redirects
 
@@ -228,6 +276,10 @@ document at. The import declares a redirect for each in
 | An attachment's page, such as `/photo-jpg/` | Its file under `/uploads/`. |
 | `/?attachment_id=ID` and `/?p=ID`, likewise | Its file under `/uploads/`. |
 
+The page WordPress used as its static front page is the exception: its
+`?p=` and `?page_id=` answer at `/`, where the site serves its homepage, since
+the page's own permalink redirects there too.
+
 A draft, a pending, private, password-protected or scheduled post or page gets
 no redirect, so its `?p=` answers as an id WordPress never had. An attachment
 whose file was not copied gets none either, until a run copies it. A post's
@@ -239,7 +291,8 @@ The import owns each key it set in `wordpress.json`, never the file, and never
 touches `_data/redirects.json`. A key the site added there, or changed, is left
 alone on every rerun. Where both files declare one URL, `redirects.json` wins.
 A link to a comment, `#comment-N`, reaches the post: the fragment never
-reaches the server, so the browser scrolls to it if the comment is there.
+reaches the server. The post's anchors are `#comment-{key}`, so the browser
+opens the post at the top.
 
 ## Bringing a person across
 

@@ -54,6 +54,7 @@ function testSite(contentDir: string): PluginSite {
     checkUpload: unused,
     comments: unused,
     putComments: unused,
+    renameComments: unused,
   };
 }
 

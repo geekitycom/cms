@@ -9,10 +9,11 @@ import path from 'node:path';
 
 import { listUsers, setUserActorId } from '../admin/accounts.ts';
 import { readSiteSettings } from '../admin/settings.ts';
+import { importedFields } from '../admin/store.ts';
 import type { AdminStore, CommentRecord } from '../admin/store.ts';
 import { acceptUpload, refusedUpload } from '../admin/uploads.ts';
 import { renderCommentMarkdown } from '../comments/markdown.ts';
-import { commentsFile, putComments, readComments } from '../comments/records.ts';
+import { commentsFile, putComments, readComments, renameComments } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { slugForPermalink } from '../content/parser.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
@@ -116,6 +117,10 @@ export function pluginSite(options: { admin: AdminStore; config: ResolvedConfig 
         comments.map(commentRecordOf),
       );
     },
+
+    async renameComments(permalink, renames) {
+      await renameComments({ admin, contentDir, dataDir }, postSlug(permalink), renames);
+    },
   };
 }
 
@@ -136,6 +141,7 @@ function pluginCommentOf(comment: CommentRecord): PluginComment {
     submitted: comment.submitted,
     inReplyTo: comment.inReplyTo,
     url: comment.url,
+    ...importedFields(comment),
   };
 }
 
@@ -152,5 +158,6 @@ function commentRecordOf(comment: PluginComment): CommentRecord {
     inReplyTo: comment.inReplyTo,
     url: comment.url,
     notify: false,
+    ...importedFields(comment),
   };
 }

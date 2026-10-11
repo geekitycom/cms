@@ -84,7 +84,7 @@ describe('PluginSite.checkUpload', () => {
 
 function imported(overrides: Partial<PluginComment> = {}): PluginComment {
   return {
-    id: 'https://old.example/?p=7#comment-3',
+    id: '0000000000007003',
     source: 'activitypub',
     kind: 'reply',
     status: 'approved',
@@ -109,7 +109,7 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
     await plugin.putComments('/2026/07/i-♥-rss/', [
       imported(),
       imported({
-        id: 'https://old.example/?p=7#comment-4',
+        id: '0000000000007004',
         source: 'comment',
         author: { name: 'Ada', url: null, email: 'ada@example.com', avatar: null },
         url: null,
@@ -125,8 +125,8 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
     assert.deepEqual(
       held.comments.map((comment) => [comment.id, comment.source]),
       [
-        ['https://old.example/?p=7#comment-3', 'activitypub'],
-        ['https://old.example/?p=7#comment-4', 'comment'],
+        ['0000000000007003', 'activitypub'],
+        ['0000000000007004', 'comment'],
       ],
     );
     assert.equal(
@@ -145,12 +145,27 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
     assert.deepEqual(read.comments, [
       imported(),
       imported({
-        id: 'https://old.example/?p=7#comment-4',
+        id: '0000000000007004',
         source: 'comment',
         author: { name: 'Ada', url: null, email: 'ada@example.com', avatar: null },
         url: null,
       }),
     ]);
+  });
+
+  it('carries migrated and the origin identity both ways, and neither for a native comment', async () => {
+    const { site: plugin, admin } = await site();
+    const migrated = imported({ migrated: true, origin: 'https://mstdn.example/notes/1' });
+
+    await plugin.putComments('/2026/09/hello/', [migrated, imported({ id: '0000000000007005' })]);
+
+    assert.deepEqual(plugin.comments('/2026/09/hello/').comments, [
+      migrated,
+      imported({ id: '0000000000007005' }),
+    ]);
+    const stored = admin.getComment('0000000000007003');
+    assert.equal(stored?.migrated, true);
+    assert.equal(stored.origin, 'https://mstdn.example/notes/1');
   });
 
   it('replaces a comment by id where it stands, appends a new one, and moves nothing else', async () => {
@@ -179,7 +194,7 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
 
     await plugin.putComments('/2026/09/hello/', [
       imported({ markdown: 'Edited at the source.' }),
-      imported({ id: 'https://old.example/?p=7#comment-9', kind: 'like', markdown: '' }),
+      imported({ id: '0000000000007009', kind: 'like', markdown: '' }),
     ]);
 
     const held = JSON.parse(await readFile(file, 'utf8')) as {
@@ -187,9 +202,47 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
     };
     assert.deepEqual(
       held.comments.map((comment) => comment.id),
-      ['https://old.example/?p=7#comment-3', live.id, 'https://old.example/?p=7#comment-9'],
+      ['0000000000007003', live.id, '0000000000007009'],
     );
     assert.equal(held.comments[0]?.content.markdown, 'Edited at the source.');
     assert.deepEqual(held.comments[1], liveEntry, 'the live comment is byte for byte as it was');
+  });
+
+  it('renames a comment in its place, its email and the replies naming it following, and refuses a taken id', async () => {
+    const { site: plugin, contentDir, admin } = await site();
+    await plugin.putComments('/2026/09/hello/', [
+      imported({ author: { name: 'Ada', url: null, email: 'ada@example.com', avatar: null } }),
+      imported({ id: '0000000000007004', inReplyTo: '0000000000007003' }),
+      imported({ id: '0000000000007005' }),
+    ]);
+
+    await plugin.renameComments(
+      '/2026/09/hello/',
+      new Map([
+        ['0000000000007003', 'aaaaaaaaaaaaaaaa'],
+        ['ffffffffffffffff', 'bbbbbbbbbbbbbbbb'],
+      ]),
+    );
+
+    const held = plugin.comments('/2026/09/hello/').comments;
+    assert.deepEqual(
+      held.map((comment) => [comment.id, comment.inReplyTo, comment.author.email]),
+      [
+        ['aaaaaaaaaaaaaaaa', null, 'ada@example.com'],
+        ['0000000000007004', 'aaaaaaaaaaaaaaaa', null],
+        ['0000000000007005', null, null],
+      ],
+    );
+    assert.equal(admin.getComment('0000000000007003'), undefined);
+    assert.equal(admin.getComment('aaaaaaaaaaaaaaaa')?.slug, 'hello');
+    assert.equal(admin.getComment('0000000000007004')?.inReplyTo, 'aaaaaaaaaaaaaaaa');
+
+    const file = path.join(contentDir, '_data', 'comments', 'hello.json');
+    const before = await readFile(file, 'utf8');
+    await assert.rejects(
+      plugin.renameComments('/2026/09/hello/', new Map([['0000000000007004', '0000000000007005']])),
+      /hello\.json: comment "0000000000007004" cannot take id "0000000000007005"/,
+    );
+    assert.equal(await readFile(file, 'utf8'), before);
   });
 });

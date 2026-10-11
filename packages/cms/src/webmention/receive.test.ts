@@ -832,7 +832,6 @@ describe('telling the moderators about it (TASK-55)', () => {
 describe('a webmention that answers a reply on the post (TASK-319)', () => {
   const NOTE = 'https://remote.example/notes/1';
   const NOTE_URL = 'https://remote.example/@ada/1';
-  const IMPORTED = 'https://old.example/?p=7#comment-5';
 
   function records(cms: Cms) {
     return { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir };
@@ -861,7 +860,7 @@ describe('a webmention that answers a reply on the post (TASK-319)', () => {
   }
 
   function pageOf(id: string): string {
-    return `${BASE_URL}/comment/${encodeURIComponent(id)}/`;
+    return `${BASE_URL}/comment/${id}/`;
   }
 
   function answering(...urls: string[]): string {
@@ -911,20 +910,8 @@ describe('a webmention that answers a reply on the post (TASK-319)', () => {
 
     const { updateComment } = await import('../comments/records.ts');
     await updateComment(records(cms), held[0]?.id ?? '', { status: 'approved' });
-    const page = await (await cms.app.request(`/comment/${encodeURIComponent(parent.id)}/`)).text();
+    const page = await (await cms.app.request(`/comment/${parent.id}/`)).text();
     assert.match(page, /An answer\./, 'and once approved it is under that comment on its page');
-  });
-
-  it('finds a comment whose id is a URL by its percent-encoded page (AC #1)', async () => {
-    const cms = await site();
-    await comment(cms, { id: IMPORTED });
-    pages.set('https://them.example/note', { body: answering(pageOf(IMPORTED)) });
-
-    assert.equal(
-      (await sendAndSettle(cms, 'https://them.example/note', pageOf(IMPORTED))).status,
-      202,
-    );
-    assert.equal(stored(cms)[0]?.inReplyTo, IMPORTED);
   });
 
   it('threads under a comment its source answers by the post’s #comment- anchor (AC #1)', async () => {

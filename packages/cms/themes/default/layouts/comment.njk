@@ -1,5 +1,5 @@
 {#
-  A native comment on a page of its own (TASK-318), at `/comment/{id}/`: what
+  A native comment on a page of its own (TASK-318), at `/comment/{key}/`: what
   another site fetches when it replies to the comment, so the comment is the
   page's one `h-entry`.
 
@@ -38,7 +38,7 @@
   {{ cited(index - 1) }}
   {% if step %}
   <p class="cite-line">
-    <span class="p-author h-card">{% if step.author.url %}<a class="u-url p-name" href="{{ step.author.url }}"{% if step.source != "post" %} rel="nofollow ugc noopener noreferrer"{% endif %}>{{ step.author.name }}</a>{% else %}<span class="p-name">{{ step.author.name }}</span>{% endif %}</span>,
+    <span class="p-author h-card">{% if step.author.url %}<a class="u-url p-name" href="{{ step.author.url }}"{% if not step.author.username %} rel="nofollow ugc noopener noreferrer"{% endif %}>{{ step.author.name }}</a>{% else %}<span class="p-name">{{ step.author.name }}</span>{% endif %}</span>,
     {%- if step.url %}
     <a class="u-url" href="{{ step.url }}"{% if step.source != "comment" %} rel="nofollow noopener noreferrer"{% endif %}><time class="dt-published" datetime="{{ step.published | date("iso") }}">{{ step.published | date }}</time></a>
     {%- else %}
@@ -67,7 +67,7 @@
         {%- else %}
         <span class="comment-avatar-empty" aria-hidden="true">{{ comment.author.name | first | upper }}</span>
         {%- endif %}
-        <b class="p-name">{% if comment.author.url %}<a class="u-url" href="{{ comment.author.url }}" rel="nofollow ugc noopener noreferrer">{{ comment.author.name }}</a>{% else %}{{ comment.author.name }}{% endif %}</b>
+        <b class="p-name">{% if comment.author.url %}<a class="u-url" href="{{ comment.author.url }}"{% if not comment.author.username %} rel="nofollow ugc noopener noreferrer"{% endif %}>{{ comment.author.name }}</a>{% else %}{{ comment.author.name }}{% endif %}</b>
       </div>
       <div class="comment-metadata">
         <a class="u-url" href="{{ comment.url }}"><time class="dt-published" datetime="{{ comment.published | date("iso") }}">{{ comment.published | date }}</time></a>

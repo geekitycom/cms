@@ -7,7 +7,6 @@ import { rsvpValue } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
 import { REPLY_ACTIVITY_TYPE, replyIdOf, replyTargetOf } from '../federation/replies.ts';
 import { repliesKey } from '../web/feed-source.ts';
-import { replyGuid } from '../web/guids.ts';
 
 /**
  * Which rows of the inbox log are replies: a `Create` that named something it
@@ -20,12 +19,6 @@ const IS_REPLY = `activity_type = '${REPLY_ACTIVITY_TYPE}' AND in_reply_to IS NO
 export interface OpenAdminStoreOptions {
   /** Directory the database lives in. Created if it is missing. */
   dataDir: string;
-  /**
-   * The site's base URL, which a native comment's `/replies/` key is worked
-   * out against (TASK-327). Opening with a different one than last time works
-   * every key out again; opening with none leaves new comments without keys.
-   */
-  baseUrl?: string | undefined;
 }
 
 /**
@@ -497,10 +490,10 @@ export interface CommentAuthor {
   /**
    * Their avatar, or `null`.
    *
-   * Only a webmention ever has one, out of the `u-photo` of the source page's
-   * `h-card` (TASK-51): a form asks for no picture, and one it did ask for
-   * would be a stranger's file on somebody else's page. It is a URL on the
-   * author's own site, printed as an `<img>` exactly as a fediverse reply's is.
+   * A webmention has one out of the `u-photo` of the source page's `h-card`
+   * (TASK-51), and an imported fediverse comment its actor's icon (TASK-338).
+   * A form asks for no picture: one it did ask for would be a stranger's file
+   * on somebody else's page. The page serves it through the avatar cache.
    */
   avatar: string | null;
 }
@@ -591,6 +584,53 @@ export interface CommentRecord {
    * TASK-320). Absent for every other comment.
    */
   via?: string;
+  /**
+   * Whether it was imported from another system (TASK-336), the word a
+   * migrated post uses. It was published before the site came here, so it is
+   * shown in its thread and carried by no feed. Absent for every other comment.
+   */
+  migrated?: true;
+  /**
+   * The name it has where it was first published, for a migrated comment
+   * that has one: a fediverse note or activity id, or a webmention's source.
+   * What the feeds call it when a native reply answers it, and what a later
+   * delivery of the same thing is recognised by. Absent for every other comment.
+   */
+  origin?: string;
+  /**
+   * The site user who wrote it, by username, for a comment written by
+   * somebody signed in to the system it was imported from (TASK-337). The
+   * thread names them as it names their reply posts. Absent for every other
+   * comment.
+   */
+  user?: string;
+  /**
+   * The fediverse actor who wrote it, by id, for a migrated fediverse comment
+   * whose actor the export named (TASK-338). What tells their like here from
+   * the same person's like delivered since, whatever profile page each names.
+   * Absent for every other comment.
+   */
+  actor?: string;
+}
+
+/**
+ * What a comment brought from the system it was imported from, as a record
+ * carries it: each of {@link CommentRecord.migrated}, `origin`, `user` and
+ * `actor` present only when set.
+ */
+export function importedFields(fields: {
+  readonly migrated?: boolean | null | undefined;
+  readonly origin?: string | null | undefined;
+  readonly user?: string | null | undefined;
+  readonly actor?: string | null | undefined;
+}): Pick<CommentRecord, 'migrated' | 'origin' | 'user' | 'actor'> {
+  const { migrated, origin, user, actor } = fields;
+  return {
+    ...(migrated === true ? { migrated: true } : {}),
+    ...(origin ? { origin } : {}),
+    ...(user ? { user } : {}),
+    ...(actor ? { actor } : {}),
+  };
 }
 
 /** A comment's {@link CommentRecord.rsvp} as a record carries it: present only when there is one. */
@@ -857,11 +897,6 @@ export interface AdminStore {
   getComment(id: string): PostComment | undefined;
   /** The comments whose `url` is this one, whatever their status (TASK-300). */
   listCommentsAt(url: string): PostComment[];
-  /**
-   * The comments and webmentions whose feed guid has this `/replies/` key,
-   * whatever their status (TASK-327): one indexed lookup.
-   */
-  listCommentsByRepliesKey(key: string): PostComment[];
   /** The logged replies whose note's id has this `/replies/` key (TASK-327). */
   listRepliesByKey(key: string): InboxActivity[];
   /** How many comments stand at each status. What the dashboard shows. */
@@ -1145,11 +1180,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
     `),
     commentById: db.prepare('SELECT * FROM comments WHERE id = ?'),
     commentsAt: db.prepare('SELECT * FROM comments WHERE url = ? ORDER BY submitted_at'),
-    commentsByRepliesKey: db.prepare(
-      'SELECT * FROM comments WHERE replies_key = ? ORDER BY submitted_at, id',
-    ),
-    staleCommentKeys: db.prepare('SELECT id, source FROM comments WHERE keys_base IS NOT ?'),
-    writeCommentKey: db.prepare('UPDATE comments SET replies_key = ?, keys_base = ? WHERE id = ?'),
     repliesByKey: db.prepare(`
       SELECT * FROM ap_inbox WHERE ${IS_REPLY} AND reply_key = ? ORDER BY received_at, id
     `),
@@ -1167,8 +1197,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         id, slug, permalink, source, kind, status,
         author_name, author_url, author_email,
         markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar, notify,
-        redacted, rsvp, via, replies_key, keys_base
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        redacted, rsvp, via, migrated, origin, user, actor
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET
         slug = excluded.slug,
         permalink = excluded.permalink,
@@ -1189,8 +1219,10 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         redacted = excluded.redacted,
         rsvp = excluded.rsvp,
         via = excluded.via,
-        replies_key = excluded.replies_key,
-        keys_base = excluded.keys_base
+        migrated = excluded.migrated,
+        origin = excluded.origin,
+        user = excluded.user,
+        actor = excluded.actor
     `),
     deleteComment: db.prepare('DELETE FROM comments WHERE id = ?'),
     clearComments: db.prepare('DELETE FROM comments'),
@@ -1320,21 +1352,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return [];
     }
   }
-
-  /** Work out again every comment key worked out against another base, or none. */
-  function refreshCommentKeys(baseUrl: string): void {
-    inTransaction(() => {
-      for (const row of statements.staleCommentKeys.all(baseUrl) as Record<string, unknown>[]) {
-        const comment = {
-          id: String(row['id']),
-          source: oneOf(row['source'], COMMENT_SOURCES, 'comment'),
-        };
-        statements.writeCommentKey.run(...commentKey(comment, baseUrl), comment.id);
-      }
-    });
-  }
-
-  if (options.baseUrl !== undefined) refreshCommentKeys(options.baseUrl);
 
   const listeners = new Set<(written: ConversationWrite) => void>();
   const written = (change: ConversationWrite): void => {
@@ -1695,10 +1712,6 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       return (statements.commentsAt.all(url) as Record<string, unknown>[]).map(toComment);
     },
 
-    listCommentsByRepliesKey(key) {
-      return (statements.commentsByRepliesKey.all(key) as Record<string, unknown>[]).map(toComment);
-    },
-
     listRepliesByKey(key) {
       return (statements.repliesByKey.all(key) as Record<string, unknown>[]).map(toInboxActivity);
     },
@@ -1719,29 +1732,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
 
     putComment(comment) {
       const before = statements.commentById.get(comment.id) as Record<string, unknown> | undefined;
-      statements.putComment.run(
-        comment.id,
-        comment.slug,
-        comment.permalink,
-        comment.source,
-        comment.kind,
-        comment.status,
-        comment.author.name,
-        comment.author.url,
-        comment.author.email,
-        comment.content.markdown,
-        comment.content.html,
-        comment.submitted,
-        comment.addressHash,
-        comment.inReplyTo,
-        comment.url,
-        comment.author.avatar,
-        comment.notify ? 1 : 0,
-        redactedColumn(comment.redacted),
-        comment.rsvp ?? null,
-        comment.via ?? null,
-        ...commentKey(comment, options.baseUrl),
-      );
+      statements.putComment.run(...commentColumns(comment));
       written({
         kind: 'comment',
         slug: comment.slug,
@@ -1763,29 +1754,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
       inTransaction(() => {
         statements.clearComments.run();
         for (const comment of comments) {
-          statements.putComment.run(
-            comment.id,
-            comment.slug,
-            comment.permalink,
-            comment.source,
-            comment.kind,
-            comment.status,
-            comment.author.name,
-            comment.author.url,
-            comment.author.email,
-            comment.content.markdown,
-            comment.content.html,
-            comment.submitted,
-            comment.addressHash,
-            comment.inReplyTo,
-            comment.url,
-            comment.author.avatar,
-            comment.notify ? 1 : 0,
-            redactedColumn(comment.redacted),
-            comment.rsvp ?? null,
-            comment.via ?? null,
-            ...commentKey(comment, options.baseUrl),
-          );
+          statements.putComment.run(...commentColumns(comment));
         }
       });
     },
@@ -2131,6 +2100,12 @@ function toComment(row: Record<string, unknown>): PostComment {
     ...redactedOf(row['redacted']),
     ...rsvpField(rsvpValue(row['rsvp'])),
     ...viaField(nullableText(row['via'])),
+    ...importedFields({
+      migrated: Number(row['migrated'] ?? 0) === 1,
+      origin: nullableText(row['origin']),
+      user: nullableText(row['user']),
+      actor: nullableText(row['actor']),
+    }),
   };
 }
 
@@ -2869,7 +2844,51 @@ const MIGRATIONS: readonly Migration[] = [
     version: 25,
     sql: `ALTER TABLE ap_inbox ADD COLUMN fetched INTEGER NOT NULL DEFAULT 0;`,
   },
+  {
+    // A comment's key is its id (decision-51), so the key worked out from its
+    // guid against the base URL has nothing left to say.
+    version: 26,
+    sql: `
+      DROP INDEX comments_replies_key;
+      ALTER TABLE comments DROP COLUMN replies_key;
+      ALTER TABLE comments DROP COLUMN keys_base;
+      ALTER TABLE comments ADD COLUMN migrated INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE comments ADD COLUMN origin TEXT;
+      ALTER TABLE comments ADD COLUMN user TEXT;
+      ALTER TABLE comments ADD COLUMN actor TEXT;
+    `,
+  },
 ];
+
+/** A comment as the values of the comments table's columns, in the order `putComment` names them. */
+function commentColumns(comment: PostComment): (string | number | null)[] {
+  return [
+    comment.id,
+    comment.slug,
+    comment.permalink,
+    comment.source,
+    comment.kind,
+    comment.status,
+    comment.author.name,
+    comment.author.url,
+    comment.author.email,
+    comment.content.markdown,
+    comment.content.html,
+    comment.submitted,
+    comment.addressHash,
+    comment.inReplyTo,
+    comment.url,
+    comment.author.avatar,
+    comment.notify ? 1 : 0,
+    redactedColumn(comment.redacted),
+    comment.rsvp ?? null,
+    comment.via ?? null,
+    comment.migrated === true ? 1 : 0,
+    comment.origin ?? null,
+    comment.user ?? null,
+    comment.actor ?? null,
+  ];
+}
 
 /** What {@link AdminStore.onConversationWrite} hears about one logged activity. */
 function activityWrite(activity: InboxActivity): ConversationWrite {
@@ -2883,12 +2902,4 @@ function activityWrite(activity: InboxActivity): ConversationWrite {
 function replyKeyOf(activity: Parameters<typeof replyIdOf>[0]): string | null {
   const id = replyIdOf(activity);
   return id === null ? null : repliesKey(id);
-}
-
-/** A comment's `/replies/` key and the base it was worked out against, as columns. */
-function commentKey(
-  comment: Pick<PostComment, 'id' | 'source'>,
-  baseUrl: string | undefined,
-): [string | null, string | null] {
-  return baseUrl === undefined ? [null, null] : [repliesKey(replyGuid(comment, baseUrl)), baseUrl];
 }

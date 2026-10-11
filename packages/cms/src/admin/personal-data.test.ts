@@ -62,9 +62,9 @@ async function erasureSite(): Promise<{
       {
         post: PERMALINK,
         comments: [
-          entry('one', 'Ada', 'Ada@Example.com'),
-          entry('two', 'Grace', 'grace@example.com', 'one'),
-          entry('three', 'Ada', 'ada@example.com', 'two'),
+          entry('0000000000000001', 'Ada', 'Ada@Example.com'),
+          entry('0000000000000002', 'Grace', 'grace@example.com', '0000000000000001'),
+          entry('0000000000000003', 'Ada', 'ada@example.com', '0000000000000002'),
         ],
       },
       null,
@@ -140,7 +140,7 @@ describe('Tools > Personal data', () => {
     assert.doesNotMatch(emails, /ada@example\.com/i, 'nor their address in data/');
     assert.match(emails, /grace@example\.com/, 'somebody else’s address is untouched');
 
-    const one = cms.admin.getComment('one');
+    const one = cms.admin.getComment('0000000000000001');
     assert.equal(one?.author.name, 'Anonymous');
     assert.equal(one?.author.email, null);
     assert.equal(one?.author.url, null);
@@ -149,8 +149,12 @@ describe('Tools > Personal data', () => {
     assert.equal(one?.status, 'approved', 'its moderation status stays');
     assert.equal(one?.content.markdown, 'Said by Ada.', 'its words stay');
     assert.deepEqual(one?.redacted, ['email', 'addressHash', 'author']);
-    assert.equal(cms.admin.getComment('three')?.inReplyTo, 'two', 'the thread stays whole');
-    assert.equal(cms.admin.getComment('two')?.author.email, 'grace@example.com');
+    assert.equal(
+      cms.admin.getComment('0000000000000003')?.inReplyTo,
+      '0000000000000002',
+      'the thread stays whole',
+    );
+    assert.equal(cms.admin.getComment('0000000000000002')?.author.email, 'grace@example.com');
     assert.equal(cms.admin.hasApprovedAuthor('Anonymous', null), false);
 
     assert.equal(readContactMessage(dataDir, messages.ada), undefined, 'their message is gone');

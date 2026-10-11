@@ -52,13 +52,16 @@ export {
   heldWebmention,
   intakeComment,
   migrateCommentEmails,
+  migrateCommentKeys,
   putComments,
+  renameComments,
   readComments,
   rebuildCommentIndexes,
   updateComment,
 } from './records.ts';
 export type {
   CommentEmailMigrationReport,
+  CommentKeyMigrationReport,
   CommentIndexReport,
   CommentIntakeOutcome,
   CommentNotices,

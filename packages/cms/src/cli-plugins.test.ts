@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -76,6 +77,42 @@ describe('a plugin command', () => {
 
     assert.equal(run.code, 0, run.stderr);
     assert.equal(run.stdout, 'HELLO THERE\nHELLO THERE\nusers: 0\n');
+  });
+
+  it('runs after the comment ids are keys, as a boot leaves them', async () => {
+    const directory = await siteWithPlugin();
+    const file = path.join(directory, 'content', '_data', 'comments', 'hello.json');
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    const old = 'https://blog.example/?p=1#comment-2';
+    await fs.writeFile(
+      file,
+      `${JSON.stringify({
+        post: '/2026/09/hello/',
+        comments: [
+          {
+            id: old,
+            source: 'comment',
+            kind: 'reply',
+            status: 'approved',
+            author: { name: 'Ada', url: null, avatar: null },
+            content: { markdown: 'Hi.', html: '<p>Hi.</p>\\n' },
+            submitted: '2026-09-01T10:00:00.000Z',
+            addressHash: null,
+            inReplyTo: null,
+            url: null,
+          },
+        ],
+      })}\n`,
+    );
+
+    const run = await runCli(['echo', 'loud', 'hi'], directory);
+
+    assert.equal(run.code, 0, run.stderr);
+    const held = JSON.parse(await fs.readFile(file, 'utf8')) as { comments: { id: string }[] };
+    assert.deepEqual(
+      held.comments.map((comment) => comment.id),
+      [createHash('sha256').update(old).digest('hex').slice(0, 16)],
+    );
   });
 
   it('refuses an option the command does not take', async () => {

@@ -15,7 +15,7 @@
 
 {% macro comment(reply, classes="h-entry") %}
 {% if reply.withheld %}
-<li id="comment-{{ reply.id }}" class="comment comment-placeholder">
+<li id="comment-{{ reply.key }}" class="comment comment-placeholder">
   <p class="comment-withheld">{{ withheld() }}</p>
   <ol class="children">
     {% for child in reply.replies %}
@@ -24,7 +24,7 @@
   </ol>
 </li>
 {% else %}
-<li id="comment-{{ reply.id }}" class="comment {{ classes }} comment-{{ reply.source }}">
+<li id="comment-{{ reply.key }}" class="comment {{ classes }} comment-{{ reply.source }}">
   <article class="comment-body">
     <footer class="comment-meta">
       <div class="comment-author vcard p-author h-card">
@@ -33,7 +33,7 @@
         {%- else %}
         <span class="comment-avatar-empty" aria-hidden="true">{{ reply.author.name | first | upper }}</span>
         {%- endif %}
-        <b class="fn p-name">{% if reply.author.url %}<a class="url u-url" href="{{ reply.author.url }}"{% if reply.source != "post" %} rel="nofollow ugc noopener noreferrer"{% endif %}>{{ reply.author.name }}</a>{% else %}{{ reply.author.name }}{% endif %}</b>
+        <b class="fn p-name">{% if reply.author.url %}<a class="url u-url" href="{{ reply.author.url }}"{% if not reply.author.username %} rel="nofollow ugc noopener noreferrer"{% endif %}>{{ reply.author.name }}</a>{% else %}{{ reply.author.name }}{% endif %}</b>
       </div>
       <div class="comment-metadata">
         {%- if reply.url %}
@@ -56,7 +56,7 @@
     </div>
     {#
       Answering a comment on this site needs no JavaScript: the link carries
-      the comment's id to the form, which puts it in a hidden field. Somebody
+      the comment's key to the form, which puts it in a hidden field. Somebody
       signed in can answer anything in the thread, and their answer is a reply
       post that reaches a webmention's page or a fediverse reply's author
       (TASK-300). A visitor answers comments written here only: a fediverse
@@ -64,7 +64,7 @@
       page that sent it.
     #}
     {% if commentForm and (reply.source == "comment" or commentForm.signedInAs) %}
-    <div class="reply"><a class="comment-reply-link" href="{{ page.url }}?reply_to={{ reply.id | urlencode }}#respond">Reply</a></div>
+    <div class="reply"><a class="comment-reply-link" href="{{ page.url }}?reply_to={{ reply.key }}#respond">Reply</a></div>
     {% endif %}
   </article>
   {% if reply.replies.length %}

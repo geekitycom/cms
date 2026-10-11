@@ -151,10 +151,13 @@ function importPostsAndPages(
       entries.push({ item, file: SITE_JSON, key: 'homepage', value: lastSegment(permalink) });
     }
     if (item.status === 'publish' && !disposition.draft) {
+      // The site serves its homepage at `/` and sends the page's own permalink
+      // there, so pointing at the permalink would cost a second hop.
+      const target = frontPage ? '/' : permalink;
       const ids = item.type === 'page' ? ['p', 'page_id'] : ['p'];
       for (const name of ids) {
         const from = `${home.pathname}?${name}=${String(item.id)}`;
-        entries.push({ item, file: IMPORT_REDIRECTS_FILE, key: from, value: permalink });
+        entries.push({ item, file: IMPORT_REDIRECTS_FILE, key: from, value: target });
       }
     }
   }

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -20,6 +21,8 @@ import {
   deleteComment,
   intakeComment,
   migrateCommentEmails,
+  migrateCommentKeys,
+  putComments,
   readComments,
   rebuildCommentIndexes,
   updateComment,
@@ -433,6 +436,200 @@ describe('a comment file written before emails moved to data/', () => {
   });
 });
 
+function keyOf(value: string): string {
+  return createHash('sha256').update(value).digest('hex').slice(0, 16);
+}
+
+describe('a comment key (decision-51)', () => {
+  it('is minted for a new comment: 16 lowercase hex digits, one per comment', async () => {
+    const site = await records();
+
+    const first = await addComment(site, ada());
+    const second = await addComment(site, ada());
+
+    assert.match(first.id, /^[0-9a-f]{16}$/);
+    assert.match(second.id, /^[0-9a-f]{16}$/);
+    assert.notEqual(first.id, second.id);
+  });
+
+  it('is the only id a comment is stored with: any other is refused, naming the file and the id', async () => {
+    const site = await records();
+    const file = commentsFile(site.contentDir, 'hello-world');
+
+    await assert.rejects(
+      addComment(site, ada({ id: '00000000-0000-4000-8000-000000000001' })),
+      (error: Error) =>
+        error.message.includes(file) &&
+        error.message.includes('"00000000-0000-4000-8000-000000000001"'),
+    );
+    await assert.rejects(
+      putComments(site, 'hello-world', '/2026/09/hello-world/', [
+        { ...ada(), id: 'https://old.example/?p=1#comment-2' },
+      ]),
+      (error: Error) =>
+        error.message.includes(file) &&
+        error.message.includes('"https://old.example/?p=1#comment-2"'),
+    );
+    await assert.rejects(addComment(site, ada({ id: 'ABCDEF0123456789' })), /not a key/);
+    assert.deepEqual(readComments(site, 'hello-world'), [], 'nothing was written');
+  });
+});
+
+describe('a migrated comment (TASK-336)', () => {
+  it('keeps migrated and its origin in the file and the index, through a rebuild and a moderation', async () => {
+    const site = await records();
+    const note = 'https://remote.example/notes/1';
+    const stored = await addComment(
+      site,
+      ada({ id: '0123456789abcdef', source: 'activitypub', migrated: true, origin: note }),
+    );
+
+    const [entry] = (
+      JSON.parse(await readFile(commentsFile(site.contentDir, 'hello-world'), 'utf8')) as {
+        comments: Record<string, unknown>[];
+      }
+    ).comments;
+    assert.equal(entry?.['migrated'], true);
+    assert.equal(entry['origin'], note);
+    assert.deepEqual(site.admin.getComment(stored.id), stored);
+
+    site.admin.replaceComments([]);
+    rebuildCommentIndexes(site);
+    assert.deepEqual(site.admin.getComment(stored.id), stored);
+
+    const moved = await updateComment(site, stored.id, { status: 'approved' });
+    assert.equal(moved?.migrated, true);
+    assert.equal(moved.origin, note);
+    assert.deepEqual(readComments(site, 'hello-world')[0]?.origin, note);
+  });
+
+  it('is the only kind that says so: a native comment’s entry has neither field', async () => {
+    const site = await records();
+    await addComment(site, ada());
+
+    const source = await readFile(commentsFile(site.contentDir, 'hello-world'), 'utf8');
+    assert.ok(!source.includes('"migrated"'));
+    assert.ok(!source.includes('"origin"'));
+  });
+});
+
+describe('a comment file from before keys', () => {
+  const POST = '/2026/09/hello-world/';
+  const FORM = '0b7c3c9e-7d6a-4a51-9d5f-6f1f2b1c0a11';
+  const ANSWER = '5e1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
+  const IMPORTED = 'https://old.example/?p=574#comment-32';
+  const MENTION = 'aa11bb22-cc33-4d44-8e55-ff6677889900';
+
+  async function legacySite(): Promise<CommentRecords> {
+    const site = await records();
+    const file = commentsFile(site.contentDir, 'hello-world');
+    await mkdir(path.dirname(file), { recursive: true });
+    const entry = (id: string, values: Record<string, unknown> = {}) => ({
+      id,
+      status: 'approved',
+      author: { name: 'Ada', url: null, avatar: null },
+      content: { markdown: 'Hi', html: '<p>Hi</p>' },
+      inReplyTo: null,
+      ...values,
+    });
+    await writeFile(
+      file,
+      `${JSON.stringify({
+        post: POST,
+        comments: [
+          entry(FORM, { someday: 'a key this version does not know' }),
+          entry(ANSWER, { inReplyTo: FORM }),
+          entry(IMPORTED),
+          entry(MENTION, {
+            source: 'webmention',
+            url: 'https://grace.example/reply',
+            inReplyTo: `https://blog.example/comment/${FORM}/`,
+          }),
+        ],
+      })}\n`,
+    );
+    const privateFile = commentEmailsFile(site.dataDir, 'hello-world');
+    await mkdir(path.dirname(privateFile), { recursive: true });
+    await writeFile(
+      privateFile,
+      JSON.stringify({ comments: { [FORM]: { email: 'ada@example.com', notify: true } } }),
+    );
+    await mkdir(path.join(site.contentDir, 'posts'), { recursive: true });
+    await writeFile(
+      path.join(site.contentDir, 'posts', '2026-09-05-answer.md'),
+      `---\nin-reply-to: https://blog.example/comment/${FORM}/\n---\n\nSee [the other one](https://blog.example${POST}#comment-${ANSWER}).\n`,
+    );
+    await writeFile(
+      path.join(site.contentDir, 'posts', '2026-09-06-unrelated.md'),
+      '---\ntitle: Unrelated\n---\n\nNothing about comments.\n',
+    );
+    return site;
+  }
+
+  it('has every id that is not a key given the key of that id, and what names it follows', async () => {
+    const site = await legacySite();
+
+    assert.equal(migrateCommentKeys(site).comments, 4);
+
+    const held = readComments(site, 'hello-world');
+    assert.deepEqual(
+      held.map((comment) => [comment.id, comment.inReplyTo]),
+      [
+        [keyOf(FORM), null],
+        [keyOf(ANSWER), keyOf(FORM)],
+        [keyOf(IMPORTED), null],
+        [keyOf(MENTION), `https://blog.example/comment/${keyOf(FORM)}/`],
+      ],
+    );
+    assert.equal(held[0]?.author.email, 'ada@example.com', 'the email follows its comment');
+    assert.equal(held[0]?.notify, true);
+    assert.deepEqual(
+      Object.keys(
+        JSON.parse(await readFile(commentEmailsFile(site.dataDir, 'hello-world'), 'utf8')).comments,
+      ),
+      [keyOf(FORM)],
+      'no email is left under the old id',
+    );
+    const published = JSON.parse(
+      await readFile(commentsFile(site.contentDir, 'hello-world'), 'utf8'),
+    );
+    assert.equal(published.comments[0].someday, 'a key this version does not know');
+    assert.equal(
+      await readFile(path.join(site.contentDir, 'posts', '2026-09-05-answer.md'), 'utf8'),
+      `---\nin-reply-to: https://blog.example/comment/${keyOf(FORM)}/\n---\n\nSee [the other one](https://blog.example${POST}#comment-${keyOf(ANSWER)}).\n`,
+    );
+  });
+
+  it('is migrated once: a second boot writes nothing', async () => {
+    const site = await legacySite();
+
+    migrateCommentKeys(site);
+    const content = await filesUnder(site.contentDir);
+    const data = await filesUnder(site.dataDir);
+
+    assert.equal(migrateCommentKeys(site).comments, 0);
+    assert.deepEqual(await filesUnder(site.contentDir), content);
+    assert.deepEqual(await filesUnder(site.dataDir), data);
+  });
+
+  it('finishes after a boot stopped between the comment file and the emails', async () => {
+    const site = await legacySite();
+    const privateFile = commentEmailsFile(site.dataDir, 'hello-world');
+    const before = await readFile(privateFile, 'utf8');
+
+    migrateCommentKeys(site);
+    // As if the boot stopped before the private file was written with the new
+    // key alone: it holds the old id's email and nothing else.
+    await writeFile(privateFile, before);
+    migrateCommentKeys(site);
+
+    assert.deepEqual(JSON.parse(await readFile(privateFile, 'utf8')), {
+      comments: { [keyOf(FORM)]: { email: 'ada@example.com', notify: true } },
+    });
+    assert.equal(readComments(site, 'hello-world')[0]?.author.email, 'ada@example.com');
+  });
+});
+
 describe('a comment file somebody edited by hand', () => {
   it('is read as far as it makes sense, so one bad entry loses only itself', async () => {
     const site = await records();
@@ -801,6 +998,24 @@ describe('the comment intake', () => {
     // A page that is edited and re-sent is not news: the moderators heard the
     // first time and the entry has been in the queue ever since.
     assert.equal(site.provider.sent.length, 0);
+  });
+
+  it('keys a webmention by its source and the post it was sent to', async () => {
+    const site = await intakeSite();
+    const source = 'https://grace.example/2026/09/about-that/';
+
+    const here = onlyStored(await site.take({ origin: 'webmention', comment: mention() }));
+    const there = onlyStored(
+      await site.take({
+        origin: 'webmention',
+        comment: mention({ slug: 'another', permalink: '/2026/09/another/' }),
+      }),
+    );
+
+    assert.equal(here.id, keyOf(`${source} /2026/09/hello-world/`));
+    assert.equal(there.id, keyOf(`${source} /2026/09/another/`));
+    assert.equal(site.admin.getComment(here.id)?.slug, 'hello-world', 'one page, two mentions');
+    assert.equal(site.admin.getComment(there.id)?.slug, 'another');
   });
 
   it('keeps a moderator’s decision when a source sends its webmention again', async () => {

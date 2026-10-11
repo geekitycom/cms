@@ -108,6 +108,7 @@ async function site(): Promise<Site> {
     checkUpload: (_name, bytes) => ({ accepted: true, bytes }),
     comments: unused,
     putComments: unused,
+    renameComments: unused,
   };
   return {
     root,

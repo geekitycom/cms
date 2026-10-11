@@ -738,7 +738,7 @@ describe('a reply from the thread to a webmention (TASK-300 AC #5)', () => {
           post: '/2026/03/hello-world/',
           comments: [
             {
-              id: '00000000-0000-4000-8000-0000000000b1',
+              id: '00000000000000b1',
               source: 'webmention',
               kind: 'reply',
               status: 'approved',
@@ -762,7 +762,7 @@ describe('a reply from the thread to a webmention (TASK-300 AC #5)', () => {
     const response = await agent.post('/_geekity/comments', {
       post: 'hello-world',
       body: 'Answering them from the thread.',
-      in_reply_to: '00000000-0000-4000-8000-0000000000b1',
+      in_reply_to: '00000000000000b1',
       csrf_token: token,
     });
     assert.equal(response.status, 303, await response.text());

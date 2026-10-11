@@ -17,7 +17,7 @@ import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
-import { isWithheld } from '../web/conversation.ts';
+import { heldComment, isWithheld } from '../web/conversation.ts';
 import type { ConversationReader, ThreadReply } from '../web/conversation.ts';
 import { isFederatedDocument } from './article.ts';
 import type { FederationContextData } from './federation.ts';
@@ -313,7 +313,7 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
       }
 
       for (const note of found.notes) {
-        if (createsOf(note.id).length > 0) continue;
+        if (createsOf(note.id).length > 0 || heldComment(admin, note.id) !== undefined) continue;
         await appendInboxActivity(records, createOf(note), {
           fetched: true,
           receivedAt: config.now().toISOString(),
@@ -392,7 +392,9 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
 
 /**
  * The fediverse replies a reader sees in a thread, shallowest first, each
- * with how far below the post it sits, down to {@link BACKFILL_DEPTH}.
+ * with how far below the post it sits, down to {@link BACKFILL_DEPTH}. Each is
+ * named by its guid, the note's id, which for one imported from another site
+ * is its origin rather than its key.
  */
 function level(replies: readonly ThreadReply[]): { id: string; depth: number }[] {
   const found: { id: string; depth: number }[] = [];
@@ -400,7 +402,7 @@ function level(replies: readonly ThreadReply[]): { id: string; depth: number }[]
   for (let depth = 1; depth <= BACKFILL_DEPTH && current.length > 0; depth += 1) {
     for (const reply of current) {
       if (!isWithheld(reply) && reply.source === 'activitypub' && reply.kind === 'reply') {
-        found.push({ id: reply.id, depth });
+        found.push({ id: reply.guid, depth });
       }
     }
     current = current.flatMap((reply) => reply.replies);

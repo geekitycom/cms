@@ -138,7 +138,7 @@ async function site(): Promise<{ cms: Cms; dataDir: string }> {
       post: '/2026/09/hello/',
       comments: [
         entry({
-          id: '00000000-0000-4000-8000-000000000001',
+          id: '0000000000000001',
           author: {
             name: 'Grace',
             url: 'https://grace.example/',
@@ -148,7 +148,7 @@ async function site(): Promise<{ cms: Cms; dataDir: string }> {
           url: 'https://grace.example/2026/09/about-that/',
         }),
         entry({
-          id: '00000000-0000-4000-8000-000000000002',
+          id: '0000000000000002',
           status: 'pending',
           author: { name: 'Pat', url: null, email: null, avatar: PENDING_PHOTO },
           url: 'https://pending.example/post/',
