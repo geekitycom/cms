@@ -297,17 +297,6 @@ describe('writing a page', () => {
     assert.match(await (await cms.app.request('/a-propos/')).text(), /<article [^>]*lang="fr">/);
   });
 
-  it('refuses a page with no title and writes nothing', async () => {
-    const cms = await box.site({ contentDir: await seeded([]) });
-    const agent = await signedIn(cms);
-
-    const response = await submit(agent, '/admin/pages/new', { title: '  ', action: 'publish' });
-
-    assert.equal(response.status, 400);
-    assert.match(await response.text(), /needs a title/);
-    assert.equal(cms.store.counts().total, 0);
-  });
-
   it('edits the file and the public page without a restart', async () => {
     const contentDir = await seeded([
       { file: 'pages/about.md', title: 'About', permalink: '/about/', body: 'The first draft.' },

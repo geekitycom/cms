@@ -1331,8 +1331,7 @@ function listing(
     term?.term ??
     author?.user.profile?.displayName ??
     author?.user.username ??
-    request.document?.title ??
-    renderer.site().title;
+    (request.document?.title || renderer.site().title);
 
   if (representation === 'markdown' || representation === 'text') {
     return listingMarkdown(c, request, representation, { href, title, pagination, documents });

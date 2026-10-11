@@ -223,15 +223,6 @@ describe('the post editor’s disclosures (TASK-245)', () => {
     });
   }
 
-  it('links a page refused for its title to the title', async () => {
-    const agent = await site();
-
-    const response = await save(agent, '/admin/pages/new', { title: '', body: 'Body.' });
-
-    assert.equal(response.status, 400);
-    assert.deepEqual(tiedErrors(await response.text()).links, ['editor-title']);
-  });
-
   it('names a post that is not a read a post that is not a read', async () => {
     const agent = await site();
 

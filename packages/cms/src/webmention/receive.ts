@@ -4,6 +4,7 @@ import { deleteComment, heldWebmention, intakeComment } from '../comments/record
 import type { CommentNotices, CommentRecords, ProposedComment } from '../comments/records.ts';
 import type { CommentChecker } from '../comments/submission.ts';
 import type { Document } from '../content/document.ts';
+import { postLabel } from '../content/post-type.ts';
 import { commentKeyAt } from '../web/conversation.ts';
 import type { ConversationReader } from '../web/conversation.ts';
 import { sanitizeCommentHtml } from '../web/sanitize.ts';
@@ -273,7 +274,7 @@ export async function verifyWebmention(
     comment: proposed,
     // The target as its sender named it, rather than this site's own idea of
     // the permalink: that is the URL the conversation is about.
-    post: { title: incoming.document.title, url: incoming.target },
+    post: { title: postLabel(incoming.document), url: incoming.target },
     dataDir: options.dataDir,
     baseUrl: options.baseUrl,
     checker: options.checker,
@@ -329,7 +330,7 @@ async function keepCarried(
           records,
           origin: 'webmention',
           comment: carriedComment(options, reply, parent),
-          post: { title: incoming.document.title, url: incoming.target },
+          post: { title: postLabel(incoming.document), url: incoming.target },
           dataDir: options.dataDir,
           baseUrl: options.baseUrl,
           checker: options.checker,

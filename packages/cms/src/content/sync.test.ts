@@ -285,7 +285,7 @@ describe('a full scan', () => {
     assert.deepEqual(index.listPaths(), ['posts/2026-09-02-hello.md']);
   });
 
-  it('logs a file it cannot parse and indexes the rest', async () => {
+  it('logs a file it cannot parse and indexes the rest, an untitled page among them', async () => {
     const warnings: string[] = [];
     const dir = await contentDir({
       'pages/about.md': markdown({ title: 'About', permalink: '/about/' }),
@@ -298,10 +298,10 @@ describe('a full scan', () => {
 
     const result = await content.sync();
 
-    assert.equal(result.failed, 2);
-    assert.equal(result.created, 1);
-    assert.deepEqual(index.listPaths(), ['pages/about.md']);
-    assert.equal(warnings.length, 2);
+    assert.equal(result.failed, 1);
+    assert.equal(result.created, 2);
+    assert.deepEqual(index.listPaths(), ['pages/about.md', 'pages/untitled.md']);
+    assert.equal(warnings.length, 1);
     assert.match(warnings.join('\n'), /broken\.md/);
   });
 

@@ -659,7 +659,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     if (slug === '') return {};
 
     const found = pages().find((document) => document.slug === slug);
-    return found === undefined ? {} : { postsPage: { title: found.title, url: found.permalink } };
+    return found === undefined
+      ? {}
+      : { postsPage: { title: postLabel(found), url: found.permalink } };
   }
 
   /**

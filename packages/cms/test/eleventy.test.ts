@@ -574,7 +574,11 @@ const FRONT_PAGE_OVERRIDE = `{% extends "layouts/base.njk" %}
  * file would render the first one's.
  */
 let builds = 0;
-async function buildWithDefaultTheme(frontPage: string, dir: string): Promise<void> {
+async function buildWithDefaultTheme(
+  frontPage: string,
+  dir: string,
+  edit: (contentDir: string) => Promise<void> = () => Promise.resolve(),
+): Promise<void> {
   builds += 1;
   const layout = `layouts/front-page-${builds}.njk`;
   await cp(PROJECT_DIR, dir, { recursive: true });
@@ -601,6 +605,8 @@ async function buildWithDefaultTheme(frontPage: string, dir: string): Promise<vo
     front,
     (await readFile(front, 'utf8')).replace(/^---\n/, `---\nlayout: ${layout}\n`),
   );
+
+  await edit(path.join(dir, 'content'));
 
   const originalCwd = process.cwd();
   process.chdir(dir);
@@ -643,6 +649,28 @@ describe('the default theme under Eleventy', () => {
     ]);
     assert.ok(!html.includes('Notes from a Draft'), 'the draft is not listed');
     assert.match(html, /<p>The first post on a file-first site\.<\/p>/, 'with its summary');
+  });
+
+  it('builds an untitled page and an untitled front page (TASK-343 AC #5)', async () => {
+    const dir = await freshDir();
+    const untitle = async (file: string): Promise<void> => {
+      const source = await readFile(file, 'utf8');
+      await writeFile(file, source.replace(/^title: .*\n/m, ''));
+    };
+    await buildWithDefaultTheme(FRONT_PAGE_OVERRIDE, dir, async (content) => {
+      await untitle(path.join(content, 'pages', 'about.md'));
+      await untitle(path.join(content, 'pages', 'front.md'));
+    });
+
+    const about = await readFile(path.join(dir, '_site', 'about', 'index.html'), 'utf8');
+    assert.match(about, /A page has no date and lives at the top level\./);
+    assert.match(about, /<title>Fixture Site<\/title>/);
+    assert.doesNotMatch(about, /<h1\b/);
+    assert.doesNotMatch(about, /<h[12][^>]*>\s*<\/h[12]>/);
+
+    const front = await readFile(path.join(dir, '_site', 'index.html'), 'utf8');
+    assert.match(front, /The page the site shows at its root\./);
+    assert.doesNotMatch(front, /<h[12][^>]*>\s*<\/h[12]>/);
   });
 
   it('lists only as many as the theme asks for', async () => {

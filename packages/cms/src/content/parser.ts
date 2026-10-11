@@ -43,12 +43,7 @@ export function parseDocument(source: string, options: ParseDocumentOptions): Do
 
   const data = parsed.data;
   const type = options.type ?? typeForPath(path);
-  // A post without a title is a note; a page is standing content and is
-  // always named.
-  const title =
-    type === 'page'
-      ? requiredString(data['title'], 'title', path)
-      : (asString(data['title']) ?? '');
+  const title = asString(data['title']) ?? '';
   const date = asDate(data['date'], 'date', path);
   const body = normalizeBody(parsed.content);
 
@@ -144,14 +139,6 @@ function extraOf(data: Record<string, unknown>): Record<string, unknown> {
 
 function optional<K extends string, V>(key: K, value: V | undefined): Record<K, V> | object {
   return value === undefined ? {} : ({ [key]: value } as Record<K, V>);
-}
-
-function requiredString(value: unknown, key: string, path: string): string {
-  const text = asString(value);
-  if (text === undefined) {
-    throw new TypeError(`${path} needs a non-empty ${key} in its front matter.`);
-  }
-  return text;
 }
 
 function asString(value: unknown): string | undefined {
