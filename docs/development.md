@@ -54,6 +54,9 @@ corepack enable
 pnpm install
 ```
 
+Node 25 and later do not include Corepack. On those versions, install it first
+with `npm install --global corepack@latest`, then run the commands above.
+
 ## Commands
 
 Run from the repository root.
