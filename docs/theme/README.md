@@ -2,11 +2,11 @@
 
 The default theme's templates ship in
 [`packages/cms/themes/default/`](../../packages/cms/themes/default/), inside the
-published package, so every site gets them without copying anything.
+published package. Every site gets them without copying any files.
 
 ```
 themes/default/
-  theme.json     the manifest: name, kind and description
+  theme.json     the manifest: name, kind, description and colours
   layouts/
     base.njk     the page every other layout extends
     home.njk     the post archive, paginated
@@ -59,32 +59,41 @@ themes/default/
     highlight.js the code highlighter
 ```
 
-Plain Nunjucks templates and one stylesheet. The stylesheet is written in
-Tailwind v4 (`src/style.css`) and compiled when the package is built, so
-`static/style.css` is a build product: gitignored in this repository, written
-by `pnpm build` (which the root `prepare` runs after an install and before a
-publish), and shipped in the package like every other file here. The compile
-happens once, on the machine that builds the package. A reader gets one plain
-CSS file and no script, web font or CDN request because of it.
+The theme is plain Nunjucks templates and one stylesheet. The stylesheet
+source is Tailwind v4 (`src/style.css`). The package build compiles it to
+`static/style.css`:
+
+- `static/style.css` is a build product and is gitignored in this repository.
+- `pnpm build` writes it. The root `prepare` script runs `pnpm build` after an
+  install and before a publish.
+- The package ships it like every other file here.
+
+The compile runs once, on the machine that builds the package. A visitor's
+browser gets one plain CSS file and makes no script, web font or CDN request
+for it.
 
 The design is Paper (doc-9, decision-22): one warm column, serif throughout,
-sans for small labels, and a kicker above every entry naming its kind.
+sans for small labels, and a kicker above every entry that names its kind.
 
-**Rebuilding the stylesheet.** After editing `src/style.css`:
+### Rebuild the stylesheet
+
+After you edit `src/style.css`, run:
 
 ```
 pnpm --filter @geekity/cms build:theme
 ```
 
-Tailwind scans only this theme's `layouts/` and `partials/`, so a utility class
-written in a template here is compiled in and nothing outside the theme is
-read. The templates themselves use the semantic class names these pages list, and the look
-lives in `src/style.css`, through `@apply`.
+Tailwind scans only this theme's `layouts/` and `partials/`. A utility class in
+a template here is compiled in, and Tailwind reads nothing outside the theme.
+The templates use the semantic class names that these pages list. The styles
+for those classes are in `src/style.css`, through `@apply`.
 
-**A site theme owes Tailwind nothing.** Its own `static/style.css` replaces this
-one wholesale, and any CSS that knows the class names in these pages will do.
-The demo theme's is plain CSS. A site that only wants different colours
-overrides the `--color-*` custom properties instead; see [Colours](page-shell.md#colours).
+### A site theme does not need Tailwind
+
+A site theme's own `static/style.css` replaces this one completely. Any CSS
+that uses the class names in these pages works. The demo theme's stylesheet is
+plain CSS. To change only the colours, override the `--color-*` custom
+properties. See [Colours](page-shell.md#colours).
 
 ## Contents
 

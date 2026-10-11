@@ -12,16 +12,19 @@
 }
 ```
 
-`name` is what a person sees, `kind` is `site` — the only kind there is, and
-the field exists so another can be added later without the format changing —
-and `description` is optional. The directory name is the theme's id. A
-directory without a readable manifest, or one naming a kind this CMS does not
-have, is not a theme.
+| Field         | Value                                                                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`        | The name a person sees.                                                                                                                          |
+| `kind`        | `site`. It is the only kind. The field exists so that a later version can add another kind without changing the format.                          |
+| `description` | Optional.                                                                                                                                        |
+| `colorScheme` | One of `normal`, `light`, `dark`, `light dark`, `dark light` or `only light`, preferred scheme first.                                            |
+| `themeColor`  | The colour of the browser around the page, one per scheme, as a three- or six-digit hex colour with no alpha. Make it the page's own background. |
 
-`colorScheme` and `themeColor` are the colours the head declares before the
-stylesheet loads (see [The head](page-shell.md#the-head)). `colorScheme` is one of `normal`,
-`light`, `dark`, `light dark`, `dark light` or `only light`, preferred scheme
-first. `themeColor` is the colour of the browser around the page, one per
-scheme, as a three- or six-digit hex colour with no alpha. Make it the page's
-own background. A value outside those is ignored, and so is one a theme leaves
-out: each falls back to this theme's, just as a template does.
+The directory name is the theme's id. A directory is not a theme if its
+manifest is missing or unreadable, or if the manifest names a kind this CMS
+does not have.
+
+The head declares `colorScheme` and `themeColor` before the stylesheet loads
+(see [The head](page-shell.md#the-head)). The CMS ignores a value outside the
+allowed ones, and a value that a theme leaves out. Each ignored value falls
+back to the default theme's value, the same way a missing template does.

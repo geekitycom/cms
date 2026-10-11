@@ -16,11 +16,11 @@
  * overrides a custom property or a class.
  *
  * The `--color-*` custom properties below are the override contract (see
- * "Colours" in docs/theme/page-shell.md). `src/web/theme-colors.test.ts` reads them out of
- * the compiled file and computes the WCAG 2.2 ratio of every pair the design
- * puts on screen: every run of text at 7:1, every border a reader relies on at
- * 3:1, in both schemes. `--color-rule` is the one exception, a decorative
- * hairline nothing a reader needs is drawn with.
+ * "Colours" in docs/theme/page-shell.md). `src/web/theme-colors.test.ts` reads
+ * them out of the compiled file and computes the WCAG 2.2 ratio of every pair
+ * the design puts on screen: every run of text at 7:1, every border a reader
+ * relies on at 3:1, in both schemes. `--color-rule` is the one exception, a
+ * decorative hairline nothing a reader needs is drawn with.
  */
 @import 'tailwindcss' source(none);
 @source '../layouts';

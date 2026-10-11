@@ -1,17 +1,17 @@
 # Personal data
 
-This is every piece of personal data the CMS stores, where it is, and how long
-it stays. "Kept" means until somebody deletes it, unless a retention period
-says otherwise.
+This page lists every piece of personal data the CMS stores, where it is
+stored, and how long the CMS keeps it. "Kept" means until a user deletes it,
+unless a retention period sets a limit.
 
 | What                                                                                                                   | Where                                                         | How long                                                                                                             |
 | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | A commenter's name, website and words                                                                                  | `content/_data/comments/{slug}.json`, public and in git       | Kept. Erasing on request replaces the name and drops the website.                                                    |
 | A commenter's email, and whether they asked to be told about replies                                                   | `data/comments/{slug}.json`, mode `0600`, keyed by comment id | `commentEmailRetentionDays`: forever unless set, 180 on a new site.                                                  |
 | A salted hash of the address a comment, webmention or contact message came from (the address itself is never stored)   | The comment file, or the contact message file                 | `addressHashRetentionDays`: forever unless set, 30 on a new site.                                                    |
-| A webmention's author name, website, avatar URL and the source page's words                                            | `content/_data/comments/{slug}.json`                          | Kept, as a copy of a page that is public already.                                                                    |
+| A webmention's author name, website, avatar URL and the source page's words                                            | `content/_data/comments/{slug}.json`                          | Kept. It is a copy of a page that is already public.                                                                 |
 | A contact message: the sender's name, email, subject and message                                                       | `data/contact/{id}.json`, mode `0600`                         | `contactMessageRetentionDays`: forever unless set, 365 on a new site.                                                |
-| The addresses that unsubscribed from reply notices                                                                     | `data/comment-optouts.json`, mode `0600`                      | Kept, so the site goes on not writing to them. Erasing on request removes one.                                       |
+| The addresses that unsubscribed from reply notices                                                                     | `data/comment-optouts.json`, mode `0600`                      | Kept, so the site continues not to write to them. Erasing on request removes one.                                    |
 | Followers: actor id, handle, display name, avatar URL, profile URL                                                     | `content/_data/federation/{username}/followers.json`, in git  | Until they unfollow.                                                                                                 |
 | Inbound likes, boosts, replies and quotes, with the actor who sent them                                                | `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`, in git    | Kept.                                                                                                                |
 | What a reply shows of the post it answers: its title, words and author                                                 | `content/_data/replyContexts.json`, in git                    | Kept.                                                                                                                |
@@ -28,33 +28,41 @@ says otherwise.
 | Micropub properties a post was sent that the site does not understand, such as an RSVP                                 | `data/kept-properties.json`, mode `0600`, keyed by permalink  | Kept until an update deletes them. Never published.                                                                  |
 | Client addresses in the access log                                                                                     | stdout, and whatever collects it                              | Only with `accessLogAddress` on. The collector keeps them.                                                           |
 
-Two services outside the site see personal data when a site turns them on.
-Akismet is sent a commenter's or sender's address, user agent, referrer, name,
-email, website and words. The mail provider is sent every address a message
-goes to.
+Two outside services see personal data when the site owner turns them on:
+
+- Akismet receives a commenter's or sender's address, user agent, referrer,
+  name, email, website and words.
+- The mail provider receives every address a message goes to.
 
 ## The starter privacy page
 
-`geekity init` writes `content/pages/privacy.md`, served at `/privacy/` and
-linked from the footer by a `Privacy | /privacy/` line in `menus.footer`. It
-says in plain language what the table above says, marks the contact form,
-reply emails and Akismet as optional, and quotes the retention periods a new
-site starts with. It is a starting point written from what the software does,
-not legal advice, and a note at its top says so to the owner: review it, add
-whatever the site does beyond the CMS (analytics, a host's logs, a theme that
-loads fonts from elsewhere), change the numbers when a retention period
-changes, and remove the menu line if the page is deleted.
+`geekity init` writes `content/pages/privacy.md`. The site serves it at
+`/privacy/`, and a `Privacy | /privacy/` line in `menus.footer` links it from
+the footer. The page:
 
-The link is a menu line rather than something the theme prints, because the
-footer prints `menus.footer` and nothing of its own (TASK-105). A site that
-upgrades gets no page and no link; it can copy the file from
+- Says in plain language what the table above says.
+- Marks the contact form, reply emails and Akismet as optional.
+- Quotes the retention periods a new site starts with.
+
+The page is a starting point based on what the software does. It is not legal
+advice. A note at its top tells the site owner to:
+
+- Review it.
+- Add what the site does beyond the CMS, such as analytics, a host's logs, or
+  a theme that loads fonts from another host.
+- Change the numbers when a retention period changes.
+- Remove the menu line if the page is deleted.
+
+The link is a menu line, not something the theme prints, because the footer
+prints only `menus.footer` (TASK-105). An upgraded site gets no page and no
+link. To add them, copy the file from
 `templates/site/content/pages/privacy.md` in the package.
 
 ## Retention
 
-Three settings in `content/_data/site.json`, on **Settings > Discussion**,
-decide how long the site keeps what readers hand it. Each counts whole days from
-when the data arrived, and `0` keeps it forever:
+Three settings in `content/_data/site.json`, on **Settings > Discussion**, set
+how long the site keeps what visitors send it. Each counts whole days from when
+the data arrived. `0` keeps the data forever:
 
 | Setting                       | Recommended | What goes when it runs out                                        |
 | ----------------------------- | ----------- | ----------------------------------------------------------------- |
@@ -63,49 +71,63 @@ when the data arrived, and `0` keeps it forever:
 | `contactMessageRetentionDays` | `365`       | The whole contact message.                                        |
 
 **A site keeps everything until its owner sets a period.** A `site.json`
-without these keys reads as `0` for all three, so an existing site that
-upgrades loses nothing, and the Discussion screen says "Kept forever" beside
-each one. A new site from `geekity init` starts with the recommended periods
-written into its `site.json`. An existing site opts in by typing them on
-Settings > Discussion and saving once.
+without these keys reads as `0` for all three. An existing site that upgrades
+loses nothing, and the Discussion screen shows "Kept forever" beside each
+setting. A new site from `geekity init` starts with the recommended periods in
+its `site.json`. To opt in on an existing site, enter the periods on
+Settings > Discussion and save.
 
-They are settings rather than config because how long a site keeps people's
-data is the owner's decision, and a privacy notice quotes it; `site.json` is
-public, which suits a policy. The recommended periods are long enough for a
-reply notice to arrive, a run of spam to be spotted and a year of
-correspondence to be answered, and no longer. The first sweep after a site
-sets a period removes whatever is already past it.
+**Why these are settings, not config.** How long a site keeps people's data is
+the site owner's decision, and a privacy notice quotes it. `site.json` is
+public, which suits a policy.
 
-A sweep runs when the site starts serving and every six hours after that, and
-`cms.retention.sweep()` runs one now. It reads the files rather than the index,
-rewrites each comment file and message inside the same lock every other writer
-takes, and puts each changed comment back into the index in the same step. A
-second sweep finds nothing left to remove and writes nothing.
+The recommended periods are long enough for a reply notice to arrive, for the
+site owner to spot a run of spam, and for a year of correspondence to be
+answered. They are no longer than that. The first sweep after the site owner
+sets a period removes all data already past it.
+
+A sweep runs when the site starts serving and every six hours after that.
+`cms.retention.sweep()` runs one immediately. The sweep:
+
+- Reads the files, not the index.
+- Rewrites each comment file and message inside the lock that every other
+  writer takes.
+- Puts each changed comment back into the index in the same step.
+
+A second sweep finds nothing to remove and writes nothing.
 
 A comment that loses its email keeps its id, its place in the thread, its
-status, its words and its name. It gains `"redacted": ["email"]`, which is how
-the index tells an email removed from one never given: a name whose email was
-removed does not count toward auto-approval, so nobody can type that name and
-skip the queue. Its author is no longer told about replies, and their next
-comment waits for a moderator. A moderation link in an inbox names the comment
-by id, so it goes on working.
+status, its words and its name. It gains `"redacted": ["email"]`. The index
+uses this marker to tell a removed email from one that was never given. A name
+whose email was removed does not count toward auto-approval, so a visitor
+cannot enter that name to skip the queue. The comment's author no longer
+receives reply notices, and their next comment waits for a moderator. A
+moderation link in an inbox names the comment by id, so the link still works.
 
-The sweep changes the files as they are now. The emails are in `data/`, which
-is not in git, so removing one removes it. Emails from before they moved out of
-the comment files (TASK-182) were committed with those files, and they stay in
-the repository's history until that history is rewritten, whatever the sweep or
-an erasure does to the files today.
+The sweep changes only the current files. The emails are in `data/`, which is
+not in git, so removing an email deletes it. Emails from before they moved out
+of the comment files (TASK-182) were committed with those files. They stay in
+the repository's history until that history is rewritten. Neither the sweep
+nor an erasure removes them from the history.
 
 ## Erasing one person's data
 
 **Tools > Personal data** erases what the site holds for one email address.
-It shows what it found first: how many comments carry the address, how many
-contact messages came from it, and whether it is on the opt-out list. Erasing
-then signs each of those comments `Anonymous`, removes its email, website,
-avatar and address hash, and marks it `"redacted": ["email", "addressHash",
-"author"]`; the comment keeps its place in the thread, its status and its words.
-The contact messages are deleted and the address comes off the opt-out list.
+First it shows what it found:
 
-A comment is found by its email, so one whose email the sweep has already
-removed, a webmention and a fediverse reply are not found there. The Comments
-screen deletes those one at a time.
+- How many comments carry the address.
+- How many contact messages came from it.
+- Whether it is on the opt-out list.
+
+When you erase, the screen does the following:
+
+- Signs each of those comments `Anonymous`, removes its email, website, avatar
+  and address hash, and marks it
+  `"redacted": ["email", "addressHash", "author"]`. The comment keeps its place
+  in the thread, its status and its words.
+- Deletes the contact messages.
+- Removes the address from the opt-out list.
+
+The screen finds comments by email. It does not find a comment whose email the
+sweep has already removed, a webmention or a fediverse reply. Delete those one
+at a time on the Comments screen.

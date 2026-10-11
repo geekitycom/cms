@@ -670,8 +670,8 @@ interface CliInbox {
  *
  * `--no-tunnel` keeps it local; without it the CLI opens a public HTTPS tunnel
  * through a third-party service, which is the right tool for testing against a
- * real Mastodon instance (docs/federation.md says how) and the wrong one for a check
- * that has to pass on a runner with no inbound network.
+ * real Mastodon instance (docs/federation.md says how) and the wrong one for a
+ * check that has to pass on a runner with no inbound network.
  */
 function startCliInbox(): CliInbox {
   // `stdio` names both streams as pipes, so `child.stdout` and `child.stderr`

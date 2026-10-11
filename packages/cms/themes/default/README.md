@@ -1,8 +1,8 @@
 # Default theme
 
-The templates and the stylesheet every Geekity CMS site gets, shipped inside
-`@geekity/cms`. A site theme replaces one template at a time and keeps the
-rest of this one.
+The templates and the stylesheet that every Geekity CMS site gets, shipped
+inside `@geekity/cms`. A site theme can replace one template at a time. The
+rest come from this theme.
 
 ## Override a template
 
@@ -13,7 +13,8 @@ cp node_modules/@geekity/cms/themes/default/layouts/post.njk themes/mine/layouts
 ```
 
 Edit the copy, then choose **Mine** on **Appearance > Themes** in the admin.
-Every template the theme does not ship still comes from this one.
+Every template that your theme does not ship still comes from the default
+theme.
 
 ## Documentation
 

@@ -1,11 +1,12 @@
 # Geekity CMS
 
-A file-first CMS. Content is Markdown on disk, laid out so Eleventy can build
-the same directory unchanged. One Node process is both the editor and the public
-website. Everything a site cannot afford to lose is a file; SQLite is a cache
-over those files that may be deleted at rest and is rebuilt on the next boot.
+A file-first CMS. Content is Markdown on disk, in a layout that Eleventy can
+build unchanged. One Node process serves both the editor and the public
+website. Everything a site cannot afford to lose is a file. SQLite is a cache
+over those files. You can delete it while the site is stopped, and the next
+boot rebuilds it.
 
-This repository is a pnpm workspace. The CMS ships to npm as `@geekity/cms`; a
+This repository is a pnpm workspace. The CMS ships to npm as `@geekity/cms`. A
 site is its own repository that depends on the package.
 
 ## Start a site
@@ -20,7 +21,7 @@ pnpm dev
 ```
 
 The site runs on <http://localhost:3000> with a post, an About page, a privacy
-page and the default theme. [Getting started](docs/getting-started.md) says
+page and the default theme. [Getting started](docs/getting-started.md) lists
 what `geekity init` writes. To run a site from the published Docker image, see
 [Deploying](docs/deploying.md).
 
@@ -39,8 +40,8 @@ in [`CLAUDE.md`](CLAUDE.md).
 
 ## Documentation
 
-[The documentation index](docs/README.md) lists every page. These are the ones
-most people start with:
+[The documentation index](docs/README.md) lists every page. Start with
+these:
 
 - [Configuration](docs/configuration.md)
 - [The `geekity` command](docs/cli.md)

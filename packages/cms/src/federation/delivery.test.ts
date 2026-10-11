@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { after, before, describe, it } from 'node:test';
+import { after, afterEach, before, describe, it } from 'node:test';
 
 import { exportJwk, importJwk } from '@fedify/fedify';
 import { CryptographicKey, Endpoints, Image, Note, Person } from '@fedify/vocab';
@@ -136,6 +136,12 @@ before(async () => {
     inbox: new URL(ERIN_INBOX),
   }).toJsonLd();
   restoreFetch = routeRemoteHost();
+});
+
+// A site left running past its test can still send, and what it sends would
+// land in the next test's deliveries.
+afterEach(async () => {
+  for (const instance of started.splice(0)) await instance.close();
 });
 
 after(async () => {
