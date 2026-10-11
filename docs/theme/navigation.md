@@ -17,8 +17,8 @@ A site stores its menus by name in `content/_data/site.json`:
 }
 ```
 
-Every template gets them as `menus`, keyed by the same names, already in order
-and already knowing which item is the page being looked at:
+Every template gets them as `menus`, keyed by the same names. Each menu is in
+order, and each item says whether it is the current page:
 
 ```njk
 {% for item in menus.footer %}
@@ -26,13 +26,13 @@ and already knowing which item is the page being looked at:
 {% endfor %}
 ```
 
-That is the whole interface, so a theme renders a menu this one has never heard
-of by looping over the name a site stored it under.
+To render any menu, including one the default theme does not use, loop over
+the name the site stored it under.
 
 ## The areas a theme declares
 
-`theme.json` says where a theme renders a menu, so the Navigation screen can
-offer those places and nowhere else. This theme declares two:
+`theme.json` lists where a theme renders a menu. The Navigation screen offers
+only those areas. The default theme declares two:
 
 ```json
 {
@@ -46,30 +46,32 @@ offer those places and nowhere else. This theme declares two:
 ```
 
 `name` is the key under `menus`, in `site.json` and on the context. `label` is
-what a person choosing an area reads; leave it out and it falls back to the
-name. Declare a third area and a site can fill it in; declare none and the
-theme renders no menu.
+the text the site owner sees when choosing an area. Without `label`, the screen
+shows the name. If you declare a third area, the site owner can fill it in. If
+you declare none, the theme renders no menu.
 
-The declaration is for the screen, not for the render. Every menu the site
-stores is on the context whether or not a theme declared an area for it — a
-menu nothing loops over is rendered nowhere and kept, which is what lets
-somebody write the menu a theme will use before switching to that theme. An
-`areas` that is missing, or that will not read, leaves the theme with none
-rather than failing to load it.
+The declaration affects only the Navigation screen, not rendering. Every menu
+the site stores is on the context, whether or not the theme declared an area
+for it. A menu that no template loops over is not rendered, but the site keeps
+it. So a site owner can write the menu a theme uses before switching to that
+theme. If `areas` is missing or does not read, the theme has no areas. The
+theme still loads.
 
 ## One item
 
-Each item is `{ label, url, current }`, plus `rel` on a link that carries `rel`
-values. `url` is a site-root path or an absolute URL for somewhere else, so put
-it through the `url` filter and a site served from a subdirectory still links
-correctly. `current` is true for the item whose path is the one being rendered,
-comparing without the trailing slash; an item pointing off the site is never
-current. `rel` is one string holding every value the line carried, already
-lower case and each said once — print it as the whole attribute,
-`rel="{{ item.rel }}"`, rather than building one of your own. `me` is the value
-most menus have, for the IndieWeb's identity check: Mastodon verifies a link on
-a profile by looking for a `rel="me"` link back, so a footer link to a profile
-marked `me` is what makes the tick appear.
+Each item is `{ label, url, current }`, plus `rel` on a link that has `rel`
+values.
+
+| Field     | What it holds                                                                                                                                             |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `label`   | The link text.                                                                                                                                            |
+| `url`     | A site-root path, or an absolute URL for another site. Pass it through the `url` filter so that a site served from a subdirectory links correctly.        |
+| `current` | `true` for the item whose path is the page being rendered. The comparison ignores the trailing slash. An item that points off the site is never current.  |
+| `rel`     | One string with every value the item had, in lower case, each value once. Print it as the whole attribute, `rel="{{ item.rel }}"`. Do not build your own. |
+
+`me` is the most common `rel` value. It is for the IndieWeb identity check.
+Mastodon verifies a link on a profile by looking for a `rel="me"` link back. A
+footer link to the profile, marked `me`, makes Mastodon show the verified tick.
 
 ## Where this theme prints them
 
@@ -80,43 +82,50 @@ marked `me` is what makes the tick appear.
 {{ nav.list(menus.footer, "Footer") }}
 ```
 
-The second argument is the `aria-label`, which is what tells a reader on a
-screen reader which of a page's menus this one is. Nothing is printed for a
-menu with nothing in it.
+The second argument is the `aria-label`. It tells a screen reader user which
+of the page's menus this is. The macro prints nothing for an empty menu.
 
-`menus.primary` is printed once, in `header.global-header`, on every page
-(TASK-105). At the root, where the header is the site title with the tagline
-under it, the menu is a line of its own under the tagline; everywhere else,
-where the header is the small link home, the stylesheet lays the header out as
-one line and the menu sits beside it. Nothing decides between two places any
-more: a reader looks in the same spot whatever they are reading, and a layout
-that overrides the `content` block cannot lose the navigation by not printing
-a bio.
+### The site menu
 
-`menus.footer` is printed in the `footer` block of `layouts/base.njk`, under
-the copyright line, and is the whole of what the footer links — a feed, a
-colophon, a webring, a profile marked `me`. The footer reads nothing off an
-account: it used to print one `rel="me"` link per entry of `siteAuthor.links`,
-which meant one nominated user's links stood for the site and nobody else's
-appeared at all.
+The theme prints `menus.primary` once, in `header.global-header`, on every page
+(TASK-105):
 
-Every menu reads the same: a link in one is the colour, the underline and the
-size of a link in the page's prose, in the sans heading font a `nav` is set in
-(TASK-111). A menu is navigation somebody is meant to use rather than a
-footnote, so none of them is set smaller than the words around it, and the same
-goes for the `rel="me"` links `partials/bio.njk` prints under a post. The two
-links that read as plain text instead are the site title and
-`a.header-link-home`, which are the page saying where it is rather than
-somewhere to go, and the stylesheet names those two rather than reaching for
-every link that happens to sit in a `<header>`.
+- At the root, the header is the site title with the tagline under it. The
+  menu is on its own line under the tagline.
+- On every other page, the header is the small link home. The stylesheet lays
+  the header out as one line, with the menu beside the link.
 
-`menus.primary` is the whole of the site menu, in the order the Navigation
-screen names it. Both areas are declared in this theme's `theme.json`, which is
-what puts them on `/admin/navigation` with those labels; a theme that renders a
-third menu declares a third area. A page cannot put itself in a menu; a page
-that should be linked — including the one a site serves as its front page,
-typed `Home | /` — is typed into the box there.
+The menu is in the same place on every page. A layout that overrides the
+`content` block cannot drop the navigation.
 
-Because the menus live in `site.json`, an Eleventy build of the same content
-renders the same ones; `docs/eleventy.config.example.js` builds them as
+### The footer links
+
+The theme prints `menus.footer` in the `footer` block of `layouts/base.njk`,
+under the copyright line. These are the only links in the footer, for example a
+feed, a colophon, a webring, or a profile marked `me`. The footer reads nothing
+from a user account. It used to print one `rel="me"` link for each entry of
+`siteAuthor.links`. That showed one chosen user's links for the whole site and
+no other user's.
+
+### How menu links look
+
+A link in any menu has the colour, the underline and the size of a link in the
+page's prose, in the sans heading font of a `nav` (TASK-111). Menus are for
+navigation, so no menu is smaller than the text around it. The same applies to
+the `rel="me"` links that `partials/bio.njk` prints under a post. Two links look
+like plain text: the site title and `a.header-link-home`. They show where the
+visitor is, not a place to go. The stylesheet targets those two by name, not
+every link in a `<header>`.
+
+### Editing the menus
+
+`menus.primary` is the complete site menu, in the order the Navigation screen
+gives it. The default theme's `theme.json` declares both areas, which puts them
+on `/admin/navigation` with those labels. A theme that renders a third menu
+declares a third area. A page cannot add itself to a menu. To link a page,
+including the page the site serves as its front page, type it into the box on
+that screen, as `Home | /`.
+
+The menus are in `site.json`, so an Eleventy build of the same content renders
+the same menus. `docs/eleventy.config.example.js` builds them as
 `collections.menus`.

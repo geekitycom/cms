@@ -1,7 +1,7 @@
 # @geekity/cms
 
-A file-first CMS. Content is Markdown on disk, laid out so Eleventy can build
-the same directory unchanged. One Node process is both the editor and the public
+A file-first CMS. Content is Markdown on disk, in a layout that Eleventy can
+build unchanged. One Node process serves both the editor and the public
 website. SQLite holds a derived index plus the data that has no natural file
 form.
 
@@ -16,10 +16,9 @@ pnpm install
 pnpm dev
 ```
 
-That is a running site on <http://localhost:3000> with a post, an About page, a
+The site runs on <http://localhost:3000> with a post, an About page, a
 starter privacy page and the packaged theme. `geekity init` refuses a directory
-that already has anything in it, so it can never write over a site you already
-have.
+that is not empty, so it never overwrites an existing site.
 
 ## An existing project
 
@@ -36,8 +35,8 @@ entry file or run `geekity serve`.
 pnpm up @geekity/cms
 ```
 
-Database migrations ship inside the package and run on boot, so a version bump
-is the whole upgrade. [Upgrading](https://github.com/geekitycom/cms/blob/main/docs/getting-started.md#upgrading)
+Database migrations ship inside the package and run on boot. To upgrade, bump
+the version. [Upgrading](https://github.com/geekitycom/cms/blob/main/docs/getting-started.md#upgrading)
 lists what semver covers.
 
 ## Documentation

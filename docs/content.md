@@ -3,7 +3,7 @@
 ## Documents and files
 
 A Markdown file and a `Document` convert both ways. The file is the source of
-truth, so front-matter keys the CMS does not model survive an admin save:
+truth. Front-matter keys the CMS does not model survive an admin save.
 
 ```ts
 import { parseDocument, serializeDocument } from '@geekity/cms';
@@ -15,144 +15,155 @@ document.html; // rendered with markdown-it
 await writeFile(file, serializeDocument({ ...document, draft: false }));
 ```
 
-`parseDocument` reads the type from the directory (`posts/` or `pages/`), fills
-in a default permalink when the file has none, normalises dates to ISO 8601
-strings and hashes the document's canonical text. `serializeDocument` writes
-front matter in a fixed key order, so an unchanged document writes the same
-bytes and a real edit produces a small diff.
+`parseDocument` does four things:
 
-`slugify(title)` and `defaultPermalink({ type, slug, date })` are what the admin
-form proposes: `/{yyyy}/{mm}/{slug}/` for a post, `/{slug}/` for a page.
-`renderMarkdown(body)` is markdown-it with Eleventy's `html: true`, plus
+- It reads the type from the directory (`posts/` or `pages/`).
+- It fills in a default permalink when the file has none.
+- It normalises dates to ISO 8601 strings.
+- It hashes the document's canonical text.
+
+`serializeDocument` writes front matter in a fixed key order. An unchanged
+document writes the same bytes, and a real edit produces a small diff.
+
+The admin form proposes a slug with `slugify(title)` and a permalink with
+`defaultPermalink({ type, slug, date })`:
+
+| Type | Default permalink      |
+| ---- | ---------------------- |
+| Post | `/{yyyy}/{mm}/{slug}/` |
+| Page | `/{slug}/`             |
+
+`renderMarkdown(body)` is markdown-it with Eleventy's `html: true`. It adds
 footnotes, heading ids and a language class on fenced code.
 
-Fixtures that both this package and the Eleventy compatibility test build from
-live in `packages/cms/test/fixtures/content/`.
+The fixtures that this package and the Eleventy compatibility test both build
+from are in `packages/cms/test/fixtures/content/`.
 
 ## Two directories: `content/` and `data/`
 
-Everything a site cannot afford to lose is a file, and every one of those files
-is in one of two directories (decision-9). Nothing else needs backing up, and
-nothing else needs carrying across a deploy.
+Every file a site cannot afford to lose is in one of two directories
+(decision-9). Back up these two directories and carry them across a deploy.
+Nothing else needs either.
 
-`content/` is what the site publishes. It belongs in git, an Eleventy build of
-the same directory reads all of it, and everything in it is meant to be public:
+`content/` holds what the site publishes. Keep it in git. An Eleventy build of
+the same directory reads all of it, and everything in it is public.
 
-| Path                                                 | What it holds                                                            |
-| ---------------------------------------------------- | ------------------------------------------------------------------------ |
-| `content/posts/`, `content/pages/`                   | The Markdown documents, `_trash/` included.                              |
-| `content/uploads/`                                   | Uploaded files, with their location and camera metadata removed.         |
-| `content/_data/site.json`                            | Every site setting.                                                      |
-| `content/_data/media.json`                           | The media library's alt text, keyed by upload.                           |
-| `content/_data/federation/{username}/followers.json` | Who follows that user.                                                   |
-| `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`   | Every activity the inbox was handed, one per line.                       |
-| `content/_data/comments/{slug}.json`                 | The comments left on that post, whatever a moderator has done with them. |
+| Path                                                 | What it holds                                                    |
+| ---------------------------------------------------- | ---------------------------------------------------------------- |
+| `content/posts/`, `content/pages/`                   | The Markdown documents, `_trash/` included.                      |
+| `content/uploads/`                                   | Uploaded files, with their location and camera metadata removed. |
+| `content/_data/site.json`                            | Every site setting.                                              |
+| `content/_data/media.json`                           | The media library's alt text, keyed by upload.                   |
+| `content/_data/federation/{username}/followers.json` | Who follows that user.                                           |
+| `content/_data/federation/inbox/{yyyy}-{mm}.jsonl`   | Every activity the inbox received, one per line.                 |
+| `content/_data/comments/{slug}.json`                 | Every comment left on that post, in every moderation state.      |
 
-`data/` is private. It is gitignored, and it is the half to copy somewhere safe:
+`data/` is private. It is gitignored. Copy it somewhere safe.
 
 | Path                             | What it holds                                                                                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `data/users.json`                | Usernames and argon2id password hashes. Mode `0600`.                                                                                              |
 | `data/keys/`                     | Each user's actor key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                                        |
-| `data/locations.json`            | Where each post was written, keyed by permalink. Never in `content/`, so a public repository never carries it (decision-29). Mode `0600`.         |
+| `data/locations.json`            | Where each post was written, keyed by permalink. It is never in `content/`, so a public repository never holds it (decision-29). Mode `0600`.     |
 | `data/kept-properties.json`      | The Micropub properties a post was sent that the site does not understand, such as an `itinerary`, keyed by permalink (decision-27). Mode `0600`. |
-| `data/comment-salt`              | What hides commenters' addresses in the published comment files. Mode `0600`.                                                                     |
+| `data/comment-salt`              | The salt that hides commenters' IP addresses in the published comment files. Mode `0600`.                                                         |
 | `data/comments/{slug}.json`      | The emails of that post's commenters, and whether each asked to hear about replies, keyed by comment id. Mode `0600`.                             |
-| `data/akismet.json`              | The Akismet key, and what `verify-key` last said about it. Mode `0600`.                                                                           |
+| `data/akismet.json`              | The Akismet key, and the last `verify-key` result for it. Mode `0600`.                                                                            |
 | `data/mail.json`                 | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                                   |
-| `data/notification-secret`       | What signs the one-click links in a notification. Mode `0600`. Losing it kills every link already in an inbox and nothing else.                   |
+| `data/notification-secret`       | The secret that signs the one-click links in a notification. Mode `0600`. Losing it breaks every link already sent, and nothing else.             |
 | `data/comment-optouts.json`      | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                                             |
 | `data/indieauth-tokens.json`     | A SHA-256 hash of each IndieAuth access and refresh token, with its user, app, scopes and expiry (decision-24). Mode `0600`.                      |
-| `data/notification-digests.json` | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early and nothing worse.                                           |
-| `data/plugins/<package name>/`   | Each plugin's private folder. Its secret settings are in `secrets.json`, mode `0600`; the rest is the plugin's to say.                            |
+| `data/notification-digests.json` | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early, and nothing else.                                           |
+| `data/plugins/<package name>/`   | Each plugin's private folder. Its secret settings are in `secrets.json`, mode `0600`. The plugin decides what else goes there.                    |
 | `data/plugin-changes.json`       | Who added, updated and removed which plugin on Admin > Plugins, and when. Mode `0600`.                                                            |
 
 [Personal data](personal-data.md) lists the files that hold readers' data, and
 how long each is kept.
 
-Three things under `data/` may be deleted whenever the site is stopped, and
-nothing else in either directory may:
+You may delete three things under `data/` while the site is stopped. Do not
+delete anything else in either directory.
 
-| Path              | What it is                                                                                                                                                                   |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data/geekity.db` | The SQLite cache, with its `-wal` and `-shm`. `geekity rebuild` deletes and rebuilds it.                                                                                     |
-| `data/images/`    | Image variants derived from `content/uploads/` (decision-10), with their `image.json` sidecars. `rm -r` it.                                                                  |
-| `data/avatars/`   | Remote avatars served from `/_geekity/avatars/` (TASK-134), fetched and shrunk so a reader's browser never asks the server they live on. `rm -r` it; they are fetched again. |
+| Path              | What it is                                                                                                                                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data/geekity.db` | The SQLite cache, with its `-wal` and `-shm`. `geekity rebuild` deletes and rebuilds it.                                                                                                                                  |
+| `data/images/`    | Image variants derived from `content/uploads/` (decision-10), with their `image.json` sidecars. Delete it with `rm -r`.                                                                                                   |
+| `data/avatars/`   | Remote avatars served from `/_geekity/avatars/` (TASK-134). The server fetches and shrinks them, so a visitor's browser never contacts the server that hosts them. Delete it with `rm -r`. The server fetches them again. |
 
-The next boot builds the database out of the files with no manual step, and a
-request for a variant that is not there derives it and serves it.
-`geekity rebuild` does the database half on demand, and **Tools > Content
-index** in the admin does it
-[without stopping the site](#rebuilding-the-index-from-the-admin). There is no
-command for the images, because there is nothing to do: `rm -r data/images`.
+The next boot builds the database from the files with no manual step. A request
+for a missing image variant derives it and serves it. `geekity rebuild` rebuilds
+the database on demand. **Tools > Content index** in the admin rebuilds it
+[without stopping the site](#rebuilding-the-index-from-the-admin). The images
+have no command. Run `rm -r data/images`.
 
 ### What is in the database, and what a rebuild costs
 
-No table holds anything that is not either read back from the files or
-something a site is told it may lose:
+Every table holds data that is either read back from the files or safe to lose.
 
-| Table                                               | Where it comes back from                                                     |
-| --------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `documents`, `document_tags`, `document_categories` | The boot scan of `content/`.                                                 |
-| `followers`, `ap_inbox`                             | `content/_data/federation/`, emptied and read back on every boot.            |
-| `comments`                                          | `content/_data/comments/`, emptied and read back on every boot.              |
-| `sessions`                                          | Nothing. Everybody signed in is signed out.                                  |
-| `ap_deliveries`                                     | Nothing. The federation screen shows its posts with "Nothing recorded."      |
-| `ap_relays`                                         | The relay list in `site.json`: boot sends each of them a fresh `Follow`.     |
-| `password_resets`, `spent_tokens`                   | Nothing. Every reset link and every one-click moderation link stops working. |
-| `cms_state`                                         | Nothing. The scheduler's watermark and its first run.                        |
-| `migrations`, `admin_migrations`                    | The package. They record which schema versions have run.                     |
+| Table                                               | Where it comes back from                                                |
+| --------------------------------------------------- | ----------------------------------------------------------------------- |
+| `documents`, `document_tags`, `document_categories` | The boot scan of `content/`.                                            |
+| `followers`, `ap_inbox`                             | `content/_data/federation/`, emptied and read back on every boot.       |
+| `comments`                                          | `content/_data/comments/`, emptied and read back on every boot.         |
+| `sessions`                                          | Nothing. Every signed-in user is signed out.                            |
+| `ap_deliveries`                                     | Nothing. The federation screen shows its posts with "Nothing recorded." |
+| `ap_relays`                                         | The relay list in `site.json`. Boot sends each relay a fresh `Follow`.  |
+| `password_resets`                                   | Nothing. Every password reset link stops working.                       |
+| `spent_tokens`                                      | Nothing. A one-click link that was already used works again.            |
+| `cms_state`                                         | Nothing. The scheduler's watermark and its first run.                   |
+| `migrations`, `admin_migrations`                    | The package. They record which schema versions have run.                |
 
-So four things are actually lost:
+A rebuild loses four things:
 
-- **Logins.** Everybody signed in has to sign in again. The accounts themselves
-  are in `data/users.json` and are untouched.
-- **Whether a one-click link had been used.** The links themselves are signed
-  rather than stored, so they go on working; a rebuild only forgets which of
-  them had already been spent. Every action they perform is idempotent, so the
-  worst that costs is a moderation link that works a second time. A password
-  reset link, which _is_ stored, stops working altogether.
-- **Relay handshakes.** A relay named in the settings that the database has
-  never heard of is followed on boot, so a rebuild sends every listed relay a
-  new `Follow` and the reason one gave for rejecting the last is gone. A relay
-  that refuses the site is asked again on each rebuild.
+- **Logins.** Every signed-in user has to sign in again. The accounts are in
+  `data/users.json`, and a rebuild does not touch them.
+- **Whether a one-click link was used.** The server signs these links and does
+  not store them, so they keep working. A rebuild forgets only which links were
+  already used. Every action they perform is idempotent, so at worst a
+  moderation link works a second time. The server does store password reset
+  links, and those stop working.
+- **Relay handshakes.** On boot, the server follows every relay in the settings
+  that the database has no record of. A rebuild therefore sends every listed
+  relay a new `Follow`, and loses the reason a relay gave for its last
+  rejection. A relay that refuses the site gets a new request on each rebuild.
 - **A scheduled post that came due while the site was down.** The scheduler
-  treats an absent watermark as "start from here", so that a rebuilt database
-  cannot re-announce the archive to every follower. Such a post is public on the
-  next boot but no `Create` is delivered for it; resend it from
-  `/admin/federation` if it should have gone out.
+  treats a missing watermark as "start from here". Without that rule, a rebuilt
+  database would re-announce the whole archive to every follower. Such a post is
+  public on the next boot, but the server delivers no `Create` for it. If it
+  should have gone out, resend it from `/admin/federation`.
 
-The one thing the file-first design (decision-9) gives up is narrower than any
-of those: a post whose **file is gone entirely** can no longer be withdrawn
-from followers' timelines, because the permalink a `Delete` names was in the
-file. Trashing a post in the admin keeps the file under `_trash/`, so the
-ordinary way of unpublishing still sends the `Delete`.
+The file-first design (decision-9) gives up one more thing. If a post's **file
+is gone entirely**, the server can no longer withdraw it from followers'
+timelines, because the permalink a `Delete` names was in the file. Trashing a
+post in the admin keeps the file under `_trash/`, so the normal way to
+unpublish a post still sends the `Delete`.
 
 ### A database this version will not open
 
-Two cases refuse the boot rather than being cleaned up behind your back, and
-both name the file and say what to do about it:
+The server refuses to boot in two cases. In both, the error names the file and
+says what to do.
 
-- **Written by a newer `@geekity/cms`**, meaning its migration ledger records a
-  schema version this package does not ship. Upgrading the package back is
-  usually what was meant; `geekity rebuild` throws it away if it was not.
-- **Damaged**, meaning SQLite will not open it. `geekity rebuild` is the fix.
+- **Written by a newer `@geekity/cms`.** Its migration ledger records a schema
+  version this package does not ship. Usually the fix is to upgrade the package
+  again. If the newer version was a mistake, `geekity rebuild` deletes the
+  database.
+- **Damaged.** SQLite cannot open it. Run `geekity rebuild`.
 
-A database _older_ than the oldest migration the package still ships is the one
-case thrown away and rebuilt without asking: there is by definition no path
-forward from it, and nothing in it is anything but a reading of the files.
+The server deletes and rebuilds without asking in one case: a database _older_
+than the oldest migration the package still ships. No migration path exists
+from it, and it holds only data read from the files.
 
 ## The content index
 
-Markdown files are the source of truth; SQLite is a derived index over them, so
-deleting `data/geekity.db` is safe and the next boot rebuilds it. The same is
-true of the two federation indexes:
+The Markdown files are the source of truth. SQLite is an index derived from
+them, so you can delete `data/geekity.db` and the next boot rebuilds it. The two
+federation indexes work the same way.
 `content/_data/federation/{username}/followers.json` and
-`content/_data/federation/inbox/{yyyy}-{mm}.jsonl` are the source, and the
-`followers` and `ap_inbox` tables are emptied and read back from them on every
-boot.
-`createCms` opens it against `dataDir` (creating the directory) and applies the
-migrations the package ships. Migrations are versioned and recorded, so
+`content/_data/federation/inbox/{yyyy}-{mm}.jsonl` are the source. The server
+empties the `followers` and `ap_inbox` tables and reads them back from those
+files on every boot.
+
+`createCms` opens the database in `dataDir`, creating the directory, and applies
+the migrations the package ships. Migrations are versioned and recorded, so
 applying them again does nothing.
 
 ```ts
@@ -168,38 +179,39 @@ cms.store.listAll({ draft: true }); // the admin's view
 cms.store.counts(); // { total, posts, pages, drafts, scheduled, trashed }
 ```
 
-A row round-trips to the `Document` it came from: optional fields stay absent
-rather than becoming `undefined`, and `extra` is stored as JSON, so anything
-JSON can hold survives.
+A row converts back to the `Document` it came from. Optional fields stay absent
+and do not become `undefined`. `extra` is stored as JSON, so any value JSON can
+hold survives.
 
-A few rules worth knowing:
+The index follows these rules:
 
-- **Dates.** `date` is kept verbatim, offset and all, because that is what the
-  file says. Listings sort on a second column holding the same instant in UTC,
-  so `2026-06-01T09:00:00-05:00` correctly sorts after `2026-06-01T12:00:00Z`.
-  A document with no date sorts last; ties break on path, descending.
+- **Dates.** The index keeps `date` as the file has it, with its
+  offset. Listings sort on a second column that holds the same instant in UTC.
+  So `2026-06-01T09:00:00-05:00` sorts after `2026-06-01T12:00:00Z`. A document
+  with no date sorts last. Ties sort by path, descending.
 - **Trash.** A document under a `_trash/` directory is trashed. The flag comes
-  from the path, not from the front matter, so moving a file in or out of the
-  trash is all it takes. `listPosts`, `listByTag` and `listByCategory` exclude
-  drafts and trash;
-  `listAll` shows drafts but hides trash unless asked with `{ trashed: true }`.
+  from the path, not the front matter. To trash or restore a file, move it into
+  or out of `_trash/`. `listPosts`, `listByTag` and `listByCategory` exclude
+  drafts and trash. `listAll` shows drafts and hides trash, unless you pass
+  `{ trashed: true }`.
 - **Scheduling.** A non-draft document whose `date` has not arrived is not
-  public yet, so every listing above excludes it too; `listAll` shows it, and
-  `{ scheduled: true }` shows only those. The index reads the clock through
-  `store.now()`, which `createCms` gives it from the `now` config option — one
-  clock, so the listings, the permalink and the scheduler cannot disagree.
-- **Permalinks** are unique and indexed. Indexing a second document at a URL
-  another file already claims throws `DuplicatePermalinkError`, which names
-  both paths.
+  public yet, so every listing above excludes it. `listAll` shows it, and
+  `{ scheduled: true }` shows only those documents. The index reads the clock
+  through `store.now()`. `createCms` sets it from the `now` config option. The
+  listings, the permalink and the scheduler all use this one clock, so they
+  cannot disagree.
+- **Permalinks** are unique and indexed. If you index a second document at a
+  URL another file already uses, the store throws `DuplicatePermalinkError`,
+  which names both paths.
 
 ## Keeping the index in step
 
-`serve()` scans `contentDir` before it listens, indexes every Markdown file
-under `posts/` and `pages/`, and drops index rows whose file has gone. After
-that a watcher keeps the two in step, so the index never serves a document the
-files disagree with, and an edit on disk reaches the live site in about a
-second without a restart. `cms.sync()` runs the same scan on its own, which is
-what a one-shot command wants.
+Before it listens, `serve()` scans `contentDir`. It indexes every Markdown file
+under `posts/` and `pages/` and drops index rows whose file is gone. After that,
+a watcher keeps the index and the files in step. The index never serves a
+document that differs from its file. An edit on disk reaches the live site in
+about a second, with no restart. `cms.sync()` runs the same scan once, for
+one-shot commands.
 
 ```ts
 const result = await cms.sync();
@@ -207,154 +219,181 @@ const result = await cms.sync();
 ```
 
 A scan parses every `.md` and `.markdown` file under a `posts/` or `pages/`
-directory, writes the ones whose hash differs from the indexed row, and drops
-rows whose file has gone. The watcher does the same for one path at a time,
-debounced 100 ms so a burst of writes costs one re-parse.
+directory. It writes each file whose hash differs from the indexed row, and
+drops rows whose file is gone. The watcher does the same for one path at a
+time. It debounces changes by 100 ms, so a burst of writes causes one re-parse.
 
-- **What is a document.** Only Markdown under `posts/` and `pages/`. Uploads,
-  `posts.json`, `README.md` at the top level and anything else is skipped.
-- **Underscore directories.** Eleventy ignores them and so does the scan, with
-  one exception: `_trash/` still holds documents, which stay indexed as trashed
-  and out of every public listing so the admin can restore them. `_data/` is
-  never indexed, however deep it goes — `_data/site.json` is the settings and
-  `_data/federation/` is the followers and the inbox log, and all three are
-  data a theme and an Eleventy build read rather than documents.
-- **No-op writes.** A file rewritten with the same content hashes the same, so
-  nothing is written to the index and no event is emitted. That is what makes
-  an admin save — which writes the file and updates the index itself — cost
-  one index write rather than two.
-- **A file that will not parse** is logged and skipped. Its old row is left
-  alone, and neither the scan nor the watcher stops.
-- **Renames**, which is what trashing and restoring are, briefly leave two rows
-  claiming one permalink. The row whose file is gone gives way.
+- **What is a document.** Only Markdown under `posts/` and `pages/`. The scan
+  skips uploads, `posts.json`, `README.md` at the top level and every other
+  file.
+- **Underscore directories.** Eleventy ignores them, and so does the scan, with
+  one exception. `_trash/` still holds documents. They stay indexed as trashed
+  and out of every public listing, so the admin can restore them. The scan
+  never indexes `_data/`, at any depth. `_data/site.json` holds the settings,
+  and `_data/federation/` holds the followers and the inbox log. A theme and an
+  Eleventy build read these as data, not as documents.
+- **No-op writes.** A file rewritten with the same content has the same hash.
+  The scan writes nothing to the index and emits no event. An admin save writes
+  the file and updates the index itself, so it costs one index write, not two.
+- **A file that does not parse** is logged and skipped. Its old row stays.
+  Neither the scan nor the watcher stops.
+- **Renames.** Trashing and restoring are renames. A rename briefly leaves two
+  rows with one permalink. The row whose file is gone is dropped.
 
-Each change is announced as an event, which a site can act on; see
+Each change emits an event that a site can act on. See
 [Hooks](plugins.md#hooks).
 
-Set `watch: false` (or `GEEKITY_WATCH=false`) to scan on boot and stop there,
-for a host whose content cannot change under the process. `geekity sync` sets
-it for you.
+To scan on boot and then stop, set `watch: false` (or `GEEKITY_WATCH=false`).
+Use it on a host where the content cannot change while the process runs.
+`geekity sync` sets it for you.
 
 ### Rebuilding the index from the admin
 
-A scan leaves a row alone when its hash matches the file, which is the right
-rule almost always and the wrong one after the index and the files have come
-apart: content edited over ssh while the site was down, a `git pull` the
-watcher never saw, a database that was restored from an older backup than the
-content. **Tools > Content index** in the admin is the repair. It shows what
-the index holds — documents, followers, inbox activities, comments — and one
-button empties it and reads every file again, on the site as it is running.
+A scan skips a row when its hash matches the file. That rule fails when the
+index and the files no longer match. For example:
 
-It is behind a confirm step, because between the emptying and the end of the
-scan the site answers 404 for documents whose files are perfectly fine: well
-under a second on a small site, longer on a large one, and it is serving the
-whole time. A second rebuild asked for while one is running is refused rather
-than started.
+- Content was edited over ssh while the site was down.
+- A `git pull` ran that the watcher did not see.
+- The database was restored from a backup older than the content.
 
-Nothing is deleted and no connection is replaced, so the rebuild costs a site
-much less than the command below: you stay signed in, the delivery log, the
-relay handshakes and the scheduler's watermark are all kept, and a post that
-comes due during it is still announced. It also tells nobody: every change a
-scan makes carries `origin: 'scan'`, which delivery, the webmentions and the
-feed pings all ignore, so no follower, no linked page and no feed server hears
-about a post that was only re-indexed.
+**Tools > Content index** in the admin fixes this. It shows the documents,
+followers, inbox activities and comments the index holds. One button empties
+the index and reads every file again while the site runs.
 
-`geekity rebuild` at the command line stays for the one case a screen cannot
-be the door for: a database this version refuses to open, where there is no
-site running to press a button in. See
+The button has a confirm step. Between the emptying and the end of the scan,
+the site answers 404 for documents whose files are fine. On a small site this
+takes well under a second. On a large one it takes longer, and the site serves
+requests the whole time. The server refuses a second rebuild while one is
+running.
+
+This rebuild deletes nothing and replaces no connection, so it costs much less
+than `geekity rebuild`:
+
+- You stay signed in.
+- The delivery log, the relay handshakes and the scheduler's watermark are
+  kept.
+- A post that comes due during the rebuild is still announced.
+
+It also notifies no one. Every change a scan makes carries `origin: 'scan'`.
+Delivery, webmentions and feed pings all ignore those changes. No follower,
+linked page or feed server hears about a post that was only re-indexed.
+
+Use `geekity rebuild` at the command line for one case: a database this version
+refuses to open. In that case no site is running, so the admin button is not
+available. See
 [Starting the database again](cli.md#starting-the-database-again) and
 [A database this version will not open](#a-database-this-version-will-not-open).
 
 ## Dates and the timezone setting
 
-Every date the CMS writes into a file — `date`, `updated` and
-`activitypub.published` — is a UTC instant ending in `Z`. The `timezone`
-setting is not stored with the date; it is the lens the instant is read
-through.
+Every date the CMS writes into a file is a UTC instant ending in `Z`. That
+covers `date`, `updated` and `activitypub.published`. The `timezone` setting is
+not stored with the date. The CMS uses it to display and read instants.
 
-That means one rule in three places:
+The setting applies in three places:
 
-- **The editor** shows a stored instant as the clock reads in the site's zone,
-  with the zone named under the field (`Wall-clock time in America/Chicago
-(CDT). Stored as UTC.`), and reads what you type back in the same zone. Type
-  `2026-09-04 09:00` in a site set to `America/Chicago` and the file gets
-  `date: '2026-09-04T14:00:00Z'`. A value you write with an offset of its own —
-  `2026-09-04T09:00:00+02:00` — already names an instant, so it is kept as one.
+- **The editor** shows a stored instant as wall-clock time in the site's zone,
+  and names the zone under the field (`Wall-clock time in America/Chicago
+(CDT). Stored as UTC.`). It reads what you type in the same zone. In a site
+  set to `America/Chicago`, type `2026-09-04 09:00` and the file gets
+  `date: '2026-09-04T14:00:00Z'`. A value with its own offset, such as
+  `2026-09-04T09:00:00+02:00`, already names an instant, and the editor keeps
+  that instant.
 - **The theme's `date` filter** renders `readable`, `html` and `year` in the
-  site's zone; `iso` stays the instant, because that is what a `<time
-datetime>` and a feed want. Changing the setting changes what every page
-  shows on the very next request, with no file touched and no rebuild.
+  site's zone. `iso` stays the UTC instant, because a `<time datetime>` and a
+  feed need the instant. A change to the setting shows on every page at the
+  next request. No file changes and no rebuild runs.
 - **A new post's filename day and its `/{yyyy}/{mm}/` permalink** come from the
-  calendar day the site's zone was on at that instant, so a post published at
-  half past midnight on 1 October in Berlin is filed under October and not
-  under the 30 September that UTC was still on.
+  calendar day in the site's zone at that instant. A post published at 00:30 on
+  1 October in Berlin is filed under October, not under 30 September, the day
+  it still was in UTC.
 
-Changing the setting later never moves a URL. The permalink is written
-explicitly into every file the CMS saves, and the day a post is filed under is
-the one in its filename — decided once, when it was written, where no setting
-can reach it.
+A later change to the setting never moves a URL. The CMS writes the permalink
+into every file it saves. The day a post is filed under is the day in its
+filename. The CMS sets that day once, when it writes the file, and the setting
+does not change it.
 
-Files written by hand keep working. A `date` with an offset, or one YAML parses
-into a timestamp by itself, is read for the instant it names, sorts and
-schedules by that instant, and is rewritten as UTC the next time the CMS saves
-that file — never by a mere scan. A hand-written file with no `permalink` still
-resolves to the URL Eleventy gives it, which is cut from the date as the file
-spells it.
+Files written by hand keep working. The CMS reads a `date` with an offset, or
+one that YAML parses as a timestamp, as the instant it names. It sorts and
+schedules the post by that instant. It rewrites the date as UTC the next time
+the CMS saves that file. A scan never rewrites it. A hand-written file with no
+`permalink` still resolves to the URL Eleventy gives it, which Eleventy builds
+from the date as the file writes it.
 
-Feeds, the sitemap and the ActivityStreams objects emit instants and are
-unaffected by the setting, and a scheduled post fires at its instant whatever
-the zone is set to.
+Feeds, the sitemap and the ActivityStreams objects emit instants, so the
+setting does not affect them. A scheduled post publishes at its instant in every
+zone setting.
 
 ## Scheduling
 
-A post whose `date` is in the future is written now and published then, the way
-WordPress schedules one. Save it with Publish; the editor answers `Scheduled:
-{title}` and says when it goes out, in the site's `timezone` setting.
+A post whose `date` is in the future is saved now and published at that date,
+as in WordPress. Save it with Publish. The editor answers `Scheduled: {title}`
+and shows when it goes out, in the site's `timezone` setting.
 
-Until that moment the post is not public in any sense: it is off the home page,
-off every archive, out of all three feeds and out of the ActivityPub outbox,
-its permalink 404s in every representation, and no follower has been told about
-it. When the moment comes the running server publishes it — no restart, no
-build — and the same delivery that a live publish runs sends the
-`Create` and pings the notify server.
+Until that date, the post is not public:
 
-There is no `scheduled` key and no state to keep: a scheduled post is an
-ordinary published one whose date has not arrived, which is a question asked of
-the clock on every query. So moving the date moves the publication, ticking
-Draft cancels it, and a date pushed into the future withdraws a post that was
-already out — with a `Delete` to the followers, exactly as drafting it would.
+- It is not on the home page or any archive.
+- It is not in any of the three feeds or the ActivityPub outbox.
+- Its permalink returns 404 in every representation.
+- No follower has been notified.
 
-A post whose date passed while the server was down is public the moment the
-next boot has scanned, and is federated once on that boot. The CMS remembers
-how far through the calendar it has got, so a restart never announces the same
-post twice and a deleted database never announces the archive.
+At that date, the running server publishes the post with no restart and no
+build. The same delivery as a live publish sends the `Create` and pings the
+notify server.
+
+There is no `scheduled` key and no stored state. A scheduled post is an
+ordinary published post whose date has not arrived. Every query checks the date
+against the clock. As a result:
+
+- Changing the date changes the publication time.
+- Ticking Draft cancels the publication.
+- Moving the date of a published post into the future withdraws it and sends
+  the followers a `Delete`, the same as marking it a draft.
+
+If a post's date passes while the server is down, the post is public as soon as
+the next boot finishes its scan, and that boot federates it once. The CMS
+records how far through the calendar it has published. A restart never
+announces the same post twice, and a deleted database never announces the
+archive.
 
 The admin lists scheduled posts under their own Scheduled filter, with a
-Scheduled status beside them. The public permalink 404s for a signed-in admin
-too: the public site has no session, deliberately — every response it gives is
-cacheable, and a URL that answered differently for one viewer would be cached
-and served to the rest. Use the editor's Preview button, which renders the post
+Scheduled status beside each one. The public permalink returns 404 for a
+signed-in admin too.
+
+Why: the public site has no session, on purpose. Every response it gives is
+cacheable. A URL that answered differently for one viewer would be cached and
+served to everyone else.
+
+To see a scheduled post, use the editor's Preview button. It renders the post
 through the theme's own layout at an admin URL.
 
 ## Unlisted posts
 
-An unlisted post is published at its URL and left off every list. Choose
-Unlisted in the editor's Visibility field, send `visibility=unlisted` from a
-Micropub app, or write it into the front matter:
+An unlisted post is published at its URL and left off every list. To make a
+post unlisted, do one of these:
+
+- Choose Unlisted in the editor's Visibility field.
+- Send `visibility=unlisted` from a Micropub app.
+- Write it into the front matter:
 
 ```yaml
 visibility: unlisted
 ```
 
-Public is the key's absence, and the editor removes the key when you choose
-Public again. The site has no private posts. A value other than `public` or
-`unlisted`, such as a hand-typed `visibility: private`, hides the post the way
-`draft: true` does: its URL answers 404 to anybody not signed in, it is on no
-list, and a post the followers already hold is withdrawn with a `Delete`. The
-editor shows the value as it is stored, marks the post Hidden in the list, and
+A post with no `visibility` key is public. When you choose Public again, the
+editor removes the key. The site has no private posts.
+
+Any other value, such as a hand-typed `visibility: private`, hides the post the
+same way `draft: true` does:
+
+- Its URL answers 404 to every visitor who is not signed in.
+- It is on no list.
+- If followers already have the post, the server withdraws it with a `Delete`.
+
+The editor shows the value as stored and marks the post Hidden in the list. It
 keeps the value through a save until you choose Public or Unlisted.
 
-The rule works for pages too.
+The same rules apply to pages.
 
 | Where                                                                      | An unlisted post                                                                                                                             |
 | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -366,29 +405,29 @@ The rule works for pages too.
 | IndexNow                                                                   | Not submitted. A public post that becomes unlisted is submitted once, so a search engine reads the `noindex`.                                |
 | The ActivityPub outbox and featured collection                             | Absent.                                                                                                                                      |
 | Followers                                                                  | Get the `Create` and every `Update`, addressed `to` the followers with Public in `cc`, which Mastodon shows as unlisted. Relays get nothing. |
-| Webmentions                                                                | Sent as for any post: the page is public.                                                                                                    |
+| Webmentions                                                                | Sent as for any post, because the page is public.                                                                                            |
 
-Changing a published post between public and unlisted sends its followers an
-`Update` with the new addressing.
+When a published post changes between public and unlisted, the server sends
+its followers an `Update` with the new addressing.
 
 In code, `isServed(document)` says whether the site serves a document at its
-URL and `isListed(document)` whether it also lists it. The index answers the
-same two rules in SQL. An Eleventy build with the example config reads the key
-too: an unlisted post gets its page, `noindex`, and no place in any collection,
-and an unrecognized value builds no page. See
+URL. `isListed(document)` says whether the site also lists it. The index
+applies the same two rules in SQL. An Eleventy build with the example config
+also reads the key. An unlisted post gets its page and `noindex`, and is in no
+collection. An unrecognized value builds no page. See
 [Building the same content with Eleventy](eleventy.md).
 
 ## The archive page
 
-A page carrying `archive: true` in its front matter lists every published post
-under its own words, grouped by the month it was published in, newest month
-first and newest post first inside a month. Nothing paginates it: an archive
-page is a way of finding one piece of writing rather than a listing to read
-through. Drafts and posts whose date has not arrived are absent, as they are
-everywhere else.
+A page with `archive: true` in its front matter lists every published post
+under the page's own text. Posts are grouped by the month they were published
+in. The newest month is first, and the newest post is first inside each month.
+The archive page has no pagination, because its purpose is to find one post,
+not to read a listing. Drafts and posts whose date has not arrived are absent,
+as everywhere else.
 
-The default theme draws it from `partials/archive.njk`, and the CMS hands the
-layout `archiveMonths` — `{ month, posts }` per month, the month already read
-through the site's `timezone` so the heading and the dates agree. Eleventy
-ignores the key, and a static build of the same directory publishes the page as
-an ordinary page.
+The default theme renders it from `partials/archive.njk`. The CMS passes the
+layout `archiveMonths`, which is `{ month, posts }` per month. The month is
+already converted to the site's `timezone`, so the heading and the dates agree.
+Eleventy ignores the key. A static build of the same directory publishes the
+page as an ordinary page.
