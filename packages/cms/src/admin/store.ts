@@ -670,8 +670,8 @@ export interface ListCommentsOptions extends ListPageOptions {
  *
  * All of it is a cache (decision-9). The followers and the inbox rows are read
  * back from `content/_data/federation/` on every boot; the rest a site is free
- * to lose, and docs/content.md says what losing it costs. It is deliberately not
- * part of the {@link ContentStore}: the two share the file, one database per
+ * to lose, and docs/content.md says what losing it costs. It is deliberately
+ * not part of the {@link ContentStore}: the two share the file, one database per
  * site with a migration ledger each, and nothing else.
  */
 export interface AdminStore {

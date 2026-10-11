@@ -2,25 +2,16 @@
  * Check that every relative link and every `#anchor` in the repository's
  * Markdown points at a file that exists and a heading that file has.
  *
- * It reads the root README, each package's README, the default theme's README
- * and everything under `docs/`. A link to this repository on GitHub
- * (`https://github.com/geekitycom/cms/blob/main/...`) is checked against the
- * checkout too, because the READMEs that ship to npm cannot use relative links
- * into `docs/`. For the same reason a README that ships to npm may not link
- * relatively out of its own package.
- *
- * Anchors follow GitHub's rules: the heading's text, lower-cased, with
- * everything but letters, digits, spaces, `-` and `_` dropped, spaces turned
- * into `-`, and `-1`, `-2` and so on added to a repeated heading.
- *
- * Usage (from the repository root):
- *
- *   node scripts/check-doc-links.ts
+ * A link to this repository on GitHub (`https://github.com/geekitycom/cms/blob/main/...`)
+ * is checked against the checkout too, because the READMEs that ship to npm
+ * cannot use relative links into `docs/`. For the same reason a README that
+ * ships to npm may not link relatively out of its own package.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 
 const REPOSITORY = 'https://github.com/geekitycom/cms';
+const ON_MAIN = /^https:\/\/github\.com\/geekitycom\/cms\/(?:blob|tree)\/main\//;
 
 export interface Link {
   readonly line: number;
@@ -71,7 +62,6 @@ export function slug(text: string): string {
     .replace(/ /g, '-');
 }
 
-/** Every anchor a Markdown file answers to: its headings and its explicit `id`s. */
 export function anchorsOf(markdown: string): Set<string> {
   const anchors = new Set<string>();
   const seen = new Map<string, number>();
@@ -88,7 +78,6 @@ export function anchorsOf(markdown: string): Set<string> {
   return anchors;
 }
 
-/** Every inline link, image and reference definition outside code. */
 export function linksOf(markdown: string): Link[] {
   const links: Link[] = [];
   withoutFences(markdown)
@@ -105,7 +94,6 @@ export function linksOf(markdown: string): Link[] {
   return links;
 }
 
-/** Every `[text][label]` whose label no `[label]: target` line in the file defines. */
 export function undefinedReferences(markdown: string): Link[] {
   const lines = withoutFences(markdown).map(withoutCodeSpans);
   const defined = new Set<string>();
@@ -123,7 +111,6 @@ export function undefinedReferences(markdown: string): Link[] {
   return missing;
 }
 
-/** The Markdown files this checker owns, relative to the repository root. */
 export function docFiles(root: string): string[] {
   const files = ['README.md', 'packages/cms/themes/default/README.md'];
   const packages = path.join(root, 'packages');
@@ -141,7 +128,6 @@ export function docFiles(root: string): string[] {
   return files.filter((file) => fs.existsSync(path.join(root, file))).sort();
 }
 
-/** The package folder a README ships to npm from, when it is one. */
 function shippedFrom(file: string): string | undefined {
   return /^(packages\/[^/]+)\//.exec(file.split(path.sep).join('/'))?.[1];
 }
@@ -181,11 +167,8 @@ export function checkDocLinks(root: string, files: readonly string[]): Problem[]
       } else if (target.startsWith(`${REPOSITORY}#`)) {
         target = `README.md${target.slice(REPOSITORY.length)}`;
         base = root;
-      } else if (/^https:\/\/github\.com\/geekitycom\/cms\/(?:blob|tree)\/main\//.test(target)) {
-        target = target.replace(
-          /^https:\/\/github\.com\/geekitycom\/cms\/(?:blob|tree)\/main\//,
-          '',
-        );
+      } else if (ON_MAIN.test(target)) {
+        target = target.replace(ON_MAIN, '');
         base = root;
       } else if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('//')) {
         continue;
