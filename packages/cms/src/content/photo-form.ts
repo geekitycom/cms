@@ -9,6 +9,9 @@
  */
 import path from 'node:path';
 
+import { rowIndexes, trimmedField } from '../util/forms.ts';
+import { isRecord } from '../util/guards.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { findUpload, UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import type { Document } from './document.ts';
 import { isUploadUrl, isWebUrl } from './enclosure.ts';
@@ -21,6 +24,19 @@ import type { Photo } from './photo.ts';
 export interface PhotoRow {
   url: string;
   alt: string;
+}
+
+/** The editor's field name prefixes; a row's index follows each. */
+export const PHOTO_FIELDS = { url: 'photo-url-', alt: 'photo-alt-' } as const;
+
+/** The photo rows out of a submitted form, in their numbered order, emptied ones gone. */
+export function readPhotoForm(body: Readonly<Record<string, unknown>>): PhotoRow[] {
+  return rowIndexes(body, PHOTO_FIELDS.url)
+    .map((index) => ({
+      url: trimmedField(body, `${PHOTO_FIELDS.url}${String(index)}`),
+      alt: trimmedField(body, `${PHOTO_FIELDS.alt}${String(index)}`),
+    }))
+    .filter((row) => row.url !== '');
 }
 
 /**
@@ -68,4 +84,32 @@ export function resolvePhotos(
     photos.push(row.alt === '' ? { url: row.url } : { url: row.url, alt: row.alt });
   }
   return { photos };
+}
+
+/**
+ * A Micropub photo given as a URL or as `{ value, alt }`, as the row it fills.
+ * A URL into this site's own uploads becomes the path the editor would have
+ * written, so the theme serves its responsive variants.
+ */
+export function photoRowFromMicropub(value: unknown, baseUrl: string): PhotoRow | undefined {
+  let url: unknown = value;
+  let alt: unknown = '';
+  if (isRecord(value)) {
+    ({ value: url, alt = '' } = value);
+  }
+  if (typeof url !== 'string' || typeof alt !== 'string' || !isWebUrl(url.trim())) return undefined;
+  const uploads = absoluteUrl(UPLOAD_ASSET_PREFIX, baseUrl);
+  const address = url.trim();
+  return {
+    url: address.startsWith(uploads)
+      ? `${UPLOAD_ASSET_PREFIX}${address.slice(uploads.length)}`
+      : address,
+    alt: alt.trim(),
+  };
+}
+
+/** A row as Micropub answers it: an absolute URL, with its alt text when it has one. */
+export function photoToMicropub({ url, alt }: PhotoRow, baseUrl: string): unknown {
+  const value = url.startsWith('/') ? absoluteUrl(url, baseUrl) : url;
+  return alt === '' ? value : { value, alt };
 }

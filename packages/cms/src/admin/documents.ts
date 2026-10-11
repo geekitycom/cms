@@ -1,37 +1,33 @@
 import type { Context, Hono } from 'hono';
 
-import {
-  citedHost,
-  citesAnImage,
-  CITATION_PROPERTIES,
-  CITED_ALT_FRONT_MATTER_KEY,
-  PREVIEW_FRONT_MATTER_KEY,
-} from '../content/citation.ts';
+import { citedHost, citesAnImage, CITATION_PROPERTIES } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
-import { BLANK_EVENT_FORM } from '../content/event-form.ts';
+import { EVENT_FIELDS } from '../content/event-form.ts';
 import {
   CITATION_FIELDS,
-  citationFields,
   COMMENT_SETTINGS,
   blankForm,
   extraFromForm,
   formFor,
   formInReplyTo,
+  postFieldsForm,
   splitTags,
 } from '../content/document-form.ts';
 import type { EditorForm, ResolvedMedia } from '../content/document-form.ts';
 import { PAGE_KIND, POST_KIND } from '../content/document-kind.ts';
 import type { DocumentKind } from '../content/document-kind.ts';
 import { TRANSCRIPT_TYPES } from '../content/enclosure.ts';
-import { BLANK_ENCLOSURE_FORM } from '../content/enclosure-form.ts';
+import { ENCLOSURE_FIELDS } from '../content/enclosure-form.ts';
 import type { Refusal } from '../content/form-error.ts';
 import { BLANK_LOCATION_FORM } from '../content/location-form.ts';
 import { postLocations } from '../content/locations.ts';
 import { postLabel } from '../content/post-type.ts';
 import { isReadStatus, READ_STATUS_LABELS, READ_STATUSES } from '../content/read.ts';
-import { BLANK_READ_OF_FORM } from '../content/read-form.ts';
-import { RSVP_FRONT_MATTER_KEY, RSVP_LABELS, RSVP_VALUES, rsvpValue } from '../content/rsvp.ts';
+import { PHOTO_FIELDS } from '../content/photo-form.ts';
+import { syndicateToField } from '../content/post-fields.ts';
+import { READ_FIELDS } from '../content/read-form.ts';
+import { RSVP_LABELS, RSVP_VALUES, rsvpValue } from '../content/rsvp.ts';
 import { scheduledFor } from '../content/schedule.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore, ListAllOptions } from '../content/store.ts';
@@ -50,30 +46,18 @@ import { userForAuthor } from '../web/authors.ts';
 import { isServed } from '../web/documents.ts';
 import { shownInFull } from '../webmention/cited-picture.ts';
 import type { CitedPicture } from '../webmention/cited-picture.ts';
-import {
-  SYNDICATE_TO_FRONT_MATTER_KEY,
-  syndicationTargetsReader,
-} from '../webmention/syndication.ts';
-import type { SyndicationTarget } from '../webmention/syndication.ts';
+import { syndicationTargetsReader } from '../webmention/syndication.ts';
 import { findUserById, listUsers } from './accounts.ts';
 import type { User } from './accounts.ts';
 import { editorActionViews } from './editor-actions.ts';
 import { openGroups } from './editor-layout.ts';
 import {
   BLANK_ALTERNATE_ROW,
-  ENCLOSURE_FIELDS,
   enclosureChoices,
-  EVENT_FIELDS,
   LOCATION_FIELDS,
-  PHOTO_FIELDS,
   photoChoices,
   photoRowViews,
-  READ_FIELDS,
-  readEnclosureForm,
   readLocationForm,
-  readPhotoForm,
-  submittedEventForm,
-  submittedReadOfForm,
 } from './editor-fields.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
@@ -281,7 +265,7 @@ export function mountDocumentScreens(
       kind,
       render,
       document,
-      form: formFor(document, siteTimezone(c), location),
+      form: formFor(kind, document, siteTimezone(c), location),
     });
   });
 
@@ -308,6 +292,7 @@ export function submittedForm(
   body: Record<string, unknown>,
   contentDir: string,
 ): EditorForm {
+  const declared = syndicationTargetsReader(contentDir)();
   return {
     title: stringOrEmpty(body['title']).trim(),
     slug: stringOrEmpty(body['slug']).trim(),
@@ -318,31 +303,14 @@ export function submittedForm(
     description: stringOrEmpty(body['description']).trim(),
     author: stringOrEmpty(body['author']).trim(),
     inReplyTo: stringOrEmpty(body['in-reply-to']).trim(),
-    rsvp: kind.type === 'post' ? stringOrEmpty(body[RSVP_FRONT_MATTER_KEY]).trim() : '',
-    ...citationFields((property) =>
-      kind.type === 'post' ? stringOrEmpty(body[property]).trim() : '',
-    ),
-    readStatus: kind.type === 'post' ? stringOrEmpty(body[READ_FIELDS.status]).trim() : '',
-    readOf: kind.type === 'post' ? submittedReadOfForm(body) : BLANK_READ_OF_FORM,
-    event: kind.type === 'post' ? submittedEventForm(body) : BLANK_EVENT_FORM,
+    ...postFieldsForm(kind, (field) => field.submitted(body, declared)),
     lang: stringOrEmpty(body['lang']).trim(),
     draft: body['draft'] !== undefined,
     visibility: formVisibility(stringOrEmpty(body['visibility'])),
     exclude: body['exclude'] !== undefined,
     contact: body['contact'] !== undefined,
-    pinned: kind.type === 'post' && body['pinned'] !== undefined,
-    previewHidden: kind.type === 'post' && body[PREVIEW_FRONT_MATTER_KEY] !== undefined,
-    citedAlt: kind.type === 'post' ? stringOrEmpty(body[CITED_ALT_FRONT_MATTER_KEY]).trim() : '',
     comments: commentSetting(stringOrEmpty(body['comments'])),
-    enclosure: kind.type === 'post' ? readEnclosureForm(body) : BLANK_ENCLOSURE_FORM,
-    photos: kind.type === 'post' ? readPhotoForm(body) : [],
-    location: kind.type === 'post' ? readLocationForm(body) : BLANK_LOCATION_FORM,
-    syndicateTo:
-      kind.type === 'post'
-        ? syndicationTargetsReader(contentDir)()
-            .filter((target) => body[syndicateToField(target)] !== undefined)
-            .map((target) => target.id)
-        : [],
+    location: kind.located ? readLocationForm(body) : BLANK_LOCATION_FORM,
     body: normalizeBody(stringOrEmpty(body['body'])),
     hash: stringOrEmpty(body['hash']),
   };
@@ -457,11 +425,6 @@ function savedMessage(
 /** The site's time zone, which is what every offset-less date in the admin means. */
 function siteTimezone(c: Context<GeekityEnv>): string {
   return readSiteSettings(c.var.config.contentDir).timezone;
-}
-
-/** The editor checkbox that selects one syndication target. */
-function syndicateToField(target: SyndicationTarget): string {
-  return `${SYNDICATE_TO_FRONT_MATTER_KEY}-${target.id}`;
 }
 
 /** The signed-in user's login, which is what doc-2's `author` holds. */
@@ -697,7 +660,7 @@ async function renderEditor(
 
   if (options.status !== undefined) c.status(options.status);
   const permissions = c.var.config.securityHeaders['permissions-policy'];
-  if (kind.type === 'post' && permissions !== undefined) {
+  if (kind.located && permissions !== undefined) {
     c.header('Permissions-Policy', allowGeolocation(permissions));
   }
 

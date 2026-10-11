@@ -37,7 +37,6 @@ import { resolvePhotos } from './photo-form.ts';
 import { PINNED_POST_LIMIT, pinnedAt } from './pinned.ts';
 import { discoverPostType, replyTarget } from './post-type.ts';
 import type { PostType } from './post-type.ts';
-import type { Read } from './read.ts';
 import { resolveRead } from './read-form.ts';
 import { RSVP_VALUES, rsvpValue } from './rsvp.ts';
 import { contentFilePath, freeSlug, saveDocument } from './save.ts';
@@ -138,14 +137,14 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
 
   // A post is a reply only when the target is a URL (Post Type Discovery), so
   // anything else would be saved as a reply that is not one.
-  if (kind.type === 'post' && form.inReplyTo !== '' && replyTarget(form) === undefined) {
+  if (kind.replies && form.inReplyTo !== '' && replyTarget(form) === undefined) {
     return refused(
       'In reply to has to be a web address, like https://example.com/a-post/.',
       'editor-in-reply-to',
     );
   }
 
-  if (kind.type === 'post' && form.rsvp !== '') {
+  if (form.rsvp !== '') {
     if (rsvpValue(form.rsvp) === undefined) {
       return refused(`RSVP is ${RSVP_VALUES.join(', ')}, not ${form.rsvp}.`, 'editor-rsvp');
     }
@@ -157,22 +156,18 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
     }
   }
 
-  let read: Read | undefined;
-  if (kind.type === 'post') {
-    for (const property of CITATION_PROPERTIES) {
-      const cited = form[CITATION_FIELDS[property]];
-      if (cited !== '' && !isWebUrl(cited)) {
-        return refused(
-          `${CITATION_LABELS[property]} has to be a web address, like https://example.com/a-post/.`,
-          `editor-${property}`,
-        );
-      }
+  for (const property of CITATION_PROPERTIES) {
+    const cited = form[CITATION_FIELDS[property]];
+    if (cited !== '' && !isWebUrl(cited)) {
+      return refused(
+        `${CITATION_LABELS[property]} has to be a web address, like https://example.com/a-post/.`,
+        `editor-${property}`,
+      );
     }
-    const resolved = resolveRead(form.readStatus, form.readOf);
-    if ('error' in resolved) return refused(resolved.error, resolved.field);
-    read = resolved.read;
   }
-  if (read !== undefined && form.description !== '') {
+  const read = resolveRead(form.readStatus, form.readOf);
+  if ('error' in read) return refused(read.error, read.field);
+  if (read.read !== undefined && form.description !== '') {
     return refused(
       'A read is described by what it says, so it keeps no Description. Empty Description to save it.',
       'editor-description',
@@ -183,25 +178,20 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
     return refused('That is not a language tag, such as en, fr or pt-BR.', 'editor-lang');
   }
 
-  let media: ResolvedMedia = { recording: undefined, photos: [] };
-  if (kind.type === 'post') {
-    const resolved = resolveEnclosure(
-      form.enclosure,
-      document === undefined ? undefined : enclosureOf(document.extra),
-      contentDir,
-    );
-    if ('error' in resolved) return refused(resolved.error, resolved.field);
-    const photos = resolvePhotos(form.photos, contentDir);
-    if ('error' in photos) return refused(photos.error, photos.field);
-    media = { recording: resolved.enclosure, photos: photos.photos };
-  }
+  // A kind without these fields has them blank, so they resolve to nothing.
+  const recording = resolveEnclosure(
+    form.enclosure,
+    document === undefined ? undefined : enclosureOf(document.extra),
+    contentDir,
+  );
+  if ('error' in recording) return refused(recording.error, recording.field);
+  const photos = resolvePhotos(form.photos, contentDir);
+  if ('error' in photos) return refused(photos.error, photos.field);
+  const media: ResolvedMedia = { recording: recording.enclosure, photos: photos.photos };
 
-  let location: PostLocation | undefined;
-  if (kind.type === 'post') {
-    const resolved = resolveLocation(form.location);
-    if ('error' in resolved) return refused(resolved.error, resolved.field);
-    location = resolved.location;
-  }
+  const located = resolveLocation(form.location);
+  if ('error' in located) return refused(located.error, located.field);
+  const { location } = located;
 
   // TASK-207: a pin is new when the file does not carry one yet, and only a
   // new one can take an author past Mastodon's limit.
@@ -233,12 +223,7 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
   if (undescribed.length > 0 && config.requireAltText) {
     return refused(`This site publishes no image without alt text. ${missingAltText(undescribed)}`);
   }
-  if (
-    !draft &&
-    config.requireAltText &&
-    kind.type === 'post' &&
-    (await citesUndescribedImage(site, document, form))
-  ) {
+  if (!draft && config.requireAltText && (await citesUndescribedImage(site, document, form))) {
     return refused(
       'This site publishes no image without alt text. Describe the image this post reposts in its alt text field.',
       'editor-cited-alt',
@@ -247,12 +232,10 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
 
   const timezone = readSiteSettings(contentDir).timezone;
 
-  if (kind.type === 'post') {
-    const resolved = resolveEvent(form.event, timezone);
-    if ('error' in resolved) return refused(resolved.error, resolved.field);
-    if (resolved.event !== undefined && form.title === '') {
-      return refused('An event needs a name. Put it in Title.', 'editor-title');
-    }
+  const event = resolveEvent(form.event, timezone);
+  if ('error' in event) return refused(event.error, event.field);
+  if (event.event !== undefined && form.title === '') {
+    return refused('An event needs a name. Put it in Title.', 'editor-title');
   }
 
   // decision-11: what the file gets is a UTC instant, and an offset-less field
@@ -382,8 +365,9 @@ async function persist(
     ...(form.description === '' ? {} : { description: form.description }),
     ...optional('author', chosenAuthor(config.dataDir, form.author, document, writer)),
     ...optional('inReplyTo', formInReplyTo(kind, form, document)),
-    ...optional('activitypub', keptIdentity(document, promised, permalink, config.baseUrl)),
+    ...optional('activitypub', keptIdentity(kind, document, promised, permalink, config.baseUrl)),
     extra: keptGuid(
+      kind,
       extraFromForm(
         kind,
         document,
@@ -405,17 +389,17 @@ async function persist(
   const saved = await replaceFile(site, { previous: document, target, content, timezone });
   if ('outcome' in saved) return saved;
 
-  if (kind.type === 'post') {
+  const moved = document !== undefined && document.permalink !== saved.permalink;
+  if (kind.located) {
     const locations = postLocations(config.dataDir);
-    const kept = keptProperties(config.dataDir);
-    if (document !== undefined && document.permalink !== saved.permalink) {
-      await locations.move(document.permalink, saved.permalink);
-      await kept.move(document.permalink, saved.permalink);
-    }
+    if (moved) await locations.move(document.permalink, saved.permalink);
     await locations.set(saved.permalink, checked.location);
-    if (write.keptProperties !== undefined) {
-      await kept.set(saved.permalink, write.keptProperties);
-    }
+  }
+  // Only a Micropub post has kept properties; for anything else both are no-ops.
+  const kept = keptProperties(config.dataDir);
+  if (moved) await kept.move(document.permalink, saved.permalink);
+  if (write.keptProperties !== undefined) {
+    await kept.set(saved.permalink, write.keptProperties);
   }
 
   // Announced rather than left to the watcher: the index already holds what
@@ -536,7 +520,7 @@ async function typeSlug(
   photos: readonly Photo[],
   citedContext: DocumentSite['citedContext'],
 ): Promise<string> {
-  if (kind.type !== 'post') return '';
+  if (!kind.replies) return '';
   const type = discoverPostType({
     'repost-of': form.repostOf,
     'like-of': form.likeOf,
@@ -642,13 +626,14 @@ function formerPermalinks(
  * stays, since it is already what they hold.
  */
 function keptIdentity(
+  kind: DocumentKind,
   document: Document | undefined,
   promised: Document | undefined,
   permalink: string,
   baseUrl: string,
 ): Document['activitypub'] {
   const block = document?.activitypub;
-  if (promised === undefined || promised.type !== 'post' || promised.permalink === permalink) {
+  if (promised === undefined || !kind.federated || promised.permalink === permalink) {
     return block;
   }
   if (block?.id !== undefined) return block;
@@ -665,12 +650,13 @@ function keptIdentity(
  * is written as its `activitypub.id`.
  */
 function keptGuid(
+  kind: DocumentKind,
   extra: Record<string, unknown>,
   promised: Document | undefined,
   permalink: string,
   baseUrl: string,
 ): Record<string, unknown> {
-  if (promised === undefined || promised.type === 'post' || promised.permalink === permalink) {
+  if (promised === undefined || kind.federated || promised.permalink === permalink) {
     return extra;
   }
   if (extra['guid'] !== undefined) return extra;

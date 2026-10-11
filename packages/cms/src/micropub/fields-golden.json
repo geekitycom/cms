@@ -1,0 +1,402 @@
+{
+  "entry created": {
+    "path": "posts/2026-09-01-every-field.md",
+    "file": "---\ntitle: Every field\ndate: '2026-09-01T10:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/every-field/\ntags:\n  - one\n  - two\ndraft: true\ndescription: A summary\nauthor: ada\nin-reply-to: https://events.example/party\nphoto:\n  - url: https://images.example/one.jpg\n  - url: https://images.example/two.jpg\n    alt: Two\nrepost-of: https://elsewhere.example/reposted\nlike-of: https://elsewhere.example/liked\nbookmark-of: https://elsewhere.example/bookmarked\nrsvp: 'yes'\nsyndicate-to:\n  - news\nvisibility: unlisted\n---\n\nSome words.\n",
+    "source": {
+      "type": ["h-entry"],
+      "properties": {
+        "bookmark-of": ["https://elsewhere.example/bookmarked"],
+        "category": ["one", "two"],
+        "content": ["Some words."],
+        "in-reply-to": ["https://events.example/party"],
+        "like-of": ["https://elsewhere.example/liked"],
+        "location": ["geo:45.5,-122.6"],
+        "mp-syndicate-to": ["news"],
+        "name": ["Every field"],
+        "photo": [
+          "https://images.example/one.jpg",
+          {
+            "value": "https://images.example/two.jpg",
+            "alt": "Two"
+          }
+        ],
+        "post-status": ["draft"],
+        "published": ["2026-09-01T10:00:00Z"],
+        "repost-of": ["https://elsewhere.example/reposted"],
+        "rsvp": ["yes"],
+        "summary": ["A summary"],
+        "visibility": ["unlisted"],
+        "x-kept": ["kept as sent"]
+      }
+    }
+  },
+  "entry update 0": {
+    "path": "posts/2026-09-01-every-field.md",
+    "file": "---\ntitle: Every field\ndate: '2026-09-01T10:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/every-field/\ntags:\n  - one\n  - two\ndraft: true\ndescription: A summary\nauthor: ada\nin-reply-to: https://events.example/party\nphoto:\n  - url: https://images.example/one.jpg\n  - url: https://images.example/two.jpg\n    alt: Two\nrepost-of: https://elsewhere.example/reposted\nlike-of: https://elsewhere.example/liked-again\nbookmark-of: https://elsewhere.example/bookmarked\nrsvp: maybe\nsyndicate-to:\n  - news\nvisibility: unlisted\n---\n\nSome words.\n",
+    "source": {
+      "type": ["h-entry"],
+      "properties": {
+        "bookmark-of": ["https://elsewhere.example/bookmarked"],
+        "category": ["one", "two"],
+        "content": ["Some words."],
+        "in-reply-to": ["https://events.example/party"],
+        "like-of": ["https://elsewhere.example/liked-again"],
+        "location": ["geo:45.5,-122.6"],
+        "mp-syndicate-to": ["news"],
+        "name": ["Every field"],
+        "photo": [
+          "https://images.example/one.jpg",
+          {
+            "value": "https://images.example/two.jpg",
+            "alt": "Two"
+          }
+        ],
+        "post-status": ["draft"],
+        "published": ["2026-09-01T10:00:00Z"],
+        "repost-of": ["https://elsewhere.example/reposted"],
+        "rsvp": ["maybe"],
+        "summary": ["A summary"],
+        "visibility": ["unlisted"],
+        "x-kept": ["kept as sent"]
+      }
+    }
+  },
+  "entry update 1": {
+    "path": "posts/2026-09-01-every-field.md",
+    "file": "---\ntitle: Every field\ndate: '2026-09-01T10:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/every-field/\ntags:\n  - one\n  - two\ndraft: true\ndescription: A summary\nauthor: ada\nin-reply-to: https://events.example/party\nphoto:\n  - url: https://images.example/one.jpg\n  - url: https://images.example/two.jpg\n    alt: Two\nlike-of: https://elsewhere.example/liked-again\nrsvp: maybe\nsyndicate-to:\n  - news\nvisibility: unlisted\n---\n\nSome words.\n",
+    "source": {
+      "type": ["h-entry"],
+      "properties": {
+        "category": ["one", "two"],
+        "content": ["Some words."],
+        "in-reply-to": ["https://events.example/party"],
+        "like-of": ["https://elsewhere.example/liked-again"],
+        "location": ["geo:45.5,-122.6"],
+        "mp-syndicate-to": ["news"],
+        "name": ["Every field"],
+        "photo": [
+          "https://images.example/one.jpg",
+          {
+            "value": "https://images.example/two.jpg",
+            "alt": "Two"
+          }
+        ],
+        "post-status": ["draft"],
+        "published": ["2026-09-01T10:00:00Z"],
+        "rsvp": ["maybe"],
+        "summary": ["A summary"],
+        "visibility": ["unlisted"],
+        "x-kept": ["kept as sent"]
+      }
+    }
+  },
+  "entry update 2": {
+    "path": "posts/2026-09-01-every-field.md",
+    "file": "---\ntitle: Every field\ndate: '2026-09-01T10:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/every-field/\ntags:\n  - one\n  - two\ndraft: true\ndescription: A summary\nauthor: ada\nin-reply-to: https://events.example/party\nphoto:\n  - url: https://images.example/one.jpg\n  - url: https://images.example/two.jpg\n    alt: Two\n  - url: https://images.example/three.jpg\nlike-of: https://elsewhere.example/liked-again\nrsvp: maybe\nsyndicate-to:\n  - news\nvisibility: unlisted\n---\n\nSome words.\n",
+    "source": {
+      "type": ["h-entry"],
+      "properties": {
+        "category": ["one", "two"],
+        "content": ["Some words."],
+        "in-reply-to": ["https://events.example/party"],
+        "like-of": ["https://elsewhere.example/liked-again"],
+        "location": ["geo:45.5,-122.6"],
+        "mp-syndicate-to": ["news"],
+        "name": ["Every field"],
+        "photo": [
+          "https://images.example/one.jpg",
+          {
+            "value": "https://images.example/two.jpg",
+            "alt": "Two"
+          },
+          "https://images.example/three.jpg"
+        ],
+        "post-status": ["draft"],
+        "published": ["2026-09-01T10:00:00Z"],
+        "rsvp": ["maybe"],
+        "summary": ["A summary"],
+        "visibility": ["unlisted"],
+        "x-kept": ["kept as sent"]
+      }
+    }
+  },
+  "entry update 3": {
+    "path": "posts/2026-09-01-every-field.md",
+    "file": "---\ntitle: Every field\ndate: '2026-09-01T10:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/every-field/\ntags:\n  - one\n  - two\ndraft: true\ndescription: Another summary\nauthor: ada\nin-reply-to: https://events.example/party\nphoto:\n  - url: https://images.example/one.jpg\n  - url: https://images.example/two.jpg\n    alt: Two\n  - url: https://images.example/three.jpg\nlike-of: https://elsewhere.example/liked-again\nrsvp: maybe\nsyndicate-to:\n  - bridgy.fed\nvisibility: unlisted\n---\n\nSome words.\n",
+    "source": {
+      "type": ["h-entry"],
+      "properties": {
+        "category": ["one", "two"],
+        "content": ["Some words."],
+        "in-reply-to": ["https://events.example/party"],
+        "like-of": ["https://elsewhere.example/liked-again"],
+        "location": ["geo:45.5,-122.6"],
+        "mp-syndicate-to": ["bridgy.fed"],
+        "name": ["Every field"],
+        "photo": [
+          "https://images.example/one.jpg",
+          {
+            "value": "https://images.example/two.jpg",
+            "alt": "Two"
+          },
+          "https://images.example/three.jpg"
+        ],
+        "post-status": ["draft"],
+        "published": ["2026-09-01T10:00:00Z"],
+        "rsvp": ["maybe"],
+        "summary": ["Another summary"],
+        "visibility": ["unlisted"],
+        "x-kept": ["kept as sent"]
+      }
+    }
+  },
+  "entry update 4": {
+    "path": "posts/2026-09-01-every-field.md",
+    "file": "---\ntitle: Every field\ndate: '2026-09-01T10:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/every-field/\ntags:\n  - one\n  - two\ndraft: true\ndescription: Another summary\nauthor: ada\nin-reply-to: https://events.example/party\nlike-of: https://elsewhere.example/liked-again\nrsvp: maybe\nsyndicate-to:\n  - bridgy.fed\nvisibility: unlisted\n---\n\nSome words.\n",
+    "source": {
+      "type": ["h-entry"],
+      "properties": {
+        "category": ["one", "two"],
+        "content": ["Some words."],
+        "in-reply-to": ["https://events.example/party"],
+        "like-of": ["https://elsewhere.example/liked-again"],
+        "mp-syndicate-to": ["bridgy.fed"],
+        "name": ["Every field"],
+        "post-status": ["draft"],
+        "published": ["2026-09-01T10:00:00Z"],
+        "rsvp": ["maybe"],
+        "summary": ["Another summary"],
+        "visibility": ["unlisted"],
+        "x-kept": ["kept as sent"]
+      }
+    }
+  },
+  "entry update 5": {
+    "path": "posts/2026-09-01-every-field.md",
+    "file": "---\ntitle: Every field\ndate: '2026-09-01T10:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/every-field/\ntags:\n  - one\n  - two\ndraft: true\ndescription: Another summary\nauthor: ada\nin-reply-to: https://events.example/party\nlike-of: https://elsewhere.example/liked-again\nrsvp: maybe\nsyndicate-to:\n  - bridgy.fed\nvisibility: unlisted\n---\n\nSome words.\n",
+    "source": {
+      "type": ["h-entry"],
+      "properties": {
+        "category": ["one", "two"],
+        "content": ["Some words."],
+        "in-reply-to": ["https://events.example/party"],
+        "like-of": ["https://elsewhere.example/liked-again"],
+        "mp-syndicate-to": ["bridgy.fed"],
+        "name": ["Every field"],
+        "post-status": ["draft"],
+        "published": ["2026-09-01T10:00:00Z"],
+        "rsvp": ["maybe"],
+        "summary": ["Another summary"],
+        "visibility": ["unlisted"],
+        "x-kept": ["changed"]
+      }
+    }
+  },
+  "read created": {
+    "path": "posts/2026-09-20-a-book.md",
+    "file": "---\ndate: '2026-09-20T12:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/a-book/\ndraft: true\nauthor: ada\nread-of:\n  name: A Book\n  author: An Author\n  uid: isbn:9780000000000\n  url: https://books.example/a-book\nread-status: finished\n---\n",
+    "source": {
+      "type": ["h-entry"],
+      "properties": {
+        "post-status": ["draft"],
+        "published": ["2026-09-20T12:00:00Z"],
+        "read-of": [
+          {
+            "type": ["h-cite"],
+            "properties": {
+              "name": ["A Book"],
+              "author": ["An Author"],
+              "uid": ["isbn:9780000000000"],
+              "url": ["https://books.example/a-book"]
+            }
+          }
+        ],
+        "read-status": ["finished"],
+        "visibility": ["public"]
+      }
+    }
+  },
+  "read update 0": {
+    "path": "posts/2026-09-20-a-book.md",
+    "file": "---\ndate: '2026-09-20T12:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/a-book/\ndraft: true\nauthor: ada\nread-of:\n  name: A Book\n  author: An Author\n  uid: isbn:9780000000000\n  url: https://books.example/a-book\nread-status: reading\n---\n",
+    "source": {
+      "type": ["h-entry"],
+      "properties": {
+        "post-status": ["draft"],
+        "published": ["2026-09-20T12:00:00Z"],
+        "read-of": [
+          {
+            "type": ["h-cite"],
+            "properties": {
+              "name": ["A Book"],
+              "author": ["An Author"],
+              "uid": ["isbn:9780000000000"],
+              "url": ["https://books.example/a-book"]
+            }
+          }
+        ],
+        "read-status": ["reading"],
+        "visibility": ["public"]
+      }
+    }
+  },
+  "read update 1": {
+    "path": "posts/2026-09-20-a-book.md",
+    "file": "---\ndate: '2026-09-20T12:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/a-book/\ndraft: true\nauthor: ada\nread-of:\n  name: Another Book\nread-status: reading\n---\n",
+    "source": {
+      "type": ["h-entry"],
+      "properties": {
+        "post-status": ["draft"],
+        "published": ["2026-09-20T12:00:00Z"],
+        "read-of": [
+          {
+            "type": ["h-cite"],
+            "properties": {
+              "name": ["Another Book"]
+            }
+          }
+        ],
+        "read-status": ["reading"],
+        "visibility": ["public"]
+      }
+    }
+  },
+  "event created": {
+    "path": "posts/2026-09-20-a-party.md",
+    "file": "---\ntitle: A party\ndate: '2026-09-20T12:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/a-party/\ndraft: true\nauthor: ada\nstart: '2026-10-01T18:00:00Z'\nend: '2026-10-01T22:00:00Z'\nlocation: The hall\n---\n",
+    "source": {
+      "type": ["h-event"],
+      "properties": {
+        "checkin": [
+          {
+            "type": ["h-card"],
+            "properties": {
+              "name": ["The hall"],
+              "geo": ["geo:45.5,-122.6"]
+            }
+          }
+        ],
+        "end": ["2026-10-01T22:00:00Z"],
+        "location": ["The hall"],
+        "name": ["A party"],
+        "post-status": ["draft"],
+        "published": ["2026-09-20T12:00:00Z"],
+        "start": ["2026-10-01T18:00:00Z"],
+        "visibility": ["public"]
+      }
+    }
+  },
+  "event update 0": {
+    "path": "posts/2026-09-20-a-party.md",
+    "file": "---\ntitle: A party\ndate: '2026-09-20T12:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/a-party/\ndraft: true\nauthor: ada\nstart: '2026-10-01T18:00:00Z'\nend: '2026-10-01T23:30:00Z'\nlocation: The hall\n---\n",
+    "source": {
+      "type": ["h-event"],
+      "properties": {
+        "checkin": [
+          {
+            "type": ["h-card"],
+            "properties": {
+              "name": ["The hall"],
+              "geo": ["geo:45.5,-122.6"]
+            }
+          }
+        ],
+        "end": ["2026-10-01T23:30:00Z"],
+        "location": ["The hall"],
+        "name": ["A party"],
+        "post-status": ["draft"],
+        "published": ["2026-09-20T12:00:00Z"],
+        "start": ["2026-10-01T18:00:00Z"],
+        "visibility": ["public"]
+      }
+    }
+  },
+  "event update 1": {
+    "path": "posts/2026-09-20-a-party.md",
+    "file": "---\ntitle: A party\ndate: '2026-09-20T12:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/a-party/\ndraft: true\nauthor: ada\nstart: '2026-10-01T18:00:00Z'\nend: '2026-10-01T23:30:00Z'\nlocation: The park\n---\n",
+    "source": {
+      "type": ["h-event"],
+      "properties": {
+        "checkin": [
+          {
+            "type": ["h-card"],
+            "properties": {
+              "name": ["The hall"],
+              "geo": ["geo:45.5,-122.6"]
+            }
+          }
+        ],
+        "end": ["2026-10-01T23:30:00Z"],
+        "location": ["The park"],
+        "name": ["A party"],
+        "post-status": ["draft"],
+        "published": ["2026-09-20T12:00:00Z"],
+        "start": ["2026-10-01T18:00:00Z"],
+        "visibility": ["public"]
+      }
+    }
+  },
+  "rsvp refused": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "error_description": "RSVP is yes, no, maybe, interested, not perhaps."
+    }
+  },
+  "repost-of refused": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "error_description": "Repost of has to be a web address, like https://example.com/a-post/."
+    }
+  },
+  "like-of refused": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "error_description": "Like of has to be a web address, like https://example.com/a-post/."
+    }
+  },
+  "bookmark-of refused": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "error_description": "Bookmark of has to be a web address, like https://example.com/a-post/."
+    }
+  },
+  "read-status refused": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "error_description": "read-status is to-read, reading, finished, not skimmed."
+    }
+  },
+  "read-of refused": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "error_description": "read-of is an h-cite, { \"type\": [\"h-cite\"], \"properties\": { \"name\": [\"…\"] } }."
+    }
+  },
+  "photo refused": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "error_description": "photo is a web address, { \"value\": \"…\", \"alt\": \"…\" } or an uploaded file."
+    }
+  },
+  "mp-syndicate-to refused": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "error_description": "mp-syndicate-to names no syndication target nowhere."
+    }
+  },
+  "event-only refused": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "error_description": "start belong to an event; send it as an h-event."
+    }
+  }
+}

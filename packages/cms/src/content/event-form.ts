@@ -1,3 +1,5 @@
+import { trimmedField } from '../util/forms.ts';
+import { isWebUrl } from './enclosure.ts';
 import { EVENT_KEYS, eventOf } from './event.ts';
 import type { PostEvent } from './event.ts';
 import type { FieldError } from './form-error.ts';
@@ -14,6 +16,21 @@ export interface EventForm {
 }
 
 export const BLANK_EVENT_FORM: EventForm = { start: '', end: '', location: '' };
+
+/** The editor's field names for an event. */
+export const EVENT_FIELDS = {
+  start: 'event-start',
+  end: 'event-end',
+  location: 'event-location',
+} as const;
+
+export function submittedEventForm(body: Readonly<Record<string, unknown>>): EventForm {
+  return {
+    start: trimmedField(body, EVENT_FIELDS.start),
+    end: trimmedField(body, EVENT_FIELDS.end),
+    location: trimmedField(body, EVENT_FIELDS.location),
+  };
+}
 
 export function eventForm(extra: Readonly<Record<string, unknown>>, timezone: string): EventForm {
   const event = eventOf(extra);
@@ -75,4 +92,43 @@ export function eventFrontMatter(event: PostEvent | undefined): Record<string, s
 function instantIn(value: string, timezone: string): string | undefined {
   if (!/^\d{4}-\d{2}-\d{2}/.test(value)) return undefined;
   return toUtcInstant(value, timezone);
+}
+
+const EVENT_PLACE_REFUSAL =
+  'An event’s location is words, a web address, or an h-card or h-adr naming a place.';
+
+const PLACE_WORDS = ['name', 'street-address', 'locality', 'region', 'country-name'] as const;
+
+/** An h-event's Micropub `location` as the form's Where; `refuse` hears what is wrong with it. */
+export function eventPlaceFromMicropub(
+  values: readonly unknown[],
+  refuse: (message: string) => void,
+): string {
+  if (values.length > 1) refuse('location takes one value.');
+  const [value] = values;
+  if (value === undefined) return '';
+  if (typeof value === 'string') {
+    if (!/^geo:/i.test(value.trim())) return value.trim();
+    refuse(EVENT_PLACE_REFUSAL);
+    return '';
+  }
+  const { type, properties } =
+    typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  const given =
+    typeof properties === 'object' && properties !== null
+      ? (properties as Record<string, unknown>)
+      : {};
+  const first = (name: string): string => {
+    const listed = given[name];
+    const text: unknown = Array.isArray(listed) ? listed[0] : undefined;
+    return typeof text === 'string' ? text.trim() : '';
+  };
+  const words = [...new Set(PLACE_WORDS.map(first).filter((part) => part !== ''))].join(', ');
+  const url = first('url');
+  const place = words !== '' ? words : isWebUrl(url) ? url : '';
+  if (!Array.isArray(type) || !type.some((t) => t === 'h-card' || t === 'h-adr') || place === '') {
+    refuse(EVENT_PLACE_REFUSAL);
+    return '';
+  }
+  return place;
 }

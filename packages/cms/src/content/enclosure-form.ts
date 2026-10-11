@@ -13,6 +13,7 @@
 import path from 'node:path';
 
 import { LANGUAGE_TAG_PATTERN } from '../admin/settings.ts';
+import { rowIndexes, trimmedField } from '../util/forms.ts';
 import { findUpload, UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import type { Document } from './document.ts';
 import {
@@ -60,6 +61,46 @@ export const BLANK_ENCLOSURE_FORM: EnclosureForm = {
   transcriptType: '',
   alternates: [],
 };
+
+/** The editor's field names, in one place for the template and the reader. */
+export const ENCLOSURE_FIELDS = {
+  url: 'enclosure-url',
+  duration: 'enclosure-duration',
+  transcriptUrl: 'enclosure-transcript-url',
+  transcriptType: 'enclosure-transcript-type',
+  alternate: {
+    url: 'alternate-url-',
+    type: 'alternate-type-',
+    title: 'alternate-title-',
+    height: 'alternate-height-',
+    lang: 'alternate-lang-',
+  },
+} as const;
+
+/**
+ * The recording fields out of a submitted form.
+ *
+ * The alternate rows are numbered, so a plain form with no script can carry
+ * any number of them. A row whose address was emptied is a row taken out.
+ */
+export function readEnclosureForm(body: Readonly<Record<string, unknown>>): EnclosureForm {
+  const names = ENCLOSURE_FIELDS.alternate;
+  return {
+    url: trimmedField(body, ENCLOSURE_FIELDS.url),
+    duration: trimmedField(body, ENCLOSURE_FIELDS.duration),
+    transcriptUrl: trimmedField(body, ENCLOSURE_FIELDS.transcriptUrl),
+    transcriptType: trimmedField(body, ENCLOSURE_FIELDS.transcriptType),
+    alternates: rowIndexes(body, names.url)
+      .map((index) => ({
+        url: trimmedField(body, `${names.url}${String(index)}`),
+        type: trimmedField(body, `${names.type}${String(index)}`),
+        title: trimmedField(body, `${names.title}${String(index)}`),
+        height: trimmedField(body, `${names.height}${String(index)}`),
+        lang: trimmedField(body, `${names.lang}${String(index)}`),
+      }))
+      .filter((row) => row.url !== ''),
+  };
+}
 
 /**
  * What a post's front matter says about its recording, as the editor shows it.

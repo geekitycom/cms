@@ -1,44 +1,24 @@
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
 import { CONTACT_FRONT_MATTER_KEY } from '../contact/form.ts';
 import { LANG_FRONT_MATTER_KEY } from '../web/locale.ts';
-import { SYNDICATE_TO_FRONT_MATTER_KEY, syndicateToOf } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
-import {
-  CITATION_PROPERTIES,
-  CITED_ALT_FRONT_MATTER_KEY,
-  citationText,
-  PREVIEW_FRONT_MATTER_KEY,
-  previewShown,
-} from './citation.ts';
 import type { CitationProperty } from './citation.ts';
 import type { Document } from './document.ts';
 import type { DocumentKind } from './document-kind.ts';
-import { ENCLOSURE_FRONT_MATTER_KEY } from './enclosure.ts';
 import type { Enclosure } from './enclosure.ts';
-import { BLANK_ENCLOSURE_FORM, enclosureForm, enclosureFrontMatter } from './enclosure-form.ts';
+import { BLANK_ENCLOSURE_FORM } from './enclosure-form.ts';
 import type { EnclosureForm } from './enclosure-form.ts';
-import { eventOf } from './event.ts';
-import type { PostEvent } from './event.ts';
-import { BLANK_EVENT_FORM, eventForm, eventFrontMatter, resolveEvent } from './event-form.ts';
+import { BLANK_EVENT_FORM } from './event-form.ts';
 import type { EventForm } from './event-form.ts';
 import type { PostLocation } from './location.ts';
 import { BLANK_LOCATION_FORM, locationForm } from './location-form.ts';
 import type { LocationForm } from './location-form.ts';
-import { PHOTO_FRONT_MATTER_KEY, photoFrontMatter } from './photo.ts';
 import type { Photo } from './photo.ts';
-import { photoRows } from './photo-form.ts';
 import type { PhotoRow } from './photo-form.ts';
-import { PINNED_FRONT_MATTER_KEY, pinnedAt } from './pinned.ts';
-import {
-  READ_OF_FRONT_MATTER_KEY,
-  READ_STATUS_FRONT_MATTER_KEY,
-  readWork,
-  readWorkFrontMatter,
-} from './read.ts';
-import { BLANK_READ_OF_FORM, readOfForm, resolveRead } from './read-form.ts';
+import type { PostField } from './post-fields.ts';
+import { BLANK_READ_OF_FORM } from './read-form.ts';
 import type { ReadOfForm } from './read-form.ts';
-import { RSVP_FRONT_MATTER_KEY, rsvpValue } from './rsvp.ts';
-import { DEFAULT_TIMEZONE, toUtcInstant, wallClockIn } from './time.ts';
+import { DEFAULT_TIMEZONE, wallClockIn } from './time.ts';
 import { VISIBILITY_FRONT_MATTER_KEY, visibilityOf } from './visibility.ts';
 import type { StoredVisibility } from './visibility.ts';
 
@@ -77,17 +57,6 @@ export const CITATION_FIELDS = {
   'like-of': 'likeOf',
   'bookmark-of': 'bookmarkOf',
 } as const satisfies Record<CitationProperty, keyof EditorForm>;
-
-/** The three citing fields, each filled from its property. */
-export function citationFields(
-  value: (property: CitationProperty) => string,
-): Pick<EditorForm, (typeof CITATION_FIELDS)[CitationProperty]> {
-  return {
-    repostOf: value('repost-of'),
-    likeOf: value('like-of'),
-    bookmarkOf: value('bookmark-of'),
-  };
-}
 
 /** The editor's fields, as strings, which is what a form has. */
 export interface EditorForm {
@@ -179,6 +148,36 @@ export interface EditorForm {
   hash: string;
 }
 
+/** The fields {@link PostField} rows fill, as a kind that carries none of them has them. */
+const BLANK_POST_FIELDS = {
+  rsvp: '',
+  repostOf: '',
+  likeOf: '',
+  bookmarkOf: '',
+  readStatus: '',
+  readOf: BLANK_READ_OF_FORM,
+  event: BLANK_EVENT_FORM,
+  pinned: false,
+  previewHidden: false,
+  citedAlt: '',
+  enclosure: BLANK_ENCLOSURE_FORM,
+  photos: [],
+  syndicateTo: [],
+} satisfies Partial<EditorForm>;
+
+type PostFieldsForm = Pick<EditorForm, keyof typeof BLANK_POST_FIELDS>;
+
+/** The form keys a kind's rows fill, each from `value`, over the blank ones. */
+export function postFieldsForm(
+  kind: DocumentKind,
+  value: (field: PostField) => Partial<EditorForm>,
+): PostFieldsForm {
+  return kind.fields.reduce<PostFieldsForm>(
+    (form, field) => ({ ...form, ...value(field) }),
+    BLANK_POST_FIELDS,
+  );
+}
+
 /**
  * The editor for a document that does not exist yet.
  *
@@ -204,24 +203,14 @@ export function blankForm(
     // The admin's Author select is where the default is applied.
     author: '',
     inReplyTo: '',
-    rsvp: '',
-    ...citationFields(() => ''),
-    readStatus: '',
-    readOf: BLANK_READ_OF_FORM,
-    event: BLANK_EVENT_FORM,
+    ...BLANK_POST_FIELDS,
     lang: '',
     draft: false,
     visibility: 'public',
     exclude: false,
     contact: false,
-    pinned: false,
-    previewHidden: false,
-    citedAlt: '',
     comments: COMMENT_SETTINGS.site,
-    enclosure: BLANK_ENCLOSURE_FORM,
-    photos: [],
     location: BLANK_LOCATION_FORM,
-    syndicateTo: [],
     body: '',
     hash: '',
   };
@@ -240,6 +229,7 @@ export function blankForm(
  * without it would remove the stored location on save.
  */
 export function formFor(
+  kind: DocumentKind,
   document: Document,
   timezone: string,
   location: PostLocation | undefined,
@@ -254,22 +244,7 @@ export function formFor(
     description: document.description ?? '',
     author: document.author ?? '',
     inReplyTo: document.inReplyTo ?? '',
-    rsvp:
-      document.type === 'post' && typeof document.extra[RSVP_FRONT_MATTER_KEY] === 'string'
-        ? document.extra[RSVP_FRONT_MATTER_KEY]
-        : '',
-    // As the file spells it, so a save writes back what it read.
-    ...citationFields((property) =>
-      document.type === 'post' ? citationText(document.extra[property]) : '',
-    ),
-    readStatus:
-      document.type === 'post' && typeof document.extra[READ_STATUS_FRONT_MATTER_KEY] === 'string'
-        ? document.extra[READ_STATUS_FRONT_MATTER_KEY]
-        : '',
-    readOf: readOfForm(
-      document.type === 'post' ? readWork(document.extra[READ_OF_FRONT_MATTER_KEY]) : undefined,
-    ),
-    event: document.type === 'post' ? eventForm(document.extra, timezone) : BLANK_EVENT_FORM,
+    ...postFieldsForm(kind, (field) => field.read(document, timezone)),
     lang:
       typeof document.extra[LANG_FRONT_MATTER_KEY] === 'string'
         ? document.extra[LANG_FRONT_MATTER_KEY]
@@ -278,17 +253,8 @@ export function formFor(
     visibility: visibilityOf(document),
     exclude: document.extra[EXCLUDE_KEY] === true,
     contact: document.extra[CONTACT_FRONT_MATTER_KEY] === true,
-    pinned: pinnedAt(document) !== undefined,
-    previewHidden: document.type === 'post' && !previewShown(document.extra),
-    citedAlt:
-      document.type === 'post' && typeof document.extra[CITED_ALT_FRONT_MATTER_KEY] === 'string'
-        ? document.extra[CITED_ALT_FRONT_MATTER_KEY]
-        : '',
     comments: commentSettingOf(document),
-    enclosure: document.type === 'post' ? enclosureForm(document) : BLANK_ENCLOSURE_FORM,
-    photos: document.type === 'post' ? photoRows(document) : [],
-    location: document.type === 'post' ? locationForm(location) : BLANK_LOCATION_FORM,
-    syndicateTo: document.type === 'post' ? syndicateToOf(document.extra) : [],
+    location: kind.located ? locationForm(location) : BLANK_LOCATION_FORM,
     body: document.body,
     hash: document.hash,
   };
@@ -327,23 +293,7 @@ export interface ResolvedMedia {
 export function extraFromForm(
   kind: DocumentKind,
   document: Document | undefined,
-  form: Pick<
-    EditorForm,
-    | 'exclude'
-    | 'comments'
-    | 'contact'
-    | 'lang'
-    | 'pinned'
-    | 'previewHidden'
-    | 'citedAlt'
-    | 'syndicateTo'
-    | 'visibility'
-    | 'readStatus'
-    | 'readOf'
-    | 'rsvp'
-    | 'event'
-    | (typeof CITATION_FIELDS)[CitationProperty]
-  >,
+  form: EditorForm,
   now: Date,
   media: ResolvedMedia,
   declared: readonly SyndicationTarget[],
@@ -351,62 +301,8 @@ export function extraFromForm(
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = { ...(document?.extra ?? {}) };
 
-  if (kind.type === 'post') {
-    if (media.recording === undefined) delete extra[ENCLOSURE_FRONT_MATTER_KEY];
-    else extra[ENCLOSURE_FRONT_MATTER_KEY] = enclosureFrontMatter(media.recording);
-    if (media.photos.length === 0) delete extra[PHOTO_FRONT_MATTER_KEY];
-    else extra[PHOTO_FRONT_MATTER_KEY] = photoFrontMatter(media.photos);
-    for (const property of CITATION_PROPERTIES) {
-      const cited = form[CITATION_FIELDS[property]];
-      if (cited === '') delete extra[property];
-      else extra[property] = cited;
-    }
-    const rsvp = rsvpValue(form.rsvp);
-    if (rsvp === undefined) delete extra[RSVP_FRONT_MATTER_KEY];
-    else extra[RSVP_FRONT_MATTER_KEY] = rsvp;
-    const event = resolveEvent(form.event, timezone);
-    if ('event' in event && isOrWasEvent(event.event, document)) {
-      for (const [key, value] of Object.entries(eventFrontMatter(event.event))) {
-        if (value === undefined) delete extra[key];
-        else extra[key] = value;
-      }
-    }
-    if (form.previewHidden) extra[PREVIEW_FRONT_MATTER_KEY] = false;
-    else delete extra[PREVIEW_FRONT_MATTER_KEY];
-    if (form.citedAlt === '') delete extra[CITED_ALT_FRONT_MATTER_KEY];
-    else extra[CITED_ALT_FRONT_MATTER_KEY] = form.citedAlt;
-    const resolved = resolveRead(form.readStatus, form.readOf);
-    if ('read' in resolved) {
-      const { read } = resolved;
-      if (read === undefined) {
-        delete extra[READ_OF_FRONT_MATTER_KEY];
-        delete extra[READ_STATUS_FRONT_MATTER_KEY];
-      } else {
-        extra[READ_OF_FRONT_MATTER_KEY] = readWorkFrontMatter(read.of);
-        extra[READ_STATUS_FRONT_MATTER_KEY] = read.status;
-      }
-    }
-  }
-
-  // The checkboxes speak for the targets the site declares (TASK-155). An id
-  // the file lists that names no declared target has no checkbox, so it is
-  // kept as written rather than lost to a save.
-  if (kind.type === 'post') {
-    const offered = new Set(declared.map((target) => target.id));
-    const kept = syndicateToOf(extra).filter((id) => !offered.has(id));
-    // A form loaded from the file (a Micropub update) already holds those ids.
-    const listed = [...new Set([...form.syndicateTo, ...kept])];
-    if (listed.length === 0) delete extra[SYNDICATE_TO_FRONT_MATTER_KEY];
-    else extra[SYNDICATE_TO_FRONT_MATTER_KEY] = listed;
-  }
-
-  // The moment a post was pinned is what orders the featured collection, so a
-  // pin the file already carries keeps its moment through every later save,
-  // and unpinning takes the key out rather than writing `false` (TASK-207).
-  if (kind.type === 'post') {
-    const pinned = document === undefined ? undefined : pinnedAt(document);
-    if (!form.pinned) delete extra[PINNED_FRONT_MATTER_KEY];
-    else if (pinned === undefined) extra[PINNED_FRONT_MATTER_KEY] = toUtcInstant(now, 'UTC');
+  for (const field of kind.fields) {
+    field.write(extra, form, { document, now, media, declared, timezone });
   }
 
   if (form.visibility === 'public') delete extra[VISIBILITY_FRONT_MATTER_KEY];
@@ -441,19 +337,16 @@ export function extraFromForm(
   return extra;
 }
 
-function isOrWasEvent(saved: PostEvent | undefined, document: Document | undefined): boolean {
-  return saved !== undefined || (document !== undefined && eventOf(document.extra) !== undefined);
-}
-
 /**
- * The `in-reply-to` a save writes: the field for a post, where an empty one
- * clears it, and whatever the file had for a page, whose editor has no field.
+ * The `in-reply-to` a save writes: the field for a kind that replies, where an
+ * empty one clears it, and whatever the file had for one whose editor has no
+ * field.
  */
 export function formInReplyTo(
   kind: DocumentKind,
   form: EditorForm,
   document: Document | undefined,
 ): string | undefined {
-  if (kind.type !== 'post') return document?.inReplyTo;
+  if (!kind.replies) return document?.inReplyTo;
   return form.inReplyTo === '' ? undefined : form.inReplyTo;
 }
