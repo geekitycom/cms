@@ -313,6 +313,21 @@ The server chooses the representation in this order:
 4. A request that accepts none of the representations gets `406` with a JSON
    body listing what it could have asked for.
 
+A static homepage is served at `/` in every representation, at `/`,
+`/index.md` and `/index.json`. Its Markdown front matter says `permalink: /`
+and its JSON `url` is the site root, whatever permalink the page's file
+carries. Each URL under that permalink answers one `301` to the root form of
+the same representation:
+
+| Request (homepage permalink `/about/`) | Answer                 |
+| -------------------------------------- | ---------------------- |
+| `/about/`                              | `301` to `/`           |
+| `/about/index.md`, `/about.md`         | `301` to `/index.md`   |
+| `/about/index.json`, `/about.json`     | `301` to `/index.json` |
+
+A page that is not the homepage keeps its own URLs. The posts page's `index.md`
+and `index.json` are its listing's.
+
 The feeds are fixed routes and are not negotiated, because feed readers do not
 send useful `Accept` headers. See [Feeds](feeds.md).
 

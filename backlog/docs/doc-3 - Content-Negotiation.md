@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-09 14:48'
+updated_date: '2026-10-11 14:06'
 ---
 # Content Negotiation
 
@@ -38,10 +38,14 @@ Link: </2026/09/hello-world/index.md>; rel="alternate"; type="text/markdown",
 
 `/` is the site's latest posts until the Reading settings say otherwise. With a
 `homepage` set it is that page instead, negotiated like any other document —
-HTML, Markdown at `/index.md`, JSON at `/index.json` — and the page's own
-permalink answers `301` to `/`, so the front page has one URL. A theme may lay
-it out on its own with `layouts/front-page.njk`, which falls back to the page
-layout.
+HTML, Markdown at `/index.md`, JSON at `/index.json` — and served at `/` in
+every representation: the Markdown's front matter says `permalink: /` and the
+JSON's `url` is the site root, whatever permalink the file carries. Each of the
+page's own URLs answers one `301` to the root form of the same representation:
+`{permalink}` to `/`, `{permalink}index.md` and the short `.md` spelling to
+`/index.md`, `{permalink}index.json` and the short `.json` spelling to
+`/index.json` (TASK-345). A theme may lay it out on its own with
+`layouts/front-page.njk`, which falls back to the page layout.
 
 With a `postsPage` set as well, the listing moves to that page's permalink and
 paginates under it at `{permalink}page/N/`, with the page's own title and
