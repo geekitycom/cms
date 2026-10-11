@@ -63,6 +63,7 @@ interface CommentEntry {
   url: string | null;
   migrated?: true;
   origin?: string;
+  user?: string;
 }
 
 async function site(): Promise<Site> {
@@ -559,6 +560,66 @@ describe('the comments and reactions import', () => {
     );
     const permalink = cms.store.getBySlug('i-♥-rss')?.permalink;
     assert.equal(permalink, PERMALINK, 'a webmention is keyed by the permalink the site serves');
+  });
+
+  it('names the site user a comment was written by when signed in to WordPress', async () => {
+    const signedIn = (id: number, userId: number): TestComment => ({
+      id,
+      type: 'comment',
+      author: 'ada',
+      authorUrl: 'https://ada.example/',
+      authorEmail: 'ada@blog.example',
+      content: 'Thanks.',
+      userId,
+    });
+    const post: TestItem = {
+      ...THE_POST,
+      comments: [signedIn(16, 2), signedIn(17, 3), { ...signedIn(18, 0), author: 'Visitor' }],
+    };
+
+    const without = await site();
+    await without.run([post]);
+    assert.deepEqual(
+      (await without.comments(FILE)).map((comment) => comment.user),
+      [undefined, undefined, undefined],
+      'no site user ada, so nobody is named',
+    );
+
+    const wp = await site();
+    await createUser({ dataDir: wp.dataDir, username: 'ada', password: 'correct horse battery' });
+    await wp.run([post]);
+    assert.deepEqual(
+      (await wp.comments(FILE)).map((comment) => [numbered.get(comment.id), comment.user]),
+      [
+        ['16', 'ada'],
+        ['17', undefined],
+        ['18', undefined],
+      ],
+      'WordPress user 2 is ada; user 3 is no author in the export; 0 is a visitor',
+    );
+
+    await createUser({
+      dataDir: without.dataDir,
+      username: 'ada',
+      password: 'correct horse battery',
+    });
+    const records = {
+      admin: without.admin,
+      contentDir: without.contentDir,
+      dataDir: without.dataDir,
+    };
+    await updateComment(records, id(16), { status: 'spam' });
+    await without.run([post]);
+    const rerun = await without.comments(FILE);
+    assert.deepEqual(
+      rerun.map((comment) => [numbered.get(comment.id), comment.user, comment.status]),
+      [
+        ['16', 'ada', 'spam'],
+        ['17', undefined, 'approved'],
+        ['18', undefined, 'approved'],
+      ],
+      'a rerun once the user exists names them, even on a comment a moderator changed',
+    );
   });
 
   it('takes a webmention sent again for an imported one as the comment it holds', async () => {

@@ -29,6 +29,7 @@ export interface TestComment {
   readonly authorUrl?: string;
   readonly content?: string;
   readonly dateGmt?: string;
+  readonly userId?: number;
   readonly meta?: readonly { key: string; value: string }[];
 }
 
@@ -116,7 +117,7 @@ function comment(entry: TestComment): string {
 			<wp:comment_approved><![CDATA[${entry.approved ?? '1'}]]></wp:comment_approved>
 			<wp:comment_type><![CDATA[${entry.type ?? 'comment'}]]></wp:comment_type>
 			<wp:comment_parent>${String(entry.parent ?? 0)}</wp:comment_parent>
-			<wp:comment_user_id>0</wp:comment_user_id>
+			<wp:comment_user_id>${String(entry.userId ?? 0)}</wp:comment_user_id>
 ${(entry.meta ?? []).map(meta('commentmeta')).join('\n')}
 		</wp:comment>`;
 }

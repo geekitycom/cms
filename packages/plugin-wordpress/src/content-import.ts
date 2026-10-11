@@ -350,15 +350,19 @@ async function writeComments(
     } else if (
       here !== undefined &&
       before !== undefined &&
-      (here.migrated !== true || here.origin !== comment.origin)
+      (here.migrated !== true ||
+        here.origin !== comment.origin ||
+        (comment.user !== undefined && here.user !== comment.user))
     ) {
-      // The import owns what a comment is, though this site owns what it says.
+      // The import owns what a comment is and who wrote it, though this site
+      // owns what it says.
       writes.push({
         ...here,
         migrated: true,
         ...(comment.origin === undefined ? {} : { origin: comment.origin }),
+        ...(comment.user === undefined ? {} : { user: comment.user }),
       });
-      why = `${why}; marked migrated, with its origin`;
+      why = `${why}; marked migrated, with its origin${comment.user === undefined ? '' : ' and its user'}`;
     }
     if (decision.action !== 'leave') recorded.set(comment.id, next);
     rows.push({ outcome: decision.outcome, item, path: held.file, why: `${label}: ${why}` });

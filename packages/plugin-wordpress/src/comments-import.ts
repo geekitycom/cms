@@ -53,6 +53,15 @@ function importComments(exported: WordPressExport, context: PluginCommandContext
     if ('permalink' in placement) permalinks.set(placement.item, placement.permalink);
   }
 
+  // Who wrote it signed in: the WordPress user's login, when this site has a
+  // user by that name, the rule a post's author is mapped by.
+  const usernames = new Set(context.site.users().map((user) => user.username));
+  const users = new Map(
+    exported.authors
+      .filter((author) => usernames.has(author.login))
+      .map((author) => [author.id, author.login]),
+  );
+
   const comments: ImportedComment[] = [];
   const notes: ItemNote[] = [];
   for (const item of exported.items) {
@@ -68,7 +77,7 @@ function importComments(exported: WordPressExport, context: PluginCommandContext
       }
       continue;
     }
-    const mapped = mapComments(item, permalink, markdownOf);
+    const mapped = mapComments(item, permalink, markdownOf, users);
     notes.push(...mapped.notes);
     comments.push(...mapped.comments);
   }
@@ -79,6 +88,7 @@ function mapComments(
   item: WordPressItem,
   permalink: string,
   markdownOf: (html: string) => string,
+  users: ReadonlyMap<number, string>,
 ): { comments: ImportedComment[]; notes: ItemNote[] } {
   const notes: ItemNote[] = [];
   const kept: {
@@ -107,6 +117,7 @@ function mapComments(
     const url = urlOf(wordPress, type, source, kind);
     const origin = originOf(wordPress, source, url);
     const formerId = `${item.guid}#comment-${String(wordPress.id)}`;
+    const user = users.get(wordPress.userId);
     kept.push({
       wordPress,
       formerId,
@@ -128,6 +139,7 @@ function mapComments(
         url,
         migrated: true,
         ...(origin === undefined ? {} : { origin }),
+        ...(user === undefined ? {} : { user }),
       },
       label: `${labelOf(wordPress)}, a ${kind} by ${name}`,
     });
