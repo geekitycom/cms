@@ -1223,7 +1223,7 @@ function interactionOf(
       user === undefined
         ? {
             name: comment.author.name,
-            handle: null,
+            handle: comment.actor === undefined ? null : (actorHandle(comment.actor) ?? null),
             url: comment.author.url,
             avatar: comment.author.avatar === null ? null : avatarHref(comment.author.avatar),
             actorId: comment.actor ?? null,

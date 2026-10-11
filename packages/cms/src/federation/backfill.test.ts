@@ -745,6 +745,13 @@ describe('a fediverse comment imported from another site (TASK-336 AC #10)', () 
     });
   }
 
+  it('names an imported like by the handle its actor id implies', async () => {
+    const { cms, contentDir } = await site('', undefined, comments);
+
+    const { likes } = conversationOf(cms, contentDir);
+    assert.equal(likes[0]?.author.handle, '@ada@mastodon.social');
+  });
+
   it('counts a like from somebody else as theirs', async () => {
     const { cms, contentDir } = await site(
       likeLine(`${CAROL}#likes/1`, CAROL),
