@@ -436,7 +436,6 @@ describe('a comment file written before emails moved to data/', () => {
   });
 });
 
-/** The key of an old id or a guid: the first 16 hex digits of its SHA-256. */
 function keyOf(value: string): string {
   return createHash('sha256').update(value).digest('hex').slice(0, 16);
 }

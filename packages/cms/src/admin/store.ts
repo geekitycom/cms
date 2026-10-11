@@ -2846,8 +2846,7 @@ const MIGRATIONS: readonly Migration[] = [
   },
   {
     // A comment's key is its id (decision-51), so the key worked out from its
-    // guid against the base URL has nothing left to say. What a comment
-    // carries from elsewhere (TASK-336..338) gets a column of its own.
+    // guid against the base URL has nothing left to say.
     version: 26,
     sql: `
       DROP INDEX comments_replies_key;

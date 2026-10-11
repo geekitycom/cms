@@ -650,10 +650,9 @@ function authorArchive(
  * Where a renamed term's archive page or feed lives now, or `undefined` when
  * the path is neither or the site records no rename of its term.
  *
- * Asked only once nothing at the path answered, so a term carried again beats
- * the record of where it went. One hop: the list is stored with its chains
- * already collapsed. A subscriber to the old feed follows it to the new one,
- * exactly as a reader of the archive does.
+ * One hop: the list is stored with its chains already collapsed. A subscriber
+ * to the old feed follows it to the new one, exactly as a reader of the archive
+ * does.
  */
 function renamedTermHref(
   c: Context<GeekityEnv>,

@@ -1179,7 +1179,6 @@ function federatedInteraction(
   };
 }
 
-/** The names of an entry no stored comment holds: its id is its guid, and its key that guid's. */
 function unstored(id: string): Pick<Interaction, 'id' | 'key' | 'guid' | 'migrated'> {
   return { id, key: repliesKey(id), guid: id, migrated: false };
 }

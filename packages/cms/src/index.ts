@@ -1711,8 +1711,7 @@ export function createCms(config: GeekityConfig = {}, context: ServeContext = {}
   // their authors' emails under data/comments/ (TASK-50, TASK-182). A comment
   // file that still holds an email, from before they moved or from a hand
   // edit, has it moved first; then the index is rebuilt, on every boot for the
-  // same reason the federation one is. Between the two, every comment id
-  // that is not yet a key becomes one (decision-51).
+  // same reason the federation one is.
   const commentRecords = { admin, contentDir: resolved.contentDir, dataDir: resolved.dataDir };
   migrateCommentEmails(commentRecords);
   migrateCommentKeys(commentRecords);

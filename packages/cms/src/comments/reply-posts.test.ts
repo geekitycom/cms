@@ -160,7 +160,6 @@ async function reply(
   return { agent, created, response };
 }
 
-/** The key of a thread entry that is not a stored comment: the hash of its guid. */
 function keyOf(guid: string): string {
   return createHash('sha256').update(guid).digest('hex').slice(0, 16);
 }
