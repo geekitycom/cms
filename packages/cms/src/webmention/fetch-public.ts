@@ -56,7 +56,6 @@ export interface PublicHeaders extends PublicResponse {
 export interface PublicRefusal {
   readonly ok: false;
   readonly reason: string;
-  /** The status the server answered with, when it answered with an error. */
   readonly status?: number;
 }
 
@@ -110,32 +109,21 @@ export async function fetchPublic(
   }
 }
 
-/** What {@link requestPublic} sends. */
 export interface RequestPublicOptions {
-  /** How host names are resolved before they are trusted. */
   readonly lookup: HostLookup;
-  /** Ends the exchange when it aborts. */
   readonly signal: AbortSignal;
-  /** `GET` unless it says otherwise. */
   readonly method?: string;
-  /** Headers besides the `User-Agent`, which is always the site's. */
-  readonly headers: Readonly<Record<string, string>>;
+  readonly headers: Readonly<Record<string, string>> & { readonly 'user-agent'?: never };
   readonly body?: string;
 }
 
-/** The response a guarded request ended at, unread, whatever its status. */
 export interface PublicAnswer {
   readonly ok: true;
   readonly response: Response;
-  /** The URL the response came from, after any redirects. */
   readonly url: string;
 }
 
-/**
- * Send one request to `target` and follow its redirects by hand, refusing any
- * hop that is not on a public host. A 303, or a 301 or 302 after a POST, turns
- * the request into a GET without a body, as `fetch` itself would.
- */
+/** A 303, or a 301 or 302 after a POST, turns the request into a GET without a body, as `fetch` itself would. */
 export async function requestPublic(
   target: string,
   options: RequestPublicOptions,

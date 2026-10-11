@@ -173,13 +173,8 @@ export function createWebmentionService(
     dataDir: config.dataDir,
   };
 
-  // Incoming checks run one after another too, and on a queue of their own: a
-  // page of this site's own that is slow to answer must not hold up the check
-  // on a webmention somebody is waiting to see appear.
   const checks = createSerialQueue();
 
-  // Sends are queued rather than run at once: one page that hangs delays the
-  // next and nothing else.
   const sends = createSerialQueue();
 
   /** Whether the site is sending webmentions at all, as the file says now. */

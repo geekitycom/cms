@@ -1,14 +1,11 @@
-/** Text as markup for a text node: only the characters that could open a tag or a reference. */
 export function escapeText(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
-/** A value as markup for an attribute, double- or single-quoted. */
 export function escapeAttribute(value: string): string {
   return escapeText(value).replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
 
-/** The named references resolved; the rest of HTML's list is left as written. */
 const ENTITIES: Readonly<Record<string, string>> = {
   amp: '&',
   lt: '<',
@@ -18,11 +15,6 @@ const ENTITIES: Readonly<Record<string, string>> = {
   nbsp: '\u00a0',
 };
 
-/**
- * Character references resolved, in one pass so `&amp;lt;` is `&lt;`. A name
- * this module does not know, or a number that names no character, is left as
- * the characters it is made of, for an escaper to make safe.
- */
 export function decodeEntities(value: string): string {
   if (!value.includes('&')) return value;
 

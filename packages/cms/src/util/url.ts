@@ -9,16 +9,9 @@ export function withTrailingSlash(value: string): string {
 }
 
 /**
- * A path on the site as an absolute URL.
- *
  * A base URL carrying a path — a site served from a subdirectory — puts that
  * path in front of a root-relative one; `new URL('/x', 'https://h/blog/')`
- * would drop `/blog`. The theme's `absoluteUrl` filter is this function, so a
- * document's id is the same string wherever it is built.
- *
- * An address no URL parser can resolve, such as `/\[` in a post, comes back as
- * given rather than throwing: a reader fails on it exactly as the page's
- * browser does, and one post's broken link must not fail a whole feed.
+ * would drop `/blog`.
  */
 export function absoluteUrl(pathname: string, baseUrl: string): string {
   const base = new URL(withTrailingSlash(baseUrl));

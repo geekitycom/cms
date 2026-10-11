@@ -77,7 +77,6 @@ interface Page {
 const pages = new Map<string, Page>();
 const requested: string[] = [];
 
-/** Every name resolves to a public address but the ones inside this network. */
 const lookup: HostLookup = (hostname) =>
   Promise.resolve(hostname.endsWith('.internal.example') ? ['127.0.0.1'] : ['203.0.113.7']);
 

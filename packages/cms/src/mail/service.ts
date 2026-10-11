@@ -201,8 +201,6 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
       noCache: config.watch,
     });
 
-  // Messages are queued rather than sent at once: one provider that hangs
-  // delays the next message and nothing else.
   const messages = createSerialQueue();
 
   /**

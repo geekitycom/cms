@@ -25,10 +25,6 @@ export const WEBMENTION_USER_AGENT = 'Geekity/1.0 (+https://github.com/andrewshe
 /**
  * The Webmention endpoint a page advertises, or `undefined` when it advertises
  * none — which is most pages, and is not an error.
- *
- * Nothing throws: a target that times out, refuses the connection, answers
- * an error or is not on a public host is a target with no endpoint as far as
- * the sender is concerned, and the caller records that rather than stopping.
  */
 export async function discoverEndpoint(
   target: string,

@@ -105,8 +105,6 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
   const { config } = options;
   const logger = options.logger ?? console;
 
-  // Pings are queued rather than sent at once: one server that hangs delays
-  // the next ping and nothing else.
   const pings = createSerialQueue();
 
   /** The server the settings name, or `undefined` when they name none. */

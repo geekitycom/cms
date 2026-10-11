@@ -170,7 +170,6 @@ describe('a new untitled post that cites a page is named after its title (TASK-2
 
   it('keeps the fetched context and does not fetch the target again after the save', async () => {
     const { cms, contentDir } = await site();
-    // Webmention discovery fetches the cited page the same guarded way.
     await updateSiteSettings({
       contentDir,
       change: (settings) => ({ ...settings, webmentionsSend: false }),

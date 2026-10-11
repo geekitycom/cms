@@ -119,9 +119,8 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
   const { federation, admin, store, config } = options;
   const logger = options.logger ?? console;
 
-  // Follows and undos are queued rather than run at once, for the reason
-  // deliveries are: a relay that is told to unfollow before it has been told
-  // to follow keeps the subscription.
+  // A relay that is told to unfollow before it has been told to follow keeps
+  // the subscription.
   const subscriptions = createSerialQueue();
 
   /** A context outside any request, which is where a follow is sent from. */

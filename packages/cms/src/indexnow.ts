@@ -185,6 +185,4 @@ function publicUrl(document: Document | undefined, now: Date, baseUrl: string): 
   return absoluteUrl(document.permalink, baseUrl);
 }
 
-function ignore(): void {
-  // A failed batch is already logged; the queue carries on regardless.
-}
+function ignore(): void {}

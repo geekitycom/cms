@@ -98,9 +98,6 @@ export interface FeedItem {
    * else an excerpt of the rendered body. Never the whole post — the content is
    * where that goes — and empty only for a post with nothing to summarise,
    * which is the one case a format leaves the element out.
-   *
-   * Plain text, never markup: a format that reads its summary as HTML prints
-   * it through `escapeText`.
    */
   summary: string;
   /**

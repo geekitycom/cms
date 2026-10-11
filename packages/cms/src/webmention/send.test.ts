@@ -38,15 +38,12 @@ const NEWS_COPY = 'https://news.example/en/blog.example/2026/03/hello-world';
 const NEWS_DE = 'https://news.example/de';
 const NEWS_DE_ENDPOINT = 'https://news.example/de/webmention';
 
-/** A page whose endpoint is on this network. */
 const SNEAKY = 'https://sneaky.example/page';
 const INSIDE_ENDPOINT = 'http://wm.internal.example/wm';
 
-/** A page whose endpoint redirects onto this network. */
 const BOUNCE = 'https://bounce.example/page';
 const BOUNCE_ENDPOINT = 'https://bounce.example/wm';
 
-/** Every name resolves to a public address but the ones inside this network. */
 const lookup: HostLookup = (hostname) =>
   Promise.resolve(hostname.endsWith('.internal.example') ? ['10.0.0.5'] : ['203.0.113.7']);
 

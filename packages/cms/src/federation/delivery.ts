@@ -168,8 +168,6 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
    */
   const synchronous = config.federation.queue === null;
 
-  // Deliveries are queued rather than run in parallel: a failure is recorded
-  // against the followers it happened to and the next activity still goes out.
   const deliveryQueue = createSerialQueue();
 
   /** A context outside any request, which is where a delivery happens from. */

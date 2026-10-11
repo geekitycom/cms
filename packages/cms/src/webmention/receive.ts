@@ -120,9 +120,6 @@ export function checkWebmentionRequest(
     return refuse('same', 'The source and the target are the same page.');
   }
 
-  // A source on a loopback or private address is not somebody else's page: it
-  // is this network. This stops the obvious spelling of that before answering;
-  // a name that resolves to one is refused when the source is fetched.
   if (isPrivateHost(from.hostname)) return refuse('source', 'The source is not a public URL.');
 
   const site = webUrl(options.baseUrl);
@@ -163,7 +160,6 @@ export interface VerifyWebmentionOptions {
   readonly notices?: CommentNotices | undefined;
   /** The clock. */
   readonly now: Date;
-  /** How the source's host is resolved before it is trusted. */
   readonly lookup: HostLookup;
   /** Where failures are reported. */
   readonly logger: { warn(message: string): void };

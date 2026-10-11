@@ -185,7 +185,6 @@ function refuseNativeModules() {
   };
 }
 
-/** Let esbuild drop these packages from a bundle that uses nothing of them. */
 function sideEffectFree(filter) {
   return {
     name: 'side-effect-free',
