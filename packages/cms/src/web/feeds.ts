@@ -9,9 +9,10 @@ import { jsonFeed } from './feed-json.ts';
 import { rssFeed, commentsRssFeed } from './feed-rss.ts';
 import { FEED_CONTENT_TYPES, feedCadence, feedLanguage, notifyServerOf } from './feed-source.ts';
 import type { CommentFeedSource, FeedFormat, FeedIdentity, FeedSource } from './feed-source.ts';
-import { absoluteUrl, contentEtag, isNotModified, latestModified } from './negotiate.ts';
+import { contentEtag, isNotModified, latestModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 import { resolveLicense } from './license.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 const COMMENTS_FEED_REVISION = 4;
 

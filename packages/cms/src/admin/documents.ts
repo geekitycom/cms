@@ -71,7 +71,7 @@ import { readAltTexts, undescribedImages, undescribedPhotos } from '../images/al
 import type { UndescribedImage } from '../images/alt-text.ts';
 import { isServed } from '../web/documents.ts';
 import { LANG_FRONT_MATTER_KEY } from '../web/locale.ts';
-import { absoluteUrl } from '../web/negotiate.ts';
+
 import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
 import { commentsFile } from '../comments/records.ts';
 import { CONTACT_FRONT_MATTER_KEY } from '../contact/form.ts';
@@ -145,6 +145,7 @@ import { shownInFull } from '../webmention/cited-picture.ts';
 import type { CitedPicture } from '../webmention/cited-picture.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Everything that differs between the posts screens and the pages screens.

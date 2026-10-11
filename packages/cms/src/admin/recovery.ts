@@ -11,6 +11,7 @@ import type { Session } from './store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { clientAddress, describeWait, loginKeys } from './throttle.ts';
 import type { LoginThrottle } from './throttle.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Forgetting a password, and getting back in without a shell.
@@ -287,7 +288,7 @@ export function newPasswordProblem(password: string, confirmation: string): stri
 
 /** The link that goes in the message, absolute because it is read elsewhere. */
 export function resetLink(baseUrl: string, token: string): string {
-  const url = new URL(RESET_PATH, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
+  const url = new URL(absoluteUrl(RESET_PATH, baseUrl));
   url.searchParams.set(RECOVERY_FIELDS.token, token);
   return url.href;
 }

@@ -9,12 +9,13 @@ import { isTrashedPath } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
 import { authorHref, parseAuthorPath } from '../web/authors.ts';
 import { goneDocumentAt, isGone, publicDocumentAt } from '../web/documents.ts';
-import { absoluteUrl, prefersActivityStreams } from '../web/negotiate.ts';
+import { prefersActivityStreams } from '../web/negotiate.ts';
 import { notFound, requestPath } from '../web/routes.ts';
 import { actorAliases, actorId, userActor } from './actor.ts';
 import { isFederatedDocument, postObject, postTombstone } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { accountOf, handleHref } from './paths.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Put Fedify in front of the rest of the app.

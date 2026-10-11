@@ -1,6 +1,7 @@
 import type { User } from '../admin/accounts.ts';
 import type { SiteSettings } from '../admin/settings.ts';
 import { authorHref, parseAuthorPath, userForAuthor } from '../web/authors.ts';
+import { withoutTrailingSlash, withTrailingSlash } from '../util/url.ts';
 
 /** What resolving a me URL needs to know about the site. */
 export interface IdentitySite {
@@ -40,7 +41,7 @@ export function userForMe(me: string, site: IdentitySite): User | undefined {
  */
 export function meForSignIn(typed: string | undefined, user: User, site: IdentitySite): string {
   const named = typed === undefined ? undefined : identityNamed(typed, site);
-  const base = site.baseUrl.replace(/\/$/, '');
+  const base = withoutTrailingSlash(site.baseUrl);
   if (named?.user.id === user.id && named.root) return `${base}/`;
   return `${base}${authorHref(user.username)}`;
 }
@@ -58,8 +59,8 @@ function identityNamed(me: string, site: IdentitySite): { user: User; root: bool
   if (withoutWww(typed.hostname) !== withoutWww(base.hostname)) return undefined;
   if (typed.port !== base.port) return undefined;
 
-  const root = withSlash(base.pathname);
-  const pathname = withSlash(typed.pathname);
+  const root = withTrailingSlash(base.pathname);
+  const pathname = withTrailingSlash(typed.pathname);
   if (!pathname.startsWith(root)) return undefined;
   const local = `/${pathname.slice(root.length)}`;
 
@@ -78,8 +79,4 @@ function identityNamed(me: string, site: IdentitySite): { user: User; root: bool
 
 function withoutWww(hostname: string): string {
   return hostname.startsWith('www.') ? hostname.slice(4) : hostname;
-}
-
-function withSlash(pathname: string): string {
-  return pathname.endsWith('/') ? pathname : `${pathname}/`;
 }

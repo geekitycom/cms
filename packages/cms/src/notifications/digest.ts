@@ -17,6 +17,7 @@ import {
   notificationMode,
   notificationRecipients,
 } from './preferences.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * One message a window instead of one message a comment.
@@ -208,7 +209,7 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
     const document = store.getBySlug(comment.slug);
     return {
       title: document === undefined ? comment.slug : postLabel(document, options.cited),
-      url: absolute(comment.permalink, config.baseUrl),
+      url: absoluteUrl(comment.permalink, config.baseUrl),
     };
   }
 
@@ -269,7 +270,7 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
     if (pending.length === 0) return 0;
 
     const listed = pending.slice(0, maxItems);
-    const queueUrl = absolute('/admin/comments', config.baseUrl);
+    const queueUrl = absoluteUrl('/admin/comments', config.baseUrl);
 
     for (const recipient of due) {
       void mail.send({
@@ -366,15 +367,6 @@ function digestTimesIn(source: string | undefined): Record<string, Record<string
   }
 
   return found;
-}
-
-/** A site-root path as an absolute URL. */
-function absolute(pathname: string, baseUrl: string): string {
-  try {
-    return new URL(pathname, baseUrl).href;
-  } catch {
-    return pathname;
-  }
 }
 
 function messageOf(error: unknown): string {

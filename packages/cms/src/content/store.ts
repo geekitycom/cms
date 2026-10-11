@@ -9,10 +9,11 @@ import { tagKey, uniqueTags } from './tags.ts';
 import { VISIBILITIES, VISIBILITY_FRONT_MATTER_KEY } from './visibility.ts';
 import { repliesKey } from '../web/feed-source.ts';
 import { feedGuid, postObjectId } from '../web/guids.ts';
-import { absoluteUrl } from '../web/negotiate.ts';
+
 import { NO_REDIRECTS } from '../web/redirects.ts';
 import type { RedirectTable } from '../web/redirects.ts';
 import { linksInto, ownSiteLinks, siteLinkKey, spelling } from '../webmention/links.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 export { DATABASE_FILE } from '../cache.ts';
 

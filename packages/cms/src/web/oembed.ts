@@ -7,10 +7,11 @@ import { siteLocale, siteTimezone } from './context.ts';
 import type { SiteData } from './context.ts';
 import { feedExcerpt } from './feed-item.ts';
 import { escapeXml } from './feed-xml.ts';
-import { absoluteUrl, contentEtag, isNotModified } from './negotiate.ts';
+import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 import { shareImage } from './share-image.ts';
 import { formatDate } from './templates.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The oEmbed provider (TASK-205): what WordPress, Discourse and the rest ask

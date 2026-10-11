@@ -25,10 +25,11 @@ import {
   WFW_NAMESPACE,
 } from './feed-xml.ts';
 import { resolveLicense } from './license.ts';
-import { absoluteUrl, latestModified } from './negotiate.ts';
+import { latestModified } from './negotiate.ts';
 import { isCaptions } from '../content/enclosure.ts';
 import type { AlternateEnclosure, Enclosure } from '../content/enclosure.ts';
 import { sanitizeCommentHtml } from './sanitize.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * RSS 2.0: the post feed, the comments feed, and the channel they share.

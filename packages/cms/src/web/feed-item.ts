@@ -18,9 +18,10 @@ import { escapeXml } from './feed-xml.ts';
 import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
 import { canonicalLocale, documentLanguage } from './locale.ts';
-import { absoluteUrl, lastModifiedOf } from './negotiate.ts';
+import { lastModifiedOf } from './negotiate.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * One post as a feed shows it, in one shape whatever format the feed is.

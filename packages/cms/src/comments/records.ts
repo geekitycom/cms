@@ -22,6 +22,7 @@ import { hashClientAddress } from '../forms/protection.ts';
 import { isKey, repliesKey, webmentionKey } from '../web/feed-source.ts';
 import { COMMENT_PAGE_PREFIX, commentPageHref } from '../web/guids.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Native comments as the files that hold them, and the one door into them.
@@ -659,7 +660,7 @@ async function ask(
     post: {
       slug: comment.slug,
       title: post?.title ?? comment.slug,
-      url: post?.url ?? absolute(comment.permalink, options.baseUrl),
+      url: post?.url ?? absoluteUrl(comment.permalink, options.baseUrl),
     },
     address: options.address,
     userAgent: options.userAgent,
@@ -688,15 +689,6 @@ function announce(notices: CommentNotices | undefined, stored: PostComment): voi
   // A comment the site let straight through is on the page already, so
   // whoever it answers hears about it now rather than at a moderator's hand.
   else if (stored.status === 'approved') notices.replyApproved(stored);
-}
-
-/** A site-root path as an absolute URL. */
-function absolute(pathname: string, baseUrl: string): string {
-  try {
-    return new URL(pathname, baseUrl).href;
-  } catch {
-    return pathname;
-  }
 }
 
 function messageOf(error: unknown): string {

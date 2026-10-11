@@ -47,6 +47,15 @@ describe('resolveConfig', () => {
     assert.equal(config.baseUrl, 'https://geekity.example');
   });
 
+  it('strips a doubled trailing slash the way a plugin does', () => {
+    const config = resolveConfig(
+      { baseUrl: 'https://geekity.example/blog//' },
+      { cwd: '/srv/site', env: {} },
+    );
+
+    assert.equal(config.baseUrl, 'https://geekity.example/blog');
+  });
+
   it('lets environment variables override the config file', () => {
     const config = resolveConfig(
       {

@@ -22,7 +22,8 @@ import {
 } from './feed-xml.ts';
 import { resolveLicense } from './license.ts';
 import type { ContentLicense } from './license.ts';
-import { absoluteUrl, latestModified } from './negotiate.ts';
+import { latestModified } from './negotiate.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Atom 1.0: the feed and its entries, rendered from {@link FeedItem}s.

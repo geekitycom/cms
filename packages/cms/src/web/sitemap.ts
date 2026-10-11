@@ -1,6 +1,7 @@
 import { escapeXml } from './feeds.ts';
-import { absoluteUrl, contentEtag, isNotModified } from './negotiate.ts';
+import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Where the sitemap and the robots file live, and what goes in them.

@@ -53,7 +53,7 @@ import { isServed, permalinkOfObjectId } from '../web/documents.ts';
 import { postObjectId } from '../web/guids.ts';
 import { feedExcerpt } from '../web/feed-item.ts';
 import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../web/locale.ts';
-import { absoluteUrl } from '../web/negotiate.ts';
+
 import { categoryHref, tagHref } from '../web/taxonomy.ts';
 import { actorId } from './actor.ts';
 import type { CitedObject } from './citations.ts';
@@ -61,6 +61,7 @@ import type { FederationContextData } from './federation.ts';
 import { mentionedAccounts } from './handles.ts';
 import type { MentionedAccount } from './handles.ts';
 import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } from './paths.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The user a post is announced by: the one its `author` names, and the site's

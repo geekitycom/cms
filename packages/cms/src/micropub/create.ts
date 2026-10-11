@@ -12,9 +12,10 @@ import { isReadStatus, READ_STATUSES } from '../content/read.ts';
 import { isVisibility } from '../content/visibility.ts';
 import { normalizeBody } from '../content/writer.ts';
 import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
-import { absoluteUrl } from '../web/negotiate.ts';
+
 import type { SyndicationTarget } from '../webmention/syndication.ts';
 import { cleanMarkdown, markdownFromHtml } from './content.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * A Micropub create (TASK-164), whichever way it was encoded: the one

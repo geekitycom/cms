@@ -9,7 +9,7 @@ import type { OutgoingMail } from '../mail/provider.ts';
 import { createUser, verifyUserPassword } from './accounts.ts';
 import { browser, csrfField, FIRST_ADMIN, sandbox, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
-import { FORGOT_PATH, RESET_PATH } from './recovery.ts';
+import { FORGOT_PATH, RESET_PATH, resetLink } from './recovery.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './settings.ts';
 
 /**
@@ -418,3 +418,10 @@ function bodyText(html: string): string {
     .replace(/value="[0-9a-f]{64}"/g, 'value="TOKEN"')
     .replace(/nonce="[^"]*"/g, 'nonce="NONCE"');
 }
+
+describe('the reset link on a site served under a path', () => {
+  it('stays under that path', () => {
+    const link = new URL(resetLink('https://example.com/blog/', 'token'));
+    assert.equal(link.origin + link.pathname, `https://example.com/blog${RESET_PATH}`);
+  });
+});

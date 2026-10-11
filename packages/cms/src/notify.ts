@@ -8,10 +8,11 @@ import { isFederatedDocument } from './federation/article.ts';
 import { isListed } from './web/documents.ts';
 import { FEED_FORMATS, notifyEndpoints } from './web/feeds.ts';
 import type { NotifyServer } from './web/feeds.ts';
-import { absoluteUrl } from './web/negotiate.ts';
+
 import { feedHref } from './web/routes.ts';
 import { TAXONOMIES, termKey } from './web/taxonomy.ts';
 import type { TaxonomyTerm } from './web/taxonomy.ts';
+import { absoluteUrl } from './util/url.ts';
 
 /**
  * How long one ping is given before it is abandoned.

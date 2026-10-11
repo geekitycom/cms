@@ -2,6 +2,7 @@ import type { CommentStatus, PostComment } from '../admin/store.ts';
 import { deleteComment, updateComment } from './records.ts';
 import type { CommentRecords } from './records.ts';
 import type { CommentChecker, CommentReport } from './submission.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The three things that can be done to a stored comment, in one place.
@@ -100,7 +101,7 @@ async function tellChecker(
 
   const report: CommentReport = {
     comment,
-    url: absolute(comment.permalink, options.baseUrl),
+    url: absoluteUrl(comment.permalink, options.baseUrl),
     baseUrl: options.baseUrl,
   };
 
@@ -112,15 +113,6 @@ async function tellChecker(
     // spam filter tomorrow, not a failed moderation action today.
     const logger = options.logger ?? console;
     logger.warn(`The comment checker would not take the correction: ${messageOf(error)}`);
-  }
-}
-
-/** A site-root path as an absolute URL. */
-function absolute(pathname: string, baseUrl: string): string {
-  try {
-    return new URL(pathname, baseUrl).href;
-  } catch {
-    return pathname;
   }
 }
 

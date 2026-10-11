@@ -24,8 +24,9 @@ import { activityStreamsId, isListed, isServed, permalinkOfObjectId } from './do
 import { isKey, repliesFeedPath, repliesKey } from './feed-source.ts';
 import type { FeedComment } from './feeds.ts';
 import { COMMENT_PAGE_PREFIX, commentPageHref, feedGuid } from './guids.ts';
-import { absoluteUrl } from './negotiate.ts';
+
 import { sanitizeCommentHtml } from './sanitize.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The conversation under a post, in one shape whatever it is made of, and the

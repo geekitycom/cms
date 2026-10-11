@@ -1,9 +1,10 @@
 import { manifestIcons } from '../images/icons.ts';
 import type { ManifestIcon } from '../images/icons.ts';
 import type { ImageConfig } from '../images/paths.ts';
-import { absoluteUrl, contentEtag, isNotModified } from './negotiate.ts';
+import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 import type { ThemeColors } from './themes.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The web app manifest (TASK-147): what a browser reads before it offers to

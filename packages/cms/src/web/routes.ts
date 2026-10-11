@@ -82,7 +82,6 @@ import {
 } from './feeds.ts';
 import type { CommentFeedSource, FeedComment, FeedFormat, FeedSource } from './feeds.ts';
 import {
-  absoluteUrl,
   DOCUMENT_REPRESENTATIONS,
   documentJson,
   LISTING_REPRESENTATIONS,
@@ -148,6 +147,7 @@ import {
 import { decodedPath, findPathRedirect, findQueryRedirect, redirectLocation } from './redirects.ts';
 import { PAGE_SEGMENT, redirectedTerm, taxonomyForSegment, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * Register the public site on a Hono app.

@@ -4,6 +4,7 @@ import { isTrashedPath } from '../content/store.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import type { ContentStore } from '../content/store.ts';
 import { postObjectId } from './guids.ts';
+import { withoutTrailingSlash } from '../util/url.ts';
 
 /**
  * Why the public site does not serve a document at its URL.
@@ -131,7 +132,7 @@ export function permalinkOfObjectId(objectId: string, baseUrl: string): string |
   }
   if (url.origin !== base.origin || url.search !== '') return undefined;
 
-  const directory = base.pathname === '/' ? '' : base.pathname.replace(/\/$/, '');
+  const directory = withoutTrailingSlash(base.pathname);
   if (directory !== '' && !url.pathname.startsWith(`${directory}/`)) return undefined;
 
   const pathname = url.pathname.slice(directory.length);

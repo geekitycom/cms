@@ -1,5 +1,5 @@
 import { rewriteAttributes } from './html-attributes.ts';
-import { absoluteUrl } from './negotiate.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 const SRCSET_URL = /(^|,)(\s*)([^\s,]+)/g;
 

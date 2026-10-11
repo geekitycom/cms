@@ -1,3 +1,4 @@
+import { withoutTrailingSlash } from '@geekity/cms/plugin';
 /**
  * One call to a provider that speaks the OpenAI chat-completions API
  * (decision-33), made with Node's built-in `fetch`, and what came of it as a
@@ -85,7 +86,7 @@ export async function chatCompletion(
   let response: Response;
   let text: string;
   try {
-    response = await fetch(`${connection.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+    response = await fetch(`${withoutTrailingSlash(connection.baseUrl)}/chat/completions`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${apiKey}`,

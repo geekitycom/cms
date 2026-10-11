@@ -2,7 +2,7 @@
  * `@geekity/cms/plugin`: the whole of what a plugin may import from core
  * (decision-33). Types, the host API version, {@link definePlugin}, which is
  * an identity function, and the key rule a plugin writing comments names them
- * by. A bundled plugin inlines what it uses of these.
+ * by, and the trailing-slash pair. A bundled plugin inlines what it uses of these.
  *
  * Removing or reshaping anything here is a breaking change to `@geekity/cms`
  * (decision-6), and bumps {@link HOST_API_VERSION}.
@@ -41,6 +41,12 @@ export type { KvStore };
  * {@link webmentionKey} of its source and the post's permalink.
  */
 export { repliesKey, webmentionKey } from './web/feed-source.ts';
+
+/**
+ * The trailing-slash pair core joins URLs with, so a base URL with a doubled
+ * trailing slash means the same thing to a plugin as to the site.
+ */
+export { withoutTrailingSlash, withTrailingSlash } from './util/url.ts';
 
 /** What a plugin's route handler is handed. */
 export interface PluginRequestContext {

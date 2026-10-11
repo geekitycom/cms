@@ -10,6 +10,7 @@ import type { MailService } from '../mail/service.ts';
 import { moderationLink, unsubscribeLink } from './links.ts';
 import { hasOptedOut } from './optouts.ts';
 import { isBatchedMode, notificationMode, notificationRecipients } from './preferences.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The two messages a comment sets off, and the rules about who gets them.
@@ -86,7 +87,7 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
     const document = store.getBySlug(comment.slug);
     return {
       title: document === undefined ? comment.slug : postLabel(document, options.cited),
-      url: absolute(comment.permalink, config.baseUrl),
+      url: absoluteUrl(comment.permalink, config.baseUrl),
     };
   }
 
@@ -140,7 +141,7 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
         comment: commentIn(comment),
         post: postOf(comment),
         actions,
-        queueUrl: absolute('/admin/comments', config.baseUrl),
+        queueUrl: absoluteUrl('/admin/comments', config.baseUrl),
       };
 
       for (const recipient of recipients) {
@@ -187,13 +188,4 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
       });
     },
   };
-}
-
-/** A site-root path as an absolute URL. */
-function absolute(pathname: string, baseUrl: string): string {
-  try {
-    return new URL(pathname, baseUrl).href;
-  } catch {
-    return pathname;
-  }
 }

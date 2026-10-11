@@ -21,6 +21,7 @@ import { readEnabledPlugins } from './enabled.ts';
 import { PLUGIN_ENTRY, PLUGIN_MANIFEST, readPluginManifest, scanPluginFolders } from './folder.ts';
 import type { PluginManifest } from './folder.ts';
 import { PACKAGE_NAME } from './registry.ts';
+import { withTrailingSlash } from '../util/url.ts';
 
 export const DEFAULT_REGISTRY = 'https://registry.npmjs.org/';
 
@@ -195,7 +196,7 @@ export interface PackageDocument {
 }
 
 export async function fetchPackument(name: string, registry: string): Promise<PackageDocument> {
-  const url = new URL(name.replace('/', '%2f'), registry.endsWith('/') ? registry : `${registry}/`);
+  const url = new URL(name.replace('/', '%2f'), withTrailingSlash(registry));
   let response: Response;
   try {
     response = await fetch(url, {

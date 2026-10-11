@@ -1,5 +1,6 @@
 import type { ModerationAction } from '../comments/moderate.ts';
 import { signNotificationToken } from './tokens.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The URLs a notification puts in front of somebody, and what they cost.
@@ -91,8 +92,7 @@ function linkTo(
   subject: string,
   lifetimeSeconds: number,
 ): string {
-  const base = context.baseUrl.endsWith('/') ? context.baseUrl : `${context.baseUrl}/`;
-  const url = new URL(pathname, base);
+  const url = new URL(absoluteUrl(pathname, context.baseUrl));
   url.searchParams.set(NOTIFICATION_FIELDS.action, action);
   url.searchParams.set(
     NOTIFICATION_FIELDS.token,

@@ -1,4 +1,3 @@
-import { absoluteUrl } from '../web/negotiate.ts';
 import {
   decodedPath,
   findPathRedirect,
@@ -8,6 +7,8 @@ import {
 } from '../web/redirects.ts';
 import type { RedirectTable } from '../web/redirects.ts';
 import { elementsIn, parseHtml } from './html.ts';
+import { absoluteUrl } from '../util/url.ts';
+import { withoutTrailingSlash } from '../util/url.ts';
 
 /**
  * Which pages a post talks about.
@@ -251,7 +252,7 @@ function sitePathOf(target: string, baseUrl: string): string | undefined {
   const base = new URL(baseUrl);
   if (url.origin !== base.origin) return undefined;
 
-  const directory = base.pathname.replace(/\/$/, '');
+  const directory = withoutTrailingSlash(base.pathname);
   if (url.pathname !== directory && !url.pathname.startsWith(`${directory}/`)) return undefined;
 
   return decodedPath(url.pathname.slice(directory.length) || '/');

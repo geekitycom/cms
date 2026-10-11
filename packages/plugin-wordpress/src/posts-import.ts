@@ -13,6 +13,7 @@ import type {
 import { wordPressMedia } from './media.ts';
 import { convertBody } from './wordpress-html.ts';
 import type { WordPressExport, WordPressItem } from './wxr.ts';
+import { withTrailingSlash } from '@geekity/cms/plugin';
 
 type Disposition =
   | {
@@ -171,13 +172,12 @@ export interface Home {
 
 export function homeOf(exported: WordPressExport): Home {
   const base = exported.site.baseBlogUrl || exported.site.link;
-  const url = new URL(base.endsWith('/') ? base : `${base}/`);
+  const url = new URL(withTrailingSlash(base));
   return { href: url.href, pathname: url.pathname };
 }
 
 function sameUrl(a: string, b: string): boolean {
-  const slash = (url: string) => (url.endsWith('/') ? url : `${url}/`);
-  return slash(a) === slash(b);
+  return withTrailingSlash(a) === withTrailingSlash(b);
 }
 
 /** Whether WordPress gave the item a pretty URL rather than its `?p=` or `?page_id=` one. */

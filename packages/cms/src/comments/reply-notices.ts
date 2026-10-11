@@ -9,8 +9,9 @@ import { authorHref, userForAuthor } from '../web/authors.ts';
 import { commentNames } from '../web/conversation.ts';
 import type { ConversationReader } from '../web/conversation.ts';
 import { isServed } from '../web/documents.ts';
-import { absoluteUrl } from '../web/negotiate.ts';
+
 import type { CommentNotices } from './records.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * The reply notice for a reply post (TASK-326): a commenter who asked to hear

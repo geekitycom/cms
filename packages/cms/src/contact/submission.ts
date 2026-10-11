@@ -7,6 +7,7 @@ import { contactProblems } from './form.ts';
 import type { ContactForm, ContactProblems } from './form.ts';
 import { addContactMessage } from './records.ts';
 import type { ContactMessage } from './records.ts';
+import { absoluteUrl } from '../util/url.ts';
 
 /**
  * What happens between somebody pressing Send and a message existing.
@@ -172,7 +173,7 @@ async function ask(
       post: {
         slug: options.document.slug,
         title: postLabel(options.document),
-        url: absolute(options.document.permalink, options.baseUrl),
+        url: absoluteUrl(options.document.permalink, options.baseUrl),
       },
       address: options.address,
       userAgent: options.userAgent,
@@ -223,15 +224,6 @@ function asComment(
     url: null,
     notify: false,
   };
-}
-
-/** A site-root path as an absolute URL. */
-function absolute(pathname: string, baseUrl: string): string {
-  try {
-    return new URL(pathname, baseUrl).href;
-  } catch {
-    return pathname;
-  }
 }
 
 function refused(refusal: ContactRefusal): ContactOutcome {
