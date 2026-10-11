@@ -9,7 +9,6 @@
 import type { KvStore } from '@fedify/fedify';
 import type { Context, MiddlewareHandler } from 'hono';
 
-import { listUsers } from '../site/users.ts';
 import type { GeekityEnv } from '../env.ts';
 import { userActor, userByUsername } from '../federation/actor.ts';
 import { lastOutboxCursor, outboxPage } from '../federation/federation.ts';
@@ -23,6 +22,7 @@ import type {
   PluginFederationContext,
   PluginFederationMiddleware,
 } from '../plugin.ts';
+import { listUsers } from '../site/users.ts';
 import { authorNames } from '../web/authors.ts';
 import type { PluginRegistry } from './registry.ts';
 import { pluginSite } from './site.ts';

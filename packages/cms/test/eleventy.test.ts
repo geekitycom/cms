@@ -20,7 +20,6 @@ import { after, before, describe, it } from 'node:test';
 
 import Eleventy from '@11ty/eleventy';
 
-import { createUser, listUsers, setUserProfile } from '../src/site/users.ts';
 import {
   categoryHref,
   DEFAULT_TAXONOMY_BASES,
@@ -30,6 +29,7 @@ import {
   siteAuthorName,
 } from '../src/index.ts';
 import type { Document, FrontPageSlugs, SiteData } from '../src/index.ts';
+import { createUser, listUsers, setUserProfile } from '../src/site/users.ts';
 
 /** Where a site's Eleventy build would be run from: the fixtures project root. */
 const PROJECT_DIR = fileURLToPath(new URL('./fixtures/', import.meta.url));

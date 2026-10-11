@@ -1,6 +1,6 @@
+import type { FieldError } from './form-error.ts';
 import { geoPoint, geoProblem, parseGeoUri, postLocation } from './location.ts';
 import type { GeoPoint, PostLocation } from './location.ts';
-import type { FieldError } from './form-error.ts';
 
 export interface LocationForm {
   geo: string;

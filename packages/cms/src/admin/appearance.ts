@@ -22,13 +22,14 @@ import path from 'node:path';
 import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
+import { formFromSettings, SETTINGS_FIELDS, settingsProblems } from '../site/settings-form.ts';
+import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
+import { trimmedField } from '../util/forms.ts';
 import { listSiteThemes, PACKAGED_THEME_DIR, readTheme } from '../web/themes.ts';
 import type { Theme } from '../web/themes.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
-import { formFromSettings, SETTINGS_FIELDS, settingsProblems } from '../site/settings-form.ts';
-import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /** Where the themes screen lives, and where its one form posts. */
@@ -131,8 +132,7 @@ export function mountAppearanceScreen(
 
   app.post(THEMES_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const value = body[THEME_FIELD];
-    const submitted = (typeof value === 'string' ? value : '').trim();
+    const submitted = trimmedField(body, THEME_FIELD);
 
     // The same check the settings pages run over this field, given the same
     // themes directory, so a name forged into this form is refused by the rule

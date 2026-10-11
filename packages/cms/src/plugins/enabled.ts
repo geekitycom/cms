@@ -4,8 +4,8 @@
  * a plugin's public settings can sit beside `enabled` and survive a disable.
  */
 
-import { parseSiteJson, readSiteJson, siteDataPath } from '../site/site-json.ts';
 import { updateFileAtomically } from '../files/atomic.ts';
+import { parseSiteJson, readSiteJson, siteDataPath } from '../site/site-json.ts';
 import { isRecord } from '../util/guards.ts';
 
 export const PLUGINS_KEY = 'plugins';

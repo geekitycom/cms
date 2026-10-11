@@ -367,7 +367,7 @@ function emailCheck(key: TextField, problem: string): FormSettingRow<string>['ch
     form[key].trim() !== '' && !EMAIL_PATTERN.test(form[key].trim()) ? problem : undefined;
 }
 
-export const SETTING_ROWS: SettingRows = {
+const SETTING_ROWS: SettingRows = {
   title: text('title', 'title', {
     empty: 'default',
     check: (form) => (form.title.trim() === '' ? 'The site needs a title.' : undefined),

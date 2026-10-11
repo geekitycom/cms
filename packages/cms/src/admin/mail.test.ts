@@ -10,6 +10,8 @@ import { startTestSmtpServer } from '../mail/__testing__/smtp-server.ts';
 import type { TestSmtpServer } from '../mail/__testing__/smtp-server.ts';
 import { writeMailCredentials } from '../mail/credentials.ts';
 import type { MailCredentials } from '../mail/credentials.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import {
@@ -20,8 +22,6 @@ import {
   MAIL_TEST_FIELDS,
   MAIL_TEST_PATH,
 } from './settings-email.ts';
-import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
 
 /** The page the credential lives on: Email, beside the From line it sends as. */
 const SETTINGS_PATH = EMAIL_SETTINGS.path;

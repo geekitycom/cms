@@ -11,9 +11,9 @@ import { after, describe, it } from 'node:test';
 import { Hono } from 'hono';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
-import { createUser } from '../site/users.ts';
 import type { GeekityEnv } from '../env.ts';
 import type { Cms } from '../index.ts';
+import { createUser } from '../site/users.ts';
 import { requireBearer } from './bearer.ts';
 import type { Guard } from './bearer.ts';
 import type { AuthorizationCode } from './grants.ts';

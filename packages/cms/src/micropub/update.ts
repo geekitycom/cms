@@ -1,6 +1,6 @@
+import type { Document } from '../content/document.ts';
 import { formFor } from '../content/document-form.ts';
 import type { EditorForm } from '../content/document-form.ts';
-import type { Document } from '../content/document.ts';
 import { POST_KIND } from '../content/document-kind.ts';
 import type { DocumentKind } from '../content/document-kind.ts';
 import { eventOf } from '../content/event.ts';

@@ -14,6 +14,8 @@ import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
+import { DEFAULT_SITE_SETTINGS } from './settings.ts';
+import type { SiteSettings } from './settings.ts';
 import {
   formFromSettings,
   SETTINGS_FIELDS,
@@ -21,8 +23,6 @@ import {
   settingsProblems,
 } from './settings-form.ts';
 import type { CarriedSettings, SettingsForm } from './settings-form.ts';
-import { DEFAULT_SITE_SETTINGS } from './settings.ts';
-import type { SiteSettings } from './settings.ts';
 import {
   settingsFromSiteJson,
   siteDataPath,

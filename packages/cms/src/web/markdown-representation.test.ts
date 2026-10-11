@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createUser, setUserProfile } from '../site/users.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 
 /**
  * A page's Markdown carries its place in the site: the front matter a Markdown

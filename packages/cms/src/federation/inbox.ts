@@ -15,10 +15,10 @@ import {
 } from '@fedify/vocab';
 import type { Actor } from '@fedify/vocab';
 
-import { listUsers, primaryUser } from '../site/users.ts';
-import type { User } from '../site/users.ts';
 import type { NewFollower } from '../admin/store.ts';
 import { holdOutbound } from '../dev-mode.ts';
+import { listUsers, primaryUser } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import { actorId, senderKeyPairs, userByUsername } from './actor.ts';
 import { documentAuthor, isFederatedDocument, postByObjectId } from './article.ts';
 import { postObjectId } from '../web/guids.ts';

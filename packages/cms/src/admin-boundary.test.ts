@@ -1,7 +1,6 @@
 /**
- * Content and Micropub are authoring inputs the admin sits on top of, not the
- * other way round (TASK-364): the users, settings and uploads they share live
- * outside `admin/`, which keeps only its screens and routes.
+ * Content, media, Micropub and site data sit below the admin, not the other
+ * way round: `admin/` keeps only its screens and routes.
  */
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -10,12 +9,12 @@ import { describe, it } from 'node:test';
 
 const SOURCE_ROOT = import.meta.dirname;
 
-const BELOW_ADMIN = ['content', 'micropub'];
+const BELOW_ADMIN = ['content', 'media', 'micropub', 'site'];
 
 const ADMIN_IMPORT = /from\s+['"](?:\.\.\/)+admin\//;
 
 describe('the admin boundary', () => {
-  it('keeps content/ and micropub/ from importing admin/', () => {
+  it('keeps the modules below the admin from importing admin/', () => {
     const offenders: string[] = [];
     for (const directory of BELOW_ADMIN) {
       for (const entry of readdirSync(path.join(SOURCE_ROOT, directory), {

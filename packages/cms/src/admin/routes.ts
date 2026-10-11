@@ -15,7 +15,7 @@ import {
   verifyUserPassword,
 } from '../site/users.ts';
 import type { User } from '../site/users.ts';
-import { adminColorScheme } from './admin-theme.ts';
+import { adminColorScheme } from '../site/admin-theme.ts';
 import { mountAppearanceScreen } from './appearance.ts';
 import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
 import { credentialProblem } from './credentials.ts';

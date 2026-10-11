@@ -8,16 +8,16 @@ import { DatabaseSync } from 'node:sqlite';
 import { Writable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 
-import { createUser, DuplicateUsernameError } from './site/users.ts';
-import { migrateUsersToFile } from './admin/users-migration.ts';
 import { credentialProblem, emailProblem } from './admin/credentials.ts';
 import { openAdminStore } from './admin/store.ts';
 import type { AdminStore } from './admin/store.ts';
+import { migrateUsersToFile } from './admin/users-migration.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
 import { resolveConfig } from './config.ts';
 import type { ResolvedConfig } from './config.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './comments/records.ts';
 import { stripStoredUploads } from './content/metadata/sweep.ts';
+import { createUser, DuplicateUsernameError } from './site/users.ts';
 import { UPLOAD_DIRECTORY } from './web/assets.ts';
 import { createCms } from './index.ts';
 import type { GeekityConfig } from './config.ts';

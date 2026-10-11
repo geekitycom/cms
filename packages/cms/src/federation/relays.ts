@@ -4,13 +4,13 @@ import type { Context } from '@fedify/fedify';
 import { Accept, Follow, PUBLIC_COLLECTION, Reject, Undo } from '@fedify/vocab';
 import type { Recipient } from '@fedify/vocab';
 
-import { primaryUser } from '../site/users.ts';
-import type { User } from '../site/users.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import type { AdminStore, Relay } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import type { ContentStore } from '../content/store.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { primaryUser } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { actorId, senderKeyPairs } from './actor.ts';

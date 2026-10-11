@@ -1,5 +1,5 @@
-import type { User } from '../site/users.ts';
 import type { SiteSettings } from '../site/settings.ts';
+import type { User } from '../site/users.ts';
 import { withoutTrailingSlash, withTrailingSlash } from '../util/url.ts';
 import { authorHref, parseAuthorPath, userForAuthor } from '../web/authors.ts';
 

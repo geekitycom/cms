@@ -1,6 +1,5 @@
 import path from 'node:path';
 
-import { listUsers } from '../site/users.ts';
 import { MODERATION_ACTIONS } from '../comments/moderate.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import type { AdminStore, PostComment } from '../admin/store.ts';
@@ -9,6 +8,7 @@ import type { ContentStore } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { MailService } from '../mail/service.ts';
+import { listUsers } from '../site/users.ts';
 import { messageOf } from '../util/errors.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { COMMENTS_NOTIFICATION } from './comments.ts';

@@ -10,13 +10,13 @@
  * the CMS models; and lang, visibility, comments, exclude and contact, which
  * every kind has.
  */
-import { trimmedField } from '../util/forms.ts';
+import { stringOrEmpty, trimmedField } from '../util/forms.ts';
 import { SYNDICATE_TO_FRONT_MATTER_KEY, syndicateToOf } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
 import {
-  CITED_ALT_FRONT_MATTER_KEY,
   citationOf,
   citationText,
+  CITED_ALT_FRONT_MATTER_KEY,
   PREVIEW_FRONT_MATTER_KEY,
   previewShown,
 } from './citation.ts';
@@ -119,11 +119,6 @@ function setOrDelete(extra: Record<string, unknown>, key: string, value: unknown
   else extra[key] = value;
 }
 
-function textOf(extra: Readonly<Record<string, unknown>>, key: string): string {
-  const value = extra[key];
-  return typeof value === 'string' ? value : '';
-}
-
 function answered(name: string, value: string | undefined): Record<string, unknown[]> {
   return value === undefined || value === '' ? {} : { [name]: [value] };
 }
@@ -199,7 +194,7 @@ function citationField(
 }
 
 const RSVP_FIELD: PostField = {
-  read: (document) => ({ rsvp: textOf(document.extra, RSVP_FRONT_MATTER_KEY) }),
+  read: (document) => ({ rsvp: stringOrEmpty(document.extra[RSVP_FRONT_MATTER_KEY]) }),
   submitted: (body) => ({ rsvp: trimmedField(body, RSVP_FRONT_MATTER_KEY) }),
   write: (extra, form) => {
     setOrDelete(extra, RSVP_FRONT_MATTER_KEY, rsvpValue(form.rsvp));
@@ -264,7 +259,7 @@ const PREVIEW_FIELD: PostField = {
 };
 
 const CITED_ALT_FIELD: PostField = {
-  read: (document) => ({ citedAlt: textOf(document.extra, CITED_ALT_FRONT_MATTER_KEY) }),
+  read: (document) => ({ citedAlt: stringOrEmpty(document.extra[CITED_ALT_FRONT_MATTER_KEY]) }),
   submitted: (body) => ({ citedAlt: trimmedField(body, CITED_ALT_FRONT_MATTER_KEY) }),
   write: (extra, form) => {
     setOrDelete(
@@ -277,7 +272,7 @@ const CITED_ALT_FIELD: PostField = {
 
 const READ_FIELD: PostField = {
   read: (document) => ({
-    readStatus: textOf(document.extra, READ_STATUS_FRONT_MATTER_KEY),
+    readStatus: stringOrEmpty(document.extra[READ_STATUS_FRONT_MATTER_KEY]),
     readOf: readOfForm(readWork(document.extra[READ_OF_FRONT_MATTER_KEY])),
   }),
   submitted: (body) => ({

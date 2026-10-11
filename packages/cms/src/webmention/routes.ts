@@ -1,8 +1,8 @@
 import type { Hono } from 'hono';
 
-import { readSiteSettings } from '../site/site-json.ts';
 import { clientAddress } from '../admin/throttle.ts';
 import type { GeekityEnv } from '../env.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { checkWebmentionRequest } from './receive.ts';

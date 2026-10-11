@@ -6,12 +6,12 @@ import { writeMailCredentials } from '../mail/credentials.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import type { OutgoingMail } from '../mail/provider.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { createUser, verifyUserPassword } from '../site/users.ts';
 import { browser, csrfField, FIRST_ADMIN, sandbox, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { FORGOT_PATH, RESET_PATH, resetLink } from './recovery.ts';
-import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
 
 /**
  * Forgetting a password and getting back in.

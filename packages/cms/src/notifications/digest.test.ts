@@ -4,9 +4,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createUser, setUserNotification, setUserNotificationMode } from '../site/users.ts';
-import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
 import { COMMENT_FIELDS } from '../comments/submission.ts';
 import { COMMENT_POST_PATH } from '../comments/form.ts';
 import { readComments, updateComment } from '../comments/records.ts';
@@ -15,6 +12,9 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import type { OutgoingMail } from '../mail/provider.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
+import { createUser, setUserNotification, setUserNotificationMode } from '../site/users.ts';
 import { createCommentDigest, readDigestTimes } from './digest.ts';
 import type { NotificationTimers } from './digest.ts';
 

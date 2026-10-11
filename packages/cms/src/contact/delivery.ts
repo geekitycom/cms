@@ -1,6 +1,6 @@
-import { listUsers } from '../site/users.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import type { MailService } from '../mail/service.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { listUsers } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import type { ContactMessage } from './records.ts';
 

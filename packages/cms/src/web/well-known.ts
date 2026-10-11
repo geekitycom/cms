@@ -1,12 +1,12 @@
 import type { Hono } from 'hono';
 
 import { LOGIN_PATH } from '../admin/routes.ts';
-import { effectiveBaseUrl } from '../site/settings.ts';
-import { readSiteSettings } from '../site/site-json.ts';
-import type { SiteSettings } from '../site/settings.ts';
 import { editUserPath } from '../admin/users.ts';
 import { signedInAccount } from '../comments/viewer.ts';
 import type { GeekityEnv } from '../env.ts';
+import { effectiveBaseUrl } from '../site/settings.ts';
+import type { SiteSettings } from '../site/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 
 /** RFC 9116's location for a site's vulnerability disclosure contacts. */
 export const SECURITY_TXT_PATH = '/.well-known/security.txt';

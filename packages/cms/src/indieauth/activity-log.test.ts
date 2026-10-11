@@ -14,8 +14,8 @@ import { after, describe, it, mock } from 'node:test';
 import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { statuses } from '../admin/__testing__/statuses.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { findUser } from '../site/users.ts';
 import type { Cms } from '../index.ts';
+import { findUser } from '../site/users.ts';
 import type { HostLookup } from '../webmention/public-address.ts';
 import {
   ACTIVITY_LOG_FILE,

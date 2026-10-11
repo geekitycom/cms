@@ -80,13 +80,13 @@ import {
 } from '@fedify/vocab';
 
 import { writeUsers } from '../src/admin/__testing__/users.ts';
-import { listUsers, setUserActorId } from '../src/site/users.ts';
-import { DEFAULT_SITE_SETTINGS } from '../src/site/settings.ts';
-import { writeSiteJson } from '../src/site/site-json.ts';
 import { loadActorKeyPairs, writeActorKeyFile } from '../src/federation/keys.ts';
 import { addFollower, readFollowers, readInboxLog } from '../src/federation/records.ts';
 import { createCms } from '../src/index.ts';
 import type { Cms } from '../src/index.ts';
+import { DEFAULT_SITE_SETTINGS } from '../src/site/settings.ts';
+import { writeSiteJson } from '../src/site/site-json.ts';
+import { listUsers, setUserActorId } from '../src/site/users.ts';
 
 /** The package root, so the fixture is found however the script was invoked. */
 const PACKAGE_DIR = path.resolve(fileURLToPath(import.meta.url), '../..');

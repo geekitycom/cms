@@ -3,8 +3,8 @@ import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
 import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
-import { stripMetadata, UnreadableMetadataError } from '../content/metadata/index.ts';
 import type { UploadMediaType } from '../content/media.ts';
+import { stripMetadata, UnreadableMetadataError } from '../content/metadata/index.ts';
 import { slugify } from '../content/slug.ts';
 import type { AltText } from '../images/alt-text.ts';
 import { generateImageVariants } from '../images/variants.ts';

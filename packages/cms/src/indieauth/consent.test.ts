@@ -10,8 +10,8 @@ import { after, describe, it } from 'node:test';
 
 import { browser, csrfField, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { createUser } from '../site/users.ts';
 import type { Cms } from '../index.ts';
+import { createUser } from '../site/users.ts';
 import type { HostLookup } from '../webmention/public-address.ts';
 
 const box = sandbox();

@@ -5,10 +5,10 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import type { Cms } from '../index.ts';
+import { deleteUpload, mentionsUpload, resolveUpload } from '../media/library.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import { statuses } from './__testing__/statuses.ts';
 import type { Browser } from './__testing__/harness.ts';
-import { deleteUpload, mentionsUpload, resolveUpload } from '../media/library.ts';
 
 const box = sandbox();
 after(() => box.cleanup());

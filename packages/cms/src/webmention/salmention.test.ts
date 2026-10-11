@@ -5,8 +5,6 @@ import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
 import { resolvePublic } from '../admin/__testing__/harness.ts';
-import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
 import type { PostComment } from '../admin/store.ts';
 import { addComment, rebuildCommentIndexes, updateComment } from '../comments/records.ts';
 import type { NewComment } from '../comments/records.ts';
@@ -14,6 +12,8 @@ import { seedActorKeys } from '../federation/__testing__/keys.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import type { CommentChecker } from '../comments/submission.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { sourceEntry } from './microformats.ts';
 import { WEBMENTION_PATH } from './routes.ts';
 import { SALMENTION_LIMIT } from './service.ts';

@@ -26,10 +26,10 @@ import { after, describe, it } from 'node:test';
 
 import sharp from 'sharp';
 
-import { createUser, setUserProfile } from '../site/users.ts';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import { generateImageVariants } from '../images/variants.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 import { PACKAGED_THEME_DIR } from './themes.ts';
 
 const box = sandbox();

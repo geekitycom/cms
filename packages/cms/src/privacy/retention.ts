@@ -1,7 +1,5 @@
 import type { AdminStore, CommentRecord, RedactedField } from '../admin/store.ts';
 import { REDACTED_FIELDS } from '../admin/store.ts';
-import { readSiteSettings } from '../site/site-json.ts';
-import { retentionPolicyOf } from '../site/settings.ts';
 import { commentSlugs, rewriteComments } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import {
@@ -12,6 +10,8 @@ import {
 import type { ContactMessage } from '../contact/records.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
+import { retentionPolicyOf } from '../site/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { outlived } from './policy.ts';

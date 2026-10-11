@@ -17,14 +17,14 @@ import {
 } from '../mail/credentials.ts';
 import type { MailCredentials } from '../mail/credentials.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
+import { EMAIL_PATTERN } from '../site/setting-values.ts';
+import type { SiteSettings } from '../site/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { flash } from './flash.ts';
+import { SETTINGS_PATH } from './settings.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { MountSettingsOptions, SettingsPage } from './settings-page.ts';
-import { EMAIL_PATTERN } from '../site/setting-values.ts';
-import { readSiteSettings } from '../site/site-json.ts';
-import { SETTINGS_PATH } from './settings.ts';
-import type { SiteSettings } from '../site/settings.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**

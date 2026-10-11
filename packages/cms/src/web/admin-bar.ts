@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import type { Environment } from 'nunjucks';
 
-import { adminColorScheme } from '../admin/admin-theme.ts';
+import { adminColorScheme } from '../site/admin-theme.ts';
 import { ADMIN_ASSET_PREFIX } from '../admin/assets.ts';
 import { editorPath, newEditorPath, PAGE_SCREENS, POST_SCREENS } from '../admin/documents.ts';
 import type { DocumentScreens } from '../admin/documents.ts';

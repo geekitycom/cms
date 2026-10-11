@@ -3,12 +3,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { SETTINGS_FIELDS } from '../site/settings-form.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
 import { ALL_SETTINGS_PAGES, SETTINGS_PAGES } from './settings-pages.ts';
-import { readSiteSettings } from '../site/site-json.ts';
-import { SETTINGS_FIELDS } from '../site/settings-form.ts';
 
 const box = sandbox();
 after(() => box.cleanup());

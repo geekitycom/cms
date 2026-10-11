@@ -1,5 +1,7 @@
 import path from 'node:path';
 
+import { adminTheme } from './admin-theme.ts';
+import type { AdminTheme } from './admin-theme.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { revokeTokensForUser } from '../indieauth/tokens.ts';
 import {
@@ -10,8 +12,6 @@ import {
 } from '../notifications/preferences.ts';
 import { messageOf } from '../util/errors.ts';
 import { relText } from '../web/navigation.ts';
-import { adminTheme } from '../admin/admin-theme.ts';
-import type { AdminTheme } from '../admin/admin-theme.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
 
 /**
@@ -550,8 +550,8 @@ export class ConflictingActorIdError extends Error {
  *
  * The id has to be unique across the file, and the check is inside the write
  * for the reason {@link createUser}'s duplicate check is: it is a rule about
- * the file rather than about one user. Returns whether anything changed, so a
- * second run with the same id writes nothing.
+ * the file rather than about one user. Returns whether the id
+ * changed, so a second run with the same id reports nothing new.
  */
 export async function setUserActorId(input: {
   /** Which site's users file to write. */

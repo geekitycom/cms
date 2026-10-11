@@ -5,13 +5,13 @@ import { after, describe, it } from 'node:test';
 
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { findUser } from '../site/users.ts';
-import { updateSiteSettings } from '../site/site-json.ts';
 import { KEPT_PROPERTIES_FILE } from '../content/kept-properties.ts';
 import type { LocationSharing } from '../content/location.ts';
 import { LOCATIONS_FILE } from '../content/locations.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
+import { updateSiteSettings } from '../site/site-json.ts';
+import { findUser } from '../site/users.ts';
 import { feedPathUnder } from '../web/feed-source.ts';
 import { OEMBED_PATH } from '../web/oembed.ts';
 

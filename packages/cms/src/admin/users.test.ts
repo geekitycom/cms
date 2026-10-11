@@ -7,6 +7,8 @@ import {
   notificationWanted,
 } from '../notifications/preferences.ts';
 import { writeMailCredentials } from '../mail/credentials.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import {
   countUsers,
   createUser,
@@ -15,8 +17,6 @@ import {
   setUserProfile,
   verifyUserPassword,
 } from '../site/users.ts';
-import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
 import { writeUsers } from './__testing__/users.ts';
 import {
   browser,

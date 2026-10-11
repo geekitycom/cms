@@ -14,9 +14,9 @@ import { fileURLToPath } from 'node:url';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
-import { findUser } from '../site/users.ts';
-import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
+import { issueTokens } from '../indieauth/tokens.ts';
+import { findUser } from '../site/users.ts';
 
 remoteHostsDoNotExist();
 

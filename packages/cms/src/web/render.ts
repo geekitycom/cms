@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 
 import type { Environment } from 'nunjucks';
 
-import type { User } from '../site/users.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { citationsOf, citesAnImage, previewShown } from '../content/citation.ts';
@@ -16,6 +15,7 @@ import { visibilityOf } from '../content/visibility.ts';
 import { devModeOn } from '../dev-mode.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
 import { iconSetting, siteIcons } from '../images/icons.ts';
+import type { User } from '../site/users.ts';
 import { LLMS_TXT_PATH } from './llms.ts';
 import { archiveMonths, archiveOpen } from './archive.ts';
 import { authorContext, siteAuthorContext } from './authors.ts';

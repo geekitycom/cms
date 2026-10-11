@@ -1,5 +1,3 @@
-import type { User } from '../site/users.ts';
-import { readSiteJson, readSiteSettings } from '../site/site-json.ts';
 import { avatarHref } from '../avatars/avatars.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { ActorProfile, AdminStore, InboxActivity, PostComment } from '../admin/store.ts';
@@ -18,6 +16,8 @@ import {
   replyFrom,
   REPLY_ACTIVITY_TYPE,
 } from '../federation/replies.ts';
+import { readSiteJson, readSiteSettings } from '../site/site-json.ts';
+import type { User } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorContext, authorFeedHref, profileContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';

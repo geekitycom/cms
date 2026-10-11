@@ -12,8 +12,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
-import { createUser } from '../site/users.ts';
 import type { Cms } from '../index.ts';
+import { createUser } from '../site/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());

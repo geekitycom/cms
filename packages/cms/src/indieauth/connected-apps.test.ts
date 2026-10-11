@@ -10,10 +10,10 @@ import { after, describe, it } from 'node:test';
 import { flashes } from '../admin/__testing__/flash.ts';
 import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { createUser } from '../site/users.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { saveSettings } from '../admin/__testing__/settings.ts';
 import type { Cms } from '../index.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { createUser } from '../site/users.ts';
 import type { AuthorizationCode } from './grants.ts';
 import { issueTokens, listTokens, recordUse } from './tokens.ts';
 

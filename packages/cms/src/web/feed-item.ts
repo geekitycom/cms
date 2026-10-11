@@ -1,4 +1,3 @@
-import type { User } from '../site/users.ts';
 import { CITATION_VERBS, citationsOf, citedPageName, previewShown } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf } from '../content/enclosure.ts';
@@ -9,6 +8,7 @@ import { RSVP_PHRASES, rsvpLine, rsvpOf } from '../content/rsvp.ts';
 import type { Photo } from '../content/photo.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
 import { replyTarget, showsTitle } from '../content/post-type.ts';
+import type { User } from '../site/users.ts';
 import { decodeEntities } from '../util/html.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorName, siteAuthorName } from './authors.ts';

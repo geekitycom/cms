@@ -10,12 +10,12 @@ import { after, describe, it } from 'node:test';
 import sharp from 'sharp';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
-import { createUser } from '../site/users.ts';
-import { listUploads } from '../media/library.ts';
 import type { GeekityConfig } from '../config.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
+import { listUploads } from '../media/library.ts';
+import { createUser } from '../site/users.ts';
 
 const box = sandbox();
 after(() => box.cleanup());

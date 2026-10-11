@@ -8,10 +8,10 @@ import { after, describe, it } from 'node:test';
 import { exportJwk } from '@fedify/fedify';
 
 import { writeUsers } from '../admin/__testing__/users.ts';
-import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { ACTOR_KEY_ALGORITHMS, actorKeyFile, actorKeysDir, loadActorKeyPairs } from './keys.ts';
 
 /**

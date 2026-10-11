@@ -1,8 +1,8 @@
 import type { Hono, MiddlewareHandler } from 'hono';
 
+import type { GeekityEnv } from '../env.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
 import { readSiteSettings } from '../site/site-json.ts';
-import type { GeekityEnv } from '../env.ts';
 import { parseAuthorPath } from '../web/authors.ts';
 import { requestPath } from '../web/routes.ts';
 

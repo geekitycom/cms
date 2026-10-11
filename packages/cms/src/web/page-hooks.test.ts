@@ -4,11 +4,11 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
-import { deleteUser, listUsers } from '../site/users.ts';
 import { sessionCookieName } from '../admin/session.ts';
 import { enterDevMode, leaveDevMode } from '../dev-mode.ts';
 import { createMailTemplates } from '../mail/templates.ts';
 import type { Cms } from '../index.ts';
+import { deleteUser, listUsers } from '../site/users.ts';
 import { createThemeSource } from './themes.ts';
 
 const box = sandbox();

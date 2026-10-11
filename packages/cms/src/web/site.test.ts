@@ -5,10 +5,10 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { brotliDecompressSync } from 'node:zlib';
 
-import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { avatarHref } from '../avatars/avatars.ts';
+import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];

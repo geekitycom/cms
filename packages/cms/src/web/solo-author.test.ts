@@ -6,9 +6,9 @@ import { after, describe, it } from 'node:test';
 
 import { mf2 } from 'microformats-parser';
 
-import { createUser, setUserProfile } from '../site/users.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 
 /**
  * Who the site is, from the outside (TASK-180, TASK-192).

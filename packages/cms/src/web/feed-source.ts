@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 
-import type { User } from '../site/users.ts';
 import type { Document } from '../content/document.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
+import type { User } from '../site/users.ts';
 import type { SiteData } from './context.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 

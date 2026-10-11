@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createUser } from '../site/users.ts';
 import { openAdminStore } from '../admin/store.ts';
 import type { AdminStore, PostComment } from '../admin/store.ts';
 import { openContentStore } from '../content/store.ts';
@@ -14,6 +13,7 @@ import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import { createMailService } from '../mail/service.ts';
 import { createCommentNotifier } from '../notifications/comments.ts';
+import { createUser } from '../site/users.ts';
 import {
   addComment,
   commentEmailsFile,

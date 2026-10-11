@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import { browser, FIRST_ADMIN, sandbox, signedIn, signIn } from '../admin/__testing__/harness.ts';
+import { hashPassword } from './passwords.ts';
 import {
   ConflictingActorIdError,
   countUsers,
@@ -25,7 +26,6 @@ import {
   usersFile,
   verifyUserPassword,
 } from './users.ts';
-import { hashPassword } from './passwords.ts';
 
 const temporaryDirs: string[] = [];
 const box = sandbox();

@@ -2,14 +2,14 @@ import { existsSync } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 
-import { listUsers } from '../site/users.ts';
-import { LANGUAGE_TAG_PATTERN } from '../site/setting-values.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { commentsFile } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { HandleLearner } from '../federation/handles.ts';
 import { readAltTexts, undescribedImages, undescribedPhotos } from '../images/alt-text.ts';
 import type { UndescribedImage } from '../images/alt-text.ts';
+import { LANGUAGE_TAG_PATTERN } from '../site/setting-values.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { listUsers } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorNames, userForAuthor } from '../web/authors.ts';
 import { isServed } from '../web/documents.ts';

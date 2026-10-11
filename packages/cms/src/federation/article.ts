@@ -24,10 +24,6 @@ import {
 import { Temporal as TemporalPolyfill } from '@js-temporal/polyfill';
 import path from 'node:path';
 
-import { listUsers, primaryUser } from '../site/users.ts';
-import type { User } from '../site/users.ts';
-import { readSiteSettings } from '../site/site-json.ts';
-import { taxonomyBasesFromSettings } from '../site/settings.ts';
 import { CITATION_VERBS, citationsOf, citedPageName } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { readLine, readOf } from '../content/read.ts';
@@ -49,6 +45,10 @@ import type { PostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
 import { respellTags } from '../content/tags.ts';
 import { visibilityOf } from '../content/visibility.ts';
+import { taxonomyBasesFromSettings } from '../site/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { listUsers, primaryUser } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import { escapeAttribute, escapeText } from '../util/html.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { userForAuthor } from '../web/authors.ts';
