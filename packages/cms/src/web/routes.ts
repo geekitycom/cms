@@ -28,11 +28,11 @@ import {
   UPLOAD_ASSET_PREFIX,
 } from './assets.ts';
 import { COMMENT_NOTICE_PARAM, COMMENT_REPLY_PARAM } from '../comments/form.ts';
-import { devModeOn } from '../dev-mode.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import { commentNoticeFor, commentReplyTarget, mountComments } from '../comments/routes.ts';
 import { commenterOf } from '../comments/viewer.ts';
 import type { CommentViewer } from '../comments/form.ts';
+import { devModeOn } from '../dev-mode.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import { mountContact } from '../contact/routes.ts';
 import { mountPingbacks, pingbackEndpointFor } from '../webmention/pingback.ts';

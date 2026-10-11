@@ -5,7 +5,6 @@ import type { Environment } from 'nunjucks';
 
 import type { User } from '../admin/accounts.ts';
 import type { ResolvedConfig } from '../config.ts';
-import { devModeOn } from '../dev-mode.ts';
 import type { Document } from '../content/document.ts';
 import { citationsOf, citesAnImage, previewShown } from '../content/citation.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
@@ -14,6 +13,7 @@ import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { visibilityOf } from '../content/visibility.ts';
+import { devModeOn } from '../dev-mode.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
 import { iconSetting, siteIcons } from '../images/icons.ts';
 import { LLMS_TXT_PATH } from './llms.ts';
