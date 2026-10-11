@@ -111,6 +111,11 @@ export function resolveNothing(hostname: string): Promise<readonly string[]> {
   return Promise.reject(new Error(`a test resolves no names: ${hostname}`));
 }
 
+/** A host lookup that puts every name on one public address, for a test whose stubbed web must be reached. */
+export function resolvePublic(): Promise<readonly string[]> {
+  return Promise.resolve(['203.0.113.7']);
+}
+
 /** The value of a `Set-Cookie` for `name`, or `undefined`. */
 export function cookieValue(response: Response, name: string): string | undefined {
   for (const header of response.headers.getSetCookie()) {

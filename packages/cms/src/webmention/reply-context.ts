@@ -228,7 +228,7 @@ async function readPage(url: string, limits: Limits): Promise<PageRead> {
     },
     headersOnly: IMAGE_TYPE,
   });
-  if (!fetched.ok) return fetched;
+  if (!fetched.ok) return { ok: false, reason: fetched.reason };
   if (fetched.read === 'headers') return { ok: true, image: fetched.url };
   const root = parseHtml(new TextDecoder().decode(fetched.body));
   const entry = fetched.truncated ? undefined : citedEntry(root, fetched.url);

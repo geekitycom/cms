@@ -3,7 +3,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, beforeEach, describe, it } from 'node:test';
 
-import { csrfField, FIRST_ADMIN, sandbox, signedIn } from './admin/__testing__/harness.ts';
+import {
+  csrfField,
+  FIRST_ADMIN,
+  resolvePublic,
+  sandbox,
+  signedIn,
+} from './admin/__testing__/harness.ts';
 import type { Browser } from './admin/__testing__/harness.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './admin/settings.ts';
 import { addFollower } from './federation/records.ts';
@@ -130,6 +136,7 @@ async function site(
     watch: options.watch ?? false,
     now: () => now,
     federation: { queue: null, allowPrivateAddress: true },
+    hostLookup: resolvePublic,
     indexNow: { batchMs: 0, backoffMs: () => 0 },
   });
   const agent = await signedIn(cms);

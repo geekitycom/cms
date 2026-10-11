@@ -55,6 +55,8 @@ export interface PublicHeaders extends PublicResponse {
 export interface PublicRefusal {
   readonly ok: false;
   readonly reason: string;
+  /** The status the server answered with, when it answered with an error. */
+  readonly status?: number;
 }
 
 /** What one fetch came to. */
@@ -73,8 +75,77 @@ export async function fetchPublic(
   target: string,
   options: FetchPublicOptions,
 ): Promise<PublicFetch> {
-  const { signal } = options;
+  const answered = await requestPublic(target, {
+    lookup: options.lookup,
+    signal: options.signal,
+    headers: { accept: options.accept },
+  });
+  if (!answered.ok) return answered;
+  const { response, url } = answered;
+
+  try {
+    if (!response.ok) {
+      await response.body?.cancel();
+      return { ok: false, reason: `answered ${String(response.status)}`, status: response.status };
+    }
+
+    const type = response.headers.get('content-type') ?? '';
+    const link = response.headers.get('link');
+    if (options.headersOnly?.test(type) === true) {
+      await response.body?.cancel();
+      return { ok: true, read: 'headers', url, type, link };
+    }
+    if (!options.contentType.pattern.test(type)) {
+      await response.body?.cancel();
+      return refuse(`not ${options.contentType.name}`);
+    }
+
+    const read = await readWithin(response, options.maxBytes, options.overflow ?? 'refuse');
+    if (read === undefined) return refuse(`larger than ${String(options.maxBytes)} bytes`);
+
+    return { ok: true, read: 'body', url, type, link, ...read };
+  } catch (thrown) {
+    return refuse(messageOf(thrown));
+  }
+}
+
+/** What {@link requestPublic} sends. */
+export interface RequestPublicOptions {
+  /** How host names are resolved before they are trusted. */
+  readonly lookup: HostLookup;
+  /** Ends the exchange when it aborts. */
+  readonly signal: AbortSignal;
+  /** `GET` unless it says otherwise. */
+  readonly method?: string;
+  /** Headers besides the `User-Agent`, which is always the site's. */
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body?: string;
+}
+
+/** The response a guarded request ended at, unread, whatever its status. */
+export interface PublicAnswer {
+  readonly ok: true;
+  readonly response: Response;
+  /** The URL the response came from, after any redirects. */
+  readonly url: string;
+}
+
+/**
+ * Send one request to `target` and follow its redirects by hand, refusing any
+ * hop that is not on a public host. A 303, or a 301 or 302 after a POST, turns
+ * the request into a GET without a body, as `fetch` itself would.
+ */
+export async function requestPublic(
+  target: string,
+  options: RequestPublicOptions,
+): Promise<PublicAnswer | PublicRefusal> {
   let at = target;
+  let method = options.method ?? 'GET';
+  let body = options.body ?? null;
+  let headers: Record<string, string> = {
+    ...options.headers,
+    'user-agent': WEBMENTION_USER_AGENT,
+  };
 
   try {
     for (let hop = 0; ; hop += 1) {
@@ -85,9 +156,11 @@ export async function fetchPublic(
       }
 
       const response = await fetch(url, {
-        headers: { accept: options.accept, 'user-agent': WEBMENTION_USER_AGENT },
+        method,
+        headers,
+        body,
         redirect: 'manual',
-        signal,
+        signal: options.signal,
       });
 
       const location = response.headers.get('location');
@@ -95,33 +168,28 @@ export async function fetchPublic(
         await response.body?.cancel();
         if (hop === MAX_REDIRECTS) return refuse('too many redirects');
         at = new URL(location, url).href;
+        if (
+          response.status === 303 ||
+          (method === 'POST' && (response.status === 301 || response.status === 302))
+        ) {
+          method = 'GET';
+          body = null;
+          headers = withoutContentType(headers);
+        }
         continue;
       }
 
-      if (!response.ok) {
-        await response.body?.cancel();
-        return refuse(`answered ${String(response.status)}`);
-      }
-
-      const type = response.headers.get('content-type') ?? '';
-      const link = response.headers.get('link');
-      if (options.headersOnly?.test(type) === true) {
-        await response.body?.cancel();
-        return { ok: true, read: 'headers', url: url.href, type, link };
-      }
-      if (!options.contentType.pattern.test(type)) {
-        await response.body?.cancel();
-        return refuse(`not ${options.contentType.name}`);
-      }
-
-      const read = await readWithin(response, options.maxBytes, options.overflow ?? 'refuse');
-      if (read === undefined) return refuse(`larger than ${String(options.maxBytes)} bytes`);
-
-      return { ok: true, read: 'body', url: url.href, type, link, ...read };
+      return { ok: true, response, url: url.href };
     }
   } catch (thrown) {
-    return refuse(thrown instanceof Error ? thrown.message : String(thrown));
+    return refuse(messageOf(thrown));
   }
+}
+
+function withoutContentType(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name]) => name.toLowerCase() !== 'content-type'),
+  );
 }
 
 /** An http or https URL with a host, or `undefined`. */
@@ -177,4 +245,8 @@ async function readWithin(
 
 function refuse(reason: string): PublicRefusal {
   return { ok: false, reason };
+}
+
+function messageOf(thrown: unknown): string {
+  return thrown instanceof Error ? thrown.message : String(thrown);
 }

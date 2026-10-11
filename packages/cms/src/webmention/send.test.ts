@@ -5,12 +5,13 @@ import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { csrfField, FIRST_ADMIN, resolveNothing, signedIn } from '../admin/__testing__/harness.ts';
+import { csrfField, FIRST_ADMIN, signedIn } from '../admin/__testing__/harness.ts';
 import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { seedActorKeys } from '../federation/__testing__/keys.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import type { HostLookup } from './public-address.ts';
 
 remoteHostsDoNotExist();
 
@@ -37,6 +38,18 @@ const NEWS_COPY = 'https://news.example/en/blog.example/2026/03/hello-world';
 const NEWS_DE = 'https://news.example/de';
 const NEWS_DE_ENDPOINT = 'https://news.example/de/webmention';
 
+/** A page whose endpoint is on this network. */
+const SNEAKY = 'https://sneaky.example/page';
+const INSIDE_ENDPOINT = 'http://wm.internal.example/wm';
+
+/** A page whose endpoint redirects onto this network. */
+const BOUNCE = 'https://bounce.example/page';
+const BOUNCE_ENDPOINT = 'https://bounce.example/wm';
+
+/** Every name resolves to a public address but the ones inside this network. */
+const lookup: HostLookup = (hostname) =>
+  Promise.resolve(hostname.endsWith('.internal.example') ? ['10.0.0.5'] : ['203.0.113.7']);
+
 /** The targets file the syndication tests declare. */
 const TARGETS_FILE = JSON.stringify([
   { id: 'news', name: 'News', url: NEWS, tag: 'news' },
@@ -58,6 +71,7 @@ interface Sent {
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 const sent: Sent[] = [];
+const requested: string[] = [];
 
 let verifyingAgainst: Cms | undefined;
 const verified: { source: string; status: number }[] = [];
@@ -72,6 +86,7 @@ after(async () => {
 
 beforeEach(() => {
   sent.length = 0;
+  requested.length = 0;
   verified.length = 0;
   verifyingAgainst = undefined;
 });
@@ -83,8 +98,12 @@ function routeTheWeb(): () => void {
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const request = new Request(input, init);
     const url = request.url;
+    requested.push(url);
 
     if (request.method === 'POST') {
+      if (url === BOUNCE_ENDPOINT) {
+        return new Response(null, { status: 307, headers: { location: INSIDE_ENDPOINT } });
+      }
       if (url === NEWS_ENDPOINT || url === NEWS_DE_ENDPOINT) {
         const body = new URLSearchParams(await request.text());
         sent.push({
@@ -120,6 +139,8 @@ function routeTheWeb(): () => void {
       return html(`<link rel="webmention" href="${BROKEN_ENDPOINT}">`);
     }
     if (url === QUIET) return html('<p>Just a page.</p>');
+    if (url === SNEAKY) return html(`<link rel="webmention" href="${INSIDE_ENDPOINT}">`);
+    if (url === BOUNCE) return html(`<link rel="webmention" href="${BOUNCE_ENDPOINT}">`);
     if (url === NEWS) return html(`<link rel="webmention" href="${NEWS_ENDPOINT}">`);
     if (url === NEWS_DE) return html(`<link rel="webmention" href="${NEWS_DE_ENDPOINT}">`);
 
@@ -174,7 +195,7 @@ async function site(
     port: 0,
     watch: false,
     baseUrl: BASE_URL,
-    hostLookup: resolveNothing,
+    hostLookup: lookup,
   });
   started.push(cms);
   await cms.sync();
@@ -279,6 +300,36 @@ describe('sending webmentions when a post is published', () => {
 
     assert.deepEqual(sent, []);
     assert.deepEqual(cms.admin.listSentWebmentions('hello-world'), []);
+  });
+});
+
+describe('sending to an endpoint inside this network', () => {
+  it('posts nothing to an advertised endpoint that resolves to a private address', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+
+    await publish(agent, `A [sneaky one](${SNEAKY}).`);
+    await cms.webmentions.settled();
+
+    assert.ok(!requested.includes(INSIDE_ENDPOINT), 'the private endpoint was never asked');
+    const [outcome] = cms.admin.listSentWebmentions('hello-world');
+    assert.equal(outcome?.status, 'failed');
+    assert.equal(outcome.endpoint, INSIDE_ENDPOINT);
+    assert.match(outcome.error ?? '', /not a public address/);
+  });
+
+  it('does not follow an endpoint that redirects to a private address', async () => {
+    const cms = await site();
+    const agent = await signedIn(cms);
+
+    await publish(agent, `A [bouncing one](${BOUNCE}).`);
+    await cms.webmentions.settled();
+
+    assert.ok(requested.includes(BOUNCE_ENDPOINT), 'the public endpoint was asked');
+    assert.ok(!requested.includes(INSIDE_ENDPOINT), 'the redirect was not followed');
+    const [outcome] = cms.admin.listSentWebmentions('hello-world');
+    assert.equal(outcome?.status, 'failed');
+    assert.match(outcome.error ?? '', /not a public address/);
   });
 });
 

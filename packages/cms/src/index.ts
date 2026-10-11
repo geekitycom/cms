@@ -1349,7 +1349,6 @@ export {
   linksTo,
   parseHtml,
   rawTextOf,
-  readCapped,
   SEND_TIMEOUT_MS,
   sourceEntry,
   textOf,

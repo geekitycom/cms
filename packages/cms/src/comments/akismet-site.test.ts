@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
+import { resolvePublic } from '../admin/__testing__/harness.ts';
 import { writeAkismetKey } from './akismet.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
@@ -144,6 +145,7 @@ async function site(
     baseUrl: BASE_URL,
     watch: false,
     now: () => NOW,
+    hostLookup: resolvePublic,
     ...options.config,
   });
   started.push(instance);

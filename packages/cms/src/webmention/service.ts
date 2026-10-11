@@ -21,7 +21,8 @@ import type { DocumentChange } from '../content/sync.ts';
 import { isFederatedDocument } from '../federation/article.ts';
 import { permalinkOfObjectId } from '../web/documents.ts';
 import { absoluteUrl } from '../web/negotiate.ts';
-import { discoverEndpoint, WEBMENTION_USER_AGENT } from './discovery.ts';
+import { discoverEndpoint } from './discovery.ts';
+import { requestPublic } from './fetch-public.ts';
 import { externalLinks, externalTarget } from './links.ts';
 import { verifyWebmention } from './receive.ts';
 import { selectedTargets, syndicationCopies, syndicationTargetsReader } from './syndication.ts';
@@ -89,7 +90,7 @@ export interface CreateWebmentionServiceOptions {
    */
   config: Pick<
     ResolvedConfig,
-    'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'now' | 'commentChecker'
+    'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'now' | 'commentChecker' | 'hostLookup'
   >;
   /** Where failures are reported. Defaults to `console`. */
   logger?: WebmentionLogger | undefined;
@@ -204,40 +205,36 @@ export function createWebmentionService(
    * page made a copy of the post, where the copy is.
    */
   async function tell(slug: string, source: string, target: string): Promise<Told> {
-    const endpoint = await discoverEndpoint(target);
+    const endpoint = await discoverEndpoint(target, config.hostLookup);
     if (endpoint === undefined) {
       // Not a failure: most of the web takes no webmentions, and recording it
       // is what tells a person why nothing went.
       return { sent: record(slug, source, target, null, 'none', null) };
     }
 
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/x-www-form-urlencoded',
-          accept: 'text/html, application/json;q=0.9, */*;q=0.8',
-          'user-agent': WEBMENTION_USER_AGENT,
-        },
-        body: new URLSearchParams({ source, target }).toString(),
-        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-      });
+    const answered = await requestPublic(endpoint, {
+      lookup: config.hostLookup,
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'text/html, application/json;q=0.9, */*;q=0.8',
+      },
+      body: new URLSearchParams({ source, target }).toString(),
+    });
 
-      if (!response.ok) {
-        const error = `${endpoint} answered ${String(response.status)}`;
-        logger.warn(`Could not send a webmention for ${source}: ${error}`);
-        return { sent: record(slug, source, target, endpoint, 'failed', error) };
-      }
-
-      return {
-        sent: record(slug, source, target, endpoint, 'sent', null),
-        copy: copyOf(response, endpoint),
-      };
-    } catch (thrown) {
-      const error = messageOf(thrown);
+    const failed = (error: string): Told => {
       logger.warn(`Could not send a webmention for ${source}: ${error}`);
       return { sent: record(slug, source, target, endpoint, 'failed', error) };
-    }
+    };
+    if (!answered.ok) return failed(answered.reason);
+    const { response, url } = answered;
+    if (!response.ok) return failed(`${endpoint} answered ${String(response.status)}`);
+
+    return {
+      sent: record(slug, source, target, endpoint, 'sent', null),
+      copy: copyOf(response, url),
+    };
   }
 
   /** Write one outcome down. */
@@ -461,6 +458,7 @@ export function createWebmentionService(
             // worth ignoring.
             notices: options.notifications,
             now: config.now(),
+            lookup: config.hostLookup,
             logger,
           });
 

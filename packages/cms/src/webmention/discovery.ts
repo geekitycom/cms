@@ -1,4 +1,6 @@
+import { fetchPublic } from './fetch-public.ts';
 import { elementsIn, hasRel, parseHtml } from './html.ts';
+import type { HostLookup } from './public-address.ts';
 
 /**
  * Finding out where to send a webmention.
@@ -24,45 +26,33 @@ export const WEBMENTION_USER_AGENT = 'Geekity/1.0 (+https://github.com/andrewshe
  * The Webmention endpoint a page advertises, or `undefined` when it advertises
  * none — which is most pages, and is not an error.
  *
- * Nothing throws: a target that times out, refuses the connection or answers
- * an error is a target with no endpoint as far as the sender is concerned, and
- * the caller records that rather than stopping.
+ * Nothing throws: a target that times out, refuses the connection, answers
+ * an error or is not on a public host is a target with no endpoint as far as
+ * the sender is concerned, and the caller records that rather than stopping.
  */
-export async function discoverEndpoint(target: string): Promise<string | undefined> {
-  let response: Response;
-  try {
-    response = await fetch(target, {
-      headers: { accept: 'text/html, */*;q=0.8', 'user-agent': WEBMENTION_USER_AGENT },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
-    });
-  } catch {
-    return undefined;
-  }
+export async function discoverEndpoint(
+  target: string,
+  lookup: HostLookup,
+): Promise<string | undefined> {
+  const fetched = await fetchPublic(target, {
+    lookup,
+    signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+    maxBytes: DISCOVERY_MAX_BYTES,
+    overflow: 'truncate',
+    accept: 'text/html, */*;q=0.8',
+    contentType: { pattern: HTML, name: 'HTML' },
+    headersOnly: NOT_HTML,
+  });
+  if (!fetched.ok) return undefined;
 
-  if (!response.ok) return undefined;
+  const header = endpointInHeader(fetched.link, fetched.url);
+  if (header !== undefined || fetched.read === 'headers') return header;
 
-  // Where the request ended up, which is what a relative endpoint is relative
-  // to. `Response.url` is empty for a response nothing redirected, in which
-  // case the URL asked for is the URL arrived at.
-  const arrivedAt = response.url === '' ? target : response.url;
-
-  const header = endpointInHeader(response.headers.get('link'), arrivedAt);
-  if (header !== undefined) {
-    // The body is not read, but it has to be released or the socket is held
-    // until the process notices.
-    await response.body?.cancel();
-    return header;
-  }
-
-  const type = response.headers.get('content-type') ?? '';
-  if (!/^\s*(text\/html|application\/xhtml\+xml)/i.test(type)) {
-    await response.body?.cancel();
-    return undefined;
-  }
-
-  return endpointInHtml(await readCapped(response), arrivedAt);
+  return endpointInHtml(new TextDecoder().decode(fetched.body), fetched.url);
 }
+
+const HTML = /^\s*(text\/html|application\/xhtml\+xml)/i;
+const NOT_HTML = /^(?!\s*(text\/html|application\/xhtml\+xml))/i;
 
 /** The endpoint one or more `Link` headers name, or `undefined`. */
 export function endpointInHeader(header: string | null, base: string): string | undefined {
@@ -150,43 +140,4 @@ function resolve(href: string, base: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-/**
- * A response body, up to {@link DISCOVERY_MAX_BYTES}.
- *
- * A cap rather than `response.text()`, because the page at the other end is a
- * stranger's and nothing stops it being a gigabyte. What is read is more than
- * enough markup for a `<link>` in the head.
- */
-export async function readCapped(response: Response): Promise<string> {
-  const body = response.body;
-  if (body === null) return '';
-
-  const reader = (body as ReadableStream<Uint8Array>).getReader();
-  const decoder = new TextDecoder();
-  const chunks: string[] = [];
-  let read = 0;
-
-  try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      const value: Uint8Array = chunk.value;
-      read += value.length;
-      chunks.push(decoder.decode(value, { stream: true }));
-      if (read >= DISCOVERY_MAX_BYTES) break;
-    }
-  } catch {
-    // A body that stops mid-stream is whatever arrived before it stopped.
-  } finally {
-    await reader.cancel().catch(ignore);
-  }
-
-  chunks.push(decoder.decode());
-  return chunks.join('');
-}
-
-function ignore(): void {
-  // Deliberately empty: a body that will not close is not worth an error.
 }
