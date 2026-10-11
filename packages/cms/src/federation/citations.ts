@@ -9,7 +9,7 @@ import type { Context } from '@fedify/fedify';
 import { Announce, isActor, Like, PUBLIC_COLLECTION, Undo } from '@fedify/vocab';
 import type { Actor } from '@fedify/vocab';
 
-import type { User } from '../admin/accounts.ts';
+import type { User } from '../site/users.ts';
 import { citationOf } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { postTypeOf, replyTarget } from '../content/post-type.ts';

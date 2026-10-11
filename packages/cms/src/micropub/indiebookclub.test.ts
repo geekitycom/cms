@@ -13,7 +13,7 @@ import matter from 'gray-matter';
 import { mf2 } from 'microformats-parser';
 
 import { FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
-import { findUser } from '../admin/accounts.ts';
+import { findUser } from '../site/users.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
 

@@ -1,4 +1,4 @@
-import type { User } from '../admin/accounts.ts';
+import type { User } from '../site/users.ts';
 import { CITATION_VERBS, citationsOf, citedPageName, previewShown } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { enclosureOf } from '../content/enclosure.ts';

@@ -5,7 +5,7 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
-import { readSiteSettings, writeSiteJson } from './settings.ts';
+import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
 
 /**
  * The Permalinks settings page: the URLs the archives live at, and the ones

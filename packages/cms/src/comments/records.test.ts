@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createUser } from '../admin/accounts.ts';
+import { createUser } from '../site/users.ts';
 import { openAdminStore } from '../admin/store.ts';
 import type { AdminStore, PostComment } from '../admin/store.ts';
 import { openContentStore } from '../content/store.ts';

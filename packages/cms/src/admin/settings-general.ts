@@ -12,11 +12,13 @@ import { iconSetting, siteIcons } from '../images/icons.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { userForAuthor } from '../web/authors.ts';
 import { CREATIVE_COMMONS_LICENSES } from '../web/license.ts';
-import { listUsers } from './accounts.ts';
+import { listUsers } from '../site/users.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';
-import { effectiveBaseUrl, readSiteJson, SETTINGS_FIELDS } from './settings.ts';
-import type { SiteSettings } from './settings.ts';
+import { effectiveBaseUrl } from '../site/settings.ts';
+import { readSiteJson } from '../site/site-json.ts';
+import { SETTINGS_FIELDS } from '../site/settings-form.ts';
+import type { SiteSettings } from '../site/settings.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /** The General settings page. */

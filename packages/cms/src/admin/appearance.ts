@@ -27,13 +27,8 @@ import type { Theme } from '../web/themes.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
-import {
-  formFromSettings,
-  readSiteSettings,
-  SETTINGS_FIELDS,
-  settingsProblems,
-  updateSiteSettings,
-} from './settings.ts';
+import { formFromSettings, SETTINGS_FIELDS, settingsProblems } from '../site/settings-form.ts';
+import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /** Where the themes screen lives, and where its one form posts. */

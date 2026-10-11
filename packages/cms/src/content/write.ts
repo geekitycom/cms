@@ -2,8 +2,9 @@ import { existsSync } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 
-import { listUsers } from '../admin/accounts.ts';
-import { LANGUAGE_TAG_PATTERN, readSiteSettings } from '../admin/settings.ts';
+import { listUsers } from '../site/users.ts';
+import { LANGUAGE_TAG_PATTERN } from '../site/setting-values.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { commentsFile } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { HandleLearner } from '../federation/handles.ts';

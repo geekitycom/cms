@@ -12,7 +12,7 @@
  */
 import path from 'node:path';
 
-import { LANGUAGE_TAG_PATTERN } from '../admin/settings.ts';
+import { LANGUAGE_TAG_PATTERN } from '../site/setting-values.ts';
 import { rowIndexes, trimmedField } from '../util/forms.ts';
 import { findUpload, UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import type { Document } from './document.ts';

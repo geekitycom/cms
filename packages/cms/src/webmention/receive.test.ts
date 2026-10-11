@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import { createUser } from '../admin/accounts.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
+import { createUser } from '../site/users.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import type { PostComment } from '../admin/store.ts';
 import type { CommentSubmission, CommentVerdict } from '../comments/submission.ts';
 import { createCms } from '../index.ts';

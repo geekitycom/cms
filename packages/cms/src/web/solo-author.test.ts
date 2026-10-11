@@ -6,7 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import { mf2 } from 'microformats-parser';
 
-import { createUser, setUserProfile } from '../admin/accounts.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 

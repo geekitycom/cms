@@ -15,7 +15,7 @@ import vm from 'node:vm';
 
 import sharp from 'sharp';
 
-import { createUser, setUserProfile } from '../admin/accounts.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 import { sandbox, signIn } from '../admin/__testing__/harness.ts';
 import { generateImageVariants } from '../images/variants.ts';
 import type { Cms, GeekityConfig } from '../index.ts';

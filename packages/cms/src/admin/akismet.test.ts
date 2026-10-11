@@ -15,7 +15,8 @@ import {
   AKISMET_REMOVE,
   DISCUSSION_SETTINGS,
 } from './settings-discussion.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './settings.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 
 /** The page the key lives on: Discussion, beside what it checks. */
 const SETTINGS_PATH = DISCUSSION_SETTINGS.path;

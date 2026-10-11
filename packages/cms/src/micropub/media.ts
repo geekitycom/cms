@@ -3,8 +3,8 @@ import path from 'node:path';
 
 import type { Context, Hono } from 'hono';
 
-import { resolveUpload } from '../admin/media.ts';
-import { refusedUpload, storeUpload, UPLOAD_FIELD } from '../admin/uploads.ts';
+import { resolveUpload } from '../media/library.ts';
+import { refusedUpload, storeUpload, UPLOAD_FIELD } from '../media/uploads.ts';
 import type { GeekityEnv } from '../env.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { logMediaRequest } from '../indieauth/activity-log.ts';

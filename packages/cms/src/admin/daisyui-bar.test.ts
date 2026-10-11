@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { findUser, setUserAdminTheme } from './accounts.ts';
+import { findUser, setUserAdminTheme } from '../site/users.ts';
 import type { AdminTheme } from './admin-theme.ts';
 import { FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
 import { adminContentSecurityPolicy } from './headers.ts';

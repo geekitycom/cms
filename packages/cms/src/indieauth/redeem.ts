@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import type { User } from '../admin/accounts.ts';
+import type { User } from '../site/users.ts';
 import { avatarUrl } from '../federation/actor.ts';
 import type { AuthorizationCode, ExpiringStore } from './grants.ts';
 

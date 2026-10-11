@@ -20,7 +20,8 @@ import {
   MAIL_TEST_FIELDS,
   MAIL_TEST_PATH,
 } from './settings-email.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './settings.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 
 /** The page the credential lives on: Email, beside the From line it sends as. */
 const SETTINGS_PATH = EMAIL_SETTINGS.path;

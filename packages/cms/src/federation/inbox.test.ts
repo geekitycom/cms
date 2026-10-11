@@ -20,7 +20,8 @@ import {
 } from '@fedify/vocab';
 
 import { writeUsers } from '../admin/__testing__/users.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { enterDevMode, readDevModeRecord } from '../dev-mode.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
 import { createCms } from '../index.ts';

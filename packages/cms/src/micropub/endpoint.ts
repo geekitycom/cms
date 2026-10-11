@@ -1,16 +1,16 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
-import { listUsers } from '../admin/accounts.ts';
-import type { User } from '../admin/accounts.ts';
-import { deleteUpload } from '../admin/media.ts';
+import { listUsers } from '../site/users.ts';
+import type { User } from '../site/users.ts';
+import { deleteUpload } from '../media/library.ts';
 import {
   largestUploadLimit,
   refusedUpload,
   storeUpload,
   tooLargeMessage,
   UPLOAD_ENVELOPE_BYTES,
-} from '../admin/uploads.ts';
-import { readSiteSettings } from '../admin/settings.ts';
+} from '../media/uploads.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 
 import type { Document } from '../content/document.ts';
 import type { EditorForm } from '../content/document-form.ts';

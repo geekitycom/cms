@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { databaseFiles } from '../cache.ts';
 import { tiedErrors } from '../__testing__/form-errors.ts';
 import { createCms } from '../index.ts';

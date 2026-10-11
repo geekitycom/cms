@@ -5,7 +5,7 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings, settingsPageUrl } from './__testing__/settings.ts';
-import { readSiteSettings } from './settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 
 /**
  * The Discussion settings page: comments, webmentions, and the closing window.

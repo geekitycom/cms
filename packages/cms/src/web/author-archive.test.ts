@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createUser, setUserProfile } from '../admin/accounts.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 

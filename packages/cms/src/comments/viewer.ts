@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 
-import { findUserById } from '../admin/accounts.ts';
-import type { User } from '../admin/accounts.ts';
+import { findUserById } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import { sessionIdFrom } from '../admin/session.ts';
 import type { GeekityEnv } from '../env.ts';
 import { authorHref } from '../web/authors.ts';

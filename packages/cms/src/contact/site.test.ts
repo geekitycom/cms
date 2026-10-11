@@ -5,8 +5,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
-import { createUser } from '../admin/accounts.ts';
-import { readSiteSettings, writeSiteJson } from '../admin/settings.ts';
+import { createUser } from '../site/users.ts';
+import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
 import type { CommentSubmission, CommentVerdict } from '../comments/submission.ts';
 import { MAXIMUM_FORM_AGE_SECONDS, MINIMUM_SUBMIT_SECONDS } from '../forms/protection.ts';
 import { createCms } from '../index.ts';

@@ -1,6 +1,6 @@
 import type { Context, Hono } from 'hono';
 
-import { readSiteSettings } from '../admin/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { clientAddress } from '../admin/throttle.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { Document } from '../content/document.ts';

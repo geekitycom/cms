@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createUser, setUserNotification, setUserNotificationMode } from '../admin/accounts.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
+import { createUser, setUserNotification, setUserNotificationMode } from '../site/users.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { COMMENT_FIELDS } from '../comments/submission.ts';
 import { COMMENT_POST_PATH } from '../comments/form.ts';
 import { readComments, updateComment } from '../comments/records.ts';

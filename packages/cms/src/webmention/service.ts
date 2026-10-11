@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { readSiteSettings } from '../admin/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import type {
   AdminStore,
   ConversationWrite,

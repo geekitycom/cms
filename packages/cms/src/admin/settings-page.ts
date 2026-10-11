@@ -27,14 +27,14 @@ import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import {
   formFromSettings,
-  readSiteSettings,
   SETTINGS_FIELDS,
-  SETTINGS_PATH,
   settingsFromForm,
   settingsProblems,
-  updateSiteSettings,
-} from './settings.ts';
-import type { SettingsField, SettingsForm, SiteSettings } from './settings.ts';
+} from '../site/settings-form.ts';
+import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
+import { SETTINGS_PATH } from './settings.ts';
+import type { SettingsField, SettingsForm } from '../site/settings-form.ts';
+import type { SiteSettings } from '../site/settings.ts';
 
 /** What {@link mountSettingsPage} needs from the admin around it. */
 export interface MountSettingsOptions {

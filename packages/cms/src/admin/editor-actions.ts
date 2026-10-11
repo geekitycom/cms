@@ -34,7 +34,7 @@ import type { DocumentKind } from '../content/document-kind.ts';
 import { resolveEvent } from '../content/event-form.ts';
 import { submittedForm } from './documents.ts';
 import { PLUGINS_PATH } from './plugins.ts';
-import { readSiteSettings } from './settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 
 /** The id of the editor's box for each field a plugin's button can sit beside. */
 const FIELD_IDS: Readonly<Record<PluginEditorField, string>> = {

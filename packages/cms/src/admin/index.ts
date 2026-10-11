@@ -15,7 +15,6 @@ export {
   findUserByIdentifier,
   listUsers,
   primaryUser,
-  migrateUsersToFile,
   cleanProfile,
   setUserEmail,
   setUserPassword,
@@ -27,8 +26,9 @@ export {
   USERS_FILE_MODE,
   usersFile,
   verifyUserPassword,
-} from './accounts.ts';
-export type { CreateUserInput, ProfileLink, StoredUser, User, UserProfile } from './accounts.ts';
+} from '../site/users.ts';
+export { migrateUsersToFile } from './users-migration.ts';
+export type { CreateUserInput, ProfileLink, StoredUser, User, UserProfile } from '../site/users.ts';
 export {
   credentialProblem,
   emailProblem,
@@ -138,6 +138,10 @@ export {
   deleteUpload,
   describeUpload,
   listUploads,
+  mentionsUpload,
+  resolveUpload,
+} from '../media/library.ts';
+export {
   MEDIA_DELETE_PATH,
   MEDIA_FIELDS,
   MEDIA_PATH,
@@ -145,18 +149,11 @@ export {
   MEDIA_SECTION,
   MEDIA_UPLOAD_PATH,
   mediaPageUrl,
-  mentionsUpload,
   mountMediaScreen,
   referencesTo,
-  resolveUpload,
 } from './media.ts';
-export type {
-  DeleteUploadOptions,
-  MediaFile,
-  MediaReference,
-  MountMediaScreenOptions,
-  RemoveDerived,
-} from './media.ts';
+export type { DeleteUploadOptions, MediaFile, RemoveDerived } from '../media/library.ts';
+export type { MediaReference, MountMediaScreenOptions } from './media.ts';
 export { formatInTimezone } from './formatting.ts';
 export {
   adminContentSecurityPolicy,
@@ -176,7 +173,7 @@ export {
 } from './throttle.ts';
 export type { LoginThrottle, LoginThrottleOptions } from './throttle.ts';
 export { mountPreview, PREVIEW_PATH } from './preview.ts';
-export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from './passwords.ts';
+export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from '../site/passwords.ts';
 export {
   DASHBOARD_RECENT_POSTS,
   guard,
@@ -196,32 +193,35 @@ export type {
 } from './menu.ts';
 export {
   LANGUAGE_TAG_PATTERN,
-  DEFAULT_SITE_SETTINGS,
-  effectiveBaseUrl,
   EMAIL_PATTERN,
-  formFromSettings,
-  migrateSettingsToFile,
-  readSiteSettings,
-  SETTINGS_FIELD_NAMES,
-  SETTINGS_FIELDS,
-  SETTINGS_PATH,
-  settingsFromForm,
-  settingsFromSiteJson,
-  settingsProblems,
-  siteDataPath,
   normalizeRelayInbox,
   relayList,
+} from '../site/setting-values.ts';
+export { DEFAULT_SITE_SETTINGS, effectiveBaseUrl } from '../site/settings.ts';
+export {
+  formFromSettings,
+  SETTINGS_FIELD_NAMES,
+  SETTINGS_FIELDS,
+  settingsFromForm,
+  settingsProblems,
+} from '../site/settings-form.ts';
+export { migrateSettingsToFile } from './settings-migration.ts';
+export {
+  readSiteSettings,
+  settingsFromSiteJson,
+  siteDataPath,
   siteJsonFor,
   updateSiteSettings,
   writeSiteJson,
-} from './settings.ts';
+} from '../site/site-json.ts';
+export { SETTINGS_PATH } from './settings.ts';
 export type {
   CarriedSettings,
   SettingsField,
   SettingsForm,
   SettingsProblems,
-  SiteSettings,
-} from './settings.ts';
+} from '../site/settings-form.ts';
+export type { SiteSettings } from '../site/settings.ts';
 export { mountSettingsPage, settingsPagePath, settingsScreen } from './settings-page.ts';
 export type { MountSettingsOptions, SettingsPage, SubmittedBody } from './settings-page.ts';
 export { ALL_SETTINGS_PAGES, mountSettings, SETTINGS_PAGES } from './settings-pages.ts';
@@ -337,22 +337,20 @@ export {
   PACKAGED_ADMIN_DIR,
 } from './templates.ts';
 export type { CreateAdminTemplateEnvironmentOptions } from './templates.ts';
+export { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
 export {
-  mountUploads,
-  refuseOversizedUpload,
   refusedUpload,
   storeUpload,
   tooLargeMessage,
   uploadMarkdown,
   UPLOAD_ENVELOPE_BYTES,
   UPLOAD_FIELD,
-  UPLOADS_PATH,
-} from './uploads.ts';
+} from '../media/uploads.ts';
 export type {
   StoredUpload,
   StoreUploadOptions,
   UploadConfig,
   UploadMarkdownOptions,
   UploadRefusal,
-  UploadResult,
-} from './uploads.ts';
+} from '../media/uploads.ts';
+export type { UploadResult } from './uploads.ts';

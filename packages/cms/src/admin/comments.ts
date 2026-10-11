@@ -11,7 +11,7 @@ import { documentEditorPath, documentSite, PAGE_SCREENS, POST_SCREENS } from './
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
-import { readSiteSettings } from './settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { COMMENT_STATUSES } from './store.ts';
 import type { AdminStore, CommentStatus, PostComment } from './store.ts';

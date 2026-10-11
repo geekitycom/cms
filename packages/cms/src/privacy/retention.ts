@@ -1,6 +1,7 @@
 import type { AdminStore, CommentRecord, RedactedField } from '../admin/store.ts';
 import { REDACTED_FIELDS } from '../admin/store.ts';
-import { readSiteSettings, retentionPolicyOf } from '../admin/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { retentionPolicyOf } from '../site/settings.ts';
 import { commentSlugs, rewriteComments } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import {

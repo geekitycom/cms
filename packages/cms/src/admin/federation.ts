@@ -7,8 +7,8 @@ import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { GeekityEnv } from '../env.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { listUsers } from './accounts.ts';
-import type { User } from './accounts.ts';
+import { listUsers } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import { avatarUrl } from '../federation/actor.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
 import type { WebmentionReport } from '../webmention/service.ts';
@@ -25,7 +25,7 @@ import { postObjectId } from '../web/guids.ts';
 import { documentEditorPath, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { readSiteSettings } from './settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import type {
   Delivery,

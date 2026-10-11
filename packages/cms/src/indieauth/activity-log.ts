@@ -25,7 +25,7 @@ import path from 'node:path';
 
 import type { Context, MiddlewareHandler } from 'hono';
 
-import { findUserById } from '../admin/accounts.ts';
+import { findUserById } from '../site/users.ts';
 import type { GeekityEnv } from '../env.ts';
 import { readFileIfPresentSync, updateFileAtomically, withFileLock } from '../files/atomic.ts';
 import { messageOf } from '../util/errors.ts';

@@ -761,7 +761,7 @@ export interface AdminStore {
    *
    * Accounts live in `data/users.json` now (decision-9). This is the one read
    * left of the table they used to live in, so the first boot after the
-   * upgrade can write them out; `migrateUsersToFile` in `accounts.ts` is what
+   * upgrade can write them out; `migrateUsersToFile` in `users-migration.ts` is what
    * does it, ids and all, so a session that names a user still finds them.
    */
   legacyUsers(): LegacyUser[] | undefined;

@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { listUsers } from '../admin/accounts.ts';
+import { listUsers } from '../site/users.ts';
 import { MODERATION_ACTIONS } from '../comments/moderate.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import type { AdminStore, PostComment } from '../admin/store.ts';

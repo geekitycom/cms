@@ -1,4 +1,4 @@
-import { readSiteSettings } from './admin/settings.ts';
+import { readSiteSettings } from './site/site-json.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
 import { isMigratedArrival } from './content/migrated.ts';

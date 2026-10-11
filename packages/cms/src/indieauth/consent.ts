@@ -1,10 +1,11 @@
 import type { Context, Hono } from 'hono';
 
-import { findUserById, listUsers } from '../admin/accounts.ts';
-import type { User } from '../admin/accounts.ts';
+import { findUserById, listUsers } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import type { AdminRender } from '../admin/documents.ts';
 import { ADMIN_PREFIX } from '../admin/session.ts';
-import { effectiveBaseUrl, readSiteSettings } from '../admin/settings.ts';
+import { effectiveBaseUrl } from '../site/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { ADMIN_TEMPLATES } from '../admin/templates.ts';
 import type { GeekityEnv } from '../env.ts';
 import { stringOrEmpty } from '../util/forms.ts';

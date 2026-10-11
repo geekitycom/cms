@@ -13,7 +13,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createUser, setUserProfile } from '../admin/accounts.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createTemplateEnvironment } from './templates.ts';

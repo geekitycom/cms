@@ -4,9 +4,9 @@ import type { Context } from '@fedify/fedify';
 import { Activity, getTypeId, PUBLIC_COLLECTION } from '@fedify/vocab';
 import type { Actor, Object as ActivityObject, Recipient } from '@fedify/vocab';
 
-import { listUsers } from '../admin/accounts.ts';
-import type { User } from '../admin/accounts.ts';
-import { readSiteSettings } from '../admin/settings.ts';
+import { listUsers } from '../site/users.ts';
+import type { User } from '../site/users.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import type { AdminStore, Delivery, DeliveryStatus, Follower } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';

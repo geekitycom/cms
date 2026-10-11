@@ -14,7 +14,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createUser, setUserProfile } from './accounts.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import type { Cms } from '../index.ts';

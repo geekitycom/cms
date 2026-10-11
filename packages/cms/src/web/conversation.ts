@@ -1,5 +1,5 @@
-import type { User } from '../admin/accounts.ts';
-import { readSiteJson, readSiteSettings } from '../admin/settings.ts';
+import type { User } from '../site/users.ts';
+import { readSiteJson, readSiteSettings } from '../site/site-json.ts';
 import { avatarHref } from '../avatars/avatars.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { ActorProfile, AdminStore, InboxActivity, PostComment } from '../admin/store.ts';

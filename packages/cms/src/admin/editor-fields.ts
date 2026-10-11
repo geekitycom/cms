@@ -5,7 +5,7 @@ import type { PhotoRow } from '../content/photo-form.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
 import { uploadPath } from '../images/markup.ts';
 import { trimmedField } from '../util/forms.ts';
-import { listUploads } from './media.ts';
+import { listUploads } from '../media/library.ts';
 
 export const LOCATION_FIELDS = {
   geo: 'location-geo',

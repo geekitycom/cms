@@ -5,7 +5,7 @@ import { after, before, describe, it } from 'node:test';
 
 import { mf2 } from 'microformats-parser';
 
-import { createUser, setUserProfile } from '../admin/accounts.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 

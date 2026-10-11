@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
-import type { SiteSettings } from '../admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
+import type { SiteSettings } from '../site/settings.ts';
 import { writeMailCredentials } from './credentials.ts';
 import { createMemoryMailProvider } from './memory.ts';
 import type { MailProvider, OutgoingMail } from './provider.ts';

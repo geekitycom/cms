@@ -10,7 +10,8 @@ import { Accept, Application, CryptographicKey, Follow, Reject } from '@fedify/v
 import { csrfField, signIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { saveSettings as saveSettingsPage } from '../admin/__testing__/settings.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';

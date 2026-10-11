@@ -20,7 +20,7 @@ import { after, before, describe, it } from 'node:test';
 
 import Eleventy from '@11ty/eleventy';
 
-import { createUser, listUsers, setUserProfile } from '../src/admin/accounts.ts';
+import { createUser, listUsers, setUserProfile } from '../src/site/users.ts';
 import {
   categoryHref,
   DEFAULT_TAXONOMY_BASES,

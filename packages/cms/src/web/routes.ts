@@ -1,8 +1,9 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
-import { listUsers } from '../admin/accounts.ts';
-import type { User } from '../admin/accounts.ts';
-import { readSiteSettings, robotsPolicyOf } from '../admin/settings.ts';
+import { listUsers } from '../site/users.ts';
+import type { User } from '../site/users.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { robotsPolicyOf } from '../site/settings.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';

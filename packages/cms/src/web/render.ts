@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Environment } from 'nunjucks';
 
-import type { User } from '../admin/accounts.ts';
+import type { User } from '../site/users.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { citationsOf, citesAnImage, previewShown } from '../content/citation.ts';

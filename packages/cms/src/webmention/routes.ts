@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 
-import { readSiteSettings } from '../admin/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { clientAddress } from '../admin/throttle.ts';
 import type { GeekityEnv } from '../env.ts';
 import { stringOrEmpty } from '../util/forms.ts';

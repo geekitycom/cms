@@ -1,4 +1,4 @@
-import type { User } from '../admin/accounts.ts';
+import type { User } from '../site/users.ts';
 
 /**
  * Which notices a user wants, as a switchboard rather than a field per notice.

@@ -10,8 +10,8 @@ import { after, describe, it } from 'node:test';
 import sharp from 'sharp';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
-import { createUser } from '../admin/accounts.ts';
-import { listUploads } from '../admin/media.ts';
+import { createUser } from '../site/users.ts';
+import { listUploads } from '../media/library.ts';
 import type { GeekityConfig } from '../config.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';

@@ -4,7 +4,7 @@ import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { findUserById, findUserByIdentifier, setUserPassword } from './accounts.ts';
+import { findUserById, findUserByIdentifier, setUserPassword } from '../site/users.ts';
 import { passwordProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';

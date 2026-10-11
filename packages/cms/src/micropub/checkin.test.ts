@@ -5,8 +5,8 @@ import { after, describe, it } from 'node:test';
 
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { findUser } from '../admin/accounts.ts';
-import { updateSiteSettings } from '../admin/settings.ts';
+import { findUser } from '../site/users.ts';
+import { updateSiteSettings } from '../site/site-json.ts';
 import { KEPT_PROPERTIES_FILE } from '../content/kept-properties.ts';
 import type { LocationSharing } from '../content/location.ts';
 import { LOCATIONS_FILE } from '../content/locations.ts';

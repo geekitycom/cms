@@ -4,7 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
-import { findUser } from './accounts.ts';
+import { findUser } from '../site/users.ts';
 import { browser, csrfField, FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
 import { SETTINGS_PAGE_FORMS, settingsPageUrl } from './__testing__/settings.ts';
 import { classesOf } from './__testing__/markup.ts';

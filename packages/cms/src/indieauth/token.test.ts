@@ -10,7 +10,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signIn } from '../admin/__testing__/harness.ts';
-import { createUser } from '../admin/accounts.ts';
+import { createUser } from '../site/users.ts';
 import type { Cms } from '../index.ts';
 import type { HostLookup } from '../webmention/public-address.ts';
 import { ACCESS_TOKEN_LIFETIME_MS, verifyAccessToken } from './tokens.ts';

@@ -1,4 +1,4 @@
-import { EMAIL_PATTERN } from './settings.ts';
+import { EMAIL_PATTERN } from '../site/setting-values.ts';
 
 /**
  * The rules a username, a password and an email address have to satisfy, in

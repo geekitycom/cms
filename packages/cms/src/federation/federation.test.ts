@@ -5,9 +5,10 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { writeUsers } from '../admin/__testing__/users.ts';
-import type { UserProfile } from '../admin/accounts.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
-import type { SiteSettings } from '../admin/settings.ts';
+import type { UserProfile } from '../site/users.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
+import type { SiteSettings } from '../site/settings.ts';
 import type { NewFollower } from '../admin/store.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';

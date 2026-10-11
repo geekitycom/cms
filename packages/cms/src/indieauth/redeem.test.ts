@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { User } from '../admin/accounts.ts';
+import type { User } from '../site/users.ts';
 import { CODE_LIFETIME_MS, createIndieAuthState } from './grants.ts';
 import type { AuthorizationCode } from './grants.ts';
 import { profileResponse, redeemCode } from './redeem.ts';

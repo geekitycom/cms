@@ -17,8 +17,8 @@ import { stringOrEmpty } from '../util/forms.ts';
 import { authorContext } from '../web/authors.ts';
 import { documentContext } from '../web/context.ts';
 import { TEMPLATES } from '../web/render.ts';
-import { findUserById, listUsers } from './accounts.ts';
-import { readSiteSettings } from './settings.ts';
+import { findUserById, listUsers } from '../site/users.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { ADMIN_PREFIX } from './session.ts';
 
 /** Where the editor posts a body it wants to see rendered. */

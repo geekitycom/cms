@@ -1,6 +1,6 @@
 import type { Context, DocumentLoader } from '@fedify/fedify';
 
-import { primaryUser } from '../admin/accounts.ts';
+import { primaryUser } from '../site/users.ts';
 import { senderKeyPairs } from './actor.ts';
 import type { FederationContextData } from './federation.ts';
 

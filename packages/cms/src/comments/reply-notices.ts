@@ -1,5 +1,5 @@
-import { listUsers } from '../admin/accounts.ts';
-import { readSiteSettings } from '../admin/settings.ts';
+import { listUsers } from '../site/users.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import type { AdminStore, ConversationWrite, PostComment } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';

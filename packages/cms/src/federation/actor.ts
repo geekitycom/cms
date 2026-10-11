@@ -10,8 +10,8 @@ import {
 } from '@fedify/vocab';
 import type { Actor } from '@fedify/vocab';
 
-import { listUsers } from '../admin/accounts.ts';
-import type { User } from '../admin/accounts.ts';
+import { listUsers } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import { escapeAttribute, escapeText } from '../util/html.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorHref, profileContext } from '../web/authors.ts';

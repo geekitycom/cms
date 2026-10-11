@@ -12,7 +12,8 @@ import { exportJwk, importJwk } from '@fedify/fedify';
 import { CryptographicKey, Endpoints, Follow, Person } from '@fedify/vocab';
 
 import { writeUsers } from '../admin/__testing__/users.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { enterDevMode, readDevModeRecord } from '../dev-mode.ts';
 import { seedActorKeys, testKeyPair } from '../federation/__testing__/keys.ts';
 import { createCms } from '../index.ts';

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
-import { browser, FIRST_ADMIN, sandbox, signedIn, signIn } from './__testing__/harness.ts';
+import { browser, FIRST_ADMIN, sandbox, signedIn, signIn } from '../admin/__testing__/harness.ts';
 import {
   ConflictingActorIdError,
   countUsers,
@@ -24,7 +24,7 @@ import {
   updateUser,
   usersFile,
   verifyUserPassword,
-} from './accounts.ts';
+} from './users.ts';
 import { hashPassword } from './passwords.ts';
 
 const temporaryDirs: string[] = [];

@@ -1,4 +1,5 @@
-import { readSiteSettings, taxonomyBasesFromSettings } from './admin/settings.ts';
+import { readSiteSettings } from './site/site-json.ts';
+import { taxonomyBasesFromSettings } from './site/settings.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
 import { isMigratedArrival } from './content/migrated.ts';

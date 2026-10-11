@@ -6,7 +6,8 @@ import { after, describe, it } from 'node:test';
 
 import { csrfField, resolveNothing, signIn } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { databaseFiles } from '../cache.ts';
 import { seedActorKeys } from '../federation/__testing__/keys.ts';

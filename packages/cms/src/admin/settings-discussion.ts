@@ -20,7 +20,9 @@ import { stringOrEmpty } from '../util/forms.ts';
 import { flash } from './flash.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { MountSettingsOptions, SettingsPage } from './settings-page.ts';
-import { effectiveBaseUrl, readSiteSettings, SETTINGS_PATH } from './settings.ts';
+import { effectiveBaseUrl } from '../site/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { SETTINGS_PATH } from './settings.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**

@@ -7,11 +7,11 @@
 
 import path from 'node:path';
 
-import { listUsers, setUserActorId } from '../admin/accounts.ts';
-import { readSiteSettings } from '../admin/settings.ts';
+import { listUsers, setUserActorId } from '../site/users.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { importedFields } from '../admin/store.ts';
 import type { AdminStore, CommentRecord } from '../admin/store.ts';
-import { acceptUpload, refusedUpload } from '../admin/uploads.ts';
+import { acceptUpload, refusedUpload } from '../media/uploads.ts';
 import { renderCommentMarkdown } from '../comments/markdown.ts';
 import { commentsFile, putComments, readComments, renameComments } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';

@@ -7,8 +7,8 @@ import { mf2 } from 'microformats-parser';
 
 import { FIRST_ADMIN, sandbox, signedIn, signIn } from '../admin/__testing__/harness.ts';
 import { saveSettings } from '../admin/__testing__/settings.ts';
-import { findUser } from '../admin/accounts.ts';
-import { updateSiteSettings } from '../admin/settings.ts';
+import { findUser } from '../site/users.ts';
+import { updateSiteSettings } from '../site/site-json.ts';
 import type { LocationSharing } from '../content/location.ts';
 import { LOCATIONS_FILE } from '../content/locations.ts';
 import { issueTokens } from '../indieauth/tokens.ts';

@@ -5,8 +5,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { resolveNothing } from '../admin/__testing__/harness.ts';
-import { createUser, listUsers, setUserProfile } from '../admin/accounts.ts';
-import { readSiteSettings, writeSiteJson } from '../admin/settings.ts';
+import { createUser, listUsers, setUserProfile } from '../site/users.ts';
+import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { child, childrenNamed, parseXml } from './__testing__/xml.ts';

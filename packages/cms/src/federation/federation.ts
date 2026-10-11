@@ -4,8 +4,8 @@ import { createFederation, InProcessMessageQueue, MemoryKvStore } from '@fedify/
 import type { Context, Federation, FederationOptions, PageItems } from '@fedify/fedify';
 import { Create, type Object as APObject, QuoteAuthorization } from '@fedify/vocab';
 
-import { countUsers, listUsers } from '../admin/accounts.ts';
-import type { User } from '../admin/accounts.ts';
+import { countUsers, listUsers } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import type { AdminStore } from '../admin/store.ts';
 import type { FederationOverrides, ResolvedConfig } from '../config.ts';
 import type { CitedPageReader } from '../content/citation.ts';

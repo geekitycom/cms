@@ -14,8 +14,9 @@ import {
   findUserById,
   setUserProfile,
   verifyUserPassword,
-} from './accounts.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './settings.ts';
+} from '../site/users.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { writeUsers } from './__testing__/users.ts';
 import {
   browser,

@@ -5,7 +5,8 @@ import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
 import { resolvePublic } from '../admin/__testing__/harness.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import type { PostComment } from '../admin/store.ts';
 import { addComment, rebuildCommentIndexes, updateComment } from '../comments/records.ts';
 import type { NewComment } from '../comments/records.ts';

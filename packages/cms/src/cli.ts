@@ -8,7 +8,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { Writable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 
-import { createUser, DuplicateUsernameError, migrateUsersToFile } from './admin/accounts.ts';
+import { createUser, DuplicateUsernameError } from './site/users.ts';
+import { migrateUsersToFile } from './admin/users-migration.ts';
 import { credentialProblem, emailProblem } from './admin/credentials.ts';
 import { openAdminStore } from './admin/store.ts';
 import type { AdminStore } from './admin/store.ts';

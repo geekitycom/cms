@@ -12,7 +12,7 @@ import sharp from 'sharp';
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { createUser, findUser } from '../admin/accounts.ts';
+import { createUser, findUser } from '../site/users.ts';
 import { addFollower } from '../federation/records.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';

@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { Context } from '@fedify/fedify';
 import { QuoteAuthorization } from '@fedify/vocab';
 
-import type { User } from '../admin/accounts.ts';
+import type { User } from '../site/users.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { actorId } from './actor.ts';
 import type { FederationContextData } from './federation.ts';

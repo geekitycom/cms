@@ -1,4 +1,4 @@
-import { readSiteSettings } from '../admin/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import type { Document } from '../content/document.ts';
 import { blankForm } from '../content/document-form.ts';
 import { POST_KIND } from '../content/document-kind.ts';

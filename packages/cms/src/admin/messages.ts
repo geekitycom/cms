@@ -15,7 +15,7 @@ import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
 import { ADMIN_PREFIX } from './session.ts';
-import { readSiteSettings } from './settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**

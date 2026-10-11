@@ -26,8 +26,8 @@ import {
   setUserPassword,
   setUserProfile,
   verifyUserPassword,
-} from './accounts.ts';
-import type { ProfileLink, User } from './accounts.ts';
+} from '../site/users.ts';
+import type { ProfileLink, User } from '../site/users.ts';
 import { ADMIN_THEMES, adminTheme } from './admin-theme.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';

@@ -15,8 +15,8 @@ import {
 } from '@fedify/vocab';
 import type { Actor } from '@fedify/vocab';
 
-import { listUsers, primaryUser } from '../admin/accounts.ts';
-import type { User } from '../admin/accounts.ts';
+import { listUsers, primaryUser } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import type { NewFollower } from '../admin/store.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import { actorId, senderKeyPairs, userByUsername } from './actor.ts';

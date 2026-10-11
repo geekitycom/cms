@@ -4,9 +4,9 @@ import type { Context } from '@fedify/fedify';
 import { Accept, Follow, PUBLIC_COLLECTION, Reject, Undo } from '@fedify/vocab';
 import type { Recipient } from '@fedify/vocab';
 
-import { primaryUser } from '../admin/accounts.ts';
-import type { User } from '../admin/accounts.ts';
-import { readSiteSettings } from '../admin/settings.ts';
+import { primaryUser } from '../site/users.ts';
+import type { User } from '../site/users.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import type { AdminStore, Relay } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';

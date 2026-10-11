@@ -13,8 +13,8 @@ import {
   DuplicateUsernameError,
   findUserById,
   verifyUserPassword,
-} from './accounts.ts';
-import type { User } from './accounts.ts';
+} from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import { adminColorScheme } from './admin-theme.ts';
 import { mountAppearanceScreen } from './appearance.ts';
 import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
