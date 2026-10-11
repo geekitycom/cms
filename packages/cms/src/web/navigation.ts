@@ -269,7 +269,7 @@ export function siteMenus(site: SiteData): NavigationMenus {
 /**
  * Every item of every menu the site stores, in the order the menus are stored,
  * each URL once: the site's way around as one list of links, which the
- * Markdown footer and `/llms.txt` both print (TASK-346).
+ * Markdown footer and `/llms.txt` both print.
  */
 export function navigationLinks(site: SiteData): NavigationItem[] {
   const seen = new Set<string>();

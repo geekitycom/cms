@@ -79,7 +79,6 @@ function linksIn(source: string): LinkAt[] {
     for (const link of found) {
       const start = toSource(offsets, link.start);
       const end = toSource(offsets, link.end);
-      // Only an edit whose range spells exactly what the parse read is made.
       if (source.slice(start, end) !== token.content.slice(link.start, link.end)) continue;
       inline.push({ ...link, start, end });
     }
@@ -88,7 +87,6 @@ function linksIn(source: string): LinkAt[] {
   return [...blockLinks, ...inline];
 }
 
-/** Where each line of the source starts. */
 function lineStarts(source: string): number[] {
   const starts = [0];
   for (let index = source.indexOf('\n'); index !== -1; index = source.indexOf('\n', index + 1)) {

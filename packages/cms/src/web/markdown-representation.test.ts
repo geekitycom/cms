@@ -9,9 +9,9 @@ import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 
 /**
- * A page's Markdown carries its place in the site (TASK-346): the front
- * matter a Markdown browser navigates by, links that stay in the Markdown web,
- * and a header and footer the theme draws.
+ * A page's Markdown carries its place in the site: the front matter a Markdown
+ * browser navigates by, links that stay in the Markdown web, and a header and
+ * footer the theme draws.
  */
 
 const started: Cms[] = [];

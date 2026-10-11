@@ -107,8 +107,8 @@ export const OPTIONAL_TEMPLATES = {
 } as const;
 
 /**
- * The two partials around a page's Markdown (TASK-346), found on the theme
- * search path like every other template.
+ * The two partials around a page's Markdown, found on the theme search path
+ * like every other template.
  */
 export const MARKDOWN_TEMPLATES = {
   header: 'partials/markdown-header.md.njk',
@@ -262,7 +262,7 @@ export interface Renderer {
    */
   renderMaintenance(url: string, until: Date | undefined): string;
   /**
-   * The header and footer of a page's Markdown (TASK-346), through
+   * The header and footer of a page's Markdown, through
    * {@link MARKDOWN_TEMPLATES} with autoescaping off: Markdown is not HTML.
    * The partials get `site`, `menus`, `soloAuthor`, the chrome's links as
    * data, and the `escapeMarkdown` and `markdownUrl` filters.
@@ -285,8 +285,8 @@ export interface Renderer {
   readonly environment: Environment;
   /**
    * The twin the Markdown partials render through: the same loader and
-   * filters, autoescaping off, and the two Markdown filters. A site adding a
-   * filter both should have adds it to both.
+   * filters, autoescaping off, and the two Markdown filters. A filter added to
+   * `environment` is not seen here: add it to both when Markdown needs it too.
    */
   readonly markdownEnvironment: Environment;
 }

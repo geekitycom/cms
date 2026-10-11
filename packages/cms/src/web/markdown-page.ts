@@ -3,8 +3,8 @@ import { dump } from 'js-yaml';
 import type { AuthorContext } from './authors.ts';
 
 /**
- * The Markdown representation of a page (TASK-346): front matter, the theme's
- * header, the page's own Markdown and the theme's footer.
+ * The Markdown representation of a page: front matter, the theme's header, the
+ * page's own Markdown and the theme's footer.
  *
  * Code owns the contract and the theme owns the chrome. The front matter, the
  * body and the rewriting of the site's own links are written here; the header
@@ -29,7 +29,6 @@ export interface MarkdownBio {
   readonly url?: string | undefined;
   /** What they say about themselves. */
   readonly note?: string | undefined;
-  /** Their profile links. */
   readonly links: readonly MarkdownLink[];
 }
 
@@ -132,7 +131,6 @@ export function entryList(entries: readonly MarkdownEntry[], markdownUrl: Markdo
     .join('\n');
 }
 
-/** Links as a list, one per line. */
 export function linkList(links: readonly MarkdownLink[], markdownUrl: MarkdownUrl): string {
   return links
     .map((link) => `- [${escapeMarkdown(link.label)}](${markdownUrl(link.url)})`)

@@ -5,7 +5,6 @@ import { rewriteMarkdownLinks } from './markdown-links.ts';
 
 const SITE = 'https://example.com';
 
-/** Rewrites what is on the site to its `.md`, the way the public site does. */
 function toMarkdown(href: string): string | undefined {
   const url = new URL(href, `${SITE}/here/`);
   if (url.origin !== SITE) return undefined;

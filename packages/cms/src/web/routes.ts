@@ -857,8 +857,6 @@ function negotiateDocument(
         })
       : undefined;
 
-  // The Markdown and JSON say where the document is read, which for the
-  // homepage is not the permalink in its file.
   const served = path === document.permalink ? document : { ...document, permalink: path };
   const markdown =
     representation === 'markdown' || representation === 'text'
@@ -1449,11 +1447,6 @@ function listingMarkdown(
   });
 }
 
-/**
- * One document's Markdown: its front matter with the author named and the
- * relations a Markdown browser reads, the theme's header and footer, and its
- * body with every link to a page of this site pointing at that page's `.md`.
- */
 function documentMarkdown(c: Context<GeekityEnv>, document: Document): string {
   const writer = authorContext(listUsers(c.var.config.dataDir), document.author);
   const neighbours = document.type === 'post' ? c.var.store.neighbours(document) : {};
@@ -1484,7 +1477,6 @@ function documentMarkdown(c: Context<GeekityEnv>, document: Document): string {
   );
 }
 
-/** A page's Markdown, its header and footer drawn by the theme. */
 function markdownPage(
   c: Context<GeekityEnv>,
   frontMatter: Record<string, unknown>,
@@ -1504,10 +1496,6 @@ function markdownPage(
   ]);
 }
 
-/**
- * {@link markdownHrefFor}, keeping a URL that names nothing with a Markdown
- * representation as it is.
- */
 function markdownUrlFor(c: Context<GeekityEnv>, pageUrl: string): MarkdownUrl {
   const href = markdownHrefFor(c, pageUrl);
   return (url) => href(url) ?? url;
