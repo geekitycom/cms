@@ -136,7 +136,8 @@ export function mountAppearanceScreen(
 
   app.post(THEMES_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const submitted = (typeof body[THEME_FIELD] === 'string' ? body[THEME_FIELD] : '').trim();
+    const value = body[THEME_FIELD];
+    const submitted = (typeof value === 'string' ? value : '').trim();
 
     // The same check the settings pages run over this field, given the same
     // themes directory, so a name forged into this form is refused by the rule
