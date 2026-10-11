@@ -38,6 +38,7 @@ function unused(): never {
 
 interface Site {
   readonly contentDir: string;
+  readonly dataDir: string;
   run(items: readonly TestItem[]): Promise<readonly ReportRow[]>;
   serve(): Cms;
   text(relative: string): Promise<string>;
@@ -69,6 +70,7 @@ async function site(): Promise<Site> {
   };
   return {
     contentDir,
+    dataDir: data.path,
     run: async (items) => {
       const context: PluginCommandContext = {
         args: [],
@@ -150,6 +152,45 @@ describe('the ?p= and ?page_id= redirects', () => {
       '/?page_id=20',
       '/?page_id=21',
     ]);
+  });
+});
+
+describe('the static front page', () => {
+  const FRONT: readonly TestItem[] = [
+    { id: 238, type: 'page', slug: 'home-page', title: 'Home', link: `${SITE}/` },
+  ];
+
+  it('answers its ?p= and ?page_id= with one 301 at /, where the site serves it', async () => {
+    const where = await site();
+    await where.run(FRONT);
+
+    const declared = JSON.parse(await where.text(REDIRECTS)) as Record<string, string>;
+    assert.deepEqual(declared, { '/?p=238': '/', '/?page_id=238': '/' });
+    const instance = where.serve();
+    await instance.sync();
+    assert.deepEqual(await location(instance, '/?p=238'), [301, '/']);
+    assert.deepEqual(await location(instance, '/?page_id=238'), [301, '/']);
+    assert.equal((await instance.app.request(`${SITE}/`)).status, 200);
+  });
+
+  it('moves the redirects an earlier import pointed at its permalink', async () => {
+    const where = await site();
+    await where.run(FRONT);
+    const older = { '/?p=238': '/home-page/', '/?page_id=238': '/home-page/' };
+    await fs.writeFile(path.join(where.contentDir, REDIRECTS), `${JSON.stringify(older)}\n`);
+    const recordPath = path.join(where.dataDir, 'import.json');
+    const record = JSON.parse(await fs.readFile(recordPath, 'utf8')) as {
+      entries: Record<string, Record<string, string>>;
+    };
+    record.entries[REDIRECTS] = Object.fromEntries(
+      Object.entries(older).map(([from, to]) => [from, JSON.stringify(to)]),
+    );
+    await fs.writeFile(recordPath, JSON.stringify(record));
+
+    await where.run(FRONT);
+
+    const declared = JSON.parse(await where.text(REDIRECTS)) as Record<string, string>;
+    assert.deepEqual(declared, { '/?p=238': '/', '/?page_id=238': '/' });
   });
 });
 

@@ -276,6 +276,10 @@ document at. The import declares a redirect for each in
 | An attachment's page, such as `/photo-jpg/` | Its file under `/uploads/`. |
 | `/?attachment_id=ID` and `/?p=ID`, likewise | Its file under `/uploads/`. |
 
+The page WordPress used as its static front page is the exception: its
+`?p=` and `?page_id=` answer at `/`, where the site serves its homepage, since
+the page's own permalink redirects there too.
+
 A draft, a pending, private, password-protected or scheduled post or page gets
 no redirect, so its `?p=` answers as an id WordPress never had. An attachment
 whose file was not copied gets none either, until a run copies it. A post's
