@@ -1,8 +1,9 @@
 /**
  * `@geekity/cms/plugin`: the whole of what a plugin may import from core
  * (decision-33). Types, the host API version, {@link definePlugin}, which is
- * an identity function, and the key rule a plugin writing comments names them
- * by, and the trailing-slash pair. A bundled plugin inlines what it uses of these.
+ * an identity function, the key rule a plugin writing comments names them
+ * by, and the helpers core writes content with. A bundled plugin inlines what
+ * it uses of these.
  *
  * Removing or reshaping anything here is a breaking change to `@geekity/cms`
  * (decision-6), and bumps {@link HOST_API_VERSION}.
@@ -47,6 +48,22 @@ export { repliesKey, webmentionKey } from './web/feed-source.ts';
  * trailing slash means the same thing to a plugin as to the site.
  */
 export { withoutTrailingSlash, withTrailingSlash } from './util/url.ts';
+
+/**
+ * How core turns a title into a slug and a document into its Markdown file, so
+ * an importer names and writes a file as the editor would, and the site
+ * writing an imported file back unchanged gives the same bytes.
+ */
+export { slugify } from './content/slug.ts';
+export { serializeDocument } from './content/writer.ts';
+export type { ActivityPubMetadata, DocumentContent } from './content/document.ts';
+
+/** Core's atomic write: a temporary sibling renamed over the target. */
+export { writeFileAtomically } from './files/atomic.ts';
+export type { FileContents, WriteFileAtomicallyOptions } from './files/atomic.ts';
+
+export { isRecord } from './util/guards.ts';
+export { messageOf } from './util/errors.ts';
 
 /** What a plugin's route handler is handed. */
 export interface PluginRequestContext {
