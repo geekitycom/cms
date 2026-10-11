@@ -232,6 +232,15 @@ backfill: it shows once, as the imported comment, and answers to the note
 thread under it. A fediverse reply's `url` stays the note's web page. A comment left on the page
 has a page of its own, `/comment/{key}/`.
 
+A fediverse comment names its actor in `_activitypub_remote_actor_id`: one of
+the export's `ap_actor` items, the ActivityPub plugin's cached copy of that
+actor's profile. The import reads that profile and gives the comment its
+`actor`, the actor's id, and its `author.avatar`, the actor's icon. The page
+shows the icon through the site's avatar cache, so a like or a boost shows a
+face, and a like delivered here since from the same actor is counted with the
+imported one. A comment whose actor is not in the export imports without
+either.
+
 A comment written signed in to WordPress names its writer in
 `comment_user_id`. When that WordPress user's login is a user on this site, the
 rule a post's author follows, the comment keeps that user as its `user`. The
@@ -243,7 +252,7 @@ The import merges by comment id. A rerun adds the comments WordPress received
 since and picks up one edited there. It leaves alone a comment this site
 received itself, and the words and status of an imported one a moderator
 approved, filed as spam, edited or deleted. It still marks such a comment
-migrated and gives it its origin and its user.
+migrated and gives it its origin, its user and its actor.
 
 **Upgrading from 0.2.0.** Version 0.2.0 used each comment's WordPress URL as
 its id. The site gives every such id the key of that URL when it next boots,

@@ -62,6 +62,8 @@ function importComments(exported: WordPressExport, context: PluginCommandContext
       .map((author) => [author.id, author.login]),
   );
 
+  const actors = remoteActors(exported);
+
   const comments: ImportedComment[] = [];
   const notes: ItemNote[] = [];
   for (const item of exported.items) {
@@ -77,7 +79,7 @@ function importComments(exported: WordPressExport, context: PluginCommandContext
       }
       continue;
     }
-    const mapped = mapComments(item, permalink, markdownOf, users);
+    const mapped = mapComments(item, permalink, markdownOf, users, actors);
     notes.push(...mapped.notes);
     comments.push(...mapped.comments);
   }
@@ -89,6 +91,7 @@ function mapComments(
   permalink: string,
   markdownOf: (html: string) => string,
   users: ReadonlyMap<number, string>,
+  actors: ReadonlyMap<string, RemoteActor>,
 ): { comments: ImportedComment[]; notes: ItemNote[] } {
   const notes: ItemNote[] = [];
   const kept: {
@@ -118,6 +121,10 @@ function mapComments(
     const origin = originOf(wordPress, source, url);
     const formerId = `${item.guid}#comment-${String(wordPress.id)}`;
     const user = users.get(wordPress.userId);
+    const actor =
+      source === 'activitypub'
+        ? actors.get(metaOf(wordPress, '_activitypub_remote_actor_id'))
+        : undefined;
     kept.push({
       wordPress,
       formerId,
@@ -131,7 +138,7 @@ function mapComments(
           url: wordPress.authorUrl || null,
           email:
             source === 'comment' && wordPress.authorEmail !== '' ? wordPress.authorEmail : null,
-          avatar: metaOf(wordPress, 'avatar') || null,
+          avatar: metaOf(wordPress, 'avatar') || (actor?.avatar ?? null),
         },
         markdown: says ? markdownOf(wordPress.content) : '',
         submitted: instantOf(wordPress.dateGmt ?? item.dateGmt),
@@ -140,6 +147,7 @@ function mapComments(
         migrated: true,
         ...(origin === undefined ? {} : { origin }),
         ...(user === undefined ? {} : { user }),
+        ...(actor === undefined ? {} : { actor: actor.id }),
       },
       label: `${labelOf(wordPress)}, a ${kind} by ${name}`,
     });
@@ -164,6 +172,51 @@ function mapComments(
     return { ...imported, comment };
   });
   return { comments, notes };
+}
+
+/** A fediverse actor as the ActivityPub plugin cached it: an `ap_actor` item, its content the actor's JSON. */
+interface RemoteActor {
+  readonly id: string;
+  readonly avatar: string | null;
+}
+
+/** Each `ap_actor` item whose content is an actor, by its post id, which `_activitypub_remote_actor_id` names. */
+function remoteActors(exported: WordPressExport): ReadonlyMap<string, RemoteActor> {
+  const actors = new Map<string, RemoteActor>();
+  for (const item of exported.items) {
+    if (item.type !== 'ap_actor') continue;
+    const actor = actorJson(item.content);
+    if (actor === undefined || typeof actor['id'] !== 'string') continue;
+    actors.set(String(item.id), { id: actor['id'], avatar: iconUrl(actor['icon']) });
+  }
+  return actors;
+}
+
+function actorJson(content: string): Record<string, unknown> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(content);
+    return isObject(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** An actor's `icon`: an Image's `url`, a Link's `href`, or the first of several that has one. */
+function iconUrl(icon: unknown): string | null {
+  if (typeof icon === 'string') return icon === '' ? null : icon;
+  if (Array.isArray(icon)) {
+    for (const each of icon as unknown[]) {
+      const url = iconUrl(each);
+      if (url !== null) return url;
+    }
+    return null;
+  }
+  if (!isObject(icon)) return null;
+  return iconUrl(icon['url']) ?? iconUrl(icon['href']);
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function kindOf(source: Source, named: Kind): Kind {

@@ -69,7 +69,8 @@ const SKIPPED_POST_TYPES: Readonly<Record<string, string>> = {
   customize_changeset: 'an unsaved Customizer session',
   user_request: 'a personal data export or erasure request',
   wp_block: 'a reusable block; its content is already in each post that used it',
-  ap_actor: "the ActivityPub plugin's cache of a remote actor",
+  ap_actor:
+    "the ActivityPub plugin's cache of a remote actor; its avatar goes to the comments it wrote",
   ap_inbox: "the ActivityPub plugin's record of an incoming activity",
   ap_outbox: "the ActivityPub plugin's record of an outgoing activity",
   ap_extrafield: "an ActivityPub plugin profile field; carry it to the user's profile by hand",
@@ -352,7 +353,8 @@ async function writeComments(
       before !== undefined &&
       (here.migrated !== true ||
         here.origin !== comment.origin ||
-        (comment.user !== undefined && here.user !== comment.user))
+        (comment.user !== undefined && here.user !== comment.user) ||
+        (comment.actor !== undefined && here.actor !== comment.actor))
     ) {
       // The import owns what a comment is and who wrote it, though this site
       // owns what it says.
@@ -361,8 +363,9 @@ async function writeComments(
         migrated: true,
         ...(comment.origin === undefined ? {} : { origin: comment.origin }),
         ...(comment.user === undefined ? {} : { user: comment.user }),
+        ...(comment.actor === undefined ? {} : { actor: comment.actor }),
       });
-      why = `${why}; marked migrated, with its origin${comment.user === undefined ? '' : ' and its user'}`;
+      why = `${why}; marked migrated, with its origin${comment.user === undefined ? '' : ' and its user'}${comment.actor === undefined ? '' : ' and its actor'}`;
     }
     if (decision.action !== 'leave') recorded.set(comment.id, next);
     rows.push({ outcome: decision.outcome, item, path: held.file, why: `${label}: ${why}` });

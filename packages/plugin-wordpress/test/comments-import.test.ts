@@ -64,6 +64,7 @@ interface CommentEntry {
   migrated?: true;
   origin?: string;
   user?: string;
+  actor?: string;
 }
 
 async function site(): Promise<Site> {
@@ -560,6 +561,116 @@ describe('the comments and reactions import', () => {
     );
     const permalink = cms.store.getBySlug('i-♥-rss')?.permalink;
     assert.equal(permalink, PERMALINK, 'a webmention is keyed by the permalink the site serves');
+  });
+
+  describe('a fediverse comment’s actor (TASK-338)', () => {
+    const PICTURE = 'https://files.mstdn.example/avatars/one.png';
+    const LINKED = 'https://tags.example/user/news/icon';
+
+    function actorItem(id: number, actor: Record<string, unknown>): TestItem {
+      return {
+        id,
+        type: 'ap_actor',
+        status: 'publish',
+        guid: String(actor['id']),
+        content: JSON.stringify({ '@context': 'https://www.w3.org/ns/activitystreams', ...actor }),
+      };
+    }
+
+    function byActor(comment: TestComment, actorPost: number): TestComment {
+      return {
+        ...comment,
+        meta: [
+          ...(comment.meta ?? []),
+          { key: '_activitypub_remote_actor_id', value: String(actorPost) },
+        ],
+      };
+    }
+
+    const ACTORS: readonly TestItem[] = [
+      actorItem(900, {
+        id: 'https://mstdn.example/users/One',
+        type: 'Person',
+        icon: { type: 'Image', mediaType: 'image/png', url: PICTURE },
+      }),
+      actorItem(901, {
+        id: 'https://tags.example/user/news',
+        type: 'Service',
+        icon: { type: 'Link', href: LINKED },
+      }),
+      actorItem(902, { id: 'https://mstdn.example/users/Two', type: 'Person' }),
+      { id: 903, type: 'ap_actor', status: 'publish', content: 'not json' },
+    ];
+
+    const POST: TestItem = {
+      ...THE_POST,
+      comments: [
+        byActor(apReaction(1, 'like', 'One'), 900),
+        byActor(apReaction(4, 'repost', 'Four'), 901),
+        byActor(apReaction(2, 'like', 'Two'), 902),
+        byActor(apReaction(5, 'repost', 'Five'), 999),
+        byActor(apReaction(15, 'like', 'Fifteen'), 903),
+      ],
+    };
+
+    async function imported(): Promise<{ wp: Site; byNumber: Map<string, CommentEntry> }> {
+      const wp = await site();
+      await wp.run([...ACTORS, POST]);
+      const comments = await wp.comments(FILE);
+      return {
+        wp,
+        byNumber: new Map(comments.map((comment) => [numbered.get(comment.id) ?? '', comment])),
+      };
+    }
+
+    it('writes the avatar and the id of the actor its _activitypub_remote_actor_id names', async () => {
+      const { byNumber } = await imported();
+      const one = byNumber.get('1');
+      const four = byNumber.get('4');
+      assert.equal(one?.author.avatar, PICTURE, 'an Image icon by its url');
+      assert.equal(one?.actor, 'https://mstdn.example/users/One');
+      assert.equal(four?.author.avatar, LINKED, 'a Link icon by its href');
+      assert.equal(four?.actor, 'https://tags.example/user/news');
+      assert.equal(byNumber.get('2')?.author.avatar, null, 'an actor with no icon gives none');
+      assert.equal(byNumber.get('2')?.actor, 'https://mstdn.example/users/Two');
+    });
+
+    it('imports a comment whose actor is missing or unreadable as before, with no avatar', async () => {
+      const { byNumber } = await imported();
+      for (const n of ['5', '15']) {
+        const comment = byNumber.get(n);
+        assert.ok(comment, `comment ${n} is imported`);
+        assert.equal(comment.author.avatar, null);
+        assert.equal(comment.actor, undefined);
+        assert.equal(comment.author.name, n === '5' ? 'Five' : 'Fifteen');
+      }
+    });
+
+    it('gives a comment the site has since moderated its actor and leaves the rest', async () => {
+      const wp = await site();
+      await wp.run([POST]);
+      const records = { admin: wp.admin, contentDir: wp.contentDir, dataDir: wp.dataDir };
+      await updateComment(records, id(1), { status: 'spam' });
+
+      await wp.run([...ACTORS, POST]);
+
+      const one = (await wp.comments(FILE)).find((comment) => comment.id === id(1));
+      assert.equal(one?.status, 'spam');
+      assert.equal(one?.actor, 'https://mstdn.example/users/One');
+    });
+
+    it('shows the actors’ avatars on the post through the avatar cache', async () => {
+      const { wp } = await imported();
+      const cms = await wp.serve();
+      const page = await (await cms.app.request('/2024/03/i-%E2%99%A5-rss/')).text();
+      const cached = (source: string) =>
+        `/_geekity/avatars/${Buffer.from(source, 'utf8').toString('base64url')}`;
+
+      assert.ok(page.includes(`src="${cached(PICTURE)}"`), 'the like’s face is the cached picture');
+      assert.ok(page.includes(`src="${cached(LINKED)}"`), 'and so is the boost’s');
+      assert.ok(!page.includes(PICTURE), 'the remote URL is never printed');
+      assert.ok(cms.admin.isAvatarSource(PICTURE), 'the cache will fetch it');
+    });
   });
 
   it('names the site user a comment was written by when signed in to WordPress', async () => {
