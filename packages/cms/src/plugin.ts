@@ -179,6 +179,8 @@ export interface PluginComment {
   readonly origin?: string;
   /** The site user who wrote it, by username, when it names one. */
   readonly user?: string;
+  /** The fediverse actor who wrote it, by id, for an imported fediverse comment that names one. */
+  readonly actor?: string;
 }
 
 /** What {@link PluginSite.checkUpload} makes of a file. */

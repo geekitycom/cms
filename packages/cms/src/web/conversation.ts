@@ -495,8 +495,8 @@ function gather(
   const mentions: Interaction[] = [...quotes];
   const answers: Interaction[] = [];
   const held = new Map<string, Interaction>();
-  // One like per person, by their profile page, so a like imported from the
-  // site this one replaced and the same person's like delivered here are one.
+  // One like per actor, so a like imported from the site this one replaced
+  // and the same person's like delivered here are one.
   const reacted = new Set(
     stored.flatMap((comment) => {
       const kind =
@@ -505,9 +505,7 @@ function gather(
           : comment.kind === 'boost' || comment.kind === 'repost'
             ? 'boost'
             : undefined;
-      return comment.source === 'activitypub' && kind !== undefined && comment.author.url !== null
-        ? [`${kind}\0${comment.author.url}`]
-        : [];
+      return kind !== undefined && comment.actor !== undefined ? [`${kind}\0${comment.actor}`] : [];
     }),
   );
   const isEvent = postTypeOf(document) === 'event';
@@ -543,10 +541,9 @@ function gather(
       // Only a reaction to the post itself: a like of one of the replies
       // belongs to that reply's own conversation, wherever it is shown.
       if (activity.objectId !== objectId) continue;
-      // One like per person, however many times it was delivered, and none
+      // One like per actor, however many times it was delivered, and none
       // at all once its actor has taken it back.
-      const author = naming(activity.actorId);
-      const key = `${kind}\0${author.url}`;
+      const key = `${kind}\0${activity.actorId}`;
       if (reacted.has(key)) continue;
       if (activity.activityId !== null && withdrawn.has(activity.activityId)) continue;
       if (
@@ -556,6 +553,7 @@ function gather(
         continue;
       }
       reacted.add(key);
+      const author = naming(activity.actorId);
       const id = activity.activityId ?? `${activity.actorId}#${kind}`;
       (kind === 'like' ? likes : boosts).push({
         id,
@@ -1225,14 +1223,10 @@ function interactionOf(
       user === undefined
         ? {
             name: comment.author.name,
-            // A commenter has no fediverse identity: they gave a name, maybe a
-            // website, and nothing that names them anywhere else.
             handle: null,
             url: comment.author.url,
-            // Only a webmention has one: it came out of the source page's `h-card`,
-            // and a form asks nobody for a picture.
             avatar: comment.author.avatar === null ? null : avatarHref(comment.author.avatar),
-            actorId: null,
+            actorId: comment.actor ?? null,
             feed: comment.source === 'webmention' ? comment.author.url : null,
             username: null,
           }

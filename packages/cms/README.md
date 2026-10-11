@@ -1106,7 +1106,9 @@ URLs. A site whose ids are all keys reads its files and writes nothing.
 
 A comment imported from another system carries `migrated: true`, and `origin`
 when it had an identity elsewhere: a fediverse reply's note id, a like's or a
-boost's activity id, a webmention's source URL. plugin-wordpress writes both.
+boost's activity id, a webmention's source URL. A migrated fediverse comment
+also carries `actor`, the id of the actor who wrote it, when the export named
+one. plugin-wordpress writes all three.
 
 A migrated comment shows on its post, in its thread and on its own page like
 any other, and replies to it thread under it. It is in no feed and no count a
@@ -1123,7 +1125,8 @@ its source. A redelivered `Create` or `Like`, and a note the
 [reply backfill](#replies-to-fediverse-replies) reads, are matched by their
 note or activity id against the stored comment's `origin`, so the inbox line is
 not shown and the backfill does not log the note. A like or a boost from the
-same person as an imported one, by their profile page, is the same reaction.
+same actor as an imported one, matched by the inbox line's actor against the
+stored comment's `actor`, is the same reaction.
 An answer to an imported fediverse note threads under the imported comment,
 and the backfill reads that note's `replies` collection by its `origin`.
 

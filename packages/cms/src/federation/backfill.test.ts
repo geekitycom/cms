@@ -637,6 +637,7 @@ describe('a fediverse comment imported from another site (TASK-336 AC #10)', () 
           notify: false,
           migrated: true,
           origin: LIKE,
+          actor: ADA,
         },
       ],
     }),
@@ -722,21 +723,39 @@ describe('a fediverse comment imported from another site (TASK-336 AC #10)', () 
     );
   });
 
-  it('counts one like from Ada when she likes the post again under a new id', async () => {
-    const { cms, contentDir } = await site(likeLine(`${ADA}#likes/2`, ADA), undefined, comments);
-    cms.admin.putActorProfile({
-      actorId: ADA,
-      handle: '@ada@mastodon.social',
-      name: 'Ada',
-      iconUrl: null,
-      url: ADA_PAGE,
-      fetchedAt: '2026-09-22T10:00:00.000Z',
+  for (const held of [false, true]) {
+    it(`counts one like from Ada when she likes the post again under a new id, ${held ? 'her profile held' : 'with no profile of her held'}`, async () => {
+      const { cms, contentDir } = await site(likeLine(`${ADA}#likes/2`, ADA), undefined, comments);
+      if (held) {
+        cms.admin.putActorProfile({
+          actorId: ADA,
+          handle: '@ada@mastodon.social',
+          name: 'Ada',
+          iconUrl: null,
+          url: ADA_PAGE,
+          fetchedAt: '2026-09-22T10:00:00.000Z',
+        });
+      }
+
+      const { likes } = conversationOf(cms, contentDir);
+      assert.deepEqual(
+        likes.map((like) => like.id),
+        [IMPORTED_LIKE],
+      );
     });
+  }
+
+  it('counts a like from somebody else as theirs', async () => {
+    const { cms, contentDir } = await site(
+      likeLine(`${CAROL}#likes/1`, CAROL),
+      undefined,
+      comments,
+    );
 
     const { likes } = conversationOf(cms, contentDir);
     assert.deepEqual(
-      likes.map((like) => like.id),
-      [IMPORTED_LIKE],
+      likes.map((like) => like.id).sort(),
+      [IMPORTED_LIKE, `${CAROL}#likes/1`].sort(),
     );
   });
 });

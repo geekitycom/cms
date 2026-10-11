@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import {
+  actorField,
   COMMENT_KINDS,
   COMMENT_SOURCES,
   COMMENT_STATUSES,
@@ -335,6 +336,7 @@ function commentFrom(value: unknown): CommentRecord | undefined {
     ...viaField(optionalText(value['via'])),
     ...migratedFields(value['migrated'] === true, optionalText(value['origin'])),
     ...userField(optionalText(value['user'])),
+    ...actorField(optionalText(value['actor'])),
   };
 }
 
@@ -1160,6 +1162,7 @@ function commentRecordOf(comment: NewComment): CommentRecord {
     ...viaField(comment.via),
     ...migratedFields(comment.migrated, comment.origin),
     ...userField(comment.user),
+    ...actorField(comment.actor),
   };
 }
 
@@ -1184,6 +1187,7 @@ function publishedEntryOf(comment: CommentRecord): PublishedComment {
     ...viaField(comment.via),
     ...migratedFields(comment.migrated, comment.origin),
     ...userField(comment.user),
+    ...actorField(comment.actor),
   };
 }
 

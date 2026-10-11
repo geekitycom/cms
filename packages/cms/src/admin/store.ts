@@ -490,10 +490,10 @@ export interface CommentAuthor {
   /**
    * Their avatar, or `null`.
    *
-   * Only a webmention ever has one, out of the `u-photo` of the source page's
-   * `h-card` (TASK-51): a form asks for no picture, and one it did ask for
-   * would be a stranger's file on somebody else's page. It is a URL on the
-   * author's own site, printed as an `<img>` exactly as a fediverse reply's is.
+   * A webmention has one out of the `u-photo` of the source page's `h-card`
+   * (TASK-51), and an imported fediverse comment its actor's icon (TASK-338).
+   * A form asks for no picture: one it did ask for would be a stranger's file
+   * on somebody else's page. The page serves it through the avatar cache.
    */
   avatar: string | null;
 }
@@ -604,11 +604,23 @@ export interface CommentRecord {
    * comment.
    */
   user?: string;
+  /**
+   * The fediverse actor who wrote it, by id, for a migrated fediverse comment
+   * whose actor the export named (TASK-338). What tells their like here from
+   * the same person's like delivered since, whatever profile page each names.
+   * Absent for every other comment.
+   */
+  actor?: string;
 }
 
 /** A comment's {@link CommentRecord.user} as a record carries it: present only when there is one. */
 export function userField(user: string | null | undefined): Pick<CommentRecord, 'user'> {
   return user === undefined || user === null || user === '' ? {} : { user };
+}
+
+/** A comment's {@link CommentRecord.actor} as a record carries it: present only when there is one. */
+export function actorField(actor: string | null | undefined): Pick<CommentRecord, 'actor'> {
+  return actor === undefined || actor === null || actor === '' ? {} : { actor };
 }
 
 /** A comment's {@link CommentRecord.migrated} and {@link CommentRecord.origin} as a record carries them: present only when set. */
@@ -1186,8 +1198,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         id, slug, permalink, source, kind, status,
         author_name, author_url, author_email,
         markdown, html, submitted_at, address_hash, in_reply_to, url, author_avatar, notify,
-        redacted, rsvp, via, migrated, origin, user
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        redacted, rsvp, via, migrated, origin, user, actor
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET
         slug = excluded.slug,
         permalink = excluded.permalink,
@@ -1210,7 +1222,8 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         via = excluded.via,
         migrated = excluded.migrated,
         origin = excluded.origin,
-        user = excluded.user
+        user = excluded.user,
+        actor = excluded.actor
     `),
     deleteComment: db.prepare('DELETE FROM comments WHERE id = ?'),
     clearComments: db.prepare('DELETE FROM comments'),
@@ -1744,6 +1757,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
         comment.migrated === true ? 1 : 0,
         comment.origin ?? null,
         comment.user ?? null,
+        comment.actor ?? null,
       );
       written({
         kind: 'comment',
@@ -1790,6 +1804,7 @@ export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
             comment.migrated === true ? 1 : 0,
             comment.origin ?? null,
             comment.user ?? null,
+            comment.actor ?? null,
           );
         }
       });
@@ -2138,6 +2153,7 @@ function toComment(row: Record<string, unknown>): PostComment {
     ...viaField(nullableText(row['via'])),
     ...migratedFields(Number(row['migrated'] ?? 0) === 1, nullableText(row['origin'])),
     ...userField(nullableText(row['user'])),
+    ...actorField(nullableText(row['actor'])),
   };
 }
 
@@ -2896,6 +2912,10 @@ const MIGRATIONS: readonly Migration[] = [
   {
     version: 28,
     sql: `ALTER TABLE comments ADD COLUMN user TEXT;`,
+  },
+  {
+    version: 29,
+    sql: `ALTER TABLE comments ADD COLUMN actor TEXT;`,
   },
 ];
 
