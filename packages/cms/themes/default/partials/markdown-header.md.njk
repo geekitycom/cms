@@ -12,13 +12,15 @@
   `title` is the heading, absent when the page's own Markdown opens with one.
   `bio` is the person the page speaks for, on an author archive and on a solo
   author site's homepage: `name`, `url`, `note` and `links` (each a `label`
-  and a `url`).
+  and a `url`). `staticFrontPage` is true on a homepage that is a page. This
+  theme prints the bio there only when the homepage lists posts, as its HTML
+  does (decision-45); a site theme may print it on a static homepage too.
 #}
 {% if title %}
 # {{ title | escapeMarkdown }}
 
 {% endif %}
-{% if bio %}
+{% if bio and not staticFrontPage %}
 {% if bio.note %}
 {{ bio.note | escapeMarkdown }}
 

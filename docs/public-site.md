@@ -392,8 +392,9 @@ on that page, one line each:
 ```
 
 On an author archive the header writes the author's bio under the heading.
-On a site whose author is a user, the homepage carries that bio too, whether
-the homepage is the latest posts or a page.
+On a site whose author is a user, a homepage that lists the latest posts
+carries that bio too. A homepage that is a page shows only the page, as its
+HTML does. A site theme can add the bio there.
 
 A theme overrides either partial like any other template. See
 [The Markdown representation](theme/markdown.md).

@@ -896,6 +896,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       home: HOME_LINK,
       ...chrome,
       bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),
+      staticFrontPage: frontPage !== undefined,
       markdownUrl,
     };
     return {

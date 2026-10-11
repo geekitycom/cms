@@ -298,14 +298,27 @@ describe('the bio (AC #5)', () => {
     assert.ok(text.includes(`---\n\n# Ada Lovelace\n\n${BIO}\n\n## Posts`), text);
   });
 
-  it('is on the homepage of a solo author site, a listing or a page', async () => {
+  it("is on a solo author site's homepage that lists posts, as the HTML card is", async () => {
     const listing = await site();
     assert.ok((await markdown(listing, '/index.md')).includes(BIO));
+  });
 
+  it('is left out of a static homepage by the default theme, which prints only the page', async () => {
     const page = await site({ site: { homepage: 'about' } });
-    assert.ok(
-      (await markdown(page, '/index.md')).includes(`# About\n\n${BIO}\n\nWho writes this.`),
-    );
+    const home = await markdown(page, '/index.md');
+    assert.ok(home.includes('# About\n\nWho writes this.'), home);
+    assert.doesNotMatch(home, /first\\\* program/, 'the bio is not printed');
+  });
+
+  it('is given to a site theme on a static homepage, which may print it', async () => {
+    const page = await site({
+      site: { homepage: 'about', theme: 'mine' },
+      theme: {
+        'partials/markdown-header.md.njk':
+          '{% if staticFrontPage and bio %}{{ bio.note | escapeMarkdown }}\n\n{% endif %}',
+      },
+    });
+    assert.ok((await markdown(page, '/index.md')).includes('Wrote the \\*first\\* program.'));
   });
 
   it('is nowhere on a site whose author is nobody', async () => {
