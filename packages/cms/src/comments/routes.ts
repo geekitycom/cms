@@ -205,7 +205,6 @@ function drawnFor(form: CommentFormContext, viewer: CommentViewer | undefined): 
   return viewer === undefined ? form : signedInCommentForm(form, viewer);
 }
 
-/** The post's own page, rendered again with this form on it. */
 function page(
   c: Context<GeekityEnv>,
   document: Document,

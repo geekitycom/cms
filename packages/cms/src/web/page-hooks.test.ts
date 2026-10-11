@@ -223,6 +223,8 @@ async function siteWithGuardedAnalytics(
     'posts/hello.md':
       "---\ntitle: Hello\ndate: '2026-09-02T09:00:00Z'\npermalink: /2026/09/hello/\ntags:\n  - notes\n---\n\nBody.\n",
     'pages/about.md': '---\ntitle: About\npermalink: /about/\n---\n\nAbout us.\n',
+    'pages/spoof.md':
+      '---\ntitle: Spoof\npermalink: /spoof/\nsignedIn: true\ndevMode: true\n---\n\nSpoofed.\n',
   });
 
   const cms = await box.open({ contentDir, dataDir, themesDir, ...config });
@@ -257,6 +259,13 @@ describe('devMode and signedIn on the context, for a theme to leave analytics ou
       assert.match(html, /<geekity-admin-bar/, `${pathname} was not drawn for the signed-in user`);
       assert.equal(html.includes('umami'), false, `${pathname} counted the signed-in reader`);
     }
+  });
+
+  it("reads both keys from the site, never from a page's front matter", async () => {
+    const { cms } = await siteWithGuardedAnalytics();
+
+    const html = await (await cms.app.request('/spoof/')).text();
+    assert.ok(headOf(html).includes(UMAMI), 'front matter switched the analytics off');
   });
 
   it('treats a session whose user was deleted as a stranger (AC #2)', async () => {

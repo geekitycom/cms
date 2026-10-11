@@ -1506,8 +1506,7 @@ function wantsFullDocuments(c: Context<GeekityEnv>): boolean {
  *
  * The documents on the page are not the whole story: the same two posts on a
  * differently sized archive are a different page, and a summary is not the
- * body, so the pagination and the `full` flag are in the fingerprint too, and
- * so is dev mode, which decides whether a theme's analytics are on the page.
+ * body, so the pagination and the `full` flag are in the fingerprint too.
  */
 function listingFingerprint(
   href: string,

@@ -893,7 +893,6 @@ describe('the comments and reactions import', () => {
 
     it('rewrites a name a 0.3.0 import stored with its entities, and keeps one the site edited', async () => {
       const wp = await site();
-      // `&amp;#8211;` decodes to `&#8211;`, the name 0.3.0 stored for `&#8211;`.
       await wp.run([post(['A &amp;#8211; B', 'C &amp;#8211; D'])]);
       assert.deepEqual(await names(wp), ['A &#8211; B', 'C &#8211; D']);
       const records = { admin: wp.admin, contentDir: wp.contentDir, dataDir: wp.dataDir };

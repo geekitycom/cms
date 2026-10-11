@@ -35,7 +35,7 @@ let environment: Environment | undefined;
  * goes through untouched, so what everybody else is sent, headers and bytes, is what
  * it was before the bar existed. For a signed-in one the account is put on the
  * context for the handlers, every page they draw has `signedIn` in its
- * template context (TASK-342), and whatever HTML they answer with, a document, a
+ * template context, and whatever HTML they answer with, a document, a
  * listing, a search, the 404 or the 500, gets the bar straight after its
  * `<body>` tag, the `geekity-admin-bar` class on `<html>`, and the headers of
  * a page drawn for one reader: private, no-store, and no validator. Anything

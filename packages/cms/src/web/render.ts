@@ -420,9 +420,6 @@ export interface RenderedPage {
   readonly fingerprint: string;
 }
 
-// Set at the public site's door (the admin bar) rather than passed to every
-// render method: a listing, the 404 and the 500 are drawn for the same reader
-// as the post, and none of them is handed the request.
 const signedInReader = new AsyncLocalStorage<true>();
 
 /** Run `draw` as the request of a signed-in reader, so its pages say `signedIn`. */
@@ -531,7 +528,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(siteOwner === undefined ? {} : { soloAuthor: siteOwner }),
       ...context,
       ...licenseContext(site, context),
-      // After the caller's context, so no front matter can spell either one.
       devMode: devModeOn(config),
       signedIn: signedInReader.getStore() === true,
     });
