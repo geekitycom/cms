@@ -20,7 +20,7 @@
 #   GEEKITY_TAG=0.3.0
 #   GEEKITY_BASE_URL=https://example.com
 #
-# See README.md, "Deploying with Docker".
+# See docs/deploying.md.
 
 services:
   geekity:
@@ -61,7 +61,7 @@ services:
       - '127.0.0.1:${GEEKITY_HOST_PORT:-3000}:3000'
 
     # Every variable in .env reaches the container, so any GEEKITY_* setting in
-    # README.md, "Configuration", can be set there.
+    # docs/configuration.md can be set there.
     env_file:
       - .env
 

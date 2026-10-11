@@ -5,7 +5,7 @@ import hello from './plugins/hello.ts';
 
 /**
  * Every value here is optional and every value can be overridden by an
- * environment variable at boot. See the README for the full table.
+ * environment variable at boot. See docs/configuration.md for the full table.
  *
  * `playground/` is a gitignored copy of `content/`, made by `playground.ts`
  * before `pnpm dev` and `pnpm start`, so what the admin writes stays local.

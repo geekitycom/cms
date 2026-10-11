@@ -1,6 +1,6 @@
 # @geekity/plugin-wordpress
 
-A [Geekity CMS](../cms/README.md) plugin for a site that moved from the
+A [Geekity CMS](https://github.com/geekitycom/cms/blob/main/packages/cms/README.md) plugin for a site that moved from the
 WordPress ActivityPub plugin. It answers the old plugin's inbox and collection
 paths until every follower's server has refetched the actor, records when each
 path was last asked for, and adds two imports: `geekity import wordpress`,
@@ -368,8 +368,8 @@ certain the pair being imported is the one the followers hold. An actor id or a
 WordPress number another user already carries is refused too, before anything
 is written.
 
-The cutover, end to end, is in the `@geekity/cms` README under _Moving a site
-from the WordPress ActivityPub plugin_.
+The cutover, end to end, is in
+[Moving a site from the WordPress ActivityPub plugin](https://github.com/geekitycom/cms/blob/main/docs/federation.md#moving-a-site-from-the-wordpress-activitypub-plugin).
 
 ## The bundle
 

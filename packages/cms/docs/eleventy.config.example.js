@@ -1097,8 +1097,8 @@ export default function (eleventyConfig) {
   // `geekitySlug` is put on the context by the preprocessor above.
   //
   // What comes back is `{ replies, likes, boosts, mentions, counts }`, with `replies`
-  // nested by `inReplyTo` and every `content` already sanitised. The theme
-  // README documents the whole shape under "The conversation".
+  // nested by `inReplyTo` and every `content` already sanitised. The shape is
+  // documented in docs/theme/conversation.md in the repository.
   eleventyConfig.addFilter('conversation', (inbox, objectId, slug) =>
     conversationIn(inbox, objectId, slug),
   );

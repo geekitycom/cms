@@ -20,7 +20,7 @@
     "test:11ty": "pnpm -r --no-bail test:11ty",
     "fed:smoke": "pnpm -r fed:smoke",
     "typecheck": "pnpm build && pnpm -r typecheck",
-    "lint": "eslint --no-error-on-unmatched-pattern *.js scripts/*.ts && pnpm -r lint",
+    "lint": "eslint --no-error-on-unmatched-pattern *.js scripts/*.ts && node scripts/check-doc-links.ts && pnpm -r lint",
     "lint:fix": "eslint --fix --no-error-on-unmatched-pattern *.js scripts/*.ts && pnpm -r lint:fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

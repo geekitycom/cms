@@ -1,8 +1,8 @@
 # @geekity/plugin-tag-suggest
 
-A [Geekity CMS](../cms/README.md) plugin that suggests tags for a post in the
+A [Geekity CMS](https://github.com/geekitycom/cms/blob/main/packages/cms/README.md) plugin that suggests tags for a post in the
 editor. It asks the language model that
-[`@geekity/plugin-llm`](../plugin-llm/README.md) connects the site to for
+[`@geekity/plugin-llm`](https://github.com/geekitycom/cms/blob/main/packages/plugin-llm/README.md) connects the site to for
 hashtags that fit the draft: specific tags for the post itself, and tags from a
 list of hashtags people follow, for reach. Follower counts on
 [tags.pub](https://tags.pub) help rank both. It runs only when the author presses the

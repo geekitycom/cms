@@ -341,7 +341,7 @@
 
       A site theme that wants a different highlighter, or none, overrides this
       block; one that wants a different set of languages rebuilds the bundle.
-      See the theme README.
+      See "Code highlighting" in docs/theme/page-shell.md.
     #}
     {% if content and "language-" in content %}
     <script src="{{ "highlight.js" | asset }}" defer></script>

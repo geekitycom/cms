@@ -246,8 +246,8 @@ describe('the starter site, served', () => {
 });
 
 /**
- * The starter privacy page (TASK-136). Every row of the README's Personal data
- * table is something this page has to own up to, and each optional feature has
+ * The starter privacy page (TASK-136). Every row of the table in
+ * docs/personal-data.md is something this page has to own up to, and each optional feature has
  * to say it is optional, so the assertions read the rendered page for each.
  */
 describe('the starter privacy page', () => {

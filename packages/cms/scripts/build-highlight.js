@@ -34,7 +34,8 @@ const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
  * and no more. highlight.js has nearly two hundred; every one of them is bytes
  * every reader of a page with code on it downloads, so the list is deliberate.
  * A site that writes in something else rebuilds with its own list, or drops the
- * bundle and overrides the `scripts` block — see the theme README.
+ * bundle and overrides the `scripts` block — see "Code highlighting" in
+ * docs/theme/page-shell.md.
  *
  * Aliases come with the grammar, so `js`, `ts`, `html`, `yml` and `sh` all
  * resolve without being named here.
