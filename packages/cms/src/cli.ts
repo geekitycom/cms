@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import cluster from 'node:cluster';
 import { existsSync, realpathSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
@@ -13,14 +12,13 @@ import { openAdminStore } from './admin/store.ts';
 import type { AdminStore } from './admin/store.ts';
 import { migrateUsersToFile } from './admin/users-migration.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
-import { resolveConfig } from './config.ts';
 import type { ResolvedConfig } from './config.ts';
+import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './comments/records.ts';
 import { stripStoredUploads } from './content/metadata/sweep.ts';
 import { createUser, DuplicateUsernameError } from './site/users.ts';
 import { UPLOAD_DIRECTORY } from './web/assets.ts';
 import { createCms } from './index.ts';
-import type { GeekityConfig } from './config.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
 import type { PluginCommand } from './plugin.ts';
 import { importPluginFolders, scanPluginFolders } from './plugins/folder.ts';
@@ -48,33 +46,175 @@ import {
 import { devModeOn, enterDevMode, leaveDevMode } from './dev-mode.ts';
 import { messageOf } from './util/errors.ts';
 
-export type Command =
+/** The commands built into the bin. */
+type CoreCommand =
   | 'serve'
   | 'init'
   | 'sync'
   | 'rebuild'
   | 'resend'
-  | 'user'
   | 'maintenance'
   | 'dev-mode'
   | 'strip-metadata'
-  | 'plugin'
-  | 'help'
-  | 'version';
+  | 'user'
+  | 'plugin';
 
-/** The commands a site can name on the command line, as opposed to the flags. */
-const COMMANDS: readonly Command[] = [
-  'serve',
-  'init',
-  'sync',
-  'rebuild',
-  'resend',
-  'user',
-  'maintenance',
-  'dev-mode',
-  'strip-metadata',
-  'plugin',
-];
+export type Command = CoreCommand | 'help' | 'version';
+
+/** One built-in command: how the help shows it, and what runs it. */
+interface CommandEntry {
+  /** Its lines under Usage, each after `geekity `. */
+  synopsis: readonly string[];
+  /** Its entries under Commands: the words named, and what they do as the lines shown. */
+  help: readonly (readonly [words: string, summary: readonly string[]])[];
+  run(parsed: ParsedArgs): Promise<number>;
+}
+
+/** Every built-in command, in the order the help lists them. */
+const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
+  serve: {
+    synopsis: ['[serve] [--config <file>]'],
+    help: [['serve', ['Start the CMS (the default when no command is given).']]],
+    run: serveCommand,
+  },
+  init: {
+    synopsis: ['init <directory>'],
+    help: [['init', ['Create a new site in <directory>.']]],
+    run: initCommand,
+  },
+  sync: {
+    synopsis: ['sync [--config <file>]'],
+    help: [['sync', ['Rebuild the content index once and exit.']]],
+    run: syncCommand,
+  },
+  rebuild: {
+    synopsis: ['rebuild [--config <file>]'],
+    help: [
+      [
+        'rebuild',
+        [
+          'Delete data/geekity.db and build it again from the files.',
+          'Everything in it is derived, so this is always safe with the',
+          'site stopped; sessions and delivery outcomes start empty.',
+        ],
+      ],
+    ],
+    run: rebuildCommand,
+  },
+  resend: {
+    synopsis: ['resend (--all | <slug>...) [--config <file>]'],
+    help: [
+      [
+        'resend',
+        [
+          'Send announced posts to every follower and relay again, as',
+          'they read now: an Update for a post still published, a',
+          'Delete for one withdrawn. --all resends every post the site',
+          'has announced; this is how posts federated before a new',
+          'federation feature (such as quote posts) pick it up.',
+        ],
+      ],
+    ],
+    run: resendCommand,
+  },
+  maintenance: {
+    synopsis: ['maintenance (on [--until <time>] | off | status) [--config <file>]'],
+    help: [
+      [
+        'maintenance',
+        [
+          'Take the public site down on purpose, or bring it back.',
+          'While on, pages, feeds, sitemaps and inbox deliveries answer',
+          '503 with Retry-After; the admin, /healthz and signed-in',
+          'users are let through. A running site notices within a',
+          'second, with no restart.',
+        ],
+      ],
+    ],
+    run: maintenanceCommand,
+  },
+  'dev-mode': {
+    synopsis: ['dev-mode (on | off | status) [--config <file>]'],
+    help: [
+      [
+        'dev-mode',
+        [
+          'Hold everything the site would send to the outside world',
+          '(ActivityPub deliveries and relay follows, webmentions,',
+          'rssCloud and WebSub pings, IndexNow, email) while it is',
+          'built or migrated, and record each one in',
+          'data/dev-mode.jsonl. off takes the site live: nothing held',
+          'is sent then, and the record says when it went live.',
+        ],
+      ],
+    ],
+    run: devModeCommand,
+  },
+  'strip-metadata': {
+    synopsis: ['strip-metadata [--config <file>]'],
+    help: [
+      [
+        'strip-metadata',
+        [
+          'Remove location and camera metadata (EXIF, XMP, IPTC, a',
+          "video's location) from files already in content/uploads.",
+          'New uploads are stripped as they arrive; this is for the',
+          'ones from before. Safe to run again: a clean file is left',
+          'as it is.',
+        ],
+      ],
+    ],
+    run: stripMetadataCommand,
+  },
+  user: {
+    synopsis: ['user add <username> [--password <pw>] [--email <address>] [--config <file>]'],
+    help: [
+      [
+        'user add',
+        ['Create an admin user, so a site can get its first login', 'without the setup screen.'],
+      ],
+    ],
+    run: userCommand,
+  },
+  plugin: {
+    synopsis: [
+      'plugin (add <package>[@version] | remove <package>) [--config <file>]',
+      'plugin upgrade [<package>...] [--check] [--config <file>]',
+    ],
+    help: [
+      [
+        'plugin add',
+        [
+          "Install a plugin package's bundle from the npm registry",
+          '(npm_config_registry, or registry.npmjs.org) into the',
+          'plugins folder, GEEKITY_PLUGINS_DIR. It installs only the',
+          'package named, and names any plugin it requires that is',
+          'missing. Reload on the Plugins screen loads it.',
+        ],
+      ],
+      [
+        'plugin remove',
+        [
+          "Delete a plugin's folder from the plugins folder. Reload on",
+          'the Plugins screen unloads it. It refuses a plugin the site',
+          'has enabled: disable it first.',
+        ],
+      ],
+      [
+        'plugin upgrade',
+        [
+          'Bring each plugin in the plugins folder, or only the ones',
+          'named, up to its newest version that this core and the',
+          'other installed plugins can run, installed as plugin add',
+          'installs one. Plugins that must move together do. It says,',
+          'for each plugin, what it upgraded, or why it held a newer',
+          'version back. --check reports and installs nothing.',
+        ],
+      ],
+    ],
+    run: pluginFolderCommand,
+  },
+};
 
 /**
  * The options one command reads out of {@link ParsedArgs.flags}, each of which
@@ -113,69 +253,8 @@ export interface ParsedArgs {
   args: readonly string[];
 }
 
-const CONFIG_FILENAMES = ['geekity.config.ts', 'geekity.config.js', 'geekity.config.mjs'];
-
-const USAGE = `geekity — the Geekity CMS command line
-
-Usage:
-  geekity [serve] [--config <file>]
-  geekity init <directory>
-  geekity sync [--config <file>]
-  geekity rebuild [--config <file>]
-  geekity resend (--all | <slug>...) [--config <file>]
-  geekity maintenance (on [--until <time>] | off | status) [--config <file>]
-  geekity dev-mode (on | off | status) [--config <file>]
-  geekity strip-metadata [--config <file>]
-  geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
-  geekity plugin (add <package>[@version] | remove <package>) [--config <file>]
-  geekity plugin upgrade [<package>...] [--check] [--config <file>]
-
-Commands:
-  serve            Start the CMS (the default when no command is given).
-  init             Create a new site in <directory>.
-  sync             Rebuild the content index once and exit.
-  rebuild          Delete data/geekity.db and build it again from the files.
-                   Everything in it is derived, so this is always safe with the
-                   site stopped; sessions and delivery outcomes start empty.
-  resend           Send announced posts to every follower and relay again, as
-                   they read now: an Update for a post still published, a
-                   Delete for one withdrawn. --all resends every post the site
-                   has announced; this is how posts federated before a new
-                   federation feature (such as quote posts) pick it up.
-  maintenance      Take the public site down on purpose, or bring it back.
-                   While on, pages, feeds, sitemaps and inbox deliveries answer
-                   503 with Retry-After; the admin, /healthz and signed-in
-                   users are let through. A running site notices within a
-                   second, with no restart.
-  dev-mode         Hold everything the site would send to the outside world
-                   (ActivityPub deliveries and relay follows, webmentions,
-                   rssCloud and WebSub pings, IndexNow, email) while it is
-                   built or migrated, and record each one in
-                   data/dev-mode.jsonl. off takes the site live: nothing held
-                   is sent then, and the record says when it went live.
-  strip-metadata   Remove location and camera metadata (EXIF, XMP, IPTC, a
-                   video's location) from files already in content/uploads.
-                   New uploads are stripped as they arrive; this is for the
-                   ones from before. Safe to run again: a clean file is left
-                   as it is.
-  user add         Create an admin user, so a site can get its first login
-                   without the setup screen.
-  plugin add       Install a plugin package's bundle from the npm registry
-                   (npm_config_registry, or registry.npmjs.org) into the
-                   plugins folder, GEEKITY_PLUGINS_DIR. It installs only the
-                   package named, and names any plugin it requires that is
-                   missing. Reload on the Plugins screen loads it.
-  plugin remove    Delete a plugin's folder from the plugins folder. Reload on
-                   the Plugins screen unloads it. It refuses a plugin the site
-                   has enabled: disable it first.
-  plugin upgrade   Bring each plugin in the plugins folder, or only the ones
-                   named, up to its newest version that this core and the
-                   other installed plugins can run, installed as plugin add
-                   installs one. Plugins that must move together do. It says,
-                   for each plugin, what it upgraded, or why it held a newer
-                   version back. --check reports and installs nothing.
-
-Options:
+/** The help's sections after the commands, which are about options rather than commands. */
+const OPTIONS_HELP = `Options:
   --config <file>  Config file to load. Defaults to the first of
                    ${CONFIG_FILENAMES.join(', ')} found in the working directory.
   --password <pw>  The new user's password. Left off, it is asked for without
@@ -321,136 +400,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   return { command: command ?? 'serve', configPath, password, email, flags, args };
 }
 
-function isCommand(value: string): value is Command {
-  return (COMMANDS as readonly string[]).includes(value);
-}
-
-/** Extensions that need TypeScript support in the loader. */
-const TYPESCRIPT_EXTENSIONS = new Set(['.ts', '.mts', '.cts']);
-
-/**
- * Load a config module, returning `{}` when the site has no config file.
- *
- * A TypeScript config is imported directly first. That is all it takes on Node
- * 24, which strips types without a flag, and inside this repository, where
- * the CLI already runs under tsx. A Node started with stripping disabled — and
- * any file carrying TypeScript syntax that stripping cannot erase — falls back to
- * registering tsx from the *site's* own dependencies, which is where a site
- * scaffolded by `geekity init` has it. A site with neither writes
- * `geekity.config.js` instead; it is in the candidate list for exactly that.
- */
-export async function loadConfig(
-  cwd: string,
-  configPath: string | undefined,
-): Promise<GeekityConfig> {
-  const candidates =
-    configPath === undefined
-      ? CONFIG_FILENAMES.map((name) => path.resolve(cwd, name))
-      : [path.resolve(cwd, configPath)];
-
-  for (const candidate of candidates) {
-    const href = pathToFileURL(candidate).href;
-    let module: { default?: GeekityConfig };
-    try {
-      module = (await import(href)) as { default?: GeekityConfig };
-    } catch (error) {
-      if (isModuleNotFound(error, candidate)) continue;
-      if (!needsTypeScriptLoader(error, candidate)) throw error;
-
-      await registerTypeScriptLoader(cwd, candidate);
-      module = (await import(href)) as { default?: GeekityConfig };
-    }
-    return module.default ?? {};
-  }
-
-  if (configPath !== undefined) {
-    throw new Error(`Config file not found: ${path.resolve(cwd, configPath)}`);
-  }
-  return {};
-}
-
-/**
- * The site's config, loaded from the working directory and resolved once.
- *
- * `adjust` changes what the site wrote before it is resolved, so an
- * environment variable still wins over what a command sets, as it wins over
- * the file.
- */
-async function loadResolvedConfig(
-  configPath: string | undefined,
-  adjust: (config: GeekityConfig) => GeekityConfig = (config) => config,
-): Promise<ResolvedConfig> {
-  return resolveConfig(adjust(await loadConfig(process.cwd(), configPath)));
-}
-
-/**
- * The site's own tsx, as the directory the package was installed into, or
- * `undefined` when the site does not have one.
- *
- * Node's resolver is deliberately not asked: this has to be the tsx the *site*
- * installed, and a resolver anchored anywhere else — or patched by a tsx that
- * is already loaded, which is what happens inside this repository — would
- * happily answer with somebody else's copy.
- */
-export function findSiteTsx(cwd: string): string | undefined {
-  let directory = path.resolve(cwd);
-
-  for (;;) {
-    const candidate = path.join(directory, 'node_modules', 'tsx');
-    if (existsSync(path.join(candidate, 'package.json'))) return candidate;
-
-    const parent = path.dirname(directory);
-    if (parent === directory) return undefined;
-    directory = parent;
-  }
-}
-
-/**
- * Teach this process to import TypeScript, using the tsx installed alongside
- * the site.
- *
- * tsx is the site's rather than this package's because the CMS does not depend
- * on it at runtime: a site that runs `server.ts` already has it, and a site
- * that does not want it writes its config in JavaScript instead.
- */
-export async function registerTypeScriptLoader(cwd: string, configFile: string): Promise<void> {
-  const tsx = findSiteTsx(cwd);
-  if (tsx === undefined) {
-    throw new Error(
-      `Could not load ${configFile}: this Node cannot import TypeScript on its own and tsx is ` +
-        'not installed in this site. Either add it (pnpm add -D tsx), or write the config as ' +
-        'geekity.config.js instead.',
-    );
-  }
-
-  const fromTsx = createRequire(path.join(tsx, 'package.json'));
-  const api = (await import(pathToFileURL(fromTsx.resolve('tsx/esm/api')).href)) as {
-    register(): unknown;
-  };
-  api.register();
-}
-
-/**
- * Whether an import failed because the loader could not handle TypeScript.
- *
- * `ERR_UNKNOWN_FILE_EXTENSION` is Node before type stripping was on by
- * default; `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` is a file using `enum` or
- * `namespace`, which stripping refuses because erasing it is not enough.
- */
-function needsTypeScriptLoader(error: unknown, candidate: string): boolean {
-  if (!TYPESCRIPT_EXTENSIONS.has(path.extname(candidate).toLowerCase())) return false;
-  const code = (error as { code?: unknown } | null)?.code;
-  return code === 'ERR_UNKNOWN_FILE_EXTENSION' || code === 'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX';
-}
-
-function isModuleNotFound(error: unknown, candidate: string): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: string }).code === 'ERR_MODULE_NOT_FOUND' &&
-    String((error as { message?: string }).message ?? '').includes(candidate)
-  );
+function isCommand(value: string): value is CoreCommand {
+  return Object.hasOwn(COMMANDS, value);
 }
 
 /** Run one command. Resolves with the exit code the process should use. */
@@ -460,33 +411,23 @@ async function main(argv: readonly string[]): Promise<number> {
     return await pluginCommand(argv);
   }
 
-  const { command, configPath, password, email, flags, args } = parseArgs(argv);
+  const parsed = parseArgs(argv);
 
-  if (command === 'help') {
-    process.stdout.write(await usage(configPath));
+  if (parsed.command === 'help') {
+    process.stdout.write(await usage(parsed.configPath));
     return 0;
   }
 
-  if (command === 'version') {
+  if (parsed.command === 'version') {
     process.stdout.write(`${ownManifest().version}\n`);
     return 0;
   }
 
-  if (command === 'init') return init(args);
-  if (command === 'user') return userCommand(args, configPath, password, email);
-  if (command === 'sync') return syncCommand(configPath);
-  if (command === 'rebuild') return rebuildCommand(configPath);
-  if (command === 'resend') return resendCommand(args, configPath, flags);
-  if (command === 'maintenance') return maintenanceCommand(args, configPath, flags);
-  if (command === 'dev-mode') return devModeCommand(args, configPath);
-  if (command === 'strip-metadata') return stripMetadataCommand(configPath);
-  if (command === 'plugin') return pluginFolderCommand(args, configPath, flags);
-
-  return serveCommand(configPath);
+  return COMMANDS[parsed.command].run(parsed);
 }
 
 /** `geekity init <directory>`: scaffold a new site. */
-async function init(args: readonly string[]): Promise<number> {
+async function initCommand({ args }: ParsedArgs): Promise<number> {
   const directory = args[0];
   if (directory === undefined) {
     throw new Error('geekity init <directory> needs the directory to create.');
@@ -515,11 +456,7 @@ async function init(args: readonly string[]): Promise<number> {
  * Only the file under `data/` is touched, so this works the same with the
  * site running or stopped: a running site re-reads it within a second.
  */
-async function maintenanceCommand(
-  args: readonly string[],
-  configPath: string | undefined,
-  flags: Readonly<Record<string, string | true>>,
-): Promise<number> {
+async function maintenanceCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const action = args[0];
   const config = await loadResolvedConfig(configPath);
   const file = maintenanceFile(config.dataDir);
@@ -552,10 +489,7 @@ async function maintenanceCommand(
   throw new Error('geekity maintenance needs on, off or status.');
 }
 
-async function devModeCommand(
-  args: readonly string[],
-  configPath: string | undefined,
-): Promise<number> {
+async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number> {
   const action = args[0];
   const config = await loadResolvedConfig(configPath);
 
@@ -612,7 +546,7 @@ function forcedLine(forced: boolean): string {
     : '';
 }
 
-async function stripMetadataCommand(configPath: string | undefined): Promise<number> {
+async function stripMetadataCommand({ configPath }: ParsedArgs): Promise<number> {
   const config = await loadResolvedConfig(configPath);
   const results = await stripStoredUploads(path.join(config.contentDir, UPLOAD_DIRECTORY));
 
@@ -644,7 +578,7 @@ async function stripMetadataCommand(configPath: string | undefined): Promise<num
  * Watching is forced off whatever the config says, because a one-shot scan
  * that then sat in a watcher would never exit.
  */
-async function syncCommand(configPath: string | undefined): Promise<number> {
+async function syncCommand({ configPath }: ParsedArgs): Promise<number> {
   const cms = createCms(
     await loadResolvedConfig(configPath, (config) => ({ ...config, watch: false })),
   );
@@ -681,11 +615,7 @@ async function syncCommand(configPath: string | undefined): Promise<number> {
  * button on the federation screen, for every post at once. Delivery runs with
  * no queue, so each activity has been posted before the process exits.
  */
-async function resendCommand(
-  args: readonly string[],
-  configPath: string | undefined,
-  flags: Readonly<Record<string, string | true>>,
-): Promise<number> {
+async function resendCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const all = flags['all'] === true;
   if (all === args.length > 0) {
     throw new Error(
@@ -747,7 +677,7 @@ async function resendCommand(
  * Watching is forced off for the reason `sync` forces it off: a one-shot
  * command that sat in a watcher would never exit.
  */
-async function rebuildCommand(configPath: string | undefined): Promise<number> {
+async function rebuildCommand({ configPath }: ParsedArgs): Promise<number> {
   const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
   const file = databaseFile(config.dataDir);
 
@@ -857,7 +787,7 @@ const SQLITE_LOCKED = 6;
  * to show and the setup screen. It happens here rather than in `createCms` so
  * a site that builds its own server never has content written for it.
  */
-async function serveCommand(configPath: string | undefined): Promise<number> {
+async function serveCommand({ configPath }: ParsedArgs): Promise<number> {
   if (cluster.isWorker) return serveWorker(configPath);
 
   const resolved = await loadResolvedConfig(configPath);
@@ -922,11 +852,7 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
   return 0;
 }
 
-async function pluginFolderCommand(
-  args: readonly string[],
-  configPath: string | undefined,
-  flags: Readonly<Record<string, string | true>>,
-): Promise<number> {
+async function pluginFolderCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const [action, ...names] = args;
   const spec = names.length === 1 ? names[0] : undefined;
   if (action !== 'upgrade' && action !== 'add' && action !== 'remove') {
@@ -1043,12 +969,12 @@ function upgradeReportText(report: UpgradeReport): string {
  * holding nobody but the user added here — which, the file winning, is what
  * the next boot would keep. So the same boot migration runs first.
  */
-async function userCommand(
-  args: readonly string[],
-  configPath: string | undefined,
-  flagPassword: string | undefined,
-  flagEmail: string | undefined,
-): Promise<number> {
+async function userCommand({
+  args,
+  configPath,
+  password: flagPassword,
+  email: flagEmail,
+}: ParsedArgs): Promise<number> {
   const subcommand = args[0];
   if (subcommand === undefined) {
     throw new Error('geekity user add <username> needs a subcommand. The only one is: add.');
@@ -1264,9 +1190,9 @@ async function usage(configPath: string | undefined): Promise<string> {
     found = await pluginCommands(await loadResolvedConfig(configPath));
   } catch (error) {
     process.stderr.write(`Plugin commands are not listed: ${messageOf(error)}\n`);
-    return USAGE;
+    return coreUsage();
   }
-  if (found.length === 0) return USAGE;
+  if (found.length === 0) return coreUsage();
 
   const lines = ['', 'Plugin commands:'];
   for (const { plugin, command } of found) {
@@ -1278,17 +1204,42 @@ async function usage(configPath: string | undefined): Promise<string> {
     lines.push(...wrap(command.summary, HELP_INDENT), `${HELP_INDENT}From ${plugin}.`);
     for (const option of command.options ?? []) {
       const flag = `--${option.name}${option.value === undefined ? '' : ` ${option.value}`}`;
-      const described = wrap(option.description, HELP_INDENT);
-      const head = `    ${flag}`;
-      if (head.length < HELP_INDENT.length - 1 && described[0] !== undefined) {
-        described[0] = `${head.padEnd(HELP_INDENT.length)}${described[0].trimStart()}`;
-        lines.push(...described);
-      } else {
-        lines.push(head, ...described);
-      }
+      lines.push(...helpEntry(`    ${flag}`, wrap(option.description, HELP_INDENT)));
     }
   }
-  return `${USAGE}${lines.join('\n')}\n`;
+  return `${coreUsage()}${lines.join('\n')}\n`;
+}
+
+/** The help for the built-in commands, generated from {@link COMMANDS}. */
+function coreUsage(): string {
+  const entries = Object.values(COMMANDS);
+  return [
+    'geekity — the Geekity CMS command line',
+    '',
+    'Usage:',
+    ...entries.flatMap((entry) => entry.synopsis.map((line) => `  geekity ${line}`)),
+    '',
+    'Commands:',
+    ...entries.flatMap((entry) =>
+      entry.help.flatMap(([words, summary]) =>
+        helpEntry(
+          `  ${words}`,
+          summary.map((line) => `${HELP_INDENT}${line}`),
+        ),
+      ),
+    ),
+    '',
+    OPTIONS_HELP,
+  ].join('\n');
+}
+
+/** A name and its indented description, side by side when the name leaves room. */
+function helpEntry(head: string, described: string[]): string[] {
+  if (head.length < HELP_INDENT.length - 1 && described[0] !== undefined) {
+    described[0] = `${head.padEnd(HELP_INDENT.length)}${described[0].trimStart()}`;
+    return described;
+  }
+  return [head, ...described];
 }
 
 /** Where the help's descriptions start, as the core commands' do. */
