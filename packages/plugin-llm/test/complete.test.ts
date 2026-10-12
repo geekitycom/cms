@@ -341,10 +341,12 @@ describe('failures', () => {
   });
 
   it('stops when the caller aborts', async () => {
-    provider.answer({ ...replying('late'), delayMs: 1_000 });
     const controller = new AbortController();
+    provider.answer(() => {
+      controller.abort();
+      return { ...replying('late'), delayMs: 1_000 };
+    });
     const pending = complete({ messages: MESSAGES, signal: controller.signal });
-    setTimeout(() => controller.abort(), 50);
     assert.deepEqual(errorOf(await pending), { kind: 'aborted' });
   });
 
