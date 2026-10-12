@@ -7,7 +7,7 @@ import { THEME_ASSET_PREFIX } from './assets.ts';
 import { representationOf } from './errors.ts';
 import { HEALTH_PATH } from './health.ts';
 import { CONTENT_TYPES, PRIVATE_CACHE_CONTROL } from './negotiate.ts';
-import { requestPath } from './routes.ts';
+import { requestPath } from './request.ts';
 import { CHANGE_PASSWORD_WELL_KNOWN_PATH, SECURITY_TXT_PATH } from './well-known.ts';
 
 /**

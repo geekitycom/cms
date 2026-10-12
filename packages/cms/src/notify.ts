@@ -12,7 +12,7 @@ import { absoluteUrl } from './util/url.ts';
 import { isListed } from './web/documents.ts';
 import { FEED_FORMATS, notifyEndpoints } from './web/feeds.ts';
 import type { NotifyServer } from './web/feeds.ts';
-import { feedHref } from './web/routes.ts';
+import { feedHref } from './web/listing-subject.ts';
 import { TAXONOMIES, termKey } from './web/taxonomy.ts';
 import type { TaxonomyTerm } from './web/taxonomy.ts';
 

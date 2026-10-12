@@ -449,20 +449,35 @@ function postConversation(context: ConversationContext, document: Document): Con
   };
 }
 
+type Group = 'written' | 'likes' | 'boosts' | 'mentions' | 'answers';
+
+/**
+ * A repost joins the boosts, because a reader looking at the page is being
+ * told the same thing by both; a mention is its own group, because it is
+ * neither an answer nor a reaction.
+ */
+const GROUP_OF: Readonly<Record<InteractionKind, Group>> = {
+  reply: 'written',
+  like: 'likes',
+  boost: 'boosts',
+  repost: 'boosts',
+  mention: 'mentions',
+};
+
 /** Everything said about one post, sorted into its groups and not yet threaded. */
-interface Gathered {
+interface Gathered extends Readonly<Record<Group, Interaction[]>> {
   /** What a top-level answer names. */
   readonly root: string;
-  /** The replies, oldest first, withdrawn ones included. */
-  readonly written: Interaction[];
   /** The ids of what an actor has taken back. */
   readonly withdrawn: ReadonlySet<string>;
   /** The native comments a reader may not see, pending or spam, by id. */
   readonly held: ReadonlyMap<string, Interaction>;
-  readonly likes: Interaction[];
-  readonly boosts: Interaction[];
-  readonly mentions: Interaction[];
-  readonly answers: Interaction[];
+}
+
+interface Part {
+  readonly said: readonly (readonly [Group, Interaction])[];
+  readonly held?: ReadonlyMap<string, Interaction>;
+  readonly withdrawn?: ReadonlySet<string>;
 }
 
 function gather(
@@ -470,61 +485,99 @@ function gather(
   document: Document,
   seen: ReadonlySet<string> = new Set([document.path]),
 ): Gathered {
-  const objectId = activityStreamsId(document, context.baseUrl);
+  const deliveredObjectId = activityStreamsId(document, context.baseUrl);
   const root = rootOf(context, document);
-
   const stored = context.admin.listCommentsFor(document.slug);
-  const users = context.users();
+  const naming = authorNaming(context.admin);
+  const isEvent = postTypeOf(document) === 'event';
+
+  const fediverse =
+    deliveredObjectId === undefined
+      ? []
+      : [
+          fromQuotes(context, deliveredObjectId, naming),
+          fromActivities(context, deliveredObjectId, stored, naming, isEvent),
+        ];
+  const comments = fromStored(context, document, stored, isEvent);
+  const sources = [...fediverse, comments];
+  const replyPosts = fromReplyPosts(context, document, root, seen, [
+    ...sources.flatMap(({ said }) =>
+      said.flatMap(([group, entry]) => (group === 'written' ? [entry] : [])),
+    ),
+    ...(comments.held?.values() ?? []),
+  ]);
+  return merged(root, [...sources, replyPosts]);
+}
+
+function merged(root: string, parts: readonly Part[]): Gathered {
+  const groups: Record<Group, Interaction[]> = {
+    written: [],
+    likes: [],
+    boosts: [],
+    mentions: [],
+    answers: [],
+  };
+  const held = new Map<string, Interaction>();
+  const withdrawn = new Set<string>();
+  for (const part of parts) {
+    for (const [group, entry] of part.said) groups[group].push(entry);
+    for (const [id, entry] of part.held ?? []) held.set(id, entry);
+    for (const id of part.withdrawn ?? []) withdrawn.add(id);
+  }
+  // Sorted before threading rather than after, because a thread is built by
+  // walking this list: two sources' entries would otherwise interleave in the
+  // order the code happened to read them rather than in the order they were
+  // written.
+  groups.written.sort(byPublished);
+  return { root, ...groups, held, withdrawn };
+}
+
+function fromQuotes(
+  context: ConversationContext,
+  objectId: string,
+  naming: (actorId: string) => InteractionAuthor,
+): Part {
+  const approvals = readAllQuoteAuthorizations(context.contentDir);
+  return {
+    said: quotesOf(context.admin, approvals, objectId, naming).map(
+      (quote) => ['mentions', quote] as const,
+    ),
+  };
+}
+
+function fromActivities(
+  context: ConversationContext,
+  objectId: string,
+  stored: readonly PostComment[],
+  naming: (actorId: string) => InteractionAuthor,
+  isEvent: boolean,
+): Part {
   // What was imported from the fediverse is walked from too: an answer to an
   // imported note names the note, which no logged activity may carry.
   const origins = stored.flatMap((comment) =>
     comment.source === 'activitypub' && comment.origin !== undefined ? [comment.origin] : [],
   );
-  const activities =
-    objectId === undefined ? [] : activitiesAround(context.admin, [objectId, ...origins]);
-  const naming = authorNaming(context.admin);
-  const quotes =
-    objectId === undefined
-      ? []
-      : quotesOf(context.admin, readAllQuoteAuthorizations(context.contentDir), objectId, naming);
-
+  const activities = activitiesAround(context.admin, [objectId, ...origins]);
   const withdrawn = withdrawnBy(activities);
-  const written: Interaction[] = [];
-  const likes: Interaction[] = [];
-  const boosts: Interaction[] = [];
-  const mentions: Interaction[] = [...quotes];
-  const answers: Interaction[] = [];
-  const held = new Map<string, Interaction>();
+  const taken = (activityId: string | null): boolean =>
+    activityId !== null && withdrawn.has(activityId);
   // One like per actor, so a like imported from the site this one replaced
   // and the same person's like delivered here are one.
-  const reacted = new Set(
-    stored.flatMap(({ kind, actor }) =>
-      actor === undefined || (kind !== 'like' && kind !== 'boost' && kind !== 'repost')
-        ? []
-        : [`${kind === 'like' ? 'like' : 'boost'}\0${actor}`],
-    ),
-  );
-  const isEvent = postTypeOf(document) === 'event';
+  const reacted = new Set(stored.flatMap(storedReaction));
+  const said: [Group, Interaction][] = [];
 
   for (const activity of activities) {
     const answer = isEvent ? RSVP_ACTIVITIES[activity.activityType] : undefined;
     if (answer !== undefined) {
-      if (activity.objectId !== objectId) continue;
-      if (activity.activityId !== null && withdrawn.has(activity.activityId)) continue;
-      const author = naming(activity.actorId);
-      answers.push({
-        ...unstored(activity.activityId ?? `${activity.actorId}#rsvp`),
-        source: 'activitypub',
-        kind: 'reply',
-        author,
-        url: author.url,
-        content: '',
-        published: new Date(activity.receivedAt),
-        inReplyTo: null,
-        status: 'published',
-        replies: [],
-        rsvp: { value: answer, label: RSVP_LABELS[answer] },
-      });
+      if (activity.objectId !== objectId || taken(activity.activityId)) continue;
+      said.push([
+        'answers',
+        {
+          ...reaction(activity, naming, `${activity.actorId}#rsvp`),
+          kind: 'reply',
+          rsvp: { value: answer, label: RSVP_LABELS[answer] },
+        },
+      ]);
       continue;
     }
 
@@ -535,9 +588,8 @@ function gather(
       if (activity.objectId !== objectId) continue;
       // One like per actor, however many times it was delivered, and none
       // at all once its actor has taken it back.
-      const key = `${kind}\0${activity.actorId}`;
-      if (reacted.has(key)) continue;
-      if (activity.activityId !== null && withdrawn.has(activity.activityId)) continue;
+      const key = reactionKey(kind, activity.actorId);
+      if (reacted.has(key) || taken(activity.activityId)) continue;
       if (
         activity.activityId !== null &&
         heldComment(context.admin, activity.activityId) !== undefined
@@ -545,77 +597,106 @@ function gather(
         continue;
       }
       reacted.add(key);
-      const author = naming(activity.actorId);
-      (kind === 'like' ? likes : boosts).push({
-        ...unstored(activity.activityId ?? `${activity.actorId}#${kind}`),
-        source: 'activitypub',
-        kind,
-        author,
-        url: author.url,
-        content: '',
-        published: new Date(activity.receivedAt),
-        inReplyTo: null,
-        status: 'published',
-        replies: [],
-      });
+      said.push([
+        GROUP_OF[kind],
+        { ...reaction(activity, naming, `${activity.actorId}#${kind}`), kind },
+      ]);
       continue;
     }
 
     const reply = replyFrom(activity);
     if (reply === undefined || heldComment(context.admin, reply.id) !== undefined) continue;
     const parent = heldComment(context.admin, reply.inReplyTo);
-    written.push(
+    said.push([
+      'written',
       federatedInteraction(
         parent === undefined ? reply : { ...reply, inReplyTo: parent.id },
         naming(activity.actorId),
       ),
-    );
+    ]);
   }
+  return { said, withdrawn };
+}
 
+function storedReaction({ kind, actor }: PostComment): string[] {
+  const group = GROUP_OF[kind];
+  return actor === undefined || (group !== 'likes' && group !== 'boosts')
+    ? []
+    : [reactionKey(kind, actor)];
+}
+
+function reactionKey(kind: InteractionKind, actor: string): string {
+  return `${GROUP_OF[kind]}\0${actor}`;
+}
+
+function reaction(
+  activity: InboxActivity,
+  naming: (actorId: string) => InteractionAuthor,
+  fallbackId: string,
+): Omit<Interaction, 'kind'> {
+  const author = naming(activity.actorId);
+  return {
+    ...unstored(activity.activityId ?? fallbackId),
+    source: 'activitypub',
+    author,
+    url: author.url,
+    content: '',
+    published: new Date(activity.receivedAt),
+    inReplyTo: null,
+    status: 'published',
+    replies: [],
+  };
+}
+
+function fromStored(
+  context: ConversationContext,
+  document: Document,
+  stored: readonly PostComment[],
+  isEvent: boolean,
+): Part {
+  const users = context.users();
+  const said: [Group, Interaction][] = [];
+  const held = new Map<string, Interaction>();
   for (const record of stored) {
     const comment = interactionOf(record, document.permalink, context.baseUrl, users);
     if (record.status !== 'approved') {
       held.set(comment.id, comment);
       continue;
     }
-    // A repost joins the boosts, because a reader looking at the page is being
-    // told the same thing by both; a mention is its own group, because it is
-    // neither an answer nor a reaction.
-    const group =
-      isEvent && comment.rsvp !== undefined
-        ? answers
-        : comment.kind === 'reply'
-          ? written
-          : comment.kind === 'like'
-            ? likes
-            : comment.kind === 'mention'
-              ? mentions
-              : boosts;
-    group.push({ ...comment, replies: [] });
+    const group = isEvent && comment.rsvp !== undefined ? 'answers' : GROUP_OF[comment.kind];
+    said.push([group, { ...comment, replies: [] }]);
   }
+  return { said, held };
+}
 
-  // The reply posts answering the post or anything said under it, each
-  // bringing what was said under it: an answer to a reply post lands against
-  // the reply post, and this is what stitches it into the thread it is in.
-  const names = namesIn(context, document, root, [...written, ...held.values()]);
+/**
+ * The reply posts answering the post or anything said under it, each
+ * bringing what was said under it: an answer to a reply post lands against
+ * the reply post, and this is what stitches it into the thread it is in.
+ */
+function fromReplyPosts(
+  context: ConversationContext,
+  document: Document,
+  root: string,
+  seen: ReadonlySet<string>,
+  answered: readonly Interaction[],
+): Part {
+  const names = namesIn(context, document, root, answered);
+  const said: [Group, Interaction][] = [];
+  const held = new Map<string, Interaction>();
+  const withdrawn = new Set<string>();
   for (const answer of context.store.listRepliesTo([...names.keys()])) {
     const target = names.get(answer.inReplyTo ?? '');
     if (target === undefined || seen.has(answer.path)) continue;
     const under = gather(context, answer, new Set([...seen, answer.path]));
     const top = (entry: Interaction): Interaction =>
       entry.inReplyTo === null ? { ...entry, inReplyTo: under.root } : entry;
-    written.push(replyPostInteraction(context, answer, under.root, target));
-    written.push(...under.written.map(top));
+    said.push(['written', replyPostInteraction(context, answer, under.root, target)]);
+    for (const entry of under.written) said.push(['written', top(entry)]);
     for (const [id, entry] of under.held) held.set(id, top(entry));
     for (const id of under.withdrawn) withdrawn.add(id);
   }
-
-  // Sorted before threading rather than after, because a thread is built by
-  // walking this list: two sources' entries would otherwise interleave in the
-  // order the code happened to read them rather than in the order they were
-  // written.
-  written.sort(byPublished);
-  return { root, written, withdrawn, held, likes, boosts, mentions, answers };
+  return { said, held, withdrawn };
 }
 
 /**

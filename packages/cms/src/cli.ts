@@ -8,13 +8,13 @@ import { Writable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 
 import { credentialProblem, emailProblem } from './admin/credentials.ts';
-import { openAdminStore } from './admin/store.ts';
+import { migrateUsersToFile } from './admin/legacy-migrations.ts';
+import { adminStoreOwning, openAdminDatabase } from './admin/store.ts';
 import type { AdminStore } from './admin/store.ts';
-import { migrateUsersToFile } from './admin/users-migration.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
 import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
 import type { ResolvedConfig } from './config.ts';
-import { migrateCommentEmails, migrateCommentKeys } from './comments/records.ts';
+import { migrateCommentEmails, migrateCommentKeys } from './comments/migrations.ts';
 import { stripStoredUploads } from './content/metadata/sweep.ts';
 import { createUser, DuplicateUsernameError } from './site/users.ts';
 import { UPLOAD_DIRECTORY } from './web/assets.ts';
@@ -992,8 +992,9 @@ async function userCommand({
   }
 
   const config = await loadResolvedConfig(configPath);
-  const admin = openAdminStore({ dataDir: config.dataDir });
-  migrateUsersToFile({ admin, dataDir: config.dataDir });
+  const adminDb = openAdminDatabase(config.dataDir);
+  migrateUsersToFile(adminDb, config.dataDir);
+  const admin = adminStoreOwning(adminDb, databaseFile(config.dataDir));
 
   try {
     const user = await createUser({ dataDir: config.dataDir, username, password, email });
@@ -1101,8 +1102,9 @@ async function pluginCommand(argv: readonly string[]): Promise<number> {
     withoutConfig(argv).slice(found.command.words.length),
     found.command,
   );
-  const admin = openAdminStore({ dataDir: config.dataDir });
-  migrateUsersToFile({ admin, dataDir: config.dataDir });
+  const adminDb = openAdminDatabase(config.dataDir);
+  migrateUsersToFile(adminDb, config.dataDir);
+  const admin = adminStoreOwning(adminDb, databaseFile(config.dataDir));
   const comments = { contentDir: config.contentDir, dataDir: config.dataDir };
   migrateCommentEmails(comments);
   migrateCommentKeys(comments);

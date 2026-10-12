@@ -1,7 +1,9 @@
 import { rsvpField } from '../admin/store.ts';
 import type { PostComment } from '../admin/store.ts';
-import { deleteComment, heldWebmention, intakeComment } from '../comments/records.ts';
-import type { CommentNotices, CommentRecords, ProposedComment } from '../comments/records.ts';
+import { heldWebmention, intakeComment } from '../comments/intake.ts';
+import type { CommentNotices, ProposedComment } from '../comments/intake.ts';
+import { deleteComment } from '../comments/records.ts';
+import type { CommentRecords } from '../comments/records.ts';
 import type { CommentChecker } from '../comments/submission.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';

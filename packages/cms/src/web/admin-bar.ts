@@ -18,7 +18,7 @@ import { hiddenReason } from './documents.ts';
 import type { HiddenReason } from './documents.ts';
 import { PRIVATE_CACHE_CONTROL } from './negotiate.ts';
 import { drawnForSignedInReader } from './render.ts';
-import { requestPath } from './routes.ts';
+import { requestPath } from './request.ts';
 import { formatDate } from './templates.ts';
 
 /** The editor screens each kind of document is written in. */

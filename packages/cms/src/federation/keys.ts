@@ -4,7 +4,6 @@ import path from 'node:path';
 
 import { exportJwk, generateCryptoKeyPair, importJwk } from '@fedify/fedify';
 
-import type { AdminStore } from '../admin/store.ts';
 import {
   readFileIfPresentSync,
   updateFileAtomically,
@@ -96,53 +95,6 @@ export async function loadActorKeyPairs(
     pairs.push(await loadPair(dataDir, identifier, algorithm));
   }
   return pairs;
-}
-
-/**
- * Turn an older site's `actor_keys` rows into files under `data/keys`, once,
- * and drop the table.
- *
- * The rows this writes out are the site actor's, which no version after
- * TASK-68 has: decision-14 replaced it with one actor per user, and a user's
- * keys are named after their username rather than after the sentinel `actor`.
- * The files are still written rather than dropped on the floor, because a
- * private key is the one thing this CMS never deletes for somebody — an
- * operator who wants the old identity back has it on disk to move.
- *
- * This is the migration decision-9 calls the one that must not fail. Settings
- * a site could type again and followers a site could ask for again; an actor's
- * private key is the site's identity, and losing it means every follower's
- * cached public key stops verifying its posts for good. So the rows are
- * written out before the table goes, never after, and a file that is already
- * there always wins — a site that has booted this version once has the truth
- * on disk, and a row left over from before it did must not overwrite it.
- *
- * Synchronous because `createCms` is: it runs before the server is listening
- * and before anything has asked for a key.
- */
-export function migrateActorKeysToFiles(options: { admin: AdminStore; dataDir: string }): void {
-  const { admin, dataDir } = options;
-  const rows = admin.legacyActorKeys();
-
-  if (rows !== undefined && rows.length > 0) {
-    ensureKeysDir(dataDir);
-    for (const row of rows) {
-      const file = actorKeyFile(dataDir, row.identifier, row.algorithm);
-      // Only the private half is written: the public one is derived from it,
-      // and a stored pair whose halves disagreed would be worse than none. The
-      // row is written out as it stands, byte for byte apart from the trailing
-      // newline every file here ends with — a key is not something to
-      // re-encode on the way past.
-      if (readFileIfPresentSync(file) === undefined) {
-        writeFileAtomicallySync(file, `${row.privateJwk.trimEnd()}\n`, { mode: KEY_FILE_MODE });
-      }
-    }
-  }
-
-  // Dropped whether or not it had rows: a fresh database gets the table from
-  // migration 4, which has shipped and so is never edited, and a site that has
-  // been migrated must not be asked again on the next boot.
-  admin.dropLegacyTable('actor_keys');
 }
 
 /**
@@ -303,7 +255,7 @@ function unusableKey(file: string, cause: unknown): Error {
 }
 
 /** The permissions a private key file is created and rewritten with. */
-const KEY_FILE_MODE = 0o600;
+export const KEY_FILE_MODE = 0o600;
 
 /** The permissions `data/keys` is created with, when this is what creates it. */
 const KEYS_DIR_MODE = 0o700;
@@ -326,6 +278,6 @@ function fileToken(value: string): string {
  * permissions a directory of private keys wants rather than the ones the
  * atomic writer's `mkdir -p` would give it.
  */
-function ensureKeysDir(dataDir: string): void {
+export function ensureKeysDir(dataDir: string): void {
   mkdirSync(actorKeysDir(dataDir), { recursive: true, mode: KEYS_DIR_MODE });
 }

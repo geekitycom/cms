@@ -2,16 +2,15 @@ import { createHash } from 'node:crypto';
 
 import type { Context } from '@fedify/fedify';
 import { Activity, getTypeId, PUBLIC_COLLECTION } from '@fedify/vocab';
-import type { Actor, Object as ActivityObject, Recipient } from '@fedify/vocab';
+import type { Object as ActivityObject } from '@fedify/vocab';
 
-import type { AdminStore, Delivery, DeliveryStatus, Follower } from '../admin/store.ts';
+import type { AdminStore, Delivery, DeliveryStatus } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { CitedPage } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { isMigrated } from '../content/migrated.ts';
-import { pinnedAt } from '../content/pinned.ts';
 import { replyTarget } from '../content/post-type.ts';
 import { saveDocument } from '../content/save.ts';
 import type { ContentStore } from '../content/store.ts';
@@ -37,11 +36,23 @@ import {
 } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { citingActivity, repliedTo, undoActivity } from './citations.ts';
-import type { Citing, CitedObject } from './citations.ts';
-import { followerRecipient } from './followers.ts';
+import {
+  citedAuthor,
+  deliveryChange,
+  deliveryRows,
+  fanOutTargets,
+  followerTargets,
+  objectTargets,
+  pinChange,
+  relayTargets,
+  revisionStep,
+  stampFor,
+  wasAnnounced,
+} from './delivery-plan.ts';
+import type { ActivityAbout, DeliveryTarget, ObjectShape, Shape } from './delivery-plan.ts';
 import { mentionedAccounts } from './handles.ts';
 import { updateActivityId } from './paths.ts';
-import { acceptedRelays, relayRecipient } from './relays.ts';
+import { acceptedRelays } from './relays.ts';
 
 /** What one activity's delivery came to, recipient by recipient. */
 export interface DeliveryReport {
@@ -186,12 +197,10 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   const sentThisProcess = new Map<string, string>();
 
   /**
-   * Write `activitypub.published` into the post's file, and answer with the
-   * document as it now reads.
+   * Write {@link stampFor}'s `activitypub.published` into the post's file, and
+   * answer with the document as it now reads.
    *
-   * That one key is the whole of the record: it says the post has been
-   * announced and when, which is what decides `Create` against `Update` and
-   * what a resend needs. No id is minted — decision-13 makes the post's id its
+   * No id is minted — decision-13 makes the post's id its
    * permalink, so there is nothing to freeze — and an `activitypub.id` the
    * file already carries is left exactly where it is, because it is the name
    * the post's followers already hold.
@@ -202,9 +211,8 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
    * federates nothing of its own.
    */
   async function stamp(document: Document): Promise<Document> {
-    const existing = document.activitypub;
-    const published = existing?.published ?? document.date ?? store.now().toISOString();
-    if (existing?.published === published) return document;
+    const published = stampFor(document, store.now());
+    if (published === undefined) return document;
 
     // The zone only matters for a date somebody wrote by hand with no offset;
     // `saveDocument` is what turns every date in the file into an instant.
@@ -215,7 +223,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       path: document.path,
       content: {
         ...documentContent(document),
-        activitypub: { ...existing, published },
+        activitypub: { ...document.activitypub, published },
       },
     });
   }
@@ -231,14 +239,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     return author;
   }
 
-  /**
-   * Fan one activity about one post out to the followers.
-   *
-   * What the activity was — its type, the object it named, the post's slug —
-   * is written onto every outcome row rather than into a table of its own,
-   * because the activity itself is not kept: it is rebuilt from the file
-   * whenever it is wanted again (decision-9).
-   */
+  /** Fan one activity about one post out to the followers. */
   async function send(
     context: Context<FederationContextData>,
     activity: Activity,
@@ -314,7 +315,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         context,
         postDeleteActivity(context, document, deleted),
         document,
-        objectTargets(document, shape.replyTo, config.contentDir),
+        postTargets(document, shape),
       );
     }
     return await send(
@@ -325,10 +326,17 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     );
   }
 
+  function postTargets(document: Document, shape: ObjectShape): DeliveryTarget[] {
+    return objectTargets(
+      shape.replyTo?.author,
+      mentionedAccounts(document.body, config.contentDir),
+    );
+  }
+
   async function revise(
     context: Context<FederationContextData>,
     document: Document,
-    shape: Shape & { kind: 'object' },
+    shape: ObjectShape,
     revision?: string,
   ): Promise<DeliveryReport> {
     return await sendAndRecordObject(
@@ -347,14 +355,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     context: Context<FederationContextData>,
     activity: Activity,
     document: Document,
-    shape: Shape & { kind: 'object' },
+    shape: ObjectShape,
   ): Promise<DeliveryReport> {
-    const report = await send(
-      context,
-      activity,
-      document,
-      objectTargets(document, shape.replyTo, config.contentDir),
-    );
+    const report = await send(context, activity, document, postTargets(document, shape));
     const object = await activity.getObject();
     if (object !== null) sentThisProcess.set(shape.id, await fingerprint(object));
     return report;
@@ -378,21 +381,12 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     context: Context<FederationContextData>,
     sender: User,
     activity: Activity,
-    about: {
-      activityId: string;
-      activityType: string;
-      objectId: string;
-      /** The post it was about, or `null` for an activity about the actor. */
-      slug: string | null;
-    },
+    about: ActivityAbout,
     also: readonly DeliveryTarget[] = [],
     { relays = true }: { relays?: boolean } = {},
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
-    const targets = deliveryTargets(admin, sender.username, { relays });
-    // One POST to an inbox the followers already share is enough.
-    const reached = new Set(targets.map((target) => target.inboxId));
-    targets.push(...also.filter((target) => !reached.has(target.inboxId)));
+    const targets = fanOutTargets(deliveryTargets(admin, sender.username, { relays }), also);
     const held =
       targets.length > 0 &&
       holdOutbound(config, {
@@ -430,16 +424,8 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         logger.warn(`Could not deliver ${about.activityId} to ${target.inboxId}: ${error}`);
       }
 
-      for (const actorId of target.actorIds) {
-        deliveries.push(
-          admin.recordDelivery({
-            ...about,
-            actorId,
-            inboxId: target.inboxId,
-            status,
-            error,
-          }),
-        );
+      for (const row of deliveryRows(about, target, { status, error })) {
+        deliveries.push(admin.recordDelivery(row));
       }
     }
 
@@ -447,16 +433,11 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   }
 
   /**
-   * Tell the followers a published post went into its author's featured
-   * collection or came out of it (TASK-207), after the activity that
-   * announced the post itself, so a peer never meets the pin of an object it
-   * has not been sent.
-   *
-   * `before` is the post as followers last knew it, or `undefined` when they
-   * are about to meet it for the first time. Whether it is featured *now* is
-   * the collection's own answer, so a pin past the limit is never announced as
-   * one. A post that stops being published sends no `Remove`: its `Delete`
-   * already takes the pin with it on Mastodon, and the collection drops it.
+   * Tell the followers what {@link pinChange} says moved, after the activity
+   * that announced the post itself, so a peer never meets the pin of an object
+   * it has not been sent. A post that stops being published sends no
+   * `Remove`: its `Delete` already takes the pin with it on Mastodon, and the
+   * collection drops it.
    */
   function queuePinChange(
     context: Context<FederationContextData>,
@@ -466,58 +447,37 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     const author = documentAuthor(context, after);
     const names = author === undefined ? [] : authorNames(listUsers(config.dataDir), author);
     const featured = store.listPinnedByAuthor(names).some((post) => post.path === after.path);
-    const wasPinned = before !== undefined && pinnedAt(before) !== undefined;
-
-    if (featured && !wasPinned) {
-      const revision = pinnedAt(after) ?? new Date().toISOString();
-      queue(() => send(context, postPinActivity(context, after, 'pin', revision), after));
-    } else if (!featured && wasPinned) {
-      const revision = new Date().toISOString();
-      queue(() => send(context, postPinActivity(context, after, 'unpin', revision), after));
-    }
+    const pin = pinChange(featured, before, after, new Date());
+    if (pin === undefined) return;
+    queue(() => send(context, postPinActivity(context, after, pin.action, pin.revision), after));
   }
 
   return {
     async handle(change) {
-      // A full scan is a rebuild of the index, not news about the site.
-      if (change.origin === 'scan') return;
-
-      const now = store.now();
-      const before = federatedOrUndefined(change.previous, now);
-      const after = federatedOrUndefined(change.next, now);
-      if (before === undefined && after === undefined) return;
-      const subject = change.next ?? change.previous;
-      if (subject !== undefined && isMigrated(subject)) {
-        const followersHoldIt = wasAnnounced(subject);
-        const comingIntoView = before === undefined;
-        if (!followersHoldIt || comingIntoView) return;
-      }
+      const delivery = deliveryChange(change, store.now());
+      if (delivery === undefined) return;
 
       const context = deliveryContext();
-      if (subject === undefined || documentAuthor(context, subject) === undefined) return;
+      if (documentAuthor(context, delivery.subject) === undefined) return;
 
-      if (after === undefined) {
-        // Unpublished, trashed or deleted; `before` is the post as it last
-        // stood, and the only version there is to build a Tombstone from.
-        if (before === undefined) return;
+      if (delivery.kind === 'withdraw') {
+        // `before` is the post as it last stood, and the only version there is
+        // to build a Tombstone from.
+        const { before } = delivery;
         queue(async () => await withdraw(context, before, await shapeOf(context, before)));
         return;
       }
 
-      const stamped = await stamp(after);
-      // The same object after a save is an `Update`, or nothing at all for a
-      // like or a repost, which has no content of its own to update. Anything
-      // else, a rename or a change of what it cites, takes the old version back
-      // before the new one goes out.
+      const { before } = delivery;
+      const stamped = await stamp(delivery.after);
       const sameId = before !== undefined && sameObject(context, before, stamped);
       queue(async () => {
         const is = await shapeOf(context, stamped);
         if (before === undefined) return await announce(context, stamped, is);
         const was = await shapeOf(context, before);
-        if (was.kind === is.kind && was.id === is.id) {
-          if (is.kind === 'citing') return undefined;
-          return await revise(context, stamped, is);
-        }
+        const step = revisionStep(was, is);
+        if (step.kind === 'none') return undefined;
+        if (step.kind === 'revise') return await revise(context, stamped, step.shape);
         await withdraw(context, before, was);
         return await announce(context, stamped, is);
       });
@@ -649,60 +609,6 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   }
 }
 
-/**
- * What a version of a post is to a peer (decision-28), and the id that names
- * it: the post's object id, or its `Like` or `Announce`'s activity id, which
- * carries the id of what it cites.
- */
-type Shape =
-  | { readonly kind: 'object'; readonly id: string; readonly replyTo: CitedObject | undefined }
-  | { readonly kind: 'citing'; readonly id: string; readonly citing: Citing };
-
-/** The author of what a post likes, reposts or replies to, as one more inbox to tell. */
-function citedAuthor(author: Actor | undefined): DeliveryTarget[] {
-  if (author?.id == null || author.inboxId === null) return [];
-  return [
-    {
-      inboxId: (author.endpoints?.sharedInbox ?? author.inboxId).href,
-      recipients: [author],
-      actorIds: [author.id.href],
-    },
-  ];
-}
-
-function objectTargets(
-  document: Document,
-  replyTo: CitedObject | undefined,
-  contentDir: string,
-): DeliveryTarget[] {
-  const byInbox = new Map<string, DeliveryTarget>();
-  const mentioned = mentionedAccounts(document.body, contentDir).map(({ account }) => ({
-    inboxId: account.sharedInbox ?? account.inbox,
-    recipients: [
-      {
-        id: new URL(account.actor),
-        inboxId: new URL(account.inbox),
-        endpoints:
-          account.sharedInbox === undefined ? null : { sharedInbox: new URL(account.sharedInbox) },
-      },
-    ],
-    actorIds: [account.actor],
-  }));
-  for (const target of [...citedAuthor(replyTo?.author), ...mentioned]) {
-    const held = byInbox.get(target.inboxId);
-    if (held === undefined) {
-      byInbox.set(target.inboxId, target);
-    } else if (!held.actorIds.some((id) => target.actorIds.includes(id))) {
-      byInbox.set(target.inboxId, {
-        inboxId: target.inboxId,
-        recipients: [...held.recipients, ...target.recipients],
-        actorIds: [...held.actorIds, ...target.actorIds],
-      });
-    }
-  }
-  return [...byInbox.values()];
-}
-
 async function fingerprint(object: ActivityObject): Promise<string> {
   const json = JSON.stringify(await object.toJsonLd());
   return createHash('sha256').update(json).digest('hex');
@@ -725,79 +631,23 @@ function sameObject(
 }
 
 /**
- * One inbox a POST goes to, and who is behind it.
- *
- * The unit a fan-out works in. A follower group and a relay are the same thing
- * from here — an inbox, the recipients Fedify addresses it with, and the actors
- * whose delivery rows the outcome is written to — which is what lets a relay
- * be recorded like a follower without pretending to be one.
- */
-export interface DeliveryTarget {
-  /** The inbox one POST reaches: a shared inbox, a personal one, or a relay's. */
-  readonly inboxId: string;
-  /** What Fedify is handed to address it. */
-  readonly recipients: Recipient[];
-  /** Whose outcome rows this delivery writes: the followers, or the relay. */
-  readonly actorIds: readonly string[];
-}
-
-/**
  * Everywhere one public activity goes: one user's followers, grouped by the
  * inbox they share, and every accepted relay.
  *
  * The followers are one person's (decision-14) and the relays are the site's:
  * a relay subscribes to everything public this site sends, whoever wrote it,
- * so it is a target of every author's activities.
- *
- * A relay is one target of its own rather than a member of a group, because it
- * is one inbox with one actor behind it and no shared inbox to fold into. A
- * pending or rejected relay is not here at all — {@link acceptedRelays} is
- * where that rule lives.
+ * so it is a target of every author's activities. A pending or rejected relay
+ * is not here at all — {@link acceptedRelays} is where that rule lives.
  */
 export function deliveryTargets(
   admin: AdminStore,
   username: string,
   { relays = true }: { relays?: boolean } = {},
 ): DeliveryTarget[] {
-  const targets: DeliveryTarget[] = [];
-
-  for (const [inboxId, members] of groupByInbox(admin.listFollowers(username))) {
-    targets.push({
-      inboxId,
-      recipients: members.map(followerRecipient),
-      actorIds: members.map((member) => member.actorId),
-    });
-  }
-
-  for (const relay of relays ? acceptedRelays(admin) : []) {
-    targets.push({
-      inboxId: relay.inboxId,
-      recipients: [relayRecipient(relay)],
-      // The relay's own id, so its outcomes sit in the same table as a
-      // follower's and the screen can find them. It has one by the time it is
-      // accepted; the inbox is the fallback for a record from somewhere else.
-      actorIds: [relay.actorId ?? relay.inboxId],
-    });
-  }
-
-  return targets;
-}
-
-/**
- * Followers keyed by the inbox one POST to which reaches them: the instance's
- * shared inbox where it published one, and the follower's own where it did not.
- */
-export function groupByInbox(followers: readonly Follower[]): Map<string, Follower[]> {
-  const groups = new Map<string, Follower[]>();
-
-  for (const follower of followers) {
-    const inbox = follower.sharedInboxId ?? follower.inboxId;
-    const group = groups.get(inbox);
-    if (group === undefined) groups.set(inbox, [follower]);
-    else group.push(follower);
-  }
-
-  return groups;
+  return [
+    ...followerTargets(admin.listFollowers(username)),
+    ...relayTargets(relays ? acceptedRelays(admin) : []),
+  ];
 }
 
 /**
@@ -813,16 +663,6 @@ function postBySlug(store: ContentStore, slug: string): Document | undefined {
   const direct = store.getBySlug(slug);
   if (direct?.type === 'post') return direct;
   return store.listFederated().find((document) => document.slug === slug);
-}
-
-function wasAnnounced(document: Document): boolean {
-  return (document.activitypub?.published ?? '') !== '';
-}
-
-/** The document, when it is one this site federates, and `undefined` otherwise. */
-function federatedOrUndefined(document: Document | undefined, now: Date): Document | undefined {
-  if (document === undefined) return undefined;
-  return isFederatedDocument(document, now) ? document : undefined;
 }
 
 /** An activity's short type name — `Create`, `Update`, `Delete` — from its type URI. */

@@ -13,7 +13,7 @@ import {
   splitRepresentationExtension,
 } from './negotiate.ts';
 import type { Representation } from './negotiate.ts';
-import { requestPath } from './routes.ts';
+import { requestPath } from './request.ts';
 
 /**
  * A server error is never stored: the next request may well succeed, and a

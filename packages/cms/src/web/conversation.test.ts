@@ -1203,6 +1203,33 @@ describe('reply posts in a conversation (TASK-300)', () => {
     assert.equal(read.counts([hello()]).get('/2026/09/hello/'), 1);
   });
 
+  it('drops a note under a reply post once its author deletes it', async () => {
+    const { admin, posts, conversation: read } = await reader();
+    posts.upsert(hello());
+    posts.upsert(replyPost('answer', POST));
+    const ANSWER = 'https://blog.example/2026/09/answer/';
+    logReply(admin, { inReplyTo: ANSWER, id: 'https://remote.example/notes/1' });
+    logReply(admin, { inReplyTo: ANSWER, id: 'https://remote.example/notes/2' });
+    admin.logInboxActivity({
+      activityId: 'https://remote.example/deletes/1',
+      activityType: 'Delete',
+      actorId: 'https://remote.example/users/ada',
+      objectId: 'https://remote.example/notes/1',
+      json: JSON.stringify({
+        type: 'Delete',
+        actor: 'https://remote.example/users/ada',
+        object: { id: 'https://remote.example/notes/1', type: 'Tombstone' },
+      }),
+    });
+
+    const [answer] = read.thread(hello()).replies;
+    assert.equal(visible(answer)?.url, '/2026/09/answer/');
+    assert.deepEqual(
+      visible(answer)?.replies.map((reply) => reply.id),
+      ['https://remote.example/notes/2'],
+    );
+  });
+
   it('ends at two reply posts that answer each other', async () => {
     const { posts, conversation: read } = await reader();
     const two = replyPost('two', 'https://blog.example/2026/09/three/');

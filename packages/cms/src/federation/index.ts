@@ -21,14 +21,15 @@ export {
   SOURCE_MEDIA_TYPE,
   toInstant,
 } from './article.ts';
-export { createDeliveryService, deliveryTargets, groupByInbox } from './delivery.ts';
+export { createDeliveryService, deliveryTargets } from './delivery.ts';
 export type {
   CreateDeliveryServiceOptions,
   DeliveryLogger,
   DeliveryReport,
   DeliveryService,
-  DeliveryTarget,
 } from './delivery.ts';
+export { groupByInbox } from './delivery-plan.ts';
+export type { DeliveryTarget } from './delivery-plan.ts';
 export {
   createSiteFederation,
   federatedPost,
@@ -64,7 +65,6 @@ export {
   actorKeysDir,
   assertActorKeysUsable,
   loadActorKeyPairs,
-  migrateActorKeysToFiles,
   writeActorKeyFile,
 } from './keys.ts';
 export type { ActorKeyAlgorithm } from './keys.ts';

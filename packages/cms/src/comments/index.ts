@@ -49,28 +49,23 @@ export {
   deleteComment,
   followAllMovedComments,
   followMovedComments,
-  heldWebmention,
-  intakeComment,
-  migrateCommentEmails,
-  migrateCommentKeys,
   putComments,
   renameComments,
   readComments,
   rebuildCommentIndexes,
   updateComment,
 } from './records.ts';
+export type { CommentIndexReport, CommentRecords, NewComment } from './records.ts';
+export { heldWebmention, intakeComment } from './intake.ts';
 export type {
-  CommentEmailMigrationReport,
-  CommentKeyMigrationReport,
-  CommentIndexReport,
   CommentIntakeOutcome,
   CommentNotices,
   CommentOrigin,
-  CommentRecords,
   IntakeCommentOptions,
-  NewComment,
   ProposedComment,
-} from './records.ts';
+} from './intake.ts';
+export { migrateCommentEmails, migrateCommentKeys } from './migrations.ts';
+export type { CommentEmailMigrationReport, CommentKeyMigrationReport } from './migrations.ts';
 export { commentFormFor, commentNoticeFor, mountComments } from './routes.ts';
 export {
   COMMENT_FIELDS,
