@@ -621,12 +621,17 @@ describe('a quote of a post (TASK-171)', () => {
   }
 
   async function approve(contentDir: string, post = POST, actor = QUOTER): Promise<void> {
-    await authorizeQuote(contentDir, 'ada', {
-      quote: QUOTE,
-      post,
-      request: `${QUOTE}/request`,
-      actor,
-    });
+    await authorizeQuote(
+      contentDir,
+      'ada',
+      {
+        quote: QUOTE,
+        post,
+        request: `${QUOTE}/request`,
+        actor,
+      },
+      new Date(),
+    );
   }
 
   it('is a mention of the post it quotes, once approved', async () => {

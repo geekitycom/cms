@@ -19,8 +19,10 @@ describe('createSettlingQueue', () => {
     const controller = new AbortController();
     const handled: unknown[] = [];
     const gate = deferred();
+    const entered = deferred();
     void queue.listen(
       async (message) => {
+        entered.resolve();
         await gate.promise;
         handled.push(message);
       },
@@ -34,7 +36,8 @@ describe('createSettlingQueue', () => {
     const settling = queue.settled().then(() => {
       settled = true;
     });
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await entered.promise;
+    await new Promise(setImmediate);
     assert.equal(settled, false, 'it waited while the handler was still running');
 
     gate.resolve();

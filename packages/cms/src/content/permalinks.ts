@@ -49,8 +49,12 @@ export function previewDocumentAt(
  * object all agree about the post's name in the fediverse, because after
  * decision-13 they are the same URL.
  */
-export function activityStreamsId(document: Document, baseUrl: string): string | undefined {
-  if (document.type !== 'post' || !isServed(document)) return undefined;
+export function activityStreamsId(
+  document: Document,
+  baseUrl: string,
+  now: Date,
+): string | undefined {
+  if (document.type !== 'post' || !isServed(document, now)) return undefined;
   return postObjectId(document, baseUrl);
 }
 

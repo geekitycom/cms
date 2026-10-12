@@ -14,6 +14,7 @@ import {
   themeSearchPath,
 } from './index.ts';
 import type { Renderer } from './index.ts';
+import { systemClock } from '../util/clock.ts';
 
 const temporaryDirs: string[] = [];
 
@@ -134,7 +135,11 @@ describe('the renderer', () => {
 
 describe('the theme filters', () => {
   const environment = (baseUrl: string) =>
-    createTemplateEnvironment({ themeDirs: themeSearchPath('/no/such/theme'), baseUrl });
+    createTemplateEnvironment({
+      themeDirs: themeSearchPath('/no/such/theme'),
+      baseUrl,
+      now: systemClock,
+    });
 
   it('formats a date in each documented format', () => {
     const date = new Date('2026-09-02T09:00:00Z');
@@ -156,11 +161,18 @@ describe('the theme filters', () => {
     assert.equal(formatDate('not a date', 'readable'), '');
   });
 
-  it('reads "now" as the moment it is asked, for the footer’s copyright year', () => {
-    const thisYear = String(new Date().getUTCFullYear());
+  it('reads "now" from the site clock when it is asked, for the footer’s copyright year', () => {
+    let now = new Date('1999-12-31T23:59:59Z');
+    const pinned = createTemplateEnvironment({
+      themeDirs: themeSearchPath('/no/such/theme'),
+      baseUrl: 'https://blog.example',
+      now: () => now,
+    });
+    const footer = '{{ "now" | date("year", "UTC") }} {{ "now" | date("html", "UTC") }}';
 
-    assert.equal(formatDate('now', 'year', 'UTC'), thisYear);
-    assert.equal(formatDate('now', 'html', 'UTC').slice(0, 4), thisYear);
+    assert.equal(pinned.renderString(footer, {}), '1999 1999-12-31');
+    now = new Date('2000-01-01T00:00:01Z');
+    assert.equal(pinned.renderString(footer, {}), '2000 2000-01-01', 'read at render time');
   });
 
   it('renders readable, html and year in the timezone it is given', () => {

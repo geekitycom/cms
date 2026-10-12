@@ -27,17 +27,23 @@ async function dataDir(): Promise<string> {
   return created;
 }
 
+const NOW = new Date('2026-09-04T12:00:00.000Z');
+
 describe('a notification token', () => {
   it('reads back the claim it was signed with', async () => {
     const dir = await dataDir();
 
-    const token = signNotificationToken(dir, {
-      action: 'approve',
-      subject: 'a-comment-id',
-      lifetimeSeconds: 60,
-    });
+    const token = signNotificationToken(
+      dir,
+      {
+        action: 'approve',
+        subject: 'a-comment-id',
+        lifetimeSeconds: 60,
+      },
+      NOW,
+    );
 
-    assert.deepEqual(readNotificationToken(dir, token), {
+    assert.deepEqual(readNotificationToken(dir, token, NOW), {
       action: 'approve',
       subject: 'a-comment-id',
     });
@@ -46,11 +52,15 @@ describe('a notification token', () => {
   it('is URL safe, so it survives being pasted out of a mail reader', async () => {
     const dir = await dataDir();
 
-    const token = signNotificationToken(dir, {
-      action: 'approve',
-      subject: 'a-comment-id',
-      lifetimeSeconds: 60,
-    });
+    const token = signNotificationToken(
+      dir,
+      {
+        action: 'approve',
+        subject: 'a-comment-id',
+        lifetimeSeconds: 60,
+      },
+      NOW,
+    );
 
     assert.equal(encodeURIComponent(token), token);
   });
@@ -72,11 +82,15 @@ describe('a notification token', () => {
   it('is refused when the payload has been edited', async () => {
     const dir = await dataDir();
 
-    const token = signNotificationToken(dir, {
-      action: 'approve',
-      subject: 'a-comment-id',
-      lifetimeSeconds: 60,
-    });
+    const token = signNotificationToken(
+      dir,
+      {
+        action: 'approve',
+        subject: 'a-comment-id',
+        lifetimeSeconds: 60,
+      },
+      NOW,
+    );
     const [payload, signature] = token.split('.');
     assert.ok(payload !== undefined && signature !== undefined);
 
@@ -84,27 +98,31 @@ describe('a notification token', () => {
       JSON.stringify({ a: 'delete', s: 'a-comment-id', x: 4102444800 }),
     ).toString('base64url');
 
-    assert.equal(readNotificationToken(dir, `${forged}.${signature}`), undefined);
+    assert.equal(readNotificationToken(dir, `${forged}.${signature}`, NOW), undefined);
   });
 
   it('is refused by a site that did not sign it', async () => {
     const one = await dataDir();
     const other = await dataDir();
 
-    const token = signNotificationToken(one, {
-      action: 'approve',
-      subject: 'a-comment-id',
-      lifetimeSeconds: 60,
-    });
+    const token = signNotificationToken(
+      one,
+      {
+        action: 'approve',
+        subject: 'a-comment-id',
+        lifetimeSeconds: 60,
+      },
+      NOW,
+    );
 
-    assert.equal(readNotificationToken(other, token), undefined);
+    assert.equal(readNotificationToken(other, token, NOW), undefined);
   });
 
   it('is nothing at all when it is not a token', async () => {
     const dir = await dataDir();
 
-    assert.equal(readNotificationToken(dir, ''), undefined);
-    assert.equal(readNotificationToken(dir, 'nonsense'), undefined);
-    assert.equal(readNotificationToken(dir, 'nonsense.nonsense'), undefined);
+    assert.equal(readNotificationToken(dir, '', NOW), undefined);
+    assert.equal(readNotificationToken(dir, 'nonsense', NOW), undefined);
+    assert.equal(readNotificationToken(dir, 'nonsense.nonsense', NOW), undefined);
   });
 });

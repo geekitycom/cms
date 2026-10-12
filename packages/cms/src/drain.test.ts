@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { nextEvent } from './__testing__/wait.ts';
+import { liveWatchers } from './__testing__/watchers.ts';
 import { writeFileAtomically, WritesRefusedError } from './files/atomic.ts';
 import { createCms } from './index.ts';
 import type { Cms } from './index.ts';
@@ -27,10 +29,6 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
     resolve = done;
   });
   return { promise, resolve };
-}
-
-function pause(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -59,6 +57,8 @@ function liveIntervals(): { live(): number; restore(): void } {
   };
 }
 
+const NOW = new Date('2026-06-01T00:00:00.000Z');
+
 /** A serving CMS with one enabled plugin that records its start and stop, and a post due next year. */
 async function serving(): Promise<{
   cms: Cms;
@@ -76,10 +76,9 @@ async function serving(): Promise<{
   await writeFile(siteJson, JSON.stringify({ ...site, plugins: { [PLUGIN]: { enabled: true } } }));
 
   await mkdir(path.join(contentDir, 'posts'), { recursive: true });
-  const nextYear = new Date().getUTCFullYear() + 1;
   await writeFile(
     path.join(contentDir, 'posts', 'later.md'),
-    `---\ntitle: Later\ndate: ${String(nextYear)}-01-01T00:00:00.000Z\n---\n\nNot yet.\n`,
+    '---\ntitle: Later\ndate: 2027-01-01T00:00:00.000Z\n---\n\nNot yet.\n',
   );
 
   const log: string[] = [];
@@ -88,6 +87,7 @@ async function serving(): Promise<{
     dataDir,
     port: 0,
     watch: true,
+    now: () => NOW,
     baseUrl: 'https://drain.example',
     plugins: [
       definePlugin({
@@ -151,24 +151,37 @@ describe('cms.drain()', () => {
   });
 
   it('lets a write already in flight finish before it stops anything', async () => {
-    const { cms } = await serving();
+    const { cms, log } = await serving();
     const held = deferred();
+    const entered = deferred();
     cms.app.post('/slow', async (c) => {
+      entered.resolve();
       await held.promise;
       return c.text('finished');
     });
     await cms.serve();
 
     const slow = cms.app.request('/slow', { method: 'POST' });
-    await pause(20);
+    await entered.promise;
+    let reportWaiting: (writes: number) => void = () => undefined;
+    const waiting = nextEvent<number>('the drain to say it waits for the write', (done) => {
+      reportWaiting = done;
+    });
     let drained = false;
-    const draining = cms.drain().then(() => {
+    const draining = cms.drain(reportWaiting).then(() => {
       drained = true;
     });
-    await pause(50);
 
-    assert.equal(drained, false, 'the drain waited for the write');
     assert.equal((await cms.app.request('/slow', { method: 'POST' })).status, 503);
+    const writes = await Promise.race([
+      waiting,
+      draining.then(() => {
+        throw new Error('the drain finished without waiting for the write in flight');
+      }),
+    ]);
+    assert.equal(writes, 1, 'the drain waits for the one write in flight');
+    assert.equal(drained, false);
+    assert.deepEqual(log, ['start'], 'nothing has stopped');
 
     held.resolve();
     const response = await slow;
@@ -177,10 +190,23 @@ describe('cms.drain()', () => {
     await draining;
   });
 
-  it('stops the scheduler, the watcher and the plugins before it resolves, and restarts them on resume', async () => {
+  it('says nothing about waiting when no write is in flight', async () => {
+    const { cms } = await serving();
+    await cms.serve();
+    const waited: number[] = [];
+
+    await cms.drain((writes) => waited.push(writes));
+
+    assert.deepEqual(waited, []);
+  });
+
+  it('stops the scheduler, the watcher and the plugins before it resolves, and restarts them on resume', async (t) => {
     const { cms, contentDir, log } = await serving();
     const intervals = liveIntervals();
+    const watchers = liveWatchers();
+    t.after(() => watchers.restore());
     await cms.serve();
+    assert.equal(watchers.watching(), true, 'the content watcher runs');
     assert.equal(
       intervals.live(),
       5,
@@ -197,14 +223,14 @@ describe('cms.drain()', () => {
     await cms.app.request('/_geekity/health');
     assert.deepEqual(log, ['start', 'stop'], 'a request does not start it again');
 
+    assert.equal(watchers.watching(), false, 'the watcher stopped');
     await writeFile(
       path.join(contentDir, 'posts', 'unseen.md'),
       '---\ntitle: Unseen\ndate: 2026-01-01T00:00:00.000Z\n---\n\nHello.\n',
     );
-    await pause(400);
-    assert.equal(cms.store.listAll().length, 1, 'the watcher stopped');
 
     await cms.resume();
+    assert.equal(watchers.watching(), true, 'the watcher is back');
     assert.equal(intervals.live(), 5, 'the interval timers are back');
     intervals.restore();
     assert.notEqual(cms.scheduler.waitingFor(), undefined, 'the scheduler is back');

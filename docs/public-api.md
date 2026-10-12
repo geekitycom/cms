@@ -1,12 +1,15 @@
 # The package API
 
-`@geekity/cms` has two entry points:
+`@geekity/cms` has three entry points:
 
 - `@geekity/cms` is for a site's own code: its `geekity.config.ts`, a
   `server.ts` entry file, and its tests. This page lists everything it
   exports.
 - `@geekity/cms/plugin` is for plugins. [Plugins and hooks](plugins.md#writing-a-plugin)
   describes it.
+- `@geekity/cms/testing` is for a plugin's tests. It exports parts of the
+  host that a test builds on its own. [Testing a plugin](plugins.md#testing-a-plugin)
+  lists them. It is not covered by semantic versioning.
 
 Every name on this page is covered by semantic versioning. Anything the package
 does not export is internal and can change in any release. The CLI imports its
@@ -22,8 +25,8 @@ To add an export, add it to `src/exports.ts` and add its row here. Removing a
 name is a breaking change.
 
 `src/documented-uses.test.ts` repeats the feed examples in [Feeds](feeds.md)
-and calls the image helpers in [Media](media.md), importing only from the root
-entry. When you change one of those examples, change the test with it.
+and calls the image helpers in [Media](media.md), importing them only from the
+root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. When you change one of those examples, change the test with it.
 
 ## Creating a site
 
@@ -48,7 +51,6 @@ entry. When you change one of those examples, change the test with it.
 | Export                    | Kind     | What it is                                                                                                    |
 | ------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
 | `defaultPermalink`        | function | The permalink the admin form proposes for a new document.                                                     |
-| `documentContent`         | function | The writable half of a parsed document: what it would be written back from.                                   |
 | `DuplicatePermalinkError` | class    | Thrown when two live files claim the same permalink.                                                          |
 | `parseDocument`           | function | Parse the text of a Markdown file into a `Document`.                                                          |
 | `renderMarkdown`          | function | Render a Markdown body to the HTML the site and the feeds serve.                                              |
@@ -56,7 +58,7 @@ entry. When you change one of those examples, change the test with it.
 | `slugify`                 | function | Turn a title into a URL slug: lowercase ASCII letters, digits and hyphens.                                    |
 | `ActivityPubMetadata`     | type     | Everything about how a post federates, whether its author wrote it or the CMS wrote it back after a delivery. |
 | `ChangeOrigin`            | type     | Where a change came from.                                                                                     |
-| `Clock`                   | type     | What the index reads the time from.                                                                           |
+| `Clock`                   | type     | Where the CMS reads the time from, for every timestamp it stores or sends.                                    |
 | `ContentEventListener`    | type     | A listener for one kind of change.                                                                            |
 | `ContentEventMap`         | type     | The events a subscriber can listen for, and what each one carries.                                            |
 | `ContentEvents`           | type     | Subscription to index changes.                                                                                |
@@ -71,6 +73,7 @@ entry. When you change one of those examples, change the test with it.
 | `Scheduler`               | type     | Publishes a document when its date arrives.                                                                   |
 | `SearchHit`               | type     | One document a search found, and the passage it was found in.                                                 |
 | `SyncResult`              | type     | What a full scan did.                                                                                         |
+| `WatchDebounce`           | type     | How the content watcher waits for a changed file to stand still: the `watchDebounce` config option.           |
 
 ## Rendering, feeds and conversations
 
@@ -147,54 +150,43 @@ entry. When you change one of those examples, change the test with it.
 
 ## Users, settings and comments
 
-| Export                  | Kind     | What it is                                                                                                                                   |
-| ----------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `addComment`            | function | Record a comment: append it to its post's file and index it.                                                                                 |
-| `CONTACT_FIELDS`        | constant | The fields the contact form submits.                                                                                                         |
-| `CONTACT_POST_PATH`     | constant | Where the contact form posts, under the CMS's own prefix.                                                                                    |
-| `createUser`            | function | Hash the password and add the user to the file.                                                                                              |
-| `deleteComment`         | function | Forget a comment altogether.                                                                                                                 |
-| `intakeComment`         | function | The one door into `content/_data/comments/`.                                                                                                 |
-| `listUsers`             | function | Every user, by name, without password hashes.                                                                                                |
-| `openAdminStore`        | function | Open (and if needed create) the admin tables in `dataDir`, applying every migration the package ships.                                       |
-| `readSiteSettings`      | function | A site's settings, as its `content/_data/site.json` says them right now.                                                                     |
-| `setUserProfile`        | function | Write a user's profile, replacing whatever was there.                                                                                        |
-| `updateComment`         | function | Move a stored comment: approve it, mark it spam, put it back, or rewrite what it says.                                                       |
-| `CommentAuthor`         | type     | Who wrote a comment, as much as the site knows.                                                                                              |
-| `CommentChecker`        | type     | A third-party opinion on comments: the one seam anything like Akismet plugs into.                                                            |
-| `CommentContent`        | type     | What a comment says, in both the forms the site keeps.                                                                                       |
-| `CommentFormContext`    | type     | The comment form as a template receives it.                                                                                                  |
-| `CommentIntakeOutcome`  | type     | What became of one proposed comment.                                                                                                         |
-| `CommentKind`           | type     | One of `COMMENT_KINDS`.                                                                                                                      |
-| `CommentNotices`        | type     | Whoever is told about a comment that has just been written.                                                                                  |
-| `CommentOrigin`         | type     | Who is proposing a comment, which is the one thing the rules differ on.                                                                      |
-| `CommentProblems`       | type     | What a form got wrong, one message per field.                                                                                                |
-| `CommentRecord`         | type     | One comment, as its post's file under `content/_data/comments/` holds it.                                                                    |
-| `CommentRecords`        | type     | What every writer here needs: the files it owns, and the index over them.                                                                    |
-| `CommentReport`         | type     | What a stored comment's later reclassification tells the checker.                                                                            |
-| `CommentSource`         | type     | One of `COMMENT_SOURCES`.                                                                                                                    |
-| `CommentStatus`         | type     | One of `COMMENT_STATUSES`.                                                                                                                   |
-| `CommentSubmission`     | type     | Everything a checker is told about a comment on its way in.                                                                                  |
-| `CommentVerdict`        | type     | What a checker can say.                                                                                                                      |
-| `CommentViewer`         | type     | Who the site knows is commenting, when a valid session says so.                                                                              |
-| `ContactFormContext`    | type     | The contact form as a template receives it.                                                                                                  |
-| `ContactProblems`       | type     | What a form got wrong, one message per field.                                                                                                |
-| `CreateUserInput`       | type     | What `createUser` is given.                                                                                                                  |
-| `Delivery`              | type     | How one attempt to deliver one activity to one recipient ended, and what the activity was.                                                   |
-| `DeliveryStatus`        | type     | One of `DELIVERY_STATUSES`.                                                                                                                  |
-| `IntakeCommentOptions`  | type     | What `intakeComment` needs around a proposed comment.                                                                                        |
-| `NewComment`            | type     | A `CommentRecord` on its way in, before the store has named it.                                                                              |
-| `OpenAdminStoreOptions` | type     | Where `openAdminStore` puts, and finds, its tables.                                                                                          |
-| `PostComment`           | type     | A `CommentRecord` with the post it is on.                                                                                                    |
-| `ProfileLink`           | type     | One thing a profile points at: somewhere else this person is.                                                                                |
-| `ProposedComment`       | type     | A comment as its writer proposes it: everything but the three things the intake decides — its name, where it stands, and where it came from. |
-| `Relay`                 | type     | The site's subscription to one relay.                                                                                                        |
-| `RelayState`            | type     | One of `RELAY_STATES`.                                                                                                                       |
-| `Session`               | type     | A login, or the anonymous session that carries a CSRF token to a visitor who has not logged in yet.                                          |
-| `SiteSettings`          | type     | The settings a site holds, as `content/_data/site.json` says them.                                                                           |
-| `SubmissionType`        | type     | What a checker is told a submission is.                                                                                                      |
-| `User`                  | type     | An admin user.                                                                                                                               |
-| `UserProfile`           | type     | The public face of a user: what their archive is headed with and what their actor will carry.                                                |
+| Export               | Kind     | What it is                                                                                          |
+| -------------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| `CONTACT_FIELDS`     | constant | The fields the contact form submits.                                                                |
+| `CONTACT_POST_PATH`  | constant | Where the contact form posts, under the CMS's own prefix.                                           |
+| `createUser`         | function | Hash the password and add the user to the file.                                                     |
+| `listUsers`          | function | Every user, by name, without password hashes.                                                       |
+| `readSiteSettings`   | function | A site's settings, as its `content/_data/site.json` says them right now.                            |
+| `setUserProfile`     | function | Write a user's profile, replacing whatever was there.                                               |
+| `CommentAuthor`      | type     | Who wrote a comment, as much as the site knows.                                                     |
+| `CommentChecker`     | type     | A third-party opinion on comments: the one seam anything like Akismet plugs into.                   |
+| `CommentContent`     | type     | What a comment says, in both the forms the site keeps.                                              |
+| `CommentFormContext` | type     | The comment form as a template receives it.                                                         |
+| `CommentKind`        | type     | One of `COMMENT_KINDS`.                                                                             |
+| `CommentNotices`     | type     | Whoever is told about a comment that has just been written.                                         |
+| `CommentProblems`    | type     | What a form got wrong, one message per field.                                                       |
+| `CommentRecord`      | type     | One comment, as its post's file under `content/_data/comments/` holds it.                           |
+| `CommentRecords`     | type     | What every writer here needs: the files it owns, and the index over them.                           |
+| `CommentReport`      | type     | What a stored comment's later reclassification tells the checker.                                   |
+| `CommentSource`      | type     | One of `COMMENT_SOURCES`.                                                                           |
+| `CommentStatus`      | type     | One of `COMMENT_STATUSES`.                                                                          |
+| `CommentSubmission`  | type     | Everything a checker is told about a comment on its way in.                                         |
+| `CommentVerdict`     | type     | What a checker can say.                                                                             |
+| `CommentViewer`      | type     | Who the site knows is commenting, when a valid session says so.                                     |
+| `ContactFormContext` | type     | The contact form as a template receives it.                                                         |
+| `ContactProblems`    | type     | What a form got wrong, one message per field.                                                       |
+| `CreateUserInput`    | type     | What `createUser` is given.                                                                         |
+| `Delivery`           | type     | How one attempt to deliver one activity to one recipient ended, and what the activity was.          |
+| `DeliveryStatus`     | type     | One of `DELIVERY_STATUSES`.                                                                         |
+| `PostComment`        | type     | A `CommentRecord` with the post it is on.                                                           |
+| `ProfileLink`        | type     | One thing a profile points at: somewhere else this person is.                                       |
+| `Relay`              | type     | The site's subscription to one relay.                                                               |
+| `RelayState`         | type     | One of `RELAY_STATES`.                                                                              |
+| `Session`            | type     | A login, or the anonymous session that carries a CSRF token to a visitor who has not logged in yet. |
+| `SiteSettings`       | type     | The settings a site holds, as `content/_data/site.json` says them.                                  |
+| `SubmissionType`     | type     | What a checker is told a submission is.                                                             |
+| `User`               | type     | An admin user.                                                                                      |
+| `UserProfile`        | type     | The public face of a user: what their archive is headed with and what their actor will carry.       |
 
 ## Mail
 
@@ -240,33 +232,31 @@ entry. When you change one of those examples, change the test with it.
 
 ## Plugins
 
-| Export                       | Kind     | What it is                                                                                                                  |
-| ---------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `pluginDataFolder`           | function | `data/plugins/<package name>/`, which only its plugin reads and writes.                                                     |
-| `pluginSite`                 | function | The `PluginSite` a plugin's host is given, built from a site's admin store and config.                                      |
-| `JsonLdDocument`             | type     | A JSON-LD document as plain data.                                                                                           |
-| `Plugin`                     | type     | A plugin, as a site config or a bundle's default export hands it over.                                                      |
-| `PluginActorKey`             | type     | One of a user's key files.                                                                                                  |
-| `PluginCollection`           | type     | A collection the site's federation publishes, paged by offset cursors.                                                      |
-| `PluginCollectionPage`       | type     | One page of a collection the site's federation publishes.                                                                   |
-| `PluginCommand`              | type     | A command on the `geekity` command line.                                                                                    |
-| `PluginCommandContext`       | type     | What a command's run is handed.                                                                                             |
-| `PluginCommandOption`        | type     | One option a command takes.                                                                                                 |
-| `PluginDataFolder`           | type     | The plugin's private folder, `data/plugins/<package name>/`.                                                                |
-| `PluginFederationContext`    | type     | What a federation middleware is handed for one request.                                                                     |
-| `PluginFederationMiddleware` | type     | Answers a request in the federation mount, or hands it on with `next`, which resolves to what the rest of the site answers. |
-| `PluginFollower`             | type     | A follower, as a user's `followers.json` holds one.                                                                         |
-| `PluginHost`                 | type     | A plugin's only door into the CMS, handed to `Plugin.register`.                                                             |
-| `PluginKeyAlgorithm`         | type     | The algorithms an actor holds a key pair for.                                                                               |
-| `PluginRecipient`            | type     | A follower as a delivery reaches them.                                                                                      |
-| `PluginRequestContext`       | type     | What a plugin's route handler is handed.                                                                                    |
-| `PluginRequirements`         | type     | The plugins this one depends on: package name to the semver range it needs, the same pairs as its peer dependencies.        |
-| `PluginRouteHandler`         | type     | Answers one request to a plugin's route.                                                                                    |
-| `PluginScreen`               | type     | A screen under Plugins in the admin, listed in the menu while the plugin is active.                                         |
-| `PluginScreenBlock`          | type     | One block of a plugin screen's card.                                                                                        |
-| `PluginScreenCard`           | type     | One card on a plugin screen.                                                                                                |
-| `PluginScreenCell`           | type     | A table cell: text, or an instant drawn as a date, `null` for never.                                                        |
-| `PluginScreenContext`        | type     | What a plugin screen's render and its actions are handed.                                                                   |
-| `PluginScreenText`           | type     | Text on a plugin screen: plain, or set as code.                                                                             |
-| `PluginSite`                 | type     | The site's accounts, keys, followers and content, as a plugin may read and change them.                                     |
-| `PluginUser`                 | type     | One account on the site.                                                                                                    |
+| Export                       | Kind | What it is                                                                                                                  |
+| ---------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------- |
+| `JsonLdDocument`             | type | A JSON-LD document as plain data.                                                                                           |
+| `Plugin`                     | type | A plugin, as a site config or a bundle's default export hands it over.                                                      |
+| `PluginActorKey`             | type | One of a user's key files.                                                                                                  |
+| `PluginCollection`           | type | A collection the site's federation publishes, paged by offset cursors.                                                      |
+| `PluginCollectionPage`       | type | One page of a collection the site's federation publishes.                                                                   |
+| `PluginCommand`              | type | A command on the `geekity` command line.                                                                                    |
+| `PluginCommandContext`       | type | What a command's run is handed.                                                                                             |
+| `PluginCommandOption`        | type | One option a command takes.                                                                                                 |
+| `PluginDataFolder`           | type | The plugin's private folder, `data/plugins/<package name>/`.                                                                |
+| `PluginFederationContext`    | type | What a federation middleware is handed for one request.                                                                     |
+| `PluginFederationMiddleware` | type | Answers a request in the federation mount, or hands it on with `next`, which resolves to what the rest of the site answers. |
+| `PluginFollower`             | type | A follower, as a user's `followers.json` holds one.                                                                         |
+| `PluginHost`                 | type | A plugin's only door into the CMS, handed to `Plugin.register`.                                                             |
+| `PluginKeyAlgorithm`         | type | The algorithms an actor holds a key pair for.                                                                               |
+| `PluginRecipient`            | type | A follower as a delivery reaches them.                                                                                      |
+| `PluginRequestContext`       | type | What a plugin's route handler is handed.                                                                                    |
+| `PluginRequirements`         | type | The plugins this one depends on: package name to the semver range it needs, the same pairs as its peer dependencies.        |
+| `PluginRouteHandler`         | type | Answers one request to a plugin's route.                                                                                    |
+| `PluginScreen`               | type | A screen under Plugins in the admin, listed in the menu while the plugin is active.                                         |
+| `PluginScreenBlock`          | type | One block of a plugin screen's card.                                                                                        |
+| `PluginScreenCard`           | type | One card on a plugin screen.                                                                                                |
+| `PluginScreenCell`           | type | A table cell: text, or an instant drawn as a date, `null` for never.                                                        |
+| `PluginScreenContext`        | type | What a plugin screen's render and its actions are handed.                                                                   |
+| `PluginScreenText`           | type | Text on a plugin screen: plain, or set as code.                                                                             |
+| `PluginSite`                 | type | The site's accounts, keys, followers and content, as a plugin may read and change them.                                     |
+| `PluginUser`                 | type | One account on the site.                                                                                                    |

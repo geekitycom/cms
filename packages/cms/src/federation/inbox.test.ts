@@ -160,6 +160,7 @@ async function temporaryDir(prefix: string): Promise<string> {
 async function site(
   /** The id the account was published under elsewhere, when it has one. */
   storedActorId?: string,
+  now?: () => Date,
 ): Promise<Cms> {
   const dataDir = await temporaryDir('geekity-inbox-data-');
   const contentDir = await temporaryDir('geekity-inbox-content-');
@@ -194,6 +195,7 @@ async function site(
     watch: false,
     baseUrl: BASE_URL,
     federation: { queue: null, allowPrivateAddress: true },
+    ...(now === undefined ? {} : { now }),
   });
   started.push(instance);
   return instance;
@@ -287,7 +289,7 @@ describe('a Follow', () => {
 
   it('in dev mode, stores the follower and holds the Accept (TASK-295)', async () => {
     const instance = await site();
-    enterDevMode(instance.config.dataDir, 'command');
+    enterDevMode(instance.config.dataDir, 'command', instance.config.now());
 
     const response = await deliver(instance, follow());
 
@@ -643,6 +645,43 @@ describe('an invalid HTTP signature', () => {
       `a Follow signed by an unknown key was answered ${String(response.status)}`,
     );
     assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
+  });
+});
+
+describe('with the clock pinned through createCms', () => {
+  const PINNED = '2026-05-06T07:08:09.000Z';
+  const pinned = () => new Date(PINNED);
+
+  it('stamps a follower with the pinned instant, in the index and the file', async () => {
+    const instance = await site(undefined, pinned);
+
+    await deliver(instance, follow());
+
+    assert.equal(instance.admin.getFollower(LOCAL_USER, REMOTE_ACTOR)?.followedAt, PINNED);
+    assert.equal(readFollowers(contentOf(instance), LOCAL_USER)[0]?.followedAt, PINNED);
+  });
+
+  it('stamps an inbox activity with the pinned instant, in the index and the month file', async () => {
+    const instance = await site(undefined, pinned);
+
+    await deliver(
+      instance,
+      new Like({
+        id: new URL(`${REMOTE_ORIGIN}/likes/pinned`),
+        actor: new URL(REMOTE_ACTOR),
+        object: new URL(`${BASE_URL}/2026/03/hello/`),
+      }),
+    );
+
+    const logged = instance.admin
+      .listInboxActivities()
+      .find((entry) => entry.activityType === 'Like');
+    assert.equal(logged?.receivedAt, PINNED);
+    assert.deepEqual(
+      readInboxLog(contentOf(instance)).map((line) => line.receivedAt),
+      [PINNED],
+    );
+    assert.ok(readFileIfPresentSync(inboxFile(contentOf(instance), PINNED)) !== undefined);
   });
 });
 

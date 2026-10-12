@@ -3,6 +3,7 @@ import type { Environment } from 'nunjucks';
 import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
 import { findThemeFile } from '../theme/themes.ts';
 import type { ThemeSource } from '../theme/themes.ts';
+import type { Clock } from '../util/clock.ts';
 
 /**
  * What a message looks like before it is addressed: a subject, a plain text
@@ -67,6 +68,7 @@ export interface CreateMailTemplatesOptions {
   themes: ThemeSource;
   /** Public origin, for the `url` and `absoluteUrl` filters. */
   baseUrl: string;
+  now: Clock;
   /**
    * Recompile a template on every render instead of caching it. On while the
    * content watcher is on, so editing a message in development shows up
@@ -110,6 +112,7 @@ export function createMailTemplates(options: CreateMailTemplatesOptions): MailTe
   const environment = createTemplateEnvironment({
     themeDirs: options.themes.current().dirs,
     baseUrl: options.baseUrl,
+    now: options.now,
     ...(options.noCache === undefined ? {} : { noCache: options.noCache }),
   });
 
@@ -119,6 +122,7 @@ export function createMailTemplates(options: CreateMailTemplatesOptions): MailTe
   const plainEnvironment = createTemplateEnvironment({
     themeDirs: options.themes.current().dirs,
     baseUrl: options.baseUrl,
+    now: options.now,
     autoescape: false,
     ...(options.noCache === undefined ? {} : { noCache: options.noCache }),
   });

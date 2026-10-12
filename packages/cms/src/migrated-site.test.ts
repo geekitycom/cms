@@ -15,6 +15,7 @@ import { addFollower } from './federation/records.ts';
 import type { Cms } from './index.ts';
 import { DEFAULT_SITE_SETTINGS } from './site/settings.ts';
 import { writeSiteJson } from './site/site-json.ts';
+import { nextEvent } from './__testing__/wait.ts';
 
 const BASE_URL = 'https://blog.example';
 const FOLLOWER = 'https://remote.example/users/bob';
@@ -178,13 +179,15 @@ async function settle(cms: Cms): Promise<void> {
   await cms.indexNow.settled();
 }
 
-async function indexed(cms: Cms, slug: string, marker: string): Promise<void> {
-  const deadline = Date.now() + 20_000;
-  while (!(cms.store.getBySlug(slug)?.body.includes(marker) ?? false)) {
-    assert.ok(Date.now() < deadline, `the watcher indexed ${slug}`);
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  await new Promise((resolve) => setTimeout(resolve, 50));
+async function indexed(cms: Cms, ...expected: (readonly [slug: string, marker: string])[]) {
+  await nextEvent(`the watcher to index ${expected.map(([slug]) => slug).join(' and ')}`, (done) =>
+    cms.onSettled(() => {
+      const landed = expected.every(
+        ([slug, marker]) => cms.store.getBySlug(slug)?.body.includes(marker) ?? false,
+      );
+      if (landed) done();
+    }),
+  );
   await settle(cms);
 }
 
@@ -278,8 +281,9 @@ describe('a post first published on this site (TASK-296 AC #4)', () => {
   it('is announced, mentioned, pinged and submitted when its file is written', async () => {
     const { cms, contentDir } = await site({ watch: true });
 
+    const landed = indexed(cms, ['brand-new', 'New words']);
     await writeDocument(contentDir, FRESH_FILE, nativePost());
-    await indexed(cms, 'brand-new', 'New words');
+    await landed;
 
     assert.deepEqual(activities(), [`Create ${BASE_URL}/2026/10/brand-new/`]);
     assert.deepEqual(webmentionSources(), [`${BASE_URL}/2026/10/brand-new/`]);
@@ -292,10 +296,14 @@ describe('a migrated post written while the site watches (TASK-296 AC #1, #2, #7
   it('sends nothing for a post its followers already hold, nor for one never federated', async () => {
     const { cms, contentDir } = await site({ watch: true });
 
+    const landed = indexed(
+      cms,
+      ['already-announced', 'Thoughts'],
+      ['an-old-essay', 'An old essay'],
+    );
     await writeDocument(contentDir, ANNOUNCED_FILE, migratedFederatedPost());
     await writeDocument(contentDir, QUIET_FILE, migratedUnfederatedPost());
-    await indexed(cms, 'already-announced', 'Thoughts');
-    await indexed(cms, 'an-old-essay', 'An old essay');
+    await landed;
 
     assertSilent('a file arriving that was public before it reached this site');
     const quiet = await readFile(path.join(contentDir, QUIET_FILE), 'utf8');
@@ -311,18 +319,20 @@ describe('a migrated post on a fresh database, edited later (TASK-296 AC #1, #2,
     });
     assertSilent('booting over the migrated archive');
 
+    const announced = indexed(cms, ['already-announced', 'Second thoughts']);
     await writeDocument(
       contentDir,
       ANNOUNCED_FILE,
       migratedFederatedPost(`Second thoughts on [a page](${LINKED_PAGE}).`),
     );
-    await indexed(cms, 'already-announced', 'Second thoughts');
+    await announced;
+    const quiet = indexed(cms, ['an-old-essay', 'A revised essay']);
     await writeDocument(
       contentDir,
       QUIET_FILE,
       migratedUnfederatedPost(`A revised essay about [a page](${LINKED_PAGE}).`),
     );
-    await indexed(cms, 'an-old-essay', 'A revised essay');
+    await quiet;
 
     assert.deepEqual(activities(), [`Update ${ANNOUNCED_ID}`], 'one Update, and no Create');
     assert.deepEqual(webmentionSources().sort(), [

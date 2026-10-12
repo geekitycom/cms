@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -75,9 +75,10 @@ describe('the post locations file (decision-29)', () => {
     const locations = postLocations(dir);
     await locations.set('/a/', PARIS);
     const file = path.join(dir, LOCATIONS_FILE);
+    const lastWritten = new Date('2026-01-01T00:00:00Z');
+    await utimes(file, lastWritten, lastWritten);
     const before = await stat(file);
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
     await locations.set('/a/', { ...PARIS });
     await locations.set('/missing/', undefined);
 

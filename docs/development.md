@@ -55,35 +55,35 @@ the line, for example
 
 The layers, from the bottom:
 
-| Layer                    | Units                                    | What it holds                                                                                                                                         |
-| ------------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| utilities                | `util/`, `types/`, `init.ts`             | Generic helpers: URLs, HTML, guards, queues, the public-address check and the IndieAuth client id rules.                                              |
-| files                    | `files/`                                 | Atomic writes and static file lookup.                                                                                                                 |
-| caches                   | `cache.ts`, `dev-mode.ts`                | The SQLite cache file and the dev-mode switch.                                                                                                        |
-| content                  | `content/`                               | The domain: documents, the index, writes, and the URL rules for permalinks, guids, keys, authors, taxonomy, redirects, uploads, licences and locales. |
-| operational state        | `store/`, `maintenance.ts`               | The SQLite records that are not derived: comments, inbox, deliveries, followers, relays, sessions, tokens. The maintenance switch.                    |
-| ports                    | `forms/`, `mail/`, `plugin.ts`           | The seams a site's config hands implementations into: form protection and the comment checker, mail providers, the plugin API.                        |
-| config                   | `config.ts`                              | The config schema and its defaults.                                                                                                                   |
-| theme                    | `theme/`                                 | Themes on disk, the Nunjucks environment, theme assets, and the site data a template reads.                                                           |
-| images                   | `images/`                                | Image variants, responsive markup and site icons.                                                                                                     |
-| site                     | `site/`                                  | `site.json` and its settings rules, users and their profiles, navigation, robots policy, and the admin paths the rest of the site refers to.          |
-| comments                 | `comments/`                              | Comment intake, records, moderation, and the conversation types.                                                                                      |
-| notifications            | `notifications/`                         | Comment notices, digests, opt-outs, and the templated mail service.                                                                                   |
-| contact                  | `contact/`                               | Contact messages.                                                                                                                                     |
-| privacy                  | `privacy/`                               | Retention and erasure.                                                                                                                                |
-| webmention               | `webmention/`                            | Sending and receiving webmentions, reply contexts and syndication.                                                                                    |
-| federation               | `federation/`                            | ActivityPub.                                                                                                                                          |
-| services                 | `avatars/`, `media/`, `indieauth/`       | Remote avatars, the media library, and IndieAuth grants and tokens.                                                                                   |
-| plugins                  | `plugins/`                               | Installing, loading and running plugins.                                                                                                              |
-| supervisor               | `supervisor/`                            | The `geekity serve` supervisor and its worker.                                                                                                        |
-| public site              | `web/`                                   | The request context (`web/env.ts`), sessions, the renderer, the conversation reader, and every public route.                                          |
-| admin                    | `admin/`                                 | The admin screens, the admin bar and the IndieAuth consent screens.                                                                                   |
-| endpoints and middleware | `micropub/`, `access-log.ts`, `drain.ts` | Micropub, the access log and the drain.                                                                                                               |
-| publish pings            | `notify.ts`, `indexnow.ts`               | rssCloud, WebSub and IndexNow pings on publish.                                                                                                       |
-| composition root         | `cms/`                                   | `createCms`, which builds every service and mounts every route, and the error handler for the whole app.                                              |
-| public API               | `exports.ts`, `config-loader.ts`         | The package's export list ([The package API](public-api.md)) and the config loader.                                                                   |
-| package index            | `index.ts`                               | The package entry point.                                                                                                                              |
-| command line             | `cli.ts`                                 | The `geekity` command.                                                                                                                                |
+| Layer                    | Units                                          | What it holds                                                                                                                                              |
+| ------------------------ | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| utilities                | `util/`, `types/`, `init.ts`                   | Generic helpers: URLs, HTML, guards, queues, the public-address check and the IndieAuth client id rules.                                                   |
+| files                    | `files/`                                       | Atomic writes and static file lookup.                                                                                                                      |
+| caches                   | `cache.ts`, `dev-mode.ts`                      | The SQLite cache file and the dev-mode switch.                                                                                                             |
+| content                  | `content/`                                     | The domain: documents, the index, writes, and the URL rules for permalinks, guids, keys, authors, taxonomy, redirects, uploads, licences and locales.      |
+| operational state        | `store/`, `maintenance.ts`                     | The SQLite records that are not derived: comments, inbox, deliveries, followers, relays, sessions, tokens. The maintenance switch.                         |
+| ports                    | `forms/`, `mail/`, `plugin.ts`                 | The seams a site's config hands implementations into: form protection and the comment checker, mail providers, the plugin API.                             |
+| config                   | `config.ts`                                    | The config schema and its defaults.                                                                                                                        |
+| theme                    | `theme/`                                       | Themes on disk, the Nunjucks environment, theme assets, and the site data a template reads.                                                                |
+| images                   | `images/`                                      | Image variants, responsive markup and site icons.                                                                                                          |
+| site                     | `site/`                                        | `site.json` and its settings rules, users and their profiles, navigation, robots policy, and the admin paths the rest of the site refers to.               |
+| comments                 | `comments/`                                    | Comment intake, records, moderation, and the conversation types.                                                                                           |
+| notifications            | `notifications/`                               | Comment notices, digests, opt-outs, and the templated mail service.                                                                                        |
+| contact                  | `contact/`                                     | Contact messages.                                                                                                                                          |
+| privacy                  | `privacy/`                                     | Retention and erasure.                                                                                                                                     |
+| webmention               | `webmention/`                                  | Sending and receiving webmentions, reply contexts and syndication.                                                                                         |
+| federation               | `federation/`                                  | ActivityPub.                                                                                                                                               |
+| services                 | `avatars/`, `media/`, `indieauth/`             | Remote avatars, the media library, and IndieAuth grants and tokens.                                                                                        |
+| plugins                  | `plugins/`                                     | Installing, loading and running plugins.                                                                                                                   |
+| supervisor               | `supervisor/`                                  | The `geekity serve` supervisor and its worker.                                                                                                             |
+| public site              | `web/`                                         | The request context (`web/env.ts`), sessions, the renderer, the conversation reader, and every public route.                                               |
+| admin                    | `admin/`                                       | The admin screens, the admin bar and the IndieAuth consent screens.                                                                                        |
+| endpoints and middleware | `micropub/`, `access-log.ts`, `drain.ts`       | Micropub, the access log and the drain.                                                                                                                    |
+| publish pings            | `notify.ts`, `indexnow.ts`                     | rssCloud, WebSub and IndexNow pings on publish.                                                                                                            |
+| composition root         | `cms/`                                         | `createCms`, which builds every service and mounts every route, and the error handler for the whole app.                                                   |
+| public API               | `exports.ts`, `testing.ts`, `config-loader.ts` | The package's export list ([The package API](public-api.md)), the test-only entry ([Testing a plugin](plugins.md#testing-a-plugin)) and the config loader. |
+| package index            | `index.ts`                                     | The package entry point.                                                                                                                                   |
+| command line             | `cli.ts`                                       | The `geekity` command.                                                                                                                                     |
 
 A feature that needs a value from a higher layer gets it injected by
 `cms/`, the composition root, as `SiteRecords` does for the write path. A rule
@@ -109,6 +109,47 @@ the response lives in `web/`, for example `web/comment-routes.ts`,
 
 The map can list an exception with the file, the unit it may import, the task
 that removes it and the reason. No exceptions are left.
+
+### One clock
+
+Every timestamp the CMS stores or sends comes from one `Clock`
+(`src/util/clock.ts`). `createCms` builds it from the `now` config option and
+passes it to each service: the content index reads it as `store.now()`, the
+operational records as `admin.now()`, and the rest as `config.now()`. A test
+that pins `now` therefore pins every record and every activity id.
+
+`src/clock-boundary.test.ts` runs in `pnpm test`. It fails on a `new Date()`,
+`Date.now()` or `systemClock()` in a source file that it does not list, and
+names the file and line. The list holds the system clock definition, the
+defaults for callers outside `createCms`, and the code that measures elapsed
+wall time, such as a timeout or a retry window. Each entry gives its reason.
+
+### Tests wait on events
+
+A test that waits for something to happen waits for the event itself, not for
+time to pass. `nextEvent` in `src/__testing__/wait.ts` subscribes to the event
+and resolves when it comes. If it does not come within 15 seconds, the test
+fails with a message that names the event. Common events are the content
+events on `cms.events`, `cms.onSettled` (the index has settled after a scan or
+a run of watched changes), the `waiting` callback of `cms.drain` (the drain
+waits for writes in flight), and a line that a child process prints, such as
+the supervisor's lines about the plugins folder. To test something that
+depends on the time, pin the clock with `createCms({ now })` and move it.
+
+A test that proves something did not happen asks for a state instead of
+waiting to see. `liveWatchers` in `src/__testing__/watchers.ts` counts the
+file watches that are open, so a test asserts that the content watcher never
+started or was closed. A test about the order of watched changes passes
+`heldDebounce()` from `src/__testing__/debounce.ts` as the `watchDebounce`
+config option, and releases each changed path by hand instead of spacing its
+writes in time.
+
+`src/test-waits.test.ts` runs in `pnpm test`. It fails on a `setTimeout`, a
+`node:timers/promises` import, a `sleep(` call, or a `Date.now()` deadline or
+measured duration in a test file that it does not list. The list holds only
+the bound in `nextEvent`, the tests that measure a duration they assert on,
+and code inside a string that a test runs as a child program. Each entry gives
+its reason.
 
 ## Requirements
 

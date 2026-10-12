@@ -8,8 +8,9 @@ import { after, before, describe, it } from 'node:test';
 
 import { importJwk } from '@fedify/fedify';
 
-import { createCms, listUsers, pluginDataFolder, pluginSite } from '@geekity/cms';
+import { createCms, listUsers } from '@geekity/cms';
 import type { Cms, PluginFollower } from '@geekity/cms';
+import { pluginDataFolder, pluginSite } from '@geekity/cms/testing';
 
 import wordpress from '../src/index.ts';
 import { importWordPressActor } from '../src/import.ts';

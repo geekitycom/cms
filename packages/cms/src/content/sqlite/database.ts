@@ -1,6 +1,6 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
-import type { Clock } from '../store.ts';
+import type { Clock } from '../../util/clock.ts';
 
 export type Row = Record<string, unknown>;
 

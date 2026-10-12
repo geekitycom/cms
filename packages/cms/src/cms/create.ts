@@ -201,6 +201,13 @@ export interface Cms {
    */
   onPublish(hook: DocumentChangeHook): () => void;
   /**
+   * Run `listener` each time the index settles: after every scan, and after
+   * a run of watcher changes once none is waiting, when every listener on
+   * {@link Cms.events} has finished with them. Returns the function that
+   * unsubscribes.
+   */
+  onSettled(listener: () => unknown): () => void;
+  /**
    * Tell the notify server that these feeds changed — absolute URLs, because
    * it is going to fetch them. The hook a site calls for a feed the CMS does
    * not know it has.
@@ -227,9 +234,10 @@ export interface Cms {
    * timers, the watcher and the plugins, send what the queues hold, and then
    * write nothing more to the database, `dataDir` or `contentDir`. What
    * `geekity serve` does to the old worker on a reload, before the new one
-   * boots.
+   * boots. `onWritesInFlight` hears how many writes are in flight when the drain has
+   * to wait for them.
    */
-  drain(): Promise<void>;
+  drain(onWritesInFlight?: (writes: number) => void): Promise<void>;
   /** Undo {@link Cms.drain}: the new server did not boot, so this one carries on. */
   resume(): Promise<void>;
   /**
@@ -325,6 +333,10 @@ export function createCms(
       return subscribe('published', hook);
     },
 
+    onSettled(listener) {
+      return content.onSettled(listener);
+    },
+
     notifyFeeds(urls) {
       return services.notifier.notify(urls);
     },
@@ -351,8 +363,8 @@ export function createCms(
       });
     },
 
-    async drain() {
-      await writes.refuse();
+    async drain(onWritesInFlight) {
+      await writes.refuse(onWritesInFlight);
       await endServices(lifecycle, 'drain');
       store.setReadOnly(true);
       admin.setReadOnly(true);

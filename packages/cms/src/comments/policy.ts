@@ -41,11 +41,7 @@ export interface CommentPolicy {
  * because a remote server sent it, which nothing here can stop and nothing
  * here should hide: a closed post still shows every one of them.
  */
-export function commentsOpen(
-  document: Document,
-  policy: CommentPolicy,
-  now: Date = new Date(),
-): boolean {
+export function commentsOpen(document: Document, policy: CommentPolicy, now: Date): boolean {
   if (!policy.enabled) return false;
   if (document.draft) return false;
 

@@ -1,6 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 
 import { databaseFile } from '../cache.ts';
+import { systemClock } from '../util/clock.ts';
+import type { Clock } from '../util/clock.ts';
 import { openCommentStore } from './comments.ts';
 import type { CommentStore } from './comments.ts';
 import { conversationEvents } from './conversation.ts';
@@ -65,6 +67,8 @@ export type { NewSentWebmention, SentWebmention, WebmentionSendStatus } from './
 export interface OpenAdminStoreOptions {
   /** Directory the database lives in. Created if it is missing. */
   dataDir: string;
+  /** What the records are stamped with. Defaults to the system clock. */
+  now?: Clock | undefined;
 }
 
 /**
@@ -91,6 +95,8 @@ export type AdminStore = SessionStore &
   RelayStore & {
     /** Absolute path of the SQLite file, the same one the content index uses. */
     readonly file: string;
+    /** What the records are stamped with: the clock the store was opened with. */
+    now(): Date;
     /**
      * Refuse every write on this connection while on, with SQLite's
      * `query_only`. A worker handing over to a new one under `geekity serve`
@@ -109,27 +115,33 @@ export type AdminStore = SessionStore &
  * index holding a second one on the same file.
  */
 export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
-  return adminStoreOwning(openAdminDatabase(options.dataDir), databaseFile(options.dataDir));
+  const now = options.now ?? systemClock;
+  return adminStoreOwning(
+    openAdminDatabase(options.dataDir, now),
+    databaseFile(options.dataDir),
+    now,
+  );
 }
 
-export function adminStoreOwning(db: DatabaseSync, file: string): AdminStore {
+export function adminStoreOwning(db: DatabaseSync, file: string, now: Clock): AdminStore {
   let open = true;
   let readOnly = false;
   const { events, written } = conversationEvents();
 
   return {
     file,
-    ...openSessionStore(db, () => readOnly),
-    ...openTokenStore(db),
-    ...openStateStore(db),
-    ...openFollowerStore(db),
+    now,
+    ...openSessionStore(db, () => readOnly, now),
+    ...openTokenStore(db, now),
+    ...openStateStore(db, now),
+    ...openFollowerStore(db, now),
     ...openProfileStore(db),
-    ...openInboxStore(db, written),
+    ...openInboxStore(db, written, now),
     ...openCommentStore(db, written),
     ...events,
-    ...openDeliveryStore(db),
-    ...openWebmentionStore(db),
-    ...openRelayStore(db),
+    ...openDeliveryStore(db, now),
+    ...openWebmentionStore(db, now),
+    ...openRelayStore(db, now),
 
     setReadOnly(on) {
       db.exec(`PRAGMA query_only = ${on ? 'ON' : 'OFF'}`);

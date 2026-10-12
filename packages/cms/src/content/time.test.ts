@@ -74,12 +74,27 @@ describe('calendarDayIn', () => {
 });
 
 describe('zoneLabel', () => {
+  const NEVER = new Date('2000-01-01T00:00:00Z');
+
   it('names the zone and the abbreviation in force at that instant', () => {
-    assert.equal(zoneLabel('2026-09-04T14:00:00Z', 'America/Chicago'), 'America/Chicago (CDT)');
-    assert.equal(zoneLabel('2026-01-04T14:00:00Z', 'America/Chicago'), 'America/Chicago (CST)');
+    assert.equal(
+      zoneLabel('2026-09-04T14:00:00Z', 'America/Chicago', NEVER),
+      'America/Chicago (CDT)',
+    );
+    assert.equal(
+      zoneLabel('2026-01-04T14:00:00Z', 'America/Chicago', NEVER),
+      'America/Chicago (CST)',
+    );
   });
 
   it('is the zone alone when it has no abbreviation to add', () => {
-    assert.equal(zoneLabel('2026-09-04T14:00:00Z', 'UTC'), 'UTC');
+    assert.equal(zoneLabel('2026-09-04T14:00:00Z', 'UTC', NEVER), 'UTC');
+  });
+
+  it('reads the abbreviation at the instant it is given when the date is empty or unreadable', () => {
+    const january = new Date('2026-01-04T14:00:00Z');
+
+    assert.equal(zoneLabel('', 'America/Chicago', january), 'America/Chicago (CST)');
+    assert.equal(zoneLabel('not a date', 'America/Chicago', january), 'America/Chicago (CST)');
   });
 });

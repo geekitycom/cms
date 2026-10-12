@@ -486,11 +486,13 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   const environment = createTemplateEnvironment({
     themeDirs: themes.current().dirs,
     baseUrl: config.baseUrl,
+    now: config.now,
     noCache: config.watch,
   });
   const markdownEnvironment = createTemplateEnvironment({
     themeDirs: themes.current().dirs,
     baseUrl: config.baseUrl,
+    now: config.now,
     noCache: config.watch,
     autoescape: false,
   });
@@ -758,14 +760,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // `activityStreams` is the object id the base layout advertises. It is
     // added here rather than in `documentContext` because it needs the
     // site's base URL, which a document on its own does not carry.
-    const objectId = activityStreamsId(document, config.baseUrl);
+    const now = config.now();
+    const objectId = activityStreamsId(document, config.baseUrl, now);
     // `conversation` is what was said back. It is on the context only when
     // there is something in it, so a theme can ask `{% if conversation %}`
     // and a post nobody has answered renders no empty section (TASK-49).
     // `commentsFeed` is where it is syndicated, for a served document that
     // shows one, and is set here rather than in a layout so that a site which
     // overrides `post.njk` or `page.njk` keeps the link.
-    const now = config.now();
     const site = siteData.read();
     const shows = answerable(document, commentPolicyOf(site), now);
     const said = shows ? options.conversation?.(document) : undefined;

@@ -118,11 +118,12 @@ export interface CreateMailServiceOptions {
   /**
    * Config after defaults: the base URL, the content directory the settings
    * are read from, the data directory the credentials are in, the theme
-   * directory the messages are looked up in, and whether templates are cached.
+   * directory the messages are looked up in, whether templates are cached,
+   * and the clock.
    */
   config: Pick<
     ResolvedConfig,
-    'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'themesDir' | 'watch'
+    'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'themesDir' | 'watch' | 'now'
   >;
   /**
    * A provider named by the site, which wins outright over the settings and
@@ -196,6 +197,7 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
           chosen: () => readSiteSettings(config.contentDir).theme,
         }),
       baseUrl: config.baseUrl,
+      now: config.now,
       noCache: config.watch,
     });
 

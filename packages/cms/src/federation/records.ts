@@ -183,7 +183,7 @@ export async function addFollower(
       url: follower.url,
       // The file remembers when the follow began, so a profile refresh cannot
       // move an actor to the top of the list it has been on for a year.
-      followedAt: existing?.followedAt ?? follower.followedAt ?? new Date().toISOString(),
+      followedAt: existing?.followedAt ?? follower.followedAt ?? admin.now().toISOString(),
     };
 
     const next =
@@ -294,7 +294,7 @@ export async function appendInboxActivity(
   } = {},
 ): Promise<InboxActivity | undefined> {
   const { admin, contentDir } = records;
-  const receivedAt = options.receivedAt ?? new Date().toISOString();
+  const receivedAt = options.receivedAt ?? admin.now().toISOString();
   const fetched = options.fetched ?? false;
   const line: InboxLine = { receivedAt, recipient: options.recipient ?? null, fetched, json };
   const row = inboxRowFrom(line);

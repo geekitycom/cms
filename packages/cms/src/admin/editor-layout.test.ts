@@ -236,8 +236,14 @@ describe('the post editor’s disclosures (TASK-245)', () => {
 
 describe('which groups start open (TASK-245)', () => {
   it('opens an empty group that holds the box a save was refused for, and only that one', () => {
-    const blank = openGroups(blankForm(POST_KIND), undefined);
-    const refused = openGroups(blankForm(POST_KIND), 'editor-like-of');
+    const blank = openGroups(
+      blankForm(POST_KIND, 'UTC', new Date('2026-09-02T10:00:00.000Z')),
+      undefined,
+    );
+    const refused = openGroups(
+      blankForm(POST_KIND, 'UTC', new Date('2026-09-02T10:00:00.000Z')),
+      'editor-like-of',
+    );
 
     assert.equal(blank.responding, false);
     assert.equal(refused.responding, true);

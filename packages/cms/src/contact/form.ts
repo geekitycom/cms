@@ -111,7 +111,7 @@ export function contactOpen(document: Document): boolean {
 }
 
 /** A fresh, empty form for a page that asked for one. */
-export function contactForm(document: Document, now: Date = new Date()): ContactFormContext {
+export function contactForm(document: Document, now: Date): ContactFormContext {
   return refilledContactForm(document, blankContactValues(), {}, now);
 }
 
@@ -125,7 +125,7 @@ export function refilledContactForm(
   document: Document,
   values: ContactFormContext['values'],
   problems: ContactProblems,
-  now: Date = new Date(),
+  now: Date,
   error?: string,
 ): ContactFormContext {
   return {

@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 
+import type { Clock } from '../util/clock.ts';
+
 import { countByStatus, inTransaction, nullableText, oneOf } from './rows.ts';
 
 /** How one webmention this site sent to one page ended. */
@@ -69,7 +71,7 @@ export interface WebmentionStore {
   moveSentWebmentions(from: Pick<SentWebmention, 'slug' | 'source'>, to: string): void;
 }
 
-export function openWebmentionStore(db: DatabaseSync): WebmentionStore {
+export function openWebmentionStore(db: DatabaseSync, clock: Clock): WebmentionStore {
   const statements = {
     recordSentWebmention: db.prepare(`
       INSERT INTO webmentions_sent (
@@ -119,7 +121,7 @@ export function openWebmentionStore(db: DatabaseSync): WebmentionStore {
         sent.endpoint,
         sent.status,
         sent.error,
-        sent.attemptedAt ?? new Date().toISOString(),
+        sent.attemptedAt ?? clock().toISOString(),
       ) as Record<string, unknown> | undefined;
       if (row === undefined) {
         throw new Error(`The webmention to ${sent.target} could not be recorded.`);

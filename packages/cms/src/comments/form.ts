@@ -127,11 +127,7 @@ export const COMMENT_NOTICES: Readonly<Record<string, string>> = {
 };
 
 /** A fresh, empty form for a post that is taking comments. */
-export function commentForm(
-  document: Document,
-  now: Date = new Date(),
-  notifiable = false,
-): CommentFormContext {
+export function commentForm(document: Document, now: Date, notifiable = false): CommentFormContext {
   return refilledCommentForm(document, blankValues(), {}, now, undefined, notifiable);
 }
 
@@ -145,7 +141,7 @@ export function refilledCommentForm(
   document: Document,
   values: CommentFormContext['values'],
   problems: CommentProblems,
-  now: Date = new Date(),
+  now: Date,
   error?: string,
   notifiable = false,
 ): CommentFormContext {

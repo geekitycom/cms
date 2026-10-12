@@ -16,6 +16,7 @@ import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
+import { nextEvent } from '../__testing__/wait.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { addFollower } from './records.ts';
 
@@ -91,6 +92,7 @@ interface Delivery {
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 const deliveries: Delivery[] = [];
+const arrivals = new Set<() => void>();
 const ownFetches: string[] = [];
 
 let remoteActorDocument: unknown;
@@ -198,6 +200,7 @@ function routeRemoteHost(): () => void {
         signature: request.headers.get('signature-input') ?? request.headers.get('signature') ?? '',
         body: (await request.json()) as Record<string, unknown>,
       });
+      for (const arrived of arrivals) arrived();
       return new Response('', { status: 202 });
     }
     if (url.pathname === new URL(REMOTE_ACTOR).pathname) {
@@ -453,22 +456,19 @@ function contentOf(delivery: Delivery | undefined): string {
 /**
  * The first delivery of this type, waiting for it to arrive.
  *
- * The watcher debounces, so a change made on disk is federated a moment after
- * the write rather than during it; there is nothing to await but the effect.
+ * The watcher debounces, and the scheduler waits for a post's date, so a
+ * change is federated a moment after it is made rather than during it.
  */
-async function waitForDelivery(type: string, timeoutMs = 5000): Promise<Delivery> {
-  const deadline = Date.now() + timeoutMs;
-
-  for (;;) {
-    const found = delivered(type)[0];
-    if (found !== undefined) return found;
-    if (Date.now() > deadline) {
-      assert.fail(
-        `no ${type} arrived within ${String(timeoutMs)}ms: ${JSON.stringify(deliveries)}`,
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
+function waitForDelivery(type: string): Promise<Delivery> {
+  return nextEvent(`a delivery of a ${type}`, (done) => {
+    const check = () => {
+      const found = delivered(type)[0];
+      if (found !== undefined) done(found);
+    };
+    check();
+    arrivals.add(check);
+    return () => arrivals.delete(check);
+  });
 }
 
 /** A draft nobody outside the site has ever seen. */
@@ -1478,6 +1478,64 @@ describe('a user whose record carries a stored actor id', () => {
   });
 });
 
+describe('with the clock pinned through createCms', () => {
+  const PINNED = '2026-05-06T07:08:09.000Z';
+  const pinned = () => new Date(PINNED);
+  const PUBLISHED_FILE = 'posts/2026-03-04-hello-world.md';
+  const PUBLISHED_OBJECT = `${BASE_URL}/2026/03/hello-world/`;
+
+  it('stamps every recorded delivery with the pinned instant', async () => {
+    const { cms } = await site({ now: pinned, followers: 2 });
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+
+    const created = String((delivered('Create')[0] as Delivery).body['id']);
+    const recorded = cms.admin.listDeliveries(created);
+    assert.ok(recorded.length > 0, 'the Create was recorded');
+    assert.deepEqual(
+      recorded.map((delivery) => delivery.attemptedAt),
+      recorded.map(() => PINNED),
+    );
+  });
+
+  it('names a resent Update of an edited post by the pinned instant', async () => {
+    const { cms, contentDir } = await site({ now: pinned });
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+
+    const file = path.join(contentDir, ...PUBLISHED_FILE.split('/'));
+    const edited = (await readFile(file, 'utf8')).replace('The first post.', 'Edited.');
+    await writeFile(file, edited, 'utf8');
+    await cms.sync();
+    deliveries.length = 0;
+
+    const report = await cms.delivery.resend('hello-world');
+
+    const expected = `${PUBLISHED_OBJECT}#update/${encodeURIComponent(PINNED)}`;
+    assert.equal(report?.activityId, expected);
+    assert.deepEqual(
+      delivered('Update').map((update) => update.body['id']),
+      [expected],
+    );
+  });
+
+  it('names an actor Update by the pinned instant', async () => {
+    const { cms, dataDir } = await site({ now: pinned, account: true });
+    const user = listUsers(dataDir)[0];
+    assert.ok(user !== undefined);
+
+    await cms.delivery.updateActor(user);
+    await cms.delivery.settled();
+
+    assert.deepEqual(
+      delivered('Update').map((update) => update.body['id']),
+      [`${ACTOR_URL}#update/${encodeURIComponent(PINNED)}`],
+    );
+  });
+});
+
 describe('resending a post', () => {
   /** Where the editor files the post {@link publishNewPost} writes. */
   const PUBLISHED_FILE = 'posts/2026-03-04-hello-world.md';
@@ -1520,7 +1578,8 @@ describe('resending a post', () => {
   });
 
   it('gives two resends of an unchanged post two activity ids (AC #1)', async () => {
-    const { cms } = await site();
+    let now = new Date('2026-03-05T10:00:00.000Z');
+    const { cms } = await site({ now: () => now });
     const agent = await signedIn(cms);
     await publishNewPost(agent);
     await cms.delivery.settled();
@@ -1529,7 +1588,7 @@ describe('resending a post', () => {
     // content — which is what a save uses — would be the same id twice, and a
     // peer is entitled to ignore an activity id it has already seen.
     const first = await cms.delivery.resend('hello-world');
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    now = new Date('2026-03-05T10:00:01.000Z');
     const second = await cms.delivery.resend('hello-world');
 
     assert.ok(first !== undefined && second !== undefined);

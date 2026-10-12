@@ -10,7 +10,6 @@ export type {
 } from './config.ts';
 export {
   defaultPermalink,
-  documentContent,
   DuplicatePermalinkError,
   parseDocument,
   renderMarkdown,
@@ -20,7 +19,6 @@ export {
 export type {
   ActivityPubMetadata,
   ChangeOrigin,
-  Clock,
   ContentEventListener,
   ContentEventMap,
   ContentEvents,
@@ -35,7 +33,9 @@ export type {
   Scheduler,
   SearchHit,
   SyncResult,
+  WatchDebounce,
 } from './content/index.ts';
+export type { Clock } from './util/clock.ts';
 export type { GeekityEnv } from './web/env.ts';
 export {
   atomFeed,
@@ -108,13 +108,7 @@ export type {
   ImageVariant,
   SiteIcon,
 } from './images/index.ts';
-export {
-  createUser,
-  listUsers,
-  openAdminStore,
-  readSiteSettings,
-  setUserProfile,
-} from './admin/index.ts';
+export { createUser, listUsers, readSiteSettings, setUserProfile } from './admin/index.ts';
 export type {
   CommentAuthor,
   CommentContent,
@@ -125,7 +119,6 @@ export type {
   CreateUserInput,
   Delivery,
   DeliveryStatus,
-  OpenAdminStoreOptions,
   PostComment,
   ProfileLink,
   Relay,
@@ -135,22 +128,16 @@ export type {
   User,
   UserProfile,
 } from './admin/index.ts';
-export { addComment, deleteComment, intakeComment, updateComment } from './comments/index.ts';
 export type {
   CommentChecker,
   CommentFormContext,
-  CommentIntakeOutcome,
   CommentNotices,
-  CommentOrigin,
   CommentProblems,
   CommentRecords,
   CommentReport,
   CommentSubmission,
   CommentVerdict,
   CommentViewer,
-  IntakeCommentOptions,
-  NewComment,
-  ProposedComment,
   SubmissionType,
 } from './comments/index.ts';
 export { CONTACT_FIELDS, CONTACT_POST_PATH } from './contact/index.ts';
@@ -187,8 +174,6 @@ export type {
 export type { HostLookup, ReplyContext, ReplyContextService } from './webmention/index.ts';
 export type { AvatarAnswer, AvatarService } from './avatars/index.ts';
 export type { RetentionReport, RetentionService } from './privacy/retention.ts';
-export { pluginSite } from './plugins/site.ts';
-export { pluginDataFolder } from './plugins/registry.ts';
 export type {
   JsonLdDocument,
   Plugin,

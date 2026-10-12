@@ -17,6 +17,7 @@ import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createUser, setUserProfile } from '../site/users.ts';
 import { createTemplateEnvironment } from '../theme/templates.ts';
+import { systemClock } from '../util/clock.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -296,7 +297,10 @@ describe('what heads a listing (AC #3)', () => {
     // descriptions — so the branch is reached by rendering the packaged layout
     // over a context that has one, which is what a site supplying descriptions
     // of its own would hand it.
-    const environment = createTemplateEnvironment({ baseUrl: 'http://localhost:3000/' });
+    const environment = createTemplateEnvironment({
+      baseUrl: 'http://localhost:3000/',
+      now: systemClock,
+    });
     const html = environment.render('layouts/category.njk', {
       site: { title: 'A Site' },
       category: 'notes',

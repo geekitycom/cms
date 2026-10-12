@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 
+import type { Clock } from '../util/clock.ts';
+
 import { nullableText, oneOf } from './rows.ts';
 
 /** Where a relay subscription stands (FEP-ae0c). */
@@ -69,7 +71,7 @@ export interface RelayStore {
   deleteRelay(inboxId: string): boolean;
 }
 
-export function openRelayStore(db: DatabaseSync): RelayStore {
+export function openRelayStore(db: DatabaseSync, clock: Clock): RelayStore {
   const statements = {
     listRelays: db.prepare('SELECT * FROM ap_relays ORDER BY created_at, inbox_id'),
     relayByInbox: db.prepare('SELECT * FROM ap_relays WHERE inbox_id = ?'),
@@ -104,7 +106,7 @@ export function openRelayStore(db: DatabaseSync): RelayStore {
     },
 
     putRelay(relay) {
-      const now = new Date().toISOString();
+      const now = clock().toISOString();
       const row = statements.putRelay.get(
         relay.inboxId,
         relay.actorId,

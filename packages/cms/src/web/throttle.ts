@@ -2,8 +2,7 @@ import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
-import type { Clock } from '../content/store.ts';
-import { systemClock } from '../content/store.ts';
+import type { Clock } from '../util/clock.ts';
 import type { GeekityEnv } from './env.ts';
 
 /**
@@ -24,8 +23,7 @@ export interface LoginThrottleOptions {
   attempts: number;
   /** How long the first lockout lasts, in seconds. */
   lockoutSeconds: number;
-  /** Where the time comes from. Defaults to the system clock; a test hands one it can move. */
-  now?: Clock;
+  now: Clock;
 }
 
 /**
@@ -71,7 +69,7 @@ interface Attempts {
  * allowed, and refusing takes no time at all.
  */
 export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottle {
-  const clock = options.now ?? systemClock;
+  const clock = options.now;
   const attempts = Math.max(1, Math.trunc(options.attempts));
   const window = Math.max(1, options.lockoutSeconds) * 1000;
   const entries = new Map<string, Attempts>();

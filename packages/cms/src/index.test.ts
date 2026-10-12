@@ -14,6 +14,8 @@ import {
   slugify,
 } from './index.ts';
 import type { Cms, GeekityConfig } from './index.ts';
+import { nextEvent } from './__testing__/wait.ts';
+import { liveWatchers } from './__testing__/watchers.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -206,36 +208,32 @@ describe('keeping the index in step with the content directory', () => {
     assert.equal(instance.store.getByPermalink('/about/')?.title, 'About');
   });
 
-  it('picks up an edit while it is serving, and stops when it closes', async () => {
+  it('picks up an edit while it is serving, and stops when it closes', async (t) => {
     const { cms: instance, contentDir } = await site(
       { 'pages/about.md': page('About', '/about/', 'First.') },
       { port: 0, watch: true },
     );
+    const watchers = liveWatchers();
+    t.after(() => watchers.restore());
     await instance.serve();
+    assert.equal(watchers.watching(), true, 'it watches while it serves');
 
+    const edited = nextEvent('the watcher to report the edit to pages/about.md', (done) =>
+      instance.events.on('updated', (change) => {
+        if (change.path === 'pages/about.md') done();
+      }),
+    );
     await writeFile(
       path.join(contentDir, 'pages/about.md'),
       page('About', '/about/', 'Second.'),
       'utf8',
     );
-
-    const deadline = Date.now() + 4000;
-    while (
-      instance.store.getByPath('pages/about.md')?.html.includes('Second.') !== true &&
-      Date.now() < deadline
-    ) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
+    await edited;
 
     assert.match(instance.store.getByPath('pages/about.md')?.html ?? '', /Second\./);
 
     await instance.close();
-    await writeFile(
-      path.join(contentDir, 'pages/about.md'),
-      page('About', '/about/', 'Third.'),
-      'utf8',
-    );
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    assert.equal(watchers.watching(), false, 'closing stopped the watch');
   });
 
   it('tells subscribers about a document it indexed', async () => {
@@ -251,20 +249,71 @@ describe('keeping the index in step with the content directory', () => {
     assert.deepEqual(seen, ['created pages/about.md', 'published About']);
   });
 
-  it('does not watch when the config turns watching off', async () => {
+  it('tells a settled listener once a scan and its listeners are done', async () => {
+    const { cms: instance } = await site({ 'pages/about.md': page('About', '/about/') });
+    const seen: string[] = [];
+    instance.events.on('change', async (change) => {
+      await new Promise(setImmediate);
+      seen.push(`listener ${change.path}`);
+    });
+    instance.onSettled(() => seen.push('settled'));
+
+    await instance.sync();
+
+    assert.deepEqual(seen, ['listener pages/about.md', 'settled']);
+  });
+
+  it('tells a settled listener once a watched run of edits and its listeners are done', async () => {
     const { cms: instance, contentDir } = await site(
+      { 'pages/about.md': page('About', '/about/', 'First.') },
+      { port: 0, watch: true },
+    );
+    await instance.serve();
+    const seen: string[] = [];
+    instance.events.on('change', async (change) => {
+      await new Promise(setImmediate);
+      seen.push(`${change.type} ${change.path}`);
+    });
+    const both = ['updated pages/about.md', 'created pages/contact.md'];
+
+    const settled = nextEvent('the index to settle after both edits', (done) =>
+      instance.onSettled(() => {
+        seen.push('settled');
+        if (both.every((change) => seen.includes(change))) done();
+      }),
+    );
+    await writeFile(path.join(contentDir, 'pages/about.md'), page('About', '/about/', 'Second.'));
+    await writeFile(path.join(contentDir, 'pages/contact.md'), page('Contact', '/contact/'));
+    await settled;
+
+    assert.equal(seen.at(-1), 'settled', seen.join(', '));
+    assert.match(instance.store.getByPath('pages/about.md')?.html ?? '', /Second\./);
+  });
+
+  it('stops telling a settled listener that unsubscribed', async () => {
+    const { cms: instance } = await site({ 'pages/about.md': page('About', '/about/') });
+    let settled = 0;
+    const stop = instance.onSettled(() => {
+      settled += 1;
+    });
+
+    await instance.sync();
+    stop();
+    await instance.sync();
+
+    assert.equal(settled, 1);
+  });
+
+  it('does not watch when the config turns watching off', async (t) => {
+    const { cms: instance } = await site(
       { 'pages/about.md': page('About', '/about/', 'First.') },
       { port: 0, watch: false },
     );
+    const watchers = liveWatchers();
+    t.after(() => watchers.restore());
     await instance.serve();
 
-    await writeFile(
-      path.join(contentDir, 'pages/about.md'),
-      page('About', '/about/', 'Second.'),
-      'utf8',
-    );
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
+    assert.equal(watchers.watching(), false);
     assert.match(instance.store.getByPath('pages/about.md')?.html ?? '', /First\./);
     await instance.close();
   });
@@ -436,7 +485,7 @@ describe('hooks', () => {
     );
 
     const result = await instance.sync();
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await new Promise(setImmediate);
 
     assert.equal(result.created, 1);
   });

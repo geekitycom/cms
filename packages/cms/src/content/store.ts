@@ -1,22 +1,12 @@
 import type { Document, DocumentType } from './document.ts';
 import type { RedirectTable } from './redirects.ts';
 import type { Taxonomy } from './taxonomy.ts';
+import type { Clock } from '../util/clock.ts';
 
 export { DATABASE_FILE } from '../cache.ts';
 
 /** Directory name that marks a document as thrown away but not yet deleted. */
 export const TRASH_DIRECTORY = '_trash';
-
-/**
- * What the index reads the time from.
- *
- * A post's date decides whether it is public yet, so the index has a clock;
- * this is the seam that lets a test move it without waiting.
- */
-export type Clock = () => Date;
-
-/** The clock an index uses when it is not given one. */
-export const systemClock: Clock = () => new Date();
 
 export interface OpenContentStoreOptions {
   /** Directory the database lives in. Created if it is missing. */

@@ -213,7 +213,7 @@ export interface SubmitCommentOptions {
    */
   notifiable?: boolean | undefined;
   /** The clock. */
-  now?: Date | undefined;
+  now: Date;
 }
 
 /** The part of the login throttle a comment needs. */
@@ -233,7 +233,7 @@ export interface CommentThrottle {
  */
 export async function submitComment(options: SubmitCommentOptions): Promise<CommentOutcome> {
   const { records, document, form, throttle } = options;
-  const now = options.now ?? new Date();
+  const { now } = options;
   // The honeypot first, because it costs one comparison and because a
   // submission that tripped it should not reach anything that could tell it so.
   if (trapped(form.trap)) return refused({ kind: 'discarded' });

@@ -4,8 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { pluginDataFolder } from '@geekity/cms';
 import type { PluginCommandContext, PluginDataFolder, PluginSite } from '@geekity/cms/plugin';
+import { pluginDataFolder } from '@geekity/cms/testing';
 
 import { importWordPressContent } from '../src/content-import.ts';
 import type { ReportRow, WordPressImporter } from '../src/content-import.ts';

@@ -38,7 +38,7 @@ describe('a database this package cannot use', () => {
     const db = new DatabaseSync(databaseFile(dataDir));
     db.prepare('INSERT INTO admin_migrations (version, applied_at) VALUES (?, ?)').run(
       9999,
-      new Date().toISOString(),
+      '2026-09-13T12:00:00.000Z',
     );
     db.close();
 

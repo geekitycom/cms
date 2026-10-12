@@ -29,6 +29,7 @@ import { intakeComment } from './intake.ts';
 import type { CommentIntakeOutcome, IntakeCommentOptions, ProposedComment } from './intake.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './migrations.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from '../forms/checker.ts';
+import { systemClock } from '../util/clock.ts';
 
 const temporaryDirs: string[] = [];
 const openStores: (AdminStore | ContentStore)[] = [];
@@ -754,6 +755,7 @@ async function intakeSite(): Promise<IntakeSite> {
       devMode: false,
       themesDir: path.join(contentDir, 'themes'),
       watch: false,
+      now: systemClock,
     },
     provider,
     backoffMs: () => 0,

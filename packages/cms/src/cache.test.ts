@@ -17,6 +17,7 @@ import {
   rebuildingIfOutdated,
 } from './cache.ts';
 import type { Migration } from './cache.ts';
+import { systemClock } from './util/clock.ts';
 
 const dirs: string[] = [];
 
@@ -52,16 +53,41 @@ function withDatabase<T>(file: string, use: (db: DatabaseSync) => T): T {
 }
 
 describe('applyMigrations', () => {
+  it('stamps each version it applies with the clock it is given', async () => {
+    const file = databaseFile(await dataDir());
+    const now = () => new Date('2026-05-06T07:08:09.000Z');
+
+    const stamps = withDatabase(file, (db) => {
+      applyMigrations(db, { file, ledger: 'test_migrations', migrations: SHIPPED, now });
+      return db
+        .prepare('SELECT DISTINCT applied_at FROM test_migrations')
+        .all()
+        .map((row) => row['applied_at']);
+    });
+
+    assert.deepEqual(stamps, ['2026-05-06T07:08:09.000Z']);
+  });
+
   it('applies what has not been applied, and applying twice does nothing', async () => {
     const file = databaseFile(await dataDir());
 
     withDatabase(file, (db) => {
-      applyMigrations(db, { file, ledger: 'test_migrations', migrations: SHIPPED });
+      applyMigrations(db, {
+        file,
+        ledger: 'test_migrations',
+        migrations: SHIPPED,
+        now: systemClock,
+      });
       db.prepare('INSERT INTO things (name, colour) VALUES (?, ?)').run('kettle', 'red');
     });
 
     const applied = withDatabase(file, (db) => {
-      applyMigrations(db, { file, ledger: 'test_migrations', migrations: SHIPPED });
+      applyMigrations(db, {
+        file,
+        ledger: 'test_migrations',
+        migrations: SHIPPED,
+        now: systemClock,
+      });
       return db
         .prepare('SELECT version FROM test_migrations ORDER BY version')
         .all()
@@ -75,17 +101,27 @@ describe('applyMigrations', () => {
     const file = databaseFile(await dataDir());
 
     withDatabase(file, (db) => {
-      applyMigrations(db, { file, ledger: 'test_migrations', migrations: SHIPPED });
+      applyMigrations(db, {
+        file,
+        ledger: 'test_migrations',
+        migrations: SHIPPED,
+        now: systemClock,
+      });
       db.prepare('INSERT INTO test_migrations (version, applied_at) VALUES (?, ?)').run(
         3,
-        new Date().toISOString(),
+        '2026-09-13T12:00:00.000Z',
       );
     });
 
     assert.throws(
       () =>
         withDatabase(file, (db) => {
-          applyMigrations(db, { file, ledger: 'test_migrations', migrations: SHIPPED });
+          applyMigrations(db, {
+            file,
+            ledger: 'test_migrations',
+            migrations: SHIPPED,
+            now: systemClock,
+          });
         }),
       (error: unknown) => {
         assert.ok(error instanceof UnusableDatabaseError);
@@ -101,13 +137,23 @@ describe('applyMigrations', () => {
     const file = databaseFile(await dataDir());
 
     withDatabase(file, (db) => {
-      applyMigrations(db, { file, ledger: 'test_migrations', migrations: SHIPPED });
+      applyMigrations(db, {
+        file,
+        ledger: 'test_migrations',
+        migrations: SHIPPED,
+        now: systemClock,
+      });
     });
 
     assert.throws(
       () =>
         withDatabase(file, (db) => {
-          applyMigrations(db, { file, ledger: 'test_migrations', migrations: PRUNED });
+          applyMigrations(db, {
+            file,
+            ledger: 'test_migrations',
+            migrations: PRUNED,
+            now: systemClock,
+          });
         }),
       (error: unknown) => {
         assert.ok(error instanceof OutdatedDatabaseError);
@@ -121,7 +167,12 @@ describe('applyMigrations', () => {
     const file = databaseFile(await dataDir());
 
     withDatabase(file, (db) => {
-      applyMigrations(db, { file, ledger: 'test_migrations', migrations: PRUNED });
+      applyMigrations(db, {
+        file,
+        ledger: 'test_migrations',
+        migrations: PRUNED,
+        now: systemClock,
+      });
       db.prepare('INSERT INTO things (colour) VALUES (?)').run('green');
     });
   });
@@ -131,7 +182,12 @@ describe('openDatabase', () => {
   it('creates the data directory and the database under it', async () => {
     const dir = path.join(await dataDir(), 'nested', 'data');
 
-    const db = openDatabase({ dataDir: dir, ledger: 'test_migrations', migrations: SHIPPED });
+    const db = openDatabase({
+      dataDir: dir,
+      ledger: 'test_migrations',
+      migrations: SHIPPED,
+      now: systemClock,
+    });
     try {
       assert.ok(existsSync(databaseFile(dir)));
       assert.equal(db.prepare('PRAGMA journal_mode').get()?.['journal_mode'], 'wal');
@@ -145,7 +201,13 @@ describe('openDatabase', () => {
     await writeFile(databaseFile(dir), 'this is not a database, it is a note\n');
 
     assert.throws(
-      () => openDatabase({ dataDir: dir, ledger: 'test_migrations', migrations: SHIPPED }),
+      () =>
+        openDatabase({
+          dataDir: dir,
+          ledger: 'test_migrations',
+          migrations: SHIPPED,
+          now: systemClock,
+        }),
       (error: unknown) => {
         assert.ok(error instanceof UnusableDatabaseError);
         assert.match(error.message, /geekity\.db/);
@@ -159,7 +221,12 @@ describe('openDatabase', () => {
 describe('discardDatabase', () => {
   it('takes the database and its write-ahead log with it', async () => {
     const dir = await dataDir();
-    const db = openDatabase({ dataDir: dir, ledger: 'test_migrations', migrations: SHIPPED });
+    const db = openDatabase({
+      dataDir: dir,
+      ledger: 'test_migrations',
+      migrations: SHIPPED,
+      now: systemClock,
+    });
     db.close();
     for (const file of databaseFiles(dir)) await writeFile(file, '');
 
@@ -178,7 +245,12 @@ describe('rebuildingIfOutdated', () => {
     const dir = await dataDir();
     const file = databaseFile(dir);
     withDatabase(file, (db) => {
-      applyMigrations(db, { file, ledger: 'test_migrations', migrations: SHIPPED });
+      applyMigrations(db, {
+        file,
+        ledger: 'test_migrations',
+        migrations: SHIPPED,
+        now: systemClock,
+      });
       db.prepare('INSERT INTO things (name) VALUES (?)').run('kettle');
     });
 
@@ -191,6 +263,7 @@ describe('rebuildingIfOutdated', () => {
         // The first attempt is the package that has dropped its early
         // migrations; the discard leaves a database it can build from nothing.
         migrations: PRUNED,
+        now: systemClock,
       });
       try {
         return db.prepare('SELECT * FROM things').all().length;
@@ -210,7 +283,12 @@ describe('rebuildingIfOutdated', () => {
     assert.throws(
       () =>
         rebuildingIfOutdated(dir, () =>
-          openDatabase({ dataDir: dir, ledger: 'test_migrations', migrations: SHIPPED }),
+          openDatabase({
+            dataDir: dir,
+            ledger: 'test_migrations',
+            migrations: SHIPPED,
+            now: systemClock,
+          }),
         ),
       UnusableDatabaseError,
     );

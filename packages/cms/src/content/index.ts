@@ -65,13 +65,11 @@ export {
   dateSortKey,
   DuplicatePermalinkError,
   isTrashedPath,
-  systemClock,
   TRASH_DIRECTORY,
 } from './store.ts';
 export { openContentStore } from './sqlite/open.ts';
 export type {
   CategoryCount,
-  Clock,
   ContentCounts,
   ContentStore,
   ListAllOptions,
@@ -82,7 +80,7 @@ export type {
   TagCount,
 } from './store.ts';
 export { calendarDayIn, DEFAULT_TIMEZONE, toUtcInstant, wallClockIn, zoneLabel } from './time.ts';
-export { createContentSync, DEFAULT_DEBOUNCE_MS } from './sync.ts';
+export { createContentSync } from './sync.ts';
 export type {
   ChangeOrigin,
   ContentEventListener,
@@ -94,4 +92,5 @@ export type {
   DocumentChangeType,
   SyncLogger,
   SyncResult,
+  WatchDebounce,
 } from './sync.ts';

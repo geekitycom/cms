@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 
+import type { Clock } from '../util/clock.ts';
+
 export interface StateStore {
   /**
    * One piece of the CMS's own operational state, or `undefined`.
@@ -15,7 +17,7 @@ export interface StateStore {
   setState(key: string, value: string): void;
 }
 
-export function openStateStore(db: DatabaseSync): StateStore {
+export function openStateStore(db: DatabaseSync, clock: Clock): StateStore {
   const statements = {
     getState: db.prepare('SELECT value FROM cms_state WHERE key = ?'),
     putState: db.prepare(`
@@ -30,7 +32,7 @@ export function openStateStore(db: DatabaseSync): StateStore {
     },
 
     setState(key, value) {
-      statements.putState.run(key, value, new Date().toISOString());
+      statements.putState.run(key, value, clock().toISOString());
     },
   };
 }

@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 
+import type { Clock } from '../util/clock.ts';
+
 import { inTransaction, NO_LIMIT, nullableText } from './rows.ts';
 import type { ListPageOptions } from './rows.ts';
 
@@ -93,7 +95,7 @@ export interface FollowerStore {
   replaceFollowers(followers: readonly NewFollower[]): void;
 }
 
-export function openFollowerStore(db: DatabaseSync): FollowerStore {
+export function openFollowerStore(db: DatabaseSync, clock: Clock): FollowerStore {
   const statements = {
     // `?1 IS NULL` is how one statement answers both questions: naming a user
     // counts theirs, naming nobody counts the site's.
@@ -155,7 +157,7 @@ export function openFollowerStore(db: DatabaseSync): FollowerStore {
         follower.name,
         follower.iconUrl,
         follower.url,
-        follower.followedAt ?? new Date().toISOString(),
+        follower.followedAt ?? clock().toISOString(),
       );
       // Read back rather than returning what was written: the upsert leaves an
       // existing `followed_at` alone, so the row is the only thing that knows
@@ -185,7 +187,7 @@ export function openFollowerStore(db: DatabaseSync): FollowerStore {
             follower.name,
             follower.iconUrl,
             follower.url,
-            follower.followedAt ?? new Date().toISOString(),
+            follower.followedAt ?? clock().toISOString(),
           );
         }
       });

@@ -57,7 +57,7 @@ describe('createSerialQueue', () => {
       log.push('first');
       void queue
         .run(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 5));
+          await new Promise(setImmediate);
           log.push('queued while draining');
           throw new Error('late failure');
         })

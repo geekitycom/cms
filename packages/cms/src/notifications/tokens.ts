@@ -52,7 +52,7 @@ export interface NewNotificationToken extends NotificationClaim {
 export function signNotificationToken(
   dataDir: string,
   claim: NewNotificationToken,
-  now: Date = new Date(),
+  now: Date,
 ): string {
   const expiresAt = Math.floor(now.getTime() / 1000) + claim.lifetimeSeconds;
   const payload = Buffer.from(
@@ -72,7 +72,7 @@ export function signNotificationToken(
 export function readNotificationToken(
   dataDir: string,
   token: string,
-  now: Date = new Date(),
+  now: Date,
 ): NotificationClaim | undefined {
   const [payload, signature] = token.split('.');
   if (payload === undefined || signature === undefined || payload === '') return undefined;

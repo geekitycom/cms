@@ -1,7 +1,7 @@
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { Clock } from './content/store.ts';
+import type { Clock } from './util/clock.ts';
 import { readFileIfPresentSync, writeFileAtomically } from './files/atomic.ts';
 
 /**

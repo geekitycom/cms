@@ -15,6 +15,9 @@ import {
 const dirs: string[] = [];
 after(() => Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true }))));
 
+const NOW = new Date('2026-10-09T10:00:00Z');
+const clock = () => NOW;
+
 async function dataDir(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), 'geekity-dev-mode-'));
   dirs.push(dir);
@@ -23,7 +26,7 @@ async function dataDir(): Promise<string> {
 
 describe('dev mode', () => {
   it('is off on a site that never entered it, and holds nothing', async () => {
-    const config = { dataDir: await dataDir(), devMode: false };
+    const config = { dataDir: await dataDir(), devMode: false, now: clock };
 
     assert.equal(devModeOn(config), false);
     assert.equal(
@@ -34,8 +37,8 @@ describe('dev mode', () => {
   });
 
   it('holds and records every outbound effect while on', async () => {
-    const config = { dataDir: await dataDir(), devMode: false };
-    enterDevMode(config.dataDir, 'command', new Date('2026-10-09T10:00:00Z'));
+    const config = { dataDir: await dataDir(), devMode: false, now: clock };
+    enterDevMode(config.dataDir, 'command', NOW);
 
     assert.equal(devModeOn(config), true);
     assert.equal(
@@ -54,7 +57,7 @@ describe('dev mode', () => {
     );
     assert.deepEqual(record[1], {
       type: 'held',
-      at: record[1]?.at,
+      at: NOW.toISOString(),
       kind: 'activitypub',
       what: 'Create https://blog.example/a/',
       to: ['https://remote.example/inbox'],
@@ -64,8 +67,8 @@ describe('dev mode', () => {
   it('is entered once however often a boot asks for it', async () => {
     const dir = await dataDir();
 
-    assert.equal(enterDevMode(dir, 'config'), true);
-    assert.equal(enterDevMode(dir, 'config'), false);
+    assert.equal(enterDevMode(dir, 'config', NOW), true);
+    assert.equal(enterDevMode(dir, 'config', NOW), false);
 
     assert.deepEqual(
       readDevModeRecord(dir).map((entry) => entry.type),
@@ -75,13 +78,13 @@ describe('dev mode', () => {
 
   it('stays on when the config stops asking for it, until it is left', async () => {
     const dir = await dataDir();
-    enterDevMode(dir, 'config');
+    enterDevMode(dir, 'config', NOW);
 
     assert.equal(devModeOn({ dataDir: dir, devMode: false }), true);
 
-    assert.equal(leaveDevMode(dir), true);
+    assert.equal(leaveDevMode(dir, NOW), true);
     assert.equal(devModeOn({ dataDir: dir, devMode: false }), false);
-    assert.equal(leaveDevMode(dir), false, 'leaving twice records nothing more');
+    assert.equal(leaveDevMode(dir, NOW), false, 'leaving twice records nothing more');
     assert.deepEqual(
       readDevModeRecord(dir).map((entry) => entry.type),
       ['on', 'off'],
@@ -101,7 +104,7 @@ describe('dev mode', () => {
 
   it('counts a file it is not allowed to read as on', async () => {
     const dir = await dataDir();
-    enterDevMode(dir, 'command');
+    enterDevMode(dir, 'command', NOW);
     await chmod(path.join(dir, 'dev-mode.json'), 0o000);
 
     assert.equal(devModeOn({ dataDir: dir, devMode: false }), true);
@@ -109,9 +112,12 @@ describe('dev mode', () => {
 
   it('skips a record line it cannot read rather than losing the rest', async () => {
     const dir = await dataDir();
-    enterDevMode(dir, 'command');
+    enterDevMode(dir, 'command', NOW);
     await writeFile(path.join(dir, 'dev-mode.jsonl'), 'garbage\n', { flag: 'a' });
-    holdOutbound({ dataDir: dir, devMode: false }, { kind: 'indexnow', what: 'x', to: ['y'] });
+    holdOutbound(
+      { dataDir: dir, devMode: false, now: clock },
+      { kind: 'indexnow', what: 'x', to: ['y'] },
+    );
 
     assert.deepEqual(
       readDevModeRecord(dir).map((entry) => entry.type),

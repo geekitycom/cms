@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
+import { databaseFile } from '../cache.ts';
 import { resolveConfig } from '../config.ts';
+import { readDevModeRecord } from '../dev-mode.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 
@@ -67,5 +70,37 @@ describe('createCms', () => {
     assert.equal(cms.config.loginAttempts, 9);
     assert.equal(cms.config.contentDir, contentDir);
     assert.ok(Object.isFrozen(cms.config));
+  });
+
+  it('stamps what booting writes with the clock it was given', async () => {
+    const PINNED = '2026-05-06T07:08:09.000Z';
+    const { contentDir, dataDir } = await dirs();
+
+    const cms = createCms({
+      contentDir,
+      dataDir,
+      watch: false,
+      port: 0,
+      devMode: true,
+      now: () => new Date(PINNED),
+    });
+    started.push(cms);
+
+    const db = new DatabaseSync(databaseFile(dataDir), { readOnly: true });
+    try {
+      for (const ledger of ['migrations', 'admin_migrations']) {
+        const stamps = db
+          .prepare(`SELECT DISTINCT applied_at FROM ${ledger}`)
+          .all()
+          .map((row) => row['applied_at']);
+        assert.deepEqual(stamps, [PINNED], ledger);
+      }
+    } finally {
+      db.close();
+    }
+    assert.deepEqual(
+      readDevModeRecord(dataDir).map((entry) => entry.at),
+      [PINNED],
+    );
   });
 });

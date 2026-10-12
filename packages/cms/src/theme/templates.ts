@@ -3,6 +3,7 @@ import { Environment, FileSystemLoader } from 'nunjucks';
 import { citedHost } from '../content/citation.ts';
 import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
 import { accountOf } from '../content/authors.ts';
+import type { Clock } from '../util/clock.ts';
 import { absoluteUrl, withoutTrailingSlash, withTrailingSlash } from '../util/url.ts';
 import { themeAssetUrl } from './assets.ts';
 import { siteLocale, siteTimezone } from './site-data.ts';
@@ -24,6 +25,7 @@ export interface CreateTemplateEnvironmentOptions {
   themeDirs?: readonly string[] | undefined;
   /** Public origin, for the `url` and `absoluteUrl` filters. */
   baseUrl: string;
+  now: Clock;
   /**
    * Recompile a template on every render instead of caching it. On while the
    * content watcher is on, so editing a template in development shows up
@@ -59,7 +61,7 @@ export function createTemplateEnvironment(options: CreateTemplateEnvironmentOpti
     lstripBlocks: true,
   });
 
-  return addFilters(environment, options.baseUrl, loader);
+  return addFilters(environment, options.baseUrl, options.now, loader);
 }
 
 /**
@@ -128,6 +130,7 @@ export type DateFormat =
 function addFilters(
   environment: Environment,
   baseUrl: string,
+  now: Clock,
   loader: FileSystemLoader,
 ): Environment {
   const basePath = withoutTrailingSlash(new URL(withTrailingSlash(baseUrl)).pathname);
@@ -143,7 +146,7 @@ function addFilters(
     ) {
       const site = renderSite(this);
       return formatDate(
-        value,
+        value === 'now' ? now() : value,
         typeof format === 'string' ? format : 'readable',
         typeof timezone === 'string' && timezone !== '' ? timezone : siteTimezone(site),
         (typeof locale === 'string' ? canonicalLocale(locale) : undefined) ?? siteLocale(site),
@@ -304,20 +307,8 @@ function renderSite(context: unknown): SiteData {
   return typeof site === 'object' && site !== null ? (site as SiteData) : none;
 }
 
-/**
- * A value as an instant, or `undefined` when it is not one.
- *
- * `'now'` is the one word the filter reads rather than parses, for the thing a
- * page has that no file carries: the year in the footer's copyright line. It is
- * read at render time rather than at boot so a site left running over New Year
- * says the new one, and it goes through the same zone lens as every other date,
- * so a site in Auckland turns the year over when Auckland does. Eleventy themes
- * spell it the same way, and `docs/eleventy.config.example.js` answers to it
- * too, so one footer renders identically in both builds.
- */
 function toDate(value: unknown): Date | undefined {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? undefined : value;
-  if (value === 'now') return new Date();
   if (typeof value === 'string' || typeof value === 'number') {
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
