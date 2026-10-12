@@ -81,7 +81,7 @@ The layers, from the bottom:
 | endpoints and middleware | `micropub/`, `access-log.ts`, `drain.ts` | Micropub, the access log and the drain.                                                                                                               |
 | publish pings            | `notify.ts`, `indexnow.ts`               | rssCloud, WebSub and IndexNow pings on publish.                                                                                                       |
 | composition root         | `cms/`                                   | `createCms`, which builds every service and mounts every route, and the error handler for the whole app.                                              |
-| public API               | `exports.ts`, `config-loader.ts`         | The package's export list and the config loader.                                                                                                      |
+| public API               | `exports.ts`, `config-loader.ts`         | The package's export list ([The package API](public-api.md)) and the config loader.                                                                   |
 | package index            | `index.ts`                               | The package entry point.                                                                                                                              |
 | command line             | `cli.ts`                                 | The `geekity` command.                                                                                                                                |
 

@@ -20,14 +20,10 @@ import { after, before, describe, it } from 'node:test';
 
 import Eleventy from '@11ty/eleventy';
 
-import {
-  categoryHref,
-  DEFAULT_TAXONOMY_BASES,
-  frontPageSlugs,
-  isTrashedPath,
-  parseDocument,
-  siteAuthorName,
-} from '../src/index.ts';
+import { isTrashedPath } from '../src/content/store.ts';
+import { categoryHref, DEFAULT_TAXONOMY_BASES } from '../src/content/taxonomy.ts';
+import { frontPageSlugs, parseDocument } from '../src/index.ts';
+import { siteAuthorName } from '../src/site/authors.ts';
 import type { Document, FrontPageSlugs, SiteData } from '../src/index.ts';
 import { createUser, listUsers, setUserProfile } from '../src/site/users.ts';
 

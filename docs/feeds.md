@@ -618,12 +618,19 @@ The builders are exported. A site can write a feed of its own, such as one for
 a single category or author, without reimplementing any of the three formats:
 
 ```ts
-import { atomFeed, createRenderer, jsonFeed, rssFeed } from '@geekity/cms';
+import {
+  atomFeed,
+  createRenderer,
+  jsonFeed,
+  listUsers,
+  rssFeed,
+} from '@geekity/cms';
 
 const site = createRenderer({ config: cms.config }).site();
 
 const source = {
   site,
+  users: listUsers(cms.config.dataDir),
   documents: cms.store.listByTag('releases', { limit: 20 }),
   title: `${site.title}: releases`,
   href: '/tag/releases/',
@@ -646,12 +653,15 @@ import {
   commentsRssFeed,
   createConversation,
   feedComments,
+  listUsers,
 } from '@geekity/cms';
 
 const conversation = createConversation({
   admin: cms.admin,
   store: cms.store,
+  contentDir: cms.config.contentDir,
   baseUrl: cms.config.baseUrl,
+  users: () => listUsers(cms.config.dataDir),
 });
 
 commentsRssFeed({
@@ -659,6 +669,7 @@ commentsRssFeed({
   comments: feedComments(conversation.latest(20), {
     baseUrl: cms.config.baseUrl,
     limit: 20,
+    cited: (url) => cms.replyContexts.read(url),
   }),
   title: `${site.title}: comments`,
   href: '/',

@@ -4,8 +4,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { addComment } from '../comments/records.ts';
+import { SCHEDULE_WATERMARK_KEY } from '../cms/services.ts';
 import { addFollower, appendInboxActivity } from '../federation/records.ts';
-import { SCHEDULE_WATERMARK_KEY } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';

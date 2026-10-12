@@ -4,7 +4,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { cleanupTemporaryDirs, exists, runCli, temporaryDir } from './__testing__/cli.ts';
-import { createCms, listUsers, MINIMUM_PASSWORD_LENGTH } from './index.ts';
+import { MINIMUM_PASSWORD_LENGTH } from './admin/credentials.ts';
+import { createCms, listUsers } from './index.ts';
 
 after(cleanupTemporaryDirs);
 
