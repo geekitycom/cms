@@ -1,11 +1,3 @@
-/**
- * Every post field Micropub maps, pinned as it is written and read back
- * (TASK-353 AC #4): the file a create and an update leave behind, what
- * `q=source` answers for it, and the refusal each field earns on its own.
- *
- * `fields-golden.json` holds the expected frames. Run with
- * `GOLDEN_UPDATE=1` to rewrite it after a deliberate change.
- */
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -69,7 +61,6 @@ async function send(cms: Cms, token: string, body: unknown): Promise<Response> {
   });
 }
 
-/** The file a URL's post lives in and what `q=source` says about it. */
 async function frame(cms: Cms, token: string, url: string): Promise<unknown> {
   const document = cms.store.getByPermalink(new URL(url).pathname);
   assert.ok(document !== undefined, `${url} is in the index`);
@@ -88,7 +79,6 @@ async function frame(cms: Cms, token: string, url: string): Promise<unknown> {
   };
 }
 
-/** Properties in name order: a client reads them by name, so their order is no part of the answer. */
 function sorted(properties: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(properties).sort(([a], [b]) => a.localeCompare(b)));
 }

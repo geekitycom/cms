@@ -27,12 +27,6 @@ interface HtmlContent {
   readonly html: string;
 }
 
-/**
- * The properties a post can be created with besides its fields' own
- * (decision-27), and the editor field each fills. Anything else is kept
- * privately, as it was sent, except an `mp-*` command the site does not carry
- * out, which is refused by name.
- */
 const SINGLE_VALUED = {
   name: 'title',
   summary: 'description',
@@ -57,7 +51,6 @@ const MAPPED_ON_THEIR_OWN = [
   'visibility',
 ] as const;
 
-/** The properties a post type can be offered with in `q=config`. */
 export type Property =
   | keyof typeof SINGLE_VALUED
   | keyof typeof ACCEPTED_WITHOUT_EFFECT
@@ -79,7 +72,6 @@ const CORE_PROPERTIES: readonly string[] = [
   ...MAPPED_ON_THEIR_OWN,
 ];
 
-/** Every property a kind maps: the core ones and its fields'. */
 function mappedProperties(kind: DocumentKind): ReadonlySet<string> {
   return new Set([
     ...CORE_PROPERTIES,
@@ -276,7 +268,6 @@ export function createForm(
     if (field.micropub !== undefined) Object.assign(form, field.micropub.toForm(fields));
   }
   const checkin = parsedLocation('checkin', values('checkin'), checkinFromMicropub, errors);
-  // An h-event's `location` is where the event is, which its field reads.
   form.location = locationForm(
     type === 'h-event'
       ? checkin

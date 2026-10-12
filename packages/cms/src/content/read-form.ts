@@ -11,7 +11,6 @@ export interface ReadOfForm {
   url: string;
 }
 
-/** The editor's field names for a read. */
 export const READ_FIELDS = {
   status: 'read-status',
   name: 'read-of-name',
@@ -79,7 +78,6 @@ export function resolveRead(
 
 const READ_OF_PROPERTIES = ['name', 'author', 'uid', 'url'] as const;
 
-/** A Micropub `read-of`, an h-cite, as the form's fields; `refuse` hears what is wrong with it. */
 export function readOfFromMicropub(
   values: readonly unknown[],
   refuse: (message: string) => void,
@@ -118,7 +116,6 @@ export function readOfFromMicropub(
   return { name: field('name'), author: field('author'), uid: field('uid'), url: field('url') };
 }
 
-/** What was read, as the h-cite Micropub answers with. */
 export function readCite(of: ReadOf): object {
   const fields = Object.entries(of).filter(([, value]) => value !== undefined);
   return {

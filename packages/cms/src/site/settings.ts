@@ -15,6 +15,7 @@ import type {
   RobotsPolicy,
 } from '../web/robots.ts';
 import { DEFAULT_TAXONOMY_BASES } from '../web/taxonomy.ts';
+import { PACKAGED_THEME } from '../web/themes.ts';
 import type { TaxonomyBases, TaxonomyRedirect } from '../web/taxonomy.ts';
 
 /**
@@ -343,7 +344,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   homepage: '',
   postsPage: '',
   author: '',
-  theme: '',
+  theme: PACKAGED_THEME,
   icon: '',
   license: '',
   licenseUrl: '',

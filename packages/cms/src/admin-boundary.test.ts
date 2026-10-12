@@ -1,7 +1,3 @@
-/**
- * Content, media, Micropub and site data sit below the admin, not the other
- * way round: `admin/` keeps only its screens and routes.
- */
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';

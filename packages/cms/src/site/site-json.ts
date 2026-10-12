@@ -1,13 +1,3 @@
-/**
- * `content/_data/site.json`, the file a site's settings live in, and the
- * settings it names.
- *
- * The file is the source of truth (decision-9): the settings screen reads it,
- * validates the form and writes it back, and nothing else remembers a setting.
- * That is what makes a hand edit of the file — in an editor, from a git
- * checkout, by an Eleventy build's own tooling — show on the very next
- * request, and what makes `data/geekity.db` a cache a site may delete.
- */
 import path from 'node:path';
 
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
@@ -17,13 +7,6 @@ import { ROWS, SETTING_KEYS } from './setting-rows.ts';
 import { DEFAULT_SITE_SETTINGS } from './settings.ts';
 import type { SiteSettings } from './settings.ts';
 
-/**
- * Keys a save takes out of the file. `navigation` is where the one menu lived
- * before menus had names, and a copy sitting beside `menus` that nothing
- * reads is the kind of thing somebody edits for an hour before noticing.
- * `soloAuthor` is the switch the author setting now says on its own
- * (TASK-192).
- */
 const RETIRED_KEYS = ['navigation', 'soloAuthor'] as const;
 
 /**
@@ -47,7 +30,6 @@ export function readSiteJson(contentDir: string): Record<string, unknown> {
   return parseSiteJson(readFileIfPresentSync(siteDataPath(contentDir)) ?? '');
 }
 
-/** One site.json as an object, empty when it will not parse. */
 export function parseSiteJson(source: string): Record<string, unknown> {
   let parsed: unknown;
   try {

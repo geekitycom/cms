@@ -1,8 +1,3 @@
-/**
- * The settings as the settings screens' form carries them: what each field is
- * submitted under, how a setting is shown, what is wrong with a submitted one
- * and the settings a valid form saves.
- */
 import { FORM_ROWS, ROWS, SETTING_KEYS, SETTINGS_FIELD_NAMES } from './setting-rows.ts';
 import type {
   CarriedSettings,
@@ -24,7 +19,6 @@ export type {
 /** One message per field that is wrong. An empty object is a valid form. */
 export type SettingsProblems = Partial<Record<SettingsField, string>>;
 
-/** One value per form field. */
 function perField<V>(value: (name: SettingsField) => V): Record<SettingsField, V> {
   return Object.fromEntries(SETTINGS_FIELD_NAMES.map((name) => [name, value(name)])) as Record<
     SettingsField,
@@ -42,8 +36,9 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsField, string>> = perField
  *
  * `fields` is what a page carries: it validates its own fields and says
  * nothing about the rest, so a page cannot refuse a save over a field it does
- * not show and gives no way to fix. `context` is what a check needs beyond the
- * form; see {@link SettingsContext}.
+ * not show and gives no way to fix. `context` names the directories the
+ * on-disk checks read, and an on-disk check runs only when its directory is
+ * named.
  */
 export function settingsProblems(
   form: SettingsForm,
@@ -53,20 +48,31 @@ export function settingsProblems(
   const problems: SettingsProblems = {};
 
   for (const name of fields) {
-    const problem = FORM_ROWS[name].check(form, context);
+    const problem = FORM_ROWS[name].check(form) ?? onDiskProblem(name, form, context);
     if (problem !== undefined) problems[name] = problem;
   }
 
   return problems;
 }
 
+function onDiskProblem(
+  name: SettingsField,
+  form: SettingsForm,
+  context: SettingsContext,
+): string | undefined {
+  const onDisk = FORM_ROWS[name].onDisk;
+  if (onDisk === undefined) return undefined;
+  const dir = context[onDisk.dir];
+  return dir === undefined ? undefined : onDisk.problem(form[name].trim(), dir);
+}
+
 function submitSetting<K extends keyof SiteSettings>(
   settings: SiteSettings,
   key: K,
   form: SettingsForm,
-  carried: CarriedSettings,
+  carriedOnFile: CarriedSettings,
 ): void {
-  settings[key] = ROWS[key].submitted(form, carried);
+  settings[key] = ROWS[key].submitted(form, carriedOnFile);
 }
 
 /**
@@ -77,9 +83,12 @@ function submitSetting<K extends keyof SiteSettings>(
  * a save of the fields that are on the form keeps whatever is stored, so
  * passing the settings read inside the write is all a caller has to do.
  */
-export function settingsFromForm(form: SettingsForm, carried: CarriedSettings = {}): SiteSettings {
+export function settingsFromForm(
+  form: SettingsForm,
+  carriedOnFile: CarriedSettings = {},
+): SiteSettings {
   const settings = { ...DEFAULT_SITE_SETTINGS };
-  for (const key of SETTING_KEYS) submitSetting(settings, key, form, carried);
+  for (const key of SETTING_KEYS) submitSetting(settings, key, form, carriedOnFile);
   return settings;
 }
 

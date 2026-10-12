@@ -4,6 +4,7 @@ import { CITATION_PROPERTIES, citedHost, citesAnImage } from '../content/citatio
 import type { CitedPageReader } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import {
+  AUTHOR_UNTIL_REQUEST,
   blankForm,
   CITATION_FIELDS,
   COMMENT_SETTINGS,
@@ -74,8 +75,7 @@ import { UPLOADS_PATH } from './uploads.ts';
  * Posts and pages are the same screens over the same store with two knobs
  * turned: a post carries a date and taxonomy, a page carries neither. Keeping the
  * difference in data rather than in two copies of the code is what lets
- * `/admin/pages` be one call to {@link mountDocumentScreens}. What a kind may
- * carry is its {@link DocumentKind}; this adds where its screens are.
+ * `/admin/pages` be one call to {@link mountDocumentScreens}.
  */
 export interface DocumentScreens extends DocumentKind {
   /** The navigation section they mark as current. */
@@ -86,7 +86,6 @@ export interface DocumentScreens extends DocumentKind {
   plural: string;
 }
 
-/** The posts screens. */
 export const POST_SCREENS: DocumentScreens = {
   ...POST_KIND,
   section: 'posts',
@@ -94,7 +93,6 @@ export const POST_SCREENS: DocumentScreens = {
   plural: 'Posts',
 };
 
-/** The pages screens. */
 export const PAGE_SCREENS: DocumentScreens = {
   ...PAGE_KIND,
   section: 'pages',
@@ -460,7 +458,8 @@ export interface AuthorChoice {
 export function authorChoices(c: Context<GeekityEnv>, current: string): AuthorChoice[] {
   const users = listUsers(c.var.config.dataDir);
   const named = userForAuthor(users, current);
-  const chosen = named?.username ?? (current === '' ? currentUsername(c) : current);
+  const chosen =
+    named?.username ?? (current === AUTHOR_UNTIL_REQUEST ? currentUsername(c) : current);
 
   const choices = users.map((user) => ({
     value: user.username,
@@ -470,7 +469,7 @@ export function authorChoices(c: Context<GeekityEnv>, current: string): AuthorCh
 
   // A name the file holds that is nobody here: offered last, and marked, so it
   // is plain that the post is attributed to somebody this site cannot reach.
-  if (named === undefined && current !== '') {
+  if (named === undefined && current !== AUTHOR_UNTIL_REQUEST) {
     choices.push({ value: current, label: `${current} (no account here)`, chosen: true });
   }
 

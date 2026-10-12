@@ -29,6 +29,8 @@ export const PACKAGED_THEME_DIR: string = fileURLToPath(
   new URL('../../themes/default/', import.meta.url),
 );
 
+export const PACKAGED_THEME = '';
+
 /** The file a directory declares itself a theme with. */
 export const THEME_MANIFEST_FILE = 'theme.json';
 
@@ -363,7 +365,7 @@ export function themeSearchPath(chosenThemeDir?: string): string[] {
  */
 export function themeNameProblem(name: string): string | undefined {
   const chosen = name.trim();
-  if (chosen === '') return undefined;
+  if (chosen === PACKAGED_THEME) return undefined;
   if (chosen === '.' || chosen === '..' || /[/\\\0]/.test(chosen)) {
     return `"${chosen}" is not a theme name: a theme is one directory inside the themes directory.`;
   }
@@ -404,7 +406,9 @@ function chooseThemeDirs(options: {
   name: string;
 }): Omit<ChosenTheme, 'colors'> {
   const name = options.name.trim();
-  if (name === '') return { theme: undefined, dirs: themeSearchPath(), problem: undefined };
+  if (name === PACKAGED_THEME) {
+    return { theme: undefined, dirs: themeSearchPath(), problem: undefined };
+  }
 
   const badName = themeNameProblem(name);
   if (badName !== undefined) {

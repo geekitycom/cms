@@ -1,10 +1,6 @@
 /**
  * The media screen: what is under `content/uploads/`, what links to it, and
  * the two things that can be done to it — add one, and take one away.
- *
- * The files themselves are `media/library.ts`. The only thing the index is
- * asked is which documents mention a URL, which is a question a directory
- * cannot answer.
  */
 
 import type { Context, Hono } from 'hono';

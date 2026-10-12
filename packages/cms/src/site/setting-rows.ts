@@ -1,14 +1,3 @@
-/**
- * Every setting, declared once (TASK-354): one row per {@link SiteSettings}
- * key saying how `content/_data/site.json` holds it, how a save of the
- * settings form makes it, and, for a setting the form carries, the form field
- * it is submitted under, how it is shown and what is wrong with it.
- *
- * The site.json converters in `site-json.ts` and the form converters in
- * `settings-form.ts` loop over these rows, so a key without a row is a type
- * error rather than a setting a save silently drops. The rows are in the
- * order a save writes the file's keys.
- */
 import path from 'node:path';
 
 import { isLocationSharing, LOCATION_SHARING } from '../content/location.ts';
@@ -23,7 +12,7 @@ import { canonicalLocale } from '../web/locale.ts';
 import { menusOf } from '../web/navigation.ts';
 import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from '../web/robots.ts';
 import { taxonomyBaseProblems, taxonomyRedirectsOf } from '../web/taxonomy.ts';
-import { readTheme, themeNameProblem } from '../web/themes.ts';
+import { PACKAGED_THEME, readTheme, themeNameProblem } from '../web/themes.ts';
 import {
   clientsWithoutPkceOf,
   EMAIL_PATTERN,
@@ -47,66 +36,41 @@ import {
 import { DEFAULT_SITE_SETTINGS } from './settings.ts';
 import type { SiteSettings } from './settings.ts';
 
-/**
- * The settings no settings form carries. Each is a record of what another
- * screen did rather than a preference typed into a box: the taxonomy screens
- * write the archive renames, the Navigation screen the menus, Users >
- * Connected apps the apps let in without PKCE, and the IndexNow key is minted
- * once and kept.
- */
 export type CarriedField = 'taxonomyRedirects' | 'menus' | 'indexNowKey' | 'clientsWithoutPkce';
 
 /** The settings the form on the settings screen carries. */
 export type SettingsField = Exclude<keyof SiteSettings, CarriedField>;
 
-/**
- * The carried settings as a save takes them from the file: read off
- * `site.json` as it stands inside the write rather than off the form, which is
- * what makes a menu edited while the settings page was open survive the save.
- */
 export type CarriedSettings = Partial<Pick<SiteSettings, CarriedField>>;
 
 /** A submitted settings form, before it is known to be valid. */
 export type SettingsForm = Record<SettingsField, string>;
 
-/**
- * What a check may need to know beyond the form itself.
- *
- * Whether a name is a theme, or a path an upload, is a question about the
- * file system rather than about the string, and only the config knows where
- * this site's themes and uploads are. A check given no context does what it
- * can, so a caller with no config in hand is not blocked.
- */
-export interface SettingsContext {
-  /** Where the site's themes are: `ResolvedConfig.themesDir`. */
-  themesDir?: string | undefined;
-  contentDir?: string | undefined;
+export interface SettingsDirs {
+  readonly themesDir: string;
+  readonly contentDir: string;
+}
+
+export type SettingsContext = { readonly [D in keyof SettingsDirs]?: string | undefined };
+
+export interface OnDiskCheck {
+  readonly dir: keyof SettingsDirs;
+  readonly problem: (value: string, dir: string) => string | undefined;
 }
 
 type SiteJson = Readonly<Record<string, unknown>>;
 
 export interface SettingRow<V> {
-  /**
-   * Its value as `site.json` says it, or `undefined` where the file says
-   * nothing usable and the default stands. Read tolerantly, because the file
-   * is public, in git and editable by hand.
-   */
   readonly read: (file: SiteJson) => V | undefined;
-  /** Write it into, or take it out of, the `site.json` a save writes. */
   readonly write: (file: Record<string, unknown>, settings: SiteSettings) => void;
-  /** Its value off a form {@link FormSettingRow.check} found nothing wrong with. */
-  readonly submitted: (form: SettingsForm, carried: CarriedSettings) => V;
+  readonly submitted: (form: SettingsForm, onFile: CarriedSettings) => V;
 }
 
 export interface FormSettingRow<V> extends SettingRow<V> {
-  /** The form field it is submitted under. */
   readonly field: string;
   readonly shown: (value: V) => string;
-  /**
-   * What is wrong with it on a submitted form. A setting nothing can be wrong
-   * with has a check all the same, so a new row has to say so.
-   */
-  readonly check: (form: SettingsForm, context: SettingsContext) => string | undefined;
+  readonly check: (form: SettingsForm) => string | undefined;
+  readonly onDisk?: OnDiskCheck;
 }
 
 type CarriedRow<K extends CarriedField> = SettingRow<SiteSettings[K]> & { readonly field?: never };
@@ -117,14 +81,12 @@ type SettingRows = { readonly [K in SettingsField]: FormSettingRow<SiteSettings[
 
 type Writer = SettingRow<unknown>['write'];
 
-/** Written whether or not it has a value, so the file's shape is stable. */
 function always(key: string, value: (settings: SiteSettings) => unknown): Writer {
   return (file, settings) => {
     file[key] = value(settings);
   };
 }
 
-/** Absent rather than empty when there is nothing to say. */
 function unlessEmpty(key: TextField | 'indexNowKey' | 'clientsWithoutPkce'): Writer {
   return (file, settings) => {
     const value = settings[key];
@@ -138,7 +100,6 @@ function stringIn(file: SiteJson, key: string): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-/** A string where the empty string is a hole only the default can fill. */
 function nonEmptyStringIn(file: SiteJson, key: string): string | undefined {
   const value = stringIn(file, key);
   return value === '' ? undefined : value;
@@ -164,7 +125,6 @@ const asIs = (value: string): string => value;
 const lines = (value: readonly string[]): string => value.join('\n');
 const nothingWrong = (): undefined => undefined;
 
-/** The settings typed into a box and held as the text typed. */
 type TextField = {
   [K in SettingsField]: string extends SiteSettings[K] ? K : never;
 }[SettingsField];
@@ -183,12 +143,6 @@ type RetentionField =
 
 type ListField = 'robotsRules' | 'securityContacts' | 'relays';
 
-/**
- * A setting typed into a box and kept trimmed. `empty` says whether the empty
- * string is a value of its own (no tagline, no author) or a hole only the
- * default can fill (no title), and whether a save writes it or leaves the key
- * out.
- */
 function text(
   key: TextField,
   field: string,
@@ -220,7 +174,6 @@ function flag(key: FlagField, field: string): FormSettingRow<boolean> {
   };
 }
 
-/** One of a fixed list, read the way the form checks it. */
 function choice<K extends ChoiceField>(
   key: K,
   field: string,
@@ -238,11 +191,13 @@ function choice<K extends ChoiceField>(
   };
 }
 
-/**
- * A retention period. Empty is refused rather than read as zero, because zero
- * keeps the data forever and a cleared field should not be how a site says
- * that.
- */
+export function requiredWholeDays(typed: string): number | undefined {
+  const trimmed = typed.trim();
+  if (trimmed === '') return undefined;
+  const days = Number(trimmed);
+  return isWholeDays(days) ? days : undefined;
+}
+
 function retention(key: RetentionField, field: string): FormSettingRow<number> {
   return {
     field,
@@ -250,21 +205,13 @@ function retention(key: RetentionField, field: string): FormSettingRow<number> {
     write: always(key, (settings) => settings[key]),
     submitted: (form) => Number(form[key]),
     shown: String,
-    check: (form) => {
-      const typed = form[key].trim();
-      const days = Number(typed);
-      return typed === '' || !Number.isInteger(days) || days < 0
+    check: (form) =>
+      requiredWholeDays(form[key]) === undefined
         ? 'Keep it for a whole number of days, or 0 to keep it forever.'
-        : undefined;
-    },
+        : undefined,
   };
 }
 
-/**
- * A Content-Signal preference. Read the way the form checks it, so a hand
- * edit naming a signal this version does not know is the default rather than
- * a line of robots.txt nobody chose.
- */
 function contentSignal<K extends ContentSignalField>(
   key: K,
   field: string,
@@ -272,11 +219,6 @@ function contentSignal<K extends ContentSignalField>(
   return choice(key, field, isContentSignalChoice, '', 'A content signal is yes, no, or not said.');
 }
 
-/**
- * A list edited one entry per line and held as an array in the file. The file
- * goes through the same normaliser a submitted form does, so the two cannot
- * mean different things by the same line.
- */
 function list(
   key: ListField,
   field: string,
@@ -296,7 +238,6 @@ function list(
   };
 }
 
-/** What a site.json `license` and `licenseName` say, as the three settings. */
 function licenseIn(
   file: SiteJson,
 ): Pick<SiteSettings, 'license' | 'licenseUrl' | 'licenseName'> | undefined {
@@ -312,12 +253,6 @@ function licenseIn(
 
 const isCustomLicense = (form: SettingsForm): boolean => form.license.trim() === 'custom';
 
-/**
- * What a page slug may be made of on this screen: the shape `slugify`
- * produces, which is what the editor writes. The setting travels no further
- * than a lookup by slug, so this is about catching a hand-typed value rather
- * than about safety.
- */
 const PAGE_SLUG_PATTERN = /^[A-Za-z0-9._~-]{1,200}$/;
 
 /** What is wrong with one page pick, or `undefined`. Empty is a value. */
@@ -328,27 +263,65 @@ function slugProblem(value: string, what: string): string | undefined {
     : `${what} is the slug of one of the site's pages, such as about.`;
 }
 
-function iconProblem(icon: string, context: SettingsContext): string | undefined {
+function iconProblem(icon: string): string | undefined {
   if (icon === '') return undefined;
 
   const parsed = parseIconSetting(icon);
-  if ('problem' in parsed) {
-    return parsed.problem === 'not-an-upload'
-      ? 'The site icon has to be a file in the media library, a path such as /uploads/2026/10/icon.png.'
-      : 'The site icon has to be an image: PNG, JPEG, GIF, WebP, AVIF, TIFF or SVG.';
-  }
-  if (context.contentDir === undefined) return undefined;
-
-  const file = sourceFile({ contentDir: context.contentDir }, parsed.source);
-  return file !== undefined && isFileSync(file)
-    ? undefined
-    : `There is no upload at ${icon}. Upload the picture on the Media screen first.`;
+  if (!('problem' in parsed)) return undefined;
+  return parsed.problem === 'not-an-upload'
+    ? 'The site icon has to be a file in the media library, a path such as /uploads/2026/10/icon.png.'
+    : 'The site icon has to be an image: PNG, JPEG, GIF, WebP, AVIF, TIFF or SVG.';
 }
 
-/**
- * A whole number read the way `Number` reads it, so a hand-edited `"7"` is
- * seven, and kept when `accept` says so.
- */
+const ICON_UPLOADED: OnDiskCheck = {
+  dir: 'contentDir',
+  problem: (icon, contentDir) => {
+    const parsed = parseIconSetting(icon);
+    if ('problem' in parsed) return undefined;
+    const file = sourceFile({ contentDir }, parsed.source);
+    return file !== undefined && isFileSync(file)
+      ? undefined
+      : `There is no upload at ${icon}. Upload the picture on the Media screen first.`;
+  },
+};
+
+export type FrontPage = Pick<SiteSettings, 'homepage' | 'postsPage'>;
+
+export function frontPageOf(form: SettingsForm): FrontPage {
+  const homepage = form.homepage.trim();
+  return { homepage, postsPage: homepage === '' ? '' : form.postsPage.trim() };
+}
+
+export function frontPageProblems(form: SettingsForm): {
+  readonly [K in keyof FrontPage]?: string | undefined;
+} {
+  const homepage = form.homepage.trim();
+  return {
+    homepage: slugProblem(homepage, 'A homepage'),
+    postsPage: postsPageProblem(homepage, form.postsPage.trim()),
+  };
+}
+
+function postsPageProblem(homepage: string, postsPage: string): string | undefined {
+  if (postsPage === '') return undefined;
+  if (homepage === '') {
+    return 'A posts page needs a homepage: pick the page the front page shows first.';
+  }
+  if (postsPage === homepage) {
+    return 'The homepage and the posts page have to be two different pages.';
+  }
+  return slugProblem(postsPage, 'A posts page');
+}
+
+function frontPageRows(): { readonly [K in keyof FrontPage]: FormSettingRow<string> } {
+  const row = (key: keyof FrontPage, field: string): FormSettingRow<string> => ({
+    ...text(key, field, { empty: 'absent' }),
+    submitted: (form) => frontPageOf(form)[key],
+    check: (form) => frontPageProblems(form)[key],
+  });
+  return { homepage: row('homepage', 'homepage'), postsPage: row('postsPage', 'posts_page') };
+}
+
 function countIn(
   file: SiteJson,
   key: string,
@@ -358,14 +331,19 @@ function countIn(
   return Number.isInteger(count) && accept(count) ? count : undefined;
 }
 
-/**
- * An email address, or empty for the fallback `empty` names. Only a non-empty
- * one has to look like an address.
- */
 function emailCheck(key: TextField, problem: string): FormSettingRow<string>['check'] {
   return (form) =>
     form[key].trim() !== '' && !EMAIL_PATTERN.test(form[key].trim()) ? problem : undefined;
 }
+
+const THEME_INSTALLED: OnDiskCheck = {
+  dir: 'themesDir',
+  problem: (name, themesDir) => {
+    if (name === PACKAGED_THEME) return undefined;
+    const read = readTheme(path.join(themesDir, name));
+    return read.ok ? undefined : `There is no theme called "${name}": ${read.reason}`;
+  },
+};
 
 const SETTING_ROWS: SettingRows = {
   title: text('title', 'title', {
@@ -375,8 +353,6 @@ const SETTING_ROWS: SettingRows = {
 
   tagline: text('tagline', 'tagline', { empty: 'value' }),
 
-  // Whether the base URL is the one in effect depends on the config; see
-  // `effectiveBaseUrl`. The file has always called it `url`.
   baseUrl: {
     field: 'base_url',
     read: (file) => stringIn(file, 'url'),
@@ -513,7 +489,6 @@ const SETTING_ROWS: SettingRows = {
 
   contentSignalAiTrain: contentSignal('contentSignalAiTrain', 'content_signal_ai_train'),
 
-  // A rule the form would refuse is left out of a hand-edited file.
   robotsRules: list(
     'robotsRules',
     'robots_rules',
@@ -525,8 +500,6 @@ const SETTING_ROWS: SettingRows = {
 
   indexNow: flag('indexNow', 'index_now'),
 
-  // Only a provider this version ships: a file naming one it has never heard
-  // of is a site that sends no mail rather than a boot that fails.
   mailProvider: choice(
     'mailProvider',
     'mail_provider',
@@ -537,9 +510,6 @@ const SETTING_ROWS: SettingRows = {
 
   mailFromName: text('mailFromName', 'mail_from_name', { empty: 'value' }),
 
-  // Empty is a value for both of these — no From address falls back to
-  // `no-reply@` at the site's host, and no reply-to means replies go to the
-  // From address.
   mailFromAddress: text('mailFromAddress', 'mail_from_address', {
     empty: 'value',
     check: emailCheck(
@@ -556,8 +526,6 @@ const SETTING_ROWS: SettingRows = {
     ),
   }),
 
-  // Empty is a value here too — it is how a site says "whichever admin has an
-  // address".
   contactEmail: text('contactEmail', 'contact_email', {
     empty: 'value',
     check: emailCheck(
@@ -606,9 +574,6 @@ const SETTING_ROWS: SettingRows = {
         : undefined,
   },
 
-  // Checked line by line, and the first bad line is what the field says: a
-  // textarea has one message, and pointing at the line somebody has to fix is
-  // more use than counting how many are wrong.
   relays: list('relays', 'relays', relayList, (form) => {
     const bad = relayLines(form.relays).find((line) => normalizeRelayInbox(line) === undefined);
     return bad === undefined
@@ -625,9 +590,6 @@ const SETTING_ROWS: SettingRows = {
     `Location sharing is one of ${LOCATION_SHARING.join(', ')}.`,
   ),
 
-  // Every menu the site holds, whether or not the theme in use renders it,
-  // written whole. The `navigation` key the one menu used to live under is not
-  // read at all: menus were renamed rather than migrated (TASK-107).
   menus: {
     read: (file) => (file['menus'] === undefined ? undefined : menusOf(file['menus'])),
     write: always('menus', (settings) =>
@@ -638,12 +600,9 @@ const SETTING_ROWS: SettingRows = {
         ]),
       ),
     ),
-    submitted: (_form, carried) => carried.menus ?? DEFAULT_SITE_SETTINGS.menus,
+    submitted: (_form, onFile) => onFile.menus ?? DEFAULT_SITE_SETTINGS.menus,
   },
 
-  // Facts about the site's URLs rather than preferences, which is why a
-  // content directory restored on its own keeps answering the archive URLs it
-  // used to.
   taxonomyRedirects: {
     read: (file) =>
       Array.isArray(file['taxonomyRedirects'])
@@ -652,64 +611,20 @@ const SETTING_ROWS: SettingRows = {
     write: always('taxonomyRedirects', (settings) =>
       settings.taxonomyRedirects.map((entry) => ({ ...entry })),
     ),
-    submitted: (_form, carried) =>
-      carried.taxonomyRedirects ?? DEFAULT_SITE_SETTINGS.taxonomyRedirects,
+    submitted: (_form, onFile) =>
+      onFile.taxonomyRedirects ?? DEFAULT_SITE_SETTINGS.taxonomyRedirects,
   },
 
-  // The page picks are absent rather than empty for a site showing its latest
-  // posts, which has no static front page at all rather than an empty one.
-  //
-  // They are checked as a pair, the way the archive bases are. Neither check
-  // asks whether the slug still names a published page — the select only
-  // offers ones that do, and a page drafted after it was picked is a site back
-  // on its latest posts rather than a settings screen that will not save.
-  homepage: text('homepage', 'homepage', {
-    empty: 'absent',
-    check: (form) => slugProblem(form.homepage, 'A homepage'),
-  }),
+  ...frontPageRows(),
 
-  postsPage: {
-    ...text('postsPage', 'posts_page', { empty: 'absent' }),
-    // Clearing the homepage clears the listing's own page with it rather than
-    // leave it stranded.
-    submitted: (form) => (form.homepage.trim() === '' ? '' : form.postsPage.trim()),
-    check: (form) => {
-      if (form.postsPage.trim() === '') return undefined;
-      if (form.homepage.trim() === '') {
-        return 'A posts page needs a homepage: pick the page the front page shows first.';
-      }
-      if (form.postsPage.trim() === form.homepage.trim()) {
-        return 'The homepage and the posts page have to be two different pages.';
-      }
-      return slugProblem(form.postsPage, 'A posts page');
-    },
+  theme: {
+    ...text('theme', 'theme', {
+      empty: 'absent',
+      check: (form) => themeNameProblem(form.theme),
+    }),
+    onDisk: THEME_INSTALLED,
   },
 
-  // Absent for a site on the packaged theme: running what the package ships
-  // is not a choice a site should have to write down, and a `theme` of `""`
-  // would be a name no directory has.
-  //
-  // A name that is not a theme is refused rather than saved and warned about
-  // later: the screen lists the themes that are there, so the only way to
-  // type one that is not is a theme deleted between drawing the list and
-  // saving it, and the person is in front of the form and can be told.
-  theme: text('theme', 'theme', {
-    empty: 'absent',
-    check: (form, context) => {
-      const name = form.theme.trim();
-      if (name === '') return undefined;
-
-      const badName = themeNameProblem(name);
-      if (badName !== undefined) return badName;
-      if (context.themesDir === undefined) return undefined;
-
-      const read = readTheme(path.join(context.themesDir, name));
-      return read.ok ? undefined : `There is no theme called "${name}": ${read.reason}`;
-    },
-  }),
-
-  // Absent for a site whose dates follow its language, which has made no
-  // choice to write down.
   locale: text('locale', 'locale', {
     empty: 'absent',
     check: (form) => {
@@ -721,19 +636,17 @@ const SETTING_ROWS: SettingRows = {
     },
   }),
 
-  // Absent for a site with several authors, which names nobody (TASK-192).
   author: text('author', 'author', { empty: 'absent' }),
 
   icon: {
     ...text('icon', 'icon', {
       empty: 'absent',
-      check: (form, context) => iconProblem(form.icon.trim(), context),
+      check: (form) => iconProblem(form.icon.trim()),
     }),
+    onDisk: ICON_UPLOADED,
     read: (file) => stringIn(file, 'icon')?.trim(),
   },
 
-  // The file says a license the way a post's front matter does: a Creative
-  // Commons key, or a custom license's URL with its name beside it.
   license: {
     field: 'license',
     read: (file) => licenseIn(file)?.license,
@@ -753,7 +666,6 @@ const SETTING_ROWS: SettingRows = {
   licenseUrl: {
     field: 'license_url',
     read: (file) => licenseIn(file)?.licenseUrl,
-    // `license` carries it.
     write: () => undefined,
     submitted: (form) => (isCustomLicense(form) ? form.licenseUrl.trim() : ''),
     shown: asIs,
@@ -788,9 +700,9 @@ const SETTING_ROWS: SettingRows = {
       return key !== undefined && isIndexNowKey(key) ? key : undefined;
     },
     write: unlessEmpty('indexNowKey'),
-    submitted: (form, carried) =>
-      carried.indexNowKey !== undefined && carried.indexNowKey !== ''
-        ? carried.indexNowKey
+    submitted: (form, onFile) =>
+      onFile.indexNowKey !== undefined && onFile.indexNowKey !== ''
+        ? onFile.indexNowKey
         : ticked(form.indexNow)
           ? generateIndexNowKey()
           : '',
@@ -802,25 +714,21 @@ const SETTING_ROWS: SettingRows = {
         ? clientsWithoutPkceOf(file['clientsWithoutPkce'])
         : undefined,
     write: unlessEmpty('clientsWithoutPkce'),
-    submitted: (_form, carried) =>
-      carried.clientsWithoutPkce ?? DEFAULT_SITE_SETTINGS.clientsWithoutPkce,
+    submitted: (_form, onFile) =>
+      onFile.clientsWithoutPkce ?? DEFAULT_SITE_SETTINGS.clientsWithoutPkce,
   },
 };
 
-/** Every row, by the key it describes. */
 export const ROWS: { readonly [K in keyof SiteSettings]: SettingRow<SiteSettings[K]> } =
   SETTING_ROWS;
 
-/** The rows the settings form carries. */
 export const FORM_ROWS: { readonly [K in SettingsField]: FormSettingRow<SiteSettings[K]> } =
   SETTING_ROWS;
 
-/** Every setting, in the order a save writes them. */
 export const SETTING_KEYS = Object.keys(SETTING_ROWS) as readonly (keyof SiteSettings)[];
 
 function isFormKey(key: keyof SiteSettings): key is SettingsField {
   return SETTING_ROWS[key].field !== undefined;
 }
 
-/** Every field of the form, in the order a save writes them. */
 export const SETTINGS_FIELD_NAMES: readonly SettingsField[] = SETTING_KEYS.filter(isFormKey);

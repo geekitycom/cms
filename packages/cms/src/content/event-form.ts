@@ -17,7 +17,6 @@ export interface EventForm {
 
 export const BLANK_EVENT_FORM: EventForm = { start: '', end: '', location: '' };
 
-/** The editor's field names for an event. */
 export const EVENT_FIELDS = {
   start: 'event-start',
   end: 'event-end',
@@ -99,7 +98,6 @@ const EVENT_PLACE_REFUSAL =
 
 const PLACE_WORDS = ['name', 'street-address', 'locality', 'region', 'country-name'] as const;
 
-/** An h-event's Micropub `location` as the form's Where; `refuse` hears what is wrong with it. */
 export function eventPlaceFromMicropub(
   values: readonly unknown[],
   refuse: (message: string) => void,

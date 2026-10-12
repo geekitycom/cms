@@ -1,13 +1,3 @@
-/**
- * What is under `content/uploads/`, and taking one of them away.
- *
- * The listing is a walk of the directory rather than a query, because the
- * directory is the truth (decision-1, decision-9). Nothing records that a file
- * exists; a file dropped in by hand over ssh, by a git pull, or by an Eleventy
- * build is listed the next time it is asked for, and a file taken away the
- * same way is not.
- */
-
 import type { Dirent } from 'node:fs';
 import { readdir, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';

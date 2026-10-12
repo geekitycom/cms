@@ -1,12 +1,3 @@
-/**
- * Every setting pinned as it is read, shown and written (TASK-354 AC #2, #4):
- * the bytes a save leaves in `content/_data/site.json` for representative
- * files and forms, the settings and form each reads as, and the message each
- * field's check gives.
- *
- * `settings-golden.json` holds the expected frames. Run with
- * `GOLDEN_UPDATE=1` to rewrite it after a deliberate change.
- */
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -90,7 +81,6 @@ const EVERY_KEY: Record<string, unknown> = {
   custom: { kept: true },
 };
 
-/** Every key the settings model, as a string where the file wants something else. */
 const EMPTY_STRINGS: Record<string, unknown> = Object.fromEntries(
   [...Object.keys(EVERY_KEY).filter((key) => key !== 'custom' && key !== 'feedSize')].map((key) => [
     key,
@@ -282,7 +272,6 @@ const BAD_FORM: SettingsForm = {
   locationSharing: 'everywhere',
 };
 
-/** An object in key order, for the objects whose key order nothing outside them can see. */
 function sorted(object: object): Record<string, unknown> {
   return Object.fromEntries(Object.entries(object).sort(([a], [b]) => a.localeCompare(b)));
 }
@@ -291,7 +280,6 @@ function text(file: Record<string, unknown>): string {
   return `${JSON.stringify(file, null, 2)}\n`;
 }
 
-/** What a save of the unchanged settings leaves in the file, through the real write. */
 async function rewritten(source: string): Promise<string> {
   const contentDir = await box.dir('geekity-settings-golden-');
   const file = siteDataPath(contentDir);

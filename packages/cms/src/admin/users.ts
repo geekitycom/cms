@@ -528,10 +528,6 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
   });
 }
 
-/**
- * The form's body and the user its `user_id` names, or, when nobody has that
- * id, the redirect to the list carrying the gone-user flash.
- */
 async function namedUser(
   c: Context<GeekityEnv>,
 ): Promise<{ dataDir: string; body: Readonly<Record<string, unknown>>; target: User } | Response> {

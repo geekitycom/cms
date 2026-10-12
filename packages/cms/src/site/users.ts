@@ -321,20 +321,8 @@ export async function createUser(input: CreateUserInput): Promise<User> {
   return withoutHash(created);
 }
 
-/**
- * What a setter changes on one user: each key it names is set, and a key set
- * to `undefined` is taken off.
- */
 export type UserChange = Partial<Omit<StoredUser, 'id' | 'username' | 'createdAt'>>;
 
-/**
- * Apply one change to the user with this id, inside the queued write. Returns
- * `false`, without calling `change`, when there is no such user.
- *
- * `change` is handed the user as the file holds them at the moment of the
- * write, and everybody else, so a rule about the whole file is checked and
- * acted on as one step.
- */
 export async function updateUser(
   dataDir: string,
   userId: number,

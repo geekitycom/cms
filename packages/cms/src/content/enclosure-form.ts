@@ -62,7 +62,6 @@ export const BLANK_ENCLOSURE_FORM: EnclosureForm = {
   alternates: [],
 };
 
-/** The editor's field names, in one place for the template and the reader. */
 export const ENCLOSURE_FIELDS = {
   url: 'enclosure-url',
   duration: 'enclosure-duration',

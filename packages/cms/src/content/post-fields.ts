@@ -1,15 +1,3 @@
-/**
- * The post fields kept in front matter the CMS does not model (TASK-353): one
- * row each, saying how the field is read into the editor form, read off a
- * submitted editor, written back to the file, and mapped by Micropub both
- * ways. A document kind carries the rows it has, so a row a kind does not
- * carry is never read or written for it.
- *
- * Fields that are not rows: the location, which is kept beside the post in
- * `data/locations.json` rather than in it (decision-29); `in-reply-to`, which
- * the CMS models; and lang, visibility, comments, exclude and contact, which
- * every kind has.
- */
 import { stringOrEmpty, trimmedField } from '../util/forms.ts';
 import { SYNDICATE_TO_FRONT_MATTER_KEY, syndicateToOf } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
@@ -58,58 +46,44 @@ import {
 import { RSVP_FRONT_MATTER_KEY, rsvpOf, rsvpValue } from './rsvp.ts';
 import { toUtcInstant } from './time.ts';
 
-/** The two microformats2 types a post is created and read back as. */
 export type MicropubType = 'h-entry' | 'h-event';
 
-/** What a Micropub mapping needs from the site. */
 export interface MicropubSite {
   readonly baseUrl: string;
-  /** The syndication targets the site declares. */
   readonly targets: readonly SyndicationTarget[];
 }
 
-/** A Micropub request's properties, as a row reads them. */
 export interface MicropubRequest extends MicropubSite {
   readonly type: MicropubType;
   readonly has: (name: string) => boolean;
   readonly values: (name: string) => readonly unknown[];
-  /** The property's one value, trimmed, or empty; anything else is refused. */
   readonly text: (name: string) => string;
   readonly refuse: (message: string) => void;
-  /** A file sent for row `row` of the photos, to be stored before the write. */
   readonly upload: (row: number, file: File) => void;
 }
 
 export interface MicropubMapping {
-  /** The properties it maps, and the form keys each one owns, which an update replaces. */
   readonly properties: Readonly<Record<string, readonly (keyof EditorForm)[]>>;
-  /** Those of them that are something to publish on their own. */
   readonly publishable: readonly string[];
   readonly toForm: (request: MicropubRequest) => Partial<EditorForm>;
-  /** What `q=source` answers for the field; a property the post does not have is left out. */
   readonly toProperties: (document: Document, site: MicropubSite) => Record<string, unknown[]>;
 }
 
-/** What a row writes the front matter with, besides the form. */
 export interface FieldWriting {
   /** The document being replaced, or `undefined` when one is being made. */
   readonly document: Document | undefined;
   readonly now: Date;
-  /** The recording and photos the form resolved to against the media library. */
   readonly media: ResolvedMedia;
   readonly declared: readonly SyndicationTarget[];
   readonly timezone: string;
 }
 
 export interface PostField {
-  /** The form keys it fills, from the document. */
   readonly read: (document: Document, timezone: string) => Partial<EditorForm>;
-  /** The form keys it fills, from a submitted editor. */
   readonly submitted: (
     body: Readonly<Record<string, unknown>>,
     declared: readonly SyndicationTarget[],
   ) => Partial<EditorForm>;
-  /** Write it into, or take it out of, the front matter a save writes. */
   readonly write: (extra: Record<string, unknown>, form: EditorForm, context: FieldWriting) => void;
   readonly micropub?: MicropubMapping;
 }
@@ -171,7 +145,6 @@ const PHOTO_FIELD: PostField = {
   },
 };
 
-/** A citing property (TASK-169), filed under its own name and filling `field`. */
 function citationField(
   property: CitationProperty,
   field: (value: string) => Partial<EditorForm>,
@@ -218,7 +191,6 @@ const EVENT_FIELD: PostField = {
     }
   },
   micropub: {
-    // An h-event's `location` is the event's too; update.ts gives it to this row for one.
     properties: { start: ['event'], end: ['event'] },
     publishable: [],
     toForm: (request) => {
@@ -332,7 +304,6 @@ const SYNDICATE_TO_FIELD: PostField = {
     properties: { 'mp-syndicate-to': ['syndicateTo'] },
     publishable: [],
     toForm: (request) => ({ syndicateTo: syndicateTo(request) }),
-    // Only the targets the site declares, the ones a client can offer.
     toProperties: (document, { targets }) => {
       const declared = new Set(targets.map(({ id }) => id));
       const selected = syndicateToOf(document.extra).filter((id) => declared.has(id));
@@ -374,7 +345,6 @@ const PINNED_FIELD: PostField = {
   },
 };
 
-/** A post's fields, in the order a save writes their keys. */
 export const POST_FIELDS: readonly PostField[] = [
   ENCLOSURE_FIELD,
   PHOTO_FIELD,

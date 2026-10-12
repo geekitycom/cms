@@ -1,8 +1,3 @@
-/**
- * The post field table (TASK-353 AC #3): a row added to a kind's fields, and
- * nowhere else, is read into the editor form, written back to the file, and
- * mapped both ways by Micropub.
- */
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -43,7 +38,6 @@ async function temporaryDir(prefix: string): Promise<string> {
 
 const NOW = new Date('2026-09-02T10:00:00.000Z');
 
-/** A form that also has the field the test adds, which `EditorForm` does not declare. */
 interface MoodForm extends EditorForm {
   mood: string;
 }

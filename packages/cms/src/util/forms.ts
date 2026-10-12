@@ -10,7 +10,6 @@ export function trimmedField(body: Readonly<Record<string, unknown>>, name: stri
   return stringOrEmpty(body[name]).trim();
 }
 
-/** The indexes of a form's numbered rows, in order, read off the names `prefix0`, `prefix1`… */
 export function rowIndexes(body: Readonly<Record<string, unknown>>, prefix: string): number[] {
   return Object.keys(body)
     .map((name) => new RegExp(`^${prefix}(\\d+)$`).exec(name)?.[1])

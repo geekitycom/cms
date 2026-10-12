@@ -1,9 +1,3 @@
-/**
- * What a single setting's value may be, and how a typed one is put into the
- * shape the file keeps: the guards and normalisers a site.json read, a form
- * save and a form check share, so the file and the screen cannot mean
- * different things by the same text.
- */
 import { clientIdentifier } from '../indieauth/client-id.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
@@ -57,12 +51,10 @@ export function isLicenseChoice(value: string): value is LicenseChoice {
   return value === '' || value === 'custom' || isCreativeCommonsKey(value);
 }
 
-/** Whether a value is a whole number of days, zero included. */
 export function isWholeDays(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
-/** The entries that are client_ids, each once. */
 export function clientsWithoutPkceOf(entries: readonly unknown[]): string[] {
   const valid = entries.filter(
     (entry): entry is string => typeof entry === 'string' && clientIdentifier(entry) !== undefined,
@@ -90,12 +82,6 @@ export function normalizeBaseUrl(value: string): string | undefined {
   return parsed.origin + pathname;
 }
 
-/**
- * The non-empty lines of a textarea, trimmed.
- *
- * Blank lines are not an error: somebody pasting a list leaves them, and a
- * blank line asks for nothing.
- */
 export function relayLines(value: string): string[] {
   return value
     .split('\n')

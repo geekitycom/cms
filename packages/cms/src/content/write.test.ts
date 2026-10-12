@@ -10,10 +10,10 @@ import type { Document } from './document.ts';
 import { blankForm } from './document-form.ts';
 import type { EditorForm } from './document-form.ts';
 import { POST_KIND } from './document-kind.ts';
-import { openContentStore } from './store.ts';
+import { DuplicatePermalinkError, openContentStore } from './store.ts';
 import type { ContentStore } from './store.ts';
 import type { DocumentChange } from './sync.ts';
-import { writeDocument } from './write.ts';
+import { releasePermalink, writeDocument } from './write.ts';
 import type { DocumentSite } from './write.ts';
 
 const temporaryDirs: string[] = [];
@@ -228,5 +228,25 @@ describe('writeDocument', () => {
 
     assert.equal(store.getByPath(saved.path)?.hash, saved.hash);
     assert.deepEqual(await postFiles(contentDir), ['2026-09-02-hello-world.md']);
+  });
+});
+
+describe('releasePermalink', () => {
+  it('frees the permalink for another path, and the returned step puts the row back', async () => {
+    const { site, store } = await scratch();
+    const saved = await created(site, { title: 'Hello world', body: 'Words.' });
+    const moved = { ...saved, path: 'posts/2026-09-02-moved.md' };
+
+    assert.throws(() => {
+      store.upsert(moved);
+    }, DuplicatePermalinkError);
+
+    const restoreRow = releasePermalink(store, saved);
+    assert.equal(store.getByPath(saved.path), undefined);
+    store.upsert(moved);
+    store.remove(moved.path);
+
+    restoreRow();
+    assert.equal(store.getByPermalink(saved.permalink)?.path, saved.path);
   });
 });

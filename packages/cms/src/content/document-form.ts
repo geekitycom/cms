@@ -148,7 +148,6 @@ export interface EditorForm {
   hash: string;
 }
 
-/** The fields {@link PostField} rows fill, as a kind that carries none of them has them. */
 const BLANK_POST_FIELDS = {
   rsvp: '',
   repostOf: '',
@@ -167,7 +166,6 @@ const BLANK_POST_FIELDS = {
 
 type PostFieldsForm = Pick<EditorForm, keyof typeof BLANK_POST_FIELDS>;
 
-/** The form keys a kind's rows fill, each from `value`, over the blank ones. */
 export function postFieldsForm(
   kind: DocumentKind,
   value: (field: PostField) => Partial<EditorForm>,
@@ -177,6 +175,8 @@ export function postFieldsForm(
     BLANK_POST_FIELDS,
   );
 }
+
+export const AUTHOR_UNTIL_REQUEST = '';
 
 /**
  * The editor for a document that does not exist yet.
@@ -198,10 +198,7 @@ export function blankForm(
     tags: '',
     categories: '',
     description: '',
-    // Empty rather than the signed-in user: `blankForm` is a pure function
-    // over a kind and a clock, and who is signed in is a fact about a request.
-    // The admin's Author select is where the default is applied.
-    author: '',
+    author: AUTHOR_UNTIL_REQUEST,
     inReplyTo: '',
     ...BLANK_POST_FIELDS,
     lang: '',
@@ -337,11 +334,6 @@ export function extraFromForm(
   return extra;
 }
 
-/**
- * The `in-reply-to` a save writes: the field for a kind that replies, where an
- * empty one clears it, and whatever the file had for one whose editor has no
- * field.
- */
 export function formInReplyTo(
   kind: DocumentKind,
   form: EditorForm,

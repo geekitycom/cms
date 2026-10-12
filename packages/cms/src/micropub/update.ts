@@ -15,12 +15,6 @@ import type { CreateSite } from './create.ts';
 
 type Updatable = Readonly<Record<string, readonly (keyof EditorForm)[]>>;
 
-/**
- * The properties besides its fields' own that an update may change, and the
- * editor fields each one owns. `post-status` owns none: it is the draft flag
- * the write is given. Anything else, `mp-slug` included, is refused by name,
- * so a post's URL only moves when its author moves it in the editor.
- */
 const CORE_UPDATABLE: Updatable = {
   name: ['title'],
   content: ['body'],
@@ -35,19 +29,16 @@ const CORE_UPDATABLE: Updatable = {
   checkin: ['location'],
 };
 
-/** What an update of a kind's post of `type` may change, and the fields each property owns. */
 function updatable(kind: DocumentKind, type: MicropubType): Updatable {
   return {
     ...CORE_UPDATABLE,
     ...Object.fromEntries(
       kind.fields.flatMap((field) => Object.entries(field.micropub?.properties ?? {})),
     ),
-    // An h-event's location is where the event is, not where its author was.
     ...(type === 'h-event' ? { location: ['event'] } : {}),
   };
 }
 
-/** The properties an h-event's event is read from, which every update of one sends again. */
 function eventProperties(kind: DocumentKind): string[] {
   return Object.entries(updatable(kind, 'h-event'))
     .filter(([, fields]) => fields.includes('event'))
@@ -63,13 +54,6 @@ export interface SourceSite extends MicropubSite {
   readonly kept: PermalinkFile<KeptProperties>;
 }
 
-/**
- * A post's properties as `q=source` answers them: the create mapping
- * (decision-27) read backwards, so a client can send them back as they came.
- * A property the post does not have is left out. An id `syndicate-to` lists
- * that names no declared target stays in the file, as it does through an
- * editor save, and is not answered.
- */
 export function sourceProperties(
   document: Document,
   site: SourceSite,

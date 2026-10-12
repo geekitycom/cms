@@ -26,7 +26,6 @@ export interface PhotoRow {
   alt: string;
 }
 
-/** The editor's field name prefixes; a row's index follows each. */
 export const PHOTO_FIELDS = { url: 'photo-url-', alt: 'photo-alt-' } as const;
 
 /** The photo rows out of a submitted form, in their numbered order, emptied ones gone. */
@@ -86,11 +85,6 @@ export function resolvePhotos(
   return { photos };
 }
 
-/**
- * A Micropub photo given as a URL or as `{ value, alt }`, as the row it fills.
- * A URL into this site's own uploads becomes the path the editor would have
- * written, so the theme serves its responsive variants.
- */
 export function photoRowFromMicropub(value: unknown, baseUrl: string): PhotoRow | undefined {
   let url: unknown = value;
   let alt: unknown = '';
@@ -108,7 +102,6 @@ export function photoRowFromMicropub(value: unknown, baseUrl: string): PhotoRow 
   };
 }
 
-/** A row as Micropub answers it: an absolute URL, with its alt text when it has one. */
 export function photoToMicropub({ url, alt }: PhotoRow, baseUrl: string): unknown {
   const value = url.startsWith('/') ? absoluteUrl(url, baseUrl) : url;
   return alt === '' ? value : { value, alt };

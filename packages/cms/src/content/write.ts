@@ -93,7 +93,6 @@ export type WriteOutcome =
       readonly conflict: Conflict;
     };
 
-/** A write turned down, and the field to point at. */
 type Refused = { readonly outcome: 'refused' } & Refusal;
 
 function refused(message: string, field?: EditorField): Refused {
@@ -119,18 +118,14 @@ export async function writeDocument(
   return await persist(site, write, checked, identity);
 }
 
-/** What a form {@link checkForm} accepted resolves to. */
 interface CheckedForm {
   readonly media: ResolvedMedia;
   readonly location: PostLocation | undefined;
-  /** Images published without alt text, on a site that allows them. */
   readonly undescribed: readonly UndescribedImage[];
   readonly timezone: string;
-  /** The UTC instant the document is dated, for a kind that has a date. */
   readonly date: string | undefined;
 }
 
-/** Every refusal a form can earn before anything is touched, in the order they are given. */
 async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<CheckedForm | Refused> {
   const { store, config, writer } = site;
   const { kind, document, form, draft } = write;
@@ -179,7 +174,6 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
     return refused('That is not a language tag, such as en, fr or pt-BR.', 'editor-lang');
   }
 
-  // A kind without these fields has them blank, so they resolve to nothing.
   const recording = resolveEnclosure(
     form.enclosure,
     document === undefined ? undefined : enclosureOf(document.extra),
@@ -256,16 +250,12 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
   return { media, location, undescribed, timezone, date };
 }
 
-/** Where a checked form's document lives: its file and its URL. */
 interface Identity {
-  /** The file, relative to the content directory. */
   readonly target: string;
   readonly permalink: string;
-  /** The document whose URL readers already hold, per {@link promisedDocument}. */
   readonly promised: Document | undefined;
 }
 
-/** The slug, the day it is filed under, the permalink and the file a checked form comes to. */
 async function resolveIdentity(
   site: DocumentSite,
   write: DocumentWrite,
@@ -323,10 +313,6 @@ async function resolveIdentity(
   return { target, permalink, promised };
 }
 
-/**
- * Check the file has not moved on and its target is free, write it, carry the
- * post's sidecar records along to its permalink, and announce it.
- */
 async function persist(
   site: DocumentSite,
   write: DocumentWrite,
@@ -396,7 +382,6 @@ async function persist(
     if (moved) await locations.move(document.permalink, saved.permalink);
     await locations.set(saved.permalink, checked.location);
   }
-  // Only a Micropub post has kept properties; for anything else both are no-ops.
   const kept = keptProperties(config.dataDir);
   if (moved) await kept.move(document.permalink, saved.permalink);
   if (write.keptProperties !== undefined) {
@@ -420,15 +405,6 @@ async function persist(
   return { outcome: 'saved', saved, undescribed: checked.undescribed, respelled: tags.respelled };
 }
 
-/**
- * Save the file at `target`, in place of `previous`'s file when the document
- * has moved, so that either the move happens whole or nothing does.
- *
- * The row for the old path goes first: a rename briefly leaves two rows
- * claiming one permalink, and the index refuses that. When the save fails
- * nothing was written, so that row goes back; the old file is only removed
- * once the new one has landed.
- */
 async function replaceFile(
   site: DocumentSite,
   input: {
@@ -443,7 +419,8 @@ async function replaceFile(
   const contentDir = config.contentDir;
 
   const renamedFrom = previous !== undefined && previous.path !== target ? previous : undefined;
-  if (renamedFrom !== undefined) store.remove(renamedFrom.path);
+  const restoreRow =
+    renamedFrom === undefined ? () => undefined : releasePermalink(store, renamedFrom);
 
   let saved: Document;
   try {
@@ -455,7 +432,7 @@ async function replaceFile(
       timezone: input.timezone,
     });
   } catch (error) {
-    if (renamedFrom !== undefined) store.upsert(renamedFrom);
+    restoreRow();
     if (error instanceof DuplicatePermalinkError) return refused(error.message);
     throw error;
   }
@@ -464,6 +441,13 @@ async function replaceFile(
     await rm(path.join(contentDir, ...renamedFrom.path.split('/')), { force: true });
   }
   return saved;
+}
+
+export function releasePermalink(store: ContentStore, row: Document): () => void {
+  store.remove(row.path);
+  return () => {
+    store.upsert(row);
+  };
 }
 
 async function citesUndescribedImage(
