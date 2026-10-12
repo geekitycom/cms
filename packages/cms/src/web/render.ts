@@ -766,7 +766,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // shows one, and is set here rather than in a layout so that a site which
     // overrides `post.njk` or `page.njk` keeps the link.
     const now = config.now();
-    const shows = answerable(document, commentPolicyOf(siteData.read()), now);
+    const site = siteData.read();
+    const shows = answerable(document, commentPolicyOf(site), now);
     const said = shows ? options.conversation?.(document) : undefined;
     const feedsIt = shows && isServed(document, now);
     // `commentForm` is on the context only when the post is open, so the
@@ -782,8 +783,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // Where a webmention about this page is sent (TASK-51). On the context
     // only when the site takes them, so a theme asks `{% if webmention %}`
     // and a site that has turned them off advertises nothing.
-    const webmention = webmentionEndpointFor(siteData.read());
-    const pingback = pingbackEndpointFor(siteData.read(), document, now);
+    const webmention = webmentionEndpointFor(site);
+    const pingback = pingbackEndpointFor(site, document, now);
     // The posts either side of this one, as the two links a theme draws under
     // an entry (TASK-79). Each is on the context only when there is one, so a
     // theme asks `{% if previous %}` and the ends of the archive draw nothing.
@@ -878,6 +879,15 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     const mark = `${stampMark}-${key}`;
     stamps.push([mark, form.loaded]);
     return { ...form, loaded: mark };
+  }
+
+  /** A page that answers for the site rather than for a document: a 404, 410, 500 or 503. */
+  function statusPage(
+    { template, title }: StatusPage,
+    url: string,
+    extra: Record<string, unknown> = {},
+  ): string {
+    return render(template, { title, url, page: { url }, ...extra });
   }
 
   function renderMarkdownChrome(
@@ -1039,44 +1049,31 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       });
     },
 
-    renderNotFound(url) {
-      return render(TEMPLATES.notFound, {
-        title: 'Not found',
+    renderNotFound: (url) => statusPage(STATUS_PAGES.notFound, url),
+    renderGone: (url) => statusPage(STATUS_PAGES.gone, url),
+    renderServerError: (url) => statusPage(STATUS_PAGES.serverError, url),
+    renderMaintenance: (url, until) =>
+      statusPage(
+        STATUS_PAGES.maintenance,
         url,
-        page: { url },
-      });
-    },
-
-    renderGone(url) {
-      return render(TEMPLATES.gone, {
-        title: 'Deleted',
-        url,
-        page: { url },
-      });
-    },
-
-    renderServerError(url) {
-      return render(TEMPLATES.serverError, {
-        title: 'Something went wrong',
-        url,
-        page: { url },
-      });
-    },
-
-    renderMaintenance(url, until) {
-      return render(TEMPLATES.maintenance, {
-        title: 'Down for maintenance',
-        url,
-        page: { url },
-        ...(until === undefined
-          ? {}
-          : { until: until.toISOString(), untilText: until.toUTCString() }),
-      });
-    },
+        until === undefined ? {} : { until: until.toISOString(), untilText: until.toUTCString() },
+      ),
 
     render,
   };
 }
+
+interface StatusPage {
+  readonly template: string;
+  readonly title: string;
+}
+
+const STATUS_PAGES = {
+  notFound: { template: TEMPLATES.notFound, title: 'Not found' },
+  gone: { template: TEMPLATES.gone, title: 'Deleted' },
+  serverError: { template: TEMPLATES.serverError, title: 'Something went wrong' },
+  maintenance: { template: TEMPLATES.maintenance, title: 'Down for maintenance' },
+} as const satisfies Record<string, StatusPage>;
 
 /**
  * One neighbour under the name a theme reads it by, or nothing at all when

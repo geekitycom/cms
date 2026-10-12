@@ -1,17 +1,14 @@
 import { MemoryKvStore } from '@fedify/fedify';
 import type { KvStore } from '@fedify/fedify';
 
-import { listUsers, readSiteSettings } from '../admin/index.ts';
+import { listUsers } from '../admin/index.ts';
 import type { ConversationWrite } from '../admin/store.ts';
 import { createAvatarService } from '../avatars/index.ts';
 import type { AvatarService } from '../avatars/index.ts';
-import { commentFormFor, followAllMovedComments, followMovedComments } from '../comments/index.ts';
+import { followAllMovedComments, followMovedComments } from '../comments/index.ts';
 import { createReplyNotices } from '../comments/reply-notices.ts';
-import { contactFormFor } from '../contact/index.ts';
 import { createContentSync, createScheduler } from '../content/index.ts';
 import type { ContentEventListener, ContentSync, Scheduler } from '../content/index.ts';
-import { shareLocation } from '../content/location.ts';
-import { postLocations } from '../content/locations.ts';
 import { createReplyBackfill, signedRepliesLoader } from '../federation/backfill.ts';
 import type { ReplyBackfill } from '../federation/backfill.ts';
 import { citedPostReader } from '../federation/cited-post.ts';
@@ -55,9 +52,9 @@ import {
   createRenderer,
   createSiteDataSource,
   createThemeSource,
-  frontPageSlugs,
   themeName,
 } from '../web/index.ts';
+import { pageSources } from '../web/page-sources.ts';
 import type { RedirectSource } from '../web/redirects.ts';
 import type { Renderer } from '../web/render.ts';
 import {
@@ -67,11 +64,6 @@ import {
 } from '../webmention/index.ts';
 import type { ReplyContextService, WebmentionService } from '../webmention/index.ts';
 import { heldReplyContext } from '../webmention/reply-context.ts';
-import {
-  selectedTargets,
-  syndicationCopies,
-  syndicationTargetsReader,
-} from '../webmention/syndication.ts';
 import type { Booted } from './boot.ts';
 import type { PluginRegistry } from '../plugins/registry.ts';
 import type { Ending, Service } from './lifecycle.ts';
@@ -172,12 +164,6 @@ export function createServices({
     users: () => listUsers(resolved.dataDir),
   });
 
-  // The syndication targets the site declares and the copies they answered
-  // with, both files in the content directory (TASK-155, decision-26).
-  const syndicationTargets = syndicationTargetsReader(resolved.contentDir);
-  const copies = syndicationCopies(resolved.contentDir);
-  const locations = postLocations(resolved.dataDir);
-
   const replyContexts = createReplyContextService({
     store,
     config: resolved,
@@ -211,87 +197,16 @@ export function createServices({
     // The stored context of a reply's target: a file read, never a fetch, so
     // a page is drawn without waiting on anybody's server (TASK-123).
     replyContext: cited,
-    // The targets a post links to and the copies they made of it (TASK-155),
-    // read from the site's files like the reply contexts.
-    syndication: (document) => ({
-      targets: selectedTargets(
-        document,
-        syndicationTargets(),
-        readSiteSettings(resolved.contentDir).language,
-      ),
-      copies: Object.values(copies.read(document.permalink)),
-    }),
-    location: (document) =>
-      shareLocation(
-        locations.read(document.permalink),
-        readSiteSettings(resolved.contentDir).locationSharing,
-      ),
-    // The pages that put themselves in the site menu are found by asking for
-    // every public page and reading their front matter, rather than by an
-    // index of their own: a site has a handful of pages, the query is the
-    // same one the listing index already serves, and doing it per render is
-    // what makes a page flagged in the editor appear in the menu at once.
-    pages: () => store.listAll({ type: 'page', draft: false, trashed: false, scheduled: false }),
-    // Who may sign in, for the byline under a post and the heading of an
-    // author archive (TASK-67). Read per render for the reason the pages are:
-    // `data/users.json` is the truth about who exists (decision-9), and a
-    // display name saved on the users screen a second ago belongs on the very
-    // next page drawn.
-    users: () => listUsers(resolved.dataDir),
-    // What has been said about a post, from every source at once and read per
-    // render for the same reason: a reply logged or a comment approved a
-    // second ago is on the page the next request draws (TASK-49, TASK-50).
-    // One dependency, and the very reader the comments feeds are published
-    // from, so the page and the feed cannot disagree.
+    // What has been said about a post, from the very reader the comments
+    // feeds are published from, so the page and the feed cannot disagree.
     conversation: conversation.thread,
-    // And the form under it, when the post is still taking comments. Asked per
-    // render because whether it is depends on the clock: a post that closed an
-    // hour ago stops offering one on the very next request.
-    commentForm: (document, viewer) =>
-      commentFormFor({
-        document,
-        site: renderer.site(),
-        now: resolved.now(),
-        // And who is reading it, when a session says: the short form for
-        // somebody signed in to this site, the stranger's form for everybody
-        // else (TASK-103). The route reads the session and hands it down, so
-        // one render of one request cannot disagree with itself.
-        viewer,
-        // Whether "tell me about replies" is worth offering, asked per render
-        // for the same reason: a credential pasted into the settings screen
-        // puts the box on the next page drawn (TASK-55).
-        notifiable: mail.configured(),
-      }),
-    // And the contact form, for a page whose front matter asks for one. Asked
-    // per render for the same reason: a `contact: true` saved in the editor a
-    // moment ago puts a form on the page the next request draws (TASK-56).
-    contactForm: (document) => contactFormFor({ document, now: resolved.now() }),
-    // The posts either side of one, for the links under an entry (TASK-79).
-    // Two indexed lookups per post rather than a walk of the archive, and
-    // asked per render for the reason the conversation is: a post published a
-    // minute ago is already the neighbour of the one before it.
-    neighbours: (document) => store.neighbours(document),
-    // And the site's own posts and pages that link to it (TASK-322), asked per
-    // render for the same reason: a post published a minute ago that cites
-    // this one is already one of its backlinks, and so does one whose link
-    // reaches it through a redirect declared a minute ago (TASK-330). A link
-    // to `/` lands on the page the Reading setting puts there, which is the
-    // page its slug names, as the routes resolve it.
-    backlinks: (document) => {
-      const { homepage } = frontPageSlugs(siteData.read());
-      return store.listBacklinks(document, {
-        redirects: redirects.current(),
-        home:
-          document.type === 'page' &&
-          homepage !== '' &&
-          store.getBySlug(homepage)?.path === document.path,
-      });
-    },
-    newestPosts: (count) => store.listPosts({ limit: count }),
-    // And every published post, for a page that says `archive: true`. The one
-    // listing with no paging, so it is asked for only by the page that prints
-    // it (TASK-85).
-    archivePosts: () => store.listPosts(),
+    ...pageSources({
+      config: resolved,
+      store,
+      redirects,
+      siteData,
+      mailConfigured: () => mail.configured(),
+    }),
   });
 
   const federationKv = resolved.federation.kv ?? new MemoryKvStore();
