@@ -2,18 +2,16 @@ import path from 'node:path';
 
 import type { KvStore, MessageQueue } from '@fedify/fedify';
 
-import type { AccessLogWriter } from './access-log.ts';
-import type { CommentChecker } from './comments/submission.ts';
+import type { CommentChecker } from './forms/checker.ts';
 import { KNOWN_UPLOAD_TYPES, normalizeUploadType } from './content/media.ts';
 import { systemClock } from './content/store.ts';
 import type { Clock } from './content/store.ts';
 import type { DocumentChange } from './content/sync.ts';
-import type { MailProvider } from './mail/provider.ts';
-import type { MailLogger } from './mail/service.ts';
+import type { MailProvider, MailLogger } from './mail/provider.ts';
 import type { Plugin } from './plugin.ts';
 import { withoutTrailingSlash } from './util/url.ts';
-import { systemHostLookup } from './webmention/public-address.ts';
-import type { HostLookup } from './webmention/public-address.ts';
+import { systemHostLookup } from './util/public-address.ts';
+import type { HostLookup } from './util/public-address.ts';
 
 /**
  * Something a site wants to happen when the index changes.
@@ -27,6 +25,15 @@ import type { HostLookup } from './webmention/public-address.ts';
  * nor wedge the watcher.
  */
 export type DocumentChangeHook = (change: DocumentChange) => unknown;
+
+/**
+ * Where one access-log line goes.
+ *
+ * The line arrives without a trailing newline; the sink decides the framing.
+ * The default sink is stdout — what a container collects, what dockge shows
+ * and what journald keeps — and a test hands in one that keeps the lines.
+ */
+export type AccessLogWriter = (line: string) => void;
 
 /**
  * The federation stores and guards a site may swap, which decision-5 promised

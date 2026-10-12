@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { isRecord } from '../util/guards.ts';
-import { SITE_DATA_FILE } from '../web/context.ts';
+import { SITE_DATA_FILE } from '../theme/site-data.ts';
 import { ROWS, SETTING_KEYS } from './setting-rows.ts';
 import { DEFAULT_SITE_SETTINGS } from './settings.ts';
 import type { SiteSettings } from './settings.ts';

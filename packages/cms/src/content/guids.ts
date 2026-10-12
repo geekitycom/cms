@@ -71,3 +71,28 @@ export const COMMENT_PAGE_PREFIX = '/comment/';
 export function repliesKey(guid: string): string {
   return createHash('sha256').update(guid).digest('hex').slice(0, 16);
 }
+
+/**
+ * A key: 16 lowercase hex digits, the one name every comment and every item
+ * that can be replied to has in a URL (decision-51): `/comment/{key}/`,
+ * `/replies/{key}/` and `#comment-{key}`. A stored comment's key is its id;
+ * anything else's is {@link repliesKey} of its feed guid. 64 bits, so two
+ * items of one site sharing a key is a birthday event only past about four
+ * billion of them.
+ */
+const KEY = /^[0-9a-f]{16}$/;
+
+/**
+ * A webmention's key: the key of its source and the post it was sent to,
+ * which together are its identity (doc-7). The source alone would give one
+ * key to a page that mentions two posts. `undefined`, so a key is minted, for
+ * one with no source.
+ */
+export function webmentionKey(source: string | null, permalink: string): string | undefined {
+  return source === null || source === '' ? undefined : repliesKey(`${source} ${permalink}`);
+}
+
+/** Whether a string is a key. */
+export function isKey(value: string): boolean {
+  return KEY.test(value);
+}

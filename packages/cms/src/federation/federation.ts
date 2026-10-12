@@ -4,7 +4,7 @@ import { createFederation, InProcessMessageQueue, MemoryKvStore } from '@fedify/
 import type { Context, Federation, FederationOptions, PageItems } from '@fedify/fedify';
 import { Create, type Object as APObject, QuoteAuthorization } from '@fedify/vocab';
 
-import type { AdminStore } from '../admin/store.ts';
+import type { AdminStore } from '../store/admin-store.ts';
 import type { FederationOverrides, ResolvedConfig } from '../config.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
@@ -13,12 +13,8 @@ import { countUsers, listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { authorNames } from '../content/authors.ts';
 import { userActor, userByUsername } from './actor.ts';
-import {
-  articleObjectId,
-  isFederatedDocument,
-  postByObjectId,
-  postCreateActivity,
-} from './article.ts';
+import { articleObjectId, postByObjectId, postCreateActivity } from './article.ts';
+import { isFederatedDocument } from '../content/served.ts';
 import { followersPage, lastFollowersCursor } from './followers.ts';
 import { INBOX_LISTENERS } from './inbox.ts';
 import { loadActorKeyPairs } from './keys.ts';

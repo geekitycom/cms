@@ -9,14 +9,8 @@ import { writeFileAtomically } from '../files/atomic.ts';
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
 import { deriveSiteIcon, isDerivedIcon } from './icons.ts';
-import {
-  derivedDir,
-  sourceFile,
-  sourceVersion,
-  versioned,
-  IMAGE_DIRECTORY,
-  VARIANT_ASSET_PREFIX,
-} from './paths.ts';
+import { derivedDir, sourceFile, sourceVersion, versioned, IMAGE_DIRECTORY } from './paths.ts';
+import { VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
 import type { ImageConfig } from './paths.ts';
 
 /**
@@ -33,7 +27,7 @@ import type { ImageConfig } from './paths.ts';
  * both kinds of derived file share the directory and the URL prefix.
  */
 
-export { IMAGE_DIRECTORY, VARIANT_ASSET_PREFIX } from './paths.ts';
+export { IMAGE_DIRECTORY } from './paths.ts';
 export type { ImageConfig } from './paths.ts';
 
 /** The sidecar that records what was derived, beside the files it describes. */

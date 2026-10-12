@@ -1,4 +1,4 @@
-import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 
 /**
  * Where the settings live: the General page, and the root every other settings

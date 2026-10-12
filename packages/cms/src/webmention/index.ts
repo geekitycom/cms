@@ -47,8 +47,8 @@ export {
   PINGBACK_PATH,
   pingbackEndpointFor,
 } from './pingback.ts';
-export { isPrivateHost, publicHost, systemHostLookup } from './public-address.ts';
-export type { HostLookup } from './public-address.ts';
+export { isPrivateHost, publicHost, systemHostLookup } from '../util/public-address.ts';
+export type { HostLookup } from '../util/public-address.ts';
 export {
   fetchReplyContext,
   readReplyContext,

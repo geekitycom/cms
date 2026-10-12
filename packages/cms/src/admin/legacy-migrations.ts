@@ -12,9 +12,9 @@ import {
   siteJsonText,
 } from '../site/site-json.ts';
 import { USERS_FILE_MODE, usersFile, usersJsonText } from '../site/users.ts';
-import { DEFAULT_MENU_NAME, menuItemsFromText } from '../web/navigation.ts';
-import { taxonomyRedirectsOf } from '../web/taxonomy.ts';
-import type { TaxonomyRedirect } from '../web/taxonomy.ts';
+import { DEFAULT_MENU_NAME, menuItemsFromText } from '../site/navigation.ts';
+import { taxonomyRedirectsOf } from '../content/taxonomy.ts';
+import type { TaxonomyRedirect } from '../content/taxonomy.ts';
 
 /**
  * One row of the settings table TASK-14 wrote, for the one boot that reads it.

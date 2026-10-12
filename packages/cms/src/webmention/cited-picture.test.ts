@@ -12,7 +12,7 @@ import {
   CITED_PICTURE_PREFIX,
 } from './cited-picture.ts';
 import type { CitedPictureConfig } from './cited-picture.ts';
-import type { HostLookup } from './public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 
 const ADDRESSES: Record<string, string[]> = {
   'media.giphy.com': ['203.0.113.30'],

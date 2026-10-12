@@ -4,15 +4,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import type { PostComment } from '../admin/store.ts';
+import type { PostComment } from '../store/admin-store.ts';
 import { updateComment } from '../comments/records.ts';
-import type { CommentVerdict } from '../comments/submission.ts';
+import type { CommentVerdict } from '../forms/checker.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';
 import { PINGBACK_MAX_BYTES, PINGBACK_PATH } from './pingback.ts';
-import type { HostLookup } from './public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './routes.ts';
 
 const BASE_URL = 'https://blog.example';

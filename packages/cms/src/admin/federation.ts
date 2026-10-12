@@ -5,7 +5,7 @@ import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
@@ -18,16 +18,16 @@ import {
   syndicationCopies,
   syndicationTargetsReader,
 } from '../webmention/syndication.ts';
-import { accountOf, ACTOR_PATH, federationOrigin } from '../federation/paths.ts';
+import { accountOf, authorHref, userForAuthor } from '../content/authors.ts';
+import { ACTOR_PATH, federationOrigin } from '../federation/paths.ts';
 import { nonEmptyStringOrNull } from '../util/forms.ts';
-import { authorHref, profileContext } from '../web/authors.ts';
-import { userForAuthor } from '../content/authors.ts';
-import { publicDocumentAt } from '../web/documents.ts';
+import { profileContext } from '../site/authors.ts';
+import { publicDocumentAt } from '../content/permalinks.ts';
 import { postObjectId } from '../content/guids.ts';
 import { documentEditorPath, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import type {
   Delivery,
   DeliveryStatus,
@@ -36,7 +36,7 @@ import type {
   Relay,
   RelayState,
   WebmentionSendStatus,
-} from './store.ts';
+} from '../store/admin-store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /** Where the federation screen lives. */

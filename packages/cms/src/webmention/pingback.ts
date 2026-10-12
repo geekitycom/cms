@@ -1,11 +1,11 @@
 import type { Context, Hono } from 'hono';
 
-import { clientAddress } from '../admin/throttle.ts';
+import { clientAddress } from '../web/throttle.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { Document } from '../content/document.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { readSiteSettings } from '../site/site-json.ts';
-import { publicDocumentAt } from '../web/documents.ts';
+import { publicDocumentAt } from '../content/permalinks.ts';
 import { escapeXml } from '../web/feed-xml.ts';
 import { checkWebmentionRequest } from './receive.ts';
 import type { RequestProblem, WebmentionOutcome } from './receive.ts';

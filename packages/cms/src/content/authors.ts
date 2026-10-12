@@ -1,3 +1,5 @@
+import { PAGE_SEGMENT } from './taxonomy.ts';
+
 export interface AuthorUser {
   readonly id: number;
   readonly username: string;
@@ -55,4 +57,71 @@ export function authorNames(users: readonly AuthorUser[], user: AuthorUser): str
   }
 
   return names;
+}
+
+/** The first URL segment every author archive, feed and actor lives under. */
+export const AUTHOR_BASE = 'author';
+
+/** Where the shared inbox goes (decision-14), and so the second reserved path. */
+export const INBOX_BASE = 'inbox';
+
+/** One author archive, and which page of it. */
+export interface AuthorRequest {
+  /** The username the URL named. Not yet known to be a user. */
+  username: string;
+  /** Zero-based index of the page. */
+  pageNumber: number;
+}
+
+/**
+ * The URL of a page of one user's archive, by zero-based index.
+ *
+ * The one place the shape is spelled, so the routes, the pager, the canonical
+ * redirect, the byline a theme prints and the actor id all agree. The first
+ * page is the archive root itself, exactly as `/page/1/` collapses onto `/`.
+ */
+export function authorHref(username: string, index = 0): string {
+  const root = `/${AUTHOR_BASE}/${encodeURIComponent(username)}/`;
+  return index === 0 ? root : `${root}${PAGE_SEGMENT}/${String(index + 1)}/`;
+}
+
+/**
+ * A path as the author archive it names, or `undefined` when it names none.
+ *
+ * The inverse of {@link authorHref}, and deliberately ignorant of whether the
+ * username is a user: the caller looks that up and 404s. Only the slashed form
+ * parses; the bare `/author/ada` is handled by the canonical redirect, like
+ * every other missing trailing slash on the site — which is also where a
+ * browser that followed an actor id without its slash lands, because Fedify
+ * 404s that form and falls through (doc-8).
+ *
+ * `page/1/` parses to the first page, which lives at the archive root, so the
+ * caller can collapse it the way `/page/1/` collapses onto `/`.
+ */
+export function parseAuthorPath(pathname: string): AuthorRequest | undefined {
+  if (!pathname.endsWith('/')) return undefined;
+
+  const segments = pathname.split('/').filter((segment) => segment !== '');
+  if (segments[0] !== AUTHOR_BASE) return undefined;
+
+  const username = segments[1];
+  if (username === undefined || username === '') return undefined;
+
+  if (segments.length === 2) return { username, pageNumber: 0 };
+  if (segments.length !== 4 || segments[2] !== PAGE_SEGMENT) return undefined;
+
+  const requested = segments[3] ?? '';
+  if (!/^[0-9]+$/.test(requested) || Number(requested) < 1) return undefined;
+  return { username, pageNumber: Number(requested) - 1 };
+}
+
+/**
+ * `{username}@{host}`: the account WebFinger answers for (decision-14).
+ *
+ * WebFinger's `acct:` subject, the handle the admin shows and the
+ * `fediverse:creator` a page names (TASK-202) are each this with a prefix, so
+ * a page cannot credit an account the site does not answer for.
+ */
+export function accountOf(username: string, baseUrl: string): string {
+  return `${username}@${new URL(baseUrl === '' ? 'http://localhost' : baseUrl).host}`;
 }

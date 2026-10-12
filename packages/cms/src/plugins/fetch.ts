@@ -6,8 +6,8 @@
 
 import type { PluginFetchInit } from '../plugin.ts';
 import { webUrl } from '../webmention/fetch-public.ts';
-import { publicHost } from '../webmention/public-address.ts';
-import type { HostLookup } from '../webmention/public-address.ts';
+import { publicHost } from '../util/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 
 /** How many redirects are followed, each one checked like the first. */
 const MAX_REDIRECTS = 5;

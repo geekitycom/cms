@@ -25,7 +25,7 @@ import { escapeAttribute, escapeText } from '../util/html.ts';
  *
  * Links are also held to an allowlist of schemes, so nothing reaches a reader
  * that a browser would treat as a program. That is the same list
- * `web/sanitize.ts` publishes remote HTML through, spelled again here because
+ * `content/sanitize.ts` publishes remote HTML through, spelled again here because
  * this renderer never sees that module's output.
  */
 

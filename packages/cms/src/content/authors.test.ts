@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { authorNames, userForAuthor } from './authors.ts';
+import {
+  accountOf,
+  AUTHOR_BASE,
+  authorHref,
+  authorNames,
+  parseAuthorPath,
+  userForAuthor,
+} from './authors.ts';
 
 interface TestUser {
   readonly id: number;
@@ -72,5 +79,56 @@ describe('which stored names read as one user', () => {
   it('never lists the same name twice', () => {
     const users = [user('ada', { displayName: 'ada' })];
     assert.deepEqual(authorNames(users, users[0] as TestUser), ['ada']);
+  });
+});
+
+describe('where an author archive lives', () => {
+  it('is /author/{username}/, paginated like the home page', () => {
+    assert.equal(AUTHOR_BASE, 'author');
+    assert.equal(authorHref('ada'), '/author/ada/');
+    assert.equal(authorHref('ada', 0), '/author/ada/');
+    assert.equal(authorHref('ada', 1), '/author/ada/page/2/');
+  });
+
+  it('escapes a username that needs it, so the URL is one segment', () => {
+    assert.equal(authorHref('ada.lovelace'), '/author/ada.lovelace/');
+  });
+});
+
+describe('reading a path as an author archive', () => {
+  it('reads the archive and its later pages', () => {
+    assert.deepEqual(parseAuthorPath('/author/ada/'), { username: 'ada', pageNumber: 0 });
+    assert.deepEqual(parseAuthorPath('/author/ada/page/3/'), { username: 'ada', pageNumber: 2 });
+  });
+
+  it('reads page/1/ as the archive itself, so the caller can collapse it', () => {
+    assert.deepEqual(parseAuthorPath('/author/ada/page/1/'), { username: 'ada', pageNumber: 0 });
+  });
+
+  it('is undefined for anything that is not one', () => {
+    for (const pathname of [
+      '/',
+      '/author/',
+      '/author/ada',
+      '/author/ada/feed/',
+      '/author/ada/page/',
+      '/author/ada/page/0/',
+      '/author/ada/page/two/',
+      '/author/ada/extra/',
+      '/tag/ada/',
+    ]) {
+      assert.equal(parseAuthorPath(pathname), undefined, pathname);
+    }
+  });
+});
+
+describe('the account a user answers for', () => {
+  it('is the username at the site’s host, port and all', () => {
+    assert.equal(accountOf('ada', 'https://example.com/blog/'), 'ada@example.com');
+    assert.equal(accountOf('ada', 'http://localhost:3000'), 'ada@localhost:3000');
+  });
+
+  it('is at localhost for a site with no base URL yet', () => {
+    assert.equal(accountOf('ada', ''), 'ada@localhost');
   });
 });

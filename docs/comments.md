@@ -323,7 +323,7 @@ With no mail configured, none of this runs and nothing breaks:
 
 Notices are per user and keyed by event name. To add one, such as a new
 follower or a digest of failed deliveries, add one entry to the registry in
-`src/notifications/preferences.ts`. Its checkbox appears on the users screen
+`src/site/notification-preferences.ts`. Its checkbox appears on the users screen
 automatically. An entry with `batched: true` also gets the frequency select. An
 event a user has not set is at its default, so turning one on for a site needs
 no visit to the users screen.

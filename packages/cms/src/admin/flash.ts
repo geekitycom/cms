@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 
-import type { GeekityEnv } from '../env.ts';
-import type { FlashKind, FlashMessage } from './store.ts';
+import type { GeekityEnv } from '../web/env.ts';
+import type { FlashKind, FlashMessage } from '../store/admin-store.ts';
 
 /**
  * Queue a message for the next page this visitor asks for.

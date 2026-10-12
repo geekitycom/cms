@@ -9,8 +9,8 @@ import { pathToFileURL } from 'node:url';
 
 import { credentialProblem, emailProblem } from './admin/credentials.ts';
 import { migrateUsersToFile } from './admin/legacy-migrations.ts';
-import { adminStoreOwning, openAdminDatabase } from './admin/store.ts';
-import type { AdminStore } from './admin/store.ts';
+import { adminStoreOwning, openAdminDatabase } from './store/admin-store.ts';
+import type { AdminStore } from './store/admin-store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
 import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
 import type { ResolvedConfig } from './config.ts';

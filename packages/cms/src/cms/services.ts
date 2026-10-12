@@ -2,7 +2,7 @@ import { MemoryKvStore } from '@fedify/fedify';
 import type { KvStore } from '@fedify/fedify';
 
 import { listUsers } from '../admin/index.ts';
-import type { ConversationWrite } from '../admin/store.ts';
+import type { ConversationWrite } from '../store/admin-store.ts';
 import { createAvatarService } from '../avatars/index.ts';
 import type { AvatarService } from '../avatars/index.ts';
 import { followAllMovedComments, followMovedComments } from '../comments/index.ts';
@@ -31,21 +31,23 @@ import { createSettlingQueue } from '../federation/queue.ts';
 import { settleImageVariants } from '../images/variants.ts';
 import { createIndexNowNotifier } from '../indexnow.ts';
 import type { IndexNowNotifier } from '../indexnow.ts';
-import { activityLogSettled } from '../indieauth/activity-log.ts';
+import { activityLogSettled } from '../web/indieauth-activity-log.ts';
 import { createIndieAuthState } from '../indieauth/grants.ts';
 import type { IndieAuthState } from '../indieauth/grants.ts';
-import { createMailService } from '../mail/index.ts';
-import type { MailService } from '../mail/index.ts';
+import {
+  createMailService,
+  createCommentDigest,
+  createCommentNotifier,
+} from '../notifications/index.ts';
+import type { MailService, CommentDigest, CommentNotifier } from '../notifications/index.ts';
 import { createMaintenanceSwitch } from '../maintenance.ts';
 import type { MaintenanceSwitch } from '../maintenance.ts';
-import { createCommentDigest, createCommentNotifier } from '../notifications/index.ts';
-import type { CommentDigest, CommentNotifier } from '../notifications/index.ts';
 import { createFeedNotifier } from '../notify.ts';
 import type { FeedNotifier } from '../notify.ts';
 import { readEnabledPlugins } from '../plugins/enabled.ts';
 import { createRetentionService } from '../privacy/retention.ts';
 import type { RetentionService } from '../privacy/retention.ts';
-import type { ConversationReader } from '../web/conversation.ts';
+import type { ConversationReader } from '../comments/conversation.ts';
 import {
   createConversation,
   createRedirectSource,

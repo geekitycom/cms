@@ -3,15 +3,15 @@ import { createHash } from 'node:crypto';
 import type { Document } from '../content/document.ts';
 import type { ImageConfig } from '../images/paths.ts';
 import { absoluteUrl } from '../util/url.ts';
-import type { AuthorContext } from './authors.ts';
-import { siteLocale, siteTimezone } from './context.ts';
-import type { SiteData } from './context.ts';
-import { feedExcerpt } from './feed-item.ts';
+import type { AuthorContext } from '../site/authors.ts';
+import { siteLocale, siteTimezone } from '../theme/site-data.ts';
+import type { SiteData } from '../theme/site-data.ts';
+import { feedExcerpt } from '../content/excerpt.ts';
 import { escapeXml } from './feed-xml.ts';
 import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
 import { shareImage } from './share-image.ts';
-import { formatDate } from './templates.ts';
+import { formatDate } from '../theme/templates.ts';
 
 /**
  * The oEmbed provider (TASK-205): what WordPress, Discourse and the rest ask

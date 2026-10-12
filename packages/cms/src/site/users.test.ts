@@ -11,7 +11,6 @@ import {
   ConflictingActorIdError,
   countUsers,
   createUser,
-  deleteUser,
   DuplicateUsernameError,
   findUser,
   findUserById,
@@ -26,6 +25,7 @@ import {
   usersFile,
   verifyUserPassword,
 } from './users.ts';
+import { deleteUser } from '../admin/users.ts';
 
 const temporaryDirs: string[] = [];
 const box = sandbox();

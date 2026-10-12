@@ -4,7 +4,7 @@ import path from 'node:path';
 import { readFileIfPresentSync, writeFileAtomically } from '../files/atomic.ts';
 import { messageOf } from '../util/errors.ts';
 import { COMMENT_FIELDS } from './submission.ts';
-import type { CommentChecker, CommentReport, CommentSubmission } from './submission.ts';
+import type { CommentChecker, CommentReport, CommentSubmission } from '../forms/checker.ts';
 
 /**
  * Akismet, as the one {@link CommentChecker} this package ships.

@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from './env.ts';
 
 /** What `X-Redirect-By` says on every redirect the CMS sends. */
 export const REDIRECT_BY = 'Geekity CMS';

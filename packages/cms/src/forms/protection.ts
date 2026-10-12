@@ -25,7 +25,7 @@ import { readFileIfPresentSync, writeFileAtomicallySync } from '../files/atomic.
  *    one machine is visible without a reader's home address being written down.
  *
  * The fourth, the per-address rate limit, is `createLoginThrottle` in
- * `admin/throttle.ts`, because it is the same limiter the login form uses and
+ * `web/throttle.ts`, because it is the same limiter the login form uses and
  * it belongs with the rest of that machinery.
  */
 
@@ -130,3 +130,6 @@ function addressSalt(dataDir: string): string {
   writeFileAtomicallySync(file, `${minted}\n`, { mode: 0o600 });
   return minted;
 }
+
+/** Name of the hidden CSRF field on every admin form and on a signed-in commenter's. */
+export const CSRF_FIELD = 'csrf_token';

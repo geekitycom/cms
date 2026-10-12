@@ -11,7 +11,7 @@
 
 import type { Context, Hono } from 'hono';
 
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { erasePersonalData, ERASED_NAME, findPersonalData } from '../privacy/erase.ts';
 import type { PersonalDataReport, PersonalDataStores } from '../privacy/erase.ts';
 import { stringOrEmpty } from '../util/forms.ts';

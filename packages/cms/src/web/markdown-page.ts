@@ -1,6 +1,6 @@
 import { dump } from 'js-yaml';
 
-import type { AuthorContext } from './authors.ts';
+import type { AuthorContext } from '../site/authors.ts';
 
 /**
  * The Markdown representation of a page: front matter, the theme's header, the

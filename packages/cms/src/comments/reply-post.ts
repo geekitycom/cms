@@ -5,9 +5,9 @@ import { writeDocument } from '../content/write.ts';
 import type { DocumentSite, WriteOutcome } from '../content/write.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { visibleReply } from '../web/conversation.ts';
+import { visibleReply } from './conversation.ts';
 import { commentPageHref } from '../content/guids.ts';
-import type { Conversation, Interaction } from '../web/conversation.ts';
+import type { Conversation, Interaction } from './conversation.ts';
 import { commentKeys, commentProblems } from './submission.ts';
 import type { CommentForm, CommentRefusal, CommentThrottle } from './submission.ts';
 

@@ -5,7 +5,7 @@ import { after, before, describe, it } from 'node:test';
 
 import { gifWithMetadata } from '../__testing__/metadata.ts';
 import type { Cms } from '../index.ts';
-import type { HostLookup } from '../webmention/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import { citedCard } from './__testing__/editor-form.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';

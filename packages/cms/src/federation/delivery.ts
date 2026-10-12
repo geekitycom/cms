@@ -4,7 +4,7 @@ import type { Context } from '@fedify/fedify';
 import { Activity, getTypeId, PUBLIC_COLLECTION } from '@fedify/vocab';
 import type { Object as ActivityObject } from '@fedify/vocab';
 
-import type { AdminStore, Delivery, DeliveryStatus } from '../admin/store.ts';
+import type { AdminStore, Delivery, DeliveryStatus } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import { citationsOf } from '../content/citation.ts';
@@ -27,13 +27,13 @@ import { ActorUpdate, actorId, senderKeyPairs, userActor } from './actor.ts';
 import {
   articleObjectId,
   documentAuthor,
-  isFederatedDocument,
   postCreateActivity,
   postDeleteActivity,
   postObject,
   postPinActivity,
   postUpdateActivity,
 } from './article.ts';
+import { isFederatedDocument } from '../content/served.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
 import { citingActivity, repliedTo, undoActivity } from './citations.ts';
 import {

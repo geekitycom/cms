@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
 import { discoverEndpoint } from './discovery.ts';
-import type { HostLookup } from './public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 
 /** What the make-believe web answers for one URL. */
 interface Page {

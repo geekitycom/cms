@@ -3,7 +3,8 @@ import { describe, it } from 'node:test';
 
 import { parseDocument } from '../content/parser.ts';
 import type { Document } from '../content/document.ts';
-import { commentsOpen, DEFAULT_COMMENTS_CLOSE_AFTER_DAYS } from './policy.ts';
+import { commentsOpen } from './policy.ts';
+import { DEFAULT_COMMENTS_CLOSE_AFTER_DAYS } from '../site/settings.ts';
 import type { CommentPolicy } from './policy.ts';
 
 const OPEN: CommentPolicy = { enabled: true, closeAfterDays: DEFAULT_COMMENTS_CLOSE_AFTER_DAYS };

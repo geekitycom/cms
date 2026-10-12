@@ -7,7 +7,7 @@ import { classesOutsideTheBar, classTokens } from './__testing__/markup.ts';
 import { adminMenu } from './menu.ts';
 import { RESET_PATH } from './recovery.ts';
 import { MAIL_TEST_FIELDS, MAIL_TEST_PATH } from './settings-email.ts';
-import type { FlashMessage } from './store.ts';
+import type { FlashMessage } from '../store/admin-store.ts';
 import { createAdminTemplateEnvironment } from './templates.ts';
 
 const environment = createAdminTemplateEnvironment({ noCache: true });

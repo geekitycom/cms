@@ -14,7 +14,7 @@ import type {
   Scheduler,
   SyncResult,
 } from '../content/index.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import type { ReplyBackfill } from '../federation/backfill.ts';
 import type {
   ActorProfileService,
@@ -24,8 +24,7 @@ import type {
 } from '../federation/index.ts';
 import { refuseWritesUnder } from '../files/atomic.ts';
 import type { IndexNowNotifier } from '../indexnow.ts';
-import type { MailService } from '../mail/index.ts';
-import type { CommentDigest, CommentNotifier } from '../notifications/index.ts';
+import type { MailService, CommentDigest, CommentNotifier } from '../notifications/index.ts';
 import type { FeedNotifier, NotifyReport } from '../notify.ts';
 import type { InstalledPlugin } from '../plugins/registry.ts';
 import type { RetentionService } from '../privacy/retention.ts';

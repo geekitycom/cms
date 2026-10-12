@@ -18,7 +18,7 @@ import {
   sweepCitedPictures,
 } from './cited-picture.ts';
 import type { CitedPictureConfig, PictureSource } from './cited-picture.ts';
-import type { HostLookup } from './public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import { fetchReplyContext } from './reply-context.ts';
 import type { FediverseLookup, ReplyContext } from './reply-context.ts';
 

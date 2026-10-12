@@ -1,9 +1,8 @@
 import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { ResolvedConfig } from '../config.ts';
-import { readAltTexts, undescribedImages, undescribedPhotos } from '../images/alt-text.ts';
-import type { UndescribedImage } from '../images/alt-text.ts';
+import { readAltTexts, undescribedImages, undescribedPhotos } from './alt-text.ts';
+import type { UndescribedImage } from './alt-text.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorNames, userForAuthor } from './authors.ts';
 import type { AuthorUser } from './authors.ts';
@@ -51,10 +50,18 @@ export interface SiteRecords {
   readonly hasComments: (slug: string) => boolean;
 }
 
+/** The parts of the site's config a write reads. */
+export interface WriteConfig {
+  readonly contentDir: string;
+  readonly dataDir: string;
+  readonly baseUrl: string;
+  readonly requireAltText: boolean;
+}
+
 /** What a write needs from the site, as plain values rather than a request. */
 export interface DocumentSite extends SiteRecords {
   readonly store: ContentStore;
-  readonly config: ResolvedConfig;
+  readonly config: WriteConfig;
   readonly announce: (change: DocumentChange) => Promise<void>;
   /** The username of whoever is writing: the author a new document starts on. */
   readonly writer: string | undefined;

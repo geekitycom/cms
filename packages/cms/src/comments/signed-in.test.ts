@@ -12,7 +12,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { commentsFile, readComments } from './records.ts';
 import { COMMENT_FIELDS } from './submission.ts';
-import type { CommentChecker, CommentSubmission } from './submission.ts';
+import type { CommentChecker, CommentSubmission } from '../forms/checker.ts';
 
 /**
  * Commenting as yourself: what the form under a post looks like when the

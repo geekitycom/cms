@@ -15,12 +15,13 @@ import {
 } from '@fedify/vocab';
 import type { Actor } from '@fedify/vocab';
 
-import type { NewFollower } from '../admin/store.ts';
+import type { NewFollower } from '../store/admin-store.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import { listUsers, primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { actorId, senderKeyPairs, userByUsername } from './actor.ts';
-import { documentAuthor, isFederatedDocument, postByObjectId } from './article.ts';
+import { documentAuthor, postByObjectId } from './article.ts';
+import { isFederatedDocument } from '../content/served.ts';
 import { postObjectId } from '../content/guids.ts';
 import type { FederationContextData } from './federation.ts';
 import { authorizeQuote, quoteAuthorization, revokeQuotes } from './quotes.ts';

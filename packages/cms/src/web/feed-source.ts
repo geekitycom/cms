@@ -1,8 +1,14 @@
+import {
+  DEFAULT_FEED_CADENCE,
+  DEFAULT_NOTIFY_SERVER,
+  isUpdatePeriod,
+} from '../site/feed-settings.ts';
+import type { FeedCadence } from '../site/feed-settings.ts';
+import { authorHref } from '../content/authors.ts';
 import type { Document } from '../content/document.ts';
-import { repliesKey } from '../content/guids.ts';
-import type { AltTextLibrary } from '../images/alt-text.ts';
+import type { AltTextLibrary } from '../content/alt-text.ts';
 import type { User } from '../site/users.ts';
-import type { SiteData } from './context.ts';
+import type { SiteData } from '../theme/site-data.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 
 /**
@@ -97,31 +103,6 @@ export function commentsFeedPath(permalink?: string): string {
 /** What the path of every replies feed starts with (TASK-324). */
 export const REPLIES_ROOT = '/replies/';
 
-/**
- * A key: 16 lowercase hex digits, the one name every comment and every item
- * that can be replied to has in a URL (decision-51): `/comment/{key}/`,
- * `/replies/{key}/` and `#comment-{key}`. A stored comment's key is its id;
- * anything else's is {@link repliesKey} of its feed guid. 64 bits, so two
- * items of one site sharing a key is a birthday event only past about four
- * billion of them.
- */
-const KEY = /^[0-9a-f]{16}$/;
-
-/**
- * A webmention's key: the key of its source and the post it was sent to,
- * which together are its identity (doc-7). The source alone would give one
- * key to a page that mentions two posts. `undefined`, so a key is minted, for
- * one with no source.
- */
-export function webmentionKey(source: string | null, permalink: string): string | undefined {
-  return source === null || source === '' ? undefined : repliesKey(`${source} ${permalink}`);
-}
-
-/** Whether a string is a key. */
-export function isKey(value: string): boolean {
-  return KEY.test(value);
-}
-
 /** The URL of the feed of one item's direct replies, by its key. */
 export function repliesFeedPath(key: string): string {
   return `${REPLIES_ROOT}${key}/`;
@@ -172,13 +153,6 @@ export function splitFeedPath(pathname: string): FeedPath | undefined {
 export function contentTypeOf(format: FeedFormat): string {
   return FEED_CONTENT_TYPES[format].split(';')[0] ?? '';
 }
-
-/**
- * The notify server a site advertises and pings when it has not said
- * otherwise: the one this CMS's author runs, which speaks both rssCloud and
- * WebSub, so one server covers every real-time subscriber a feed has.
- */
-export const DEFAULT_NOTIFY_SERVER = 'https://rpc.rsscloud.io';
 
 /** The three paths a notify server answers on, under whatever URL it lives at. */
 export const NOTIFY_PATHS = {
@@ -302,34 +276,6 @@ export function feedSize(site: SiteData): number {
   }
   return DEFAULT_FEED_SIZE;
 }
-
-/**
- * The periods the RSS Syndication module lets a feed name, from
- * https://web.resource.org/rss/1.0/modules/syndication/.
- */
-export const UPDATE_PERIODS = ['hourly', 'daily', 'weekly', 'monthly', 'yearly'] as const;
-
-/** One of {@link UPDATE_PERIODS}. */
-export type UpdatePeriod = (typeof UPDATE_PERIODS)[number];
-
-/** Whether a value is an {@link UpdatePeriod}. */
-export function isUpdatePeriod(value: unknown): value is UpdatePeriod {
-  return (UPDATE_PERIODS as readonly unknown[]).includes(value);
-}
-
-/** How often an RSS feed tells a reader to poll it: `frequency` times a `period`. */
-export interface FeedCadence {
-  period: UpdatePeriod;
-  /** A whole number of polls per period, at least one. */
-  frequency: number;
-}
-
-/**
- * The cadence a feed declares when the site has not said: once an hour, which
- * is what WordPress declares, so the subscribers of a migrated site keep
- * polling the way they always have.
- */
-export const DEFAULT_FEED_CADENCE: FeedCadence = { period: 'hourly', frequency: 1 };
 
 /**
  * The cadence the RSS feeds declare, from `feedUpdatePeriod` and
@@ -458,3 +404,13 @@ export interface FeedComment {
 
 /** Enough of any feed to say where it lives: what a header needs from one. */
 export type FeedIdentity = Pick<FeedSource, 'site' | 'feedHref' | 'baseUrl'>;
+
+/**
+ * The URL of one format of one user's feed.
+ *
+ * WordPress's layout, which decision-14 keeps: the feeds are children of the
+ * archive, so `/author/ada/feed/` is RSS 2.0 and the other two hang beside it.
+ */
+export function authorFeedHref(username: string, format: FeedFormat): string {
+  return feedPathUnder(authorHref(username), format);
+}

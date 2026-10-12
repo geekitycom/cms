@@ -1,11 +1,11 @@
 import type { Context, Hono } from 'hono';
 
-import { CROSS_SITE_REFUSAL, crossSiteWrite, csrfTokenMatches } from '../admin/session.ts';
-import type { AdminStore } from '../admin/store.ts';
-import { clientAddress, createLoginThrottle } from '../admin/throttle.ts';
+import { CROSS_SITE_REFUSAL, crossSiteWrite, csrfTokenMatches } from '../web/session.ts';
+import type { AdminStore } from '../store/admin-store.ts';
+import { clientAddress, createLoginThrottle } from '../web/throttle.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { documentSite } from '../admin/documents.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { isServed } from '../content/served.ts';
@@ -20,8 +20,8 @@ import {
 } from './form.ts';
 import type { CommentFormContext, CommentViewer } from './form.ts';
 import { commentPolicyOf, commentsOpen } from './policy.ts';
-import { commentAnchor, visibleReply } from '../web/conversation.ts';
-import type { Conversation } from '../web/conversation.ts';
+import { commentAnchor, visibleReply } from './conversation.ts';
+import type { Conversation } from './conversation.ts';
 import {
   COMMENT_FIELDS,
   COMMENT_RATE_LIMIT,

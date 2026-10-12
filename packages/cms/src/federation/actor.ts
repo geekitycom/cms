@@ -14,7 +14,8 @@ import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { escapeAttribute, escapeText } from '../util/html.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { authorHref, profileContext } from '../web/authors.ts';
+import { authorHref } from '../content/authors.ts';
+import { profileContext } from '../site/authors.ts';
 import { attributionDomainOf, handleHref } from './paths.ts';
 
 /**

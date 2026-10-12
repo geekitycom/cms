@@ -1,7 +1,7 @@
 import type { Document } from '../content/document.ts';
 import { decodedPath } from '../content/redirects.ts';
-import { parseAuthorPath } from './authors.ts';
-import { publicDocumentAt } from './documents.ts';
+import { parseAuthorPath } from '../content/authors.ts';
+import { publicDocumentAt } from '../content/permalinks.ts';
 import { commentsFeedPath, COMMENTS_ROOT, splitFeedPath } from './feeds.ts';
 import type { FeedFormat } from './feeds.ts';
 import { archiveOf, homeListing, SITE_POSTS } from './listing-subject.ts';
@@ -12,8 +12,8 @@ import { pageCount } from './pagination.ts';
 import { encodePath } from './request.ts';
 import { servedPath } from './site-view.ts';
 import type { SiteView } from './site-view.ts';
-import { PAGE_SEGMENT, taxonomyForSegment } from './taxonomy.ts';
-import type { TaxonomyTerm } from './taxonomy.ts';
+import { PAGE_SEGMENT, taxonomyForSegment } from '../content/taxonomy.ts';
+import type { TaxonomyTerm } from '../content/taxonomy.ts';
 
 /** What a feed URL syndicates. */
 export type FeedTarget =

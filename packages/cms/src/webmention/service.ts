@@ -5,7 +5,7 @@ import type {
   ConversationWrite,
   SentWebmention,
   WebmentionSendStatus,
-} from '../admin/store.ts';
+} from '../store/admin-store.ts';
 import { permalinkOwner } from '../comments/records.ts';
 import type { CommentNotices } from '../comments/intake.ts';
 import type { CommentRecords } from '../comments/records.ts';
@@ -18,12 +18,12 @@ import { readOf } from '../content/read.ts';
 import { replyTarget } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
-import { isFederatedDocument } from '../federation/article.ts';
+import { isFederatedDocument } from '../content/served.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { permalinkOfObjectId } from '../web/documents.ts';
+import { permalinkOfObjectId } from '../content/permalinks.ts';
 import { discoverEndpoint } from './discovery.ts';
 import { requestPublic } from './fetch-public.ts';
 import { externalLinks, externalTarget } from './links.ts';
@@ -31,8 +31,8 @@ import { verifyWebmention } from './receive.ts';
 import { selectedTargets, syndicationCopies, syndicationTargetsReader } from './syndication.ts';
 import type { SyndicationTarget } from '../content/syndicate-to.ts';
 import type { IncomingWebmention, WebmentionOutcome } from './receive.ts';
-import { isWithheld } from '../web/conversation.ts';
-import type { ConversationReader, ThreadReply, Upstream } from '../web/conversation.ts';
+import { isWithheld } from '../comments/conversation.ts';
+import type { ConversationReader, ThreadReply, Upstream } from '../comments/conversation.ts';
 
 /**
  * Telling the pages a post links to that it links to them.

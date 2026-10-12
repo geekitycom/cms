@@ -2,11 +2,11 @@ import { randomInt } from 'node:crypto';
 
 import type { Context, Hono } from 'hono';
 
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import {
   countUsers,
   createUser,
-  deleteUser,
+  removeUser,
   DuplicateUsernameError,
   findUserById,
   listUsers,
@@ -19,25 +19,23 @@ import {
   verifyUserPassword,
 } from '../site/users.ts';
 import type { ProfileLink, User } from '../site/users.ts';
-import { authorHref } from '../web/authors.ts';
-import { isLinkUrl, LINK_REL_RULE, LINK_URL_RULE, splitLinkRel } from '../web/navigation.ts';
+import { authorHref } from '../content/authors.ts';
+import { isLinkUrl, LINK_REL_RULE, LINK_URL_RULE, splitLinkRel } from '../site/navigation.ts';
 import {
   DEFAULT_DELIVERY_MODE,
   deliveryMode,
   notificationEvent,
   notificationSwitches,
-} from '../notifications/preferences.ts';
+} from '../site/notification-preferences.ts';
+import { revokeTokensForUser } from '../indieauth/tokens.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { ADMIN_THEMES, adminTheme } from '../site/admin-theme.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { ADMIN_PREFIX } from './session.ts';
+import { editUserPath, USERS_PATH } from '../site/admin-paths.ts';
 import { toldFollowers } from './settings-page.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
-
-/** Where the list of users lives. */
-export const USERS_PATH = `${ADMIN_PREFIX}/users`;
 
 /**
  * Where the add form lives, and where it posts.
@@ -48,18 +46,6 @@ export const USERS_PATH = `${ADMIN_PREFIX}/users`;
  * top of a list of everybody.
  */
 export const ADD_USER_PATH = `${USERS_PATH}/new`;
-
-/**
- * Where one user is edited.
- *
- * The split documents.ts already makes between a listing and `basePath/:slug`
- * (TASK-97): the table says who there is, and one screen per person holds
- * every field that person has, each with a label beside it. A row of
- * unlabelled boxes in a table cell could not.
- */
-export function editUserPath(id: number): string {
-  return `${USERS_PATH}/${String(id)}`;
-}
 
 /**
  * The id in `/admin/users/<id>`, or `undefined` for a segment that is not one.
@@ -75,7 +61,7 @@ function pathId(segment: string): number | undefined {
 
 /**
  * Users > Connected apps: the apps holding a token for whoever is signed in
- * (TASK-162). Mounted by `indieauth/connected-apps.ts`; named here so the
+ * (TASK-162). Mounted by `admin/connected-apps.ts`; named here so the
  * menu can link it without importing the IndieAuth side.
  */
 export const CONNECTED_APPS_PATH = `${USERS_PATH}/apps`;
@@ -86,7 +72,7 @@ export const CONNECTED_APPS_CHILD = 'apps';
 /**
  * Users > App activity: what apps sent to the IndieAuth and Micropub
  * endpoints, and what they were answered (TASK-221). Mounted by
- * `indieauth/app-activity.ts`; named here for the same reason as Connected apps.
+ * `admin/app-activity.ts`; named here for the same reason as Connected apps.
  */
 export const APP_ACTIVITY_PATH = `${USERS_PATH}/activity`;
 
@@ -544,6 +530,23 @@ async function namedUser(
 }
 
 const GONE_USER = 'That user is already gone.';
+
+/**
+ * Take a user out of the file. Returns `false` when there was nothing to take.
+ *
+ * Their IndieAuth tokens go with them (TASK-160): a token is a file in
+ * `data/` too, so it is revoked here, where every caller deletes a user.
+ *
+ * Their sessions are not ended here: sessions are in the database, and the
+ * screen that deletes a user ends them itself. A session that outlives this —
+ * one in a database restored from a backup, say — names a user the file no
+ * longer holds, and the admin guard turns that into no session at all.
+ */
+export async function deleteUser(input: { dataDir: string; userId: number }): Promise<boolean> {
+  const deleted = await removeUser(input);
+  await revokeTokensForUser(input.dataDir, input.userId);
+  return deleted;
+}
 
 /**
  * Delete a user.

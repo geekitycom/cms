@@ -16,7 +16,7 @@ import { after, describe, it } from 'node:test';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createUser, setUserProfile } from '../site/users.ts';
-import { createTemplateEnvironment } from './templates.ts';
+import { createTemplateEnvironment } from '../theme/templates.ts';
 
 const box = sandbox();
 after(() => box.cleanup());

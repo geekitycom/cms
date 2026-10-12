@@ -12,8 +12,8 @@ import {
   legacySettings,
   legacyUsers,
 } from './legacy-migrations.ts';
-import { adminStoreOwning, openAdminDatabase } from './store.ts';
-import type { AdminStore } from './store.ts';
+import { adminStoreOwning, openAdminDatabase } from '../store/admin-store.ts';
+import type { AdminStore } from '../store/admin-store.ts';
 
 const temporaryDirs: string[] = [];
 const openDatabases: DatabaseSync[] = [];

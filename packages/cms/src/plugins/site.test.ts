@@ -5,8 +5,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { leakedSecrets, pngWithMetadata } from '../__testing__/metadata.ts';
-import { openAdminStore } from '../admin/store.ts';
-import type { AdminStore } from '../admin/store.ts';
+import { openAdminStore } from '../store/admin-store.ts';
+import type { AdminStore } from '../store/admin-store.ts';
 import { addComment } from '../comments/records.ts';
 import { resolveConfig } from '../config.ts';
 import type { PluginComment, PluginSite } from '../plugin.ts';

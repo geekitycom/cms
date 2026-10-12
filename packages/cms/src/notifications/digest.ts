@@ -2,12 +2,12 @@ import path from 'node:path';
 
 import { MODERATION_ACTIONS } from '../comments/moderate.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
-import type { AdminStore, PostComment } from '../admin/store.ts';
+import type { AdminStore, PostComment } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { ContentStore } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
-import type { MailService } from '../mail/service.ts';
+import type { MailService } from './mail-service.ts';
 import { listUsers } from '../site/users.ts';
 import { messageOf } from '../util/errors.ts';
 import { absoluteUrl } from '../util/url.ts';
@@ -18,7 +18,7 @@ import {
   isBatchedMode,
   notificationMode,
   notificationRecipients,
-} from './preferences.ts';
+} from '../site/notification-preferences.ts';
 
 /**
  * One message a window instead of one message a comment.

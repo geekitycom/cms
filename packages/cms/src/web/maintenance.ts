@@ -1,12 +1,11 @@
 import type { Context, MiddlewareHandler } from 'hono';
 
-import { ADMIN_PREFIX } from '../admin/session.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { signedInAccount } from '../comments/viewer.ts';
-import type { GeekityEnv } from '../env.ts';
-import { THEME_ASSET_PREFIX } from './assets.ts';
-import { representationOf } from './errors.ts';
+import type { GeekityEnv } from './env.ts';
+import { THEME_ASSET_PREFIX } from '../theme/assets.ts';
+import { representationOf, CONTENT_TYPES, PRIVATE_CACHE_CONTROL } from './negotiate.ts';
 import { HEALTH_PATH } from './health.ts';
-import { CONTENT_TYPES, PRIVATE_CACHE_CONTROL } from './negotiate.ts';
 import { requestPath } from './request.ts';
 import { CHANGE_PASSWORD_WELL_KNOWN_PATH, SECURITY_TXT_PATH } from './well-known.ts';
 

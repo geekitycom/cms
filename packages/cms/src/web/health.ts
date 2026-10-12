@@ -2,7 +2,7 @@ import { opendir } from 'node:fs/promises';
 
 import type { Context, Hono } from 'hono';
 
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from './env.ts';
 
 /** Where the health check answers. */
 export const HEALTH_PATH = '/healthz';

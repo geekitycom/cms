@@ -1,22 +1,22 @@
-import { rsvpField } from '../admin/store.ts';
-import type { PostComment } from '../admin/store.ts';
+import { rsvpField } from '../store/admin-store.ts';
+import type { PostComment } from '../store/admin-store.ts';
 import { heldWebmention, intakeComment } from '../comments/intake.ts';
 import type { CommentNotices, ProposedComment } from '../comments/intake.ts';
 import { deleteComment } from '../comments/records.ts';
 import type { CommentRecords } from '../comments/records.ts';
-import type { CommentChecker } from '../comments/submission.ts';
+import type { CommentChecker } from '../forms/checker.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
 import { escapeText } from '../util/html.ts';
-import { commentKeyAt } from '../web/conversation.ts';
-import type { ConversationReader } from '../web/conversation.ts';
-import { sanitizeCommentHtml } from '../web/sanitize.ts';
+import { commentKeyAt } from '../comments/conversation.ts';
+import type { ConversationReader } from '../comments/conversation.ts';
+import { sanitizeCommentHtml } from '../content/sanitize.ts';
 import { DISCOVERY_MAX_BYTES } from './discovery.ts';
 import { fetchPublic } from './fetch-public.ts';
 import { linksTo, sourceEntry } from './microformats.ts';
 import type { NestedReply } from './microformats.ts';
-import { isPrivateHost } from './public-address.ts';
-import type { HostLookup } from './public-address.ts';
+import { isPrivateHost } from '../util/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 
 /**
  * Taking a webmention somebody sent this site.

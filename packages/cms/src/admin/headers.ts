@@ -3,8 +3,8 @@ import { randomBytes } from 'node:crypto';
 import type { MiddlewareHandler } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
-import type { GeekityEnv } from '../env.ts';
-import { usesSecureCookies } from './session.ts';
+import type { GeekityEnv } from '../web/env.ts';
+import { usesSecureCookies } from '../web/session.ts';
 
 /**
  * How long a browser is told to insist on https, in seconds. One year, which

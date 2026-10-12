@@ -1,14 +1,13 @@
 export {
   ADMIN_ASSET_MAX_AGE,
-  ADMIN_ASSET_PREFIX,
   ADMIN_STATIC_DIR,
   adminAssetResponse,
   findAdminAsset,
 } from './assets.ts';
+export { ADMIN_ASSET_PREFIX } from '../site/admin-paths.ts';
 export {
   countUsers,
   createUser,
-  deleteUser,
   DuplicateUsernameError,
   findUser,
   findUserById,
@@ -27,6 +26,7 @@ export {
   usersFile,
   verifyUserPassword,
 } from '../site/users.ts';
+export { deleteUser } from './users.ts';
 export type { CreateUserInput, ProfileLink, StoredUser, User, UserProfile } from '../site/users.ts';
 export {
   credentialProblem,
@@ -169,19 +169,19 @@ export {
   describeWait,
   LOCKOUT_GROWTH_LIMIT,
   loginKeys,
-} from './throttle.ts';
-export type { LoginThrottle, LoginThrottleOptions } from './throttle.ts';
+} from '../web/throttle.ts';
+export type { LoginThrottle, LoginThrottleOptions } from '../web/throttle.ts';
 export { mountPreview, PREVIEW_PATH } from './preview.ts';
 export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from '../site/passwords.ts';
 export {
   DASHBOARD_RECENT_POSTS,
   guard,
-  LOGIN_PATH,
   LOGOUT_PATH,
   mountAdmin,
   postEditorPath,
   SETUP_PATH,
 } from './routes.ts';
+export { LOGIN_PATH } from '../site/admin-paths.ts';
 export { ADMIN_SECTIONS, adminMenu, UnknownAdminScreenError } from './menu.ts';
 export type {
   AdminMenuChild,
@@ -259,8 +259,8 @@ export {
   mountUsers,
   USER_EMAIL_PATH,
   USER_FIELDS,
-  USERS_PATH,
 } from './users.ts';
+export { USERS_PATH } from '../site/admin-paths.ts';
 export type { AddUserProblems, ChangePasswordProblems, MountUsersOptions } from './users.ts';
 export {
   FORGOT_PATH,
@@ -275,10 +275,9 @@ export {
   resetLink,
 } from './recovery.ts';
 export type { MountRecoveryOptions } from './recovery.ts';
+export { ADMIN_PREFIX } from '../site/admin-paths.ts';
 export {
-  ADMIN_PREFIX,
   clearSessionCookie,
-  CSRF_FIELD,
   csrfTokenMatches,
   SECURE_SESSION_COOKIE,
   SESSION_COOKIE,
@@ -286,7 +285,8 @@ export {
   sessionIdFrom,
   setSessionCookie,
   usesSecureCookies,
-} from './session.ts';
+} from '../web/session.ts';
+export { CSRF_FIELD } from '../forms/protection.ts';
 export {
   adminStoreOwning,
   COMMENT_KINDS,
@@ -297,7 +297,7 @@ export {
   openAdminStore,
   RELAY_STATES,
   SESSION_ID_BYTES,
-} from './store.ts';
+} from '../store/admin-store.ts';
 export type {
   AdminStore,
   CommentAuthor,
@@ -329,7 +329,7 @@ export type {
   Relay,
   RelayState,
   Session,
-} from './store.ts';
+} from '../store/admin-store.ts';
 export {
   ADMIN_TEMPLATES,
   createAdminTemplateEnvironment,

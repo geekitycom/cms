@@ -1,4 +1,4 @@
-import type { FlashKind } from '../store.ts';
+import type { FlashKind } from '../../store/admin-store.ts';
 
 /** The kind of flash each alert colour draws. */
 const COLOURS: Readonly<Record<string, FlashKind>> = {

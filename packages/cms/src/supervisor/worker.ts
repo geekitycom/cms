@@ -4,7 +4,6 @@
  * to what the supervisor tells this worker to do.
  */
 
-import type { Cms } from '../index.ts';
 import { pluginsFingerprint } from '../plugins/folder.ts';
 import type { PluginFolder } from '../plugins/folder.ts';
 import { messageOf } from '../util/errors.ts';
@@ -19,10 +18,17 @@ export interface WorkerChannel {
   onDisconnect(handler: () => void): void;
 }
 
+/** What a worker asks of the CMS it runs: `Cms` is one. */
+export interface SupervisedCms {
+  drain(): Promise<void>;
+  resume(): Promise<void>;
+  close(): Promise<void>;
+}
+
 export interface SupervisedWorker {
   readonly supervision: Supervision;
   /** The CMS listens: tell the supervisor, and do what it says from here on. */
-  serving(cms: Pick<Cms, 'drain' | 'resume' | 'close'>): void;
+  serving(cms: SupervisedCms): void;
 }
 
 export function superviseWorker(options: {

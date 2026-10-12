@@ -3,7 +3,7 @@ import type { TurndownNode } from 'turndown';
 
 import { htmlInlineOffset, markdownTokens } from '../content/markdown.ts';
 import { normalizeBody } from '../content/writer.ts';
-import { cleanPostHtml } from '../web/sanitize.ts';
+import { cleanPostHtml } from '../content/sanitize.ts';
 
 /**
  * A Micropub client's content as the post body the site stores (TASK-258,

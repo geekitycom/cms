@@ -5,7 +5,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
-import type { CommentSubmission, CommentVerdict } from '../comments/submission.ts';
+import type { CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import { MAXIMUM_FORM_AGE_SECONDS, MINIMUM_SUBMIT_SECONDS } from '../forms/protection.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';

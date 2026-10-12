@@ -1,6 +1,6 @@
 import type { FederationOrigin } from '@fedify/fedify';
 
-import { AUTHOR_BASE, INBOX_BASE } from '../web/authors.ts';
+import { AUTHOR_BASE, INBOX_BASE } from '../content/authors.ts';
 
 /**
  * Where a user's ActivityPub endpoints live: at their author URL, and under it.
@@ -42,7 +42,7 @@ export const QUOTE_AUTHORIZATION_PATH = `${ACTOR_PATH}quotes/{id}/` as const;
  * once.
  *
  * A reserved top-level path (decision-14), which is why `inbox` is one of the
- * two names `web/authors.ts` keeps a user from taking.
+ * two names `content/authors.ts` keeps a user from taking.
  */
 export const SHARED_INBOX_PATH = `/${INBOX_BASE}/` as const;
 
@@ -117,17 +117,6 @@ export function pinActivityId(
 export function federationOrigin(baseUrl: string): FederationOrigin {
   const url = new URL(baseUrl);
   return { handleHost: url.host, webOrigin: url.origin };
-}
-
-/**
- * `{username}@{host}`: the account WebFinger answers for (decision-14).
- *
- * WebFinger's `acct:` subject, the handle the admin shows and the
- * `fediverse:creator` a page names (TASK-202) are each this with a prefix, so
- * a page cannot credit an account the site does not answer for.
- */
-export function accountOf(username: string, baseUrl: string): string {
-  return `${username}@${federationOrigin(baseUrl === '' ? 'http://localhost' : baseUrl).handleHost}`;
 }
 
 /**

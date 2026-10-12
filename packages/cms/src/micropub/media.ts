@@ -4,11 +4,11 @@ import path from 'node:path';
 import type { Context, Hono } from 'hono';
 
 import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
-import { logMediaRequest } from '../indieauth/activity-log.ts';
-import type { BearerEnv } from '../indieauth/bearer.ts';
-import { MICROPUB_MEDIA_PATH, siteBaseUrl } from '../indieauth/discovery.ts';
+import { logMediaRequest } from '../web/indieauth-activity-log.ts';
+import type { BearerEnv } from '../web/indieauth-bearer.ts';
+import { MICROPUB_MEDIA_PATH, siteBaseUrl } from '../web/indieauth-discovery.ts';
 import { resolveUpload } from '../media/library.ts';
 import { refusedUpload, storeUpload, UPLOAD_FIELD } from '../media/uploads.ts';
 import { absoluteUrl } from '../util/url.ts';

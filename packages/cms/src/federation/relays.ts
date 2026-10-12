@@ -4,7 +4,7 @@ import type { Context } from '@fedify/fedify';
 import { Accept, Follow, PUBLIC_COLLECTION, Reject, Undo } from '@fedify/vocab';
 import type { Recipient } from '@fedify/vocab';
 
-import type { AdminStore, Relay } from '../admin/store.ts';
+import type { AdminStore, Relay } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import type { ContentStore } from '../content/store.ts';

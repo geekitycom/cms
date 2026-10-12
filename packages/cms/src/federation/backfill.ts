@@ -11,7 +11,7 @@ import {
   Question,
 } from '@fedify/vocab';
 
-import type { AdminStore, InboxActivity } from '../admin/store.ts';
+import type { AdminStore, InboxActivity } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
@@ -19,9 +19,9 @@ import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
-import { heldComment, isWithheld } from '../web/conversation.ts';
-import type { ConversationReader, ThreadReply } from '../web/conversation.ts';
-import { isFederatedDocument } from './article.ts';
+import { heldComment, isWithheld } from '../comments/conversation.ts';
+import type { ConversationReader, ThreadReply } from '../comments/conversation.ts';
+import { isFederatedDocument } from '../content/served.ts';
 import type { FederationContextData } from './federation.ts';
 import { appendInboxActivity, removeInboxActivities } from './records.ts';
 import type { FederationRecords } from './records.ts';

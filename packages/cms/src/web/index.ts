@@ -9,31 +9,28 @@ export {
   THEME_ASSET_PREFIX,
   THEME_STATIC_DIR,
   UPLOAD_ASSET_MAX_AGE,
-} from './assets.ts';
+} from '../theme/assets.ts';
 export { findAsset } from '../files/static-files.ts';
 export { findUpload, UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';
-export type { AssetResponseOptions, ThemeAsset } from './assets.ts';
+export type { AssetResponseOptions, ThemeAsset } from '../theme/assets.ts';
 export type { StaticAsset } from '../files/static-files.ts';
 export { archiveMonths, ARCHIVE_FRONT_MATTER_KEY, archiveOpen } from './archive.ts';
 export type { ArchiveEntry, ArchiveMonth } from './archive.ts';
+export { AUTHOR_BASE, authorHref, INBOX_BASE, parseAuthorPath } from '../content/authors.ts';
 export {
-  AUTHOR_BASE,
   authorContext,
-  authorFeedHref,
-  authorHref,
   authorName,
-  INBOX_BASE,
-  parseAuthorPath,
   profileContext,
   siteAuthorContext,
   siteAuthorName,
-} from './authors.ts';
+} from '../site/authors.ts';
+export { authorFeedHref } from './feed-source.ts';
 export { authorNames, userForAuthor } from '../content/authors.ts';
-export type { AuthorContext, AuthorRequest, PublishedProfileLink } from './authors.ts';
+export type { AuthorContext, PublishedProfileLink } from '../site/authors.ts';
+export type { AuthorRequest } from '../content/authors.ts';
 export {
   createSiteDataSource,
   DEFAULT_POSTS_PER_PAGE,
-  documentContext,
   frontPageSlugs,
   postsPerPage,
   siteTimezone,
@@ -41,20 +38,14 @@ export {
   taxonomyBases,
   termRedirects,
   themeName,
-} from './context.ts';
-export type {
-  BacklinkContext,
-  DocumentContext,
-  FrontPageSlugs,
-  NeighbourContext,
-  PageContext,
-  SiteData,
-  SiteDataSource,
-} from './context.ts';
-export { commentAnchor, createConversation, feedComments, spokenIn } from './conversation.ts';
+} from '../theme/site-data.ts';
+export { documentContext } from './context.ts';
+export type { BacklinkContext, DocumentContext, NeighbourContext, PageContext } from './context.ts';
+export type { FrontPageSlugs, SiteData, SiteDataSource } from '../theme/site-data.ts';
+export { commentAnchor } from '../comments/conversation.ts';
+export { createConversation, feedComments, spokenIn } from './conversation.ts';
 export type {
   Conversation,
-  ConversationContext,
   ConversationReader,
   Interaction,
   InteractionAuthor,
@@ -65,8 +56,9 @@ export type {
   Placed,
   RepliesOf,
   SiteInteraction,
-} from './conversation.ts';
-export { activityStreamsId, publicDocumentAt } from './documents.ts';
+} from '../comments/conversation.ts';
+export type { ConversationContext } from './conversation.ts';
+export { activityStreamsId, publicDocumentAt } from '../content/permalinks.ts';
 export { isListed, isServed } from '../content/served.ts';
 export { postObjectId } from '../content/guids.ts';
 export {
@@ -85,7 +77,6 @@ export {
   DC_NAMESPACE,
   DEFAULT_FEED_LANGUAGE,
   DEFAULT_FEED_SIZE,
-  DEFAULT_NOTIFY_SERVER,
   escapeXml,
   excerptFromHtml,
   EXCERPT_WORDS,
@@ -121,9 +112,10 @@ export {
   splitFeedPath,
   WFW_NAMESPACE,
 } from './feeds.ts';
+export { DEFAULT_NOTIFY_SERVER } from '../site/feed-settings.ts';
 export { CREATIVE_COMMONS_NAMESPACE, ITUNES_NAMESPACE, PODCAST_NAMESPACE } from './feed-xml.ts';
-export { CREATIVE_COMMONS_LICENSES, resolveLicense } from './license.ts';
-export type { ContentLicense, CreativeCommonsKey, LicenseSource } from './license.ts';
+export { CREATIVE_COMMONS_LICENSES, resolveLicense } from '../content/license.ts';
+export type { ContentLicense, CreativeCommonsKey, LicenseSource } from '../content/license.ts';
 export type {
   CommentFeedSource,
   FeedComment,
@@ -197,7 +189,7 @@ export {
   relValuesOf,
   siteMenus,
   splitLinkRel,
-} from './navigation.ts';
+} from '../site/navigation.ts';
 export type {
   LinkLine,
   MenuItem,
@@ -206,7 +198,7 @@ export type {
   NavigationMenuOptions,
   NavigationMenus,
   NavigationMenusOptions,
-} from './navigation.ts';
+} from '../site/navigation.ts';
 export { HEALTH_PATH, mountHealth } from './health.ts';
 export { offsetForPage, paginate } from './pagination.ts';
 export type { Pagination, PaginateOptions } from './pagination.ts';
@@ -215,7 +207,7 @@ export type { CreateRendererOptions, Listing, Renderer, SearchPage } from './ren
 export { feedHref, homeHref, listingPageHref } from './listing-subject.ts';
 export { commentsFeedHref } from './paths.ts';
 export { mountPublicSite } from './routes.ts';
-export { sanitizeCommentHtml } from './sanitize.ts';
+export { sanitizeCommentHtml } from '../content/sanitize.ts';
 export {
   MAXIMUM_QUERY_LENGTH,
   searchHref,
@@ -233,16 +225,23 @@ export {
   AI_RETRIEVAL_CRAWLERS,
   AI_TRAINING_CRAWLERS,
   CONTENT_SIGNALS,
-  contentSignalValue,
   DEFAULT_ROBOTS_POLICY,
-  robotsResponse,
   robotsRuleLines,
   robotsRuleProblem,
+} from '../site/robots.ts';
+export {
+  contentSignalValue,
+  robotsResponse,
   robotsTxt,
   ROBOTS_CONTENT_TYPE,
   ROBOTS_PATH,
 } from './robots.ts';
-export type { AiCrawlerPolicy, ContentSignal, ContentSignalName, RobotsPolicy } from './robots.ts';
+export type {
+  AiCrawlerPolicy,
+  ContentSignal,
+  ContentSignalName,
+  RobotsPolicy,
+} from '../site/robots.ts';
 export {
   sitemapChildPath,
   sitemapDate,
@@ -273,16 +272,16 @@ export {
   taxonomyForSegment,
   taxonomyRedirectsOf,
   termHref,
-} from './taxonomy.ts';
+} from '../content/taxonomy.ts';
 export type {
   Taxonomy,
   TaxonomyBaseProblems,
   TaxonomyBases,
   TaxonomyRedirect,
   TaxonomyTerm,
-} from './taxonomy.ts';
-export { createTemplateEnvironment, formatDate, useThemeDirs } from './templates.ts';
-export type { CreateTemplateEnvironmentOptions, DateFormat } from './templates.ts';
+} from '../content/taxonomy.ts';
+export { createTemplateEnvironment, formatDate, useThemeDirs } from '../theme/templates.ts';
+export type { CreateTemplateEnvironmentOptions, DateFormat } from '../theme/templates.ts';
 export {
   chooseTheme,
   createThemeSource,
@@ -293,7 +292,7 @@ export {
   THEME_MANIFEST_FILE,
   themeNameProblem,
   themeSearchPath,
-} from './themes.ts';
+} from '../theme/themes.ts';
 export type {
   ChosenTheme,
   Theme,
@@ -302,10 +301,12 @@ export type {
   ThemeLogger,
   ThemeRead,
   ThemeSource,
-} from './themes.ts';
+} from '../theme/themes.ts';
 export { createRedirectSource, REDIRECTS_FILE } from '../content/redirects.ts';
 export { redirectBy, REDIRECT_BY } from './redirects.ts';
-export { serverError } from './errors.ts';
 export { maintenanceGate } from './maintenance.ts';
 export { mountWellKnown } from './well-known.ts';
 export type { RedirectSource } from '../content/redirects.ts';
+export { mountAvatars } from './avatar-routes.ts';
+export { mountContact } from './contact-routes.ts';
+export { mountNotificationLinks } from './notification-routes.ts';

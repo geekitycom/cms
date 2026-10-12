@@ -19,3 +19,14 @@ export const UPLOAD_DIRECTORY = 'uploads';
 export function findUpload(relative: string, contentDir: string): StaticAsset | undefined {
   return findAsset(relative, [path.join(contentDir, UPLOAD_DIRECTORY)]);
 }
+
+/**
+ * URL prefix the derived files are served under.
+ *
+ * It sits inside `/uploads/` rather than beside it so a site's asset host, its
+ * cache rules and its Eleventy passthrough only ever have to know about one
+ * path. `_` cannot collide with a real upload: the CMS files uploads under
+ * `{yyyy}/{mm}/`, and Eleventy — like the CMS's own content walk — ignores
+ * underscore-prefixed directories anyway.
+ */
+export const VARIANT_ASSET_PREFIX = `${UPLOAD_ASSET_PREFIX}_/`;

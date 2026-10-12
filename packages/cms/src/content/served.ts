@@ -68,3 +68,16 @@ export function isGone(document: Document, now: Date = new Date()): boolean {
 export function isListed(document: Document, now: Date = new Date()): boolean {
   return isServed(document, now) && visibilityOf(document) === 'public';
 }
+
+/**
+ * Whether a document is one of the objects this site federates.
+ *
+ * doc-4 federates published posts and nothing else: pages are standing
+ * content with no place in a timeline, and a draft, a trashed post or one
+ * whose date has not arrived is not public at all. This is the one rule, so
+ * the object dispatcher, the outbox and the permalink all agree about what
+ * exists.
+ */
+export function isFederatedDocument(document: Document, now: Date = new Date()): boolean {
+  return document.type === 'post' && isServed(document, now);
+}

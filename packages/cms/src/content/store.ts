@@ -197,7 +197,7 @@ export interface ContentStore {
    * A list of names rather than one, because more than one string can read as
    * the same person: doc-2's `author` holds a username, and a file written
    * before decision-14 holds a display name that reads as the one user
-   * answering to it. `web/authors.ts` decides which names those are and hands
+   * answering to it. `content/authors.ts` decides which names those are and hands
    * them here, so the index matches strings and never has to know what a user
    * is. An empty list matches nothing, which is what a user whose name nothing
    * resolves to should get.
@@ -407,9 +407,8 @@ export interface CategoryCount {
 /**
  * Which of the two taxonomies a query is about.
  *
- * Spelled here rather than imported from `web/taxonomy.ts` because the index
- * is underneath the web layer and should not depend on it; the two types are
- * the same union, so they are assignable to each other.
+ * The same union as `Taxonomy` in `content/taxonomy.ts`, so the two are
+ * assignable to each other.
  */
 export type TaxonomyName = 'tag' | 'category';
 

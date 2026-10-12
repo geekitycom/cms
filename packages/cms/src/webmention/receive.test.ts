@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import type { PostComment } from '../admin/store.ts';
-import type { CommentSubmission, CommentVerdict } from '../comments/submission.ts';
+import type { PostComment } from '../store/admin-store.ts';
+import type { CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
@@ -13,7 +13,7 @@ import type { MemoryMailProvider } from '../mail/memory.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';
 import { createUser } from '../site/users.ts';
-import type { HostLookup } from './public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './routes.ts';
 
 /**

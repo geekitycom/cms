@@ -1,5 +1,5 @@
-import type { PostComment } from '../admin/store.ts';
-import type { CommentChecker, CommentVerdict } from '../comments/submission.ts';
+import type { PostComment } from '../store/admin-store.ts';
+import type { CommentChecker, CommentVerdict } from '../forms/checker.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
 import { formTimingRefusal, hashClientAddress, trapped } from '../forms/protection.ts';

@@ -3,9 +3,9 @@ import path from 'node:path';
 
 import sharp from 'sharp';
 
-import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
+import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
 import { writeFileAtomically } from '../files/atomic.ts';
-import { derivedDir, sourceFile, sourceVersion, versioned, VARIANT_ASSET_PREFIX } from './paths.ts';
+import { derivedDir, sourceFile, sourceVersion, versioned } from './paths.ts';
 import type { ImageConfig } from './paths.ts';
 
 /**

@@ -1,29 +1,27 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
-import { mountAvatars } from '../avatars/routes.ts';
+import { mountAvatars } from './avatar-routes.ts';
 import { mountComments } from '../comments/routes.ts';
-import { mountContact } from '../contact/routes.ts';
+import { mountContact } from './contact-routes.ts';
 import { COMMENT_PAGE_PREFIX } from '../content/guids.ts';
 import { findPathRedirect, findQueryRedirect, redirectLocation } from '../content/redirects.ts';
-import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
-import type { GeekityEnv } from '../env.ts';
+import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
+import type { GeekityEnv } from './env.ts';
 import { iconSetting } from '../images/icons.ts';
-import { VARIANT_ASSET_PREFIX } from '../images/variants.ts';
-import { advertiseIdentityEndpoints } from '../indieauth/discovery.ts';
-import { mountNotificationLinks } from '../notifications/routes.ts';
+import { advertiseIdentityEndpoints } from './indieauth-discovery.ts';
+import { mountNotificationLinks } from './notification-routes.ts';
 import { robotsPolicyOf } from '../site/settings.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { mountPingbacks } from '../webmention/pingback.ts';
 import { mountWebmentions } from '../webmention/routes.ts';
-import { publicAdminBar } from './admin-bar.ts';
 import { favicon, imageVariant, themeAsset, upload } from './asset-routes.ts';
-import { THEME_ASSET_PREFIX } from './assets.ts';
+import { THEME_ASSET_PREFIX } from '../theme/assets.ts';
 import { negotiateDocument } from './document-page.ts';
-import { goneDocumentAt, previewDocumentAt } from './documents.ts';
+import { goneDocumentAt, previewDocumentAt } from '../content/permalinks.ts';
 import { embedView, oEmbed } from './embed.ts';
 import { commentPage, comments, feed, repliesFeed } from './feed-routes.ts';
 import { feedPathUnder, FEED_FORMATS, REPLIES_ROOT, splitFeedPath } from './feeds.ts';
-import { indexNowKeyPath, indexNowKeyResponse } from './indexnow.ts';
+import { indexNowKeyPath, indexNowKeyResponse } from '../site/indexnow-key.ts';
 import { listing, search } from './listing-pages.ts';
 import { feedHref, SITE_POSTS } from './listing-subject.ts';
 import { LLMS_TXT_LINK, LLMS_TXT_PATH } from './llms.ts';
@@ -62,8 +60,8 @@ import { llmsTxt, sitemap } from './site-index.ts';
 import { siteView } from './site-view.ts';
 import type { SiteView } from './site-view.ts';
 import { SITEMAP_CHILD_ROUTE, SITEMAP_PATH } from './sitemap.ts';
-import { redirectedTerm, termHref } from './taxonomy.ts';
-import type { TaxonomyTerm } from './taxonomy.ts';
+import { redirectedTerm, termHref } from '../content/taxonomy.ts';
+import type { TaxonomyTerm } from '../content/taxonomy.ts';
 
 /**
  * Register the public site on a Hono app.
@@ -74,9 +72,6 @@ import type { TaxonomyTerm } from './taxonomy.ts';
  * them, because the document lookup only runs once nothing else has matched.
  */
 export function mountPublicSite(app: Hono<GeekityEnv>): void {
-  // First, so every page below it, the 404 and the 500 included, is drawn
-  // knowing whether a signed-in user is reading it (TASK-183).
-  app.use('*', publicAdminBar);
   app.use('*', advertiseIdentityEndpoints);
   app.use('*', declaredQueryRedirect);
 

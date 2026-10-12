@@ -8,7 +8,7 @@
 import type { Context, Hono } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { ownManifest } from '../init.ts';
 import { readPluginChanges } from '../plugins/changes.ts';
 import type { PluginChangeEntry } from '../plugins/changes.ts';
@@ -48,7 +48,7 @@ import type { AdminRender } from './documents.ts';
 import { formatInTimezone } from './formatting.ts';
 import type { AdminMenuChild } from './menu.ts';
 import { flash } from './flash.ts';
-import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 export const PLUGINS_PATH = `${ADMIN_PREFIX}/plugins`;

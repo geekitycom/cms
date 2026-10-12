@@ -1,10 +1,10 @@
 import type { Context } from 'hono';
 
-import { sessionIdFrom } from '../admin/session.ts';
-import type { GeekityEnv } from '../env.ts';
+import { sessionIdFrom } from '../web/session.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { findUserById } from '../site/users.ts';
 import type { User } from '../site/users.ts';
-import { authorHref } from '../web/authors.ts';
+import { authorHref } from '../content/authors.ts';
 import type { CommentViewer } from './form.ts';
 
 /**

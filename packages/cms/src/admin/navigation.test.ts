@@ -12,7 +12,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import type { Cms } from '../index.ts';
-import type { NavigationMenus } from '../web/navigation.ts';
+import type { NavigationMenus } from '../site/navigation.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import {

@@ -24,13 +24,13 @@ import type { Context, Hono } from 'hono';
 import { rebuildCommentIndexes } from '../comments/records.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { SyncResult } from '../content/sync.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { rebuildFederationIndexes } from '../federation/records.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { ADMIN_PREFIX } from './session.ts';
-import type { AdminStore } from './store.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
+import type { AdminStore } from '../store/admin-store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**

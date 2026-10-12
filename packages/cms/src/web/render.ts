@@ -18,52 +18,49 @@ import { iconSetting, siteIcons } from '../images/icons.ts';
 import type { User } from '../site/users.ts';
 import { LLMS_TXT_PATH } from './llms.ts';
 import { archiveMonths, archiveOpen } from './archive.ts';
-import { authorContext, siteAuthorContext } from './authors.ts';
-import type { AuthorContext } from './authors.ts';
+import { authorContext, siteAuthorContext } from '../site/authors.ts';
+import type { AuthorContext } from '../site/authors.ts';
 import {
   backlinkContext,
   citedPhotoContext,
   citedPictureContext,
-  createSiteDataSource,
   documentContext,
-  frontPageSlugs,
   locationContext,
+  syndicationLinks,
+} from './context.ts';
+import {
+  createSiteDataSource,
+  frontPageSlugs,
   postsPerPage,
   siteLocale,
   siteTimezone,
-  syndicationLinks,
   taxonomyBases,
   termRedirects,
   themeName,
-} from './context.ts';
+} from '../theme/site-data.ts';
 import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { ContactFormContext } from '../contact/form.ts';
-import { commentAnchor } from './conversation.ts';
+import { commentAnchor } from '../comments/conversation.ts';
 import { commentPageHref } from '../content/guids.ts';
-import type { CommentThread, Conversation } from './conversation.ts';
-import { activityStreamsId } from './documents.ts';
+import type { CommentThread, Conversation } from '../comments/conversation.ts';
+import { activityStreamsId } from '../content/permalinks.ts';
 import { isServed } from '../content/served.ts';
 import { commentsFeedPath } from './feeds.ts';
-import type {
-  DocumentContext,
-  FrontPageSlugs,
-  NeighbourContext,
-  PhotoContext,
-  SiteData,
-} from './context.ts';
+import type { DocumentContext, NeighbourContext, PhotoContext } from './context.ts';
+import type { FrontPageSlugs, SiteData } from '../theme/site-data.ts';
 import { bioOf, escapeMarkdown, HOME_LINK } from './markdown-page.ts';
 import type { MarkdownChrome, MarkdownUrl } from './markdown-page.ts';
-import { navigationLinks, navigationMenus } from './navigation.ts';
-import { resolveLicense } from './license.ts';
-import type { ContentLicense } from './license.ts';
+import { navigationLinks, navigationMenus } from '../site/navigation.ts';
+import { resolveLicense } from '../content/license.ts';
+import type { ContentLicense } from '../content/license.ts';
 import { shareImage } from './share-image.ts';
 import type { Pagination } from './pagination.ts';
 import { snippetHtml } from './search.ts';
-import type { TaxonomyBases, TaxonomyRedirect } from './taxonomy.ts';
-import { createTemplateEnvironment, useThemeDirs } from './templates.ts';
-import { createThemeSource, findThemeFile } from './themes.ts';
-import type { ThemeColors, ThemeSource } from './themes.ts';
+import type { TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
+import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
+import { createThemeSource, findThemeFile } from '../theme/themes.ts';
+import type { ThemeColors, ThemeSource } from '../theme/themes.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import { readCitedStart } from '../webmention/cited-start.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';

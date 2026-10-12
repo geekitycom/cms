@@ -1,10 +1,10 @@
 import type { Hono } from 'hono';
 
-import { clientAddress } from '../admin/throttle.ts';
-import type { GeekityEnv } from '../env.ts';
+import { clientAddress } from '../web/throttle.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
-import { publicDocumentAt } from '../web/documents.ts';
+import { publicDocumentAt } from '../content/permalinks.ts';
 import { checkWebmentionRequest } from './receive.ts';
 import { postSyndicatedAt, syndicationCopies } from './syndication.ts';
 

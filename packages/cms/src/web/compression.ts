@@ -3,8 +3,7 @@ import { brotliCompress, constants, gzip } from 'node:zlib';
 
 import type { MiddlewareHandler } from 'hono';
 
-import { ADMIN_ASSET_PREFIX } from '../admin/assets.ts';
-import { ADMIN_PREFIX } from '../admin/session.ts';
+import { ADMIN_ASSET_PREFIX, ADMIN_PREFIX } from '../site/admin-paths.ts';
 
 /**
  * Below this many bytes a response goes out as it is: the saving is smaller

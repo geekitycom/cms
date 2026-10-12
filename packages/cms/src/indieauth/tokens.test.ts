@@ -9,7 +9,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
-import { createUser, deleteUser } from '../site/users.ts';
+import { createUser } from '../site/users.ts';
+import { deleteUser } from '../admin/users.ts';
 import type { AuthorizationCode } from './grants.ts';
 import {
   ACCESS_TOKEN_LIFETIME_MS,

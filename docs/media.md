@@ -110,7 +110,7 @@ the source of truth (decision-9) and the server reads it on each request, so an
 entry written by hand appears without a restart. The editor's publish check and
 the federated `Image` attachments read alt text through
 `readAltTexts(contentDir)` and `undescribedImages(html, library)` in
-`src/images/alt-text.ts`.
+`src/content/alt-text.ts`.
 
 ### Location and camera metadata
 

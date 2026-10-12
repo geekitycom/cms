@@ -18,4 +18,3 @@ export type {
   AvatarService,
   CreateAvatarServiceOptions,
 } from './avatars.ts';
-export { mountAvatars } from './routes.ts';

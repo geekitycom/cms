@@ -3,7 +3,14 @@ import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
 
 import type { Document } from './document.ts';
-import { commentPageHref, feedGuid, postObjectId, repliesKey } from './guids.ts';
+import {
+  commentPageHref,
+  feedGuid,
+  isKey,
+  postObjectId,
+  repliesKey,
+  webmentionKey,
+} from './guids.ts';
 
 const BASE = 'https://example.com/blog/';
 
@@ -80,5 +87,42 @@ describe('repliesKey', () => {
 describe('commentPageHref', () => {
   it('is the comment’s own page under /comment/', () => {
     assert.equal(commentPageHref('0123456789abcdef'), '/comment/0123456789abcdef/');
+  });
+});
+
+describe('webmentionKey', () => {
+  it('is the replies key of the source and the post it was sent to', () => {
+    assert.equal(
+      webmentionKey('https://other.example/note', '/2026/09/hello/'),
+      repliesKey('https://other.example/note /2026/09/hello/'),
+    );
+  });
+
+  it('tells apart one source mentioning two posts', () => {
+    const source = 'https://other.example/note';
+    assert.notEqual(webmentionKey(source, '/a/'), webmentionKey(source, '/b/'));
+  });
+
+  it('is undefined for a webmention with no source', () => {
+    assert.equal(webmentionKey(null, '/a/'), undefined);
+    assert.equal(webmentionKey('', '/a/'), undefined);
+  });
+});
+
+describe('isKey', () => {
+  it('accepts sixteen lowercase hex digits', () => {
+    assert.equal(isKey(repliesKey('anything')), true);
+  });
+
+  it('refuses anything else', () => {
+    for (const value of [
+      '',
+      'ABCDEF0123456789',
+      '0123456789abcde',
+      '0123456789abcdef0',
+      'g123456789abcdef',
+    ]) {
+      assert.equal(isKey(value), false, value);
+    }
   });
 });

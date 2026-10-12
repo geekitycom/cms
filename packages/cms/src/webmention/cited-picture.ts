@@ -14,7 +14,7 @@ import { generateImageVariants, removeImageVariants } from '../images/variants.t
 import type { ImageConfig } from '../images/variants.ts';
 import { messageOf } from '../util/errors.ts';
 import { fetchPublic } from './fetch-public.ts';
-import type { HostLookup } from './public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import type { ReplyContext } from './reply-context.ts';
 
 /** `photo` when the cited page is the picture (an oEmbed photo), else a `thumbnail` of it. */

@@ -7,7 +7,7 @@ import { commenterOf } from '../comments/viewer.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import type { Document } from '../content/document.ts';
 import { isListed } from '../content/served.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from './env.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { pingbackEndpointFor } from '../webmention/pingback.ts';

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { Document } from './document.ts';
-import { hiddenReason, isGone, isListed, isServed } from './served.ts';
+import { hiddenReason, isFederatedDocument, isGone, isListed, isServed } from './served.ts';
 
 const NOW = new Date('2026-09-02T10:00:00.000Z');
 
@@ -64,5 +64,17 @@ describe('isGone', () => {
       false,
     );
     assert.equal(isGone(post(), NOW), false);
+  });
+});
+
+describe('which documents federate', () => {
+  it('is a served post', () => {
+    assert.equal(isFederatedDocument(post(), NOW), true);
+  });
+
+  it('is never a page, a draft or a post whose date has not come', () => {
+    assert.equal(isFederatedDocument(post({ type: 'page' }), NOW), false);
+    assert.equal(isFederatedDocument(post({ draft: true }), NOW), false);
+    assert.equal(isFederatedDocument(post({ date: '2026-12-01T00:00:00.000Z' }), NOW), false);
   });
 });

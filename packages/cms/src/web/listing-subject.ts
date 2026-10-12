@@ -1,15 +1,17 @@
 import type { Document } from '../content/document.ts';
 import type { ListOptions } from '../content/store.ts';
-import { authorFeedHref, authorHref, profileContext } from './authors.ts';
-import type { AuthorContext } from './authors.ts';
-import type { SiteData } from './context.ts';
+import { authorFeedHref } from './feed-source.ts';
+import { authorHref } from '../content/authors.ts';
+import { profileContext } from '../site/authors.ts';
+import type { AuthorContext } from '../site/authors.ts';
+import type { SiteData } from '../theme/site-data.ts';
 import { feedPathUnder } from './feeds.ts';
 import type { FeedFormat } from './feeds.ts';
 import { TEMPLATES } from './render.ts';
 import type { Listing } from './render.ts';
 import type { AuthorListing, FrontPages, SiteView } from './site-view.ts';
-import { PAGE_SEGMENT, termHref } from './taxonomy.ts';
-import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
+import { PAGE_SEGMENT, termHref } from '../content/taxonomy.ts';
+import type { TaxonomyBases, TaxonomyTerm } from '../content/taxonomy.ts';
 
 export type ListingSubject =
   | { kind: 'home'; postsPage: Document | undefined }

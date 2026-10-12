@@ -1,4 +1,4 @@
-import { siteAuthorName } from './authors.ts';
+import { siteAuthorName } from '../site/authors.ts';
 import { feedItems } from './feed-item.ts';
 import type { FeedItem } from './feed-item.ts';
 import { feedLanguage, notifyServerOf } from './feed-source.ts';

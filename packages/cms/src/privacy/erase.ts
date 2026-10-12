@@ -1,4 +1,4 @@
-import type { CommentRecord } from '../admin/store.ts';
+import type { CommentRecord } from '../store/admin-store.ts';
 import { commentSlugs, readComments, rewriteComments } from '../comments/records.ts';
 import type { CommentRecords } from '../comments/records.ts';
 import { deleteContactMessage, listContactMessages } from '../contact/records.ts';

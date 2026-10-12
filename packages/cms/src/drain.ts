@@ -12,7 +12,7 @@
 
 import type { Context, MiddlewareHandler } from 'hono';
 
-import type { GeekityEnv } from './env.ts';
+import type { GeekityEnv } from './web/env.ts';
 import { WritesRefusedError } from './files/atomic.ts';
 
 /** How long a refused client is asked to wait: about as long as a worker takes to boot. */

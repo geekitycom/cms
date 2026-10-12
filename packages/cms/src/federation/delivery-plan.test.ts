@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { Like, Person } from '@fedify/vocab';
 
-import type { Follower, Relay } from '../admin/store.ts';
+import type { Follower, Relay } from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import {

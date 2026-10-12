@@ -10,7 +10,7 @@ import { jpegWithMetadata } from '../__testing__/metadata.ts';
 import { FIRST_ADMIN, sandbox } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import type { Cms } from '../index.ts';
-import type { HostLookup } from '../webmention/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 
 const box = sandbox();
 

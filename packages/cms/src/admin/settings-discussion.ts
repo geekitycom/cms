@@ -15,7 +15,7 @@ import {
   writeAkismetKey,
 } from '../comments/akismet.ts';
 import type { AkismetKeyRecord } from '../comments/akismet.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';

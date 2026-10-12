@@ -1,18 +1,19 @@
 import { Hono } from 'hono';
 
 import { createAccessLog } from '../access-log.ts';
+import { publicAdminBar } from '../admin/admin-bar.ts';
 import { baselineSecurityHeaders, mountAdmin } from '../admin/index.ts';
 import { createWriteGate } from '../drain.ts';
 import type { WriteGate } from '../drain.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { mountFederation } from '../federation/index.ts';
-import { mountAuthorizationEndpoint } from '../indieauth/consent.ts';
-import { mountIndieAuthDiscovery } from '../indieauth/discovery.ts';
-import { mountTokenEndpoint, mountTokenInfoEndpoints } from '../indieauth/token.ts';
+import { mountAuthorizationEndpoint } from '../admin/indieauth-consent.ts';
+import { mountIndieAuthDiscovery } from '../web/indieauth-discovery.ts';
+import { mountTokenEndpoint, mountTokenInfoEndpoints } from '../web/indieauth-token.ts';
 import { mountMicropub } from '../micropub/endpoint.ts';
 import { mountMicropubMedia } from '../micropub/media.ts';
-import { pluginFederation } from '../plugins/federation.ts';
-import { mountPluginRoutes, pluginLifecycle } from '../plugins/mount.ts';
+import { pluginFederation } from '../web/plugin-federation.ts';
+import { mountPluginRoutes, pluginLifecycle } from '../web/plugin-routes.ts';
 import { leavingWriteGate } from '../supervisor/supervision.ts';
 import type { Supervision } from '../supervisor/supervision.ts';
 import { compression } from '../web/compression.ts';
@@ -22,8 +23,8 @@ import {
   mountPublicSite,
   mountWellKnown,
   redirectBy,
-  serverError,
 } from '../web/index.ts';
+import { serverError } from './server-error.ts';
 import type { Booted } from './boot.ts';
 import type { Services } from './services.ts';
 
@@ -148,6 +149,9 @@ export function createApp(
   // The admin goes on before the public site, for the same reason.
   mountAdmin(app);
   mountPluginRoutes(app, plugins);
+  // Before the public site, so every page it draws, the 404 and the 500
+  // included, knows whether a signed-in user is reading it (TASK-183).
+  app.use('*', publicAdminBar);
   mountPublicSite(app);
 
   return { app, writes };

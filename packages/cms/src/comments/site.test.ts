@@ -12,7 +12,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';
 import { COMMENT_FIELDS, MINIMUM_SUBMIT_SECONDS } from './submission.ts';
-import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
+import type { CommentChecker, CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { commentEmailsFile, commentsFile, updateComment } from './records.ts';
 

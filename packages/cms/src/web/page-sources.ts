@@ -13,8 +13,8 @@ import {
   syndicationCopies,
   syndicationTargetsReader,
 } from '../webmention/syndication.ts';
-import { frontPageSlugs } from './context.ts';
-import type { SiteDataSource } from './context.ts';
+import { frontPageSlugs } from '../theme/site-data.ts';
+import type { SiteDataSource } from '../theme/site-data.ts';
 import type { CreateRendererOptions } from './render.ts';
 
 export interface PageSourcesOptions {

@@ -10,8 +10,8 @@ import {
   REDACTED_FIELDS,
   rsvpField,
   viaField,
-} from '../admin/store.ts';
-import type { AdminStore, CommentRecord, PostComment } from '../admin/store.ts';
+} from '../store/admin-store.ts';
+import type { AdminStore, CommentRecord, PostComment } from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
 import { slugForPermalink } from '../content/parser.ts';
 import { rsvpValue } from '../content/rsvp.ts';
@@ -20,7 +20,7 @@ import type { ContentStore } from '../content/store.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { isRecord } from '../util/guards.ts';
-import { isKey } from '../web/feed-source.ts';
+import { isKey } from '../content/guids.ts';
 
 /**
  * Native comments as the files that hold them.

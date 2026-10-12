@@ -27,7 +27,7 @@
 
 import type { Context, Hono } from 'hono';
 
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import {
@@ -35,13 +35,13 @@ import {
   menuItemsFromText,
   menuItemsText,
   menuNameProblem,
-} from '../web/navigation.ts';
-import type { NavigationMenus } from '../web/navigation.ts';
-import { chooseTheme, PACKAGED_THEME_DIR, readTheme } from '../web/themes.ts';
-import type { Theme, ThemeArea } from '../web/themes.ts';
+} from '../site/navigation.ts';
+import type { NavigationMenus } from '../site/navigation.ts';
+import { chooseTheme, PACKAGED_THEME_DIR, readTheme } from '../theme/themes.ts';
+import type { Theme, ThemeArea } from '../theme/themes.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**

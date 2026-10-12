@@ -1,5 +1,5 @@
-import type { AdminStore, CommentRecord, RedactedField } from '../admin/store.ts';
-import { REDACTED_FIELDS } from '../admin/store.ts';
+import type { AdminStore, CommentRecord, RedactedField } from '../store/admin-store.ts';
+import { REDACTED_FIELDS } from '../store/admin-store.ts';
 import { commentSlugs, rewriteComments } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import {
@@ -14,8 +14,8 @@ import { retentionPolicyOf } from '../site/settings.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
-import { outlived } from './policy.ts';
-import type { RetentionPolicy } from './policy.ts';
+import { outlived } from '../site/retention-policy.ts';
+import type { RetentionPolicy } from '../site/retention-policy.ts';
 
 /**
  * The retention sweep (TASK-135): what removes the personal data a site has

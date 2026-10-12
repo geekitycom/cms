@@ -4,7 +4,7 @@ import { postLabel } from '../content/post-type.ts';
 import { isModerationAction, moderateComment } from '../comments/moderate.ts';
 import { writeReplyPost } from '../comments/reply-post.ts';
 import type { CommentRecords } from '../comments/records.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { pageCount } from '../web/pagination.ts';
@@ -12,9 +12,9 @@ import { documentEditorPath, documentSite, PAGE_SCREENS, POST_SCREENS } from './
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
-import { ADMIN_PREFIX } from './session.ts';
-import { COMMENT_STATUSES } from './store.ts';
-import type { AdminStore, CommentStatus, PostComment } from './store.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
+import { COMMENT_STATUSES } from '../store/admin-store.ts';
+import type { AdminStore, CommentStatus, PostComment } from '../store/admin-store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**

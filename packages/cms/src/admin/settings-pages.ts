@@ -21,7 +21,7 @@
 
 import type { Hono } from 'hono';
 
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { DISCUSSION_SETTINGS } from './settings-discussion.ts';
 import { EMAIL_SETTINGS } from './settings-email.ts';
 import { FEDERATION_SETTINGS } from './settings-federation.ts';

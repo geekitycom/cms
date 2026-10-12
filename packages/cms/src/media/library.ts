@@ -5,8 +5,8 @@ import path from 'node:path';
 import { UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import type { UploadKind } from '../content/media.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';
-import { readAltTexts, writeAltText } from '../images/alt-text.ts';
-import type { AltText } from '../images/alt-text.ts';
+import { readAltTexts, writeAltText } from '../content/alt-text.ts';
+import type { AltText } from '../content/alt-text.ts';
 import { CITED_PICTURE_DIRECTORY } from '../webmention/cited-picture.ts';
 import { uploadMarkdown } from './uploads.ts';
 

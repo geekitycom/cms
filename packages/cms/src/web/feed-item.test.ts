@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { Document } from '../content/document.ts';
 import type { User } from '../site/users.ts';
-import type { SiteData } from './context.ts';
+import type { SiteData } from '../theme/site-data.ts';
 import { FEED_ITEM_REVISION, feedItem, feedItems } from './feed-item.ts';
 import type { FeedItemContext } from './feed-item.ts';
 

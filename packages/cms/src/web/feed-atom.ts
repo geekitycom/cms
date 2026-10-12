@@ -1,6 +1,6 @@
 import { absoluteUrl } from '../util/url.ts';
-import { siteAuthorName } from './authors.ts';
-import type { SiteData } from './context.ts';
+import { siteAuthorName } from '../site/authors.ts';
+import type { SiteData } from '../theme/site-data.ts';
 import { feedItems } from './feed-item.ts';
 import type { FeedItem } from './feed-item.ts';
 import {
@@ -21,8 +21,8 @@ import {
   SOURCE_NAMESPACE,
   THR_NAMESPACE,
 } from './feed-xml.ts';
-import { resolveLicense } from './license.ts';
-import type { ContentLicense } from './license.ts';
+import { resolveLicense } from '../content/license.ts';
+import type { ContentLicense } from '../content/license.ts';
 import { latestModified } from './negotiate.ts';
 
 /**

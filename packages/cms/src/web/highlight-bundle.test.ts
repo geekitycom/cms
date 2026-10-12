@@ -23,7 +23,7 @@ import { describe, it } from 'node:test';
 import { runInNewContext } from 'node:vm';
 
 import { renderMarkdown } from '../content/markdown.ts';
-import { PACKAGED_THEME_DIR } from './themes.ts';
+import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 
 const BUNDLE = path.join(PACKAGED_THEME_DIR, 'static', 'highlight.js');
 

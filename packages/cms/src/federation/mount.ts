@@ -3,20 +3,20 @@ import { federation as federationMiddleware } from '@fedify/hono';
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
 import type { Document } from '../content/document.ts';
-import { isGone } from '../content/served.ts';
+import { isGone, isFederatedDocument } from '../content/served.ts';
 import { isTrashedPath } from '../content/store.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { authorHref, parseAuthorPath } from '../web/authors.ts';
-import { goneDocumentAt, publicDocumentAt } from '../web/documents.ts';
+import { authorHref, parseAuthorPath, accountOf } from '../content/authors.ts';
+import { goneDocumentAt, publicDocumentAt } from '../content/permalinks.ts';
 import { prefersActivityStreams } from '../web/negotiate.ts';
 import { notFound, requestPath } from '../web/request.ts';
 import { actorAliases, actorId, userActor } from './actor.ts';
-import { isFederatedDocument, postObject, postTombstone } from './article.ts';
+import { postObject, postTombstone } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
-import { accountOf, handleHref } from './paths.ts';
+import { handleHref } from './paths.ts';
 
 /**
  * Put Fedify in front of the rest of the app.

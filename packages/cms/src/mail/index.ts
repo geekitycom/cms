@@ -14,26 +14,10 @@ export { MAIL_PROVIDERS } from './provider.ts';
 export type {
   MailAddress,
   MailDelivery,
+  MailLogger,
   MailProvider,
   MailProviderName,
   OutgoingMail,
 } from './provider.ts';
-export { createMailService, DEFAULT_MAIL_ATTEMPTS, defaultMailBackoffMs } from './service.ts';
-export type {
-  CreateMailServiceOptions,
-  MailLogger,
-  MailRecipient,
-  MailResult,
-  MailService,
-  RawMail,
-  TemplateMail,
-} from './service.ts';
 export { createSmtpProvider, SMTP_TIMEOUT_MS } from './smtp.ts';
 export type { SmtpProviderOptions } from './smtp.ts';
-export { createMailTemplates, mailTemplateFiles } from './templates.ts';
-export type {
-  CreateMailTemplatesOptions,
-  MailTemplateFiles,
-  MailTemplates,
-  RenderedMail,
-} from './templates.ts';

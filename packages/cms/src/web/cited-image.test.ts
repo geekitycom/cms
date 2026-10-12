@@ -6,7 +6,7 @@ import { after, before, describe, it } from 'node:test';
 import { leakedSecrets, pngWithMetadata } from '../__testing__/metadata.ts';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import type { HostLookup } from '../webmention/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 
 const box = sandbox();
 

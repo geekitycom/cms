@@ -8,8 +8,8 @@ import { csrfField, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { createUser } from '../site/users.ts';
-import type { HostLookup } from '../webmention/public-address.ts';
-import { readActivityLog } from './activity-log.ts';
+import type { HostLookup } from '../util/public-address.ts';
+import { readActivityLog } from '../web/indieauth-activity-log.ts';
 
 const box = sandbox();
 

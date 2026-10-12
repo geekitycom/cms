@@ -1,5 +1,6 @@
 import { COMMENTS_FRONT_MATTER_KEY } from '../content/comments.ts';
 import type { Document } from '../content/document.ts';
+import { DEFAULT_COMMENTS_CLOSE_AFTER_DAYS } from '../site/settings.ts';
 
 /**
  * When a post is taking comments, and when it has stopped.
@@ -10,13 +11,6 @@ import type { Document } from '../content/document.ts';
  * submission can never disagree about whether a post is open, which is the
  * only way a comment form can lie to somebody who has just typed a paragraph.
  */
-
-/**
- * How long a post takes comments for, in days, before this is decided
- * otherwise. WordPress's own default, and the age at which a post stops being
- * a conversation and starts being a spam target.
- */
-export const DEFAULT_COMMENTS_CLOSE_AFTER_DAYS = 14;
 
 /** The site's half of the decision: the two settings that apply to every post. */
 export interface CommentPolicy {

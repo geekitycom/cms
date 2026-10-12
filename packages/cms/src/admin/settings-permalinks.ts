@@ -11,7 +11,7 @@
  * which URLs they are about.
  */
 
-import { TAXONOMY_LABELS } from '../web/taxonomy.ts';
+import { TAXONOMY_LABELS } from '../content/taxonomy.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';

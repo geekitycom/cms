@@ -25,7 +25,7 @@ import { MESSAGES_PATH } from './messages.ts';
 import { NAVIGATION_PATH } from './navigation.ts';
 import { PLUGINS_CHILD, PLUGINS_PATH, PLUGINS_SECTION } from './plugins.ts';
 import { settingsPagePath } from './settings-page.ts';
-import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_PREFIX, USERS_PATH } from '../site/admin-paths.ts';
 import { SYNDICATION_TARGETS_CHILD, SYNDICATION_TARGETS_PATH } from './syndication-targets.ts';
 import { CATEGORY_KIND, TAG_KIND } from './taxonomy.ts';
 import { DEV_MODE_CHILD, DEV_MODE_PATH } from './dev-mode.ts';
@@ -37,7 +37,6 @@ import {
   APP_ACTIVITY_PATH,
   CONNECTED_APPS_CHILD,
   CONNECTED_APPS_PATH,
-  USERS_PATH,
 } from './users.ts';
 
 /** One screen under a section, as the menu lists it. */

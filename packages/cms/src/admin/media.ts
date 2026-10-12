@@ -9,9 +9,9 @@ import { postLabel } from '../content/post-type.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { ContentStore } from '../content/store.ts';
 import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
-import type { GeekityEnv } from '../env.ts';
-import { writeAltText } from '../images/alt-text.ts';
-import type { AltText } from '../images/alt-text.ts';
+import type { GeekityEnv } from '../web/env.ts';
+import { writeAltText } from '../content/alt-text.ts';
+import type { AltText } from '../content/alt-text.ts';
 import { removeImageVariants } from '../images/variants.ts';
 import { deleteUpload, listUploads, mentionsUpload, resolveUpload } from '../media/library.ts';
 import type { RemoveDerived } from '../media/library.ts';
@@ -22,7 +22,7 @@ import { pageCount } from '../web/pagination.ts';
 import { documentEditorPath, PAGE_SCREENS, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /** Where the media screen lives. */

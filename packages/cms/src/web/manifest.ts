@@ -4,7 +4,7 @@ import type { ImageConfig } from '../images/paths.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
-import type { ThemeColors } from './themes.ts';
+import type { ThemeColors } from '../theme/themes.ts';
 
 /**
  * The web app manifest (TASK-147): what a browser reads before it offers to

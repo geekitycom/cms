@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 
-import { PACKAGED_THEME_DIR } from './themes.ts';
+import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 
 const STYLESHEET = path.join(PACKAGED_THEME_DIR, 'static', 'style.css');
 

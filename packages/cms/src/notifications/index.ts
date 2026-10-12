@@ -56,13 +56,12 @@ export {
   notificationWanted,
   withNotification,
   withNotificationMode,
-} from './preferences.ts';
+} from '../site/notification-preferences.ts';
 export type {
   NotificationDeliveryMode,
   NotificationEvent,
   NotificationSwitch,
-} from './preferences.ts';
-export { mountNotificationLinks } from './routes.ts';
+} from '../site/notification-preferences.ts';
 export {
   NOTIFICATION_SECRET_FILE,
   notificationTokenExpiry,
@@ -70,3 +69,19 @@ export {
   signNotificationToken,
 } from './tokens.ts';
 export type { NewNotificationToken, NotificationClaim } from './tokens.ts';
+export { createMailService, DEFAULT_MAIL_ATTEMPTS, defaultMailBackoffMs } from './mail-service.ts';
+export type {
+  CreateMailServiceOptions,
+  MailRecipient,
+  MailResult,
+  MailService,
+  RawMail,
+  TemplateMail,
+} from './mail-service.ts';
+export { createMailTemplates, mailTemplateFiles } from './mail-templates.ts';
+export type {
+  CreateMailTemplatesOptions,
+  MailTemplateFiles,
+  MailTemplates,
+  RenderedMail,
+} from './mail-templates.ts';
