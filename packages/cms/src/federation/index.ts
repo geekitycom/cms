@@ -13,7 +13,6 @@ export type { UserActorOptions } from './actor.ts';
 export {
   articleObjectId,
   documentAuthor,
-  isFederatedDocument,
   postCreateActivity,
   postDeleteActivity,
   postObject,
@@ -21,6 +20,7 @@ export {
   SOURCE_MEDIA_TYPE,
   toInstant,
 } from './article.ts';
+export { isFederatedDocument } from '../content/served.ts';
 export { createDeliveryService, deliveryTargets } from './delivery.ts';
 export type {
   CreateDeliveryServiceOptions,
@@ -88,8 +88,7 @@ export {
   userDirectory,
 } from './records.ts';
 export type { FederationIndexReport, FederationRecords, InboxLine } from './records.ts';
-export { acctOf, mountFederation, webFingerSubject, WEBFINGER_PATH } from './mount.ts';
-export type { MountFederationOptions } from './mount.ts';
+export { acctOf, WEBFINGER_PATH } from './webfinger.ts';
 export {
   ACTOR_PATH,
   createActivityId,
@@ -132,5 +131,10 @@ export type {
   ActorProfileService,
   CreateActorProfileServiceOptions,
 } from './profiles.ts';
-export { actorHandle, replyFrom, replyTargetOf, REPLY_ACTIVITY_TYPE } from './replies.ts';
-export type { Reply } from './replies.ts';
+export {
+  actorHandle,
+  replyFrom,
+  replyTargetOf,
+  REPLY_ACTIVITY_TYPE,
+} from '../store/inbox-replies.ts';
+export type { Reply } from '../store/inbox-replies.ts';

@@ -37,9 +37,9 @@ import { placeWordList, shareLocation } from '../content/location.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { postLocations } from '../content/locations.ts';
 import { canonicalType, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
-import { readAltTexts } from '../images/alt-text.ts';
-import { imagesIn } from '../images/markup.ts';
-import type { ContentStore } from '../content/store.ts';
+import { readAltTexts } from '../content/alt-text.ts';
+import { imagesIn } from '../content/image-tags.ts';
+import type { DocumentLookup } from '../content/store.ts';
 import { postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
@@ -52,12 +52,11 @@ import type { User } from '../site/users.ts';
 import { escapeAttribute, escapeText } from '../util/html.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { userForAuthor } from '../content/authors.ts';
-import { isServed } from '../content/served.ts';
-import { permalinkOfObjectId } from '../web/documents.ts';
+import { permalinkOfObjectId } from '../content/permalinks.ts';
 import { postObjectId } from '../content/guids.ts';
-import { feedExcerpt } from '../web/feed-item.ts';
-import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../web/locale.ts';
-import { categoryHref, tagHref } from '../web/taxonomy.ts';
+import { feedExcerpt } from '../content/excerpt.ts';
+import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../content/locale.ts';
+import { categoryHref, tagHref } from '../content/taxonomy.ts';
 import { actorId } from './actor.ts';
 import type { CitedObject } from './citations.ts';
 import type { FederationContextData } from './federation.ts';
@@ -165,19 +164,6 @@ function mentions(
 export const SOURCE_MEDIA_TYPE = 'text/markdown';
 
 /**
- * Whether a document is one of the objects this site federates.
- *
- * doc-4 federates published posts and nothing else: pages are standing
- * content with no place in a timeline, and a draft, a trashed post or one
- * whose date has not arrived is not public at all. This is the one rule, so
- * the object dispatcher, the outbox and the permalink all agree about what
- * exists.
- */
-export function isFederatedDocument(document: Document, now: Date = new Date()): boolean {
-  return document.type === 'post' && isServed(document, now);
-}
-
-/**
  * The post an ActivityStreams object id names, federated or not.
  *
  * Either the post whose file stores that id, or the one at the permalink the
@@ -185,7 +171,7 @@ export function isFederatedDocument(document: Document, now: Date = new Date()):
  * migrated post is not found a second time under its permalink.
  */
 export function postByObjectId(
-  store: ContentStore,
+  store: DocumentLookup,
   objectId: string,
   baseUrl: string,
 ): Document | undefined {
@@ -691,7 +677,7 @@ export type PinChange = 'pin' | 'unpin';
  *
  * A thin wrapper over {@link postObjectId} so everything in this module reads
  * the id the same way and off the same base URL the object's `url` is built
- * on. The rule itself lives in `web/documents.ts`, because the page, the feed
+ * on. The rule itself lives in `content/permalinks.ts`, because the page, the feed
  * item and the object are one identity now rather than three.
  */
 export function articleObjectId(context: Context<FederationContextData>, document: Document): URL {

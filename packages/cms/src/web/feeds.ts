@@ -2,8 +2,8 @@ import { citationsOf } from '../content/citation.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
 import { replyTarget } from '../content/post-type.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { authorName, siteAuthorName } from './authors.ts';
-import type { SiteData } from './context.ts';
+import { authorName, siteAuthorName } from '../site/authors.ts';
+import type { SiteData } from '../theme/site-data.ts';
 import { atomFeed } from './feed-atom.ts';
 import { FEED_ITEM_REVISION } from './feed-item.ts';
 import { jsonFeed } from './feed-json.ts';
@@ -12,7 +12,7 @@ import { FEED_CONTENT_TYPES, feedCadence, feedLanguage, notifyServerOf } from '.
 import type { CommentFeedSource, FeedFormat, FeedIdentity, FeedSource } from './feed-source.ts';
 import { contentEtag, isNotModified, latestModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
-import { resolveLicense } from './license.ts';
+import { resolveLicense } from '../content/license.ts';
 
 const COMMENTS_FEED_REVISION = 4;
 
@@ -35,7 +35,6 @@ export {
   contentTypeOf,
   DEFAULT_FEED_LANGUAGE,
   DEFAULT_FEED_SIZE,
-  DEFAULT_NOTIFY_SERVER,
   EMPTY_FEED_UPDATED,
   FEED_ALIASES,
   FEED_CONTENT_TYPES,
@@ -67,14 +66,8 @@ export type {
   NotifyServer,
 } from './feed-source.ts';
 
-export {
-  EXCERPT_WORDS,
-  excerptFromHtml,
-  FEED_ITEM_REVISION,
-  feedExcerpt,
-  feedItem,
-  feedItems,
-} from './feed-item.ts';
+export { EXCERPT_WORDS, excerptFromHtml, feedExcerpt } from '../content/excerpt.ts';
+export { FEED_ITEM_REVISION, feedItem, feedItems } from './feed-item.ts';
 export type { FeedItem, FeedItemComments, FeedItemContext } from './feed-item.ts';
 
 export {

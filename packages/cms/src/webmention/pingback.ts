@@ -1,15 +1,7 @@
-import type { Context, Hono } from 'hono';
-
-import { clientAddress } from '../admin/throttle.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { Document } from '../content/document.ts';
-import type { GeekityEnv } from '../env.ts';
-import { readSiteSettings } from '../site/site-json.ts';
-import { publicDocumentAt } from '../web/documents.ts';
-import { escapeXml } from '../web/feed-xml.ts';
-import { checkWebmentionRequest } from './receive.ts';
 import type { RequestProblem, WebmentionOutcome } from './receive.ts';
-import { webmentionEndpointFor } from './routes.ts';
+import { webmentionEndpointFor } from './endpoint.ts';
 
 /**
  * Pingback 1.0, which is how most WordPress sites say they linked here.
@@ -44,12 +36,12 @@ export const PINGBACK_FAULTS = {
   badParams: -32602,
 } as const;
 
-interface Fault {
+export interface PingbackFault {
   readonly code: number;
   readonly message: string;
 }
 
-const REQUEST_FAULTS: Record<RequestProblem, number> = {
+export const PINGBACK_REQUEST_FAULTS: Record<RequestProblem, number> = {
   source: PINGBACK_FAULTS.sourceMissing,
   target: PINGBACK_FAULTS.targetMissing,
   elsewhere: PINGBACK_FAULTS.notATarget,
@@ -71,69 +63,7 @@ export function pingbackEndpointFor(
   return answerable(document, commentPolicyOf(site), now) ? PINGBACK_PATH : undefined;
 }
 
-/** Register the pingback endpoint. Mounted by the public site. */
-export function mountPingbacks(app: Hono<GeekityEnv>): void {
-  app.post(PINGBACK_PATH, async (c) => {
-    if (!readSiteSettings(c.var.config.contentDir).webmentionsReceive) {
-      return c.text('This site does not take pingbacks.', 404);
-    }
-
-    const answer = await answerPing(c);
-    return c.body(typeof answer === 'string' ? success(answer) : fault(answer), 200, {
-      'content-type': 'text/xml; charset=utf-8',
-    });
-  });
-
-  app.get(PINGBACK_PATH, (c) => {
-    c.header('allow', 'POST');
-    return c.text('Send a pingback here as an XML-RPC pingback.ping POST.', 405);
-  });
-}
-
-async function answerPing(c: Context<GeekityEnv>): Promise<string | Fault> {
-  const { store, config, webmentions, renderer, conversation } = c.var;
-
-  const xml = await readBounded(c.req.raw, PINGBACK_MAX_BYTES);
-  if (xml === undefined) {
-    return { code: PINGBACK_FAULTS.notWellFormed, message: 'The call is too large.' };
-  }
-
-  const call = readMethodCall(xml);
-  if ('code' in call) return call;
-  if (call.method !== 'pingback.ping') {
-    return { code: PINGBACK_FAULTS.unknownMethod, message: 'Only pingback.ping is served here.' };
-  }
-  const [source, target] = call.params;
-  if (call.params.length !== 2 || source === undefined || target === undefined) {
-    return {
-      code: PINGBACK_FAULTS.badParams,
-      message: 'pingback.ping takes a source and a target.',
-    };
-  }
-
-  const checked = checkWebmentionRequest(source, target, {
-    baseUrl: config.baseUrl,
-    documentAt: (pathname) => publicDocumentAt(store, pathname),
-    conversation,
-  });
-  if (!checked.ok) return { code: REQUEST_FAULTS[checked.problem], message: checked.message };
-
-  if (pingbackEndpointFor(renderer.site(), checked.document, config.now()) === undefined) {
-    return { code: PINGBACK_FAULTS.notATarget, message: 'That page takes no pingbacks.' };
-  }
-
-  const outcome = await webmentions.receive({
-    source: checked.source,
-    target: checked.target,
-    document: checked.document,
-    address: clientAddress(c, config),
-    userAgent: c.req.header('user-agent'),
-    referrer: c.req.header('referer'),
-  });
-  return answerFor(outcome);
-}
-
-function answerFor(outcome: WebmentionOutcome): string | Fault {
+export function pingbackAnswerFor(outcome: WebmentionOutcome): string | PingbackFault {
   switch (outcome.kind) {
     case 'stored':
       // The entry has been rewritten from the source as it now reads, exactly
@@ -160,14 +90,14 @@ function answerFor(outcome: WebmentionOutcome): string | Fault {
   }
 }
 
-type MethodCall = { readonly method: string; readonly params: readonly string[] };
+export type PingbackCall = { readonly method: string; readonly params: readonly string[] };
 
 const CALL =
   /^<methodCall>\s*<methodName>([^<]*)<\/methodName>\s*(?:<params>([^]*)<\/params>\s*)?<\/methodCall>$/;
 const PARAM =
   /\s*<param>\s*<value>(?:\s*<string>([^<]*)<\/string>\s*|([^<]*))<\/value>\s*<\/param>\s*/y;
 
-function readMethodCall(xml: string): MethodCall | Fault {
+export function readPingbackCall(xml: string): PingbackCall | PingbackFault {
   const refused = { code: PINGBACK_FAULTS.notWellFormed, message: 'The call is not well formed.' };
 
   const body = xml
@@ -222,41 +152,4 @@ function reference(name: string): string | undefined {
   if (numeric === null) return PREDEFINED[name];
   const point = numeric[1] === undefined ? Number(numeric[2]) : parseInt(numeric[1], 16);
   return point > 0 && point <= 0x10ffff ? String.fromCodePoint(point) : undefined;
-}
-
-async function readBounded(request: Request, max: number): Promise<string | undefined> {
-  if (Number(request.headers.get('content-length') ?? 0) > max) return undefined;
-  if (request.body === null) return '';
-
-  const reader = (request.body as ReadableStream<Uint8Array>).getReader();
-  const decoder = new TextDecoder();
-  let text = '';
-  let read = 0;
-  try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      read += chunk.value.length;
-      if (read > max) return undefined;
-      text += decoder.decode(chunk.value, { stream: true });
-    }
-  } finally {
-    await reader.cancel().catch(() => undefined);
-  }
-  return text + decoder.decode();
-}
-
-function success(message: string): string {
-  return `<?xml version="1.0"?>
-<methodResponse><params><param><value><string>${escapeXml(message)}</string></value></param></params></methodResponse>
-`;
-}
-
-function fault({ code, message }: Fault): string {
-  return `<?xml version="1.0"?>
-<methodResponse><fault><value><struct>
-<member><name>faultCode</name><value><int>${String(code)}</int></value></member>
-<member><name>faultString</name><value><string>${escapeXml(message)}</string></value></member>
-</struct></value></fault></methodResponse>
-`;
 }

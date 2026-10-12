@@ -1,7 +1,7 @@
 import { messageOf } from '../util/errors.ts';
 import { WEBMENTION_USER_AGENT } from './discovery.ts';
-import { publicHost } from './public-address.ts';
-import type { HostLookup } from './public-address.ts';
+import { publicHost } from '../util/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 
 /**
  * One GET of a stranger's URL, with every guard the site puts on reaching out.

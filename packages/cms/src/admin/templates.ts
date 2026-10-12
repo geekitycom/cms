@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 
 import { Environment, FileSystemLoader } from 'nunjucks';
 
-import { formatDate } from '../web/templates.ts';
+import { formatDate } from '../theme/templates.ts';
 
 /**
  * The admin's templates, resolved from this module rather than the working

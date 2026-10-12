@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import sharp from 'sharp';
 
-import type { AdminStore } from '../admin/store.ts';
+import type { AdminStore } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { writeFileAtomically } from '../files/atomic.ts';
 import { findAsset } from '../files/static-files.ts';

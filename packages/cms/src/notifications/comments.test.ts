@@ -5,7 +5,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { COMMENT_FIELDS } from '../comments/submission.ts';
-import type { CommentChecker } from '../comments/submission.ts';
+import type { CommentChecker } from '../forms/checker.ts';
 import { COMMENT_POST_PATH } from '../comments/form.ts';
 import { readComments, rebuildCommentIndexes, updateComment } from '../comments/records.ts';
 import { createCms } from '../index.ts';

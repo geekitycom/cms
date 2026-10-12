@@ -1,22 +1,22 @@
-import { DEFAULT_COMMENTS_CLOSE_AFTER_DAYS } from '../comments/policy.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { LocationSharing } from '../content/location.ts';
 import type { MailProviderName } from '../mail/provider.ts';
-import type { RetentionPolicy } from '../privacy/policy.ts';
-import { DEFAULT_FEED_CADENCE } from '../web/feed-source.ts';
-import type { UpdatePeriod } from '../web/feed-source.ts';
-import { DEFAULT_NOTIFY_SERVER } from '../web/feeds.ts';
-import type { CreativeCommonsKey } from '../web/license.ts';
-import type { NavigationMenus } from '../web/navigation.ts';
-import type {
-  AiCrawlerPolicy,
-  ContentSignal,
-  ContentSignalName,
-  RobotsPolicy,
-} from '../web/robots.ts';
-import { DEFAULT_TAXONOMY_BASES } from '../web/taxonomy.ts';
-import { PACKAGED_THEME } from '../web/themes.ts';
-import type { TaxonomyBases, TaxonomyRedirect } from '../web/taxonomy.ts';
+import type { RetentionPolicy } from './retention-policy.ts';
+import { DEFAULT_FEED_CADENCE, DEFAULT_NOTIFY_SERVER } from './feed-settings.ts';
+import type { UpdatePeriod } from './feed-settings.ts';
+import type { CreativeCommonsKey } from '../content/license.ts';
+import type { NavigationMenus } from './navigation.ts';
+import type { AiCrawlerPolicy, ContentSignal, ContentSignalName, RobotsPolicy } from './robots.ts';
+import { DEFAULT_TAXONOMY_BASES } from '../content/taxonomy.ts';
+import { PACKAGED_THEME } from '../theme/themes.ts';
+import type { TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
+
+/**
+ * How long a post takes comments for, in days, before this is decided
+ * otherwise. WordPress's own default, and the age at which a post stops being
+ * a conversation and starts being a spam target.
+ */
+export const DEFAULT_COMMENTS_CLOSE_AFTER_DAYS = 14;
 
 /**
  * The settings a site holds, as `content/_data/site.json` says them.

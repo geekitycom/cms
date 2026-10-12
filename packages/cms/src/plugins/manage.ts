@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import type { FlashKind } from '../admin/store.ts';
+import type { FlashKind } from '../store/admin-store.ts';
 import { withFileLock } from '../files/atomic.ts';
 import { recordPluginChanges } from './changes.ts';
 import type { PluginChange } from './changes.ts';

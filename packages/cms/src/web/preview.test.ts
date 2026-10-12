@@ -5,7 +5,7 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { sessionCookieName } from '../admin/session.ts';
+import { sessionCookieName } from './session.ts';
 import type { Cms } from '../index.ts';
 
 const BASE_URL = 'https://blog.example';

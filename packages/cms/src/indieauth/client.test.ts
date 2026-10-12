@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import type { HostLookup } from '../webmention/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import { fetchClientInformation, fetchClientLogo, readClientInformation } from './client.ts';
 
 const fetched: string[] = [];

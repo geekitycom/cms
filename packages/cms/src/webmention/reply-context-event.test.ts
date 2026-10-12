@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, describe, it } from 'node:test';
 
-import type { HostLookup } from './public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import { fetchReplyContext } from './reply-context.ts';
 
 const EVENT = 'https://events.example/2026/10/indieweb-camp';

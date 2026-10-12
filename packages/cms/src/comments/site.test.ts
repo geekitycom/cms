@@ -12,7 +12,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';
 import { COMMENT_FIELDS, MINIMUM_SUBMIT_SECONDS } from './submission.ts';
-import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
+import type { CommentChecker, CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { commentEmailsFile, commentsFile, updateComment } from './records.ts';
 
@@ -562,6 +562,32 @@ describe('the spam checker seam', () => {
 
     assert.equal((await submit(cms, submission())).status, 303);
     assert.equal(cms.admin.countCommentsByStatus().pending, 1);
+  });
+});
+
+describe('a submission for a post that is not there', () => {
+  it('is a 404 that says so, for a slug nobody wrote', async () => {
+    const { cms } = await site();
+
+    const response = await submit(cms, submission({ [COMMENT_FIELDS.post]: 'no-such-post' }));
+
+    assert.equal(response.status, 404);
+    assert.equal(await response.text(), 'There is no such post to comment on.');
+    assert.equal(cms.admin.listComments({}).length, 0);
+  });
+
+  it('is a 404 for a draft, which is not served', async () => {
+    const { cms } = await site({
+      'posts/2026-09-19-hello-world.md': POST.replace(
+        '---\n\nWords.',
+        'draft: true\n---\n\nWords.',
+      ),
+    });
+
+    const response = await submit(cms, submission());
+
+    assert.equal(response.status, 404);
+    assert.equal(cms.admin.listComments({}).length, 0);
   });
 });
 

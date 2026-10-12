@@ -4,7 +4,7 @@ import { after, describe, it } from 'node:test';
 import { Hono } from 'hono';
 
 import { createAccessLog } from './access-log.ts';
-import type { GeekityEnv } from './env.ts';
+import type { GeekityEnv } from './web/env.ts';
 import {
   FIRST_ADMIN,
   browser,

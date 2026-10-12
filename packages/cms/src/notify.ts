@@ -3,18 +3,17 @@ import type { Document } from './content/document.ts';
 import { isMigratedArrival } from './content/migrated.ts';
 import { holdOutbound } from './dev-mode.ts';
 import type { DocumentChange } from './content/sync.ts';
-import { isFederatedDocument } from './federation/article.ts';
+import { isFederatedDocument, isListed } from './content/served.ts';
 import { taxonomyBasesFromSettings } from './site/settings.ts';
 import { readSiteSettings } from './site/site-json.ts';
 import { messageOf } from './util/errors.ts';
 import { createSerialQueue } from './util/queue.ts';
 import { absoluteUrl } from './util/url.ts';
-import { isListed } from './content/served.ts';
 import { FEED_FORMATS, notifyEndpoints } from './web/feeds.ts';
 import type { NotifyServer } from './web/feeds.ts';
 import { feedHref } from './web/listing-subject.ts';
-import { TAXONOMIES, termKey } from './web/taxonomy.ts';
-import type { TaxonomyTerm } from './web/taxonomy.ts';
+import { TAXONOMIES, termKey } from './content/taxonomy.ts';
+import type { TaxonomyTerm } from './content/taxonomy.ts';
 
 /**
  * How long one ping is given before it is abandoned.

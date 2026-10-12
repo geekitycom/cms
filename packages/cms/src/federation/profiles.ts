@@ -2,7 +2,7 @@ import type { Context, DocumentLoader } from '@fedify/fedify';
 import { isActor } from '@fedify/vocab';
 import type { Actor, Link } from '@fedify/vocab';
 
-import type { ActorProfile, AdminStore } from '../admin/store.ts';
+import type { ActorProfile, AdminStore } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';

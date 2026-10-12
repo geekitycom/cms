@@ -21,7 +21,7 @@ import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import { createUser, setUserProfile } from '../site/users.ts';
-import { PACKAGED_THEME_DIR } from './themes.ts';
+import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 import type { Cms } from '../index.ts';
 
 const box = sandbox();

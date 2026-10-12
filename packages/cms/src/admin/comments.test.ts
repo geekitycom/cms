@@ -5,7 +5,7 @@ import { after, describe, it } from 'node:test';
 
 import { addComment } from '../comments/records.ts';
 import type { NewComment } from '../comments/records.ts';
-import type { CommentReport } from '../comments/submission.ts';
+import type { CommentReport } from '../forms/checker.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';

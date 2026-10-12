@@ -11,7 +11,8 @@ import type { Document } from './document.ts';
 import { parseRedirects } from './redirects.ts';
 import type { RedirectTable } from './redirects.ts';
 import { isListed, isServed } from './served.ts';
-import { DuplicatePermalinkError, openContentStore } from './store.ts';
+import { openContentStore } from './sqlite/open.ts';
+import { DuplicatePermalinkError } from './store.ts';
 import type { ContentStore } from './store.ts';
 
 const temporaryDirs: string[] = [];
@@ -2144,5 +2145,169 @@ describe('backlinks through the homepage and the site’s redirects (TASK-330)',
     ]);
 
     assert.deepEqual(backlinks(index, other, { redirects: redirects({}) }), []);
+  });
+});
+
+describe('the clock and the connection', () => {
+  it('answers now() from the clock it was opened with', async () => {
+    const at = new Date('2030-01-01T00:00:00Z');
+    const index = openContentStore({ dataDir: await dataDir(), now: () => at });
+    openStores.push(index);
+
+    assert.equal(index.now().toISOString(), at.toISOString());
+  });
+
+  it('can be closed twice', async () => {
+    const index = openContentStore({ dataDir: await dataDir() });
+
+    index.close();
+    index.close();
+  });
+});
+
+describe('getBySlug', () => {
+  it('answers the newest document when two years share a slug', async () => {
+    const index = await store();
+    index.upsertAll([
+      post({
+        path: 'posts/2025-01-01-notes.md',
+        slug: 'notes',
+        permalink: '/2025/01/notes/',
+        title: 'Older',
+        date: '2025-01-01T00:00:00Z',
+      }),
+      post({
+        path: 'posts/2026-01-01-notes.md',
+        slug: 'notes',
+        permalink: '/2026/01/notes/',
+        title: 'Newer',
+        date: '2026-01-01T00:00:00Z',
+      }),
+    ]);
+
+    assert.equal(index.getBySlug('notes')?.title, 'Newer');
+  });
+});
+
+describe('getByStoredObjectId', () => {
+  it('finds the post whose front matter names the whole id, query string included', async () => {
+    const index = await store();
+    index.upsertAll([
+      post({ activitypub: { id: 'https://old.example/?p=813' } }),
+      post({
+        path: 'posts/2026-09-03-plain.md',
+        slug: 'plain',
+        permalink: '/2026/09/plain/',
+        title: 'Plain',
+      }),
+    ]);
+
+    assert.equal(index.getByStoredObjectId('https://old.example/?p=813')?.title, 'Hello, World!');
+    assert.equal(index.getByStoredObjectId('https://old.example/?p=814'), undefined);
+    assert.equal(index.getByStoredObjectId('https://old.example/'), undefined);
+    assert.equal(index.getByStoredObjectId(''), undefined);
+  });
+});
+
+describe('listPinnedByAuthor (TASK-207)', () => {
+  function pinned(slug: string, overrides: Partial<Document>): Document {
+    return post({
+      path: `posts/2026-01-01-${slug}.md`,
+      slug,
+      permalink: `/2026/01/${slug}/`,
+      title: slug,
+      author: 'ada',
+      ...overrides,
+    });
+  }
+
+  it('lists the author’s pinned posts, most recently pinned first', async () => {
+    const index = await store();
+    index.upsertAll([
+      pinned('first-pin', { extra: { pinned: '2026-02-01T00:00:00Z' } }),
+      pinned('second-pin', { extra: { pinned: '2026-03-01T00:00:00Z' } }),
+      pinned('not-pinned', {}),
+      pinned('unpinned', { extra: { pinned: false } }),
+      pinned('draft-pin', { draft: true, extra: { pinned: '2026-04-01T00:00:00Z' } }),
+      pinned('her-pin', { author: 'grace', extra: { pinned: '2026-05-01T00:00:00Z' } }),
+      pinned('future-pin', {
+        date: '2099-01-01T00:00:00Z',
+        extra: { pinned: '2026-06-01T00:00:00Z' },
+      }),
+    ]);
+
+    assert.deepEqual(titles(index.listPinnedByAuthor(['ada'])), ['second-pin', 'first-pin']);
+    assert.deepEqual(titles(index.listPinnedByAuthor(['grace'])), ['her-pin']);
+    assert.deepEqual(index.listPinnedByAuthor([]), []);
+  });
+
+  it('caps the collection at five', async () => {
+    const index = await store();
+    index.upsertAll(
+      [1, 2, 3, 4, 5, 6].map((n) =>
+        pinned(`pin-${n}`, { extra: { pinned: `2026-0${n}-01T00:00:00Z` } }),
+      ),
+    );
+
+    assert.deepEqual(titles(index.listPinnedByAuthor(['ada'])), [
+      'pin-6',
+      'pin-5',
+      'pin-4',
+      'pin-3',
+      'pin-2',
+    ]);
+  });
+});
+
+describe('reply posts (TASK-300)', () => {
+  const TARGET = 'https://elsewhere.example/a';
+
+  function reply(slug: string, date: string, overrides: Partial<Document> = {}): Document {
+    return post({
+      path: `posts/${slug}.md`,
+      slug,
+      permalink: `/${slug}/`,
+      title: slug,
+      date,
+      inReplyTo: TARGET,
+      ...overrides,
+    });
+  }
+
+  async function replies(): Promise<ContentStore> {
+    const index = await store();
+    index.upsertAll([
+      reply('older', '2026-01-01T00:00:00Z'),
+      reply('newer', '2026-02-01T00:00:00Z'),
+      reply('unlisted', '2026-03-01T00:00:00Z', { extra: { visibility: 'unlisted' } }),
+      reply('elsewhere', '2026-04-01T00:00:00Z', { inReplyTo: 'https://elsewhere.example/b' }),
+      reply('draft', '2026-05-01T00:00:00Z', { draft: true }),
+      reply('not-due', '2099-01-01T00:00:00Z'),
+      reply('thrown-away', '2026-06-01T00:00:00Z', { path: '_trash/posts/thrown-away.md' }),
+      reply('page', '2026-07-01T00:00:00Z', { type: 'page' }),
+      post({ path: 'posts/plain.md', slug: 'plain', permalink: '/plain/', title: 'plain' }),
+    ]);
+    return index;
+  }
+
+  it('lists the served posts answering exactly one of the targets, unlisted ones included', async () => {
+    const index = await replies();
+
+    assert.deepEqual(titles(index.listRepliesTo([TARGET])), ['unlisted', 'newer', 'older']);
+    assert.deepEqual(titles(index.listRepliesTo([TARGET, TARGET, 'https://elsewhere.example/b'])), [
+      'elsewhere',
+      'unlisted',
+      'newer',
+      'older',
+    ]);
+    assert.deepEqual(index.listRepliesTo(['https://elsewhere.example/']), []);
+    assert.deepEqual(index.listRepliesTo([]), []);
+  });
+
+  it('lists every served reply post, newest first, a page at a time', async () => {
+    const index = await replies();
+
+    assert.deepEqual(titles(index.listReplyPosts()), ['elsewhere', 'unlisted', 'newer', 'older']);
+    assert.deepEqual(titles(index.listReplyPosts({ limit: 2, offset: 1 })), ['unlisted', 'newer']);
   });
 });

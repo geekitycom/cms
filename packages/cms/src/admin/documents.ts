@@ -31,19 +31,20 @@ import { READ_FIELDS } from '../content/read-form.ts';
 import { RSVP_LABELS, RSVP_VALUES, rsvpValue } from '../content/rsvp.ts';
 import { scheduledFor } from '../content/schedule.ts';
 import { isTrashedPath } from '../content/store.ts';
-import type { ContentStore, ListAllOptions } from '../content/store.ts';
+import type { CatalogReader, DocumentLookup, ListAllOptions } from '../content/store.ts';
 import type { Respelling } from '../content/tags.ts';
 import { zoneLabel } from '../content/time.ts';
 import { moveDocumentFile } from '../content/trash.ts';
 import { isVisibility, visibilityOf } from '../content/visibility.ts';
 import type { StoredVisibility } from '../content/visibility.ts';
 import { missingAltText, writeDocument } from '../content/write.ts';
-import type { Conflict, DocumentSite } from '../content/write.ts';
+import { currentUsername, documentSite } from '../web/document-site.ts';
+import type { Conflict } from '../content/write.ts';
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
-import type { GeekityEnv } from '../env.ts';
-import { readAltTexts } from '../images/alt-text.ts';
+import type { GeekityEnv } from '../web/env.ts';
+import { readAltTexts } from '../content/alt-text.ts';
 import { readSiteSettings } from '../site/site-json.ts';
-import { findUserById, listUsers } from '../site/users.ts';
+import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { userForAuthor } from '../content/authors.ts';
@@ -64,7 +65,7 @@ import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
 import { allowGeolocation } from './headers.ts';
 import { PREVIEW_PATH } from './preview.ts';
-import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { UPLOADS_PATH } from './uploads.ts';
 
@@ -162,7 +163,7 @@ export function documentFilter(value: string | undefined): DocumentFilter {
   return DOCUMENT_FILTERS.includes(value as DocumentFilter) ? (value as DocumentFilter) : 'all';
 }
 
-/** {@link ContentStore.listAll} options for one kind and one filter. */
+/** {@link CatalogReader.listAll} options for one kind and one filter. */
 export function listOptionsFor(kind: DocumentKind, filter: DocumentFilter): ListAllOptions {
   return {
     type: kind.type,
@@ -377,26 +378,6 @@ async function saveFromForm(
   return c.redirect(documentEditorPath(kind, saved), 303);
 }
 
-/**
- * The write path as one request reaches it, writing as `writer`: by default
- * whoever the admin session names.
- */
-export function documentSite(
-  c: Context<GeekityEnv>,
-  writer: string | undefined = currentUsername(c),
-): DocumentSite {
-  return {
-    ...c.var.siteRecords,
-    store: c.var.store,
-    config: c.var.config,
-    announce: c.var.announce,
-    writer,
-    citedContext: (target) => c.var.replyContexts.describe(target),
-    storedContext: (target) => c.var.replyContexts.read(target),
-    learnHandles: c.var.learnHandles,
-  };
-}
-
 function respelledMessage(respelled: readonly Respelling[]): string {
   const pairs = respelled.map(({ given, site }) => `“${site}” for “${given}”`);
   const noun = respelled.length === 1 ? 'a tag' : `${String(respelled.length)} tags`;
@@ -423,13 +404,6 @@ function savedMessage(
 /** The site's time zone, which is what every offset-less date in the admin means. */
 function siteTimezone(c: Context<GeekityEnv>): string {
   return readSiteSettings(c.var.config.contentDir).timezone;
-}
-
-/** The signed-in user's login, which is what doc-2's `author` holds. */
-function currentUsername(c: Context<GeekityEnv>): string | undefined {
-  const userId = c.var.session?.userId;
-  if (userId == null) return undefined;
-  return findUserById(c.var.config.dataDir, userId)?.username;
 }
 
 /** One entry of the editor's Author select. */
@@ -763,7 +737,7 @@ function citedPreviews(
 }
 
 function findEdited(
-  store: ContentStore,
+  store: DocumentLookup & CatalogReader,
   kind: DocumentKind,
   slug: string,
   file: string | undefined,
@@ -782,7 +756,7 @@ function findEdited(
  * document is restored from.
  */
 export function findBySlug(
-  store: ContentStore,
+  store: DocumentLookup & CatalogReader,
   kind: DocumentKind,
   slug: string,
 ): Document | undefined {

@@ -12,7 +12,7 @@ import {
 import type { GeekityConfig } from './config.ts';
 import { KNOWN_UPLOAD_TYPES } from './content/media.ts';
 import { systemClock } from './content/store.ts';
-import { systemHostLookup } from './webmention/public-address.ts';
+import { systemHostLookup } from './util/public-address.ts';
 
 describe('resolveConfig', () => {
   it('falls back to documented defaults when nothing is supplied', () => {

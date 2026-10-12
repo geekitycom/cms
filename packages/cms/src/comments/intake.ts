@@ -1,11 +1,11 @@
-import type { CommentStatus, PostComment } from '../admin/store.ts';
+import type { CommentStatus, PostComment } from '../store/admin-store.ts';
 import { hashClientAddress } from '../forms/protection.ts';
 import { messageOf } from '../util/errors.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { webmentionKey } from '../web/feed-source.ts';
+import { webmentionKey } from '../content/guids.ts';
 import { addComment, deleteComment, updateComment } from './records.ts';
 import type { CommentRecords } from './records.ts';
-import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
+import type { CommentChecker, CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 
 /**
  * The one door into a post's comments.

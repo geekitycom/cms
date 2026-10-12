@@ -1,16 +1,15 @@
-import type { AdminStore, ConversationWrite, PostComment } from '../admin/store.ts';
+import type { AdminStore, ConversationWrite, PostComment } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
-import { userForAuthor } from '../content/authors.ts';
+import { userForAuthor, authorHref } from '../content/authors.ts';
 import type { Document } from '../content/document.ts';
 import { isServed } from '../content/served.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { DocumentLookup, IndexClock, ReplyReader } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { authorHref } from '../web/authors.ts';
-import { commentNames } from '../web/conversation.ts';
-import type { ConversationReader } from '../web/conversation.ts';
+import { commentNames } from './conversation.ts';
+import type { ConversationReader } from './conversation.ts';
 import type { CommentNotices } from './intake.ts';
 
 /**
@@ -33,7 +32,7 @@ import type { CommentNotices } from './intake.ts';
 /** What {@link createReplyNotices} needs. */
 export interface CreateReplyNoticesOptions {
   readonly admin: AdminStore;
-  readonly store: ContentStore;
+  readonly store: DocumentLookup & ReplyReader & IndexClock;
   readonly conversation: ConversationReader;
   readonly notices: CommentNotices;
   readonly config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir'>;

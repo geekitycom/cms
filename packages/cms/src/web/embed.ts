@@ -2,9 +2,9 @@ import type { Context } from 'hono';
 
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
-import type { GeekityEnv } from '../env.ts';
-import { authorContext, siteAuthorContext } from './authors.ts';
-import { permalinkOfObjectId } from './documents.ts';
+import type { GeekityEnv } from './env.ts';
+import { authorContext, siteAuthorContext } from '../site/authors.ts';
+import { permalinkOfObjectId } from '../content/permalinks.ts';
 import { embedPage, embedResponse, oEmbedFor, oEmbedRequest, oEmbedResponse } from './oembed.ts';
 import type { EmbedSubject } from './oembed.ts';
 import { classifyPath } from './paths.ts';

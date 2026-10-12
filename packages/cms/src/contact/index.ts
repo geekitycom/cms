@@ -59,5 +59,3 @@ export type {
 
 export { CONTACT_MESSAGE_TEMPLATE, contactRecipient, sendContactMessage } from './delivery.ts';
 export type { ContactRecipientOptions, SendContactMessageOptions } from './delivery.ts';
-
-export { mountContact } from './routes.ts';

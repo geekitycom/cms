@@ -1,11 +1,16 @@
-import { commentFormFor } from '../comments/routes.ts';
+import { commentFormFor } from '../comments/page-form.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { contactFormFor } from '../contact/form.ts';
 import type { Document } from '../content/document.ts';
 import { shareLocation } from '../content/location.ts';
 import { postLocations } from '../content/locations.ts';
 import type { RedirectSource } from '../content/redirects.ts';
-import type { ContentStore } from '../content/store.ts';
+import type {
+  ArchiveReader,
+  BacklinkReader,
+  CatalogReader,
+  DocumentLookup,
+} from '../content/store.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import {
@@ -13,13 +18,13 @@ import {
   syndicationCopies,
   syndicationTargetsReader,
 } from '../webmention/syndication.ts';
-import { frontPageSlugs } from './context.ts';
-import type { SiteDataSource } from './context.ts';
+import { frontPageSlugs } from '../theme/site-data.ts';
+import type { SiteDataSource } from '../theme/site-data.ts';
 import type { CreateRendererOptions } from './render.ts';
 
 export interface PageSourcesOptions {
   readonly config: ResolvedConfig;
-  readonly store: ContentStore;
+  readonly store: DocumentLookup & ArchiveReader & BacklinkReader & CatalogReader;
   readonly redirects: RedirectSource;
   readonly siteData: SiteDataSource;
   readonly mailConfigured: () => boolean;
@@ -88,7 +93,7 @@ export function pageSources({
   };
 }
 
-function isHomepage(store: ContentStore, siteData: SiteDataSource, document: Document): boolean {
+function isHomepage(store: DocumentLookup, siteData: SiteDataSource, document: Document): boolean {
   if (document.type !== 'page') return false;
   const { homepage } = frontPageSlugs(siteData.read());
   return homepage !== '' && store.getBySlug(homepage)?.path === document.path;

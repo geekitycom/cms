@@ -7,10 +7,10 @@ import { isServed } from '../content/served.ts';
 import { landing, siteLinkAt } from '../content/site-links.ts';
 import { calendarDayIn } from '../content/time.ts';
 import { documentFrontMatter, normalizeBody } from '../content/writer.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from './env.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { authorContext } from './authors.ts';
-import { siteTimezone } from './context.ts';
+import { authorContext } from '../site/authors.ts';
+import { siteTimezone } from '../theme/site-data.ts';
 import type { Archive } from './listing-subject.ts';
 import {
   bioOf,

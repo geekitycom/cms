@@ -10,15 +10,16 @@ import type { PostLocations } from '../content/locations.ts';
 import type { PermalinkFile } from '../content/permalink-file.ts';
 import type { PostType } from '../content/post-type.ts';
 import { isTrashedPath } from '../content/store.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { DocumentLookup, IndexClock, TaxonomyReader } from '../content/store.ts';
 import { moveDocumentFile } from '../content/trash.ts';
 import { VISIBILITIES } from '../content/visibility.ts';
 import { writeDocument } from '../content/write.ts';
-import { logMicropubRequest } from '../indieauth/activity-log.ts';
-import { insufficientScope, requireBearer } from '../indieauth/bearer.ts';
-import type { BearerEnv, Scopes } from '../indieauth/bearer.ts';
-import { MICROPUB_MEDIA_PATH, MICROPUB_PATH, siteBaseUrl } from '../indieauth/discovery.ts';
-import type { GeekityEnv } from '../env.ts';
+import { documentSiteFrom } from '../web/document-site.ts';
+import { logMicropubRequest } from '../web/indieauth-activity-log.ts';
+import { insufficientScope, requireBearer } from '../web/indieauth-bearer.ts';
+import type { BearerEnv, Scopes } from '../web/indieauth-bearer.ts';
+import { MICROPUB_MEDIA_PATH, MICROPUB_PATH, siteBaseUrl } from '../web/indieauth-discovery.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import type { Scope } from '../indieauth/request.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { removeImageVariants } from '../images/variants.ts';
@@ -30,14 +31,12 @@ import {
   tooLargeMessage,
   UPLOAD_ENVELOPE_BYTES,
 } from '../media/uploads.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { isRecord } from '../util/guards.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
 import { userForAuthor } from '../content/authors.ts';
-import { syndicationTargetsReader } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../content/syndicate-to.ts';
 import { createForm, fromForm, fromJson } from './create.ts';
 import type { CreatedForm, CreateRequest, Property } from './create.ts';
@@ -108,7 +107,7 @@ type Query = (typeof QUERY_NAMES)[number];
 /** What a query is answered from. */
 interface QueryContext {
   readonly baseUrl: string;
-  readonly store: ContentStore;
+  readonly store: DocumentLookup & TaxonomyReader & IndexClock;
   /** The syndication targets the site declares (TASK-155). */
   readonly targets: readonly SyndicationTarget[];
   readonly locations: PostLocations;
@@ -180,7 +179,7 @@ function invalid(description: string): Refusal {
  */
 function postAt(
   url: string | undefined,
-  site: { store: ContentStore; baseUrl: string; users: readonly User[]; user: User },
+  site: { store: DocumentLookup; baseUrl: string; users: readonly User[]; user: User },
 ): Document | Refusal {
   if (url === undefined || url === '') return invalid('A url is required.');
   const root = absoluteUrl('/', site.baseUrl);
@@ -210,7 +209,7 @@ function offered(targets: readonly SyndicationTarget[]): { uid: string; name: st
  * Every tag and category on a published post, once each, alphabetically
  * whatever the case, keeping those containing `filter` when one is given.
  */
-function categories(store: ContentStore, filter: string | undefined): string[] {
+function categories(store: TaxonomyReader, filter: string | undefined): string[] {
   const terms = new Set([
     ...store.listTags().map(({ tag }) => tag),
     ...store.listCategories().map(({ category }) => category),
@@ -360,38 +359,26 @@ const ACTIONS: {
   ) => Promise<Response>;
 } = {
   create: async (c, { request }) => {
-    const { store, config, announce, bearer, replyContexts } = c.var;
-    const timezone = readSiteSettings(config.contentDir).timezone;
+    const { store, config, bearer } = c.var;
+    const timezone = c.var.siteRecords.timezone();
     const created = createForm(request, {
       author: bearer.user.username,
       timezone,
       now: store.now(),
       baseUrl: siteBaseUrl(c),
-      targets: syndicationTargetsReader(config.contentDir)(),
+      targets: c.var.siteRecords.syndicationTargets(),
     });
     if ('errors' in created) return invalid(created.errors.join(' ')).answer(c);
 
     const photos = await storePhotos(created, config);
     if ('error' in photos) return invalid(photos.error).answer(c);
 
-    const written = await writeDocument(
-      {
-        ...c.var.siteRecords,
-        store,
-        config,
-        announce,
-        writer: bearer.user.username,
-        citedContext: (target) => replyContexts.describe(target),
-        storedContext: (target) => replyContexts.read(target),
-        learnHandles: c.var.learnHandles,
-      },
-      {
-        kind: POST_KIND,
-        document: undefined,
-        ...created,
-        form: withoutClientReadSummary(photos.form),
-      },
-    );
+    const written = await writeDocument(documentSiteFrom(c.var, bearer.user.username), {
+      kind: POST_KIND,
+      document: undefined,
+      ...created,
+      form: withoutClientReadSummary(photos.form),
+    });
     if (written.outcome === 'refused') {
       await removeUploads(photos.stored, config);
       return invalid(written.message).answer(c);
@@ -409,30 +396,23 @@ const ACTIONS: {
   update: async (c, { url, changes }) => {
     const document = postFor(c, url);
     if (document instanceof Refusal) return document.answer(c);
-    const { store, config, announce, bearer, replyContexts } = c.var;
+    const { store, config, bearer } = c.var;
     const updated = updateForm(document, changes, {
-      timezone: readSiteSettings(config.contentDir).timezone,
+      timezone: c.var.siteRecords.timezone(),
       now: store.now(),
       baseUrl: siteBaseUrl(c),
-      targets: syndicationTargetsReader(config.contentDir)(),
+      targets: c.var.siteRecords.syndicationTargets(),
       locations: postLocations(config.dataDir),
       kept: keptProperties(config.dataDir),
     });
     if ('errors' in updated) return invalid(updated.errors.join(' ')).answer(c);
 
-    const written = await writeDocument(
-      {
-        ...c.var.siteRecords,
-        store,
-        config,
-        announce,
-        writer: bearer.user.username,
-        citedContext: (target) => replyContexts.describe(target),
-        storedContext: (target) => replyContexts.read(target),
-        learnHandles: c.var.learnHandles,
-      },
-      { kind: POST_KIND, document, ...updated, form: withoutClientReadSummary(updated.form) },
-    );
+    const written = await writeDocument(documentSiteFrom(c.var, bearer.user.username), {
+      kind: POST_KIND,
+      document,
+      ...updated,
+      form: withoutClientReadSummary(updated.form),
+    });
     if (written.outcome === 'refused') return invalid(written.message).answer(c);
     if (written.outcome === 'conflict') {
       return new Refusal(409, 'conflict', `${url ?? ''} changed on disk; read it again.`).answer(c);
@@ -518,7 +498,7 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
     const answer = QUERIES[q]({
       baseUrl: siteBaseUrl(c),
       store: c.var.store,
-      targets: syndicationTargetsReader(c.var.config.contentDir)(),
+      targets: c.var.siteRecords.syndicationTargets(),
       locations: postLocations(c.var.config.dataDir),
       kept: keptProperties(c.var.config.dataDir),
       filter: c.req.query('filter'),

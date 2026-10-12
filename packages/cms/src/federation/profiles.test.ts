@@ -22,10 +22,10 @@ import { writeUsers } from '../admin/__testing__/users.ts';
 import { avatarHref } from '../avatars/avatars.ts';
 import { discardDatabase } from '../cache.ts';
 import type { Cms } from '../index.ts';
-import type { HostLookup } from '../webmention/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import { testKeyPair } from './__testing__/keys.ts';
 import { createActorProfileService } from './profiles.ts';
-import type { ActorProfile } from '../admin/store.ts';
+import type { ActorProfile } from '../store/admin-store.ts';
 
 const box = sandbox();
 

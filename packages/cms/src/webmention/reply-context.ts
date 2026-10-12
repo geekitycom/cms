@@ -1,12 +1,12 @@
 import { htmlToText } from '../content/search.ts';
 import { parseHtml } from '../util/html-tree.ts';
 import { absoluteUrl } from '../util/url.ts';
-import type { HeldAt } from '../web/conversation.ts';
+import type { HeldAt } from '../comments/conversation.ts';
 import type { CitedImage, CitedPicture, PictureSource } from './cited-picture.ts';
 import { readCitedStart } from './cited-start.ts';
 import { webUrl } from './fetch-public.ts';
 import { citedEntry } from './microformats.ts';
-import type { HostLookup } from './public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import { fediversePostOf, fediverseSource } from './reply-context/fediverse.ts';
 import type { FediverseLookup, FediversePost } from './reply-context/fediverse.ts';
 import { jsonLdEventSource, jsonLdSource } from './reply-context/json-ld.ts';

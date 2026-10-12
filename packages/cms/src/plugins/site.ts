@@ -7,8 +7,8 @@
 
 import path from 'node:path';
 
-import { importedFields } from '../admin/store.ts';
-import type { AdminStore, CommentRecord } from '../admin/store.ts';
+import { importedFields } from '../store/admin-store.ts';
+import type { AdminStore, CommentRecord } from '../store/admin-store.ts';
 import { renderCommentMarkdown } from '../comments/markdown.ts';
 import { commentsFile, putComments, readComments, renameComments } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';

@@ -23,7 +23,7 @@ import { handleDirectory } from '../content/handles.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { discoverPostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import type {
   PluginEditorAction,
   PluginEditorDraft,

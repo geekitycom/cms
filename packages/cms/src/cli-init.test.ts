@@ -14,7 +14,7 @@ import {
   RECOMMENDED_ADDRESS_HASH_RETENTION_DAYS,
   RECOMMENDED_COMMENT_EMAIL_RETENTION_DAYS,
   RECOMMENDED_CONTACT_MESSAGE_RETENTION_DAYS,
-} from './privacy/policy.ts';
+} from './site/retention-policy.ts';
 
 after(cleanupTemporaryDirs);
 

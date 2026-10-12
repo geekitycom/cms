@@ -5,7 +5,7 @@ import {
   NOTIFICATION_EVENTS,
   notificationMode,
   notificationWanted,
-} from '../notifications/preferences.ts';
+} from '../site/notification-preferences.ts';
 import { writeMailCredentials } from '../mail/credentials.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';

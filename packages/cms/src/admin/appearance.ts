@@ -21,15 +21,15 @@ import path from 'node:path';
 
 import type { Context, Hono } from 'hono';
 
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { formFromSettings, SETTINGS_FIELDS, settingsProblems } from '../site/settings-form.ts';
 import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
 import { trimmedField } from '../util/forms.ts';
-import { listSiteThemes, PACKAGED_THEME, PACKAGED_THEME_DIR, readTheme } from '../web/themes.ts';
-import type { Theme } from '../web/themes.ts';
+import { listSiteThemes, PACKAGED_THEME, PACKAGED_THEME_DIR, readTheme } from '../theme/themes.ts';
+import type { Theme } from '../theme/themes.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /** Where the themes screen lives, and where its one form posts. */

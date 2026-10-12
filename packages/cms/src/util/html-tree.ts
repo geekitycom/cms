@@ -14,7 +14,7 @@ import { decodeEntities, escapeAttribute, escapeText } from './html.ts';
  * table foster-parenting, no adoption agency, no character encoding detection:
  * what it has is elements, attributes and text, nested the way a page that is
  * not broken nests them, which is what {@link elementsIn} and
- * {@link textOf} need. `web/sanitize.ts` scans markup with the same shape of
+ * {@link textOf} need. `content/sanitize.ts` scans markup with the same shape of
  * scanner for a different job — it rebuilds output rather than building a
  * tree — and the two are kept apart rather than shared because one of them is
  * a security boundary and should not grow features for the other's sake.

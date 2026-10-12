@@ -1,10 +1,10 @@
 import type { Context } from 'hono';
 
-import { findUpload, UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
-import type { GeekityEnv } from '../env.ts';
+import { findUpload, UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
+import type { GeekityEnv } from './env.ts';
 import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
 import { sourceVersion } from '../images/paths.ts';
-import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
+import { findImageVariant } from '../images/variants.ts';
 import {
   ASSET_VERSION_PARAM,
   assetNotModified,
@@ -16,7 +16,7 @@ import {
   matchesEtag,
   THEME_ASSET_PREFIX,
   UPLOAD_ASSET_MAX_AGE,
-} from './assets.ts';
+} from '../theme/assets.ts';
 import { notFound, requestPath } from './request.ts';
 
 /**

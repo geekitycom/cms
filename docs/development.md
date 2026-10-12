@@ -40,6 +40,76 @@ deploy/compose.yaml    the compose file a Docker deployment starts from
 backlog/               tasks, docs and decisions (Backlog.md)
 ```
 
+## Source layers
+
+Every top-level directory and root-level file under `packages/cms/src` sits in
+one layer. A module imports only from layers below its own. It never imports
+from a higher layer or from another unit of its own layer. Test files and
+`__testing__` folders are exempt.
+
+`src/layer-boundary.test.ts` holds the map and runs in `pnpm test`. It fails
+when a unit has no layer, when an import points at the same or a higher layer,
+and when an exception no longer matches an import. A failure names the rule and
+the line, for example
+`site/ (site) must not import from web/ (public site, a higher layer): site/settings.ts:6`.
+
+The layers, from the bottom:
+
+| Layer                    | Units                                    | What it holds                                                                                                                                         |
+| ------------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| utilities                | `util/`, `types/`, `init.ts`             | Generic helpers: URLs, HTML, guards, queues, the public-address check and the IndieAuth client id rules.                                              |
+| files                    | `files/`                                 | Atomic writes and static file lookup.                                                                                                                 |
+| caches                   | `cache.ts`, `dev-mode.ts`                | The SQLite cache file and the dev-mode switch.                                                                                                        |
+| content                  | `content/`                               | The domain: documents, the index, writes, and the URL rules for permalinks, guids, keys, authors, taxonomy, redirects, uploads, licences and locales. |
+| operational state        | `store/`, `maintenance.ts`               | The SQLite records that are not derived: comments, inbox, deliveries, followers, relays, sessions, tokens. The maintenance switch.                    |
+| ports                    | `forms/`, `mail/`, `plugin.ts`           | The seams a site's config hands implementations into: form protection and the comment checker, mail providers, the plugin API.                        |
+| config                   | `config.ts`                              | The config schema and its defaults.                                                                                                                   |
+| theme                    | `theme/`                                 | Themes on disk, the Nunjucks environment, theme assets, and the site data a template reads.                                                           |
+| images                   | `images/`                                | Image variants, responsive markup and site icons.                                                                                                     |
+| site                     | `site/`                                  | `site.json` and its settings rules, users and their profiles, navigation, robots policy, and the admin paths the rest of the site refers to.          |
+| comments                 | `comments/`                              | Comment intake, records, moderation, and the conversation types.                                                                                      |
+| notifications            | `notifications/`                         | Comment notices, digests, opt-outs, and the templated mail service.                                                                                   |
+| contact                  | `contact/`                               | Contact messages.                                                                                                                                     |
+| privacy                  | `privacy/`                               | Retention and erasure.                                                                                                                                |
+| webmention               | `webmention/`                            | Sending and receiving webmentions, reply contexts and syndication.                                                                                    |
+| federation               | `federation/`                            | ActivityPub.                                                                                                                                          |
+| services                 | `avatars/`, `media/`, `indieauth/`       | Remote avatars, the media library, and IndieAuth grants and tokens.                                                                                   |
+| plugins                  | `plugins/`                               | Installing, loading and running plugins.                                                                                                              |
+| supervisor               | `supervisor/`                            | The `geekity serve` supervisor and its worker.                                                                                                        |
+| public site              | `web/`                                   | The request context (`web/env.ts`), sessions, the renderer, the conversation reader, and every public route.                                          |
+| admin                    | `admin/`                                 | The admin screens, the admin bar and the IndieAuth consent screens.                                                                                   |
+| endpoints and middleware | `micropub/`, `access-log.ts`, `drain.ts` | Micropub, the access log and the drain.                                                                                                               |
+| publish pings            | `notify.ts`, `indexnow.ts`               | rssCloud, WebSub and IndexNow pings on publish.                                                                                                       |
+| composition root         | `cms/`                                   | `createCms`, which builds every service and mounts every route, and the error handler for the whole app.                                              |
+| public API               | `exports.ts`, `config-loader.ts`         | The package's export list and the config loader.                                                                                                      |
+| package index            | `index.ts`                               | The package entry point.                                                                                                                              |
+| command line             | `cli.ts`                                 | The `geekity` command.                                                                                                                                |
+
+A feature that needs a value from a higher layer gets it injected by
+`cms/`, the composition root, as `SiteRecords` does for the write path. A rule
+that two layers share moves down to the lower one. Hono handlers live in `web/`
+or `admin/`, not in the feature they serve.
+
+The content index is split the same way. `content/store.ts` declares one
+small interface per kind of question, such as `DocumentLookup`,
+`ArchiveReader`, `TaxonomyReader`, `SearchReader`, `CatalogReader` and
+`IndexWriter`. `ContentStore` is all of them together. A caller names only the
+interfaces it reads, and only `cms/`, `content/` and `exports.ts` name
+`ContentStore`. The SQLite implementation lives in `content/sqlite/`, with one
+module per query family, and it is the only part of `content/` that imports
+`node:sqlite`. `content/store-boundary.test.ts` checks these rules.
+
+No unit below the public site imports Hono: not `hono`, `hono/*`, `@hono/*`
+or `@fedify/hono`. A feature such as `comments/`, `webmention/` or
+`federation/` keeps its rules as plain functions over values the request has
+already been parsed into, and the handler that reads the request and builds
+the response lives in `web/`, for example `web/comment-routes.ts`,
+`web/webmention-routes.ts`, `web/pingback-routes.ts` and
+`web/federation-routes.ts`. The same test enforces this rule.
+
+The map can list an exception with the file, the unit it may import, the task
+that removes it and the reason. No exceptions are left.
+
 ## Requirements
 
 Node 24 or newer and pnpm, for the reason

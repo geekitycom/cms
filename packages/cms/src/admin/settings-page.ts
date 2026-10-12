@@ -20,7 +20,7 @@
 import type { Context, Hono } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import {

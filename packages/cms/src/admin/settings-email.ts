@@ -9,7 +9,7 @@
 
 import type { Hono } from 'hono';
 
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import {
   readMailCredentials,
   removeMailCredentials,

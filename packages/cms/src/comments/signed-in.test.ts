@@ -12,7 +12,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { commentsFile, readComments } from './records.ts';
 import { COMMENT_FIELDS } from './submission.ts';
-import type { CommentChecker, CommentSubmission } from './submission.ts';
+import type { CommentChecker, CommentSubmission } from '../forms/checker.ts';
 
 /**
  * Commenting as yourself: what the form under a post looks like when the
@@ -263,6 +263,10 @@ describe('the token on the signed-in form', () => {
     );
 
     assert.equal(refused.status, 403);
+    assert.equal(
+      await refused.text(),
+      'That form was stale or came from somewhere else. Reload and try again.',
+    );
     assert.deepEqual(replyPosts(cms), [], 'nothing was written');
   });
 
@@ -287,6 +291,7 @@ describe('the token on the signed-in form', () => {
     });
 
     assert.equal(refused.status, 403);
+    assert.equal(await refused.text(), 'That request came from another site, so it was refused.');
     assert.deepEqual(replyPosts(cms), [], 'nothing was written');
   });
 

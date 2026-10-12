@@ -32,7 +32,8 @@ export { renderCommentMarkdown } from './markdown.ts';
 export { isModerationAction, moderateComment, MODERATION_ACTIONS } from './moderate.ts';
 export type { ModerateCommentOptions, ModerationAction, ModerationOutcome } from './moderate.ts';
 export { COMMENTS_FRONT_MATTER_KEY } from '../content/comments.ts';
-export { commentPolicyOf, commentsOpen, DEFAULT_COMMENTS_CLOSE_AFTER_DAYS } from './policy.ts';
+export { commentPolicyOf, commentsOpen } from './policy.ts';
+export { DEFAULT_COMMENTS_CLOSE_AFTER_DAYS } from '../site/settings.ts';
 export type { CommentPolicy } from './policy.ts';
 export {
   addComment,
@@ -62,7 +63,7 @@ export type {
 } from './intake.ts';
 export { migrateCommentEmails, migrateCommentKeys } from './migrations.ts';
 export type { CommentEmailMigrationReport, CommentKeyMigrationReport } from './migrations.ts';
-export { commentFormFor, commentNoticeFor, mountComments } from './routes.ts';
+export { commentFormFor, commentNoticeFor } from './page-form.ts';
 export {
   COMMENT_FIELDS,
   COMMENT_RATE_LIMIT,
@@ -81,15 +82,16 @@ export {
 } from './submission.ts';
 export type {
   CommentChecker,
+  CommentReport,
+  CommentSubmission,
+  SubmissionType,
+  CommentVerdict,
+} from '../forms/checker.ts';
+export type {
   CommentForm,
   CommentOutcome,
   CommentProblems,
   CommentRefusal,
-  CommentReport,
-  CommentSubmission,
-  SubmissionType,
   CommentThrottle,
-  CommentVerdict,
   SubmitCommentOptions,
 } from './submission.ts';
-export { signedInCommenter } from './viewer.ts';

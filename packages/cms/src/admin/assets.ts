@@ -2,8 +2,7 @@ import { fileURLToPath } from 'node:url';
 
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
-import { assetNotModified, assetResponse, matchesEtag } from '../web/assets.ts';
-import { ADMIN_PREFIX } from './session.ts';
+import { assetNotModified, assetResponse, matchesEtag } from '../theme/assets.ts';
 
 /**
  * Where the admin's own files live: the compiled stylesheet, the admin bar's
@@ -14,14 +13,6 @@ import { ADMIN_PREFIX } from './session.ts';
 export const ADMIN_STATIC_DIR: string = fileURLToPath(
   new URL('../../admin/static/', import.meta.url),
 );
-
-/**
- * URL prefix the admin's files are served under.
- *
- * The leading underscore keeps it out of the way of the screens: `/admin/posts`
- * is a screen and `/admin/_static/admin.css` never can be.
- */
-export const ADMIN_ASSET_PREFIX = `${ADMIN_PREFIX}/_static/`;
 
 /** How long a browser may keep an admin asset. One hour, as for a theme's. */
 export const ADMIN_ASSET_MAX_AGE = 3600;

@@ -3,7 +3,7 @@ import type { Context } from 'hono';
 import type { Document } from '../content/document.ts';
 import type { ListOptions } from '../content/store.ts';
 import { devModeOn } from '../dev-mode.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from './env.ts';
 import { archiveOf } from './listing-subject.ts';
 import type { ListingRequest } from './listing-subject.ts';
 import { listingMarkdown } from './markdown-representation.ts';

@@ -4,21 +4,23 @@ import { createFederation, InProcessMessageQueue, MemoryKvStore } from '@fedify/
 import type { Context, Federation, FederationOptions, PageItems } from '@fedify/fedify';
 import { Create, type Object as APObject, QuoteAuthorization } from '@fedify/vocab';
 
-import type { AdminStore } from '../admin/store.ts';
+import type { AdminStore } from '../store/admin-store.ts';
 import type { FederationOverrides, ResolvedConfig } from '../config.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
-import type { ContentStore } from '../content/store.ts';
+import type {
+  ArchiveReader,
+  CatalogReader,
+  DocumentLookup,
+  IndexClock,
+  TaxonomyReader,
+} from '../content/store.ts';
 import { countUsers, listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { authorNames } from '../content/authors.ts';
 import { userActor, userByUsername } from './actor.ts';
-import {
-  articleObjectId,
-  isFederatedDocument,
-  postByObjectId,
-  postCreateActivity,
-} from './article.ts';
+import { articleObjectId, postByObjectId, postCreateActivity } from './article.ts';
+import { isFederatedDocument } from '../content/served.ts';
 import { followersPage, lastFollowersCursor } from './followers.ts';
 import { INBOX_LISTENERS } from './inbox.ts';
 import { loadActorKeyPairs } from './keys.ts';
@@ -54,7 +56,7 @@ export interface FederationContextData {
   /** The followers, the inbox log and the relay records. */
   readonly admin: AdminStore;
   /** The content index, which the outbox and the post articles are built from. */
-  readonly store: ContentStore;
+  readonly store: DocumentLookup & ArchiveReader & CatalogReader & TaxonomyReader & IndexClock;
   /** Config after defaults and environment overrides. */
   readonly config: ResolvedConfig;
   /** Where the inbox asks for the profile of an actor it has just heard from (TASK-184). */
@@ -88,7 +90,7 @@ export interface CreateSiteFederationOptions extends FederationOverrides {
  * collections, WebFinger's neighbours and NodeInfo.
  *
  * A post's object is not here — it is its permalink (decision-13), served by
- * the middleware in `mount.ts`, which also owns `/.well-known/webfinger`
+ * the middleware in `web/federation-routes.ts`, which also owns `/.well-known/webfinger`
  * (doc-8) because Fedify's own cannot publish the aliases decision-14 wants.
  *
  * It is a factory rather than a module-level singleton so the KV store and the
@@ -129,7 +131,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
     // WebFinger asks for a username, and a user's username *is* their
     // identifier now, so this is the identity function over the people who
     // exist. It stays registered because Fedify's own lookups — `parseUri`,
-    // the collection URIs — go through it, even though `mount.ts` answers
+    // the collection URIs — go through it, even though `web/federation-routes.ts` answers
     // `/.well-known/webfinger` itself.
     .mapHandle((context, username) => (actorFor(context, username) === undefined ? null : username))
     .setKeyPairsDispatcher(async (context, identifier) =>
@@ -140,7 +142,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
 
   // No object dispatcher for posts. decision-13 makes a post's id its
   // permalink, which Fedify never minted and cannot route: the permalink
-  // middleware in `mount.ts` answers an ActivityStreams request there, and
+  // middleware in `web/federation-routes.ts` answers an ActivityStreams request there, and
   // `isFederatedDocument` is the one rule it and the outbox both read, so they
   // cannot disagree about what exists.
 
@@ -282,7 +284,10 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
  * match. That is the same rule the admin's own slug lookup follows, so a
  * collision resolves the same way wherever it is asked about.
  */
-export function federatedPost(store: ContentStore, slug: string): Document | undefined {
+export function federatedPost(
+  store: DocumentLookup & IndexClock,
+  slug: string,
+): Document | undefined {
   const document = store.getBySlug(slug);
   return document !== undefined && isFederatedDocument(document, store.now())
     ? document

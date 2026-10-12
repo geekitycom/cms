@@ -1,6 +1,6 @@
 import type { PictureSource } from '../cited-picture.ts';
 import { webUrl } from '../fetch-public.ts';
-import type { HostLookup } from '../public-address.ts';
+import type { HostLookup } from '../../util/public-address.ts';
 
 export interface Limits {
   readonly lookup: HostLookup;

@@ -6,12 +6,12 @@ import type { Document } from './document.ts';
 import { handleDirectory } from './handles.ts';
 import { parseDocument } from './parser.ts';
 import { isTrashedPath, TRASH_DIRECTORY } from './store.ts';
-import type { ContentStore } from './store.ts';
+import type { DocumentLookup, IndexWriter } from './store.ts';
 import type { DocumentChange } from './sync.ts';
 
 /** What moving a document's file needs from the site. */
 export interface MoveSite {
-  readonly store: ContentStore;
+  readonly store: DocumentLookup & IndexWriter;
   readonly contentDir: string;
   readonly announce: (change: DocumentChange) => Promise<void>;
 }

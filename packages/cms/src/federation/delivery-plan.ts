@@ -1,11 +1,11 @@
 import type { Actor, Recipient } from '@fedify/vocab';
 
-import type { DeliveryStatus, Follower, NewDelivery, Relay } from '../admin/store.ts';
+import type { DeliveryStatus, Follower, NewDelivery, Relay } from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
 import { isMigrated } from '../content/migrated.ts';
 import { pinnedAt } from '../content/pinned.ts';
 import type { DocumentChange } from '../content/sync.ts';
-import { isFederatedDocument } from './article.ts';
+import { isFederatedDocument } from '../content/served.ts';
 import type { Citing, CitedObject } from './citations.ts';
 import { followerRecipient } from './followers.ts';
 import type { MentionedAccount } from './handles.ts';

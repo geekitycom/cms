@@ -3,7 +3,7 @@ import { linkTargets } from '../webmention/discovery.ts';
 import { fetchPublic, webUrl } from '../webmention/fetch-public.ts';
 import { itemsIn } from '../webmention/microformats.ts';
 import type { MicroformatItem } from '../webmention/microformats.ts';
-import type { HostLookup } from '../webmention/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 
 /** What a client says about itself at its client_id URL. */
 export interface ClientInformation {

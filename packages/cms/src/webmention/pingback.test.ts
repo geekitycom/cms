@@ -4,16 +4,16 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import type { PostComment } from '../admin/store.ts';
+import type { PostComment } from '../store/admin-store.ts';
 import { updateComment } from '../comments/records.ts';
-import type { CommentVerdict } from '../comments/submission.ts';
+import type { CommentVerdict } from '../forms/checker.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';
 import { PINGBACK_MAX_BYTES, PINGBACK_PATH } from './pingback.ts';
-import type { HostLookup } from './public-address.ts';
-import { WEBMENTION_PATH } from './routes.ts';
+import type { HostLookup } from '../util/public-address.ts';
+import { WEBMENTION_PATH } from './endpoint.ts';
 
 const BASE_URL = 'https://blog.example';
 const ENDPOINT = `${BASE_URL}${PINGBACK_PATH}`;
@@ -422,5 +422,56 @@ describe('what is refused before it is parsed', () => {
     const response = await cms.app.request(PINGBACK_PATH);
     assert.equal(response.status, 405);
     assert.equal(response.headers.get('allow'), 'POST');
+  });
+});
+
+describe('what the endpoint answers, word for word', () => {
+  it('thanks the sender in an XML-RPC string once the pingback is held', async () => {
+    const source = 'https://them.example/note';
+    pages.set(source, { body: linkingTo(POST_URL) });
+    const cms = await site();
+
+    const response = await ping(cms, source);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'text/xml; charset=utf-8');
+    assert.equal(
+      await response.text(),
+      '<?xml version="1.0"?>\n<methodResponse><params><param><value><string>' +
+        'Thanks. The pingback is waiting for a moderator.' +
+        '</string></value></param></params></methodResponse>\n',
+    );
+  });
+
+  it('spells a fault out as the struct the spec defines', async () => {
+    const cms = await site();
+
+    const response = await post(cms, call('pingback.extensions.getPingbacks'));
+
+    assert.equal(response.headers.get('content-type'), 'text/xml; charset=utf-8');
+    assert.equal(
+      await response.text(),
+      '<?xml version="1.0"?>\n<methodResponse><fault><value><struct>\n' +
+        '<member><name>faultCode</name><value><int>-32601</int></value></member>\n' +
+        '<member><name>faultString</name><value><string>Only pingback.ping is served here.</string></value></member>\n' +
+        '</struct></value></fault></methodResponse>\n',
+    );
+  });
+
+  it('has no endpoint on a site that takes no webmentions', async () => {
+    const cms = await site({}, { webmentionsReceive: false });
+
+    const response = await ping(cms, 'https://them.example/a');
+
+    assert.equal(response.status, 404);
+    assert.equal(await response.text(), 'This site does not take pingbacks.');
+  });
+
+  it('says what it takes when somebody GETs it', async () => {
+    const cms = await site();
+
+    const response = await cms.app.request(PINGBACK_PATH);
+
+    assert.equal(await response.text(), 'Send a pingback here as an XML-RPC pingback.ping POST.');
   });
 });

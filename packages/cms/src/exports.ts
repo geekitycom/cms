@@ -399,7 +399,6 @@ export {
   MINIMUM_SUBMIT_SECONDS,
   moderateComment,
   MODERATION_ACTIONS,
-  mountComments,
   normalizeWebsite,
   readAkismetKey,
   readComments,
@@ -407,7 +406,6 @@ export {
   refilledCommentForm,
   removeAkismetKey,
   renderCommentMarkdown,
-  signedInCommenter,
   signedInCommentForm,
   submitComment,
   updateComment,
@@ -484,13 +482,15 @@ export {
   MAXIMUM_CONTACT_MESSAGE_LENGTH,
   MAXIMUM_CONTACT_NAME_LENGTH,
   MAXIMUM_CONTACT_SUBJECT_LENGTH,
-  mountContact,
   readContactMessage,
   refilledContactForm,
   sendContactMessage,
   setContactMessageRead,
   submitContactMessage,
 } from './contact/index.ts';
+export { mountContact } from './web/index.ts';
+export { mountComments, signedInCommenter } from './web/index.ts';
+export { mountFederation, webFingerSubject } from './web/index.ts';
 export type {
   ContactForm,
   ContactFormContext,
@@ -702,7 +702,7 @@ export type {
   UploadSignature,
 } from './content/index.ts';
 
-export type { GeekityEnv } from './env.ts';
+export type { GeekityEnv } from './web/env.ts';
 
 // Notifications: who is told about a comment, the switchboard that decides,
 // and the signed one-click links the messages carry (TASK-55).
@@ -729,7 +729,6 @@ export {
   MODERATE_PATH,
   MODERATION_TOKEN_LIFETIME_SECONDS,
   moderationLink,
-  mountNotificationLinks,
   NOTIFICATION_DELIVERY_MODES,
   NOTIFICATION_EVENTS,
   NOTIFICATION_FIELDS,
@@ -753,6 +752,7 @@ export {
   withNotification,
   withNotificationMode,
 } from './notifications/index.ts';
+export { mountNotificationLinks } from './web/index.ts';
 export type {
   CommentDigest,
   CommentNotifier,
@@ -775,45 +775,49 @@ export {
   BREVO_ENDPOINT,
   BREVO_TIMEOUT_MS,
   createBrevoProvider,
-  createMailService,
-  createMailTemplates,
   createMemoryMailProvider,
   createSmtpProvider,
-  DEFAULT_MAIL_ATTEMPTS,
-  defaultMailBackoffMs,
   MAIL_CREDENTIALS_FILE,
   MAIL_PROVIDERS,
   mailCredentialsPath,
-  mailTemplateFiles,
   readMailCredentials,
   removeMailCredentials,
   SMTP_TIMEOUT_MS,
   writeMailCredentials,
 } from './mail/index.ts';
+export {
+  createMailService,
+  createMailTemplates,
+  DEFAULT_MAIL_ATTEMPTS,
+  defaultMailBackoffMs,
+  mailTemplateFiles,
+} from './notifications/index.ts';
 export type {
   BrevoCredential,
   BrevoProviderOptions,
-  CreateMailServiceOptions,
-  CreateMailTemplatesOptions,
   MailAddress,
   MailCredentials,
   MailDelivery,
   MailLogger,
   MailProvider,
   MailProviderName,
+  MemoryMailProvider,
+  OutgoingMail,
+  SmtpCredential,
+  SmtpProviderOptions,
+} from './mail/index.ts';
+export type {
+  CreateMailServiceOptions,
+  CreateMailTemplatesOptions,
   MailRecipient,
   MailResult,
   MailService,
   MailTemplateFiles,
   MailTemplates,
-  MemoryMailProvider,
-  OutgoingMail,
   RawMail,
   RenderedMail,
-  SmtpCredential,
-  SmtpProviderOptions,
   TemplateMail,
-} from './mail/index.ts';
+} from './notifications/index.ts';
 
 export {
   acceptedRelays,
@@ -849,7 +853,6 @@ export {
   acctOf,
   handleHref,
   userDirectory,
-  webFingerSubject,
   WEBFINGER_PATH,
   followerFrom,
   followerRecipient,
@@ -878,7 +881,6 @@ export {
   loadActorKeyPairs,
   logActivity,
   migrateFederationToFiles,
-  mountFederation,
   NODEINFO_PATH,
   OUTBOX_PAGE_SIZE,
   OUTBOX_PATH,
@@ -1268,15 +1270,15 @@ export {
   avatarHref,
   avatarSourceOf,
   createAvatarService,
-  mountAvatars,
 } from './avatars/index.ts';
+export { mountAvatars } from './web/index.ts';
 export type { AvatarAnswer, AvatarService, CreateAvatarServiceOptions } from './avatars/index.ts';
 export {
   RECOMMENDED_ADDRESS_HASH_RETENTION_DAYS,
   RECOMMENDED_COMMENT_EMAIL_RETENTION_DAYS,
   RECOMMENDED_CONTACT_MESSAGE_RETENTION_DAYS,
-} from './privacy/policy.ts';
-export type { RetentionPolicy } from './privacy/policy.ts';
+} from './site/retention-policy.ts';
+export type { RetentionPolicy } from './site/retention-policy.ts';
 export { createRetentionService, RETENTION_SWEEP_MS } from './privacy/retention.ts';
 export type {
   CreateRetentionServiceOptions,

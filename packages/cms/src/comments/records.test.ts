@@ -5,13 +5,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { openAdminStore } from '../admin/store.ts';
-import type { AdminStore, PostComment } from '../admin/store.ts';
-import { openContentStore } from '../content/store.ts';
+import { openAdminStore } from '../store/admin-store.ts';
+import type { AdminStore, PostComment } from '../store/admin-store.ts';
+import { openContentStore } from '../content/index.ts';
 import type { ContentStore } from '../content/store.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
-import { createMailService } from '../mail/service.ts';
+import { createMailService } from '../notifications/mail-service.ts';
 import { createCommentNotifier } from '../notifications/comments.ts';
 import { createUser } from '../site/users.ts';
 import {
@@ -28,7 +28,7 @@ import type { CommentRecords, NewComment } from './records.ts';
 import { intakeComment } from './intake.ts';
 import type { CommentIntakeOutcome, IntakeCommentOptions, ProposedComment } from './intake.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './migrations.ts';
-import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
+import type { CommentChecker, CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 
 const temporaryDirs: string[] = [];
 const openStores: (AdminStore | ContentStore)[] = [];

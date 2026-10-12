@@ -1,5 +1,6 @@
-import { readAltTexts } from '../images/alt-text.ts';
-import { siteImageRecord, uploadPath } from '../images/markup.ts';
+import { readAltTexts } from '../content/alt-text.ts';
+import { siteImageRecord } from '../images/markup.ts';
+import { uploadPath } from '../content/image-tags.ts';
 import type { ImageConfig } from '../images/paths.ts';
 
 /**

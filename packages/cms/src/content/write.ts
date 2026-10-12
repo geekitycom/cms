@@ -1,9 +1,8 @@
 import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { ResolvedConfig } from '../config.ts';
-import { readAltTexts, undescribedImages, undescribedPhotos } from '../images/alt-text.ts';
-import type { UndescribedImage } from '../images/alt-text.ts';
+import { readAltTexts, undescribedImages, undescribedPhotos } from './alt-text.ts';
+import type { UndescribedImage } from './alt-text.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorNames, userForAuthor } from './authors.ts';
 import type { AuthorUser } from './authors.ts';
@@ -37,7 +36,13 @@ import { htmlToText } from './search.ts';
 import { isServed } from './served.ts';
 import { defaultPermalink, slugify } from './slug.ts';
 import { DuplicatePermalinkError, isTrashedPath, TRASH_DIRECTORY } from './store.ts';
-import type { ContentStore } from './store.ts';
+import type {
+  ArchiveReader,
+  DocumentLookup,
+  IndexClock,
+  IndexWriter,
+  TaxonomyReader,
+} from './store.ts';
 import type { DocumentChange } from './sync.ts';
 import type { SyndicationTarget } from './syndicate-to.ts';
 import { respellTags } from './tags.ts';
@@ -51,10 +56,17 @@ export interface SiteRecords {
   readonly hasComments: (slug: string) => boolean;
 }
 
+export interface WriteConfig {
+  readonly contentDir: string;
+  readonly dataDir: string;
+  readonly baseUrl: string;
+  readonly requireAltText: boolean;
+}
+
 /** What a write needs from the site, as plain values rather than a request. */
 export interface DocumentSite extends SiteRecords {
-  readonly store: ContentStore;
-  readonly config: ResolvedConfig;
+  readonly store: DocumentLookup & ArchiveReader & TaxonomyReader & IndexWriter & IndexClock;
+  readonly config: WriteConfig;
   readonly announce: (change: DocumentChange) => Promise<void>;
   /** The username of whoever is writing: the author a new document starts on. */
   readonly writer: string | undefined;
@@ -433,7 +445,7 @@ async function replaceFile(
   return saved;
 }
 
-export function releasePermalink(store: ContentStore, row: Document): () => void {
+export function releasePermalink(store: IndexWriter, row: Document): () => void {
   store.remove(row.path);
   return () => {
     store.upsert(row);

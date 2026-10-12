@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, describe, it } from 'node:test';
 
-import { isPrivateHost, publicHost } from './public-address.ts';
-import type { HostLookup } from './public-address.ts';
+import { isPrivateHost, publicHost } from '../util/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import { fetchReplyContext, readReplyContext } from './reply-context.ts';
 
 const TARGET = 'https://them.example/2026/09/their-post/';

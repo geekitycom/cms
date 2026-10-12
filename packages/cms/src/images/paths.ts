@@ -1,9 +1,9 @@
 import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
-import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';
+import { UPLOAD_DIRECTORY } from '../content/uploads.ts';
 import { findAsset } from '../files/static-files.ts';
-import { assetVersion, ASSET_VERSION_PARAM } from '../web/assets.ts';
+import { assetVersion, ASSET_VERSION_PARAM } from '../theme/assets.ts';
 
 /**
  * Where a derived image comes from and where it goes.
@@ -16,17 +16,6 @@ import { assetVersion, ASSET_VERSION_PARAM } from '../web/assets.ts';
 
 /** The directory under `dataDir` that holds every derived image. */
 export const IMAGE_DIRECTORY = 'images';
-
-/**
- * URL prefix the derived files are served under.
- *
- * It sits inside `/uploads/` rather than beside it so a site's asset host, its
- * cache rules and its Eleventy passthrough only ever have to know about one
- * path. `_` cannot collide with a real upload: the CMS files uploads under
- * `{yyyy}/{mm}/`, and Eleventy — like the CMS's own content walk — ignores
- * underscore-prefixed directories anyway.
- */
-export const VARIANT_ASSET_PREFIX = `${UPLOAD_ASSET_PREFIX}_/`;
 
 /** The part of the config the derived images are derived according to. */
 export type ImageConfig = Pick<

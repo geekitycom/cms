@@ -12,7 +12,7 @@ import { after, before, beforeEach, describe, it } from 'node:test';
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import type { HostLookup } from '../webmention/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import { saveUrlOf } from '../admin/__testing__/editor-form.ts';
 
 remoteHostsDoNotExist();

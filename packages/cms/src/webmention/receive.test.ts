@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import type { PostComment } from '../admin/store.ts';
-import type { CommentSubmission, CommentVerdict } from '../comments/submission.ts';
+import type { PostComment } from '../store/admin-store.ts';
+import type { CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
@@ -13,8 +13,8 @@ import type { MemoryMailProvider } from '../mail/memory.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';
 import { createUser } from '../site/users.ts';
-import type { HostLookup } from './public-address.ts';
-import { WEBMENTION_PATH } from './routes.ts';
+import type { HostLookup } from '../util/public-address.ts';
+import { WEBMENTION_PATH } from './endpoint.ts';
 
 /**
  * Webmentions as somebody else's server meets them: an endpoint advertised on
@@ -1037,5 +1037,51 @@ describe('a webmention that answers a reply on the post (TASK-319)', () => {
     pages.set('https://them.example/note', { body: answering(POST_URL) });
     await sendAndSettle(cms, 'https://them.example/note');
     assert.equal(stored(cms)[0]?.inReplyTo, null, 'and back at the top once it answers the post');
+  });
+});
+
+describe('what the endpoint answers, word for word', () => {
+  it('accepts a webmention worth checking with a 202 that says so', async () => {
+    const cms = await site();
+    pages.set('https://them.example/note', {
+      body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
+    });
+
+    const response = await sendAndSettle(cms, 'https://them.example/note');
+
+    assert.equal(response.status, 202);
+    assert.match(response.headers.get('content-type') ?? '', /^text\/plain/);
+    assert.equal(await response.text(), 'Accepted. The source will be checked shortly.');
+  });
+
+  it('refuses a malformed one with the reason the check gave', async () => {
+    const cms = await site();
+
+    const response = await send(cms, { target: POST_URL });
+
+    assert.equal(response.status, 400);
+    assert.equal(await response.text(), 'A webmention needs a source.');
+  });
+
+  it('has no endpoint on a site that takes no webmentions', async () => {
+    const cms = await site({}, { webmentionsReceive: false });
+
+    const response = await send(cms, { source: 'https://them.example/x', target: POST_URL });
+
+    assert.equal(response.status, 404);
+    assert.equal(await response.text(), 'This site does not take webmentions.');
+  });
+
+  it('answers a GET with a 405 naming the method it takes', async () => {
+    const cms = await site();
+
+    const response = await cms.app.request(WEBMENTION_PATH);
+
+    assert.equal(response.status, 405);
+    assert.equal(response.headers.get('allow'), 'POST');
+    assert.equal(
+      await response.text(),
+      'Send a webmention here with a POST carrying source and target.',
+    );
   });
 });

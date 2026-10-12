@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from './env.ts';
 import { FEED_FORMATS, FEED_SEGMENTS } from './feeds.ts';
 import type { FeedFormat } from './feeds.ts';
 import { selectRepresentation } from './negotiate.ts';

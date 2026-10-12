@@ -1,13 +1,13 @@
 import path from 'node:path';
 
 import type { Document } from '../content/document.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { CatalogReader, DocumentLookup, IndexClock } from '../content/store.ts';
 import { syndicateToOf } from '../content/syndicate-to.ts';
 import type { SyndicationTarget } from '../content/syndicate-to.ts';
-import { publicDocumentAt } from '../web/documents.ts';
+import { publicDocumentAt } from '../content/permalinks.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { isRecord, nonEmptyStrings } from '../util/guards.ts';
-import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../web/locale.ts';
+import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../content/locale.ts';
 
 /**
  * Syndication targets (TASK-155): services such as IndieNews and Bridgy
@@ -360,7 +360,7 @@ export function syndicationCopies(contentDir: string): SyndicationCopies {
  */
 export function postSyndicatedAt(
   url: string,
-  store: ContentStore,
+  store: CatalogReader & DocumentLookup & IndexClock,
   copies: SyndicationCopies,
 ): Document | undefined {
   const post = store

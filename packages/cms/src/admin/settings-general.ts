@@ -16,7 +16,7 @@ import { SETTINGS_FIELDS } from '../site/settings-form.ts';
 import { readSiteJson } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
-import { CREATIVE_COMMONS_LICENSES } from '../web/license.ts';
+import { CREATIVE_COMMONS_LICENSES } from '../content/license.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';

@@ -12,7 +12,7 @@ import type { TestContext } from 'node:test';
 
 import { sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import { PACKAGED_THEME_DIR } from './themes.ts';
+import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 
 const box = sandbox();
 after(() => box.cleanup());

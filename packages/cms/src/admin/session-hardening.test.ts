@@ -3,7 +3,7 @@ import { after, describe, it } from 'node:test';
 
 import { CONTACT_POST_PATH } from '../contact/form.ts';
 import { MODERATE_PATH, UNSUBSCRIBE_PATH } from '../notifications/links.ts';
-import { WEBMENTION_PATH } from '../webmention/routes.ts';
+import { WEBMENTION_PATH } from '../webmention/endpoint.ts';
 import {
   browser,
   csrfField,

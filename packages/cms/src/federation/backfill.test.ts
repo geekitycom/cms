@@ -19,8 +19,8 @@ import { writeUsers } from '../admin/__testing__/users.ts';
 import { discardDatabase } from '../cache.ts';
 import type { Cms } from '../index.ts';
 import { createConversation } from '../web/conversation.ts';
-import type { ThreadReply } from '../web/conversation.ts';
-import type { HostLookup } from '../webmention/public-address.ts';
+import type { ThreadReply } from '../comments/conversation.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import {
   BACKFILL_DEPTH,
   BACKFILL_INTERVAL_MS,

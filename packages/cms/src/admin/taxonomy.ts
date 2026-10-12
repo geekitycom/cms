@@ -19,7 +19,7 @@ import { parseDocument } from '../content/parser.ts';
 import { saveDocument } from '../content/save.ts';
 import type { TermUsage } from '../content/store.ts';
 import { documentContent } from '../content/writer.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import {
@@ -29,11 +29,11 @@ import {
   TAXONOMY_LABELS,
   termHref,
   termKey,
-} from '../web/taxonomy.ts';
-import type { Taxonomy, TaxonomyRedirect } from '../web/taxonomy.ts';
+} from '../content/taxonomy.ts';
+import type { Taxonomy, TaxonomyRedirect } from '../content/taxonomy.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /** Everything that differs between the tags screen and the categories screen. */

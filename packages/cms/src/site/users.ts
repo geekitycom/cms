@@ -3,15 +3,14 @@ import path from 'node:path';
 import { adminTheme } from './admin-theme.ts';
 import type { AdminTheme } from './admin-theme.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
-import { revokeTokensForUser } from '../indieauth/tokens.ts';
 import {
   deliveryMode,
   notificationEvent,
   withNotification,
   withNotificationMode,
-} from '../notifications/preferences.ts';
+} from './notification-preferences.ts';
 import { messageOf } from '../util/errors.ts';
-import { relText } from '../web/navigation.ts';
+import { relText } from './navigation.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
 
 /**
@@ -72,7 +71,7 @@ export interface User {
    *
    * Absent for almost everybody, because it holds only what somebody actually
    * changed: an event nothing says anything about is at the default
-   * `src/notifications/preferences.ts` gives it, which is what lets a new
+   * `src/site/notification-preferences.ts` gives it, which is what lets a new
    * notice start working without anybody visiting the users screen. Keyed by
    * event name, so adding an event adds no field here.
    */
@@ -580,25 +579,16 @@ export class UnknownUserError extends Error {
   }
 }
 
-/**
- * Take a user out of the file. Returns `false` when there was nothing to take.
- *
- * Their IndieAuth tokens go with them (TASK-160): a token is a file in
- * `data/` too, so it is revoked here, where every caller deletes a user.
- *
- * Their sessions are not ended here: sessions are in the database, and the
- * screen that deletes a user ends them itself. A session that outlives this —
- * one in a database restored from a backup, say — names a user the file no
- * longer holds, and the admin guard turns that into no session at all.
- */
-export async function deleteUser(input: { dataDir: string; userId: number }): Promise<boolean> {
+export async function removeUserRecord(input: {
+  dataDir: string;
+  userId: number;
+}): Promise<boolean> {
   let deleted = false;
 
   await write(input.dataDir, (contents) => {
     deleted = contents.users.some((user) => user.id === input.userId);
     return { ...contents, users: contents.users.filter((user) => user.id !== input.userId) };
   });
-  await revokeTokensForUser(input.dataDir, input.userId);
 
   return deleted;
 }

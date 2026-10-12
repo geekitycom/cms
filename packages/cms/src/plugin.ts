@@ -42,7 +42,7 @@ export type { KvStore };
  * {@link webmentionKey} of its source and the post's permalink.
  */
 export { repliesKey } from './content/guids.ts';
-export { webmentionKey } from './web/feed-source.ts';
+export { webmentionKey } from './content/guids.ts';
 
 /**
  * The trailing-slash pair core joins URLs with, so a base URL with a doubled

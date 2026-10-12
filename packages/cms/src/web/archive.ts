@@ -2,8 +2,8 @@ import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
 import type { Document } from '../content/document.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { postLabel } from '../content/post-type.ts';
-import { DEFAULT_LOCALE } from './locale.ts';
-import { formatDate } from './templates.ts';
+import { DEFAULT_LOCALE } from '../content/locale.ts';
+import { formatDate } from '../theme/templates.ts';
 
 /**
  * The archive page: every post the site has published, grouped by the month it

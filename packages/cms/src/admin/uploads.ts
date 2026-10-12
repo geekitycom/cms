@@ -1,6 +1,6 @@
 import type { Hono, MiddlewareHandler } from 'hono';
 
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import {
   largestUploadLimit,
   refusedUpload,
@@ -10,7 +10,7 @@ import {
   UPLOAD_FIELD,
   uploadMarkdown,
 } from '../media/uploads.ts';
-import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 
 /** Where the editor posts a file it wants stored. */
 export const UPLOADS_PATH = `${ADMIN_PREFIX}/uploads`;

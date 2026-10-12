@@ -1,7 +1,7 @@
 import { messageOf } from '../util/errors.ts';
 import type { Document } from './document.ts';
 import { dateSortKey } from './store.ts';
-import type { ContentStore } from './store.ts';
+import type { IndexClock, ScheduleReader } from './store.ts';
 import type { ChangeOrigin, DocumentChange } from './sync.ts';
 
 /**
@@ -99,7 +99,7 @@ export interface ScheduleLogger {
 /** What {@link createScheduler} needs. */
 export interface CreateSchedulerOptions {
   /** The index, which answers what is due and when the next one is. */
-  store: ContentStore;
+  store: ScheduleReader & IndexClock;
   /** How a document that has come due is reported to every subscriber. */
   announce: (change: DocumentChange) => Promise<void>;
   /** How far the last run got, across restarts. */

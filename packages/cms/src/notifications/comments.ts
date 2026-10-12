@@ -1,16 +1,20 @@
 import { listUsers } from '../site/users.ts';
-import { commentAnchor } from '../web/conversation.ts';
+import { commentAnchor } from '../comments/conversation.ts';
 import { MODERATION_ACTIONS } from '../comments/moderate.ts';
-import type { AdminStore, PostComment } from '../admin/store.ts';
+import type { AdminStore, PostComment } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { DocumentLookup } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
-import type { MailService } from '../mail/service.ts';
+import type { MailService } from './mail-service.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { moderationLink, unsubscribeLink } from './links.ts';
 import { hasOptedOut } from './optouts.ts';
-import { isBatchedMode, notificationMode, notificationRecipients } from './preferences.ts';
+import {
+  isBatchedMode,
+  notificationMode,
+  notificationRecipients,
+} from '../site/notification-preferences.ts';
 
 /**
  * The two messages a comment sets off, and the rules about who gets them.
@@ -53,7 +57,7 @@ export interface CreateCommentNotifierOptions {
   /** The comment index, which is what a parent comment is looked up in. */
   admin: AdminStore;
   /** The content index, for the post's title. */
-  store: ContentStore;
+  store: DocumentLookup;
   cited?: CitedPageReader | undefined;
   /** The one door out for email. */
   mail: MailService;

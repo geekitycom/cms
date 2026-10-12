@@ -1,17 +1,8 @@
 import type { MiddlewareHandler } from 'hono';
 
-import { clientAddress } from './admin/throttle.ts';
-import type { ResolvedConfig } from './config.ts';
-import type { GeekityEnv } from './env.ts';
-
-/**
- * Where one access-log line goes.
- *
- * The line arrives without a trailing newline; the sink decides the framing.
- * The default sink is stdout — what a container collects, what dockge shows
- * and what journald keeps — and a test hands in one that keeps the lines.
- */
-export type AccessLogWriter = (line: string) => void;
+import { clientAddress } from './web/throttle.ts';
+import type { AccessLogWriter, ResolvedConfig } from './config.ts';
+import type { GeekityEnv } from './web/env.ts';
 
 /** What {@link createAccessLog} needs to know. */
 export interface AccessLogOptions {

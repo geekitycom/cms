@@ -1,7 +1,7 @@
 import type { Context, PageItems } from '@fedify/fedify';
 import type { Recipient } from '@fedify/vocab';
 
-import type { Follower } from '../admin/store.ts';
+import type { Follower } from '../store/admin-store.ts';
 import type { FederationContextData } from './federation.ts';
 
 /**

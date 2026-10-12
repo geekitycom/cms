@@ -3,10 +3,10 @@ import type { Environment } from 'nunjucks';
 
 import type { ResolvedConfig } from '../config.ts';
 import { postLabel } from '../content/post-type.ts';
-import type { GeekityEnv } from '../env.ts';
-import { mountAppActivity } from '../indieauth/app-activity.ts';
-import { mountConnectedApps } from '../indieauth/connected-apps.ts';
-import { CONSENT_PATH, mountConsentScreen } from '../indieauth/consent.ts';
+import type { GeekityEnv } from '../web/env.ts';
+import { mountAppActivity } from './app-activity.ts';
+import { mountConnectedApps } from './connected-apps.ts';
+import { CONSENT_PATH, mountConsentScreen } from './indieauth-consent.ts';
 import {
   countUsers,
   createUser,
@@ -17,7 +17,8 @@ import {
 import type { User } from '../site/users.ts';
 import { adminColorScheme } from '../site/admin-theme.ts';
 import { mountAppearanceScreen } from './appearance.ts';
-import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
+import { adminAssetResponse } from './assets.ts';
+import { ADMIN_ASSET_PREFIX, ADMIN_PREFIX, editUserPath, LOGIN_PATH } from '../site/admin-paths.ts';
 import { credentialProblem } from './credentials.ts';
 import {
   editorPath,
@@ -39,20 +40,19 @@ import { FORGOT_PATH, mountRecovery, RESET_PATH } from './recovery.ts';
 import { mountSettings } from './settings-pages.ts';
 import { mountSyndicationTargetsScreen } from './syndication-targets.ts';
 import {
-  ADMIN_PREFIX,
   clearSessionCookie,
-  CSRF_FIELD,
   CROSS_SITE_REFUSAL,
   crossSiteWrite,
   csrfTokenMatches,
   retireOldSessionCookie,
   sessionIdFrom,
   setSessionCookie,
-} from './session.ts';
-import type { AdminStore, Session } from './store.ts';
+} from '../web/session.ts';
+import { CSRF_FIELD } from '../forms/protection.ts';
+import type { AdminStore, Session } from '../store/admin-store.ts';
 import { mountTaxonomyScreens, TAXONOMY_KINDS } from './taxonomy.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
-import { clientAddress, createLoginThrottle, describeWait, loginKeys } from './throttle.ts';
+import { clientAddress, createLoginThrottle, describeWait, loginKeys } from '../web/throttle.ts';
 import { mountToolsScreen } from './tools.ts';
 import { devModeOn } from '../dev-mode.ts';
 import { stringOrEmpty } from '../util/forms.ts';
@@ -60,12 +60,10 @@ import { DEV_MODE_PATH, mountDevModeScreen } from './dev-mode.ts';
 import { mountPersonalDataScreen } from './personal-data.ts';
 import { mountEditorActions } from './editor-actions.ts';
 import { mountPluginsScreen, pluginScreens } from './plugins.ts';
-import type { LoginThrottle } from './throttle.ts';
+import type { LoginThrottle } from '../web/throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
-import { editUserPath, mountUsers } from './users.ts';
+import { mountUsers } from './users.ts';
 
-/** Where the login form lives. */
-export const LOGIN_PATH = `${ADMIN_PREFIX}/login`;
 /** Where the first-run form lives. */
 export const SETUP_PATH = `${ADMIN_PREFIX}/setup`;
 /** Where the logout form posts. */

@@ -7,7 +7,7 @@ import { after, describe, it } from 'node:test';
 import type { Document } from './document.ts';
 import { createScheduler, isScheduled, MAXIMUM_DELAY_MS, scheduledFor } from './schedule.ts';
 import type { ScheduleTimers, ScheduleWatermark } from './schedule.ts';
-import { openContentStore } from './store.ts';
+import { openContentStore } from './sqlite/open.ts';
 import type { ContentStore } from './store.ts';
 import type { DocumentChange } from './sync.ts';
 

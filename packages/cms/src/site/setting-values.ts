@@ -1,10 +1,10 @@
 import { LANGUAGE_TAG_PATTERN } from '../content/language.ts';
-import { clientIdentifier } from '../indieauth/client-id.ts';
+import { clientIdentifier } from '../util/client-id.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
-import { isCreativeCommonsKey } from '../web/license.ts';
-import { AI_CRAWLER_POLICIES } from '../web/robots.ts';
-import type { AiCrawlerPolicy } from '../web/robots.ts';
+import { isCreativeCommonsKey } from '../content/license.ts';
+import { AI_CRAWLER_POLICIES } from './robots.ts';
+import type { AiCrawlerPolicy } from './robots.ts';
 import type { ContentSignalChoice, LicenseChoice } from './settings.ts';
 
 /**

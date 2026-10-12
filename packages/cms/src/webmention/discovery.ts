@@ -1,6 +1,6 @@
 import { elementsIn, hasRel, parseHtml } from '../util/html-tree.ts';
 import { fetchPublic } from './fetch-public.ts';
-import type { HostLookup } from './public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 
 /**
  * Finding out where to send a webmention.

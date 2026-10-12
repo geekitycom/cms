@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, afterEach, describe, it } from 'node:test';
 
-import { openContentStore } from './store.ts';
+import { openContentStore } from './sqlite/open.ts';
 import type { ContentStore } from './store.ts';
 import { createContentSync } from './sync.ts';
 import type { ContentSync, DocumentChange } from './sync.ts';

@@ -12,14 +12,15 @@ import { RSVP_FRONT_MATTER_KEY, rsvpValue } from '../content/rsvp.ts';
 import { defaultPermalink, slugify } from '../content/slug.ts';
 import { calendarDayIn, toUtcInstant } from '../content/time.ts';
 import { normalizeBody } from '../content/writer.ts';
-import type { GeekityEnv } from '../env.ts';
+import { currentUsername } from '../web/document-site.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { readSiteSettings } from '../site/site-json.ts';
-import { findUserById, listUsers } from '../site/users.ts';
+import { listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
-import { authorContext } from '../web/authors.ts';
+import { authorContext } from '../site/authors.ts';
 import { documentContext } from '../web/context.ts';
 import { TEMPLATES } from '../web/render.ts';
-import { ADMIN_PREFIX } from './session.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 
 /** Where the editor posts a body it wants to see rendered. */
 export const PREVIEW_PATH = `${ADMIN_PREFIX}/preview`;
@@ -176,8 +177,3 @@ function orNow(value: string, timezone: string, now: Date): string {
 }
 
 /** The signed-in user's login, so a byline in the theme has something to print. */
-function currentUsername(c: Context<GeekityEnv>): string | undefined {
-  const userId = c.var.session?.userId;
-  if (userId == null) return undefined;
-  return findUserById(c.var.config.dataDir, userId)?.username;
-}

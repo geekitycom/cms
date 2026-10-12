@@ -5,9 +5,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import type { PostComment } from '../admin/store.ts';
+import type { PostComment } from '../store/admin-store.ts';
 import { createAkismetChecker, verifyAkismetKey, writeAkismetKey } from './akismet.ts';
-import type { CommentReport, CommentSubmission } from './submission.ts';
+import type { CommentReport, CommentSubmission } from '../forms/checker.ts';
 
 /**
  * Akismet, against a stub of Akismet.

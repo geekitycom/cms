@@ -6,7 +6,7 @@ import path from 'node:path';
 import '../../__testing__/stub-notify-pings.ts';
 import { seedActorKeys } from '../../federation/__testing__/keys.ts';
 import { createCms } from '../../index.ts';
-import { sessionCookieName } from '../session.ts';
+import { sessionCookieName } from '../../web/session.ts';
 import type { Cms, GeekityConfig, ServeContext } from '../../index.ts';
 
 /**

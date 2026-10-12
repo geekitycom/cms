@@ -16,7 +16,7 @@ import sharp from 'sharp';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import type { HostLookup } from '../webmention/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 import {
   AVATAR_DIRECTORY,
   AVATAR_MAX_AGE_MS,

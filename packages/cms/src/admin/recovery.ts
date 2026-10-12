@@ -1,18 +1,18 @@
 import type { Context, Hono } from 'hono';
 
 import type { ResolvedConfig } from '../config.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import { findUserById, findUserByIdentifier, setUserPassword } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { passwordProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { ADMIN_PREFIX } from './session.ts';
-import type { Session } from './store.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
+import type { Session } from '../store/admin-store.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
-import { clientAddress, describeWait, loginKeys } from './throttle.ts';
-import type { LoginThrottle } from './throttle.ts';
+import { clientAddress, describeWait, loginKeys } from '../web/throttle.ts';
+import type { LoginThrottle } from '../web/throttle.ts';
 
 /**
  * Forgetting a password, and getting back in without a shell.

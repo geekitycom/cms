@@ -34,21 +34,15 @@ export type {
   WebmentionOutcome,
   WebmentionRequest,
 } from './receive.ts';
+export { WEBMENTION_FIELDS, WEBMENTION_PATH, webmentionEndpointFor } from './endpoint.ts';
 export {
-  mountWebmentions,
-  WEBMENTION_FIELDS,
-  WEBMENTION_PATH,
-  webmentionEndpointFor,
-} from './routes.ts';
-export {
-  mountPingbacks,
   PINGBACK_FAULTS,
   PINGBACK_MAX_BYTES,
   PINGBACK_PATH,
   pingbackEndpointFor,
 } from './pingback.ts';
-export { isPrivateHost, publicHost, systemHostLookup } from './public-address.ts';
-export type { HostLookup } from './public-address.ts';
+export { isPrivateHost, publicHost, systemHostLookup } from '../util/public-address.ts';
+export type { HostLookup } from '../util/public-address.ts';
 export {
   fetchReplyContext,
   readReplyContext,

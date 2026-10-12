@@ -2,7 +2,7 @@ import type { Hono } from 'hono';
 
 import { devModeOn, readDevModeRecord } from '../dev-mode.ts';
 import type { DevModeEntry, HeldKind } from '../dev-mode.ts';
-import type { GeekityEnv } from '../env.ts';
+import type { GeekityEnv } from '../web/env.ts';
 import type { AdminRender } from './documents.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { TOOLS_PATH, TOOLS_SECTION } from './tools.ts';

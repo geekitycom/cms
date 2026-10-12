@@ -10,17 +10,17 @@ import {
   REDACTED_FIELDS,
   rsvpField,
   viaField,
-} from '../admin/store.ts';
-import type { AdminStore, CommentRecord, PostComment } from '../admin/store.ts';
+} from '../store/admin-store.ts';
+import type { AdminStore, CommentRecord, PostComment } from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
 import { slugForPermalink } from '../content/parser.ts';
 import { rsvpValue } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { DocumentLookup } from '../content/store.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { isRecord } from '../util/guards.ts';
-import { isKey } from '../web/feed-source.ts';
+import { isKey } from '../content/guids.ts';
 
 /**
  * Native comments as the files that hold them.
@@ -545,7 +545,7 @@ export async function rewriteComments(
 
 export async function followMovedComments(
   records: CommentRecords,
-  store: ContentStore,
+  store: DocumentLookup,
   document: Document,
 ): Promise<void> {
   for (const permalink of document.redirectFrom ?? []) {
@@ -556,12 +556,12 @@ export async function followMovedComments(
 
 export async function followAllMovedComments(
   records: CommentRecords,
-  store: ContentStore,
+  store: DocumentLookup,
 ): Promise<void> {
   for (const slug of commentSlugs(records.contentDir)) await follow(records, store, slug);
 }
 
-async function follow(records: CommentRecords, store: ContentStore, from: string): Promise<void> {
+async function follow(records: CommentRecords, store: DocumentLookup, from: string): Promise<void> {
   const to = permalinkOwner(store, readPost(records, from).post)?.slug;
   if (to === undefined || to === from) return;
 
@@ -576,7 +576,7 @@ async function follow(records: CommentRecords, store: ContentStore, from: string
   );
 }
 
-function followFile(records: CommentRecords, store: ContentStore, from: string): void {
+function followFile(records: CommentRecords, store: DocumentLookup, from: string): void {
   const left = readPost(records, from);
   const owner = permalinkOwner(store, left.post);
   if (owner === undefined || owner.slug === from) return;
@@ -599,7 +599,7 @@ function followFile(records: CommentRecords, store: ContentStore, from: string):
  * The document a URL of this site belongs to: the one at it, else the one
  * whose `redirect_from` names it.
  */
-export function permalinkOwner(store: ContentStore, permalink: string): Document | undefined {
+export function permalinkOwner(store: DocumentLookup, permalink: string): Document | undefined {
   if (permalink === '') return undefined;
   return store.getByPermalink(permalink) ?? store.getByFormerPermalink(permalink);
 }

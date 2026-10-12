@@ -7,12 +7,12 @@ import type {
   InboxActivity,
   NewFollower,
   NewInboxActivity,
-} from '../admin/store.ts';
+} from '../store/admin-store.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { messageOf } from '../util/errors.ts';
 import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { isRecord } from '../util/guards.ts';
-import { uriOf } from './replies.ts';
+import { uriOf } from '../store/inbox-replies.ts';
 
 /**
  * The two things an ActivityPub site cannot regenerate, as files it publishes.
@@ -59,7 +59,7 @@ export const INBOX_DIRECTORY = `${FEDERATION_DATA_DIRECTORY}/inbox`;
  * one with an unusual name in it.
  *
  * `inbox` is not a username: it is where the shared log lives, and
- * `web/authors.ts` reserves the path for exactly that reason. A name that
+ * `content/authors.ts` reserves the path for exactly that reason. A name that
  * could climb out of the directory is refused rather than sanitised, because
  * sanitising two different usernames into one directory would merge two
  * people's followers.

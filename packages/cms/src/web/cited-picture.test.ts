@@ -8,7 +8,7 @@ import { mf2 } from 'microformats-parser';
 import { gifWithMetadata, jpegWithMetadata, leakedSecrets } from '../__testing__/metadata.ts';
 import { sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
-import type { HostLookup } from '../webmention/public-address.ts';
+import type { HostLookup } from '../util/public-address.ts';
 
 const box = sandbox();
 

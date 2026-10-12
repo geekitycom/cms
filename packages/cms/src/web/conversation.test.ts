@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { openAdminStore } from '../admin/store.ts';
-import type { AdminStore, CommentStatus } from '../admin/store.ts';
-import { openContentStore } from '../content/store.ts';
+import { openAdminStore } from '../store/admin-store.ts';
+import type { AdminStore, CommentStatus } from '../store/admin-store.ts';
+import { openContentStore } from '../content/index.ts';
 import type { ContentStore } from '../content/store.ts';
 import { parseDocument } from '../content/parser.ts';
 import type { Document } from '../content/document.ts';
@@ -15,7 +15,7 @@ import { authorizeQuote } from '../federation/quotes.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { createConversation } from './conversation.ts';
-import type { ConversationReader, Interaction, ThreadReply } from './conversation.ts';
+import type { ConversationReader, Interaction, ThreadReply } from '../comments/conversation.ts';
 import { avatarHref } from '../avatars/avatars.ts';
 
 const temporaryDirs: string[] = [];

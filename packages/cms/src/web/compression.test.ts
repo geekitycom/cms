@@ -10,7 +10,7 @@ import { after, describe, it } from 'node:test';
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 
 import { browser, csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
-import { sessionCookieName } from '../admin/session.ts';
+import { sessionCookieName } from './session.ts';
 import type { GeekityConfig } from '../config.ts';
 import type { Cms } from '../index.ts';
 

@@ -1,7 +1,7 @@
 import { mkdir, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { readActivityLog } from '../../indieauth/activity-log.ts';
+import { readActivityLog } from '../../web/indieauth-activity-log.ts';
 import { issueTokens } from '../../indieauth/tokens.ts';
 import type { Cms } from '../../index.ts';
 import { signIn } from './harness.ts';

@@ -1,5 +1,10 @@
-import { clientIdentifier, sameClient } from './client-id.ts';
-import { SCOPES } from './discovery.ts';
+import { clientIdentifier, sameClient } from '../util/client-id.ts';
+
+/**
+ * The scopes a client may ask for: the profile ones (TASK-158) and the
+ * Micropub ones a token is issued for (TASK-160).
+ */
+export const SCOPES = ['profile', 'email', 'create', 'update', 'delete', 'media'] as const;
 
 /** A scope this site can grant. */
 export type Scope = (typeof SCOPES)[number];

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { Document } from '../content/document.ts';
 import { documentFrontMatter } from '../content/writer.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { matchesEtag } from './assets.ts';
+import { matchesEtag } from '../theme/assets.ts';
 
 /**
  * Which of a resource's representations a request asked for.
@@ -608,4 +608,16 @@ function splitList(header: string): string[] {
     .split(',')
     .map((part) => part.trim())
     .filter((part) => part !== '');
+}
+
+/**
+ * The representation the failed request was after: the one its `.md` or
+ * `.json` suffix names, else the one its `Accept` header prefers, else HTML.
+ */
+export function representationOf(pathname: string, accept: string | undefined): Representation {
+  return (
+    splitRepresentationExtension(pathname)?.representation ??
+    selectRepresentation(accept, DOCUMENT_REPRESENTATIONS) ??
+    'html'
+  );
 }

@@ -1,5 +1,6 @@
-import type { SiteData } from './context.ts';
-import { excerptFromHtml, feedItems } from './feed-item.ts';
+import type { SiteData } from '../theme/site-data.ts';
+import { excerptFromHtml } from '../content/excerpt.ts';
+import { feedItems } from './feed-item.ts';
 import type { FeedItem } from './feed-item.ts';
 import {
   contentTypeOf,
@@ -24,13 +25,13 @@ import {
   SY_NAMESPACE,
   WFW_NAMESPACE,
 } from './feed-xml.ts';
-import { resolveLicense } from './license.ts';
+import { resolveLicense } from '../content/license.ts';
 import { latestModified } from './negotiate.ts';
 import { isCaptions } from '../content/enclosure.ts';
 import type { AlternateEnclosure, Enclosure } from '../content/enclosure.ts';
 import { escapeText } from '../util/html.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { sanitizeCommentHtml } from './sanitize.ts';
+import { sanitizeCommentHtml } from '../content/sanitize.ts';
 
 /**
  * RSS 2.0: the post feed, the comments feed, and the channel they share.

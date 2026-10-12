@@ -2,8 +2,8 @@ import { transcriptTypeFor } from '../content/enclosure-form.ts';
 import type { AlternateRow } from '../content/enclosure-form.ts';
 import type { LocationForm } from '../content/location-form.ts';
 import type { PhotoRow } from '../content/photo-form.ts';
-import type { AltTextLibrary } from '../images/alt-text.ts';
-import { uploadPath } from '../images/markup.ts';
+import type { AltTextLibrary } from '../content/alt-text.ts';
+import { uploadPath } from '../content/image-tags.ts';
 import { listUploads } from '../media/library.ts';
 import { trimmedField } from '../util/forms.ts';
 

@@ -15,7 +15,7 @@
  */
 // Types only: the image modules load the image encoder, which Post Type
 // Discovery, and so everything that asks a post its type, must not.
-import type { AltTextLibrary } from '../images/alt-text.ts';
+import type { AltTextLibrary } from './alt-text.ts';
 import { isUploadUrl, isWebUrl } from './enclosure.ts';
 import { UPLOAD_ASSET_PREFIX } from './uploads.ts';
 

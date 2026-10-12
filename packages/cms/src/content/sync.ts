@@ -17,7 +17,7 @@ import {
 import { parseDocument } from './parser.ts';
 import { replyTarget } from './post-type.ts';
 import { DuplicatePermalinkError, TRASH_DIRECTORY } from './store.ts';
-import type { ContentStore } from './store.ts';
+import type { CatalogReader, DocumentLookup, IndexClock, IndexWriter } from './store.ts';
 import { isServed } from './served.ts';
 
 /** File extensions the sync treats as documents. */
@@ -104,7 +104,7 @@ export interface SyncLogger {
 /** How to build a {@link ContentSync}. */
 export interface CreateContentSyncOptions {
   /** The index to keep in step with the files. */
-  store: ContentStore;
+  store: DocumentLookup & CatalogReader & IndexWriter & IndexClock;
   /** Absolute path of the content directory. It need not exist yet. */
   contentDir: string;
   /** Watch for changes after the boot scan. Default `true`. */

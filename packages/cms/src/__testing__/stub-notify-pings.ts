@@ -1,4 +1,5 @@
-import { DEFAULT_NOTIFY_SERVER, notifyEndpoints } from '../web/feeds.ts';
+import { DEFAULT_NOTIFY_SERVER } from '../site/feed-settings.ts';
+import { notifyEndpoints } from '../web/feeds.ts';
 
 const ping = notifyEndpoints(DEFAULT_NOTIFY_SERVER)?.ping;
 const passOn = globalThis.fetch;

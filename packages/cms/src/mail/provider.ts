@@ -83,3 +83,11 @@ export interface MailProvider {
    */
   deliver(message: OutgoingMail): Promise<MailDelivery>;
 }
+
+/** Where the service says what it did and what it could not do. `console` will do. */
+export interface MailLogger {
+  /** One line per message that went, and one per message that was not sent. */
+  info(message: string): void;
+  /** One line per attempt that failed, and one when the service gives up. */
+  warn(message: string): void;
+}

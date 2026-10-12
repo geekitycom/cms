@@ -6,14 +6,14 @@ import { parseIconSetting } from '../images/icons.ts';
 import { sourceFile } from '../images/paths.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import { isFileSync } from '../util/files.ts';
-import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from '../web/feed-source.ts';
-import { generateIndexNowKey, isIndexNowKey } from '../web/indexnow.ts';
-import { classifyLicense, isLicenseUrl, NO_LICENSE } from '../web/license.ts';
-import { canonicalLocale } from '../web/locale.ts';
-import { menusOf } from '../web/navigation.ts';
-import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from '../web/robots.ts';
-import { taxonomyBaseProblems, taxonomyRedirectsOf } from '../web/taxonomy.ts';
-import { PACKAGED_THEME, readTheme, themeNameProblem } from '../web/themes.ts';
+import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from './feed-settings.ts';
+import { generateIndexNowKey, isIndexNowKey } from './indexnow-key.ts';
+import { classifyLicense, isLicenseUrl, NO_LICENSE } from '../content/license.ts';
+import { canonicalLocale } from '../content/locale.ts';
+import { menusOf } from './navigation.ts';
+import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from './robots.ts';
+import { taxonomyBaseProblems, taxonomyRedirectsOf } from '../content/taxonomy.ts';
+import { PACKAGED_THEME, readTheme, themeNameProblem } from '../theme/themes.ts';
 import {
   clientsWithoutPkceOf,
   EMAIL_PATTERN,

@@ -1,8 +1,7 @@
-import { userForAuthor } from '../content/authors.ts';
+import { userForAuthor, authorHref, parseAuthorPath } from '../content/authors.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import type { User } from '../site/users.ts';
 import { withoutTrailingSlash, withTrailingSlash } from '../util/url.ts';
-import { authorHref, parseAuthorPath } from '../web/authors.ts';
 
 /** What resolving a me URL needs to know about the site. */
 export interface IdentitySite {
