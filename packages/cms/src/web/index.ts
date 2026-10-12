@@ -213,13 +213,9 @@ export { offsetForPage, paginate } from './pagination.ts';
 export type { Pagination, PaginateOptions } from './pagination.ts';
 export { createRenderer, OPTIONAL_TEMPLATES, TEMPLATES } from './render.ts';
 export type { CreateRendererOptions, Listing, Renderer, SearchPage } from './render.ts';
-export {
-  commentsFeedHref,
-  feedHref,
-  homeHref,
-  listingPageHref,
-  mountPublicSite,
-} from './routes.ts';
+export { feedHref, homeHref, listingPageHref } from './listing-subject.ts';
+export { commentsFeedHref } from './paths.ts';
+export { mountPublicSite } from './routes.ts';
 export { sanitizeCommentHtml } from './sanitize.ts';
 export {
   MAXIMUM_QUERY_LENGTH,

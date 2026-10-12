@@ -4,7 +4,7 @@ import type { GeekityEnv } from '../env.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { parseAuthorPath } from '../web/authors.ts';
-import { requestPath } from '../web/routes.ts';
+import { requestPath } from '../web/request.ts';
 
 /** Where the authorization server metadata document is published. */
 export const INDIEAUTH_METADATA_PATH = '/_geekity/indieauth/metadata';

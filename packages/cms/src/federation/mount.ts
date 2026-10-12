@@ -11,7 +11,7 @@ import { absoluteUrl } from '../util/url.ts';
 import { authorHref, parseAuthorPath } from '../web/authors.ts';
 import { goneDocumentAt, isGone, publicDocumentAt } from '../web/documents.ts';
 import { prefersActivityStreams } from '../web/negotiate.ts';
-import { notFound, requestPath } from '../web/routes.ts';
+import { notFound, requestPath } from '../web/request.ts';
 import { actorAliases, actorId, userActor } from './actor.ts';
 import { isFederatedDocument, postObject, postTombstone } from './article.ts';
 import type { FederationContextData, SiteFederation } from './federation.ts';
