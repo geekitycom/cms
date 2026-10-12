@@ -21,7 +21,8 @@ export {
   SOURCE_MEDIA_TYPE,
   toInstant,
 } from './article.ts';
-export { createDeliveryService, deliveryTargets, groupByInbox } from './delivery.ts';
+export { createDeliveryService, deliveryTargets } from './delivery.ts';
+export { groupByInbox } from './delivery-plan.ts';
 export type {
   CreateDeliveryServiceOptions,
   DeliveryLogger,
