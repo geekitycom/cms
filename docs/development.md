@@ -99,9 +99,16 @@ interfaces it reads, and only `cms/`, `content/` and `exports.ts` name
 module per query family, and it is the only part of `content/` that imports
 `node:sqlite`. `content/store-boundary.test.ts` checks these rules.
 
-The map lists each remaining exception with the file, the unit it may import,
-the task that removes it and the reason. The exceptions left are the route
-files that TASK-368 moves out of `comments/`, `webmention/` and `federation/`.
+No unit below the public site imports Hono: not `hono`, `hono/*`, `@hono/*`
+or `@fedify/hono`. A feature such as `comments/`, `webmention/` or
+`federation/` keeps its rules as plain functions over values the request has
+already been parsed into, and the handler that reads the request and builds
+the response lives in `web/`, for example `web/comment-routes.ts`,
+`web/webmention-routes.ts`, `web/pingback-routes.ts` and
+`web/federation-routes.ts`. The same test enforces this rule.
+
+The map can list an exception with the file, the unit it may import, the task
+that removes it and the reason. No exceptions are left.
 
 ## Requirements
 

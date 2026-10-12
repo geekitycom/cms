@@ -17,7 +17,7 @@ import type { SiteFederation } from '../federation/federation.ts';
 import { followersPage, lastFollowersCursor } from '../federation/followers.ts';
 import { receiveActivity } from '../federation/inbox.ts';
 import { loadActorKeyPairs } from '../federation/keys.ts';
-import { contextData } from '../federation/mount.ts';
+import { contextData } from './federation-routes.ts';
 import type {
   JsonLdDocument,
   PluginFederationContext,

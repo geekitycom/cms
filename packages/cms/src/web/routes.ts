@@ -1,7 +1,7 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
 import { mountAvatars } from './avatar-routes.ts';
-import { mountComments } from '../comments/routes.ts';
+import { mountComments } from './comment-routes.ts';
 import { mountContact } from './contact-routes.ts';
 import { COMMENT_PAGE_PREFIX } from '../content/guids.ts';
 import { findPathRedirect, findQueryRedirect, redirectLocation } from '../content/redirects.ts';
@@ -12,8 +12,8 @@ import { advertiseIdentityEndpoints } from './indieauth-discovery.ts';
 import { mountNotificationLinks } from './notification-routes.ts';
 import { robotsPolicyOf } from '../site/settings.ts';
 import { readSiteSettings } from '../site/site-json.ts';
-import { mountPingbacks } from '../webmention/pingback.ts';
-import { mountWebmentions } from '../webmention/routes.ts';
+import { mountPingbacks } from './pingback-routes.ts';
+import { mountWebmentions } from './webmention-routes.ts';
 import { favicon, imageVariant, themeAsset, upload } from './asset-routes.ts';
 import { THEME_ASSET_PREFIX } from '../theme/assets.ts';
 import { negotiateDocument } from './document-page.ts';

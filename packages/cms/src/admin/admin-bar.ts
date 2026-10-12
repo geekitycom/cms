@@ -7,7 +7,7 @@ import { editorPath, newEditorPath, PAGE_SCREENS, POST_SCREENS } from './documen
 import type { DocumentScreens } from './documents.ts';
 import { LOGOUT_PATH } from './routes.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from './templates.ts';
-import { signedInAccount } from '../comments/viewer.ts';
+import { signedInAccount } from '../web/signed-in.ts';
 import type { SignedInAccount } from '../comments/viewer.ts';
 import type { Document, DocumentType } from '../content/document.ts';
 import type { GeekityEnv } from '../web/env.ts';

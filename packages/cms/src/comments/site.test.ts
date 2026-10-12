@@ -565,6 +565,32 @@ describe('the spam checker seam', () => {
   });
 });
 
+describe('a submission for a post that is not there', () => {
+  it('is a 404 that says so, for a slug nobody wrote', async () => {
+    const { cms } = await site();
+
+    const response = await submit(cms, submission({ [COMMENT_FIELDS.post]: 'no-such-post' }));
+
+    assert.equal(response.status, 404);
+    assert.equal(await response.text(), 'There is no such post to comment on.');
+    assert.equal(cms.admin.listComments({}).length, 0);
+  });
+
+  it('is a 404 for a draft, which is not served', async () => {
+    const { cms } = await site({
+      'posts/2026-09-19-hello-world.md': POST.replace(
+        '---\n\nWords.',
+        'draft: true\n---\n\nWords.',
+      ),
+    });
+
+    const response = await submit(cms, submission());
+
+    assert.equal(response.status, 404);
+    assert.equal(cms.admin.listComments({}).length, 0);
+  });
+});
+
 describe('a post that has stopped taking comments', () => {
   /** The same post, dated far enough back to be past the closing window. */
   const OLD = `---

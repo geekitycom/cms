@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 
 import { LOGIN_PATH, editUserPath } from '../site/admin-paths.ts';
-import { signedInAccount } from '../comments/viewer.ts';
+import { signedInAccount } from './signed-in.ts';
 import type { GeekityEnv } from './env.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';

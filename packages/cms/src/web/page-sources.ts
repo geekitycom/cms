@@ -1,4 +1,4 @@
-import { commentFormFor } from '../comments/routes.ts';
+import { commentFormFor } from '../comments/page-form.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { contactFormFor } from '../contact/form.ts';
 import type { Document } from '../content/document.ts';

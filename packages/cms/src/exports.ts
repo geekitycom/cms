@@ -399,7 +399,6 @@ export {
   MINIMUM_SUBMIT_SECONDS,
   moderateComment,
   MODERATION_ACTIONS,
-  mountComments,
   normalizeWebsite,
   readAkismetKey,
   readComments,
@@ -407,7 +406,6 @@ export {
   refilledCommentForm,
   removeAkismetKey,
   renderCommentMarkdown,
-  signedInCommenter,
   signedInCommentForm,
   submitComment,
   updateComment,
@@ -491,6 +489,8 @@ export {
   submitContactMessage,
 } from './contact/index.ts';
 export { mountContact } from './web/index.ts';
+export { mountComments, signedInCommenter } from './web/index.ts';
+export { mountFederation, webFingerSubject } from './web/index.ts';
 export type {
   ContactForm,
   ContactFormContext,
@@ -853,7 +853,6 @@ export {
   acctOf,
   handleHref,
   userDirectory,
-  webFingerSubject,
   WEBFINGER_PATH,
   followerFrom,
   followerRecipient,
@@ -882,7 +881,6 @@ export {
   loadActorKeyPairs,
   logActivity,
   migrateFederationToFiles,
-  mountFederation,
   NODEINFO_PATH,
   OUTBOX_PAGE_SIZE,
   OUTBOX_PATH,

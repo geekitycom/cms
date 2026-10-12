@@ -63,7 +63,7 @@ export type {
 } from './intake.ts';
 export { migrateCommentEmails, migrateCommentKeys } from './migrations.ts';
 export type { CommentEmailMigrationReport, CommentKeyMigrationReport } from './migrations.ts';
-export { commentFormFor, commentNoticeFor, mountComments } from './routes.ts';
+export { commentFormFor, commentNoticeFor } from './page-form.ts';
 export {
   COMMENT_FIELDS,
   COMMENT_RATE_LIMIT,
@@ -95,4 +95,3 @@ export type {
   CommentThrottle,
   SubmitCommentOptions,
 } from './submission.ts';
-export { signedInCommenter } from './viewer.ts';

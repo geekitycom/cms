@@ -34,14 +34,8 @@ export type {
   WebmentionOutcome,
   WebmentionRequest,
 } from './receive.ts';
+export { WEBMENTION_FIELDS, WEBMENTION_PATH, webmentionEndpointFor } from './endpoint.ts';
 export {
-  mountWebmentions,
-  WEBMENTION_FIELDS,
-  WEBMENTION_PATH,
-  webmentionEndpointFor,
-} from './routes.ts';
-export {
-  mountPingbacks,
   PINGBACK_FAULTS,
   PINGBACK_MAX_BYTES,
   PINGBACK_PATH,

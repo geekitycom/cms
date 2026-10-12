@@ -88,8 +88,7 @@ export {
   userDirectory,
 } from './records.ts';
 export type { FederationIndexReport, FederationRecords, InboxLine } from './records.ts';
-export { acctOf, mountFederation, webFingerSubject, WEBFINGER_PATH } from './mount.ts';
-export type { MountFederationOptions } from './mount.ts';
+export { acctOf, WEBFINGER_PATH } from './webfinger.ts';
 export {
   ACTOR_PATH,
   createActivityId,

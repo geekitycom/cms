@@ -11,7 +11,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { COMMENT_FIELDS } from './submission.ts';
 import { commentsFile } from './records.ts';
-import { WEBMENTION_PATH } from '../webmention/routes.ts';
+import { WEBMENTION_PATH } from '../webmention/endpoint.ts';
 
 /**
  * Akismet where it actually runs: a whole CMS, a comment posted through the

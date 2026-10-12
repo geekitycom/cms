@@ -263,6 +263,10 @@ describe('the token on the signed-in form', () => {
     );
 
     assert.equal(refused.status, 403);
+    assert.equal(
+      await refused.text(),
+      'That form was stale or came from somewhere else. Reload and try again.',
+    );
     assert.deepEqual(replyPosts(cms), [], 'nothing was written');
   });
 
@@ -287,6 +291,7 @@ describe('the token on the signed-in form', () => {
     });
 
     assert.equal(refused.status, 403);
+    assert.equal(await refused.text(), 'That request came from another site, so it was refused.');
     assert.deepEqual(replyPosts(cms), [], 'nothing was written');
   });
 

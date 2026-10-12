@@ -67,7 +67,7 @@ import type { ReplyContext } from '../webmention/reply-context.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
 import type { SyndicationTarget } from '../content/syndicate-to.ts';
 import { pingbackEndpointFor } from '../webmention/pingback.ts';
-import { webmentionEndpointFor } from '../webmention/routes.ts';
+import { webmentionEndpointFor } from '../webmention/endpoint.ts';
 
 /** Templates the default theme ships and the public routes ask for by name. */
 export const TEMPLATES = {

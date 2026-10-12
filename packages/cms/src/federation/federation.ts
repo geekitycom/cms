@@ -90,7 +90,7 @@ export interface CreateSiteFederationOptions extends FederationOverrides {
  * collections, WebFinger's neighbours and NodeInfo.
  *
  * A post's object is not here — it is its permalink (decision-13), served by
- * the middleware in `mount.ts`, which also owns `/.well-known/webfinger`
+ * the middleware in `web/federation-routes.ts`, which also owns `/.well-known/webfinger`
  * (doc-8) because Fedify's own cannot publish the aliases decision-14 wants.
  *
  * It is a factory rather than a module-level singleton so the KV store and the
@@ -131,7 +131,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
     // WebFinger asks for a username, and a user's username *is* their
     // identifier now, so this is the identity function over the people who
     // exist. It stays registered because Fedify's own lookups — `parseUri`,
-    // the collection URIs — go through it, even though `mount.ts` answers
+    // the collection URIs — go through it, even though `web/federation-routes.ts` answers
     // `/.well-known/webfinger` itself.
     .mapHandle((context, username) => (actorFor(context, username) === undefined ? null : username))
     .setKeyPairsDispatcher(async (context, identifier) =>
@@ -142,7 +142,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
 
   // No object dispatcher for posts. decision-13 makes a post's id its
   // permalink, which Fedify never minted and cannot route: the permalink
-  // middleware in `mount.ts` answers an ActivityStreams request there, and
+  // middleware in `web/federation-routes.ts` answers an ActivityStreams request there, and
   // `isFederatedDocument` is the one rule it and the outbox both read, so they
   // cannot disagree about what exists.
 

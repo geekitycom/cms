@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 
 import { COMMENT_NOTICE_PARAM, COMMENT_REPLY_PARAM } from '../comments/form.ts';
 import type { CommentViewer } from '../comments/form.ts';
-import { commentNoticeFor, commentReplyTarget } from '../comments/routes.ts';
+import { commentNoticeFor, commentReplyTarget } from '../comments/page-form.ts';
 import { commenterOf } from '../comments/viewer.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import type { Document } from '../content/document.ts';
@@ -11,7 +11,7 @@ import type { GeekityEnv } from './env.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { pingbackEndpointFor } from '../webmention/pingback.ts';
-import { WEBMENTION_PATH } from '../webmention/routes.ts';
+import { WEBMENTION_PATH } from '../webmention/endpoint.ts';
 import { documentMarkdown } from './markdown-representation.ts';
 import {
   DOCUMENT_REPRESENTATIONS,

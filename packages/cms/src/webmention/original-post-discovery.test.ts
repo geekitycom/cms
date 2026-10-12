@@ -15,7 +15,7 @@ import { writeSiteJson } from '../site/site-json.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { fetchReplyContext } from './reply-context.ts';
 import type { FediverseLookup } from './reply-context.ts';
-import { WEBMENTION_PATH } from './routes.ts';
+import { WEBMENTION_PATH } from './endpoint.ts';
 
 remoteHostsDoNotExist();
 

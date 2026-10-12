@@ -47,39 +47,13 @@ const LAYERS: readonly Layer[] = [
   { name: 'command line', units: ['cli.ts'] },
 ];
 
-const ROUTE_IN_A_FEATURE =
-  'a Hono route file still inside a feature directory; it reads the request context and the delivery helpers until it moves to web/';
+const EXCEPTIONS: readonly Exception[] = [];
 
-const EXCEPTIONS: readonly Exception[] = [
-  { file: 'comments/routes.ts', mayImport: 'web/', until: 'TASK-368', because: ROUTE_IN_A_FEATURE },
-  {
-    file: 'comments/routes.ts',
-    mayImport: 'admin/',
-    until: 'TASK-368',
-    because: 'a reply post from the comment form is written through the admin’s documentSite',
-  },
-  { file: 'comments/viewer.ts', mayImport: 'web/', until: 'TASK-368', because: ROUTE_IN_A_FEATURE },
-  {
-    file: 'webmention/routes.ts',
-    mayImport: 'web/',
-    until: 'TASK-368',
-    because: ROUTE_IN_A_FEATURE,
-  },
-  {
-    file: 'webmention/pingback.ts',
-    mayImport: 'web/',
-    until: 'TASK-368',
-    because: ROUTE_IN_A_FEATURE,
-  },
-  {
-    file: 'federation/mount.ts',
-    mayImport: 'web/',
-    until: 'TASK-368',
-    because: ROUTE_IN_A_FEATURE,
-  },
-];
+const IMPORT = /(?:\bfrom\s+|\bimport\s*\(\s*|^\s*import\s+)['"]([^'"]+)['"]/g;
 
-const RELATIVE_IMPORT = /(?:\bfrom\s+|\bimport\s*\(\s*|^\s*import\s+)['"](\.{1,2}\/[^'"]+)['"]/g;
+const HTTP_FRAMEWORK = /^(?:hono|@hono\/[^/]+|@fedify\/hono)(?:\/|$)/;
+
+const LOWEST_HTTP_LAYER = 'web/';
 
 function unitOf(relative: string): string {
   const [first = '', ...rest] = relative.split(path.sep);
@@ -94,6 +68,32 @@ function isSource(relative: string): boolean {
   );
 }
 
+interface Specifier {
+  readonly specifier: string;
+  readonly file: string;
+  readonly absolute: string;
+  readonly at: string;
+}
+
+function sourceSpecifiers(): Specifier[] {
+  const found: Specifier[] = [];
+  for (const entry of readdirSync(SOURCE_ROOT, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const absolute = path.join(entry.parentPath, entry.name);
+    const file = path.relative(SOURCE_ROOT, absolute);
+    if (!isSource(file)) continue;
+    readFileSync(absolute, 'utf8')
+      .split('\n')
+      .forEach((line, index) => {
+        for (const [, specifier] of line.matchAll(IMPORT)) {
+          if (specifier === undefined) continue;
+          found.push({ specifier, file, absolute, at: `${file}:${String(index + 1)}` });
+        }
+      });
+  }
+  return found;
+}
+
 interface Import {
   readonly from: string;
   readonly to: string;
@@ -102,26 +102,14 @@ interface Import {
 }
 
 function sourceImports(): Import[] {
-  const found: Import[] = [];
-  for (const entry of readdirSync(SOURCE_ROOT, { recursive: true, withFileTypes: true })) {
-    if (!entry.isFile()) continue;
-    const file = path.join(entry.parentPath, entry.name);
-    const relative = path.relative(SOURCE_ROOT, file);
-    if (!isSource(relative)) continue;
-    readFileSync(file, 'utf8')
-      .split('\n')
-      .forEach((line, index) => {
-        for (const [, specifier] of line.matchAll(RELATIVE_IMPORT)) {
-          if (specifier === undefined) continue;
-          const landed = path.relative(SOURCE_ROOT, path.resolve(path.dirname(file), specifier));
-          const to = unitOf(landed);
-          const from = unitOf(relative);
-          if (to === from) continue;
-          found.push({ from, to, file: relative, at: `${relative}:${String(index + 1)}` });
-        }
-      });
-  }
-  return found;
+  return sourceSpecifiers()
+    .filter(({ specifier }) => specifier.startsWith('./') || specifier.startsWith('../'))
+    .flatMap(({ specifier, file, absolute, at }) => {
+      const landed = path.relative(SOURCE_ROOT, path.resolve(path.dirname(absolute), specifier));
+      const from = unitOf(file);
+      const to = unitOf(landed);
+      return to === from ? [] : [{ from, to, file, at }];
+    });
 }
 
 function topLevelUnits(): string[] {
@@ -164,6 +152,21 @@ describe('the layer map', () => {
         const where = target.rank === own.rank ? 'its own layer' : 'a higher layer';
         return [
           `${from} (${own.name}) must not import from ${to} (${target.name}, ${where}): ${at}`,
+        ];
+      });
+    assert.deepEqual(offences, []);
+  });
+
+  it('keeps Hono out of every layer below the public site', () => {
+    const lowest = layerOf.get(LOWEST_HTTP_LAYER)?.rank;
+    assert.ok(lowest !== undefined, `${LOWEST_HTTP_LAYER} needs a layer in LAYERS`);
+    const offences = sourceSpecifiers()
+      .filter(({ specifier }) => HTTP_FRAMEWORK.test(specifier))
+      .flatMap(({ specifier, file, at }) => {
+        const own = layerOf.get(unitOf(file));
+        if (own === undefined || own.rank >= lowest) return [];
+        return [
+          `${unitOf(file)} (${own.name}) must not import ${specifier}; HTTP handlers live in ${LOWEST_HTTP_LAYER} or above: ${at}`,
         ];
       });
     assert.deepEqual(offences, []);

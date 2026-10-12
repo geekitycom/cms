@@ -6,7 +6,7 @@ import { baselineSecurityHeaders, mountAdmin } from '../admin/index.ts';
 import { createWriteGate } from '../drain.ts';
 import type { WriteGate } from '../drain.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { mountFederation } from '../federation/index.ts';
+import { mountFederation } from '../web/federation-routes.ts';
 import { mountAuthorizationEndpoint } from '../admin/indieauth-consent.ts';
 import { mountIndieAuthDiscovery } from '../web/indieauth-discovery.ts';
 import { mountTokenEndpoint, mountTokenInfoEndpoints } from '../web/indieauth-token.ts';

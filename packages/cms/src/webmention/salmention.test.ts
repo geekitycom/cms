@@ -15,7 +15,7 @@ import type { CommentChecker } from '../forms/checker.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';
 import { sourceEntry } from './microformats.ts';
-import { WEBMENTION_PATH } from './routes.ts';
+import { WEBMENTION_PATH } from './endpoint.ts';
 import { SALMENTION_LIMIT } from './service.ts';
 
 /**

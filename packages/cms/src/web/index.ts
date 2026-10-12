@@ -310,3 +310,7 @@ export type { RedirectSource } from '../content/redirects.ts';
 export { mountAvatars } from './avatar-routes.ts';
 export { mountContact } from './contact-routes.ts';
 export { mountNotificationLinks } from './notification-routes.ts';
+export { mountComments } from './comment-routes.ts';
+export { signedInCommenter } from './signed-in.ts';
+export { mountFederation, webFingerSubject } from './federation-routes.ts';
+export type { MountFederationOptions } from './federation-routes.ts';

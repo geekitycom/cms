@@ -1,36 +1,32 @@
 import type { Context, Hono } from 'hono';
 
-import { CROSS_SITE_REFUSAL, crossSiteWrite, csrfTokenMatches } from '../web/session.ts';
-import type { AdminStore } from '../store/admin-store.ts';
-import { clientAddress, createLoginThrottle } from '../web/throttle.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import type { GeekityEnv } from '../web/env.ts';
-import { documentSite } from '../admin/documents.ts';
-import { stringOrEmpty } from '../util/forms.ts';
 import { isServed } from '../content/served.ts';
+import { commentAnchor } from '../comments/conversation.ts';
 import {
   COMMENT_NOTICE_PARAM,
-  COMMENT_NOTICES,
   COMMENT_POST_PATH,
-  commentForm,
   refilledCommentForm,
-  signedInCommentForm,
   valuesOf,
-} from './form.ts';
-import type { CommentFormContext, CommentViewer } from './form.ts';
-import { commentPolicyOf, commentsOpen } from './policy.ts';
-import { commentAnchor, visibleReply } from './conversation.ts';
-import type { Conversation } from './conversation.ts';
+} from '../comments/form.ts';
+import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
+import { drawnFor } from '../comments/page-form.ts';
+import { commentPolicyOf, commentsOpen } from '../comments/policy.ts';
+import { submitReplyPost } from '../comments/reply-post.ts';
 import {
   COMMENT_FIELDS,
   COMMENT_RATE_LIMIT,
   COMMENT_RATE_WINDOW_SECONDS,
   submitComment,
-} from './submission.ts';
-import type { CommentForm, CommentRefusal, CommentThrottle } from './submission.ts';
-import { submitReplyPost } from './reply-post.ts';
-import { commenterOf } from './viewer.ts';
+} from '../comments/submission.ts';
+import type { CommentForm, CommentRefusal, CommentThrottle } from '../comments/submission.ts';
+import { commenterOf } from '../comments/viewer.ts';
+import { stringOrEmpty } from '../util/forms.ts';
+import { documentSite } from './document-site.ts';
+import type { GeekityEnv } from './env.ts';
+import { CROSS_SITE_REFUSAL, crossSiteWrite, csrfTokenMatches } from './session.ts';
+import { clientAddress, createLoginThrottle } from './throttle.ts';
 
 /**
  * The one public endpoint comments add: where the form under a post posts to.
@@ -45,8 +41,6 @@ import { commenterOf } from './viewer.ts';
  * script: a comment form has worked without JavaScript since 2003 and there is
  * no reason for this one to stop.
  */
-
-export { COMMENT_POST_PATH, COMMENT_REPLY_PARAM } from './form.ts';
 
 /** Register the comment endpoint. Mounted by the public site. */
 export function mountComments(app: Hono<GeekityEnv>): void {
@@ -198,14 +192,6 @@ function refusedPage(
 /** The statuses a refused submission is answered with. */
 type RefusalStatus = 400 | 403 | 429;
 
-/**
- * The same form drawn for whoever is filling it in: the short one when the
- * site knows them, and the stranger's one when it does not.
- */
-function drawnFor(form: CommentFormContext, viewer: CommentViewer | undefined): CommentFormContext {
-  return viewer === undefined ? form : signedInCommentForm(form, viewer);
-}
-
 function page(
   c: Context<GeekityEnv>,
   document: Document,
@@ -220,73 +206,6 @@ function page(
 /** The per-field messages a refusal carries, if it carries any. */
 function problemsOf(refusal: { kind: string; problems?: unknown }): Record<string, string> {
   return refusal.kind === 'invalid' ? ((refusal.problems ?? {}) as Record<string, string>) : {};
-}
-
-/**
- * The thank-you a reader is shown after posting, from the query the redirect
- * carried, or `undefined` when the URL says nothing.
- *
- * A query rather than a flash message, because a reader has no session to hang
- * one on, and because a comment form that only works for people with cookies
- * is not a comment form.
- */
-export function commentNoticeFor(query: string | undefined): string | undefined {
-  return query === undefined ? undefined : COMMENT_NOTICES[query];
-}
-
-/**
- * The comment a `?reply_to=` query points at, as the theme needs it, or an
- * empty object when the query names nothing on this post.
- *
- * Checked against the index rather than trusted, so a made-up id — or one from
- * another page — cannot put a stranger's name on somebody's reply form, and so
- * a comment waiting for a moderator cannot be discovered by guessing. With the
- * post's `thread`, which is handed over for somebody signed in (TASK-300), any
- * entry a reader can see is answerable: a webmention, a fediverse reply or a
- * reply post as well as a comment.
- */
-export function commentReplyTarget(options: {
-  admin: AdminStore;
-  document: Document;
-  id: string | undefined;
-  thread?: Conversation | undefined;
-}): Record<string, unknown> {
-  if (options.id === undefined || options.id === '') return {};
-
-  if (options.thread !== undefined) {
-    const reply = visibleReply(options.thread.replies, options.id);
-    return reply === undefined
-      ? {}
-      : { commentReplyTo: reply.key, commentReplyingTo: reply.author.name };
-  }
-
-  const parent = options.admin.getComment(options.id);
-  if (parent === undefined || parent.slug !== options.document.slug) return {};
-  if (parent.status !== 'approved') return {};
-
-  return { commentReplyTo: parent.id, commentReplyingTo: parent.author.name };
-}
-
-/**
- * The form for a post, or `undefined` when it is not taking comments.
- *
- * What the renderer is handed at boot. It reads the settings and the clock on
- * every render, so a post that closed an hour ago stops offering a form on the
- * very next request.
- */
-export function commentFormFor(options: {
-  document: Document;
-  site: Record<string, unknown>;
-  now: Date;
-  /** Whether the site can send mail, which is whether the box is offered. */
-  notifiable?: boolean | undefined;
-  /** Who the request's session says is reading, when it says anybody. */
-  viewer?: CommentViewer | undefined;
-}): CommentFormContext | undefined {
-  if (!commentsOpen(options.document, commentPolicyOf(options.site), options.now)) return undefined;
-
-  const form = commentForm(options.document, options.now, options.notifiable ?? false);
-  return drawnFor(form, options.viewer);
 }
 
 /** A submitted body as the form it is, every field a string. */

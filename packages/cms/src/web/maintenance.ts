@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
-import { signedInAccount } from '../comments/viewer.ts';
+import { signedInAccount } from './signed-in.ts';
 import type { GeekityEnv } from './env.ts';
 import { THEME_ASSET_PREFIX } from '../theme/assets.ts';
 import { representationOf, CONTENT_TYPES, PRIVATE_CACHE_CONTROL } from './negotiate.ts';
