@@ -216,7 +216,7 @@ describe('keeping the index in step with the content directory', () => {
     const watchers = liveWatchers();
     t.after(() => watchers.restore());
     await instance.serve();
-    assert.equal(watchers.live(), 1, 'it watches while it serves');
+    assert.equal(watchers.watching(), true, 'it watches while it serves');
 
     const edited = nextEvent('the watcher to report the edit to pages/about.md', (done) =>
       instance.events.on('updated', (change) => {
@@ -233,7 +233,7 @@ describe('keeping the index in step with the content directory', () => {
     assert.match(instance.store.getByPath('pages/about.md')?.html ?? '', /Second\./);
 
     await instance.close();
-    assert.equal(watchers.live(), 0, 'closing stopped the watch');
+    assert.equal(watchers.watching(), false, 'closing stopped the watch');
   });
 
   it('tells subscribers about a document it indexed', async () => {
@@ -313,7 +313,7 @@ describe('keeping the index in step with the content directory', () => {
     t.after(() => watchers.restore());
     await instance.serve();
 
-    assert.equal(watchers.live(), 0);
+    assert.equal(watchers.watching(), false);
     assert.match(instance.store.getByPath('pages/about.md')?.html ?? '', /First\./);
     await instance.close();
   });

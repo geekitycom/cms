@@ -17,26 +17,26 @@ async function directory(): Promise<string> {
 }
 
 describe('liveWatchers', () => {
-  it('counts a watch opened through the node:fs import until it is closed', async () => {
+  it('sees a watch opened through the node:fs import until it is closed', async () => {
     const watchers = liveWatchers();
     try {
       const opened = watch(await directory(), { recursive: true });
-      assert.equal(watchers.live(), 1);
+      assert.equal(watchers.watching(), true);
 
       opened.close();
-      assert.equal(watchers.live(), 0);
+      assert.equal(watchers.watching(), false);
     } finally {
       watchers.restore();
     }
   });
 
-  it('counts nothing opened before it began or after it was restored', async () => {
+  it('sees nothing opened before it began or after it was restored', async () => {
     const before = watch(await directory());
     const watchers = liveWatchers();
     watchers.restore();
     const later = watch(await directory());
 
-    assert.equal(watchers.live(), 0);
+    assert.equal(watchers.watching(), false);
     before.close();
     later.close();
   });

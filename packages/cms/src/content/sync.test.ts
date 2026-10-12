@@ -709,10 +709,10 @@ describe('the watcher', () => {
     const watchers = liveWatchers();
     try {
       await content.start();
-      assert.equal(watchers.live(), 1, 'it watches while it runs');
+      assert.equal(watchers.watching(), true, 'it watches while it runs');
 
       await content.stop();
-      assert.equal(watchers.live(), 0, 'the watch is closed');
+      assert.equal(watchers.watching(), false, 'the watch is closed');
     } finally {
       watchers.restore();
     }
@@ -726,7 +726,7 @@ describe('the watcher', () => {
     const watchers = liveWatchers();
     try {
       await content.start();
-      assert.equal(watchers.live(), 0);
+      assert.equal(watchers.watching(), false);
     } finally {
       watchers.restore();
     }

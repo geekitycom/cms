@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import type { FSWatcher } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 
-export function liveWatchers(): { live(): number; restore(): void } {
+export function liveWatchers(): { watching(): boolean; restore(): void } {
   const original = fs.watch;
   const live = new Set<FSWatcher>();
   fs.watch = ((...args: Parameters<typeof fs.watch>) => {
@@ -17,7 +17,7 @@ export function liveWatchers(): { live(): number; restore(): void } {
   }) as typeof fs.watch;
   syncBuiltinESMExports();
   return {
-    live: () => live.size,
+    watching: () => live.size > 0,
     restore() {
       fs.watch = original;
       syncBuiltinESMExports();

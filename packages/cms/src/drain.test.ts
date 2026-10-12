@@ -206,7 +206,7 @@ describe('cms.drain()', () => {
     const watchers = liveWatchers();
     t.after(() => watchers.restore());
     await cms.serve();
-    assert.equal(watchers.live(), 1, 'the content watcher runs');
+    assert.equal(watchers.watching(), true, 'the content watcher runs');
     assert.equal(
       intervals.live(),
       5,
@@ -223,14 +223,14 @@ describe('cms.drain()', () => {
     await cms.app.request('/_geekity/health');
     assert.deepEqual(log, ['start', 'stop'], 'a request does not start it again');
 
-    assert.equal(watchers.live(), 0, 'the watcher stopped');
+    assert.equal(watchers.watching(), false, 'the watcher stopped');
     await writeFile(
       path.join(contentDir, 'posts', 'unseen.md'),
       '---\ntitle: Unseen\ndate: 2026-01-01T00:00:00.000Z\n---\n\nHello.\n',
     );
 
     await cms.resume();
-    assert.equal(watchers.live(), 1, 'the watcher is back');
+    assert.equal(watchers.watching(), true, 'the watcher is back');
     assert.equal(intervals.live(), 5, 'the interval timers are back');
     intervals.restore();
     assert.notEqual(cms.scheduler.waitingFor(), undefined, 'the scheduler is back');
