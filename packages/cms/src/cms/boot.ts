@@ -1,0 +1,160 @@
+import {
+  effectiveBaseUrl,
+  migrateSettingsToFile,
+  migrateUsersToFile,
+  openAdminStore,
+  readSiteSettings,
+} from '../admin/index.ts';
+import type { AdminStore } from '../admin/index.ts';
+import { withRebuiltDatabase } from '../cache.ts';
+import {
+  createAkismetChecker,
+  migrateCommentEmails,
+  migrateCommentKeys,
+  rebuildCommentIndexes,
+} from '../comments/index.ts';
+import type { CommentRecords } from '../comments/index.ts';
+import { resolveConfig } from '../config.ts';
+import type { GeekityConfig, ResolvedConfig } from '../config.ts';
+import { openContentStore } from '../content/index.ts';
+import type { ContentStore } from '../content/index.ts';
+import { enterDevMode } from '../dev-mode.ts';
+import {
+  assertActorKeysUsable,
+  migrateActorKeysToFiles,
+  migrateFederationToFiles,
+  rebuildFederationIndexes,
+} from '../federation/index.ts';
+import type { InstalledPlugin, PluginRegistry } from '../plugins/registry.ts';
+import { sitePluginRegistry } from '../plugins/site.ts';
+import { listUsers } from '../site/users.ts';
+
+/** What a boot leaves behind: the config as it will be served, and the open database. */
+export interface Booted {
+  readonly resolved: ResolvedConfig;
+  readonly plugins: PluginRegistry;
+  readonly store: ContentStore;
+  readonly admin: AdminStore;
+  readonly commentRecords: CommentRecords;
+}
+
+/**
+ * Resolve the config, open the database and carry an older site's data
+ * forward into files, refusing the boot only when an actor's keys are
+ * unreadable.
+ */
+export function boot(
+  config: GeekityConfig,
+  folderPlugins: readonly InstalledPlugin[] | undefined,
+): Booted {
+  const resolved = resolveConfig(config);
+  if (resolved.devMode) enterDevMode(resolved.dataDir, 'config');
+
+  const plugins = sitePluginRegistry(resolved, folderPlugins);
+
+  const { store, admin } = openCache(resolved);
+
+  // A site upgrading from the version that kept its settings in SQLite has
+  // rows nothing would read again: they become content/_data/site.json here,
+  // once, and the table goes (decision-9). A site that has already been
+  // through it does nothing but check.
+  migrateSettingsToFile({ admin, contentDir: resolved.contentDir });
+
+  // And the same for its actor's key pairs, which become JWK files under
+  // data/keys. This is the migration that must not fail: an actor whose
+  // private key is lost is one every follower stops being able to verify, so
+  // the rows are written out before the table is dropped, and a file that is
+  // already there always wins.
+  migrateActorKeysToFiles({ admin, dataDir: resolved.dataDir });
+
+  // And the accounts, which become data/users.json. The ids come with them, so
+  // a session the database already holds still names the person it was made
+  // for, and the file wins where there already is one.
+  migrateUsersToFile({ admin, dataDir: resolved.dataDir });
+
+  // And the log of what the inbox was told, which becomes
+  // content/_data/federation/inbox/{yyyy}-{mm}.jsonl. Unlike the three above,
+  // no table is dropped: `ap_inbox` and `followers` stay as indexes of the
+  // files, which is why the rebuild is next and runs on every boot rather than
+  // once. The site actor's followers are not migrated: decision-14 replaced it
+  // with one actor per user, and nobody inherits a follow made with somebody
+  // who no longer exists.
+  migrateFederationToFiles({ admin, contentDir: resolved.contentDir });
+  rebuildFederationIndexes({ admin, contentDir: resolved.contentDir });
+
+  // And the comments, which are files under content/_data/comments/ with
+  // their authors' emails under data/comments/ (TASK-50, TASK-182). A comment
+  // file that still holds an email, from before they moved or from a hand
+  // edit, has it moved first; then the index is rebuilt, on every boot for the
+  // same reason the federation one is.
+  const commentRecords = { admin, contentDir: resolved.contentDir, dataDir: resolved.dataDir };
+  migrateCommentEmails(commentRecords);
+  migrateCommentKeys(commentRecords);
+  rebuildCommentIndexes(commentRecords);
+
+  // And, once the files are the whole story, that every user's keys are
+  // readable. This is the one thing here that can stop a boot: an actor that
+  // publishes no key is one no follower can verify, and Fedify would serve
+  // exactly that rather than complain. A minute of downtime with the file
+  // named is the better failure. A user who has never federated has no key
+  // files at all, which is not damage and does not stop anything.
+  for (const user of listUsers(resolved.dataDir)) {
+    assertActorKeysUsable(resolved.dataDir, user.username);
+  }
+
+  // The one thing the settings decide before a request arrives. It is settled
+  // here, at boot, rather than per request: `baseUrl` also decides whether the
+  // session cookie is `Secure`, and flipping that under a signed-in admin
+  // would log them out of the form they just submitted.
+  resolved.baseUrl = effectiveBaseUrl(resolved, readSiteSettings(resolved.contentDir));
+
+  // Akismet, when the site has not named a checker of its own (TASK-52). A
+  // config that names one wins outright, because a site that has written a
+  // checker meant it; this is the one the settings screen turns on with a key
+  // rather than a deployment.
+  //
+  // Built whether or not there is a key in `data/akismet.json`: it reads that
+  // file on every call, so a key pasted into the settings screen filters the
+  // next comment and a key removed stops filtering at once, neither of them
+  // needing a restart. With no key it sends nothing anywhere.
+  resolved.commentChecker ??= createAkismetChecker({
+    dataDir: resolved.dataDir,
+    // Read when a comment arrives rather than now, so a change of language on
+    // the settings screen reaches Akismet without a restart either.
+    language: () => readSiteSettings(resolved.contentDir).language,
+  });
+
+  return { resolved, plugins, store, admin, commentRecords };
+}
+
+/**
+ * The two connections a boot takes on the one database, opened together so
+ * that either both of them survive it or neither does.
+ *
+ * The database is a cache (decision-9), so a version of it this package cannot
+ * carry forward is thrown away and read back from the files rather than being
+ * a thing anybody has to do something about. That is what
+ * {@link withRebuiltDatabase} does with an {@link OutdatedDatabaseError} — and
+ * why the content store is closed before the admin store's failure is allowed
+ * to leave here: the file cannot be deleted while a connection holds it.
+ *
+ * The failure it does not recover from is a database written by a newer
+ * `@geekity/cms`, or one damaged past opening. Both refuse the boot naming the
+ * file, because a downgrade is usually a mistake and because a database from
+ * before decision-9 still carries the settings, key and account rows the
+ * migrations in {@link boot} write out as files — deleting one of those to get
+ * past an error would destroy an actor's private keys. `geekity rebuild` is
+ * the door for a person who has looked and decided.
+ */
+function openCache(resolved: ResolvedConfig): { store: ContentStore; admin: AdminStore } {
+  return withRebuiltDatabase(resolved.dataDir, () => {
+    const { dataDir, baseUrl } = resolved;
+    const store = openContentStore({ dataDir, baseUrl, now: resolved.now });
+    try {
+      return { store, admin: openAdminStore({ dataDir }) };
+    } catch (error) {
+      store.close();
+      throw error;
+    }
+  });
+}
