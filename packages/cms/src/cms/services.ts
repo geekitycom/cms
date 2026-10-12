@@ -12,6 +12,11 @@ import { createContentSync, createScheduler } from '../content/index.ts';
 import type { ContentEventListener, ContentSync, Scheduler } from '../content/index.ts';
 import { shareLocation } from '../content/location.ts';
 import { postLocations } from '../content/locations.ts';
+import { createReplyBackfill, signedRepliesLoader } from '../federation/backfill.ts';
+import type { ReplyBackfill } from '../federation/backfill.ts';
+import { citedPostReader } from '../federation/cited-post.ts';
+import { handleLearner } from '../federation/handles.ts';
+import type { HandleLearner } from '../federation/handles.ts';
 import {
   createActorProfileService,
   createDeliveryService,
@@ -25,18 +30,13 @@ import type {
   RelayService,
   SiteFederation,
 } from '../federation/index.ts';
-import { createReplyBackfill, signedRepliesLoader } from '../federation/backfill.ts';
-import type { ReplyBackfill } from '../federation/backfill.ts';
-import { citedPostReader } from '../federation/cited-post.ts';
-import { handleLearner } from '../federation/handles.ts';
-import type { HandleLearner } from '../federation/handles.ts';
 import { createSettlingQueue } from '../federation/queue.ts';
 import { settleImageVariants } from '../images/variants.ts';
+import { createIndexNowNotifier } from '../indexnow.ts';
+import type { IndexNowNotifier } from '../indexnow.ts';
 import { activityLogSettled } from '../indieauth/activity-log.ts';
 import { createIndieAuthState } from '../indieauth/grants.ts';
 import type { IndieAuthState } from '../indieauth/grants.ts';
-import { createIndexNowNotifier } from '../indexnow.ts';
-import type { IndexNowNotifier } from '../indexnow.ts';
 import { createMailService } from '../mail/index.ts';
 import type { MailService } from '../mail/index.ts';
 import { createMaintenanceSwitch } from '../maintenance.ts';
@@ -48,6 +48,7 @@ import type { FeedNotifier } from '../notify.ts';
 import { readEnabledPlugins } from '../plugins/enabled.ts';
 import { createRetentionService } from '../privacy/retention.ts';
 import type { RetentionService } from '../privacy/retention.ts';
+import type { ConversationReader } from '../web/conversation.ts';
 import {
   createConversation,
   createRedirectSource,
@@ -57,7 +58,6 @@ import {
   frontPageSlugs,
   themeName,
 } from '../web/index.ts';
-import type { ConversationReader } from '../web/conversation.ts';
 import type { RedirectSource } from '../web/redirects.ts';
 import type { Renderer } from '../web/render.ts';
 import {
@@ -487,19 +487,19 @@ export function createServices({
     // The avatars the conversations show are fetched or refreshed in the
     // background now and on a timer from here on, so a reader almost never
     // waits on a stranger's server for one (TASK-134).
-    timed(avatars),
+    avatars,
     // The profiles of whoever is in the inbox log without being a follower:
     // missing ones are fetched now, which is the backfill of a log written
     // before profiles were kept, and stale ones on a timer (TASK-184).
-    timed(actorProfiles),
-    timed(replyBackfill),
+    actorProfiles,
+    replyBackfill,
     // Whatever personal data has outlived its period is removed now and every
     // few hours from here on (TASK-135).
-    timed(retention),
+    retention,
     // Nothing is caught up first: a digest is whatever is pending when a
     // window comes up, so a site that was down over one simply sends the next
     // one, with everything still waiting in it.
-    timed(digests),
+    digests,
     { settled: () => notifier.settled() },
     {
       // What was gathered and not yet sent is dropped rather than sent on the
@@ -551,18 +551,5 @@ export function createServices({
     }),
     indieauth: createIndieAuthState(resolved.now),
     lifecycle,
-  };
-}
-
-/** A service that sweeps on a timer once started and queues each sweep. */
-function timed(service: { start(): void; stop(): void; settled(): Promise<void> }): Service {
-  return {
-    start: () => {
-      service.start();
-    },
-    stop: () => {
-      service.stop();
-    },
-    settled: () => service.settled(),
   };
 }
