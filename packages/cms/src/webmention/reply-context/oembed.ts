@@ -14,7 +14,7 @@ export interface Oembed {
 }
 
 /** A provider whose JSON oEmbed endpoint is asked about its pages before the page itself. */
-export interface KnownOembedProvider {
+interface KnownOembedProvider {
   /** The host names its pages are on. */
   readonly hosts: readonly string[];
   /** Which of its pages, by path and query, the endpoint answers for. */
@@ -30,7 +30,7 @@ export interface KnownOembedProvider {
  * YouTube, TikTok, Reddit and Giphy serve a server a generic or slow page, or
  * refuse it, while their endpoints answer (decision-19).
  */
-export const KNOWN_OEMBED_PROVIDERS: readonly KnownOembedProvider[] = [
+const KNOWN_OEMBED_PROVIDERS: readonly KnownOembedProvider[] = [
   {
     hosts: ['youtube.com', 'www.youtube.com', 'm.youtube.com'],
     path: /^\/(watch\?(.*&)?v=[\w-]+|shorts\/[\w-]+\/?(\?|$))/,

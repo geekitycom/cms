@@ -1,6 +1,6 @@
 import { isRecord } from '../../util/guards.ts';
-import type { HtmlElement } from '../html.ts';
 import { elementsIn } from '../html.ts';
+import type { HtmlElement } from '../html.ts';
 import { plainText, resolved } from './source.ts';
 import type { Source } from './source.ts';
 

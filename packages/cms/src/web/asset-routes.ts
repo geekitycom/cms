@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
-import { iconSetting, FAVICON_FILE, siteIconSource } from '../images/icons.ts';
+import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
 import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
 import {

@@ -41,42 +41,32 @@ export type {
   CommentRecord,
   CommentSource,
   CommentStatus,
-  CommentStore,
   ListCommentsOptions,
   PostComment,
   RedactedField,
 } from './store/comments.ts';
-export type { ConversationEvents, ConversationWrite } from './store/conversation.ts';
+export type { ConversationWrite } from './store/conversation.ts';
 export { DELIVERY_STATUSES } from './store/deliveries.ts';
-export type { Delivery, DeliveryStatus, DeliveryStore, NewDelivery } from './store/deliveries.ts';
-export type { Follower, FollowerStore, NewFollower } from './store/followers.ts';
-export type { InboxActivity, InboxStore, NewInboxActivity } from './store/inbox.ts';
-export type { ActorProfile, ProfileStore, StoredActorProfile } from './store/profiles.ts';
+export type { Delivery, DeliveryStatus, NewDelivery } from './store/deliveries.ts';
+export type { Follower, NewFollower } from './store/followers.ts';
+export type { InboxActivity, NewInboxActivity } from './store/inbox.ts';
+export type { ActorProfile, StoredActorProfile } from './store/profiles.ts';
 export { RELAY_STATES } from './store/relays.ts';
-export type { NewRelay, Relay, RelayState, RelayStore } from './store/relays.ts';
+export type { NewRelay, Relay, RelayState } from './store/relays.ts';
 export type { ListPageOptions } from './store/rows.ts';
 export { openAdminDatabase } from './store/schema.ts';
 export { SESSION_ID_BYTES } from './store/sessions.ts';
-export type {
-  CreateSessionInput,
-  FlashKind,
-  FlashMessage,
-  Session,
-  SessionStore,
-} from './store/sessions.ts';
-export type { StateStore } from './store/state.ts';
+export type { CreateSessionInput, FlashKind, FlashMessage, Session } from './store/sessions.ts';
 export type {
   CreatePasswordResetInput,
   IssuedPasswordReset,
   PasswordReset,
-  TokenStore,
 } from './store/tokens.ts';
 export { WEBMENTION_SEND_STATUSES } from './store/webmentions.ts';
 export type {
   NewSentWebmention,
   SentWebmention,
   WebmentionSendStatus,
-  WebmentionStore,
 } from './store/webmentions.ts';
 
 /** Where {@link openAdminStore} puts, and finds, its tables. */

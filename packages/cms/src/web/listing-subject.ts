@@ -1,12 +1,12 @@
 import type { Document } from '../content/document.ts';
 import type { ListOptions } from '../content/store.ts';
-import type { SiteData } from './context.ts';
 import { authorFeedHref, authorHref, profileContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
+import type { SiteData } from './context.ts';
 import { feedPathUnder } from './feeds.ts';
 import type { FeedFormat } from './feeds.ts';
-import type { Listing } from './render.ts';
 import { TEMPLATES } from './render.ts';
+import type { Listing } from './render.ts';
 import type { AuthorListing, FrontPages, SiteView } from './site-view.ts';
 import { PAGE_SEGMENT, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';

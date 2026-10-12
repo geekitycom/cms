@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { Person } from '@fedify/vocab';
+import { Like, Person } from '@fedify/vocab';
 
 import type { Follower, Relay } from '../admin/store.ts';
 import type { Document } from '../content/document.ts';
@@ -50,7 +50,9 @@ function follower(actorId: string, inboxId: string, sharedInboxId: string | null
     handle: null,
     name: null,
     iconUrl: null,
-  } as Follower;
+    url: null,
+    followedAt: NOW.toISOString(),
+  };
 }
 
 function relay(inboxId: string, actorId: string | null): Relay {
@@ -303,19 +305,24 @@ describe('what a change delivers', () => {
 
 describe('what an edit sends', () => {
   const object: Shape = { kind: 'object', id: 'https://site.example/hello/', replyTo: undefined };
+  const liking = { activity: new Like({}), author: undefined };
 
   it('revises the same object', () => {
     assert.deepEqual(revisionStep(object, { ...object }), { kind: 'revise', shape: object });
   });
 
   it('sends nothing again for the same like or repost', () => {
-    const citing = { kind: 'citing', id: 'https://site.example/hello/#like', citing: {} } as Shape;
+    const citing: Shape = {
+      kind: 'citing',
+      id: 'https://site.example/hello/#like',
+      citing: liking,
+    };
     assert.deepEqual(revisionStep(citing, citing), { kind: 'none' });
   });
 
   it('replaces an object that changed its id or became a like', () => {
     const renamed: Shape = { ...object, id: 'https://site.example/hi/' };
-    const like = { kind: 'citing', id: 'https://site.example/hello/', citing: {} } as Shape;
+    const like: Shape = { kind: 'citing', id: 'https://site.example/hello/', citing: liking };
     assert.deepEqual(revisionStep(object, renamed), { kind: 'replace' });
     assert.deepEqual(revisionStep(object, like), { kind: 'replace' });
   });

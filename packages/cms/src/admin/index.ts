@@ -292,10 +292,10 @@ export {
   usesSecureCookies,
 } from './session.ts';
 export {
+  adminStoreOver,
   COMMENT_KINDS,
   COMMENT_SOURCES,
   COMMENT_STATUSES,
-  adminStoreOver,
   DELIVERY_STATUSES,
   openAdminDatabase,
   openAdminStore,

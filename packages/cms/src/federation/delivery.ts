@@ -54,8 +54,6 @@ import { mentionedAccounts } from './handles.ts';
 import { updateActivityId } from './paths.ts';
 import { acceptedRelays } from './relays.ts';
 
-export type { DeliveryTarget } from './delivery-plan.ts';
-
 /** What one activity's delivery came to, recipient by recipient. */
 export interface DeliveryReport {
   /** The activity that went out. */

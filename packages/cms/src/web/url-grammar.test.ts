@@ -10,7 +10,7 @@ import { createUser } from '../site/users.ts';
 
 /**
  * Which of the things a path can name wins when it could name several, and
- * where each spelling of it leads (TASK-360).
+ * where each spelling of it leads.
  */
 
 const started: Cms[] = [];
@@ -149,7 +149,7 @@ describe('a feed spelled another way', () => {
   });
 });
 
-describe('one grammar for every representation (TASK-360)', () => {
+describe('one grammar for every representation', () => {
   it('answers the archive’s Markdown where a page is shadowed by the archive', async () => {
     const cms = await site();
     const response = await cms.app.request('/tag/shared/index.md');
@@ -181,7 +181,7 @@ describe('one grammar for every representation (TASK-360)', () => {
   });
 });
 
-describe('the home listing’s pages on a site with a posts page (TASK-360)', () => {
+describe('the home listing’s pages on a site with a posts page', () => {
   const files = {
     ...CONTENT,
     '_data/site.json': JSON.stringify({

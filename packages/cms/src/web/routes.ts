@@ -18,7 +18,7 @@ import { THEME_ASSET_PREFIX, UPLOAD_ASSET_PREFIX } from './assets.ts';
 import { negotiateDocument } from './document-page.ts';
 import { goneDocumentAt, previewDocumentAt } from './documents.ts';
 import { embedView, oEmbed } from './embed.ts';
-import { comments, commentPage, feed, repliesFeed } from './feed-routes.ts';
+import { commentPage, comments, feed, repliesFeed } from './feed-routes.ts';
 import { feedPathUnder, FEED_FORMATS, REPLIES_ROOT, splitFeedPath } from './feeds.ts';
 import { COMMENT_PAGE_PREFIX } from './guids.ts';
 import { indexNowKeyPath, indexNowKeyResponse } from './indexnow.ts';

@@ -31,7 +31,6 @@ import { merge, withoutDirectionControls } from './reply-context/source.ts';
 import type { Limits, Source } from './reply-context/source.ts';
 
 export type { FediverseLookup, FediversePost } from './reply-context/fediverse.ts';
-export type { Oembed } from './reply-context/oembed.ts';
 
 /**
  * Reply context: what a reply shows of the post it answers (TASK-123).

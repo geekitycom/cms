@@ -22,14 +22,14 @@ export {
   toInstant,
 } from './article.ts';
 export { createDeliveryService, deliveryTargets } from './delivery.ts';
-export { groupByInbox } from './delivery-plan.ts';
 export type {
   CreateDeliveryServiceOptions,
   DeliveryLogger,
   DeliveryReport,
   DeliveryService,
-  DeliveryTarget,
 } from './delivery.ts';
+export { groupByInbox } from './delivery-plan.ts';
+export type { DeliveryTarget } from './delivery-plan.ts';
 export {
   createSiteFederation,
   federatedPost,
