@@ -1,5 +1,5 @@
+import { elementsIn, hasRel, parseHtml } from '../util/html-tree.ts';
 import { fetchPublic } from './fetch-public.ts';
-import { elementsIn, hasRel, parseHtml } from './html.ts';
 import type { HostLookup } from './public-address.ts';
 
 /**

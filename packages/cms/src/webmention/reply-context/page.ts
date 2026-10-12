@@ -1,8 +1,8 @@
 import { discoverPostType } from '../../content/post-type.ts';
+import { elementsIn, hasRel, parseHtml, textOf } from '../../util/html-tree.ts';
+import type { HtmlElement } from '../../util/html-tree.ts';
 import type { PictureSource } from '../cited-picture.ts';
 import { fetchPublic, webUrl } from '../fetch-public.ts';
-import { elementsIn, hasRel, parseHtml, textOf } from '../html.ts';
-import type { HtmlElement } from '../html.ts';
 import { citedEntry, citedEvent } from '../microformats.ts';
 import type { CitedEntry, CitedEvent } from '../microformats.ts';
 import { NAMELESS_NOTE, resolved, withoutDirectionControls } from './source.ts';

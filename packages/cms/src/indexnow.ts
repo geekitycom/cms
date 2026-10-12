@@ -9,7 +9,7 @@ import { createSerialQueue } from './util/queue.ts';
 import { retry } from './util/retry.ts';
 import { absoluteUrl } from './util/url.ts';
 import { isPrivateHost } from './webmention/public-address.ts';
-import { isListed } from './web/documents.ts';
+import { isListed } from './content/served.ts';
 import { indexNowKeyPath } from './web/indexnow.ts';
 
 /** The shared endpoint: a submission here reaches every IndexNow engine. */

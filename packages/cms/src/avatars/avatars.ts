@@ -7,12 +7,12 @@ import sharp from 'sharp';
 import type { AdminStore } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { writeFileAtomically } from '../files/atomic.ts';
-import type { NotificationTimers } from '../notifications/digest.ts';
+import { findAsset } from '../files/static-files.ts';
+import type { StaticAsset } from '../files/static-files.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
+import type { NotificationTimers } from '../notifications/digest.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
-import { findAsset } from '../web/assets.ts';
-import type { StaticAsset } from '../web/assets.ts';
 import { fetchPublic, webUrl } from '../webmention/fetch-public.ts';
 
 /**

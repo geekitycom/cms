@@ -1,23 +1,14 @@
-import { existsSync } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 
-import { commentsFile } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
-import type { HandleLearner } from '../federation/handles.ts';
 import { readAltTexts, undescribedImages, undescribedPhotos } from '../images/alt-text.ts';
 import type { UndescribedImage } from '../images/alt-text.ts';
-import { LANGUAGE_TAG_PATTERN } from '../site/setting-values.ts';
-import { readSiteSettings } from '../site/site-json.ts';
-import { listUsers } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { authorNames, userForAuthor } from '../web/authors.ts';
-import { isServed } from '../web/documents.ts';
-import { shownInFull } from '../webmention/cited-picture.ts';
-import type { ReplyContext } from '../webmention/reply-context.ts';
-import { syndicationTargetsReader } from '../webmention/syndication.ts';
-import { CITATION_PROPERTIES, citesAnImage } from './citation.ts';
-import type { CitationProperty } from './citation.ts';
+import { authorNames, userForAuthor } from './authors.ts';
+import type { AuthorUser } from './authors.ts';
+import { CITATION_PROPERTIES, citesAnImage, shownInFull } from './citation.ts';
+import type { CitationProperty, CitedPage } from './citation.ts';
 import type { Document, DocumentContent } from './document.ts';
 import { CITATION_FIELDS, extraFromForm, formInReplyTo, splitTags } from './document-form.ts';
 import type { EditorForm, ResolvedMedia } from './document-form.ts';
@@ -28,6 +19,7 @@ import { resolveEvent } from './event-form.ts';
 import type { EditorField, Refusal } from './form-error.ts';
 import { keptProperties } from './kept-properties.ts';
 import type { KeptProperties } from './kept-properties.ts';
+import { LANGUAGE_TAG_PATTERN } from './language.ts';
 import type { PostLocation } from './location.ts';
 import { resolveLocation } from './location-form.ts';
 import { postLocations } from './locations.ts';
@@ -42,24 +34,43 @@ import { resolveRead } from './read-form.ts';
 import { RSVP_VALUES, rsvpValue } from './rsvp.ts';
 import { contentFilePath, freeSlug, saveDocument } from './save.ts';
 import { htmlToText } from './search.ts';
+import { isServed } from './served.ts';
 import { defaultPermalink, slugify } from './slug.ts';
 import { DuplicatePermalinkError, isTrashedPath, TRASH_DIRECTORY } from './store.ts';
 import type { ContentStore } from './store.ts';
 import type { DocumentChange } from './sync.ts';
+import type { SyndicationTarget } from './syndicate-to.ts';
 import { respellTags } from './tags.ts';
 import type { Respelling } from './tags.ts';
 import { calendarDayIn, toUtcInstant } from './time.ts';
 
+/**
+ * What a write reads about the site beyond its content, each read as it is
+ * now. The composition root gives it, so the write path names none of the
+ * features that keep these records.
+ */
+export interface SiteRecords {
+  /** The site's users, whom a save's `author` is resolved against. */
+  readonly users: () => readonly AuthorUser[];
+  /** The timezone an offset-less date is the wall clock of. */
+  readonly timezone: () => string;
+  /** The places the site declares a post may be syndicated to. */
+  readonly syndicationTargets: () => readonly SyndicationTarget[];
+  /** Whether anybody has commented on the document with this slug. */
+  readonly hasComments: (slug: string) => boolean;
+}
+
 /** What a write needs from the site, as plain values rather than a request. */
-export interface DocumentSite {
+export interface DocumentSite extends SiteRecords {
   readonly store: ContentStore;
   readonly config: ResolvedConfig;
   readonly announce: (change: DocumentChange) => Promise<void>;
   /** The username of whoever is writing: the author a new document starts on. */
   readonly writer: string | undefined;
-  readonly citedContext: (target: string) => Promise<ReplyContext | undefined>;
-  readonly storedContext: (target: string) => ReplyContext | undefined;
-  readonly learnHandles: HandleLearner;
+  readonly citedContext: (target: string) => Promise<CitedPage | undefined>;
+  readonly storedContext: (target: string) => CitedPage | undefined;
+  /** Resolves the fediverse handles a body names before it is written. */
+  readonly learnHandles: (body: string) => Promise<void>;
 }
 
 /** What {@link writeDocument} is asked to write. */
@@ -191,11 +202,8 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
   // TASK-207: a pin is new when the file does not carry one yet, and only a
   // new one can take an author past Mastodon's limit.
   if (form.pinned && (document === undefined || pinnedAt(document) === undefined)) {
-    const users = listUsers(config.dataDir);
-    const author = userForAuthor(
-      users,
-      chosenAuthor(config.dataDir, form.author, document, writer) ?? '',
-    );
+    const users = site.users();
+    const author = userForAuthor(users, chosenAuthor(users, form.author, document, writer) ?? '');
     const names = author === undefined ? [] : authorNames(users, author);
     if (store.listPinnedByAuthor(names).length >= PINNED_POST_LIMIT) {
       return refused(
@@ -225,7 +233,7 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
     );
   }
 
-  const timezone = readSiteSettings(contentDir).timezone;
+  const timezone = site.timezone();
 
   const event = resolveEvent(form.event, timezone);
   if ('error' in event) return refused(event.error, event.field);
@@ -291,7 +299,7 @@ async function resolveIdentity(
   // editing the slug or the permalink: correcting a date refiles the file and
   // leaves the URL where it was. An empty permalink field is a form that
   // carried none, not a request to move.
-  const promised = promisedDocument(document, store.now(), contentDir);
+  const promised = promisedDocument(site, document);
   const submitted = normalizePermalink(form.permalink);
   const asked =
     promised !== undefined &&
@@ -350,20 +358,12 @@ async function persist(
     categories: kind.categorised ? splitTags(form.categories) : [],
     draft,
     ...(form.description === '' ? {} : { description: form.description }),
-    ...optional('author', chosenAuthor(config.dataDir, form.author, document, writer)),
+    ...optional('author', chosenAuthor(site.users(), form.author, document, writer)),
     ...optional('inReplyTo', formInReplyTo(kind, form, document)),
     ...optional('activitypub', keptIdentity(kind, document, promised, permalink, config.baseUrl)),
     extra: keptGuid(
       kind,
-      extraFromForm(
-        kind,
-        document,
-        form,
-        store.now(),
-        media,
-        syndicationTargetsReader(contentDir)(),
-        timezone,
-      ),
+      extraFromForm(kind, document, form, store.now(), media, site.syndicationTargets(), timezone),
       promised,
       permalink,
       config.baseUrl,
@@ -567,14 +567,13 @@ function documentPath(input: {
  * leaving anything behind.
  */
 function promisedDocument(
+  site: DocumentSite,
   document: Document | undefined,
-  now: Date,
-  contentDir: string,
 ): Document | undefined {
   if (document === undefined) return undefined;
   const announced = document.activitypub?.published !== undefined;
-  const answered = existsSync(commentsFile(contentDir, document.slug));
-  return isServed(document, now) || announced || answered ? document : undefined;
+  const answered = site.hasComments(document.slug);
+  return isServed(document, site.store.now()) || announced || answered ? document : undefined;
 }
 
 /**
@@ -769,12 +768,12 @@ function normalizePermalink(value: string): string | undefined {
  * save, and neither is a reason to reattribute somebody's post.
  */
 function chosenAuthor(
-  dataDir: string,
+  users: readonly AuthorUser[],
   submitted: string,
   document: Document | undefined,
   writer: string | undefined,
 ): string | undefined {
-  const named = userForAuthor(listUsers(dataDir), submitted);
+  const named = userForAuthor(users, submitted);
   if (named !== undefined) return named.username;
   return document?.author ?? writer;
 }

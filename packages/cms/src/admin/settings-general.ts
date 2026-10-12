@@ -8,6 +8,7 @@
  */
 
 import type { ResolvedConfig } from '../config.ts';
+import { userForAuthor } from '../content/authors.ts';
 import { iconSetting, siteIcons } from '../images/icons.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
@@ -15,7 +16,6 @@ import { SETTINGS_FIELDS } from '../site/settings-form.ts';
 import { readSiteJson } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
-import { userForAuthor } from '../web/authors.ts';
 import { CREATIVE_COMMONS_LICENSES } from '../web/license.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';

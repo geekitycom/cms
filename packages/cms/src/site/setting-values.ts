@@ -1,3 +1,4 @@
+import { LANGUAGE_TAG_PATTERN } from '../content/language.ts';
 import { clientIdentifier } from '../indieauth/client-id.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import type { MailProviderName } from '../mail/provider.ts';
@@ -5,19 +6,6 @@ import { isCreativeCommonsKey } from '../web/license.ts';
 import { AI_CRAWLER_POLICIES } from '../web/robots.ts';
 import type { AiCrawlerPolicy } from '../web/robots.ts';
 import type { ContentSignalChoice, LicenseChoice } from './settings.ts';
-
-/**
- * What a language tag may look like: BCP 47's shape rather than its registry —
- * a two or three letter primary subtag followed by dash-separated subtags of
- * letters and digits.
- *
- * Checking the shape and not the registry is deliberate. The value ends up in
- * `<html lang>`, an RSS `<language>` and an Atom `xml:lang`, where a
- * well-formed tag a reader has never heard of is harmless and a malformed one
- * is not; refusing a valid tag because this CMS shipped before it was
- * registered would be worse than accepting one nobody uses.
- */
-export const LANGUAGE_TAG_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,4}$/;
 
 /**
  * What an email address has to look like before the settings screen will keep

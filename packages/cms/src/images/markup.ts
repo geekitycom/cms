@@ -1,6 +1,6 @@
 import { messageOf } from '../util/errors.ts';
 import { decodeEntities } from '../util/html.ts';
-import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
+import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
 import {
   describeImage,
   generateImageVariants,

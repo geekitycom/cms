@@ -1,6 +1,6 @@
 import type { Document } from './document.ts';
 import type { DocumentChange } from './sync.ts';
-import { isServed } from '../web/documents.ts';
+import { isServed } from './served.ts';
 
 export const MIGRATED_FRONT_MATTER_KEY = 'migrated';
 

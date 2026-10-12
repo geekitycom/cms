@@ -6,8 +6,8 @@ import sharp from 'sharp';
 import type { Sharp } from 'sharp';
 
 import { writeFileAtomically } from '../files/atomic.ts';
-import { findAsset } from '../web/assets.ts';
-import type { StaticAsset } from '../web/assets.ts';
+import { findAsset } from '../files/static-files.ts';
+import type { StaticAsset } from '../files/static-files.ts';
 import { deriveSiteIcon, isDerivedIcon } from './icons.ts';
 import {
   derivedDir,

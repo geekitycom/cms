@@ -1,6 +1,6 @@
+import { elementsIn, hasRel, parseHtml } from '../util/html-tree.ts';
 import { linkTargets } from '../webmention/discovery.ts';
 import { fetchPublic, webUrl } from '../webmention/fetch-public.ts';
-import { elementsIn, hasRel, parseHtml } from '../webmention/html.ts';
 import { itemsIn } from '../webmention/microformats.ts';
 import type { MicroformatItem } from '../webmention/microformats.ts';
 import type { HostLookup } from '../webmention/public-address.ts';

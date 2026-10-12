@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 
+import { findUpload, UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
 import type { GeekityEnv } from '../env.ts';
 import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
 import { sourceVersion } from '../images/paths.ts';
@@ -11,12 +12,10 @@ import {
   assetResponse,
   assetVersion,
   findThemeAsset,
-  findUpload,
   IMMUTABLE_ASSET,
   matchesEtag,
   THEME_ASSET_PREFIX,
   UPLOAD_ASSET_MAX_AGE,
-  UPLOAD_ASSET_PREFIX,
 } from './assets.ts';
 import { notFound, requestPath } from './request.ts';
 

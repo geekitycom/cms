@@ -12,7 +12,7 @@
 import type { Context } from 'hono';
 
 import { postLabel } from '../content/post-type.ts';
-import { isServed } from '../web/documents.ts';
+import { isServed } from '../content/served.ts';
 import type { GeekityEnv } from '../env.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';

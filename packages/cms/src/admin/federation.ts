@@ -20,9 +20,10 @@ import {
 } from '../webmention/syndication.ts';
 import { accountOf, ACTOR_PATH, federationOrigin } from '../federation/paths.ts';
 import { nonEmptyStringOrNull } from '../util/forms.ts';
-import { authorHref, profileContext, userForAuthor } from '../web/authors.ts';
+import { authorHref, profileContext } from '../web/authors.ts';
+import { userForAuthor } from '../content/authors.ts';
 import { publicDocumentAt } from '../web/documents.ts';
-import { postObjectId } from '../web/guids.ts';
+import { postObjectId } from '../content/guids.ts';
 import { documentEditorPath, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';

@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 
+import { repliesKey } from '../../content/guids.ts';
 import { REPLY_ACTIVITY_TYPE, replyIdOf, replyTargetOf } from '../../federation/replies.ts';
-import { repliesKey } from '../../web/feed-source.ts';
 import type { ConversationWrite } from './conversation.ts';
 import { inTransaction, NO_LIMIT, nullableText } from './rows.ts';
 import type { ListPageOptions } from './rows.ts';

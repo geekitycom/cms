@@ -8,7 +8,7 @@ import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
 import { documentSite } from '../admin/documents.ts';
 import { stringOrEmpty } from '../util/forms.ts';
-import { isServed } from '../web/documents.ts';
+import { isServed } from '../content/served.ts';
 import {
   COMMENT_NOTICE_PARAM,
   COMMENT_NOTICES,

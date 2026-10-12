@@ -1,7 +1,8 @@
 import { fileURLToPath } from 'node:url';
 
-import { assetNotModified, assetResponse, findAsset, matchesEtag } from '../web/assets.ts';
-import type { StaticAsset } from '../web/assets.ts';
+import { findAsset } from '../files/static-files.ts';
+import type { StaticAsset } from '../files/static-files.ts';
+import { assetNotModified, assetResponse, matchesEtag } from '../web/assets.ts';
 import { ADMIN_PREFIX } from './session.ts';
 
 /**

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { isRecord } from './guards.ts';
+import { isRecord, nonEmptyStrings } from './guards.ts';
 
 describe('isRecord', () => {
   it('accepts a plain object', () => {
@@ -15,5 +15,18 @@ describe('isRecord', () => {
     assert.equal(isRecord('x'), false);
     assert.equal(isRecord(1), false);
     assert.equal(isRecord(undefined), false);
+  });
+});
+
+describe('nonEmptyStrings', () => {
+  it('is one string as a list, or the non-empty strings of a list', () => {
+    assert.deepEqual(nonEmptyStrings('a'), ['a']);
+    assert.deepEqual(nonEmptyStrings(['a', '', 1, null, 'b']), ['a', 'b']);
+  });
+
+  it('is empty for an empty string and for anything else', () => {
+    assert.deepEqual(nonEmptyStrings(''), []);
+    assert.deepEqual(nonEmptyStrings(undefined), []);
+    assert.deepEqual(nonEmptyStrings({ a: 'b' }), []);
   });
 });

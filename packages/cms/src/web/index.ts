@@ -1,9 +1,7 @@
 export {
   assetNotModified,
   assetResponse,
-  findAsset,
   findThemeAsset,
-  findUpload,
   matchesEtag,
   themeAssetNotModified,
   themeAssetResponse,
@@ -11,10 +9,11 @@ export {
   THEME_ASSET_PREFIX,
   THEME_STATIC_DIR,
   UPLOAD_ASSET_MAX_AGE,
-  UPLOAD_ASSET_PREFIX,
-  UPLOAD_DIRECTORY,
 } from './assets.ts';
-export type { AssetResponseOptions, StaticAsset, ThemeAsset } from './assets.ts';
+export { findAsset } from '../files/static-files.ts';
+export { findUpload, UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';
+export type { AssetResponseOptions, ThemeAsset } from './assets.ts';
+export type { StaticAsset } from '../files/static-files.ts';
 export { archiveMonths, ARCHIVE_FRONT_MATTER_KEY, archiveOpen } from './archive.ts';
 export type { ArchiveEntry, ArchiveMonth } from './archive.ts';
 export {
@@ -23,14 +22,13 @@ export {
   authorFeedHref,
   authorHref,
   authorName,
-  authorNames,
   INBOX_BASE,
   parseAuthorPath,
   profileContext,
   siteAuthorContext,
   siteAuthorName,
-  userForAuthor,
 } from './authors.ts';
+export { authorNames, userForAuthor } from '../content/authors.ts';
 export type { AuthorContext, AuthorRequest, PublishedProfileLink } from './authors.ts';
 export {
   createSiteDataSource,
@@ -68,8 +66,9 @@ export type {
   RepliesOf,
   SiteInteraction,
 } from './conversation.ts';
-export { activityStreamsId, isListed, isServed, publicDocumentAt } from './documents.ts';
-export { postObjectId } from './guids.ts';
+export { activityStreamsId, publicDocumentAt } from './documents.ts';
+export { isListed, isServed } from '../content/served.ts';
+export { postObjectId } from '../content/guids.ts';
 export {
   atomEntry,
   atomFeed,
@@ -304,8 +303,9 @@ export type {
   ThemeRead,
   ThemeSource,
 } from './themes.ts';
-export { createRedirectSource, redirectBy, REDIRECT_BY, REDIRECTS_FILE } from './redirects.ts';
+export { createRedirectSource, REDIRECTS_FILE } from '../content/redirects.ts';
+export { redirectBy, REDIRECT_BY } from './redirects.ts';
 export { serverError } from './errors.ts';
 export { maintenanceGate } from './maintenance.ts';
 export { mountWellKnown } from './well-known.ts';
-export type { RedirectSource } from './redirects.ts';
+export type { RedirectSource } from '../content/redirects.ts';

@@ -1,6 +1,6 @@
 import type { Context, Hono } from 'hono';
 
-import { CITATION_PROPERTIES, citedHost, citesAnImage } from '../content/citation.ts';
+import { CITATION_PROPERTIES, citedHost, citesAnImage, shownInFull } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import {
@@ -46,9 +46,8 @@ import { readSiteSettings } from '../site/site-json.ts';
 import { findUserById, listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
-import { userForAuthor } from '../web/authors.ts';
-import { isServed } from '../web/documents.ts';
-import { shownInFull } from '../webmention/cited-picture.ts';
+import { userForAuthor } from '../content/authors.ts';
+import { isServed } from '../content/served.ts';
 import type { CitedPicture } from '../webmention/cited-picture.ts';
 import { syndicationTargetsReader } from '../webmention/syndication.ts';
 import { editorActionViews } from './editor-actions.ts';
@@ -387,6 +386,7 @@ export function documentSite(
   writer: string | undefined = currentUsername(c),
 ): DocumentSite {
   return {
+    ...c.var.siteRecords,
     store: c.var.store,
     config: c.var.config,
     announce: c.var.announce,

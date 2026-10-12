@@ -1,13 +1,13 @@
 import type { Context } from 'hono';
 
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
+import { authorNames } from '../content/authors.ts';
 import type { Document } from '../content/document.ts';
+import { isServed } from '../content/served.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
-import { authorNames } from './authors.ts';
-import { isServed } from './documents.ts';
 import type { TaxonomyBases } from './taxonomy.ts';
 
 /** The pages the Reading setting names, as documents the site would serve. */

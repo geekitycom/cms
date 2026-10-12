@@ -1,4 +1,4 @@
-import { decodeEntities, escapeAttribute, escapeText } from '../util/html.ts';
+import { decodeEntities, escapeAttribute, escapeText } from './html.ts';
 
 /**
  * Somebody else's page, as a tree small enough to ask questions of.

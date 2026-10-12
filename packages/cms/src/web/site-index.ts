@@ -1,11 +1,11 @@
 import type { Context } from 'hono';
 
 import type { Document } from '../content/document.ts';
+import { isListed } from '../content/served.ts';
 import { calendarDayIn } from '../content/time.ts';
 import type { GeekityEnv } from '../env.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { siteTimezone } from './context.ts';
-import { isListed } from './documents.ts';
 import { feedExcerpt } from './feed-item.ts';
 import { archiveOf, homeListing } from './listing-subject.ts';
 import type { ListingSubject } from './listing-subject.ts';

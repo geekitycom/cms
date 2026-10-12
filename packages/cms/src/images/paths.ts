@@ -1,13 +1,9 @@
 import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
-import {
-  assetVersion,
-  findAsset,
-  ASSET_VERSION_PARAM,
-  UPLOAD_ASSET_PREFIX,
-  UPLOAD_DIRECTORY,
-} from '../web/assets.ts';
+import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';
+import { findAsset } from '../files/static-files.ts';
+import { assetVersion, ASSET_VERSION_PARAM } from '../web/assets.ts';
 
 /**
  * Where a derived image comes from and where it goes.

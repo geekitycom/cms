@@ -1,13 +1,15 @@
-import type { Document } from '../content/document.ts';
+import { createHash } from 'node:crypto';
+
 import { absoluteUrl } from '../util/url.ts';
+import type { Document } from './document.ts';
 
 /**
  * The names this site gives things to the world outside it: a post's object
  * id, a feed guid, a comment's page.
  *
- * Kept apart from the modules that serve them so the indexes can name things
- * the same way without importing the web layer: the content index keys
- * `/replies/` feeds by these guids (TASK-327).
+ * Content policy rather than delivery, so the content index names things the
+ * way the feeds and the federation do: it keys `/replies/` feeds by these
+ * guids (TASK-327).
  */
 
 /**
@@ -68,3 +70,8 @@ export function commentPageHref(key: string): string {
 
 /** What every comment page's path starts with. */
 export const COMMENT_PAGE_PREFIX = '/comment/';
+
+/** The key of an item that has no stored id: the first 16 hex digits of the SHA-256 of its feed guid. */
+export function repliesKey(guid: string): string {
+  return createHash('sha256').update(guid).digest('hex').slice(0, 16);
+}

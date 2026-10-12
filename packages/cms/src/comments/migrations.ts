@@ -1,11 +1,11 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { COMMENT_PAGE_PREFIX, commentPageHref, repliesKey } from '../content/guids.ts';
 import { readFileIfPresentSync, writeFileAtomicallySync } from '../files/atomic.ts';
 import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { isRecord } from '../util/guards.ts';
-import { isKey, repliesKey } from '../web/feed-source.ts';
-import { COMMENT_PAGE_PREFIX, commentPageHref } from '../web/guids.ts';
+import { isKey } from '../web/feed-source.ts';
 import {
   COMMENT_EMAILS_FILE_MODE,
   commentEmailsFile,

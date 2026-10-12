@@ -1,6 +1,6 @@
 import { stringOrEmpty, trimmedField } from '../util/forms.ts';
-import { SYNDICATE_TO_FRONT_MATTER_KEY, syndicateToOf } from '../webmention/syndication.ts';
-import type { SyndicationTarget } from '../webmention/syndication.ts';
+import { SYNDICATE_TO_FRONT_MATTER_KEY, syndicateToOf } from './syndicate-to.ts';
+import type { SyndicationTarget } from './syndicate-to.ts';
 import {
   citationOf,
   citationText,

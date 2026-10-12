@@ -16,8 +16,8 @@
 // Types only: the image modules load the image encoder, which Post Type
 // Discovery, and so everything that asks a post its type, must not.
 import type { AltTextLibrary } from '../images/alt-text.ts';
-import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import { isUploadUrl, isWebUrl } from './enclosure.ts';
+import { UPLOAD_ASSET_PREFIX } from './uploads.ts';
 
 /** The front matter key the photos are under, Micropub's property name. */
 export const PHOTO_FRONT_MATTER_KEY = 'photo';

@@ -21,10 +21,11 @@ import type { User } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorContext, authorFeedHref, profileContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
-import { activityStreamsId, isListed, isServed, permalinkOfObjectId } from './documents.ts';
-import { isKey, repliesFeedPath, repliesKey } from './feed-source.ts';
+import { activityStreamsId, permalinkOfObjectId } from './documents.ts';
+import { isListed, isServed } from '../content/served.ts';
+import { isKey, repliesFeedPath } from './feed-source.ts';
+import { COMMENT_PAGE_PREFIX, commentPageHref, feedGuid, repliesKey } from '../content/guids.ts';
 import type { FeedComment } from './feeds.ts';
-import { COMMENT_PAGE_PREFIX, commentPageHref, feedGuid } from './guids.ts';
 import { sanitizeCommentHtml } from './sanitize.ts';
 
 /**

@@ -31,12 +31,8 @@ export type { CommentFormContext, CommentViewer } from './form.ts';
 export { renderCommentMarkdown } from './markdown.ts';
 export { isModerationAction, moderateComment, MODERATION_ACTIONS } from './moderate.ts';
 export type { ModerateCommentOptions, ModerationAction, ModerationOutcome } from './moderate.ts';
-export {
-  COMMENTS_FRONT_MATTER_KEY,
-  commentPolicyOf,
-  commentsOpen,
-  DEFAULT_COMMENTS_CLOSE_AFTER_DAYS,
-} from './policy.ts';
+export { COMMENTS_FRONT_MATTER_KEY } from '../content/comments.ts';
+export { commentPolicyOf, commentsOpen, DEFAULT_COMMENTS_CLOSE_AFTER_DAYS } from './policy.ts';
 export type { CommentPolicy } from './policy.ts';
 export {
   addComment,

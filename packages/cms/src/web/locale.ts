@@ -1,3 +1,5 @@
+import { LANG_FRONT_MATTER_KEY } from '../content/language.ts';
+
 /**
  * The locale a site's dates and counts are written in (TASK-153).
  *
@@ -43,13 +45,6 @@ export function pluralForm(
   const written = new Intl.NumberFormat(locale, { useGrouping: false }).format(count);
   return form.replaceAll('#', written);
 }
-
-/**
- * The front-matter key that names the language a post or a page is written
- * in, when it is not the site's (TASK-154). The name HTML gives the attribute,
- * so an Eleventy build reads the same key as page data.
- */
-export const LANG_FRONT_MATTER_KEY = 'lang';
 
 /**
  * The language a document says it is in, as a canonical BCP 47 tag, or

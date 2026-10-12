@@ -11,7 +11,7 @@ import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
 import { countUsers, listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
-import { authorNames } from '../web/authors.ts';
+import { authorNames } from '../content/authors.ts';
 import { userActor, userByUsername } from './actor.ts';
 import {
   articleObjectId,

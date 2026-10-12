@@ -2,9 +2,11 @@ import path from 'node:path';
 
 import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
+import { syndicateToOf } from '../content/syndicate-to.ts';
+import type { SyndicationTarget } from '../content/syndicate-to.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
-import { isRecord } from '../util/guards.ts';
+import { isRecord, nonEmptyStrings } from '../util/guards.ts';
 import { canonicalLocale, DEFAULT_LOCALE, documentLanguage } from '../web/locale.ts';
 
 /**
@@ -30,9 +32,6 @@ export const SYNDICATION_TARGETS_FILE = '_data/syndicationTargets.json';
  */
 export const SYNDICATION_FILE = '_data/syndication.json';
 
-/** The front matter key a post lists the ids of its targets under. */
-export const SYNDICATE_TO_FRONT_MATTER_KEY = 'syndicate-to';
-
 /** The front matter key, and mf2 property, for the URLs of a post's copies. */
 export const SYNDICATION_FRONT_MATTER_KEY = 'syndication';
 
@@ -41,27 +40,6 @@ const ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 /** What a target's `url` may hold to follow the post's language (TASK-156). */
 export const LANGUAGE_PLACEHOLDER = '{lang}';
-
-/** One place a post can be syndicated to. */
-export interface SyndicationTarget {
-  /** What `syndicate-to` names it by, and its Micropub uid. */
-  readonly id: string;
-  /** What the editor's checkbox and the post's link say. */
-  readonly name: string;
-  /**
-   * The page the post links to and the webmention is sent to. As declared it
-   * may hold {@link LANGUAGE_PLACEHOLDER}; a target {@link selectedTargets}
-   * answers with has it filled for the post.
-   */
-  readonly url: string;
-  /** A tag that selects this target without the post listing it. */
-  readonly tag?: string | undefined;
-  /**
-   * The languages, as canonical BCP 47 tags, the target takes posts in. A post
-   * in any other language does not select it. Absent means every language.
-   */
-  readonly languages?: readonly string[] | undefined;
-}
 
 /** The declared targets, and a sentence for each entry that was not one. */
 export interface ParsedSyndicationTargets {
@@ -271,7 +249,7 @@ export function selectedTargets(
   targets: readonly SyndicationTarget[],
   siteLanguage: string,
 ): SyndicationTarget[] {
-  const listed = new Set(stringsOf(document.extra[SYNDICATE_TO_FRONT_MATTER_KEY]));
+  const listed = new Set(syndicateToOf(document.extra));
   const tags = new Set(document.tags.map((tag) => tag.toLowerCase()));
   const language = documentLanguage(document) ?? canonicalLocale(siteLanguage) ?? DEFAULT_LOCALE;
 
@@ -301,14 +279,11 @@ function fillLanguage(template: string, language: string): string {
   return template.replaceAll(LANGUAGE_PLACEHOLDER, encodeURIComponent(language));
 }
 
-/** The ids a post's `syndicate-to` lists, as written. */
-export function syndicateToOf(extra: Record<string, unknown>): string[] {
-  return stringsOf(extra[SYNDICATE_TO_FRONT_MATTER_KEY]);
-}
-
 /** The copies an author listed by hand under `syndication`, each an http or https URL. */
 export function handSyndicationOf(extra: Record<string, unknown>): string[] {
-  return stringsOf(extra[SYNDICATION_FRONT_MATTER_KEY]).flatMap((value) => webUrl(value) ?? []);
+  return nonEmptyStrings(extra[SYNDICATION_FRONT_MATTER_KEY]).flatMap(
+    (value) => webUrl(value) ?? [],
+  );
 }
 
 /** The copies targets answered with, kept in {@link SYNDICATION_FILE}. */
@@ -425,12 +400,6 @@ function parseCopies(text: string): Record<string, Record<string, string>> {
 }
 
 /** A front matter value as a list of strings: a lone string is a list of one. */
-function stringsOf(value: unknown): string[] {
-  if (typeof value === 'string') return value === '' ? [] : [value];
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === 'string' && item !== '');
-}
-
 function webUrl(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   try {

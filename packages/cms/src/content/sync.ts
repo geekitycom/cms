@@ -18,7 +18,7 @@ import { parseDocument } from './parser.ts';
 import { replyTarget } from './post-type.ts';
 import { DuplicatePermalinkError, TRASH_DIRECTORY } from './store.ts';
 import type { ContentStore } from './store.ts';
-import { isServed } from '../web/documents.ts';
+import { isServed } from './served.ts';
 
 /** File extensions the sync treats as documents. */
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
