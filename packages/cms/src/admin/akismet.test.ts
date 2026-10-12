@@ -7,6 +7,8 @@ import { after, beforeEach, describe, it } from 'node:test';
 import { addComment } from '../comments/records.ts';
 import { writeAkismetKey } from '../comments/akismet.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import {
@@ -15,7 +17,6 @@ import {
   AKISMET_REMOVE,
   DISCUSSION_SETTINGS,
 } from './settings-discussion.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './settings.ts';
 
 /** The page the key lives on: Discussion, beside what it checks. */
 const SETTINGS_PATH = DISCUSSION_SETTINGS.path;

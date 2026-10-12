@@ -9,13 +9,13 @@ import {
 } from '../contact/records.ts';
 import type { ContactMessage, ContactStatus } from '../contact/records.ts';
 import type { GeekityEnv } from '../env.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { pageCount } from '../web/pagination.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { formatInTimezone } from './formatting.ts';
 import { ADMIN_PREFIX } from './session.ts';
-import { readSiteSettings } from './settings.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**

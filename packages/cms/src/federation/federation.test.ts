@@ -5,12 +5,13 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { writeUsers } from '../admin/__testing__/users.ts';
-import type { UserProfile } from '../admin/accounts.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
-import type { SiteSettings } from '../admin/settings.ts';
 import type { NewFollower } from '../admin/store.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import type { SiteSettings } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
+import type { UserProfile } from '../site/users.ts';
 import { seedActorKeys } from './__testing__/keys.ts';
 import { FOLLOWERS_PAGE_SIZE, followersPage } from './followers.ts';
 import { attributionDomainOf, federationOrigin } from './paths.ts';

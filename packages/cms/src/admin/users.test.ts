@@ -7,6 +7,8 @@ import {
   notificationWanted,
 } from '../notifications/preferences.ts';
 import { writeMailCredentials } from '../mail/credentials.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import {
   countUsers,
   createUser,
@@ -14,8 +16,7 @@ import {
   findUserById,
   setUserProfile,
   verifyUserPassword,
-} from './accounts.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './settings.ts';
+} from '../site/users.ts';
 import { writeUsers } from './__testing__/users.ts';
 import {
   browser,
@@ -1422,4 +1423,30 @@ describe('what the Links box says about itself (TASK-112)', () => {
       { label: 'Mastodon', href: 'https://shll.me/@a', rel: 'me' },
     ]);
   });
+});
+
+describe('a form naming a user who is already gone', () => {
+  const forms: { path: string; fields: Record<string, string> }[] = [
+    { path: '/admin/users/email', fields: { email: 'nobody@example.com' } },
+    { path: '/admin/users/profile', fields: { display_name: 'Nobody' } },
+    { path: '/admin/users/notifications', fields: { event: 'comments', on: 'on' } },
+    { path: '/admin/users/notifications/mode', fields: { event: 'comments', mode: 'daily' } },
+  ];
+
+  for (const { path, fields } of forms) {
+    for (const userId of ['404', 'not-a-number']) {
+      it(`${path} with user_id ${userId} lands on the list and says so`, async () => {
+        const cms = await box.site();
+        const agent = await signedIn(cms);
+        const { token } = await usersScreen(agent);
+
+        const response = await agent.post(path, { csrf_token: token, user_id: userId, ...fields });
+
+        assert.equal(response.status, 303);
+        assert.equal(response.headers.get('location'), '/admin/users');
+        const { html } = await usersScreen(agent);
+        assert.match(html, /That user is already gone\./);
+      });
+    }
+  }
 });

@@ -1,8 +1,5 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
-import { listUsers } from '../admin/accounts.ts';
-import type { User } from '../admin/accounts.ts';
-import { readSiteSettings, robotsPolicyOf } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore, ListOptions } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
@@ -15,6 +12,10 @@ import { readAltTexts } from '../images/alt-text.ts';
 import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
 import { sourceVersion } from '../images/paths.ts';
 import { findImageVariant, VARIANT_ASSET_PREFIX } from '../images/variants.ts';
+import { robotsPolicyOf } from '../site/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { listUsers } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import {
   ASSET_VERSION_PARAM,

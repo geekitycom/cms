@@ -1,17 +1,8 @@
 import { randomInt } from 'node:crypto';
 
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
-import { authorHref } from '../web/authors.ts';
-import { isLinkUrl, LINK_REL_RULE, LINK_URL_RULE, splitLinkRel } from '../web/navigation.ts';
-import {
-  DEFAULT_DELIVERY_MODE,
-  deliveryMode,
-  notificationEvent,
-  notificationSwitches,
-} from '../notifications/preferences.ts';
-import { stringOrEmpty } from '../util/forms.ts';
 import {
   countUsers,
   createUser,
@@ -26,9 +17,18 @@ import {
   setUserPassword,
   setUserProfile,
   verifyUserPassword,
-} from './accounts.ts';
-import type { ProfileLink, User } from './accounts.ts';
-import { ADMIN_THEMES, adminTheme } from './admin-theme.ts';
+} from '../site/users.ts';
+import type { ProfileLink, User } from '../site/users.ts';
+import { authorHref } from '../web/authors.ts';
+import { isLinkUrl, LINK_REL_RULE, LINK_URL_RULE, splitLinkRel } from '../web/navigation.ts';
+import {
+  DEFAULT_DELIVERY_MODE,
+  deliveryMode,
+  notificationEvent,
+  notificationSwitches,
+} from '../notifications/preferences.ts';
+import { stringOrEmpty } from '../util/forms.ts';
+import { ADMIN_THEMES, adminTheme } from '../site/admin-theme.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
@@ -304,16 +304,10 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
    * what is stored back in it.
    */
   app.post(USER_EMAIL_PATH, async (c) => {
-    const dataDir = c.var.config.dataDir;
-    const body = await c.req.parseBody();
-    const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
+    const named = await namedUser(c);
+    if (named instanceof Response) return named;
+    const { dataDir, body, target } = named;
     const email = stringOrEmpty(body[USER_FIELDS.email]).trim();
-    const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
-
-    if (target === undefined) {
-      flash(c, 'error', 'That user is already gone.');
-      return c.redirect(USERS_PATH, 303);
-    }
 
     const problem = emailProblem(email);
     if (problem !== undefined) {
@@ -348,15 +342,9 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
    * than reported, and because the line to fix has to still be there to fix.
    */
   app.post(USER_PROFILE_PATH, async (c) => {
-    const dataDir = c.var.config.dataDir;
-    const body = await c.req.parseBody();
-    const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
-    const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
-
-    if (target === undefined) {
-      flash(c, 'error', 'That user is already gone.');
-      return c.redirect(USERS_PATH, 303);
-    }
+    const named = await namedUser(c);
+    if (named instanceof Response) return named;
+    const { dataDir, body, target } = named;
 
     const typed = {
       displayName: stringOrEmpty(body[USER_FIELDS.displayName]),
@@ -408,15 +396,9 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
    * render.
    */
   app.post(USER_NOTIFICATIONS_PATH, async (c) => {
-    const dataDir = c.var.config.dataDir;
-    const body = await c.req.parseBody();
-    const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
-    const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
-
-    if (target === undefined) {
-      flash(c, 'error', 'That user is already gone.');
-      return c.redirect(USERS_PATH, 303);
-    }
+    const named = await namedUser(c);
+    if (named instanceof Response) return named;
+    const { dataDir, body, target } = named;
 
     const name = stringOrEmpty(body[USER_FIELDS.event]);
     const event = notificationEvent(name);
@@ -449,15 +431,9 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
    * render.
    */
   app.post(USER_NOTIFICATION_MODE_PATH, async (c) => {
-    const dataDir = c.var.config.dataDir;
-    const body = await c.req.parseBody();
-    const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
-    const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
-
-    if (target === undefined) {
-      flash(c, 'error', 'That user is already gone.');
-      return c.redirect(USERS_PATH, 303);
-    }
+    const named = await namedUser(c);
+    if (named instanceof Response) return named;
+    const { dataDir, body, target } = named;
 
     const name = stringOrEmpty(body[USER_FIELDS.event]);
     const event = notificationEvent(name);
@@ -552,6 +528,23 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
   });
 }
 
+async function namedUser(
+  c: Context<GeekityEnv>,
+): Promise<{ dataDir: string; body: Readonly<Record<string, unknown>>; target: User } | Response> {
+  const dataDir = c.var.config.dataDir;
+  const body = await c.req.parseBody();
+  const id = Number(stringOrEmpty(body[USER_FIELDS.userId]));
+  const target = Number.isInteger(id) ? findUserById(dataDir, id) : undefined;
+
+  if (target === undefined) {
+    flash(c, 'error', GONE_USER);
+    return c.redirect(USERS_PATH, 303);
+  }
+  return { dataDir, body, target };
+}
+
+const GONE_USER = 'That user is already gone.';
+
 /**
  * Delete a user.
  *
@@ -569,7 +562,7 @@ export function deleteUserRefusal(input: {
   /** How many users the site has. */
   total: number;
 }): string | undefined {
-  if (input.target === undefined) return 'That user is already gone.';
+  if (input.target === undefined) return GONE_USER;
   if (input.total <= 1) {
     return `${input.target.username} is the only user. Add another before deleting this one.`;
   }

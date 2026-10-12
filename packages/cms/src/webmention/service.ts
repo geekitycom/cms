@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 
-import { readSiteSettings } from '../admin/settings.ts';
 import type {
   AdminStore,
   ConversationWrite,
@@ -19,6 +18,7 @@ import { replyTarget } from '../content/post-type.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { isFederatedDocument } from '../federation/article.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { absoluteUrl } from '../util/url.ts';

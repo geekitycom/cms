@@ -1,4 +1,4 @@
-import type { ProfileLink, User } from '../admin/accounts.ts';
+import type { ProfileLink, User } from '../site/users.ts';
 import { feedPathUnder } from './feed-source.ts';
 import type { FeedFormat } from './feed-source.ts';
 import { relText } from './navigation.ts';

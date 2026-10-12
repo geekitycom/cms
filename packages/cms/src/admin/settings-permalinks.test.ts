@@ -3,9 +3,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
-import { readSiteSettings, writeSiteJson } from './settings.ts';
 
 /**
  * The Permalinks settings page: the URLs the archives live at, and the ones

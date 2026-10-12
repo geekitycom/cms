@@ -5,16 +5,11 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { formFromSettings, settingsFromForm, settingsProblems } from '../site/settings-form.ts';
+import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
-import {
-  DEFAULT_SITE_SETTINGS,
-  formFromSettings,
-  readSiteSettings,
-  settingsFromForm,
-  settingsProblems,
-  updateSiteSettings,
-} from './settings.ts';
 
 /**
  * The settings themselves: `content/_data/site.json`, which is what every

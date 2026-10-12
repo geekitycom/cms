@@ -4,13 +4,14 @@ import { after, before, describe, it } from 'node:test';
 import { csrfField, sandbox, signedIn, FIRST_ADMIN } from './admin/__testing__/harness.ts';
 import type { Browser } from './admin/__testing__/harness.ts';
 import { resendMessage } from './admin/federation.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './admin/settings.ts';
 import { readDevModeRecord } from './dev-mode.ts';
 import type { DevModeEntry } from './dev-mode.ts';
 import { addFollower } from './federation/records.ts';
 import type { Cms } from './index.ts';
 import { createMemoryMailProvider } from './mail/memory.ts';
 import type { MemoryMailProvider } from './mail/memory.ts';
+import { DEFAULT_SITE_SETTINGS } from './site/settings.ts';
+import { writeSiteJson } from './site/site-json.ts';
 
 const BASE_URL = 'https://blog.example';
 const FOLLOWER = 'https://remote.example/users/bob';

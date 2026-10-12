@@ -6,9 +6,10 @@ import type { ContentStore } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { GeekityEnv } from '../env.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { listUsers } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { listUsers } from './accounts.ts';
-import type { User } from './accounts.ts';
 import { avatarUrl } from '../federation/actor.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
 import type { WebmentionReport } from '../webmention/service.ts';
@@ -22,10 +23,9 @@ import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { authorHref, profileContext, userForAuthor } from '../web/authors.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { postObjectId } from '../web/guids.ts';
-import { documentEditorPath, POST_KIND } from './documents.ts';
+import { documentEditorPath, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { readSiteSettings } from './settings.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import type {
   Delivery,
@@ -391,7 +391,7 @@ export function deliveryRows(
       post: {
         slug: document.slug,
         title: postLabel(document, context.cited),
-        editUrl: documentEditorPath(POST_KIND, document),
+        editUrl: documentEditorPath(POST_SCREENS, document),
         inThread: false,
       },
       author: context.author(document),
@@ -667,7 +667,7 @@ export function localPosts(
     return {
       slug: document.slug,
       title: postLabel(document, cited),
-      editUrl: documentEditorPath(POST_KIND, document),
+      editUrl: documentEditorPath(POST_SCREENS, document),
       inThread: own === undefined,
     };
   };

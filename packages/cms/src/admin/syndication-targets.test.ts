@@ -13,7 +13,7 @@ import { after, describe, it } from 'node:test';
 
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
-import { findUser } from './accounts.ts';
+import { findUser } from '../site/users.ts';
 import { browser, csrfField, FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import {

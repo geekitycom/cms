@@ -1,8 +1,8 @@
 import type { Context, MiddlewareHandler } from 'hono';
 
-import { findUserById } from '../admin/accounts.ts';
-import type { User } from '../admin/accounts.ts';
 import type { GeekityEnv } from '../env.ts';
+import { findUserById } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import { PROTECTED_RESOURCE_METADATA_PATH, siteBaseUrl } from './discovery.ts';
 import type { Scope } from './request.ts';
 import { findAccessToken, recordUse, verifyAccessToken } from './tokens.ts';

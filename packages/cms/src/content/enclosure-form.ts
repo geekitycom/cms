@@ -12,6 +12,10 @@
  */
 import path from 'node:path';
 
+import { LANGUAGE_TAG_PATTERN } from '../site/setting-values.ts';
+import { rowIndexes, trimmedField } from '../util/forms.ts';
+import { findUpload, UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
+import type { Document } from './document.ts';
 import {
   ALTERNATE_TITLE_MAX_LENGTH,
   ENCLOSURE_FRONT_MATTER_KEY,
@@ -20,15 +24,11 @@ import {
   isUploadUrl,
   isWebUrl,
   TRANSCRIPT_TYPES,
-} from '../content/enclosure.ts';
-import type { Document } from '../content/document.ts';
-import type { AlternateEnclosure, Enclosure, Transcript } from '../content/enclosure.ts';
-import { canonicalType, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
-import type { UploadMediaType } from '../content/media.ts';
-import { findUpload, UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
-import type { EditorField, FieldError } from './editor-layout.ts';
-import { listUploads } from './media.ts';
-import { LANGUAGE_TAG_PATTERN } from './settings.ts';
+} from './enclosure.ts';
+import type { AlternateEnclosure, Enclosure, Transcript } from './enclosure.ts';
+import type { EditorField, FieldError } from './form-error.ts';
+import { canonicalType, UPLOAD_MEDIA_TYPES } from './media.ts';
+import type { UploadMediaType } from './media.ts';
 
 /** One alternate version's row, as the form has it. */
 export interface AlternateRow {
@@ -53,7 +53,15 @@ export interface EnclosureForm {
   alternates: AlternateRow[];
 }
 
-/** The form field names, in one place for the template and the reader. */
+/** No recording. */
+export const BLANK_ENCLOSURE_FORM: EnclosureForm = {
+  url: '',
+  duration: '',
+  transcriptUrl: '',
+  transcriptType: '',
+  alternates: [],
+};
+
 export const ENCLOSURE_FIELDS = {
   url: 'enclosure-url',
   duration: 'enclosure-duration',
@@ -68,23 +76,30 @@ export const ENCLOSURE_FIELDS = {
   },
 } as const;
 
-/** The empty row the editor adds so a form with no script can add a version. */
-export const BLANK_ALTERNATE_ROW: AlternateRow = {
-  url: '',
-  type: '',
-  title: '',
-  height: '',
-  lang: '',
-};
-
-/** No recording. */
-export const BLANK_ENCLOSURE_FORM: EnclosureForm = {
-  url: '',
-  duration: '',
-  transcriptUrl: '',
-  transcriptType: '',
-  alternates: [],
-};
+/**
+ * The recording fields out of a submitted form.
+ *
+ * The alternate rows are numbered, so a plain form with no script can carry
+ * any number of them. A row whose address was emptied is a row taken out.
+ */
+export function readEnclosureForm(body: Readonly<Record<string, unknown>>): EnclosureForm {
+  const names = ENCLOSURE_FIELDS.alternate;
+  return {
+    url: trimmedField(body, ENCLOSURE_FIELDS.url),
+    duration: trimmedField(body, ENCLOSURE_FIELDS.duration),
+    transcriptUrl: trimmedField(body, ENCLOSURE_FIELDS.transcriptUrl),
+    transcriptType: trimmedField(body, ENCLOSURE_FIELDS.transcriptType),
+    alternates: rowIndexes(body, names.url)
+      .map((index) => ({
+        url: trimmedField(body, `${names.url}${String(index)}`),
+        type: trimmedField(body, `${names.type}${String(index)}`),
+        title: trimmedField(body, `${names.title}${String(index)}`),
+        height: trimmedField(body, `${names.height}${String(index)}`),
+        lang: trimmedField(body, `${names.lang}${String(index)}`),
+      }))
+      .filter((row) => row.url !== ''),
+  };
+}
 
 /**
  * What a post's front matter says about its recording, as the editor shows it.
@@ -114,38 +129,6 @@ export function enclosureForm(document: Document): EnclosureForm {
       height: alternate.height === undefined ? '' : String(alternate.height),
       lang: alternate.lang ?? '',
     })),
-  };
-}
-
-/**
- * The recording fields out of a submitted form.
- *
- * The alternate rows are numbered, so a plain form with no script can carry
- * any number of them. A row whose address was emptied is a row taken out.
- */
-export function readEnclosureForm(body: Record<string, unknown>): EnclosureForm {
-  const field = (name: string): string => (typeof body[name] === 'string' ? body[name] : '').trim();
-  const rows = Object.keys(body)
-    .map((name) => /^alternate-url-(\d+)$/.exec(name)?.[1])
-    .filter((index) => index !== undefined)
-    .map(Number)
-    .sort((left, right) => left - right);
-
-  const names = ENCLOSURE_FIELDS.alternate;
-  return {
-    url: field(ENCLOSURE_FIELDS.url),
-    duration: field(ENCLOSURE_FIELDS.duration),
-    transcriptUrl: field(ENCLOSURE_FIELDS.transcriptUrl),
-    transcriptType: field(ENCLOSURE_FIELDS.transcriptType),
-    alternates: rows
-      .map((index) => ({
-        url: field(`${names.url}${String(index)}`),
-        type: field(`${names.type}${String(index)}`),
-        title: field(`${names.title}${String(index)}`),
-        height: field(`${names.height}${String(index)}`),
-        lang: field(`${names.lang}${String(index)}`),
-      }))
-      .filter((row) => row.url !== ''),
   };
 }
 
@@ -212,40 +195,6 @@ export function resolveEnclosure(
 export function enclosureFrontMatter(enclosure: Enclosure): Record<string, unknown> {
   const { alternates, ...rest } = enclosure;
   return alternates.length === 0 ? rest : { ...rest, alternates };
-}
-
-/** The media library's choices for a post's recording, and the address it has now. */
-export interface EnclosureChoices {
-  /** Audio and video uploads, newest first. */
-  media: { url: string; label: string }[];
-  /** Upload addresses a transcript can be. */
-  transcripts: string[];
-}
-
-/**
- * What the editor offers to choose from.
- *
- * A post whose file has since gone from the library keeps it as a choice of
- * its own, so opening the editor never quietly drops a recording; saving it
- * says what is wrong.
- */
-export async function enclosureChoices(
-  contentDir: string,
-  current: string,
-): Promise<EnclosureChoices> {
-  const files = await listUploads(contentDir);
-  const media = files
-    .filter((file) => file.kind === 'audio' || file.kind === 'video')
-    .map((file) => ({ url: file.url, label: file.path }));
-  if (current !== '' && !media.some((file) => file.url === current)) {
-    media.unshift({ url: current, label: `${current} (not in the media library)` });
-  }
-  return {
-    media,
-    transcripts: files
-      .filter((file) => transcriptTypeFor(file.extension) !== undefined)
-      .map((file) => file.url),
-  };
 }
 
 function resolveTranscript(
@@ -358,7 +307,7 @@ function measuredUpload(
   return { type, length: asset.stats.size };
 }
 
-function transcriptTypeFor(extension: string): Transcript['type'] | undefined {
+export function transcriptTypeFor(extension: string): Transcript['type'] | undefined {
   const media = UPLOAD_MEDIA_TYPES.get(extension);
   const declared = media === undefined ? undefined : canonicalType(media);
   return TRANSCRIPT_TYPES.find((known) => known === declared);

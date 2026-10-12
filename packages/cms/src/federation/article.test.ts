@@ -8,11 +8,12 @@ import type { Hashtag } from '@fedify/vocab';
 
 import { resolveNothing } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
-import type { SiteSettings } from '../admin/settings.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import type { SiteSettings } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { postObject } from './article.ts';
 import { OUTBOX_PAGE_SIZE } from './federation.ts';
 import { createActivityId } from './paths.ts';

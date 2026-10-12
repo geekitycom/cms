@@ -3,8 +3,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import { findUser } from './accounts.ts';
-import { updateSiteSettings } from './settings.ts';
+import { updateSiteSettings } from '../site/site-json.ts';
+import { findUser } from '../site/users.ts';
 import { CITED_SLUG_TIMEOUT_MS } from '../webmention/reply-contexts.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';

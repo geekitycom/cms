@@ -7,8 +7,8 @@ import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
-import { createUser, setUserProfile } from '../admin/accounts.ts';
 import type { Cms } from '../index.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 import type { AuthorizationCode } from './grants.ts';
 import type { Scope } from './request.ts';
 import { ACCESS_TOKEN_LIFETIME_MS, issueTokens, listTokens } from './tokens.ts';

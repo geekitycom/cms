@@ -1,10 +1,11 @@
-import { readSiteSettings, taxonomyBasesFromSettings } from './admin/settings.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
 import { isMigratedArrival } from './content/migrated.ts';
 import { holdOutbound } from './dev-mode.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { isFederatedDocument } from './federation/article.ts';
+import { taxonomyBasesFromSettings } from './site/settings.ts';
+import { readSiteSettings } from './site/site-json.ts';
 import { messageOf } from './util/errors.ts';
 import { createSerialQueue } from './util/queue.ts';
 import { absoluteUrl } from './util/url.ts';

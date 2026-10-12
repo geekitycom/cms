@@ -1,8 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 
-import { usersFile } from '../accounts.ts';
-import type { UserProfile } from '../accounts.ts';
-import { hashPassword } from '../passwords.ts';
+import { hashPassword } from '../../site/passwords.ts';
+import { usersFile } from '../../site/users.ts';
+import type { UserProfile } from '../../site/users.ts';
 
 /**
  * Write `data/users.json` straight, without hashing a password.

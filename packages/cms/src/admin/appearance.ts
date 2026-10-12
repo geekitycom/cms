@@ -22,18 +22,14 @@ import path from 'node:path';
 import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
-import { listSiteThemes, PACKAGED_THEME_DIR, readTheme } from '../web/themes.ts';
+import { formFromSettings, SETTINGS_FIELDS, settingsProblems } from '../site/settings-form.ts';
+import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
+import { trimmedField } from '../util/forms.ts';
+import { listSiteThemes, PACKAGED_THEME, PACKAGED_THEME_DIR, readTheme } from '../web/themes.ts';
 import type { Theme } from '../web/themes.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
-import {
-  formFromSettings,
-  readSiteSettings,
-  SETTINGS_FIELDS,
-  settingsProblems,
-  updateSiteSettings,
-} from './settings.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /** Where the themes screen lives, and where its one form posts. */
@@ -88,7 +84,13 @@ export function themeCards(options: { themes: readonly Theme[]; chosen: string }
   // Unreadable only if the package itself is broken, which is not a state a
   // screen can do anything about; the site's own themes are still listed.
   if (packaged.ok) {
-    cards.push(card(packaged.theme, { value: '', active: chosen === '', packaged: true }));
+    cards.push(
+      card(packaged.theme, {
+        value: PACKAGED_THEME,
+        active: chosen === PACKAGED_THEME,
+        packaged: true,
+      }),
+    );
   }
 
   for (const theme of options.themes) {
@@ -136,7 +138,7 @@ export function mountAppearanceScreen(
 
   app.post(THEMES_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const submitted = (typeof body[THEME_FIELD] === 'string' ? body[THEME_FIELD] : '').trim();
+    const submitted = trimmedField(body, THEME_FIELD);
 
     // The same check the settings pages run over this field, given the same
     // themes directory, so a name forged into this form is refused by the rule
@@ -190,7 +192,7 @@ export function mountAppearanceScreen(
 
   /** A theme by its display name, for the flash. */
   function named(c: Context<GeekityEnv>, value: string): string {
-    if (value === '') {
+    if (value === PACKAGED_THEME) {
       const packaged = readTheme(PACKAGED_THEME_DIR);
       return packaged.ok ? packaged.theme.name : 'The packaged theme';
     }

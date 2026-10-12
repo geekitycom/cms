@@ -13,9 +13,9 @@ import {
   DuplicateUsernameError,
   findUserById,
   verifyUserPassword,
-} from './accounts.ts';
-import type { User } from './accounts.ts';
-import { adminColorScheme } from './admin-theme.ts';
+} from '../site/users.ts';
+import type { User } from '../site/users.ts';
+import { adminColorScheme } from '../site/admin-theme.ts';
 import { mountAppearanceScreen } from './appearance.ts';
 import { adminAssetResponse, ADMIN_ASSET_PREFIX } from './assets.ts';
 import { credentialProblem } from './credentials.ts';
@@ -23,8 +23,8 @@ import {
   editorPath,
   mountDocumentScreens,
   newEditorPath,
-  PAGE_KIND,
-  POST_KIND,
+  PAGE_SCREENS,
+  POST_SCREENS,
 } from './documents.ts';
 import { FEDERATION_PATH, mountFederationScreen } from './federation.ts';
 import { takeFlash } from './flash.ts';
@@ -76,7 +76,7 @@ export const DASHBOARD_RECENT_POSTS = 5;
 
 /** Where the editor for a post lives. */
 export function postEditorPath(slug: string): string {
-  return editorPath(POST_KIND, slug);
+  return editorPath(POST_SCREENS, slug);
 }
 
 /**
@@ -158,7 +158,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       site: c.var.renderer.site(),
       adminUrl: ADMIN_PREFIX,
       siteUrl: '/',
-      newPostUrl: newEditorPath(POST_KIND),
+      newPostUrl: newEditorPath(POST_SCREENS),
       assetPrefix: ADMIN_ASSET_PREFIX,
       navigation: adminMenu(
         { section: name(context['section']), child: name(context['child']) },
@@ -346,8 +346,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // The listing and the editor. Posts and pages are the same screens over the
   // same store; the kind decides what a file is called and which fields the
   // form has.
-  mountDocumentScreens(app, { kind: POST_KIND, render });
-  mountDocumentScreens(app, { kind: PAGE_KIND, render });
+  mountDocumentScreens(app, { kind: POST_SCREENS, render });
+  mountDocumentScreens(app, { kind: PAGE_SCREENS, render });
 
   // The terms themselves: what is in use, and the three things — rename,
   // merge, delete — that rewrite every file carrying one.

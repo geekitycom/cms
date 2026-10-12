@@ -1,4 +1,4 @@
-import { listUsers } from '../admin/accounts.ts';
+import { listUsers } from '../site/users.ts';
 import { commentAnchor } from '../web/conversation.ts';
 import { MODERATION_ACTIONS } from '../comments/moderate.ts';
 import type { AdminStore, PostComment } from '../admin/store.ts';

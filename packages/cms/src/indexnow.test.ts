@@ -6,10 +6,11 @@ import { after, describe, it } from 'node:test';
 import { csrfField, sandbox, signedIn } from './admin/__testing__/harness.ts';
 import type { Browser } from './admin/__testing__/harness.ts';
 import { saveSettings } from './admin/__testing__/settings.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './admin/settings.ts';
 import type { Cms } from './index.ts';
 import { INDEXNOW_ENDPOINT } from './indexnow.ts';
 import { saveUrlOf } from './admin/__testing__/editor-form.ts';
+import { DEFAULT_SITE_SETTINGS } from './site/settings.ts';
+import { writeSiteJson } from './site/site-json.ts';
 
 /**
  * IndexNow (TASK-151): a site that turns it on serves a key at `/{key}.txt`

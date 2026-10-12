@@ -29,6 +29,8 @@ import {
 } from '../plugins/manage.ts';
 import type { ManageOptions, ManageResult } from '../plugins/manage.ts';
 import { describeUpgrade } from '../plugins/upgrade.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { findUserById, verifyUserPassword } from '../site/users.ts';
 import type { Supervision } from '../supervisor/supervision.ts';
 import { PACKAGE_NAME } from '../plugins/registry.ts';
 import type {
@@ -42,13 +44,11 @@ import type { ResolvedSetting } from '../plugins/settings.ts';
 import { pluginSite } from '../plugins/site.ts';
 import { messageOf } from '../util/errors.ts';
 import { stringOrEmpty } from '../util/forms.ts';
-import { findUserById, verifyUserPassword } from './accounts.ts';
 import type { AdminRender } from './documents.ts';
 import { formatInTimezone } from './formatting.ts';
 import type { AdminMenuChild } from './menu.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
-import { readSiteSettings } from './settings.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 export const PLUGINS_PATH = `${ADMIN_PREFIX}/plugins`;

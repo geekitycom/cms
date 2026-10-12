@@ -1,7 +1,7 @@
-import { readSiteSettings } from '../admin/settings.ts';
-import type { SiteSettings } from '../admin/settings.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
+import type { SiteSettings } from '../site/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { retry } from '../util/retry.ts';

@@ -1,139 +1,95 @@
-import { formFor } from '../admin/documents.ts';
-import type { EditorForm } from '../admin/documents.ts';
-import { eventFrontMatter } from '../admin/event-field.ts';
-import { photoRows } from '../admin/photo-field.ts';
-import { citationsOf } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
+import { formFor } from '../content/document-form.ts';
+import type { EditorForm } from '../content/document-form.ts';
+import { POST_KIND } from '../content/document-kind.ts';
+import type { DocumentKind } from '../content/document-kind.ts';
 import { eventOf } from '../content/event.ts';
-import { locationToMicropub } from '../content/location.ts';
-import { readOf } from '../content/read.ts';
-import type { ReadOf } from '../content/read.ts';
-import { rsvpOf } from '../content/rsvp.ts';
 import type { KeptProperties } from '../content/kept-properties.ts';
+import { locationToMicropub } from '../content/location.ts';
 import type { PostLocations } from '../content/locations.ts';
 import type { PermalinkFile } from '../content/permalink-file.ts';
+import type { MicropubSite, MicropubType } from '../content/post-fields.ts';
 import { visibilityOf } from '../content/visibility.ts';
-import { absoluteUrl } from '../util/url.ts';
-import { syndicateToOf } from '../webmention/syndication.ts';
 import { createForm, keptPrivately, keptRefusal, propertyName } from './create.ts';
 import type { CreateSite } from './create.ts';
 
-/**
- * The properties an update may change, and the editor fields each one owns.
- * `post-status` owns none: it is the draft flag the write is given. Anything
- * else, `mp-slug` included, is refused by name, so a post's URL only moves
- * when its author moves it in the editor.
- */
-const UPDATABLE: Readonly<Record<string, readonly (keyof EditorForm)[]>> = {
+type Updatable = Readonly<Record<string, readonly (keyof EditorForm)[]>>;
+
+const CORE_UPDATABLE: Updatable = {
   name: ['title'],
   content: ['body'],
   summary: ['description'],
   category: ['tags'],
   'in-reply-to': ['inReplyTo'],
-  rsvp: ['rsvp'],
-  'repost-of': ['repostOf'],
-  'like-of': ['likeOf'],
-  'bookmark-of': ['bookmarkOf'],
-  'read-of': ['readOf'],
-  'read-status': ['readStatus'],
   published: ['date'],
   'post-status': [],
   'p3k-content-type': [],
   visibility: ['visibility'],
-  photo: ['photos'],
   location: ['location'],
   checkin: ['location'],
-  'mp-syndicate-to': ['syndicateTo'],
-  start: ['event'],
-  end: ['event'],
 };
 
-type MicropubType = 'h-entry' | 'h-event';
+function updatable(kind: DocumentKind, type: MicropubType): Updatable {
+  return {
+    ...CORE_UPDATABLE,
+    ...Object.fromEntries(
+      kind.fields.flatMap((field) => Object.entries(field.micropub?.properties ?? {})),
+    ),
+    ...(type === 'h-event' ? { location: ['event'] } : {}),
+  };
+}
 
-const UPDATABLE_BY_TYPE: Readonly<Record<MicropubType, typeof UPDATABLE>> = {
-  'h-entry': UPDATABLE,
-  'h-event': { ...UPDATABLE, location: ['event'] },
-};
-
-const EVENT_FIELD_PROPERTIES = Object.entries(UPDATABLE_BY_TYPE['h-event'])
-  .filter(([, fields]) => fields.includes('event'))
-  .map(([property]) => property);
+function eventProperties(kind: DocumentKind): string[] {
+  return Object.entries(updatable(kind, 'h-event'))
+    .filter(([, fields]) => fields.includes('event'))
+    .map(([property]) => property);
+}
 
 export function micropubType(document: Document): MicropubType {
   return eventOf(document.extra) === undefined ? 'h-entry' : 'h-event';
 }
 
-export interface SourceSite extends Pick<CreateSite, 'baseUrl' | 'targets'> {
+export interface SourceSite extends MicropubSite {
   readonly locations: PostLocations;
   readonly kept: PermalinkFile<KeptProperties>;
 }
 
-/**
- * A post's properties as `q=source` answers them: the create mapping
- * (decision-27) read backwards, so a client can send them back as they came.
- * A property the post does not have is left out. `mp-syndicate-to` holds
- * only the targets the site declares, the ones a client can offer; an id the
- * file lists that names none stays in the file, as it does through an editor
- * save.
- */
-export function sourceProperties(document: Document, site: SourceSite): Record<string, unknown[]> {
-  const { baseUrl } = site;
+export function sourceProperties(
+  document: Document,
+  site: SourceSite,
+  kind: DocumentKind = POST_KIND,
+): Record<string, unknown[]> {
   const properties: Record<string, unknown[]> = {};
   const text = (name: string, value: string | undefined): void => {
     if (value !== undefined && value !== '') properties[name] = [value];
   };
   text('name', document.title);
-  const event = eventOf(document.extra);
-  if (event !== undefined) {
-    for (const [name, value] of Object.entries(eventFrontMatter(event))) text(name, value);
-  }
   text('content', document.body.trim());
   text('summary', document.description);
   if (document.tags.length > 0) properties['category'] = [...document.tags];
   text('in-reply-to', document.inReplyTo);
-  text('rsvp', rsvpOf(document.extra));
-  for (const { property, url } of citationsOf(document.extra)) text(property, url);
-  const read = readOf(document.extra);
-  if (read !== undefined) {
-    properties['read-of'] = [readCite(read.of)];
-    properties['read-status'] = [read.status];
-  }
   text('published', document.date);
   properties['post-status'] = [document.draft ? 'draft' : 'published'];
   const visibility = visibilityOf(document);
   properties['visibility'] = [
     typeof visibility === 'string' ? visibility : visibility.unrecognized,
   ];
-  const photos = photoRows(document).map(({ url, alt }) => {
-    const value = url.startsWith('/') ? absoluteUrl(url, baseUrl) : url;
-    return alt === '' ? value : { value, alt };
-  });
-  if (photos.length > 0) properties['photo'] = photos;
+  for (const field of kind.fields) {
+    Object.assign(properties, field.micropub?.toProperties(document, site));
+  }
   const authorLocation = site.locations.read(document.permalink);
-  if (authorLocation !== undefined && (event === undefined || authorLocation.checkin === true)) {
+  if (
+    authorLocation !== undefined &&
+    (micropubType(document) === 'h-entry' || authorLocation.checkin === true)
+  ) {
     properties[authorLocation.checkin === true ? 'checkin' : 'location'] = [
       locationToMicropub(authorLocation),
     ];
   }
-  const declared = new Set(site.targets.map(({ id }) => id));
-  const selected = syndicateToOf(document.extra).filter((id) => declared.has(id));
-  if (selected.length > 0) properties['mp-syndicate-to'] = selected;
-  for (const [name, values] of stillUnmapped(site.kept.read(document.permalink) ?? {})) {
-    properties[name] = [...values];
+  for (const [name, values] of Object.entries(site.kept.read(document.permalink) ?? {})) {
+    if (keptPrivately(name, kind)) properties[name] = [...values];
   }
   return properties;
-}
-
-function stillUnmapped(kept: KeptProperties): [string, KeptProperties[string]][] {
-  return Object.entries(kept).filter(([name]) => keptPrivately(name));
-}
-
-function readCite(of: ReadOf): object {
-  const fields = Object.entries(of).filter(([, value]) => value !== undefined);
-  return {
-    type: ['h-cite'],
-    properties: Object.fromEntries(fields.map(([name, value]) => [name, [value]])),
-  };
 }
 
 /**
@@ -192,6 +148,7 @@ export function updateForm(
   document: Document,
   given: readonly Change[],
   site: Omit<CreateSite, 'author'> & SourceSite,
+  kind: DocumentKind = POST_KIND,
 ):
   | {
       readonly form: EditorForm;
@@ -199,44 +156,44 @@ export function updateForm(
       readonly keptProperties: KeptProperties | undefined;
     }
   | { readonly errors: string[] } {
+  const kept = (name: string): boolean => keptPrivately(name, kind);
   const changes = given.map((change) => ({ ...change, property: propertyName(change.property) }));
   const touched = [...new Set(changes.map(({ property }) => property))];
-  const unknown = touched.filter(
-    (property) => !(property in UPDATABLE) && !keptPrivately(property),
-  );
+  const type = micropubType(document);
+  const owned = updatable(kind, type);
+  const unknown = touched.filter((property) => !(property in owned) && !kept(property));
   if (unknown.length > 0) return { errors: [`This endpoint cannot update ${unknown.join(', ')}.`] };
 
-  const type = micropubType(document);
-  const updatable = UPDATABLE_BY_TYPE[type];
   const sourced =
-    type === 'h-event' ? [...new Set([...touched, ...EVENT_FIELD_PROPERTIES])] : touched;
-  const source = sourceProperties(document, site);
+    type === 'h-event' ? [...new Set([...touched, ...eventProperties(kind)])] : touched;
+  const source = sourceProperties(document, site, kind);
   const properties = new Map(sourced.map((property) => [property, source[property] ?? []]));
   for (const change of changes) {
     const current = properties.get(change.property) ?? [];
     properties.set(change.property, changed(current, change));
   }
 
-  const mapped = new Map([...properties].filter(([name]) => !keptPrivately(name)));
+  const mapped = new Map([...properties].filter(([name]) => !kept(name)));
   const created = createForm(
     { type, properties: mapped },
     { ...site, author: document.author ?? '' },
+    kind,
   );
   if ('errors' in created) return created;
 
   let keptProperties: KeptProperties | undefined;
-  if (touched.some(keptPrivately)) {
+  if (touched.some(kept)) {
     const all = { ...source, ...Object.fromEntries(properties) };
     keptProperties = Object.fromEntries(
-      Object.entries(all).filter(([name, values]) => keptPrivately(name) && values.length > 0),
+      Object.entries(all).filter(([name, values]) => kept(name) && values.length > 0),
     );
     const refused = keptRefusal(keptProperties);
     if (refused !== undefined) return { errors: [refused] };
   }
 
-  const form = formFor(document, site.timezone, site.locations.read(document.permalink));
+  const form = formFor(kind, document, site.timezone, site.locations.read(document.permalink));
   for (const property of touched) {
-    for (const field of updatable[property] ?? []) {
+    for (const field of owned[property] ?? []) {
       Object.assign(form, { [field]: created.form[field] });
     }
   }

@@ -1,19 +1,14 @@
-import { blankForm, POST_KIND } from '../admin/documents.ts';
-import type { EditorForm } from '../admin/documents.ts';
-import { locationForm } from '../admin/location-field.ts';
-import type { PhotoRow } from '../admin/photo-field.ts';
-import { BLANK_READ_OF_FORM } from '../admin/read-field.ts';
-import type { ReadOfForm } from '../admin/read-field.ts';
-import { isWebUrl } from '../content/enclosure.ts';
+import { blankForm } from '../content/document-form.ts';
+import type { EditorForm } from '../content/document-form.ts';
+import { POST_KIND } from '../content/document-kind.ts';
+import type { DocumentKind } from '../content/document-kind.ts';
 import type { KeptProperties } from '../content/kept-properties.ts';
 import { checkinFromMicropub, locationFromMicropub, postLocation } from '../content/location.ts';
 import type { PostLocation } from '../content/location.ts';
-import { isReadStatus, READ_STATUSES } from '../content/read.ts';
+import { locationForm } from '../content/location-form.ts';
+import type { MicropubRequest, MicropubType } from '../content/post-fields.ts';
 import { isVisibility } from '../content/visibility.ts';
 import { normalizeBody } from '../content/writer.ts';
-import { isRecord } from '../util/guards.ts';
-import { absoluteUrl } from '../util/url.ts';
-import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import type { SyndicationTarget } from '../webmention/syndication.ts';
 import { cleanMarkdown, markdownFromHtml } from './content.ts';
 
@@ -32,19 +27,10 @@ interface HtmlContent {
   readonly html: string;
 }
 
-/**
- * The properties a post can be created with, and the editor field each one
- * fills (decision-27). Anything else is kept privately, as it was sent, except
- * an `mp-*` command the site does not carry out, which is refused by name.
- */
 const SINGLE_VALUED = {
   name: 'title',
   summary: 'description',
   'in-reply-to': 'inReplyTo',
-  rsvp: 'rsvp',
-  'repost-of': 'repostOf',
-  'like-of': 'likeOf',
-  'bookmark-of': 'bookmarkOf',
   published: 'date',
   'mp-slug': 'slug',
 } as const satisfies Record<string, keyof EditorForm>;
@@ -59,28 +45,39 @@ const ACCEPTED_WITHOUT_EFFECT = {
 const MAPPED_ON_THEIR_OWN = [
   'content',
   'category',
-  'photo',
   'location',
   'checkin',
   'post-status',
-  'mp-syndicate-to',
   'visibility',
-  'read-of',
-  'read-status',
-  'start',
-  'end',
 ] as const;
 
 export type Property =
   | keyof typeof SINGLE_VALUED
   | keyof typeof ACCEPTED_WITHOUT_EFFECT
-  | (typeof MAPPED_ON_THEIR_OWN)[number];
+  | (typeof MAPPED_ON_THEIR_OWN)[number]
+  | 'rsvp'
+  | 'repost-of'
+  | 'like-of'
+  | 'bookmark-of'
+  | 'photo'
+  | 'mp-syndicate-to'
+  | 'read-of'
+  | 'read-status'
+  | 'start'
+  | 'end';
 
-const PROPERTIES = new Set<string>([
+const CORE_PROPERTIES: readonly string[] = [
   ...Object.keys(SINGLE_VALUED),
   ...Object.keys(ACCEPTED_WITHOUT_EFFECT),
   ...MAPPED_ON_THEIR_OWN,
-]);
+];
+
+function mappedProperties(kind: DocumentKind): ReadonlySet<string> {
+  return new Set([
+    ...CORE_PROPERTIES,
+    ...kind.fields.flatMap((field) => Object.keys(field.micropub?.properties ?? {})),
+  ]);
+}
 
 /**
  * The names Quill accounts created before its migrations 0002 and 0004 send,
@@ -95,8 +92,8 @@ export function propertyName(name: string): string {
   return LEGACY_NAMES.get(name) ?? name;
 }
 
-export function keptPrivately(name: string): boolean {
-  return !PROPERTIES.has(name) && !name.startsWith('mp-');
+export function keptPrivately(name: string, kind: DocumentKind = POST_KIND): boolean {
+  return !mappedProperties(kind).has(name) && !name.startsWith('mp-');
 }
 
 const KEPT_PROPERTIES_LIMIT_BYTES = 16 * 1024;
@@ -116,17 +113,7 @@ export function keptRefusal(kept: KeptProperties): string | undefined {
   return undefined;
 }
 
-const PUBLISHABLE: readonly Property[] = [
-  'content',
-  'name',
-  'photo',
-  'in-reply-to',
-  'like-of',
-  'repost-of',
-  'bookmark-of',
-  'read-of',
-  'checkin',
-];
+const PUBLISHABLE: readonly Property[] = ['content', 'name', 'in-reply-to', 'checkin'];
 
 /** What `post-status` may say, and whether it makes a draft. */
 const POST_STATUSES: Readonly<Record<string, boolean>> = { published: false, draft: true };
@@ -207,12 +194,14 @@ export interface CreatedForm {
 export function createForm(
   request: CreateRequest,
   site: CreateSite,
+  kind: DocumentKind = POST_KIND,
 ): CreatedForm | { readonly errors: string[] } {
   const { author, timezone, now } = site;
   if (request.type !== 'h-entry' && request.type !== 'h-event') {
     const named = request.type === '' ? 'no type' : request.type;
     return { errors: [`This endpoint creates h-entry and h-event posts, not ${named}.`] };
   }
+  const type: MicropubType = request.type;
 
   const properties = new Map<string, readonly unknown[]>();
   for (const [name, values] of request.properties) {
@@ -221,28 +210,34 @@ export function createForm(
   }
 
   const errors: string[] = [];
+  const mapped = mappedProperties(kind);
   const commands = [...properties.keys()].filter(
-    (name) => name.startsWith('mp-') && !PROPERTIES.has(name),
+    (name) => name.startsWith('mp-') && !mapped.has(name),
   );
   if (commands.length > 0) {
     errors.push(`This endpoint does not support ${commands.join(', ')}.`);
   }
   const keptProperties = Object.fromEntries(
-    [...properties].filter(([name, values]) => keptPrivately(name) && values.length > 0),
+    [...properties].filter(([name, values]) => keptPrivately(name, kind) && values.length > 0),
   );
   const kept = Object.keys(keptProperties);
   const refused = keptRefusal(keptProperties);
   if (refused !== undefined) errors.push(refused);
-  if (kept.length > 0 && !PUBLISHABLE.some((name) => (properties.get(name) ?? []).length > 0)) {
+  const publishable = [
+    ...PUBLISHABLE,
+    ...kind.fields.flatMap((field) => field.micropub?.publishable ?? []),
+  ];
+  if (kept.length > 0 && !publishable.some((name) => (properties.get(name) ?? []).length > 0)) {
     errors.push(
       `This endpoint does not understand ${kept.join(', ')}, and the post has nothing else to publish.`,
     );
   }
 
+  const values = (name: string): readonly unknown[] => properties.get(name) ?? [];
   const text = (name: string): string => {
-    const values = properties.get(name) ?? [];
-    if (values.length > 1) errors.push(`${name} takes one value.`);
-    const [value] = values;
+    const given = values(name);
+    if (given.length > 1) errors.push(`${name} takes one value.`);
+    const [value] = given;
     if (value === undefined) return '';
     if (typeof value !== 'string') {
       errors.push(`${name} has to be text.`);
@@ -252,57 +247,35 @@ export function createForm(
   };
 
   const form: EditorForm = {
-    ...blankForm(POST_KIND, timezone, now),
+    ...blankForm(kind, timezone, now),
     date: '',
     author,
-    body: content(properties.get('content') ?? [], errors),
-    tags: categories(properties.get('category') ?? [], errors),
-    syndicateTo: syndicateTo(properties.get('mp-syndicate-to') ?? [], site.targets, errors),
+    body: content(values('content'), errors),
+    tags: categories(values('category'), errors),
   };
   const uploads: PhotoUpload[] = [];
-  form.photos = (properties.get('photo') ?? []).map((value, row) => {
-    if (value instanceof File) {
-      uploads.push({ row, file: value });
-      return { url: '', alt: '' };
-    }
-    const photo = photoRow(value, site.baseUrl);
-    if (photo === undefined) {
-      errors.push('photo is a web address, { "value": "…", "alt": "…" } or an uploaded file.');
-      return { url: '', alt: '' };
-    }
-    return photo;
-  });
-  const checkin = parsedLocation(
-    'checkin',
-    properties.get('checkin') ?? [],
-    checkinFromMicropub,
-    errors,
+  const fields: MicropubRequest = {
+    type,
+    has: (name) => properties.has(name),
+    values,
+    text,
+    refuse: (message) => errors.push(message),
+    upload: (row, file) => uploads.push({ row, file }),
+    baseUrl: site.baseUrl,
+    targets: site.targets,
+  };
+  for (const field of kind.fields) {
+    if (field.micropub !== undefined) Object.assign(form, field.micropub.toForm(fields));
+  }
+  const checkin = parsedLocation('checkin', values('checkin'), checkinFromMicropub, errors);
+  form.location = locationForm(
+    type === 'h-event'
+      ? checkin
+      : checkinOverLocation(
+          parsedLocation('location', values('location'), locationFromMicropub, errors),
+          checkin,
+        ),
   );
-  if (request.type === 'h-event') {
-    form.event = {
-      start: text('start'),
-      end: text('end'),
-      location: eventPlaceText(properties.get('location') ?? [], errors),
-    };
-    if (form.event.start === '') errors.push('An h-event needs a start.');
-    form.location = locationForm(checkin);
-  } else {
-    const eventOnly = (['start', 'end'] as const).filter((name) => properties.has(name));
-    if (eventOnly.length > 0) {
-      errors.push(`${eventOnly.join(' and ')} belong to an event; send it as an h-event.`);
-    }
-    form.location = locationForm(
-      checkinOverLocation(
-        parsedLocation('location', properties.get('location') ?? [], locationFromMicropub, errors),
-        checkin,
-      ),
-    );
-  }
-  form.readOf = readOf(properties.get('read-of') ?? [], errors);
-  form.readStatus = text('read-status');
-  if (form.readStatus !== '' && !isReadStatus(form.readStatus)) {
-    errors.push(`read-status is ${READ_STATUSES.join(', ')}, not ${form.readStatus}.`);
-  }
   for (const [property, field] of Object.entries(SINGLE_VALUED)) {
     form[field] = text(property);
   }
@@ -331,28 +304,6 @@ export function createForm(
     : { form, draft, uploads, keptProperties };
 }
 
-/**
- * A photo given as a URL or as `{ value, alt }`, as the editor row it fills.
- * A URL into this site's own uploads becomes the path the editor would have
- * written, so the theme serves its responsive variants.
- */
-function photoRow(value: unknown, baseUrl: string): PhotoRow | undefined {
-  let url: unknown = value;
-  let alt: unknown = '';
-  if (isRecord(value)) {
-    ({ value: url, alt = '' } = value);
-  }
-  if (typeof url !== 'string' || typeof alt !== 'string' || !isWebUrl(url.trim())) return undefined;
-  const uploads = absoluteUrl(UPLOAD_ASSET_PREFIX, baseUrl);
-  const address = url.trim();
-  return {
-    url: address.startsWith(uploads)
-      ? `${UPLOAD_ASSET_PREFIX}${address.slice(uploads.length)}`
-      : address,
-    alt: alt.trim(),
-  };
-}
-
 function parsedLocation(
   name: string,
   values: readonly unknown[],
@@ -376,78 +327,6 @@ function checkinOverLocation(
 ): PostLocation | undefined {
   if (location === undefined || checkin === undefined) return checkin ?? location;
   return postLocation({ ...location, ...checkin, geo: checkin.geo ?? location.geo });
-}
-
-const EVENT_PLACE_REFUSAL =
-  'An event’s location is words, a web address, or an h-card or h-adr naming a place.';
-
-const PLACE_WORDS = ['name', 'street-address', 'locality', 'region', 'country-name'] as const;
-
-function eventPlaceText(values: readonly unknown[], errors: string[]): string {
-  if (values.length > 1) errors.push('location takes one value.');
-  const [value] = values;
-  if (value === undefined) return '';
-  if (typeof value === 'string') {
-    if (!/^geo:/i.test(value.trim())) return value.trim();
-    errors.push(EVENT_PLACE_REFUSAL);
-    return '';
-  }
-  const { type, properties } =
-    typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
-  const given =
-    typeof properties === 'object' && properties !== null
-      ? (properties as Record<string, unknown>)
-      : {};
-  const first = (name: string): string => {
-    const listed = given[name];
-    const text: unknown = Array.isArray(listed) ? listed[0] : undefined;
-    return typeof text === 'string' ? text.trim() : '';
-  };
-  const words = [...new Set(PLACE_WORDS.map(first).filter((part) => part !== ''))].join(', ');
-  const url = first('url');
-  const place = words !== '' ? words : isWebUrl(url) ? url : '';
-  if (!Array.isArray(type) || !type.some((t) => t === 'h-card' || t === 'h-adr') || place === '') {
-    errors.push(EVENT_PLACE_REFUSAL);
-    return '';
-  }
-  return place;
-}
-
-const READ_OF_PROPERTIES = ['name', 'author', 'uid', 'url'] as const;
-
-function readOf(values: readonly unknown[], errors: string[]): ReadOfForm {
-  if (values.length > 1) errors.push('read-of takes one value.');
-  const [value] = values;
-  if (value === undefined) return BLANK_READ_OF_FORM;
-  const { type, properties } =
-    typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
-  if (
-    !Array.isArray(type) ||
-    !type.includes('h-cite') ||
-    typeof properties !== 'object' ||
-    properties === null
-  ) {
-    errors.push('read-of is an h-cite, { "type": ["h-cite"], "properties": { "name": ["…"] } }.');
-    return BLANK_READ_OF_FORM;
-  }
-  const given = properties as Record<string, unknown>;
-  const unknown = Object.keys(given).filter(
-    (name) => !(READ_OF_PROPERTIES as readonly string[]).includes(name),
-  );
-  if (unknown.length > 0) errors.push(`read-of does not understand ${unknown.join(', ')}.`);
-  const field = (name: (typeof READ_OF_PROPERTIES)[number]): string => {
-    const values = given[name] ?? [];
-    if (
-      !Array.isArray(values) ||
-      values.length > 1 ||
-      !values.every((v) => typeof v === 'string')
-    ) {
-      errors.push(`read-of ${name} takes one text value.`);
-      return '';
-    }
-    return (values[0] ?? '').trim();
-  };
-  return { name: field('name'), author: field('author'), uid: field('uid'), url: field('url') };
 }
 
 function content(values: readonly unknown[], errors: string[]): string {
@@ -486,26 +365,4 @@ function categories(values: readonly unknown[], errors: string[]): string {
     terms.push(value);
   }
   return terms.join(', ');
-}
-
-/**
- * The targets `mp-syndicate-to` selects, each once, as the editor's checkboxes
- * would. A uid the site does not declare is refused by name: a post read back
- * ignores it, so a client would never learn the post went nowhere.
- */
-function syndicateTo(
-  values: readonly unknown[],
-  targets: readonly SyndicationTarget[],
-  errors: string[],
-): string[] {
-  if (!values.every((value) => typeof value === 'string')) {
-    errors.push('mp-syndicate-to has to be text, one target uid to a value.');
-    return [];
-  }
-  const declared = new Set(targets.map(({ id }) => id));
-  const unknown = values.filter((uid) => !declared.has(uid));
-  if (unknown.length > 0) {
-    errors.push(`mp-syndicate-to names no syndication target ${unknown.join(', ')}.`);
-  }
-  return [...new Set(values)];
 }

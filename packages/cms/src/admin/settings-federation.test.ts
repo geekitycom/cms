@@ -3,11 +3,11 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
+import { readSiteSettings } from '../site/site-json.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
 import { FEDERATION_SETTINGS } from './settings-federation.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
-import { readSiteSettings } from './settings.ts';
 
 /**
  * The Federation settings page: which relays boost the site.

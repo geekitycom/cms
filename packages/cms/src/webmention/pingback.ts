@@ -1,10 +1,10 @@
 import type { Context, Hono } from 'hono';
 
-import { readSiteSettings } from '../admin/settings.ts';
 import { clientAddress } from '../admin/throttle.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { Document } from '../content/document.ts';
 import type { GeekityEnv } from '../env.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { publicDocumentAt } from '../web/documents.ts';
 import { escapeXml } from '../web/feed-xml.ts';
 import { checkWebmentionRequest } from './receive.ts';

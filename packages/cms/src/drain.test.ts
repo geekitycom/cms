@@ -4,11 +4,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './admin/settings.ts';
 import { writeFileAtomically, WritesRefusedError } from './files/atomic.ts';
 import { createCms } from './index.ts';
 import type { Cms } from './index.ts';
 import { definePlugin, HOST_API_VERSION } from './plugin.ts';
+import { DEFAULT_SITE_SETTINGS } from './site/settings.ts';
+import { writeSiteJson } from './site/site-json.ts';
 
 const temporaryDirs: string[] = [];
 const started: Cms[] = [];

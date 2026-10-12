@@ -6,10 +6,10 @@ import { after, describe, it } from 'node:test';
 import matter from 'gray-matter';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
+import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
 import { browser, csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import { assertInOrder, titleCell } from './__testing__/markup.ts';
 import { statuses } from './__testing__/statuses.ts';
-import { readSiteSettings, writeSiteJson } from './settings.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { saveUrlOf } from './__testing__/editor-form.ts';
 

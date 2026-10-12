@@ -22,19 +22,19 @@ import type { Context, Hono } from 'hono';
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../env.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
+import type { SiteSettings } from '../site/settings.ts';
+import {
+  formFromSettings,
+  SETTINGS_FIELDS,
+  settingsFromForm,
+  settingsProblems,
+} from '../site/settings-form.ts';
+import type { SettingsField, SettingsForm } from '../site/settings-form.ts';
+import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import {
-  formFromSettings,
-  readSiteSettings,
-  SETTINGS_FIELDS,
-  SETTINGS_PATH,
-  settingsFromForm,
-  settingsProblems,
-  updateSiteSettings,
-} from './settings.ts';
-import type { SettingsField, SettingsForm, SiteSettings } from './settings.ts';
+import { SETTINGS_PATH } from './settings.ts';
 
 /** What {@link mountSettingsPage} needs from the admin around it. */
 export interface MountSettingsOptions {

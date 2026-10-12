@@ -1,10 +1,10 @@
-import { listUsers } from '../admin/accounts.ts';
-import { readSiteSettings } from '../admin/settings.ts';
 import type { AdminStore, ConversationWrite, PostComment } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { listUsers } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorHref, userForAuthor } from '../web/authors.ts';
 import { commentNames } from '../web/conversation.ts';

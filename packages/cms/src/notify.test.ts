@@ -6,10 +6,11 @@ import { after, describe, it } from 'node:test';
 
 import { csrfField, FIRST_ADMIN, signedIn } from './admin/__testing__/harness.ts';
 import type { Browser } from './admin/__testing__/harness.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from './admin/settings.ts';
 import { seedActorKeys } from './federation/__testing__/keys.ts';
 import { createCms } from './index.ts';
 import type { Cms } from './index.ts';
+import { DEFAULT_SITE_SETTINGS } from './site/settings.ts';
+import { writeSiteJson } from './site/site-json.ts';
 
 /** The site under test. */
 const BASE_URL = 'https://blog.example';

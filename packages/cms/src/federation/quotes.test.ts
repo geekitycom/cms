@@ -9,9 +9,10 @@ import { exportJwk, importJwk, signRequest } from '@fedify/fedify';
 import { CryptographicKey, Endpoints, Person } from '@fedify/vocab';
 
 import { writeUsers } from '../admin/__testing__/users.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { readQuoteAuthorizations } from './quotes.ts';
 

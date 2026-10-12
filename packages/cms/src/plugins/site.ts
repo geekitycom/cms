@@ -7,11 +7,8 @@
 
 import path from 'node:path';
 
-import { listUsers, setUserActorId } from '../admin/accounts.ts';
-import { readSiteSettings } from '../admin/settings.ts';
 import { importedFields } from '../admin/store.ts';
 import type { AdminStore, CommentRecord } from '../admin/store.ts';
-import { acceptUpload, refusedUpload } from '../admin/uploads.ts';
 import { renderCommentMarkdown } from '../comments/markdown.ts';
 import { commentsFile, putComments, readComments, renameComments } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
@@ -19,7 +16,10 @@ import { slugForPermalink } from '../content/parser.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
 import { actorKeyFile, loadActorKeyPairs, writeActorKeyFile } from '../federation/keys.ts';
 import { addFollower, readFollowers } from '../federation/records.ts';
+import { acceptUpload, refusedUpload } from '../media/uploads.ts';
 import type { PluginComment, PluginSite } from '../plugin.ts';
+import { readSiteSettings } from '../site/site-json.ts';
+import { listUsers, setUserActorId } from '../site/users.ts';
 import { createPluginRegistry } from './registry.ts';
 import type { InstalledPlugin, PluginRegistry } from './registry.ts';
 

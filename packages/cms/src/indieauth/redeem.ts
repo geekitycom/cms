@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
-import type { User } from '../admin/accounts.ts';
 import { avatarUrl } from '../federation/actor.ts';
+import type { User } from '../site/users.ts';
 import type { AuthorizationCode, ExpiringStore } from './grants.ts';
 
 /** The OAuth errors a redemption can end in. */

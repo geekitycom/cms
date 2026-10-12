@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createUser, setUserProfile } from '../admin/accounts.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 
 /**
  * The author archive and its feeds, from the outside (TASK-67).

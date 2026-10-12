@@ -16,7 +16,7 @@ import {
   webpWithMetadata,
 } from '../__testing__/metadata.ts';
 import { resolveConfig } from '../config.ts';
-import { refusedUpload, storeUpload } from './uploads.ts';
+import { refusedUpload, storeUpload } from '../media/uploads.ts';
 
 const directories: string[] = [];
 after(async () => {

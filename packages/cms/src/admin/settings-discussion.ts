@@ -16,11 +16,13 @@ import {
 } from '../comments/akismet.ts';
 import type { AkismetKeyRecord } from '../comments/akismet.ts';
 import type { GeekityEnv } from '../env.ts';
+import { effectiveBaseUrl } from '../site/settings.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { flash } from './flash.ts';
+import { SETTINGS_PATH } from './settings.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { MountSettingsOptions, SettingsPage } from './settings-page.ts';
-import { effectiveBaseUrl, readSiteSettings, SETTINGS_PATH } from './settings.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**

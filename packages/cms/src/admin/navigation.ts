@@ -28,6 +28,7 @@
 import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
+import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import {
   menuItemLineProblem,
@@ -41,7 +42,6 @@ import type { Theme, ThemeArea } from '../web/themes.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from './session.ts';
-import { readSiteSettings, updateSiteSettings } from './settings.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /**

@@ -5,7 +5,7 @@ import { setTimeout } from 'node:timers/promises';
 import { Hono } from 'hono';
 
 import type { GeekityEnv } from '../env.ts';
-import { countUsers, listUsers } from './accounts.ts';
+import { countUsers, listUsers } from '../site/users.ts';
 import { adminSecurityHeaders } from './headers.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
 import {

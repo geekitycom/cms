@@ -3,9 +3,9 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { findUser, setUserProfile } from '../site/users.ts';
 import { flashes } from './__testing__/flash.ts';
 import { csrfField, sandbox, signedIn, signIn } from './__testing__/harness.ts';
-import { findUser, setUserProfile } from './accounts.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { classesOutsideTheBar, screenOf, text } from './__testing__/markup.ts';
 import { saveUrlOf } from './__testing__/editor-form.ts';

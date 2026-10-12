@@ -1,7 +1,9 @@
-import { EVENT_KEYS, eventOf } from '../content/event.ts';
-import type { PostEvent } from '../content/event.ts';
-import { toUtcInstant, wallClockIn } from '../content/time.ts';
-import type { FieldError } from './editor-layout.ts';
+import { trimmedField } from '../util/forms.ts';
+import { isWebUrl } from './enclosure.ts';
+import { EVENT_KEYS, eventOf } from './event.ts';
+import type { PostEvent } from './event.ts';
+import type { FieldError } from './form-error.ts';
+import { toUtcInstant, wallClockIn } from './time.ts';
 
 /**
  * The editor's event fields (TASK-200): when it starts and ends, as wall-clock
@@ -13,13 +15,21 @@ export interface EventForm {
   location: string;
 }
 
+export const BLANK_EVENT_FORM: EventForm = { start: '', end: '', location: '' };
+
 export const EVENT_FIELDS = {
   start: 'event-start',
   end: 'event-end',
   location: 'event-location',
 } as const;
 
-export const BLANK_EVENT_FORM: EventForm = { start: '', end: '', location: '' };
+export function submittedEventForm(body: Readonly<Record<string, unknown>>): EventForm {
+  return {
+    start: trimmedField(body, EVENT_FIELDS.start),
+    end: trimmedField(body, EVENT_FIELDS.end),
+    location: trimmedField(body, EVENT_FIELDS.location),
+  };
+}
 
 export function eventForm(extra: Readonly<Record<string, unknown>>, timezone: string): EventForm {
   const event = eventOf(extra);
@@ -29,15 +39,6 @@ export function eventForm(extra: Readonly<Record<string, unknown>>, timezone: st
     start: wallClockIn(event.start, timezone),
     end: event.end === undefined ? '' : wallClockIn(event.end, timezone),
     location: typeof location === 'string' ? location : '',
-  };
-}
-
-export function submittedEventForm(body: Record<string, unknown>): EventForm {
-  const field = (name: string): string => (typeof body[name] === 'string' ? body[name] : '').trim();
-  return {
-    start: field(EVENT_FIELDS.start),
-    end: field(EVENT_FIELDS.end),
-    location: field(EVENT_FIELDS.location),
   };
 }
 
@@ -90,4 +91,42 @@ export function eventFrontMatter(event: PostEvent | undefined): Record<string, s
 function instantIn(value: string, timezone: string): string | undefined {
   if (!/^\d{4}-\d{2}-\d{2}/.test(value)) return undefined;
   return toUtcInstant(value, timezone);
+}
+
+const EVENT_PLACE_REFUSAL =
+  'An event’s location is words, a web address, or an h-card or h-adr naming a place.';
+
+const PLACE_WORDS = ['name', 'street-address', 'locality', 'region', 'country-name'] as const;
+
+export function eventPlaceFromMicropub(
+  values: readonly unknown[],
+  refuse: (message: string) => void,
+): string {
+  if (values.length > 1) refuse('location takes one value.');
+  const [value] = values;
+  if (value === undefined) return '';
+  if (typeof value === 'string') {
+    if (!/^geo:/i.test(value.trim())) return value.trim();
+    refuse(EVENT_PLACE_REFUSAL);
+    return '';
+  }
+  const { type, properties } =
+    typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+  const given =
+    typeof properties === 'object' && properties !== null
+      ? (properties as Record<string, unknown>)
+      : {};
+  const first = (name: string): string => {
+    const listed = given[name];
+    const text: unknown = Array.isArray(listed) ? listed[0] : undefined;
+    return typeof text === 'string' ? text.trim() : '';
+  };
+  const words = [...new Set(PLACE_WORDS.map(first).filter((part) => part !== ''))].join(', ');
+  const url = first('url');
+  const place = words !== '' ? words : isWebUrl(url) ? url : '';
+  if (!Array.isArray(type) || !type.some((t) => t === 'h-card' || t === 'h-adr') || place === '') {
+    refuse(EVENT_PLACE_REFUSAL);
+    return '';
+  }
+  return place;
 }

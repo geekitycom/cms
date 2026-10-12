@@ -8,10 +8,10 @@ import type { Hono } from 'hono';
 
 import type { AdminRender } from '../admin/documents.ts';
 import { formatInTimezone } from '../admin/formatting.ts';
-import { readSiteSettings } from '../admin/settings.ts';
 import { ADMIN_TEMPLATES } from '../admin/templates.ts';
 import { APP_ACTIVITY_CHILD, APP_ACTIVITY_PATH } from '../admin/users.ts';
 import type { GeekityEnv } from '../env.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { isFailure, isFresh, readActivityLog } from './activity-log.ts';
 import type { ActivityEndpoint, ActivityEntry, CarriedField } from './activity-log.ts';
 

@@ -13,11 +13,11 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import type { Cms } from '../index.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { THEMES_PATH } from './appearance.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
-import { readSiteSettings } from './settings.ts';
 
 const box = sandbox();
 after(() => box.cleanup());

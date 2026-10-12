@@ -1,7 +1,9 @@
-import { blankForm, POST_KIND, writeDocument } from '../admin/documents.ts';
-import type { DocumentSite, WriteOutcome } from '../admin/documents.ts';
-import { readSiteSettings } from '../admin/settings.ts';
 import type { Document } from '../content/document.ts';
+import { blankForm } from '../content/document-form.ts';
+import { POST_KIND } from '../content/document-kind.ts';
+import { writeDocument } from '../content/write.ts';
+import type { DocumentSite, WriteOutcome } from '../content/write.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { visibleReply } from '../web/conversation.ts';
 import { commentPageHref } from '../web/guids.ts';

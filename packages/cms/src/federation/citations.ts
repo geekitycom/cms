@@ -9,10 +9,10 @@ import type { Context } from '@fedify/fedify';
 import { Announce, isActor, Like, PUBLIC_COLLECTION, Undo } from '@fedify/vocab';
 import type { Actor } from '@fedify/vocab';
 
-import type { User } from '../admin/accounts.ts';
 import { citationOf } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
 import { postTypeOf, replyTarget } from '../content/post-type.ts';
+import type { User } from '../site/users.ts';
 import { actorId, senderKeyPairs } from './actor.ts';
 import { articleObjectId, documentAuthor, toInstant } from './article.ts';
 import type { FederationContextData } from './federation.ts';

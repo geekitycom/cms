@@ -4,8 +4,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createUser, setUserNotification } from '../admin/accounts.ts';
-import { DEFAULT_SITE_SETTINGS, writeSiteJson } from '../admin/settings.ts';
 import { COMMENT_FIELDS } from '../comments/submission.ts';
 import type { CommentChecker } from '../comments/submission.ts';
 import { COMMENT_POST_PATH } from '../comments/form.ts';
@@ -15,6 +13,9 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import type { OutgoingMail } from '../mail/provider.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import { writeSiteJson } from '../site/site-json.ts';
+import { createUser, setUserNotification } from '../site/users.ts';
 
 /**
  * The notices a comment sets off, and the links they carry.

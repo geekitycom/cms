@@ -5,8 +5,8 @@ import { after, describe, it } from 'node:test';
 
 import themeOrder from 'daisyui/functions/themeOrder';
 
-import { findUser, findUserById, setUserAdminTheme, usersFile } from './accounts.ts';
-import { ADMIN_THEMES, adminColorScheme, adminTheme } from './admin-theme.ts';
+import { findUser, findUserById, setUserAdminTheme, usersFile } from '../site/users.ts';
+import { ADMIN_THEMES, adminColorScheme, adminTheme } from '../site/admin-theme.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
 import { PACKAGED_ADMIN_DIR } from './templates.ts';
 import { browser, csrfField, FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';

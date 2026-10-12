@@ -1,10 +1,8 @@
 import path from 'node:path';
 
-import {
-  readFileIfPresentSync,
-  updateFileAtomically,
-  writeFileAtomicallySync,
-} from '../files/atomic.ts';
+import { adminTheme } from './admin-theme.ts';
+import type { AdminTheme } from './admin-theme.ts';
+import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { revokeTokensForUser } from '../indieauth/tokens.ts';
 import {
   deliveryMode,
@@ -14,10 +12,7 @@ import {
 } from '../notifications/preferences.ts';
 import { messageOf } from '../util/errors.ts';
 import { relText } from '../web/navigation.ts';
-import { adminTheme } from './admin-theme.ts';
-import type { AdminTheme } from './admin-theme.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
-import type { AdminStore } from './store.ts';
 
 /**
  * Who may sign in: `data/users.json`, and everything that reads or writes it.
@@ -326,6 +321,29 @@ export async function createUser(input: CreateUserInput): Promise<User> {
   return withoutHash(created);
 }
 
+export type UserChange = Partial<Omit<StoredUser, 'id' | 'username' | 'createdAt'>>;
+
+export async function updateUser(
+  dataDir: string,
+  userId: number,
+  change: (user: StoredUser, everyone: readonly StoredUser[]) => UserChange,
+): Promise<boolean> {
+  let found = false;
+
+  await write(dataDir, (contents) => ({
+    ...contents,
+    users: contents.users.map((user) => {
+      if (user.id !== userId) return user;
+      found = true;
+      // A key the change sets to `undefined` is dropped by JSON.stringify on
+      // the way to disk, which is how an optional field comes off the file.
+      return { ...user, ...change(user, contents.users) };
+    }),
+  }));
+
+  return found;
+}
+
 /**
  * Hash a new password and put it on a user, replacing the old one. Returns
  * `false` when there is no such user. Sessions are left alone; deciding which
@@ -342,19 +360,7 @@ export async function setUserPassword(input: {
   // Hashed before the write rather than inside it, so a hash that throws
   // leaves the stored one alone.
   const hash = hashPassword(input.password);
-  let changed = false;
-
-  await write(input.dataDir, (contents) => {
-    changed = contents.users.some((user) => user.id === input.userId);
-    return {
-      ...contents,
-      users: contents.users.map((user) =>
-        user.id === input.userId ? { ...user, passwordHash: hash } : user,
-      ),
-    };
-  });
-
-  return changed;
+  return updateUser(input.dataDir, input.userId, () => ({ passwordHash: hash }));
 }
 
 /**
@@ -375,21 +381,9 @@ export async function setUserEmail(input: {
   email: string;
 }): Promise<boolean> {
   const email = input.email.trim();
-  let changed = false;
-
-  await write(input.dataDir, (contents) => {
-    changed = contents.users.some((user) => user.id === input.userId);
-    return {
-      ...contents,
-      users: contents.users.map((user) => {
-        if (user.id !== input.userId) return user;
-        const { email: _removed, ...rest } = user;
-        return email === '' ? rest : { ...rest, email };
-      }),
-    };
-  });
-
-  return changed;
+  return updateUser(input.dataDir, input.userId, () => ({
+    email: email === '' ? undefined : email,
+  }));
 }
 
 /**
@@ -410,22 +404,8 @@ export async function setUserProfile(input: {
   /** Everything the profile should say from now on. */
   profile: UserProfile;
 }): Promise<boolean> {
-  const next = cleanProfile(input.profile);
-  let changed = false;
-
-  await write(input.dataDir, (contents) => {
-    changed = contents.users.some((user) => user.id === input.userId);
-    return {
-      ...contents,
-      users: contents.users.map((user) => {
-        if (user.id !== input.userId) return user;
-        const { profile: _removed, ...rest } = user;
-        return next === undefined ? rest : { ...rest, profile: next };
-      }),
-    };
-  });
-
-  return changed;
+  const profile = cleanProfile(input.profile);
+  return updateUser(input.dataDir, input.userId, () => ({ profile }));
 }
 
 /**
@@ -484,22 +464,9 @@ export async function setUserNotification(input: {
   /** Whether they want it. */
   on: boolean;
 }): Promise<boolean> {
-  let changed = false;
-
-  await write(input.dataDir, (contents) => {
-    changed = contents.users.some((user) => user.id === input.userId);
-    return {
-      ...contents,
-      users: contents.users.map((user) => {
-        if (user.id !== input.userId) return user;
-        const { notifications: _removed, ...rest } = user;
-        const next = withNotification(user.notifications, input.event, input.on);
-        return next === undefined ? rest : { ...rest, notifications: next };
-      }),
-    };
-  });
-
-  return changed;
+  return updateUser(input.dataDir, input.userId, (user) => ({
+    notifications: withNotification(user.notifications, input.event, input.on),
+  }));
 }
 
 /**
@@ -522,22 +489,9 @@ export async function setUserNotificationMode(input: {
   /** How often they want it. */
   mode: string;
 }): Promise<boolean> {
-  let changed = false;
-
-  await write(input.dataDir, (contents) => {
-    changed = contents.users.some((user) => user.id === input.userId);
-    return {
-      ...contents,
-      users: contents.users.map((user) => {
-        if (user.id !== input.userId) return user;
-        const { notificationModes: _removed, ...rest } = user;
-        const next = withNotificationMode(user.notificationModes, input.event, input.mode);
-        return next === undefined ? rest : { ...rest, notificationModes: next };
-      }),
-    };
-  });
-
-  return changed;
+  return updateUser(input.dataDir, input.userId, (user) => ({
+    notificationModes: withNotificationMode(user.notificationModes, input.event, input.mode),
+  }));
 }
 
 /**
@@ -553,21 +507,7 @@ export async function setUserAdminTheme(input: {
   /** The theme, or `undefined` to follow the system. */
   theme: AdminTheme | undefined;
 }): Promise<boolean> {
-  let changed = false;
-
-  await write(input.dataDir, (contents) => {
-    changed = contents.users.some((user) => user.id === input.userId);
-    return {
-      ...contents,
-      users: contents.users.map((user) => {
-        if (user.id !== input.userId) return user;
-        const { adminTheme: _removed, ...rest } = user;
-        return input.theme === undefined ? rest : { ...rest, adminTheme: input.theme };
-      }),
-    };
-  });
-
-  return changed;
+  return updateUser(input.dataDir, input.userId, () => ({ adminTheme: input.theme }));
 }
 
 /**
@@ -598,8 +538,8 @@ export class ConflictingActorIdError extends Error {
  *
  * The id has to be unique across the file, and the check is inside the write
  * for the reason {@link createUser}'s duplicate check is: it is a rule about
- * the file rather than about one user. Returns whether anything changed, so a
- * second run with the same id writes nothing.
+ * the file rather than about one user. Returns whether the id
+ * changed, so a second run with the same id reports nothing new.
  */
 export async function setUserActorId(input: {
   /** Which site's users file to write. */
@@ -609,29 +549,21 @@ export async function setUserActorId(input: {
   /** The id they were published under, query string and all. */
   actorId: string;
 }): Promise<boolean> {
+  const mine = findUser(input.dataDir, input.username);
+  if (mine === undefined) throw new UnknownUserError(input.username);
   let changed = false;
 
-  await write(input.dataDir, (contents) => {
-    const mine = contents.users.find((user) => user.username === input.username);
-    if (mine === undefined) throw new UnknownUserError(input.username);
-
-    const holder = contents.users.find(
-      (user) => user.id !== mine.id && user.actorId === input.actorId,
+  const found = await updateUser(input.dataDir, mine.id, (user, everyone) => {
+    const holder = everyone.find(
+      (other) => other.id !== user.id && other.actorId === input.actorId,
     );
     if (holder !== undefined) {
       throw new ConflictingActorIdError(holder.username, `The actor id ${input.actorId}`);
     }
-
-    changed = mine.actorId !== input.actorId;
-    if (!changed) return contents;
-
-    return {
-      ...contents,
-      users: contents.users.map((user) =>
-        user.id === mine.id ? { ...user, actorId: input.actorId } : user,
-      ),
-    };
+    changed = user.actorId !== input.actorId;
+    return { actorId: input.actorId };
   });
+  if (!found) throw new UnknownUserError(input.username);
 
   return changed;
 }
@@ -691,47 +623,6 @@ export function verifyUserPassword(
   return withoutHash(user);
 }
 
-/**
- * Turn an older site's users rows into `data/users.json`, once, and drop the
- * table.
- *
- * TASK-9 put the accounts in SQLite; decision-9 made the database disposable,
- * and a site upgrading across the two has rows nothing would ever read again.
- * So the first boot of this version writes them out — ids and hashes exactly
- * as they stand, because a session names its user by id and a hash is not
- * something to re-encode on the way past.
- *
- * The file wins, as it does everywhere else: a `users.json` that is already
- * there is left alone, so a database restored from a backup taken before the
- * upgrade cannot bring deleted accounts back or undo a password change. The
- * table is dropped either way, because a fresh database gets it from migration
- * 1 — which has shipped, and so is never edited — and a site that has been
- * migrated must not be asked again.
- *
- * Synchronous because `createCms` is: it runs before the server is listening
- * and before anything else has touched the file.
- */
-export function migrateUsersToFile(options: { admin: AdminStore; dataDir: string }): void {
-  const { admin, dataDir } = options;
-  const rows = admin.legacyUsers();
-  const file = usersFile(dataDir);
-
-  if (rows !== undefined && rows.length > 0 && readFileIfPresentSync(file) === undefined) {
-    const users = rows.map((row) => ({
-      id: row.id,
-      username: row.username,
-      passwordHash: row.passwordHash,
-      createdAt: row.createdAt,
-    }));
-    const highest = users.reduce((top, user) => Math.max(top, user.id), 0);
-    writeFileAtomicallySync(file, usersJsonText({ users, nextId: highest + 1 }), {
-      mode: USERS_FILE_MODE,
-    });
-  }
-
-  admin.dropLegacyTable('users');
-}
-
 /** A user as a screen may render it: everything but the hash. */
 function withoutHash(user: StoredUser): User {
   return {
@@ -756,7 +647,7 @@ const DUMMY_HASH = hashPassword(
 );
 
 /** The file as it is on disk: the users, and the next id to hand out. */
-interface UsersFileContents {
+export interface UsersFileContents {
   /** Everyone who may sign in, in the order the file lists them. */
   users: StoredUser[];
   /**
@@ -771,7 +662,7 @@ interface UsersFileContents {
 }
 
 /** The bytes of the file, as it is written. */
-function usersJsonText(contents: UsersFileContents): string {
+export function usersJsonText(contents: UsersFileContents): string {
   return `${JSON.stringify(contents, null, 2)}\n`;
 }
 

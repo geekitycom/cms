@@ -20,6 +20,7 @@ import { saveDocument } from '../content/save.ts';
 import type { TermUsage } from '../content/store.ts';
 import { documentContent } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
+import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import {
   forgetTerm,
@@ -32,7 +33,6 @@ import {
 import type { Taxonomy, TaxonomyRedirect } from '../web/taxonomy.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { readSiteSettings, updateSiteSettings } from './settings.ts';
 import { ADMIN_PREFIX } from './session.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 

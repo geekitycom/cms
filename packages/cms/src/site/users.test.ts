@@ -5,7 +5,8 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
-import { browser, FIRST_ADMIN, sandbox, signedIn, signIn } from './__testing__/harness.ts';
+import { browser, FIRST_ADMIN, sandbox, signedIn, signIn } from '../admin/__testing__/harness.ts';
+import { hashPassword } from './passwords.ts';
 import {
   ConflictingActorIdError,
   countUsers,
@@ -21,10 +22,10 @@ import {
   setUserPassword,
   setUserProfile,
   UnknownUserError,
+  updateUser,
   usersFile,
   verifyUserPassword,
-} from './accounts.ts';
-import { hashPassword } from './passwords.ts';
+} from './users.ts';
 
 const temporaryDirs: string[] = [];
 const box = sandbox();
@@ -428,6 +429,62 @@ describe('changing a password', () => {
       await setUserPassword({ dataDir, userId: 404, password: 'a password nobody will use' }),
       false,
     );
+  });
+});
+
+describe('updating one user', () => {
+  it('writes the change on that user and leaves everybody else alone', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+    const grace = await createUser({ dataDir, username: 'grace', password: 'correct horse' });
+
+    assert.equal(await updateUser(dataDir, ada.id, () => ({ email: 'ada@example.com' })), true);
+
+    assert.equal(findUserById(dataDir, ada.id)?.email, 'ada@example.com');
+    assert.deepEqual(findUserById(dataDir, grace.id), grace);
+  });
+
+  it('hands the change the user as the file holds them', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+
+    await updateUser(dataDir, ada.id, (user) => ({ email: `${user.username}@example.com` }));
+
+    assert.equal(findUserById(dataDir, ada.id)?.email, 'ada@example.com');
+  });
+
+  it('says so and writes nothing when there is no such user', async () => {
+    const dataDir = await temporaryDir();
+    await createUser({ dataDir, username: 'ada', password: 'correct horse' });
+    const before = await readFile(usersFile(dataDir), 'utf8');
+    let called = false;
+
+    const found = await updateUser(dataDir, 404, () => {
+      called = true;
+      return { email: 'nobody@example.com' };
+    });
+
+    assert.equal(found, false);
+    assert.equal(called, false, 'there was nobody to change');
+    assert.equal(await readFile(usersFile(dataDir), 'utf8'), before);
+  });
+
+  it('takes a key off the file when the change sets it to undefined', async () => {
+    const dataDir = await temporaryDir();
+    const ada = await createUser({
+      dataDir,
+      username: 'ada',
+      password: 'correct horse',
+      email: 'ada@example.com',
+    });
+
+    await updateUser(dataDir, ada.id, () => ({ email: undefined }));
+
+    const parsed = JSON.parse(await readFile(usersFile(dataDir), 'utf8')) as {
+      users: Record<string, unknown>[];
+    };
+    assert.equal(Object.hasOwn(parsed.users[0] ?? {}, 'email'), false, 'no key, not a null');
+    assert.equal(findUserById(dataDir, ada.id)?.email, undefined);
   });
 });
 

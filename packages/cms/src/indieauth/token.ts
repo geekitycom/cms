@@ -1,8 +1,8 @@
 import type { Context, Hono } from 'hono';
 
-import { findUserById } from '../admin/accounts.ts';
-import type { User } from '../admin/accounts.ts';
 import type { GeekityEnv } from '../env.ts';
+import { findUserById } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import { logTokenRequest, noteActivity } from './activity-log.ts';
 import { requireBearer } from './bearer.ts';
 import {

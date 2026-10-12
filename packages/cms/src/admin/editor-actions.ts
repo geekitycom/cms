@@ -14,6 +14,11 @@
 
 import type { Context, Hono } from 'hono';
 
+import { splitTags } from '../content/document-form.ts';
+import type { EditorForm } from '../content/document-form.ts';
+import { PAGE_KIND, POST_KIND } from '../content/document-kind.ts';
+import type { DocumentKind } from '../content/document-kind.ts';
+import { resolveEvent } from '../content/event-form.ts';
 import { handleDirectory } from '../content/handles.ts';
 import { renderMarkdown } from '../content/markdown.ts';
 import { discoverPostType } from '../content/post-type.ts';
@@ -26,12 +31,10 @@ import type {
   PluginEditorSuggestion,
   PluginPostType,
 } from '../plugin.ts';
+import { readSiteSettings } from '../site/site-json.ts';
 import { messageOf } from '../util/errors.ts';
-import { resolveEvent } from './event-field.ts';
-import type { DocumentKind, EditorForm } from './documents.ts';
-import { PAGE_KIND, POST_KIND, splitTags, submittedForm } from './documents.ts';
+import { submittedForm } from './documents.ts';
 import { PLUGINS_PATH } from './plugins.ts';
-import { readSiteSettings } from './settings.ts';
 
 /** The id of the editor's box for each field a plugin's button can sit beside. */
 const FIELD_IDS: Readonly<Record<PluginEditorField, string>> = {

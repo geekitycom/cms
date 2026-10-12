@@ -5,14 +5,14 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { tiedErrors } from '../__testing__/form-errors.ts';
-import { createUser } from '../admin/accounts.ts';
-import { readSiteSettings, writeSiteJson } from '../admin/settings.ts';
 import type { CommentSubmission, CommentVerdict } from '../comments/submission.ts';
 import { MAXIMUM_FORM_AGE_SECONDS, MINIMUM_SUBMIT_SECONDS } from '../forms/protection.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
+import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
+import { createUser } from '../site/users.ts';
 import { CONTACT_ANCHOR, CONTACT_FIELDS, CONTACT_NOTICE_PARAM, CONTACT_POST_PATH } from './form.ts';
 import { listContactMessages } from './records.ts';
 import { CONTACT_RATE_LIMIT, CONTACT_RATE_WINDOW_SECONDS } from './submission.ts';

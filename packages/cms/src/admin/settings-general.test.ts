@@ -5,11 +5,11 @@ import { after, describe, it } from 'node:test';
 
 import sharp from 'sharp';
 
+import { readSiteSettings } from '../site/site-json.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { saveSettings, SETTINGS_PAGE_FORMS } from './__testing__/settings.ts';
-import { createUser, setUserProfile } from './accounts.ts';
-import { readSiteSettings } from './settings.ts';
 
 /**
  * The General settings page: what the site is called and where it lives.
