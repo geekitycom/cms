@@ -1,8 +1,18 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 import path from 'node:path';
 
-import { resolveConfig } from './config.ts';
+import {
+  DEFAULT_SECURITY_HEADERS,
+  ENV_VARIABLES,
+  isResolvedConfig,
+  resolveConfig,
+} from './config.ts';
+import type { GeekityConfig } from './config.ts';
+import { KNOWN_UPLOAD_TYPES } from './content/media.ts';
+import { systemClock } from './content/store.ts';
+import { systemHostLookup } from './webmention/public-address.ts';
 
 describe('resolveConfig', () => {
   it('falls back to documented defaults when nothing is supplied', () => {
@@ -660,5 +670,244 @@ describe('baseUrlSource', () => {
       () => resolveConfig({}, { cwd: '/srv/site', env: { GEEKITY_DEV_MODE: 'maybe' } }),
       /GEEKITY_DEV_MODE/,
     );
+  });
+});
+
+describe('what the environment and config may say', () => {
+  const cwd = '/srv/site';
+
+  function messageOf(config: GeekityConfig, env: Record<string, string>): string {
+    try {
+      resolveConfig(config, { cwd, env });
+    } catch (error) {
+      assert.ok(error instanceof Error);
+      return `${error.constructor.name}: ${error.message}`;
+    }
+    assert.fail(`resolved ${JSON.stringify({ config, env })} without an error`);
+  }
+
+  it('resolves every setting to its default when nothing names one', () => {
+    const { ...fields } = resolveConfig({}, { cwd, env: {} });
+
+    assert.deepEqual(Object.fromEntries(Object.entries(fields)), {
+      port: 3000,
+      contentDir: '/srv/site/content',
+      dataDir: '/srv/site/data',
+      themesDir: '/srv/site/themes',
+      baseUrl: 'http://localhost:3000',
+      baseUrlSource: 'default',
+      watch: true,
+      sessionLifetime: 1209600,
+      uploadMaxBytes: 10485760,
+      uploadMediaMaxBytes: 209715200,
+      uploadTypes: [...KNOWN_UPLOAD_TYPES],
+      imageOptimization: true,
+      imageWidths: [320, 640, 960, 1280, 1920],
+      imageFormats: ['webp'],
+      requireAltText: false,
+      loginAttempts: 5,
+      loginLockout: 900,
+      trustProxy: false,
+      accessLog: false,
+      accessLogAddress: false,
+      accessLogWriter: undefined,
+      seedContent: false,
+      maintenance: false,
+      devMode: false,
+      compression: true,
+      securityHeaders: { ...DEFAULT_SECURITY_HEADERS },
+      onDocumentChange: undefined,
+      onPublish: undefined,
+      commentChecker: undefined,
+      mail: {},
+      indexNow: {},
+      now: systemClock,
+      federation: {},
+      hostLookup: systemHostLookup,
+      plugins: [],
+      pluginsDir: undefined,
+      pluginInstall: true,
+      pluginWatch: true,
+    });
+  });
+
+  it('refuses each environment variable it cannot read with the same words', () => {
+    const known = KNOWN_UPLOAD_TYPES.join(', ');
+    const refusals: [Record<string, string>, string][] = [
+      [
+        { GEEKITY_PORT: 'http' },
+        'TypeError: GEEKITY_PORT/PORT must be an integer between 0 and 65535, received "http"',
+      ],
+      [
+        { PORT: '70000' },
+        'TypeError: GEEKITY_PORT/PORT must be an integer between 0 and 65535, received "70000"',
+      ],
+      [
+        { GEEKITY_BASE_URL: 'geekity' },
+        'TypeError: GEEKITY_BASE_URL must be an absolute URL, received "geekity"',
+      ],
+      [
+        { GEEKITY_SESSION_LIFETIME: '0' },
+        'TypeError: GEEKITY_SESSION_LIFETIME must be a positive number of seconds, received "0"',
+      ],
+      [
+        { GEEKITY_UPLOAD_MAX_BYTES: '1.5' },
+        'TypeError: GEEKITY_UPLOAD_MAX_BYTES must be a positive whole number of bytes, received "1.5"',
+      ],
+      [
+        { GEEKITY_UPLOAD_MEDIA_MAX_BYTES: 'lots' },
+        'TypeError: GEEKITY_UPLOAD_MEDIA_MAX_BYTES must be a positive whole number of bytes, received "lots"',
+      ],
+      [
+        { GEEKITY_UPLOAD_TYPES: 'png,exe' },
+        `TypeError: GEEKITY_UPLOAD_TYPES names ".exe", which the CMS has no media type for. It knows ${known}.`,
+      ],
+      [
+        { GEEKITY_IMAGE_WIDTHS: '320, -1' },
+        'TypeError: GEEKITY_IMAGE_WIDTHS must be positive whole numbers of pixels, received -1',
+      ],
+      [
+        { GEEKITY_IMAGE_FORMATS: 'webp, GIF' },
+        'TypeError: GEEKITY_IMAGE_FORMATS names "gif", which is not a format the CMS writes. It knows avif, jpeg, png, webp.',
+      ],
+      [
+        { GEEKITY_LOGIN_ATTEMPTS: '0' },
+        'TypeError: GEEKITY_LOGIN_ATTEMPTS must be a positive whole number, received "0"',
+      ],
+      [
+        { GEEKITY_LOGIN_LOCKOUT: '2.5' },
+        'TypeError: GEEKITY_LOGIN_LOCKOUT must be a positive whole number, received "2.5"',
+      ],
+      ...[
+        'GEEKITY_WATCH',
+        'GEEKITY_IMAGE_OPTIMIZATION',
+        'GEEKITY_REQUIRE_ALT_TEXT',
+        'GEEKITY_TRUST_PROXY',
+        'GEEKITY_ACCESS_LOG',
+        'GEEKITY_ACCESS_LOG_ADDRESS',
+        'GEEKITY_SEED_CONTENT',
+        'GEEKITY_MAINTENANCE',
+        'GEEKITY_DEV_MODE',
+        'GEEKITY_COMPRESSION',
+        'GEEKITY_PLUGIN_INSTALL',
+        'GEEKITY_PLUGIN_WATCH',
+      ].map((variable): [Record<string, string>, string] => [
+        { [variable]: 'sometimes' },
+        `TypeError: ${variable} must be a boolean such as true or false, received "sometimes"`,
+      ]),
+    ];
+
+    for (const [env, message] of refusals) assert.equal(messageOf({}, env), message);
+  });
+
+  it('refuses each config value it cannot use with the same words', () => {
+    const known = KNOWN_UPLOAD_TYPES.join(', ');
+    const refusals: [GeekityConfig, string][] = [
+      [
+        { port: 70000 },
+        'TypeError: config.port must be an integer between 0 and 65535, received 70000',
+      ],
+      [
+        { baseUrl: 'geekity' },
+        'TypeError: config.baseUrl must be an absolute URL, received "geekity"',
+      ],
+      [
+        { sessionLifetime: -1 },
+        'TypeError: config.sessionLifetime must be a positive number of seconds, received -1',
+      ],
+      [
+        { uploadMaxBytes: 0 },
+        'TypeError: config.uploadMaxBytes must be a positive whole number of bytes, received 0',
+      ],
+      [
+        { uploadMediaMaxBytes: 2.5 },
+        'TypeError: config.uploadMediaMaxBytes must be a positive whole number of bytes, received 2.5',
+      ],
+      [
+        { uploadTypes: ['PNG', 'exe'] },
+        `TypeError: config.uploadTypes names ".exe", which the CMS has no media type for. It knows ${known}.`,
+      ],
+      [
+        { imageWidths: [640, 0] },
+        'TypeError: config.imageWidths must be positive whole numbers of pixels, received 0',
+      ],
+      [
+        { imageFormats: ['tiff'] },
+        'TypeError: config.imageFormats names "tiff", which is not a format the CMS writes. It knows avif, jpeg, png, webp.',
+      ],
+      [
+        { loginAttempts: 0 },
+        'TypeError: config.loginAttempts must be a positive whole number, received 0',
+      ],
+      [
+        { loginLockout: 1.5 },
+        'TypeError: config.loginLockout must be a positive whole number, received 1.5',
+      ],
+      [
+        { securityHeaders: { 'bad name': 'x' } },
+        'Error: securityHeaders: "bad name" is not a header name',
+      ],
+      [
+        { securityHeaders: { 'X-Test': 'a\nb' } },
+        'Error: securityHeaders: X-Test must be a non-empty single-line string, or false to remove it',
+      ],
+    ];
+
+    for (const [config, message] of refusals) assert.equal(messageOf(config, {}), message);
+  });
+
+  it('reads GEEKITY_PORT when it is set at all, even empty, and PORT only when it is not', () => {
+    assert.equal(
+      resolveConfig({ port: 4000 }, { cwd, env: { GEEKITY_PORT: '', PORT: '5000' } }).port,
+      4000,
+    );
+    assert.equal(resolveConfig({ port: 4000 }, { cwd, env: { PORT: '5000' } }).port, 5000);
+  });
+
+  it('treats an empty variable as unset and an empty directory in the config as unnamed', () => {
+    const config = resolveConfig(
+      { contentDir: '', pluginsDir: '', watch: false, loginAttempts: 7 },
+      { cwd, env: { GEEKITY_CONTENT_DIR: '', GEEKITY_WATCH: '', GEEKITY_LOGIN_ATTEMPTS: '' } },
+    );
+
+    assert.equal(config.contentDir, '/srv/site/content');
+    assert.equal(config.pluginsDir, undefined);
+    assert.equal(config.watch, false);
+    assert.equal(config.loginAttempts, 7);
+  });
+});
+
+describe('a resolved config', () => {
+  it('is frozen, and so are the lists it made', () => {
+    const config = resolveConfig({}, { cwd: '/srv/site', env: {} });
+
+    assert.ok(Object.isFrozen(config));
+    assert.ok(Object.isFrozen(config.uploadTypes));
+    assert.ok(Object.isFrozen(config.imageWidths));
+    assert.ok(Object.isFrozen(config.imageFormats));
+    assert.ok(Object.isFrozen(config.securityHeaders));
+    assert.throws(() => {
+      (config as { port: number }).port = 1;
+    }, TypeError);
+  });
+
+  it('can be told from a config that has not been resolved', () => {
+    const resolved = resolveConfig({}, { cwd: '/srv/site', env: {} });
+
+    assert.equal(isResolvedConfig(resolved), true);
+    assert.equal(isResolvedConfig({ ...resolved, watch: false }), true);
+    assert.equal(isResolvedConfig({}), false);
+    assert.equal(isResolvedConfig({ port: 3000, baseUrl: 'https://example.com' }), false);
+  });
+});
+
+describe('the environment variables', () => {
+  it('are every one of them in docs/configuration.md', async () => {
+    const docs = await readFile(new URL('../../../docs/configuration.md', import.meta.url), 'utf8');
+
+    assert.ok(ENV_VARIABLES.length > 25);
+    for (const variable of ENV_VARIABLES) {
+      assert.ok(docs.includes(`\`${variable}\``), `${variable} is not in docs/configuration.md`);
+    }
   });
 });

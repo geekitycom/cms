@@ -8,13 +8,8 @@ import { execFile as execFileCallback } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 
 import { cleanupTemporaryDirs, PACKAGE_ROOT, temporaryDir } from './__testing__/cli.ts';
-import {
-  findSiteTsx,
-  loadConfig,
-  parseArgs,
-  readPassword,
-  registerTypeScriptLoader,
-} from './cli.ts';
+import { parseArgs, readPassword } from './cli.ts';
+import { findSiteTsx, loadConfig, registerTypeScriptLoader } from './config-loader.ts';
 
 /**
  * The parts of the bin that do not run a command: the argument parser, the
