@@ -119,14 +119,14 @@ async function settle(cms: Cms): Promise<void> {
   await cms.indexNow.settled();
 }
 
-async function indexed(cms: Cms, slugs: readonly string[]): Promise<void> {
-  const deadline = Date.now() + 20_000;
-  while (!slugs.every((slug) => cms.store.getBySlug(slug) !== undefined)) {
-    assert.ok(Date.now() < deadline, `the watcher indexed ${slugs.join(', ')}`);
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  await settle(cms);
+function indexed(cms: Cms, slugs: readonly string[]): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const stop = cms.onSettled(() => {
+      if (!slugs.every((slug) => cms.store.getBySlug(slug) !== undefined)) return;
+      stop();
+      resolve();
+    });
+  }).then(() => settle(cms));
 }
 
 async function held(dataDir: string): Promise<string[]> {
@@ -140,67 +140,77 @@ async function held(dataDir: string): Promise<string[]> {
 }
 
 describe('the WordPress import into a running site in dev mode (TASK-291 #8)', () => {
-  it('makes no outbound request and holds nothing, its comments included, while a new post would have been sent', async () => {
-    const { cms, contentDir, dataDir } = await devSite();
-    const site = pluginSite({
-      admin: cms.admin,
-      config: resolveConfig({ contentDir, dataDir, baseUrl: SITE }, { env: {} }),
-    });
+  it(
+    'makes no outbound request and holds nothing, its comments included, while a new post would have been sent',
+    { timeout: 30_000 },
+    async () => {
+      const { cms, contentDir, dataDir } = await devSite();
+      const site = pluginSite({
+        admin: cms.admin,
+        config: resolveConfig({ contentDir, dataDir, baseUrl: SITE }, { env: {} }),
+      });
 
-    await importWordPressContent({
-      exported: parseWordPressExport(
-        wxr([
-          {
-            id: 813,
-            slug: 'announced',
-            creator: USER,
-            meta: [{ key: 'activitypub_status', value: 'federated' }],
-            content: '<p>See <a href="https://linked.example/a-page/">a page</a>.</p>',
-            comments: [
-              { id: 1, type: 'like', meta: [{ key: 'protocol', value: 'activitypub' }] },
-              {
-                id: 2,
-                content: 'A reply from the fediverse.',
-                meta: [{ key: 'protocol', value: 'activitypub' }],
-              },
-              { id: 3, content: 'A comment left on WordPress.', authorEmail: 'ada@example.com' },
-              { id: 4, parent: 3, content: 'An answer to it.', authorEmail: 'ada@example.com' },
-              { id: 6, approved: '0', content: 'Held for moderation on WordPress.' },
-              {
-                id: 5,
-                type: 'mention',
-                content: 'A page that linked here.',
-                meta: [
-                  { key: 'protocol', value: 'webmention' },
-                  { key: 'webmention_source_url', value: 'https://linker.example/post/' },
-                ],
-              },
-            ],
-          },
-          { id: 609, slug: 'never-sent', creator: USER },
-          { id: 20, type: 'page', slug: 'about', creator: USER, link: `${SITE}/about/` },
-        ]),
-      ),
-      context: { args: [], options: {}, cwd: contentDir, site, write: () => undefined },
-      data: pluginDataFolder(dataDir, '@geekity/plugin-wordpress'),
-      importers: [postsAndPages, commentsAndReactions],
-    });
-    await indexed(cms, ['announced', 'never-sent', 'about']);
+      const imported = indexed(cms, ['announced', 'never-sent', 'about']);
+      await importWordPressContent({
+        exported: parseWordPressExport(
+          wxr([
+            {
+              id: 813,
+              slug: 'announced',
+              creator: USER,
+              meta: [{ key: 'activitypub_status', value: 'federated' }],
+              content: '<p>See <a href="https://linked.example/a-page/">a page</a>.</p>',
+              comments: [
+                { id: 1, type: 'like', meta: [{ key: 'protocol', value: 'activitypub' }] },
+                {
+                  id: 2,
+                  content: 'A reply from the fediverse.',
+                  meta: [{ key: 'protocol', value: 'activitypub' }],
+                },
+                { id: 3, content: 'A comment left on WordPress.', authorEmail: 'ada@example.com' },
+                { id: 4, parent: 3, content: 'An answer to it.', authorEmail: 'ada@example.com' },
+                { id: 6, approved: '0', content: 'Held for moderation on WordPress.' },
+                {
+                  id: 5,
+                  type: 'mention',
+                  content: 'A page that linked here.',
+                  meta: [
+                    { key: 'protocol', value: 'webmention' },
+                    { key: 'webmention_source_url', value: 'https://linker.example/post/' },
+                  ],
+                },
+              ],
+            },
+            { id: 609, slug: 'never-sent', creator: USER },
+            { id: 20, type: 'page', slug: 'about', creator: USER, link: `${SITE}/about/` },
+          ]),
+        ),
+        context: { args: [], options: {}, cwd: contentDir, site, write: () => undefined },
+        data: pluginDataFolder(dataDir, '@geekity/plugin-wordpress'),
+        importers: [postsAndPages, commentsAndReactions],
+      });
+      await imported;
 
-    assert.equal(cms.admin.listCommentsFor('announced').length, 6, 'the comments are on the post');
-    assert.deepEqual(outbound, [], 'no request left the site');
-    assert.deepEqual(await held(dataDir), [], 'nothing was held, since nothing was due');
+      assert.equal(
+        cms.admin.listCommentsFor('announced').length,
+        6,
+        'the comments are on the post',
+      );
+      assert.deepEqual(outbound, [], 'no request left the site');
+      assert.deepEqual(await held(dataDir), [], 'nothing was held, since nothing was due');
 
-    await writeFile(
-      path.join(contentDir, 'posts', '2024-03-06-new.md'),
-      `---\ntitle: New\ndate: '2024-03-06T10:00:00Z'\npermalink: /2024/03/new/\nauthor: ${USER}\n---\n\nNews.\n`,
-    );
-    await indexed(cms, ['new']);
+      const published = indexed(cms, ['new']);
+      await writeFile(
+        path.join(contentDir, 'posts', '2024-03-06-new.md'),
+        `---\ntitle: New\ndate: '2024-03-06T10:00:00Z'\npermalink: /2024/03/new/\nauthor: ${USER}\n---\n\nNews.\n`,
+      );
+      await published;
 
-    assert.deepEqual(outbound, []);
-    assert.ok(
-      (await held(dataDir)).includes(`activitypub Create ${SITE}/2024/03/new/`),
-      'a post first published here was due to its followers, and dev mode held it',
-    );
-  });
+      assert.deepEqual(outbound, []);
+      assert.ok(
+        (await held(dataDir)).includes(`activitypub Create ${SITE}/2024/03/new/`),
+        'a post first published here was due to its followers, and dev mode held it',
+      );
+    },
+  );
 });
