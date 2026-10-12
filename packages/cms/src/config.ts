@@ -420,17 +420,20 @@ export interface GeekityConfig {
 }
 
 /**
- * A {@link GeekityConfig} with every field filled in and every path absolute.
+ * A {@link GeekityConfig} with every field filled in and every path absolute,
+ * frozen.
  *
  * The two hooks are the exception to "filled in": they have no default, so
  * they are present and `undefined` when the site named neither.
  */
 export interface ResolvedConfig {
-  port: number;
-  contentDir: string;
-  dataDir: string;
-  themesDir: string;
-  baseUrl: string;
+  /** Set by {@link resolveConfig} alone; see {@link isResolvedConfig}. */
+  readonly [RESOLVED]: true;
+  readonly port: number;
+  readonly contentDir: string;
+  readonly dataDir: string;
+  readonly themesDir: string;
+  readonly baseUrl: string;
   /**
    * Where {@link ResolvedConfig.baseUrl} came from.
    *
@@ -439,61 +442,61 @@ export interface ResolvedConfig {
    * of its own: an `environment` or `config` value is a deployment fact and
    * wins over the `url` in `content/_data/site.json`.
    */
-  baseUrlSource: 'environment' | 'config' | 'default';
-  watch: boolean;
-  sessionLifetime: number;
-  uploadMaxBytes: number;
-  uploadMediaMaxBytes: number;
+  readonly baseUrlSource: 'environment' | 'config' | 'default';
+  readonly watch: boolean;
+  readonly sessionLifetime: number;
+  readonly uploadMaxBytes: number;
+  readonly uploadMediaMaxBytes: number;
   /** Normalised: lower case, each with its leading dot. */
-  uploadTypes: string[];
-  imageOptimization: boolean;
+  readonly uploadTypes: readonly string[];
+  readonly imageOptimization: boolean;
   /** Ascending and without repeats. */
-  imageWidths: number[];
+  readonly imageWidths: readonly number[];
   /** Normalised: lower case, in the order the `<source>` elements go. */
-  imageFormats: string[];
-  requireAltText: boolean;
-  loginAttempts: number;
-  loginLockout: number;
-  trustProxy: boolean;
-  accessLog: boolean;
-  accessLogAddress: boolean;
+  readonly imageFormats: readonly string[];
+  readonly requireAltText: boolean;
+  readonly loginAttempts: number;
+  readonly loginLockout: number;
+  readonly trustProxy: boolean;
+  readonly accessLog: boolean;
+  readonly accessLogAddress: boolean;
   /** The sink, when the site named one; otherwise the log writes to stdout. */
-  accessLogWriter: AccessLogWriter | undefined;
-  seedContent: boolean;
-  maintenance: boolean;
-  devMode: boolean;
-  compression: boolean;
+  readonly accessLogWriter: AccessLogWriter | undefined;
+  readonly seedContent: boolean;
+  readonly maintenance: boolean;
+  readonly devMode: boolean;
+  readonly compression: boolean;
   /** Header name, lower case, to value: the defaults with the site's changes applied. */
-  securityHeaders: Readonly<Record<string, string>>;
-  onDocumentChange: DocumentChangeHook | undefined;
-  onPublish: DocumentChangeHook | undefined;
+  readonly securityHeaders: Readonly<Record<string, string>>;
+  readonly onDocumentChange: DocumentChangeHook | undefined;
+  readonly onPublish: DocumentChangeHook | undefined;
   /**
    * The comment checker, when the site named one.
    *
-   * `undefined` as this leaves {@link resolveConfig}. `createCms` fills it in
-   * with the Akismet checker (TASK-52) when the site named none, so by the
-   * time a request reads it off the context there is one — and with no key in
+   * `undefined` as this leaves {@link resolveConfig}. The boot's config, a new
+   * one, has the Akismet checker (TASK-52) here when the site named none, so
+   * by the time a request reads it off the context there is one — and with no key in
    * `data/akismet.json` that one sends nothing anywhere.
    */
-  commentChecker: CommentChecker | undefined;
+  readonly commentChecker: CommentChecker | undefined;
   /** Mail overrides, empty when the site named none. */
-  mail: MailOverrides;
+  readonly mail: MailOverrides;
   /** IndexNow overrides, empty when the site named none. */
-  indexNow: IndexNowOverrides;
+  readonly indexNow: IndexNowOverrides;
   /** The clock the index and the scheduler read. */
-  now: Clock;
+  readonly now: Clock;
   /** Federation stores and guards, empty when the site named none. */
-  federation: FederationOverrides;
+  readonly federation: FederationOverrides;
   /** How host names are resolved before a stranger's page is fetched. */
-  hostLookup: HostLookup;
+  readonly hostLookup: HostLookup;
   /** The installed plugins, empty when the site named none. */
-  plugins: readonly Plugin[];
+  readonly plugins: readonly Plugin[];
   /** The folder of plugins `geekity serve` loads, or `undefined` when the site names none. */
-  pluginsDir: string | undefined;
+  readonly pluginsDir: string | undefined;
   /** Whether Admin > Plugins may change the plugins folder. */
-  pluginInstall: boolean;
+  readonly pluginInstall: boolean;
   /** Whether `geekity serve` reloads by itself when the plugins folder changes. */
-  pluginWatch: boolean;
+  readonly pluginWatch: boolean;
 }
 
 /** Ambient inputs {@link resolveConfig} reads, injectable so the resolution is testable. */
@@ -585,11 +588,20 @@ export function defineConfig(config: GeekityConfig): GeekityConfig {
   return config;
 }
 
+/** What every config {@link resolveConfig} returns carries, so `createCms` can tell one from a site's own. */
+export const RESOLVED: unique symbol = Symbol('geekity.resolvedConfig');
+
+/** Whether this config came out of {@link resolveConfig}, so resolving it again would be wrong. */
+export function isResolvedConfig(config: GeekityConfig | ResolvedConfig): config is ResolvedConfig {
+  return RESOLVED in config;
+}
+
 /**
  * Merge a site's config with environment overrides and defaults.
  *
  * Precedence is environment variable, then config file, then default. Relative
- * directories resolve against `cwd`; absolute ones are left alone.
+ * directories resolve against `cwd`; absolute ones are left alone. The result
+ * is frozen: a value the boot settles later goes into a new config.
  */
 export function resolveConfig(
   config: GeekityConfig = {},
@@ -598,102 +610,16 @@ export function resolveConfig(
   const cwd = context.cwd ?? process.cwd();
   const env = context.env ?? process.env;
 
-  const port = resolvePort(config.port, env);
+  const settings = resolveEnvSettings(config, env, cwd);
+  const baseUrlFromEnv = env[ENV_SETTINGS.baseUrl.env[0]];
 
-  return {
-    port,
-    contentDir: resolveDir(cwd, env['GEEKITY_CONTENT_DIR'], config.contentDir, DEFAULT_CONTENT_DIR),
-    dataDir: resolveDir(cwd, env['GEEKITY_DATA_DIR'], config.dataDir, DEFAULT_DATA_DIR),
-    themesDir: resolveDir(cwd, env['GEEKITY_THEMES_DIR'], config.themesDir, DEFAULT_THEMES_DIR),
-    baseUrl: resolveBaseUrl(env['GEEKITY_BASE_URL'], config.baseUrl, port),
-    baseUrlSource: baseUrlSource(env['GEEKITY_BASE_URL'], config.baseUrl),
-    watch: resolveBoolean('GEEKITY_WATCH', env['GEEKITY_WATCH'], config.watch, true),
-    sessionLifetime: resolveSessionLifetime(
-      env['GEEKITY_SESSION_LIFETIME'],
-      config.sessionLifetime,
-    ),
-    uploadMaxBytes: resolveByteLimit(
-      'GEEKITY_UPLOAD_MAX_BYTES',
-      'uploadMaxBytes',
-      env['GEEKITY_UPLOAD_MAX_BYTES'],
-      config.uploadMaxBytes,
-      DEFAULT_UPLOAD_MAX_BYTES,
-    ),
-    uploadMediaMaxBytes: resolveByteLimit(
-      'GEEKITY_UPLOAD_MEDIA_MAX_BYTES',
-      'uploadMediaMaxBytes',
-      env['GEEKITY_UPLOAD_MEDIA_MAX_BYTES'],
-      config.uploadMediaMaxBytes,
-      DEFAULT_UPLOAD_MEDIA_MAX_BYTES,
-    ),
-    uploadTypes: resolveUploadTypes(env['GEEKITY_UPLOAD_TYPES'], config.uploadTypes),
-    imageOptimization: resolveBoolean(
-      'GEEKITY_IMAGE_OPTIMIZATION',
-      env['GEEKITY_IMAGE_OPTIMIZATION'],
-      config.imageOptimization,
-      true,
-    ),
-    imageWidths: resolveImageWidths(env['GEEKITY_IMAGE_WIDTHS'], config.imageWidths),
-    imageFormats: resolveImageFormats(env['GEEKITY_IMAGE_FORMATS'], config.imageFormats),
-    requireAltText: resolveBoolean(
-      'GEEKITY_REQUIRE_ALT_TEXT',
-      env['GEEKITY_REQUIRE_ALT_TEXT'],
-      config.requireAltText,
-      false,
-    ),
-    loginAttempts: resolveCount(
-      'GEEKITY_LOGIN_ATTEMPTS',
-      'loginAttempts',
-      env['GEEKITY_LOGIN_ATTEMPTS'],
-      config.loginAttempts,
-      DEFAULT_LOGIN_ATTEMPTS,
-    ),
-    loginLockout: resolveCount(
-      'GEEKITY_LOGIN_LOCKOUT',
-      'loginLockout',
-      env['GEEKITY_LOGIN_LOCKOUT'],
-      config.loginLockout,
-      DEFAULT_LOGIN_LOCKOUT,
-    ),
-    trustProxy: resolveBoolean(
-      'GEEKITY_TRUST_PROXY',
-      env['GEEKITY_TRUST_PROXY'],
-      config.trustProxy,
-      false,
-    ),
-    accessLog: resolveBoolean(
-      'GEEKITY_ACCESS_LOG',
-      env['GEEKITY_ACCESS_LOG'],
-      config.accessLog,
-      false,
-    ),
-    accessLogAddress: resolveBoolean(
-      'GEEKITY_ACCESS_LOG_ADDRESS',
-      env['GEEKITY_ACCESS_LOG_ADDRESS'],
-      config.accessLogAddress,
-      false,
-    ),
+  return Object.freeze({
+    [RESOLVED]: true as const,
+    ...settings,
+    baseUrl: settings.baseUrl ?? `http://localhost:${String(settings.port)}`,
+    baseUrlSource: baseUrlSource(baseUrlFromEnv, config.baseUrl),
     accessLogWriter: config.accessLogWriter,
-    seedContent: resolveBoolean(
-      'GEEKITY_SEED_CONTENT',
-      env['GEEKITY_SEED_CONTENT'],
-      config.seedContent,
-      false,
-    ),
-    maintenance: resolveBoolean(
-      'GEEKITY_MAINTENANCE',
-      env['GEEKITY_MAINTENANCE'],
-      config.maintenance,
-      false,
-    ),
-    devMode: resolveBoolean('GEEKITY_DEV_MODE', env['GEEKITY_DEV_MODE'], config.devMode, false),
-    compression: resolveBoolean(
-      'GEEKITY_COMPRESSION',
-      env['GEEKITY_COMPRESSION'],
-      config.compression,
-      true,
-    ),
-    securityHeaders: resolveSecurityHeaders(config.securityHeaders),
+    securityHeaders: Object.freeze(resolveSecurityHeaders(config.securityHeaders)),
     onDocumentChange: config.onDocumentChange,
     onPublish: config.onPublish,
     commentChecker: config.commentChecker,
@@ -703,20 +629,210 @@ export function resolveConfig(
     federation: config.federation ?? {},
     hostLookup: config.hostLookup ?? systemHostLookup,
     plugins: config.plugins ?? [],
-    pluginsDir: optionalDir(cwd, env['GEEKITY_PLUGINS_DIR'], config.pluginsDir),
-    pluginInstall: resolveBoolean(
-      'GEEKITY_PLUGIN_INSTALL',
-      env['GEEKITY_PLUGIN_INSTALL'],
-      config.pluginInstall,
-      true,
-    ),
-    pluginWatch: resolveBoolean(
-      'GEEKITY_PLUGIN_WATCH',
-      env['GEEKITY_PLUGIN_WATCH'],
-      config.pluginWatch,
-      true,
-    ),
+  });
+}
+
+/** Where a value is being read from, for the kind to name in an error. */
+interface Source {
+  /** The environment variable, or variables, as an error names them. */
+  readonly variable: string;
+  /** `config.<field>`. */
+  readonly field: string;
+  readonly cwd: string;
+}
+
+/**
+ * One kind of setting: how its environment text is read, how its config value
+ * is checked, and the words for each refusal. `fromConfig` is handed
+ * `undefined` when the site named nothing, and the default is then its answer.
+ */
+interface SettingKind<In, Out> {
+  fromEnv(text: string, source: Source): Out;
+  fromConfig(value: In | undefined, fallback: Out, source: Source): Out;
+}
+
+/** A number checked one way whichever door it came in by. */
+function numberKind(
+  valid: (value: number) => boolean,
+  mustBe: string,
+): SettingKind<number, number> {
+  return {
+    fromEnv(text, { variable }) {
+      const parsed = Number(text);
+      if (!valid(parsed)) {
+        throw new TypeError(`${variable} must be ${mustBe}, received ${JSON.stringify(text)}`);
+      }
+      return parsed;
+    },
+    fromConfig(value, fallback, { field }) {
+      if (value === undefined) return fallback;
+      if (!valid(value)) {
+        throw new TypeError(`${field} must be ${mustBe}, received ${JSON.stringify(value)}`);
+      }
+      return value;
+    },
   };
+}
+
+/** A list read from a comma-separated variable or a config array, checked by `check` either way. */
+function listKind<In, Out>(
+  split: (text: string) => In[],
+  check: (values: In[], source: string) => Out[],
+): SettingKind<In[], readonly Out[]> {
+  return {
+    fromEnv: (text, { variable }) => Object.freeze(check(split(text), variable)),
+    fromConfig: (value, fallback, { field }) =>
+      Object.freeze(value === undefined ? [...fallback] : check(value, field)),
+  };
+}
+
+function isPositiveInteger(value: number): boolean {
+  return Number.isInteger(value) && value > 0;
+}
+
+const BOOLEAN: SettingKind<boolean, boolean> = {
+  fromEnv(text, { variable }) {
+    const normalized = text.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+    throw new TypeError(
+      `${variable} must be a boolean such as true or false, received ${JSON.stringify(text)}`,
+    );
+  },
+  fromConfig: (value, fallback) => value ?? fallback,
+};
+
+const PORT = numberKind(
+  (value) => Number.isInteger(value) && value >= 0 && value <= 65535,
+  'an integer between 0 and 65535',
+);
+const COUNT = numberKind(isPositiveInteger, 'a positive whole number');
+const BYTES = numberKind(isPositiveInteger, 'a positive whole number of bytes');
+const SECONDS = numberKind(
+  (value) => Number.isFinite(value) && value > 0,
+  'a positive number of seconds',
+);
+
+/** A directory, absolute, from a non-empty variable, then a non-empty config value, then the default. */
+const DIRECTORY: SettingKind<string, string> = {
+  fromEnv: (text, { cwd }) => path.resolve(cwd, text),
+  fromConfig: (value, fallback, { cwd }) =>
+    path.resolve(cwd, value === undefined || value === '' ? fallback : value),
+};
+
+const OPTIONAL_DIRECTORY: SettingKind<string, string | undefined> = {
+  fromEnv: (text, { cwd }) => path.resolve(cwd, text),
+  fromConfig: (value, fallback, { cwd }) =>
+    value === undefined || value === '' ? fallback : path.resolve(cwd, value),
+};
+
+/**
+ * An origin and path with no trailing slash, or `undefined` for none named;
+ * {@link resolveConfig} puts the port in. Refused as `config.baseUrl` from
+ * either door, as it always has been.
+ */
+const URL_KIND: SettingKind<string, string | undefined> = {
+  fromEnv: (text, { field }) => normalizedBaseUrl(text, field),
+  fromConfig: (value, fallback, { field }) =>
+    value === undefined || value === '' ? fallback : normalizedBaseUrl(value, field),
+};
+
+const UPLOAD_TYPES = listKind((text) => text.split(','), checkedUploadTypes);
+const IMAGE_WIDTHS = listKind(
+  (text) =>
+    text
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => value !== '')
+      .map(Number),
+  checkedImageWidths,
+);
+const IMAGE_FORMATS = listKind((text) => text.split(','), checkedImageFormats);
+
+/**
+ * One setting the environment may name: the variables it is read from, first
+ * set wins, its kind, and its default.
+ */
+interface EnvSetting<In, Out> {
+  readonly env: readonly [string, ...string[]];
+  readonly kind: SettingKind<In, Out>;
+  readonly fallback: Out;
+}
+
+function setting<In, Out>(
+  env: string | readonly [string, ...string[]],
+  kind: SettingKind<In, Out>,
+  fallback: Out,
+): EnvSetting<In, Out> {
+  return { env: typeof env === 'string' ? [env] : env, kind, fallback };
+}
+
+/** Every setting the environment may override, which docs/configuration.md lists too. */
+const ENV_SETTINGS = {
+  port: setting(['GEEKITY_PORT', 'PORT'], PORT, DEFAULT_PORT),
+  contentDir: setting('GEEKITY_CONTENT_DIR', DIRECTORY, DEFAULT_CONTENT_DIR),
+  dataDir: setting('GEEKITY_DATA_DIR', DIRECTORY, DEFAULT_DATA_DIR),
+  themesDir: setting('GEEKITY_THEMES_DIR', DIRECTORY, DEFAULT_THEMES_DIR),
+  baseUrl: setting('GEEKITY_BASE_URL', URL_KIND, undefined),
+  watch: setting('GEEKITY_WATCH', BOOLEAN, true),
+  sessionLifetime: setting('GEEKITY_SESSION_LIFETIME', SECONDS, DEFAULT_SESSION_LIFETIME),
+  uploadMaxBytes: setting('GEEKITY_UPLOAD_MAX_BYTES', BYTES, DEFAULT_UPLOAD_MAX_BYTES),
+  uploadMediaMaxBytes: setting(
+    'GEEKITY_UPLOAD_MEDIA_MAX_BYTES',
+    BYTES,
+    DEFAULT_UPLOAD_MEDIA_MAX_BYTES,
+  ),
+  uploadTypes: setting('GEEKITY_UPLOAD_TYPES', UPLOAD_TYPES, DEFAULT_UPLOAD_TYPES),
+  imageOptimization: setting('GEEKITY_IMAGE_OPTIMIZATION', BOOLEAN, true),
+  imageWidths: setting('GEEKITY_IMAGE_WIDTHS', IMAGE_WIDTHS, DEFAULT_IMAGE_WIDTHS),
+  imageFormats: setting('GEEKITY_IMAGE_FORMATS', IMAGE_FORMATS, DEFAULT_IMAGE_FORMATS),
+  requireAltText: setting('GEEKITY_REQUIRE_ALT_TEXT', BOOLEAN, false),
+  loginAttempts: setting('GEEKITY_LOGIN_ATTEMPTS', COUNT, DEFAULT_LOGIN_ATTEMPTS),
+  loginLockout: setting('GEEKITY_LOGIN_LOCKOUT', COUNT, DEFAULT_LOGIN_LOCKOUT),
+  trustProxy: setting('GEEKITY_TRUST_PROXY', BOOLEAN, false),
+  accessLog: setting('GEEKITY_ACCESS_LOG', BOOLEAN, false),
+  accessLogAddress: setting('GEEKITY_ACCESS_LOG_ADDRESS', BOOLEAN, false),
+  seedContent: setting('GEEKITY_SEED_CONTENT', BOOLEAN, false),
+  maintenance: setting('GEEKITY_MAINTENANCE', BOOLEAN, false),
+  devMode: setting('GEEKITY_DEV_MODE', BOOLEAN, false),
+  compression: setting('GEEKITY_COMPRESSION', BOOLEAN, true),
+  pluginsDir: setting('GEEKITY_PLUGINS_DIR', OPTIONAL_DIRECTORY, undefined),
+  pluginInstall: setting('GEEKITY_PLUGIN_INSTALL', BOOLEAN, true),
+  pluginWatch: setting('GEEKITY_PLUGIN_WATCH', BOOLEAN, true),
+} satisfies {
+  [K in keyof GeekityConfig]?: EnvSetting<NonNullable<GeekityConfig[K]>, unknown>;
+};
+
+type EnvSettings = typeof ENV_SETTINGS;
+type EnvValues = {
+  [K in keyof EnvSettings]: EnvSettings[K] extends EnvSetting<never, infer Out> ? Out : never;
+};
+
+/** The name of every environment variable the config reads. */
+export const ENV_VARIABLES: readonly string[] = Object.values(ENV_SETTINGS).flatMap(
+  (each) => each.env,
+);
+
+function resolveEnvSettings(
+  config: GeekityConfig,
+  env: Record<string, string | undefined>,
+  cwd: string,
+): EnvValues {
+  const values: Record<string, unknown> = {};
+  for (const [key, each] of Object.entries(ENV_SETTINGS) as [
+    keyof EnvSettings,
+    EnvSetting<unknown, unknown>,
+  ][]) {
+    const source = { variable: each.env.join('/'), field: `config.${key}`, cwd };
+    // The first variable that is set at all wins, even set empty: GEEKITY_PORT=''
+    // hides PORT, as it always has.
+    const text = each.env.map((name) => env[name]).find((value) => value !== undefined);
+    values[key] =
+      text !== undefined && text !== ''
+        ? each.kind.fromEnv(text, source)
+        : each.kind.fromConfig(config[key], each.fallback, source);
+  }
+  return values as EnvValues;
 }
 
 /** RFC 9110's `token`: the characters a header name may be made of. */
@@ -752,55 +868,11 @@ function resolveSecurityHeaders(
   return headers;
 }
 
-/** Bytes, a positive whole number of them, from the environment, else the option, else the default. */
-function resolveByteLimit(
-  variable: string,
-  option: string,
-  fromEnv: string | undefined,
-  configured: number | undefined,
-  fallback: number,
-): number {
-  if (fromEnv !== undefined && fromEnv !== '') {
-    const parsed = Number(fromEnv);
-    if (!isValidByteCount(parsed)) {
-      throw new TypeError(
-        `${variable} must be a positive whole number of bytes, received ${JSON.stringify(fromEnv)}`,
-      );
-    }
-    return parsed;
-  }
-
-  if (configured === undefined) return fallback;
-  if (!isValidByteCount(configured)) {
-    throw new TypeError(
-      `config.${option} must be a positive whole number of bytes, received ${JSON.stringify(configured)}`,
-    );
-  }
-  return configured;
-}
-
-function isValidByteCount(value: number): boolean {
-  return Number.isInteger(value) && value > 0;
-}
-
 /**
- * An upload allowlist, normalised and checked.
- *
  * A name the CMS has no media type for is refused rather than ignored: a
  * config that says `.svg` and silently gets nothing would be a config that
  * lies, and a typo in an allowlist is worth hearing about at boot.
  */
-function resolveUploadTypes(
-  fromEnv: string | undefined,
-  configured: string[] | undefined,
-): string[] {
-  if (fromEnv !== undefined && fromEnv !== '') {
-    return checkedUploadTypes(fromEnv.split(','), 'GEEKITY_UPLOAD_TYPES');
-  }
-  if (configured === undefined) return [...DEFAULT_UPLOAD_TYPES];
-  return checkedUploadTypes(configured, 'config.uploadTypes');
-}
-
 function checkedUploadTypes(values: string[], source: string): string[] {
   const types: string[] = [];
   for (const value of values) {
@@ -817,34 +889,14 @@ function checkedUploadTypes(values: string[], source: string): string[] {
 }
 
 /**
- * A width set, checked and put in order.
- *
  * Ascending and deduplicated because the `srcset` it becomes is read by a
  * browser picking the first entry wide enough, and because two identical
  * widths would be two encodes of the same picture.
  */
-function resolveImageWidths(
-  fromEnv: string | undefined,
-  configured: number[] | undefined,
-): number[] {
-  if (fromEnv !== undefined && fromEnv !== '') {
-    return checkedImageWidths(
-      fromEnv
-        .split(',')
-        .map((value) => value.trim())
-        .filter((value) => value !== '')
-        .map(Number),
-      'GEEKITY_IMAGE_WIDTHS',
-    );
-  }
-  if (configured === undefined) return [...DEFAULT_IMAGE_WIDTHS];
-  return checkedImageWidths(configured, 'config.imageWidths');
-}
-
 function checkedImageWidths(values: number[], source: string): number[] {
   const widths = new Set<number>();
   for (const value of values) {
-    if (!isValidCount(value)) {
+    if (!isPositiveInteger(value)) {
       throw new TypeError(
         `${source} must be positive whole numbers of pixels, received ${JSON.stringify(value)}`,
       );
@@ -855,23 +907,10 @@ function checkedImageWidths(values: number[], source: string): number[] {
 }
 
 /**
- * A format set, checked and normalised.
- *
  * A name sharp cannot write is refused rather than dropped, for the reason an
  * unknown upload type is: a config that silently produced nothing would be a
  * config that lies about what the site is serving.
  */
-function resolveImageFormats(
-  fromEnv: string | undefined,
-  configured: string[] | undefined,
-): string[] {
-  if (fromEnv !== undefined && fromEnv !== '') {
-    return checkedImageFormats(fromEnv.split(','), 'GEEKITY_IMAGE_FORMATS');
-  }
-  if (configured === undefined) return [...DEFAULT_IMAGE_FORMATS];
-  return checkedImageFormats(configured, 'config.imageFormats');
-}
-
 function checkedImageFormats(values: string[], source: string): string[] {
   const formats: string[] = [];
   for (const value of values) {
@@ -887,130 +926,6 @@ function checkedImageFormats(values: string[], source: string): string[] {
   return formats;
 }
 
-/** `true`, `1`, `yes` and `on` mean yes; `false`, `0`, `no` and `off` mean no. */
-function resolveBoolean(
-  variable: string,
-  fromEnv: string | undefined,
-  configured: boolean | undefined,
-  fallback: boolean,
-): boolean {
-  if (fromEnv !== undefined && fromEnv !== '') {
-    const normalized = fromEnv.trim().toLowerCase();
-    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
-    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
-    throw new TypeError(
-      `${variable} must be a boolean such as true or false, received ${JSON.stringify(fromEnv)}`,
-    );
-  }
-  return configured ?? fallback;
-}
-
-/** A positive whole number, from the environment, the config or the default. */
-function resolveCount(
-  variable: string,
-  field: string,
-  fromEnv: string | undefined,
-  configured: number | undefined,
-  fallback: number,
-): number {
-  if (fromEnv !== undefined && fromEnv !== '') {
-    const parsed = Number(fromEnv);
-    if (!isValidCount(parsed)) {
-      throw new TypeError(
-        `${variable} must be a positive whole number, received ${JSON.stringify(fromEnv)}`,
-      );
-    }
-    return parsed;
-  }
-
-  if (configured === undefined) return fallback;
-  if (!isValidCount(configured)) {
-    throw new TypeError(
-      `config.${field} must be a positive whole number, received ${JSON.stringify(configured)}`,
-    );
-  }
-  return configured;
-}
-
-function isValidCount(value: number): boolean {
-  return Number.isInteger(value) && value > 0;
-}
-
-/** Seconds, positive and finite. Fractions are allowed; zero and below are not. */
-function resolveSessionLifetime(
-  fromEnv: string | undefined,
-  configured: number | undefined,
-): number {
-  if (fromEnv !== undefined && fromEnv !== '') {
-    const parsed = Number(fromEnv);
-    if (!isValidLifetime(parsed)) {
-      throw new TypeError(
-        `GEEKITY_SESSION_LIFETIME must be a positive number of seconds, received ${JSON.stringify(fromEnv)}`,
-      );
-    }
-    return parsed;
-  }
-
-  if (configured === undefined) return DEFAULT_SESSION_LIFETIME;
-  if (!isValidLifetime(configured)) {
-    throw new TypeError(
-      `config.sessionLifetime must be a positive number of seconds, received ${JSON.stringify(configured)}`,
-    );
-  }
-  return configured;
-}
-
-function isValidLifetime(value: number): boolean {
-  return Number.isFinite(value) && value > 0;
-}
-
-function resolvePort(
-  configured: number | undefined,
-  env: Record<string, string | undefined>,
-): number {
-  const fromEnv = env['GEEKITY_PORT'] ?? env['PORT'];
-  if (fromEnv !== undefined && fromEnv !== '') {
-    const parsed = Number(fromEnv);
-    if (!isValidPort(parsed)) {
-      throw new TypeError(
-        `GEEKITY_PORT/PORT must be an integer between 0 and 65535, received ${JSON.stringify(fromEnv)}`,
-      );
-    }
-    return parsed;
-  }
-
-  if (configured === undefined) return DEFAULT_PORT;
-  if (!isValidPort(configured)) {
-    throw new TypeError(
-      `config.port must be an integer between 0 and 65535, received ${JSON.stringify(configured)}`,
-    );
-  }
-  return configured;
-}
-
-function isValidPort(value: number): boolean {
-  return Number.isInteger(value) && value >= 0 && value <= 65535;
-}
-
-function resolveDir(
-  cwd: string,
-  fromEnv: string | undefined,
-  configured: string | undefined,
-  fallback: string,
-): string {
-  const chosen = firstNonEmpty(fromEnv, configured) ?? fallback;
-  return path.resolve(cwd, chosen);
-}
-
-function optionalDir(
-  cwd: string,
-  fromEnv: string | undefined,
-  configured: string | undefined,
-): string | undefined {
-  const chosen = firstNonEmpty(fromEnv, configured);
-  return chosen === undefined ? undefined : path.resolve(cwd, chosen);
-}
-
 /** Which of the two doors named the base URL, if either did. */
 function baseUrlSource(
   fromEnv: string | undefined,
@@ -1021,28 +936,12 @@ function baseUrlSource(
   return 'default';
 }
 
-function resolveBaseUrl(
-  fromEnv: string | undefined,
-  configured: string | undefined,
-  port: number,
-): string {
-  const chosen = firstNonEmpty(fromEnv, configured);
-  if (chosen === undefined) return `http://localhost:${port}`;
-
+function normalizedBaseUrl(chosen: string, field: string): string {
   let parsed: URL;
   try {
     parsed = new URL(chosen);
   } catch {
-    throw new TypeError(
-      `config.baseUrl must be an absolute URL, received ${JSON.stringify(chosen)}`,
-    );
+    throw new TypeError(`${field} must be an absolute URL, received ${JSON.stringify(chosen)}`);
   }
   return parsed.origin + withoutTrailingSlash(parsed.pathname);
-}
-
-function firstNonEmpty(...values: (string | undefined)[]): string | undefined {
-  for (const value of values) {
-    if (value !== undefined && value !== '') return value;
-  }
-  return undefined;
 }

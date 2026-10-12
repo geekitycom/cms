@@ -14,7 +14,7 @@ import {
   rebuildCommentIndexes,
 } from '../comments/index.ts';
 import type { CommentRecords } from '../comments/index.ts';
-import { resolveConfig } from '../config.ts';
+import { isResolvedConfig, resolveConfig } from '../config.ts';
 import type { GeekityConfig, ResolvedConfig } from '../config.ts';
 import { openContentStore } from '../content/index.ts';
 import type { ContentStore } from '../content/index.ts';
@@ -39,26 +39,34 @@ export interface Booted {
 }
 
 /**
- * Resolve the config, open the database and carry an older site's data
- * forward into files, refusing the boot only when an actor's keys are
- * unreadable.
+ * Resolve the config unless it already is, open the database and carry an
+ * older site's data forward into files, refusing the boot only when an actor's
+ * keys are unreadable.
  */
 export function boot(
-  config: GeekityConfig,
+  config: GeekityConfig | ResolvedConfig,
   folderPlugins: readonly InstalledPlugin[] | undefined,
 ): Booted {
-  const resolved = resolveConfig(config);
-  if (resolved.devMode) enterDevMode(resolved.dataDir, 'config');
+  const configured = isResolvedConfig(config) ? config : resolveConfig(config);
+  if (configured.devMode) enterDevMode(configured.dataDir, 'config');
 
-  const plugins = sitePluginRegistry(resolved, folderPlugins);
-
-  const { store, admin } = openCache(resolved);
+  const { store, admin } = openCache(configured);
 
   // A site upgrading from the version that kept its settings in SQLite has
   // rows nothing would read again: they become content/_data/site.json here,
   // once, and the table goes (decision-9). A site that has already been
   // through it does nothing but check.
-  migrateSettingsToFile({ admin, contentDir: resolved.contentDir });
+  migrateSettingsToFile({ admin, contentDir: configured.contentDir });
+
+  const resolved = settleConfig(configured);
+  let plugins: PluginRegistry;
+  try {
+    plugins = sitePluginRegistry(resolved, folderPlugins);
+  } catch (error) {
+    admin.close();
+    store.close();
+    throw error;
+  }
 
   // And the same for its actor's key pairs, which become JWK files under
   // data/keys. This is the migration that must not fail: an actor whose
@@ -102,29 +110,39 @@ export function boot(
     assertActorKeysUsable(resolved.dataDir, user.username);
   }
 
-  // The one thing the settings decide before a request arrives. It is settled
-  // here, at boot, rather than per request: `baseUrl` also decides whether the
-  // session cookie is `Secure`, and flipping that under a signed-in admin
-  // would log them out of the form they just submitted.
-  resolved.baseUrl = effectiveBaseUrl(resolved, readSiteSettings(resolved.contentDir));
-
-  // Akismet, when the site has not named a checker of its own (TASK-52). A
-  // config that names one wins outright, because a site that has written a
-  // checker meant it; this is the one the settings screen turns on with a key
-  // rather than a deployment.
-  //
-  // Built whether or not there is a key in `data/akismet.json`: it reads that
-  // file on every call, so a key pasted into the settings screen filters the
-  // next comment and a key removed stops filtering at once, neither of them
-  // needing a restart. With no key it sends nothing anywhere.
-  resolved.commentChecker ??= createAkismetChecker({
-    dataDir: resolved.dataDir,
-    // Read when a comment arrives rather than now, so a change of language on
-    // the settings screen reaches Akismet without a restart either.
-    language: () => readSiteSettings(resolved.contentDir).language,
-  });
-
   return { resolved, plugins, store, admin, commentRecords };
+}
+
+/**
+ * The config as it will be served: a new frozen one with the values the boot
+ * settles, read once the settings are in their file.
+ */
+function settleConfig(resolved: ResolvedConfig): ResolvedConfig {
+  return Object.freeze({
+    ...resolved,
+    // The one thing the settings decide before a request arrives. It is settled
+    // here, at boot, rather than per request: `baseUrl` also decides whether the
+    // session cookie is `Secure`, and flipping that under a signed-in admin
+    // would log them out of the form they just submitted.
+    baseUrl: effectiveBaseUrl(resolved, readSiteSettings(resolved.contentDir)),
+    // Akismet, when the site has not named a checker of its own (TASK-52). A
+    // config that names one wins outright, because a site that has written a
+    // checker meant it; this is the one the settings screen turns on with a key
+    // rather than a deployment.
+    //
+    // Built whether or not there is a key in `data/akismet.json`: it reads that
+    // file on every call, so a key pasted into the settings screen filters the
+    // next comment and a key removed stops filtering at once, neither of them
+    // needing a restart. With no key it sends nothing anywhere.
+    commentChecker:
+      resolved.commentChecker ??
+      createAkismetChecker({
+        dataDir: resolved.dataDir,
+        // Read when a comment arrives rather than now, so a change of language on
+        // the settings screen reaches Akismet without a restart either.
+        language: () => readSiteSettings(resolved.contentDir).language,
+      }),
+  });
 }
 
 /**

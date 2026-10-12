@@ -251,7 +251,8 @@ export interface ServeContext {
 }
 
 /**
- * Build a CMS around a site's config.
+ * Build a CMS around a site's config, or around one `resolveConfig` already
+ * resolved, which is used as it is.
  *
  * The returned app is a plain Hono app: the public site, the admin UI and the
  * federation endpoints are all mounted on it as later milestones land. Booting
@@ -260,7 +261,10 @@ export interface ServeContext {
  * database is built and read back out of the files; see {@link boot} for what
  * happens to one this version cannot use.
  */
-export function createCms(config: GeekityConfig = {}, context: ServeContext = {}): Cms {
+export function createCms(
+  config: GeekityConfig | ResolvedConfig = {},
+  context: ServeContext = {},
+): Cms {
   const booted = boot(config, context.folderPlugins);
   const { resolved, store, admin } = booted;
   const services = createServices(booted);

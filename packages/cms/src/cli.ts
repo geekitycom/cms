@@ -370,6 +370,20 @@ export async function loadConfig(
 }
 
 /**
+ * The site's config, loaded from the working directory and resolved once.
+ *
+ * `adjust` changes what the site wrote before it is resolved, so an
+ * environment variable still wins over what a command sets, as it wins over
+ * the file.
+ */
+async function loadResolvedConfig(
+  configPath: string | undefined,
+  adjust: (config: GeekityConfig) => GeekityConfig = (config) => config,
+): Promise<ResolvedConfig> {
+  return resolveConfig(adjust(await loadConfig(process.cwd(), configPath)));
+}
+
+/**
  * The site's own tsx, as the directory the package was installed into, or
  * `undefined` when the site does not have one.
  *
@@ -507,7 +521,7 @@ async function maintenanceCommand(
   flags: Readonly<Record<string, string | true>>,
 ): Promise<number> {
   const action = args[0];
-  const config = resolveConfig(await loadConfig(process.cwd(), configPath));
+  const config = await loadResolvedConfig(configPath);
   const file = maintenanceFile(config.dataDir);
 
   if (action === 'on') {
@@ -543,7 +557,7 @@ async function devModeCommand(
   configPath: string | undefined,
 ): Promise<number> {
   const action = args[0];
-  const config = resolveConfig(await loadConfig(process.cwd(), configPath));
+  const config = await loadResolvedConfig(configPath);
 
   if (action === 'on') {
     enterDevMode(config.dataDir, 'command');
@@ -599,7 +613,7 @@ function forcedLine(forced: boolean): string {
 }
 
 async function stripMetadataCommand(configPath: string | undefined): Promise<number> {
-  const config = resolveConfig(await loadConfig(process.cwd(), configPath));
+  const config = await loadResolvedConfig(configPath);
   const results = await stripStoredUploads(path.join(config.contentDir, UPLOAD_DIRECTORY));
 
   let stripped = 0;
@@ -631,8 +645,9 @@ async function stripMetadataCommand(configPath: string | undefined): Promise<num
  * that then sat in a watcher would never exit.
  */
 async function syncCommand(configPath: string | undefined): Promise<number> {
-  const config = await loadConfig(process.cwd(), configPath);
-  const cms = createCms({ ...config, watch: false });
+  const cms = createCms(
+    await loadResolvedConfig(configPath, (config) => ({ ...config, watch: false })),
+  );
 
   try {
     const result = await cms.sync();
@@ -678,12 +693,13 @@ async function resendCommand(
     );
   }
 
-  const config = await loadConfig(process.cwd(), configPath);
-  const cms = createCms({
-    ...config,
-    watch: false,
-    federation: { ...config.federation, queue: null },
-  });
+  const cms = createCms(
+    await loadResolvedConfig(configPath, (config) => ({
+      ...config,
+      watch: false,
+      federation: { ...config.federation, queue: null },
+    })),
+  );
 
   try {
     await cms.sync();
@@ -732,8 +748,7 @@ async function resendCommand(
  * command that sat in a watcher would never exit.
  */
 async function rebuildCommand(configPath: string | undefined): Promise<number> {
-  const loaded = await loadConfig(process.cwd(), configPath);
-  const config = resolveConfig(loaded);
+  const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
   const file = databaseFile(config.dataDir);
 
   if (databaseInUse(config.dataDir)) {
@@ -747,7 +762,7 @@ async function rebuildCommand(configPath: string | undefined): Promise<number> {
 
   discardDatabase(config.dataDir);
 
-  const cms = createCms({ ...loaded, watch: false });
+  const cms = createCms(config);
   try {
     const result = await cms.sync();
     process.stdout.write(
@@ -845,7 +860,7 @@ const SQLITE_LOCKED = 6;
 async function serveCommand(configPath: string | undefined): Promise<number> {
   if (cluster.isWorker) return serveWorker(configPath);
 
-  const resolved = resolveConfig(await loadConfig(process.cwd(), configPath));
+  const resolved = await loadResolvedConfig(configPath);
   if (
     resolved.seedContent &&
     (await seedStarterContent({ contentDir: resolved.contentDir, baseUrl: resolved.baseUrl }))
@@ -870,8 +885,16 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => undefined);
 
   try {
-    const config = await loadConfig(process.cwd(), configPath);
-    const loaded = scanPluginFolders(resolveConfig(config).pluginsDir);
+    // The access log is on here and off in `createCms`: a server that answers
+    // the internet should be able to say what it answered, while a CMS embedded
+    // in somebody else's app has no business writing to their stdout uninvited.
+    // Named as a config value rather than forced, so `GEEKITY_ACCESS_LOG` still
+    // wins and a site that wrote `accessLog: false` still gets silence.
+    const config = await loadResolvedConfig(configPath, (site) => ({
+      ...site,
+      accessLog: site.accessLog ?? true,
+    }));
+    const loaded = scanPluginFolders(config.pluginsDir);
     const worker = superviseWorker({
       channel,
       loaded,
@@ -879,15 +902,10 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
       log: (line) => process.stderr.write(`${line}\n`),
     });
 
-    // The access log is on here and off in `createCms`: a server that answers
-    // the internet should be able to say what it answered, while a CMS embedded
-    // in somebody else's app has no business writing to their stdout uninvited.
-    // Named as a config value rather than forced, so `GEEKITY_ACCESS_LOG` still
-    // wins and a site that wrote `accessLog: false` still gets silence.
-    const cms = createCms(
-      { ...config, accessLog: config.accessLog ?? true },
-      { folderPlugins: await importPluginFolders(loaded), supervision: worker.supervision },
-    );
+    const cms = createCms(config, {
+      folderPlugins: await importPluginFolders(loaded),
+      supervision: worker.supervision,
+    });
     const { port } = await cms.serve();
     if (devModeOn(cms.config)) {
       process.stdout.write(
@@ -914,7 +932,7 @@ async function pluginFolderCommand(
   if (action !== 'upgrade' && action !== 'add' && action !== 'remove') {
     throw new Error(PLUGIN_USAGE);
   }
-  const config = resolveConfig(await loadConfig(process.cwd(), configPath));
+  const config = await loadResolvedConfig(configPath);
   const { pluginsDir } = config;
   if (pluginsDir === undefined) {
     throw new Error(
@@ -1053,7 +1071,7 @@ async function userCommand(
     return 1;
   }
 
-  const config = resolveConfig(await loadConfig(process.cwd(), configPath));
+  const config = await loadResolvedConfig(configPath);
   const admin = openAdminStore({ dataDir: config.dataDir });
   migrateUsersToFile({ admin, dataDir: config.dataDir });
 
@@ -1148,7 +1166,7 @@ async function pluginCommands(config: ResolvedConfig): Promise<FoundCommand[]> {
  */
 async function pluginCommand(argv: readonly string[]): Promise<number> {
   const configPath = configFlag(argv);
-  const config = resolveConfig(await loadConfig(process.cwd(), configPath));
+  const config = await loadResolvedConfig(configPath);
   const words = leadingWords(argv);
   const found = (await pluginCommands(config)).find(({ command }) =>
     command.words.every((word, index) => words[index] === word),
@@ -1243,7 +1261,7 @@ function parseCommandArgs(
 async function usage(configPath: string | undefined): Promise<string> {
   let found: FoundCommand[];
   try {
-    found = await pluginCommands(resolveConfig(await loadConfig(process.cwd(), configPath)));
+    found = await pluginCommands(await loadResolvedConfig(configPath));
   } catch (error) {
     process.stderr.write(`Plugin commands are not listed: ${messageOf(error)}\n`);
     return USAGE;
