@@ -8,6 +8,7 @@ import { sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { repliesKey } from '../content/guids.ts';
 import type { Cms, DocumentChangeHook } from '../index.ts';
+import { nextEvent } from '../__testing__/wait.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -109,13 +110,18 @@ async function text(cms: Cms, pathname: string): Promise<string> {
   return await response.text();
 }
 
-async function until(what: string, check: () => Promise<boolean> | boolean): Promise<void> {
-  const deadline = Date.now() + 5000;
-  while (!(await check())) {
-    assert.ok(Date.now() < deadline, `timed out waiting for ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
+/** Resolves once the index settles with `landed` true. Called before the files move. */
+function settledWith(cms: Cms, what: string, landed: () => boolean): Promise<void> {
+  return nextEvent(what, (done) =>
+    cms.onSettled(() => {
+      if (landed()) done();
+    }),
+  );
 }
+
+const MOVED_BY_HAND = (cms: Cms) =>
+  cms.store.getByPath('posts/2026-09-02-greetings.md') !== undefined &&
+  cms.store.getByPath('posts/2026-09-02-hello.md') === undefined;
 
 async function moveByHand(contentDir: string): Promise<void> {
   await rm(path.join(contentDir, 'posts', '2026-09-02-hello.md'));
@@ -168,12 +174,10 @@ describe('a moved document keeps its whole identity (TASK-332)', () => {
     const { cms, contentDir } = await site({ watch: true });
     await cms.serve();
     try {
+      const moved = settledWith(cms, 'the watched move to settle', () => MOVED_BY_HAND(cms));
       await moveByHand(contentDir);
-      await until('the moved post to show Ada', async () =>
-        (await cms.app.request('/2026/09/greetings/'))
-          .text()
-          .then((body) => body.includes('Ada says so.')),
-      );
+      await moved;
+      assert.ok((await text(cms, '/2026/09/greetings/')).includes('Ada says so.'));
     } finally {
       await cms.close();
     }
@@ -183,6 +187,11 @@ describe('a moved document keeps its whole identity (TASK-332)', () => {
     const { cms, contentDir } = await site({ watch: true });
     await cms.serve();
     try {
+      const landed = settledWith(
+        cms,
+        'both posts to be indexed and the comments to settle',
+        () => MOVED_BY_HAND(cms) && cms.store.getByPath('posts/2026-09-09-hello.md') !== undefined,
+      );
       await moveByHand(contentDir);
       await new Promise((resolve) => setTimeout(resolve, 40));
       await writeFile(
@@ -192,14 +201,7 @@ describe('a moved document keeps its whole identity (TASK-332)', () => {
           'A new post here.',
         ),
       );
-      await until('both posts to be indexed and the comments to settle', async () => {
-        const landed =
-          cms.store.getByPath('posts/2026-09-09-hello.md') !== undefined &&
-          cms.store.getByPath('posts/2026-09-02-greetings.md') !== undefined &&
-          cms.store.getByPath('posts/2026-09-02-hello.md') === undefined;
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        return landed;
-      });
+      await landed;
 
       const comments = path.join(contentDir, '_data', 'comments');
       const file = JSON.parse(await readFile(path.join(comments, 'hello.json'), 'utf8')) as {

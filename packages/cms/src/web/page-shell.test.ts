@@ -39,11 +39,11 @@ after(() => box.cleanup());
 const NOW = '2026-09-13T12:00:00Z';
 
 /**
- * The year the footer prints: the wall clock rather than the site's injected
- * `now`, because `{{ "now" | date("year") }}` is read when the page is rendered
- * and a site left running over New Year should say the new one.
+ * The year the footer prints. `{{ "now" | date("year") }}` reads the site's
+ * clock when the page is rendered, so a site left running over New Year says
+ * the new one.
  */
-const YEAR = String(new Date().getUTCFullYear());
+const YEAR = String(new Date(NOW).getUTCFullYear());
 
 /** Write a tree of files, relative paths to contents, under `root`. */
 async function writeTree(root: string, files: Record<string, string>): Promise<void> {

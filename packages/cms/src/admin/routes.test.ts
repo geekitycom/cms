@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
-import { setTimeout } from 'node:timers/promises';
 
 import { Hono } from 'hono';
 
@@ -309,7 +308,8 @@ describe('the session cookie', () => {
   });
 
   it('expires after the configured lifetime', async () => {
-    const cms = await site({ sessionLifetime: 0.25 });
+    let now = new Date('2026-09-13T12:00:00.000Z');
+    const cms = await site({ sessionLifetime: 0.25, now: () => now });
     const agent = browser(cms);
     await setUpFirstAdmin(agent);
     const sessionId = agent.session();
@@ -317,7 +317,7 @@ describe('the session cookie', () => {
 
     assert.equal((await agent.get('/admin')).status, 200, 'good while it lasts');
 
-    await setTimeout(300);
+    now = new Date('2026-09-13T12:00:00.300Z');
     agent.setSession(sessionId);
 
     const expired = await agent.get('/admin');

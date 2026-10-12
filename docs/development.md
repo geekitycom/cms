@@ -124,6 +124,25 @@ names the file and line. The list holds the system clock definition, the
 defaults for callers outside `createCms`, and the code that measures elapsed
 wall time, such as a timeout or a retry window. Each entry gives its reason.
 
+### Tests wait on events
+
+A test that waits for something to happen waits for the event itself, not for
+time to pass. `nextEvent` in `src/__testing__/wait.ts` subscribes to the event
+and resolves when it comes. If it does not come within 15 seconds, the test
+fails with a message that names the event. Common events are the content
+events on `cms.events`, `cms.onSettled` (the index has settled after a scan or
+a run of watched changes), and a line that a child process prints. To test
+something that depends on the time, pin the clock with `createCms({ now })`
+and move it.
+
+`src/test-waits.test.ts` runs in `pnpm test`. It fails on a `setTimeout`, a
+`node:timers/promises` import, a `sleep(` call, or a `Date.now()` deadline or
+measured duration in a test file that it does not list. The list holds the
+bound in `nextEvent`, the tests that measure a duration they assert on, the
+tests that assert that nothing happens when nothing running can report an
+event, and timers that are part of a scenario, such as a slow copy. Each entry
+gives its reason.
+
 ## Requirements
 
 Node 24 or newer and pnpm, for the reason

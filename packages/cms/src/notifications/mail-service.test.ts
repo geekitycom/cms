@@ -303,7 +303,7 @@ describe('the queue', () => {
         inFlight += 1;
         assert.equal(inFlight, 1, 'two messages were in flight at once');
         order.push(`start ${message.subject}`);
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        await new Promise(setImmediate);
         order.push(`end ${message.subject}`);
         inFlight -= 1;
         return { messageId: message.subject };

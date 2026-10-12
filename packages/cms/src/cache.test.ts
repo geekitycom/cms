@@ -109,7 +109,7 @@ describe('applyMigrations', () => {
       });
       db.prepare('INSERT INTO test_migrations (version, applied_at) VALUES (?, ?)').run(
         3,
-        new Date().toISOString(),
+        '2026-09-13T12:00:00.000Z',
       );
     });
 

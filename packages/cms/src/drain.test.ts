@@ -29,8 +29,20 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve };
 }
 
-function pause(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Long enough for a drain that did not wait for the write in flight to have
+ * finished. A drain that waits announces nothing while it does.
+ */
+function windowForADrain(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 50));
+}
+
+/**
+ * Long enough for a watcher event and its debounce to have happened, had the
+ * watcher still been running. A stopped watcher has no event to wait for.
+ */
+function windowForAWatcher(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 400));
 }
 
 /**
@@ -59,6 +71,8 @@ function liveIntervals(): { live(): number; restore(): void } {
   };
 }
 
+const NOW = new Date('2026-06-01T00:00:00.000Z');
+
 /** A serving CMS with one enabled plugin that records its start and stop, and a post due next year. */
 async function serving(): Promise<{
   cms: Cms;
@@ -76,10 +90,9 @@ async function serving(): Promise<{
   await writeFile(siteJson, JSON.stringify({ ...site, plugins: { [PLUGIN]: { enabled: true } } }));
 
   await mkdir(path.join(contentDir, 'posts'), { recursive: true });
-  const nextYear = new Date().getUTCFullYear() + 1;
   await writeFile(
     path.join(contentDir, 'posts', 'later.md'),
-    `---\ntitle: Later\ndate: ${String(nextYear)}-01-01T00:00:00.000Z\n---\n\nNot yet.\n`,
+    '---\ntitle: Later\ndate: 2027-01-01T00:00:00.000Z\n---\n\nNot yet.\n',
   );
 
   const log: string[] = [];
@@ -88,6 +101,7 @@ async function serving(): Promise<{
     dataDir,
     port: 0,
     watch: true,
+    now: () => NOW,
     baseUrl: 'https://drain.example',
     plugins: [
       definePlugin({
@@ -153,22 +167,24 @@ describe('cms.drain()', () => {
   it('lets a write already in flight finish before it stops anything', async () => {
     const { cms } = await serving();
     const held = deferred();
+    const entered = deferred();
     cms.app.post('/slow', async (c) => {
+      entered.resolve();
       await held.promise;
       return c.text('finished');
     });
     await cms.serve();
 
     const slow = cms.app.request('/slow', { method: 'POST' });
-    await pause(20);
+    await entered.promise;
     let drained = false;
     const draining = cms.drain().then(() => {
       drained = true;
     });
-    await pause(50);
 
-    assert.equal(drained, false, 'the drain waited for the write');
     assert.equal((await cms.app.request('/slow', { method: 'POST' })).status, 503);
+    await windowForADrain();
+    assert.equal(drained, false, 'the drain waited for the write');
 
     held.resolve();
     const response = await slow;
@@ -201,7 +217,7 @@ describe('cms.drain()', () => {
       path.join(contentDir, 'posts', 'unseen.md'),
       '---\ntitle: Unseen\ndate: 2026-01-01T00:00:00.000Z\n---\n\nHello.\n',
     );
-    await pause(400);
+    await windowForAWatcher();
     assert.equal(cms.store.listAll().length, 1, 'the watcher stopped');
 
     await cms.resume();

@@ -8,6 +8,7 @@ import { openContentStore } from './sqlite/open.ts';
 import type { ContentStore } from './store.ts';
 import { createContentSync } from './sync.ts';
 import type { ContentSync, DocumentChange } from './sync.ts';
+import { nextEvent } from '../__testing__/wait.ts';
 
 const temporaryDirs: string[] = [];
 const openStores: ContentStore[] = [];
@@ -115,30 +116,53 @@ async function sync(
 }
 
 /**
- * Poll until `read` returns something truthy, then hand it back. Bounded, so a
- * watcher that never fires fails the test instead of hanging it.
- *
- * The deadline is generous because it costs nothing: the loop returns the
- * instant the value appears, so only a test that is about to fail ever waits
- * this long. Four seconds was enough on an idle machine and not always enough
- * on a loaded one, where the pre-push hook runs this suite next to a build.
+ * Hand back what `read` returns once it is something truthy, read now and
+ * again after each change the sync reports.
  */
-async function eventually<T>(read: () => T | undefined | false, what: string): Promise<T> {
-  const deadline = Date.now() + 10_000;
-  for (;;) {
-    const value = read();
-    if (value !== undefined && value !== false) return value;
-    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${what}.`);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
+function eventually<T>(
+  content: ContentSync,
+  read: () => T | undefined | false,
+  what: string,
+): Promise<T> {
+  return nextEvent<T>(what, (done) => {
+    const check = () => {
+      const value = read();
+      if (value !== undefined && value !== false) done(value);
+    };
+    check();
+    return content.events.on('change', check);
+  });
+}
+
+const SENTINEL = 'pages/sentinel.md';
+
+/**
+ * Write a file the watcher has not seen and wait for it to be indexed. The
+ * watcher takes its events in order, so once the sentinel is in, every write
+ * made before it has had its turn: a test that asserts nothing happened is
+ * asserting about a watcher that has caught up.
+ */
+async function caughtUp(content: ContentSync, dir: string): Promise<void> {
+  const indexed = nextEvent(`the watcher to index ${SENTINEL}`, (done) =>
+    content.events.on('created', (change) => {
+      if (change.path === SENTINEL) done();
+    }),
+  );
+  await writeFiles(dir, { [SENTINEL]: markdown({ title: 'Sentinel', permalink: '/sentinel/' }) });
+  await indexed;
+}
+
+/** The changes to anything but the sentinel. */
+function besidesSentinel(changes: readonly DocumentChange[]): DocumentChange[] {
+  return changes.filter((change) => change.path !== SENTINEL);
 }
 
 /**
- * Long enough for a watcher event and its debounce to have happened, so a test
- * that asserts nothing happened is asserting about a settled watcher.
+ * Long enough for a watcher event and its debounce to have happened, had
+ * there been a watcher. With none running there is no event to wait for.
  */
-function settle(ms = 500): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function windowForAWatcher(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 500));
 }
 
 describe('a full scan', () => {
@@ -443,6 +467,7 @@ describe('the watcher', () => {
     await content.start();
 
     await eventually(
+      content,
       () => Object.keys(arrivals).every((relative) => index.getByPath(relative) !== undefined),
       'every document written during the boot scan to be indexed',
     );
@@ -476,6 +501,7 @@ describe('the watcher', () => {
     );
 
     await eventually(
+      content,
       () => Object.keys(arrivals).every((relative) => index.getByPath(relative) !== undefined),
       'every document in the new directories to be indexed',
     );
@@ -483,6 +509,7 @@ describe('the watcher', () => {
     await rm(path.join(dir, 'imported'), { recursive: true });
 
     await eventually(
+      content,
       () => index.listPaths().every((indexed) => !indexed.startsWith('imported/')),
       'the documents of the removed directory to leave the index',
     );
@@ -511,10 +538,14 @@ describe('the watcher', () => {
       }),
     });
 
-    const html = await eventually(() => {
-      const found = index.getByPath('posts/2026-09-02-hello.md')?.html;
-      return found !== undefined && found.includes('Rewritten.') ? found : undefined;
-    }, 'the edit to reach the index');
+    const html = await eventually(
+      content,
+      () => {
+        const found = index.getByPath('posts/2026-09-02-hello.md')?.html;
+        return found !== undefined && found.includes('Rewritten.') ? found : undefined;
+      },
+      'the edit to reach the index',
+    );
 
     assert.match(html, /Rewritten\./);
     assert.deepEqual(
@@ -539,6 +570,7 @@ describe('the watcher', () => {
     });
 
     const document = await eventually(
+      content,
       () => index.getByPath('posts/2026-09-03-new.md'),
       'the new file to be indexed',
     );
@@ -557,6 +589,7 @@ describe('the watcher', () => {
     await rm(path.join(dir, 'pages/colophon.md'));
 
     await eventually(
+      content,
       () => index.getByPath('pages/colophon.md') === undefined,
       'the deleted file to leave the index',
     );
@@ -574,11 +607,10 @@ describe('the watcher', () => {
     changes.length = 0;
 
     await writeFiles(dir, { 'pages/about.md': source });
-    // Give the watcher room to fire and be found a no-op.
-    await settle();
+    await caughtUp(content, dir);
 
-    assert.equal(index.upserts, writesAfterBoot);
-    assert.deepEqual(changes, []);
+    assert.equal(index.upserts, writesAfterBoot + 1, 'only the sentinel was written');
+    assert.deepEqual(besidesSentinel(changes), []);
   });
 
   it('collapses a burst of writes to one update', async () => {
@@ -603,13 +635,14 @@ describe('the watcher', () => {
     }
 
     await eventually(
+      content,
       () => index.getByPath('pages/about.md')?.html.includes('Four.') === true,
       'the last write of the burst to reach the index',
     );
-    await settle();
+    await caughtUp(content, dir);
 
     assert.deepEqual(
-      changes.map((change) => change.type),
+      besidesSentinel(changes).map((change) => change.type),
       ['updated'],
     );
   });
@@ -625,7 +658,7 @@ describe('the watcher', () => {
     await writeFiles(dir, {
       'pages/about.md': markdown({ title: 'About', permalink: '/about/', body: 'Two.' }),
     });
-    await settle();
+    await windowForAWatcher();
 
     assert.match(index.getByPath('pages/about.md')?.html ?? '', /One\./);
   });
@@ -640,7 +673,7 @@ describe('the watcher', () => {
     await writeFiles(dir, {
       'pages/about.md': markdown({ title: 'About', permalink: '/about/', body: 'Two.' }),
     });
-    await settle();
+    await windowForAWatcher();
 
     assert.match(index.getByPath('pages/about.md')?.html ?? '', /One\./);
   });
@@ -662,29 +695,32 @@ describe('the watcher', () => {
     );
 
     await eventually(
+      content,
       () => index.getByPath('_trash/posts/2026-09-02-hello.md') !== undefined,
       'the trashed file to be indexed',
     );
-    await eventually(() => index.listPosts().length === 0, 'the live row to go');
+    await eventually(content, () => index.listPosts().length === 0, 'the live row to go');
     assert.equal(index.counts().trashed, 1);
   });
 
   it('keeps watching after a file it cannot parse is saved', async () => {
-    const warnings: string[] = [];
+    let warned: (message: string) => void = () => undefined;
     const dir = await contentDir({
       'pages/about.md': markdown({ title: 'About', permalink: '/about/' }),
     });
     const { sync: content, store: index } = await sync(dir, {
       watch: true,
-      logger: { warn: (message) => warnings.push(message) },
+      logger: { warn: (message) => warned(message) },
     });
     await content.start();
 
+    const logged = nextEvent('the parse failure to be logged', (done) => {
+      warned = (message) => {
+        if (message.includes('broken.md')) done();
+      };
+    });
     await writeFiles(dir, { 'pages/broken.md': 'no front matter\n' });
-    await eventually(
-      () => warnings.some((warning) => warning.includes('broken.md')),
-      'the parse failure to be logged',
-    );
+    await logged;
 
     await writeFiles(dir, {
       'posts/2026-08-04-later.md': markdown({
@@ -694,6 +730,7 @@ describe('the watcher', () => {
       }),
     });
     const document = await eventually(
+      content,
       () => index.getByPath('posts/2026-08-04-later.md'),
       'the watcher to keep working after a parse failure',
     );
@@ -940,7 +977,11 @@ describe('the search index (TASK-22 AC #2)', () => {
         body: 'Badgers at dusk.',
       }),
     });
-    await eventually(() => index.countSearch('badgers') === 1, 'the edit to be searchable');
+    await eventually(
+      content,
+      () => index.countSearch('badgers') === 1,
+      'the edit to be searchable',
+    );
     assert.equal(index.countSearch('aardvarks'), 0);
 
     await mkdir(path.join(dir, '_trash/posts'), { recursive: true });
@@ -949,6 +990,7 @@ describe('the search index (TASK-22 AC #2)', () => {
       path.join(dir, '_trash/posts/2026-09-02-hello.md'),
     );
     await eventually(
+      content,
       () =>
         index.getByPath('_trash/posts/2026-09-02-hello.md') !== undefined &&
         index.getByPath('posts/2026-09-02-hello.md') === undefined,
@@ -957,7 +999,11 @@ describe('the search index (TASK-22 AC #2)', () => {
     assert.equal(index.countSearch('badgers'), 0, 'a trashed post is still found');
 
     await rm(path.join(dir, '_trash/posts/2026-09-02-hello.md'));
-    await eventually(() => index.listPaths().length === 0, 'the deleted file to leave the index');
+    await eventually(
+      content,
+      () => index.listPaths().length === 0,
+      'the deleted file to leave the index',
+    );
     assert.equal(index.countSearch('badgers'), 0);
   });
 });
