@@ -76,6 +76,7 @@ export function createApp(
     c.set('webmentions', services.webmentions);
     c.set('replyContexts', services.replyContexts);
     c.set('learnHandles', services.learnHandles);
+    c.set('siteRecords', services.siteRecords);
     c.set('mail', services.mail);
     c.set('notifications', services.notifications);
     c.set('redirects', services.redirects);

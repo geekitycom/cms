@@ -9,7 +9,7 @@ import { readSiteSettings } from './site/site-json.ts';
 import { messageOf } from './util/errors.ts';
 import { createSerialQueue } from './util/queue.ts';
 import { absoluteUrl } from './util/url.ts';
-import { isListed } from './web/documents.ts';
+import { isListed } from './content/served.ts';
 import { FEED_FORMATS, notifyEndpoints } from './web/feeds.ts';
 import type { NotifyServer } from './web/feeds.ts';
 import { feedHref } from './web/listing-subject.ts';

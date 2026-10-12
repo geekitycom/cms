@@ -1,4 +1,5 @@
 import type { Document } from '../content/document.ts';
+import { decodedPath } from '../content/redirects.ts';
 import { parseAuthorPath } from './authors.ts';
 import { publicDocumentAt } from './documents.ts';
 import { commentsFeedPath, COMMENTS_ROOT, splitFeedPath } from './feeds.ts';
@@ -8,7 +9,6 @@ import type { ListingRequest, ListingSubject } from './listing-subject.ts';
 import { representationHref } from './negotiate.ts';
 import type { Representation } from './negotiate.ts';
 import { pageCount } from './pagination.ts';
-import { decodedPath } from './redirects.ts';
 import { encodePath } from './request.ts';
 import { servedPath } from './site-view.ts';
 import type { SiteView } from './site-view.ts';

@@ -21,14 +21,17 @@ import { archiveMonths, archiveOpen } from './archive.ts';
 import { authorContext, siteAuthorContext } from './authors.ts';
 import type { AuthorContext } from './authors.ts';
 import {
+  backlinkContext,
   citedPhotoContext,
   citedPictureContext,
   createSiteDataSource,
   documentContext,
   frontPageSlugs,
+  locationContext,
   postsPerPage,
   siteLocale,
   siteTimezone,
+  syndicationLinks,
   taxonomyBases,
   termRedirects,
   themeName,
@@ -37,9 +40,10 @@ import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
 import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { ContactFormContext } from '../contact/form.ts';
 import { commentAnchor } from './conversation.ts';
-import { commentPageHref } from './guids.ts';
+import { commentPageHref } from '../content/guids.ts';
 import type { CommentThread, Conversation } from './conversation.ts';
-import { activityStreamsId, isServed } from './documents.ts';
+import { activityStreamsId } from './documents.ts';
+import { isServed } from '../content/served.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type {
   DocumentContext,
@@ -64,8 +68,7 @@ import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import { readCitedStart } from '../webmention/cited-start.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
-import type { SyndicationTarget } from '../webmention/syndication.ts';
-import { backlinkContext, locationContext, syndicationLinks } from './context.ts';
+import type { SyndicationTarget } from '../content/syndicate-to.ts';
 import { pingbackEndpointFor } from '../webmention/pingback.ts';
 import { webmentionEndpointFor } from '../webmention/routes.ts';
 

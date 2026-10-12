@@ -6,11 +6,11 @@ import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import type { UploadMediaType } from '../content/media.ts';
 import { stripMetadata, UnreadableMetadataError } from '../content/metadata/index.ts';
 import { slugify } from '../content/slug.ts';
+import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';
 import type { AltText } from '../images/alt-text.ts';
 import { generateImageVariants } from '../images/variants.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import { messageOf } from '../util/errors.ts';
-import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../web/assets.ts';
 
 /** The form field the file arrives in. */
 export const UPLOAD_FIELD = 'file';

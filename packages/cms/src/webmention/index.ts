@@ -14,8 +14,8 @@ export {
   parseHtml,
   rawTextOf,
   textOf,
-} from './html.ts';
-export type { HtmlElement, HtmlNode, HtmlText } from './html.ts';
+} from '../util/html-tree.ts';
+export type { HtmlElement, HtmlNode, HtmlText } from '../util/html-tree.ts';
 export { externalLinks } from './links.ts';
 export { itemsIn, linksTo, sourceEntry } from './microformats.ts';
 export type {
@@ -72,14 +72,11 @@ export type {
 export {
   parseSyndicationTargets,
   selectedTargets,
-  SYNDICATE_TO_FRONT_MATTER_KEY,
   SYNDICATION_FILE,
   SYNDICATION_FRONT_MATTER_KEY,
   SYNDICATION_TARGETS_FILE,
   syndicationTargetsReader,
 } from './syndication.ts';
-export type {
-  ParsedSyndicationTargets,
-  SyndicationTarget,
-  SyndicationTargetsReader,
-} from './syndication.ts';
+export { SYNDICATE_TO_FRONT_MATTER_KEY } from '../content/syndicate-to.ts';
+export type { ParsedSyndicationTargets, SyndicationTargetsReader } from './syndication.ts';
+export type { SyndicationTarget } from '../content/syndicate-to.ts';

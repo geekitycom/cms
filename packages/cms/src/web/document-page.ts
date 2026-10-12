@@ -6,12 +6,12 @@ import { commentNoticeFor, commentReplyTarget } from '../comments/routes.ts';
 import { commenterOf } from '../comments/viewer.ts';
 import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import type { Document } from '../content/document.ts';
+import { isListed } from '../content/served.ts';
 import type { GeekityEnv } from '../env.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { pingbackEndpointFor } from '../webmention/pingback.ts';
 import { WEBMENTION_PATH } from '../webmention/routes.ts';
-import { isListed } from './documents.ts';
 import { documentMarkdown } from './markdown-representation.ts';
 import {
   DOCUMENT_REPRESENTATIONS,

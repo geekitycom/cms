@@ -190,12 +190,8 @@ export type {
   AdminScreenLocation,
   AdminSection,
 } from './menu.ts';
-export {
-  LANGUAGE_TAG_PATTERN,
-  EMAIL_PATTERN,
-  normalizeRelayInbox,
-  relayList,
-} from '../site/setting-values.ts';
+export { LANGUAGE_TAG_PATTERN } from '../content/language.ts';
+export { EMAIL_PATTERN, normalizeRelayInbox, relayList } from '../site/setting-values.ts';
 export { DEFAULT_SITE_SETTINGS, effectiveBaseUrl } from '../site/settings.ts';
 export {
   formFromSettings,

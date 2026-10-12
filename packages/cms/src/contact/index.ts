@@ -10,7 +10,6 @@ export {
   blankContactValues,
   CONTACT_ANCHOR,
   CONTACT_FIELDS,
-  CONTACT_FRONT_MATTER_KEY,
   CONTACT_NOTICE_PARAM,
   CONTACT_NOTICES,
   CONTACT_POST_PATH,
@@ -26,6 +25,7 @@ export {
   MAXIMUM_CONTACT_SUBJECT_LENGTH,
   refilledContactForm,
 } from './form.ts';
+export { CONTACT_FRONT_MATTER_KEY } from '../content/contact.ts';
 export type { ContactForm, ContactFormContext, ContactProblems } from './form.ts';
 
 export {

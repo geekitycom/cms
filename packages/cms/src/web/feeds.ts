@@ -54,9 +54,9 @@ export {
   notifyServerOf,
   REPLIES_ROOT,
   repliesFeedPath,
-  repliesKey,
   splitFeedPath,
 } from './feed-source.ts';
+export { repliesKey } from '../content/guids.ts';
 export type {
   CommentFeedSource,
   FeedComment,

@@ -26,7 +26,7 @@
  * and the feeds, the theme and the federation read only what it returns.
  */
 import { isRecord } from '../util/guards.ts';
-import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
+import { UPLOAD_ASSET_PREFIX } from './uploads.ts';
 
 /** The front matter key the recording is under. */
 export const ENCLOSURE_FRONT_MATTER_KEY = 'enclosure';

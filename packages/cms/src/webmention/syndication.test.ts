@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { SYNDICATE_TO_FRONT_MATTER_KEY } from '../content/syndicate-to.ts';
+import type { SyndicationTarget } from '../content/syndicate-to.ts';
 import {
   checkSyndicationTarget,
   handSyndicationOf,
   parseSyndicationTargets,
   selectedTargets,
-  SYNDICATE_TO_FRONT_MATTER_KEY,
 } from './syndication.ts';
-import type { SyndicationTarget } from './syndication.ts';
 
 const INDIENEWS: SyndicationTarget = {
   id: 'indienews',

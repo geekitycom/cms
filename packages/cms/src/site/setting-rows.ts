@@ -1,5 +1,6 @@
 import path from 'node:path';
 
+import { LANGUAGE_TAG_PATTERN } from '../content/language.ts';
 import { isLocationSharing, LOCATION_SHARING } from '../content/location.ts';
 import { parseIconSetting } from '../images/icons.ts';
 import { sourceFile } from '../images/paths.ts';
@@ -23,7 +24,6 @@ import {
   isPollCount,
   isValidTimezone,
   isWholeDays,
-  LANGUAGE_TAG_PATTERN,
   normalizeBaseUrl,
   normalizeLanguageList,
   normalizeRelayInbox,

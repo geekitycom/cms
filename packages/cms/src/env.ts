@@ -1,10 +1,10 @@
-import type { AdminStore } from './admin/store.ts';
-import type { Session } from './admin/store.ts';
+import type { AdminStore, Session } from './admin/store.ts';
 import type { AvatarService } from './avatars/avatars.ts';
 import type { SignedInAccount } from './comments/viewer.ts';
 import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
 import type { ContentStore } from './content/store.ts';
+import type { SiteRecords } from './content/write.ts';
 import type { DocumentChange, SyncResult } from './content/sync.ts';
 import type { DeliveryService } from './federation/delivery.ts';
 import type { ActivityNote } from './indieauth/activity-log.ts';
@@ -20,7 +20,7 @@ import type { ReplyContextService } from './webmention/reply-contexts.ts';
 import type { HandleLearner } from './federation/handles.ts';
 import type { WebmentionService } from './webmention/service.ts';
 import type { ConversationReader } from './web/conversation.ts';
-import type { RedirectSource } from './web/redirects.ts';
+import type { RedirectSource } from './content/redirects.ts';
 import type { Renderer } from './web/render.ts';
 
 /**
@@ -111,6 +111,7 @@ export interface GeekityEnv {
     replyContexts: ReplyContextService;
     /** Resolves the fediverse handles a save names before it is written (TASK-194). */
     learnHandles: HandleLearner;
+    siteRecords: SiteRecords;
     /**
      * The site's outgoing email (TASK-53), so a handler can send one: the
      * settings screen's Send test email button, and the password resets,

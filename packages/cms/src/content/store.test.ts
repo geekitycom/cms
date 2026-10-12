@@ -7,10 +7,10 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
-import { isListed, isServed } from '../web/documents.ts';
-import { parseRedirects } from '../web/redirects.ts';
-import type { RedirectTable } from '../web/redirects.ts';
 import type { Document } from './document.ts';
+import { parseRedirects } from './redirects.ts';
+import type { RedirectTable } from './redirects.ts';
+import { isListed, isServed } from './served.ts';
 import { DuplicatePermalinkError, openContentStore } from './store.ts';
 import type { ContentStore } from './store.ts';
 

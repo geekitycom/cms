@@ -3,6 +3,9 @@ import type { Context, Hono, MiddlewareHandler } from 'hono';
 import { mountAvatars } from '../avatars/routes.ts';
 import { mountComments } from '../comments/routes.ts';
 import { mountContact } from '../contact/routes.ts';
+import { COMMENT_PAGE_PREFIX } from '../content/guids.ts';
+import { findPathRedirect, findQueryRedirect, redirectLocation } from '../content/redirects.ts';
+import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
 import type { GeekityEnv } from '../env.ts';
 import { iconSetting } from '../images/icons.ts';
 import { VARIANT_ASSET_PREFIX } from '../images/variants.ts';
@@ -14,13 +17,12 @@ import { mountPingbacks } from '../webmention/pingback.ts';
 import { mountWebmentions } from '../webmention/routes.ts';
 import { publicAdminBar } from './admin-bar.ts';
 import { favicon, imageVariant, themeAsset, upload } from './asset-routes.ts';
-import { THEME_ASSET_PREFIX, UPLOAD_ASSET_PREFIX } from './assets.ts';
+import { THEME_ASSET_PREFIX } from './assets.ts';
 import { negotiateDocument } from './document-page.ts';
 import { goneDocumentAt, previewDocumentAt } from './documents.ts';
 import { embedView, oEmbed } from './embed.ts';
 import { commentPage, comments, feed, repliesFeed } from './feed-routes.ts';
 import { feedPathUnder, FEED_FORMATS, REPLIES_ROOT, splitFeedPath } from './feeds.ts';
-import { COMMENT_PAGE_PREFIX } from './guids.ts';
 import { indexNowKeyPath, indexNowKeyResponse } from './indexnow.ts';
 import { listing, search } from './listing-pages.ts';
 import { feedHref, SITE_POSTS } from './listing-subject.ts';
@@ -44,7 +46,6 @@ import {
   slashedHref,
 } from './paths.ts';
 import type { PathMatch } from './paths.ts';
-import { findPathRedirect, findQueryRedirect, redirectLocation } from './redirects.ts';
 import {
   conditionalHeaders,
   encodePath,

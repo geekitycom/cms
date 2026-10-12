@@ -8,11 +8,10 @@ import { featuredPosts, PINNED_FRONT_MATTER_KEY } from './pinned.ts';
 import { searchExpression, searchText, SNIPPET_CLOSE, SNIPPET_OPEN } from './search.ts';
 import { tagKey, uniqueTags } from './tags.ts';
 import { VISIBILITIES, VISIBILITY_FRONT_MATTER_KEY } from './visibility.ts';
-import { repliesKey } from '../web/feed-source.ts';
-import { feedGuid, postObjectId } from '../web/guids.ts';
-import { NO_REDIRECTS } from '../web/redirects.ts';
-import type { RedirectTable } from '../web/redirects.ts';
-import { linksInto, ownSiteLinks, siteLinkKey, spelling } from '../webmention/links.ts';
+import { feedGuid, postObjectId, repliesKey } from './guids.ts';
+import { NO_REDIRECTS } from './redirects.ts';
+import type { RedirectTable } from './redirects.ts';
+import { linksInto, ownSiteLinks, siteLinkKey, spelling } from './site-links.ts';
 
 export { DATABASE_FILE } from '../cache.ts';
 

@@ -29,7 +29,7 @@ import { requestPublic } from './fetch-public.ts';
 import { externalLinks, externalTarget } from './links.ts';
 import { verifyWebmention } from './receive.ts';
 import { selectedTargets, syndicationCopies, syndicationTargetsReader } from './syndication.ts';
-import type { SyndicationTarget } from './syndication.ts';
+import type { SyndicationTarget } from '../content/syndicate-to.ts';
 import type { IncomingWebmention, WebmentionOutcome } from './receive.ts';
 import { isWithheld } from '../web/conversation.ts';
 import type { ConversationReader, ThreadReply, Upstream } from '../web/conversation.ts';

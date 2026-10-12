@@ -4,6 +4,7 @@ import { contactFormFor } from '../contact/form.ts';
 import type { Document } from '../content/document.ts';
 import { shareLocation } from '../content/location.ts';
 import { postLocations } from '../content/locations.ts';
+import type { RedirectSource } from '../content/redirects.ts';
 import type { ContentStore } from '../content/store.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
@@ -14,7 +15,6 @@ import {
 } from '../webmention/syndication.ts';
 import { frontPageSlugs } from './context.ts';
 import type { SiteDataSource } from './context.ts';
-import type { RedirectSource } from './redirects.ts';
 import type { CreateRendererOptions } from './render.ts';
 
 export interface PageSourcesOptions {

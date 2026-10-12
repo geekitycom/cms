@@ -17,7 +17,7 @@ import type { ResolvedConfig } from './config.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './comments/migrations.ts';
 import { stripStoredUploads } from './content/metadata/sweep.ts';
 import { createUser, DuplicateUsernameError } from './site/users.ts';
-import { UPLOAD_DIRECTORY } from './web/assets.ts';
+import { UPLOAD_DIRECTORY } from './content/uploads.ts';
 import { createCms } from './index.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
 import type { PluginCommand } from './plugin.ts';

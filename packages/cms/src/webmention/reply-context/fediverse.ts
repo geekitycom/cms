@@ -1,6 +1,6 @@
+import { elementsIn, hasRel, parseHtml, textOf } from '../../util/html-tree.ts';
+import type { HtmlElement } from '../../util/html-tree.ts';
 import { webUrl } from '../fetch-public.ts';
-import { elementsIn, hasRel, parseHtml, textOf } from '../html.ts';
-import type { HtmlElement } from '../html.ts';
 import { publicHost } from '../public-address.ts';
 import type { HtmlPage } from './page.ts';
 import { NAMELESS_NOTE, resolved } from './source.ts';

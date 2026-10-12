@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { commentsFile } from '../comments/records.ts';
+import { siteRecords } from '../cms/site-records.ts';
 import { resolveConfig } from '../config.ts';
 import { refuseWritesUnder, WritesRefusedError } from '../files/atomic.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 import type { Document } from './document.ts';
 import { blankForm } from './document-form.ts';
 import type { EditorForm } from './document-form.ts';
@@ -35,6 +38,7 @@ interface Scratch {
   readonly store: ContentStore;
   readonly contentDir: string;
   readonly announced: DocumentChange[];
+  readonly config: DocumentSite['config'];
 }
 
 async function scratch(
@@ -45,9 +49,11 @@ async function scratch(
   const store = openContentStore({ dataDir });
   stores.push(store);
   const announced: DocumentChange[] = [];
+  const config = resolveConfig({ contentDir, dataDir, baseUrl: 'https://example.com' });
   const site: DocumentSite = {
+    ...siteRecords(config),
     store,
-    config: resolveConfig({ contentDir, dataDir, baseUrl: 'https://example.com' }),
+    config,
     announce: (change) => {
       announced.push(change);
       return Promise.resolve();
@@ -57,7 +63,7 @@ async function scratch(
     storedContext: () => undefined,
     learnHandles,
   };
-  return { site, store, contentDir, announced };
+  return { site, store, contentDir, announced, config: site.config };
 }
 
 function form(overrides: Partial<EditorForm>): EditorForm {
@@ -248,5 +254,130 @@ describe('releasePermalink', () => {
 
     restoreRow();
     assert.equal(store.getByPermalink(saved.permalink)?.path, saved.path);
+  });
+});
+
+describe('what a write reads about the site', () => {
+  async function writeData(contentDir: string, name: string, value: unknown): Promise<void> {
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(path.join(contentDir, '_data', name), JSON.stringify(value));
+  }
+
+  async function renamed(site: DocumentSite, document: Document): Promise<Document> {
+    const slug = `${document.slug}-renamed`;
+    const written = await writeDocument(site, {
+      kind: POST_KIND,
+      document,
+      form: edited(document, { slug, permalink: '' }),
+      draft: true,
+    });
+    assert.equal(written.outcome, 'saved');
+    return written.saved;
+  }
+
+  it('keeps the URL of a draft somebody has commented on, and not of one nobody has', async () => {
+    const { site, contentDir } = await scratch();
+    const answered = await created(site, { title: 'Answered', body: 'Words.' });
+    const quiet = await created(site, { title: 'Quiet', body: 'Words.' });
+    await mkdir(path.dirname(commentsFile(contentDir, answered.slug)), { recursive: true });
+    await writeFile(commentsFile(contentDir, answered.slug), '[]');
+
+    assert.deepEqual((await renamed(site, answered)).redirectFrom, [answered.permalink]);
+    assert.equal((await renamed(site, quiet)).redirectFrom, undefined);
+  });
+
+  it('reads an offset-less date on the site’s timezone', async () => {
+    const { site, contentDir } = await scratch();
+    await writeData(contentDir, 'site.json', { timezone: 'America/Chicago' });
+
+    const saved = await created(site, { title: 'Dated', body: 'Words.', date: '2026-09-02T09:00' });
+
+    assert.equal(saved.date, '2026-09-02T14:00:00Z');
+  });
+
+  it('drops an unchecked target the site declares and keeps one it does not', async () => {
+    const { site, contentDir } = await scratch();
+    await writeData(contentDir, 'syndicationTargets.json', [
+      { id: 'news', name: 'News', url: 'https://news.example/' },
+    ]);
+    const saved = await created(site, { title: 'Shared', body: 'Words.', syndicateTo: ['news'] });
+    assert.deepEqual(saved.extra['syndicate-to'], ['news']);
+    const listed = { ...saved, extra: { ...saved.extra, 'syndicate-to': ['news', 'gone'] } };
+
+    const written = await writeDocument(site, {
+      kind: POST_KIND,
+      document: listed,
+      form: edited(listed, { syndicateTo: [] }),
+      draft: true,
+    });
+
+    assert.equal(written.outcome, 'saved');
+    assert.deepEqual(written.saved.extra['syndicate-to'], ['gone']);
+  });
+
+  it('writes the username of the user a display name names, and counts their pins by both', async () => {
+    const { site, store, config } = await scratch();
+    const ada = await createUser({ dataDir: config.dataDir, username: 'ada', password: 'x' });
+    await setUserProfile({
+      dataDir: config.dataDir,
+      userId: ada.id,
+      profile: { displayName: 'Ada Lovelace' },
+    });
+
+    const byName = await created(site, { title: 'Byline', body: 'Words.', author: 'Ada Lovelace' });
+    assert.equal(byName.author, 'ada');
+
+    for (let index = 0; index < 5; index += 1) {
+      const pinned = await created(site, {
+        title: `Pinned ${String(index)}`,
+        body: 'Words.',
+        author: 'ada',
+        pinned: true,
+      });
+      store.upsert({ ...pinned, author: index % 2 === 0 ? 'ada' : 'Ada Lovelace', draft: false });
+    }
+    const sixth = await writeDocument(site, {
+      kind: POST_KIND,
+      document: undefined,
+      form: form({ title: 'Sixth', body: 'Words.', author: 'Ada Lovelace', pinned: true }),
+      draft: true,
+    });
+
+    assert.equal(sixth.outcome, 'refused');
+    assert.equal(sixth.field, 'editor-pinned');
+  });
+});
+
+describe('the site records a write is given', () => {
+  it('are what it reads, not the files behind them', async () => {
+    const { site } = await scratch();
+    const given: DocumentSite = {
+      ...site,
+      users: () => [{ id: 1, username: 'ada', profile: { displayName: 'Ada Lovelace' } }],
+      timezone: () => 'Asia/Tokyo',
+      syndicationTargets: () => [{ id: 'news', name: 'News', url: 'https://news.example/' }],
+      hasComments: (slug) => slug === 'answered',
+    };
+
+    const saved = await created(given, {
+      title: 'Answered',
+      body: 'Words.',
+      author: 'Ada Lovelace',
+      date: '2026-09-02T09:00',
+    });
+    assert.equal(saved.author, 'ada');
+    assert.equal(saved.date, '2026-09-02T00:00:00Z');
+
+    const listed = { ...saved, extra: { ...saved.extra, 'syndicate-to': ['news'] } };
+    const written = await writeDocument(given, {
+      kind: POST_KIND,
+      document: listed,
+      form: edited(listed, { slug: 'moved', permalink: '', syndicateTo: [] }),
+      draft: true,
+    });
+
+    assert.equal(written.outcome, 'saved');
+    assert.deepEqual(written.saved.redirectFrom, [saved.permalink]);
+    assert.equal(written.saved.extra['syndicate-to'], undefined);
   });
 });

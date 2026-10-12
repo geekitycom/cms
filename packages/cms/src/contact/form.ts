@@ -1,3 +1,4 @@
+import { CONTACT_FRONT_MATTER_KEY } from '../content/contact.ts';
 import type { Document } from '../content/document.ts';
 import { FORM_LOADED_FIELD, FORM_TRAP_FIELD } from '../forms/protection.ts';
 
@@ -12,9 +13,6 @@ import { FORM_LOADED_FIELD, FORM_TRAP_FIELD } from '../forms/protection.ts';
  * when a submission arrives, so it cannot appear in the HTML however a theme is
  * written.
  */
-
-/** The front matter key a page opts in with. */
-export const CONTACT_FRONT_MATTER_KEY = 'contact';
 
 /** Where the contact form posts, under the CMS's own prefix. */
 export const CONTACT_POST_PATH = '/_geekity/contact';

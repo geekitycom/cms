@@ -1,8 +1,15 @@
 import { isWebUrl } from '../content/enclosure.ts';
 import { rsvpValue } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
-import { classesOf, elementsIn, innerHtmlOf, isElement, parseHtml, textOf } from './html.ts';
-import type { HtmlElement } from './html.ts';
+import {
+  classesOf,
+  elementsIn,
+  innerHtmlOf,
+  isElement,
+  parseHtml,
+  textOf,
+} from '../util/html-tree.ts';
+import type { HtmlElement } from '../util/html-tree.ts';
 
 /**
  * What somebody else's page says about this one.

@@ -12,13 +12,13 @@ import path from 'node:path';
 import { rowIndexes, trimmedField } from '../util/forms.ts';
 import { isRecord } from '../util/guards.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { findUpload, UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import type { Document } from './document.ts';
 import { isUploadUrl, isWebUrl } from './enclosure.ts';
 import type { EditorField, FieldError } from './form-error.ts';
 import { UPLOAD_MEDIA_TYPES } from './media.ts';
 import { PHOTO_FRONT_MATTER_KEY, photosOf } from './photo.ts';
 import type { Photo } from './photo.ts';
+import { findUpload, UPLOAD_ASSET_PREFIX } from './uploads.ts';
 
 /** One photo's row, as the form has it. */
 export interface PhotoRow {

@@ -3,13 +3,14 @@ import { federation as federationMiddleware } from '@fedify/hono';
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
 import type { Document } from '../content/document.ts';
+import { isGone } from '../content/served.ts';
 import { isTrashedPath } from '../content/store.ts';
 import type { GeekityEnv } from '../env.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorHref, parseAuthorPath } from '../web/authors.ts';
-import { goneDocumentAt, isGone, publicDocumentAt } from '../web/documents.ts';
+import { goneDocumentAt, publicDocumentAt } from '../web/documents.ts';
 import { prefersActivityStreams } from '../web/negotiate.ts';
 import { notFound, requestPath } from '../web/request.ts';
 import { actorAliases, actorId, userActor } from './actor.ts';

@@ -55,7 +55,8 @@ import {
   themeName,
 } from '../web/index.ts';
 import { pageSources } from '../web/page-sources.ts';
-import type { RedirectSource } from '../web/redirects.ts';
+import type { RedirectSource } from '../content/redirects.ts';
+import type { SiteRecords } from '../content/write.ts';
 import type { Renderer } from '../web/render.ts';
 import {
   createReplyContextService,
@@ -67,6 +68,7 @@ import { heldReplyContext } from '../webmention/reply-context.ts';
 import type { Booted } from './boot.ts';
 import type { PluginRegistry } from '../plugins/registry.ts';
 import type { Ending, Service } from './lifecycle.ts';
+import { siteRecords } from './site-records.ts';
 
 /**
  * Where the scheduler's watermark lives in {@link AdminStore.getState}: the
@@ -99,6 +101,7 @@ export interface Services {
   readonly digests: CommentDigest;
   readonly scheduler: Scheduler;
   readonly learnHandles: HandleLearner;
+  readonly siteRecords: SiteRecords;
   readonly maintenance: MaintenanceSwitch;
   readonly indieauth: IndieAuthState;
   readonly lifecycle: readonly Service[];
@@ -436,6 +439,7 @@ export function createServices({
     digests,
     scheduler,
     learnHandles,
+    siteRecords: siteRecords(resolved),
     maintenance: createMaintenanceSwitch({
       dataDir: resolved.dataDir,
       forced: resolved.maintenance,

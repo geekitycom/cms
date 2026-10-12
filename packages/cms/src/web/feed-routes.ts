@@ -2,10 +2,10 @@ import type { Context } from 'hono';
 
 import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
+import { isGone, isServed } from '../content/served.ts';
 import type { GeekityEnv } from '../env.ts';
 import { readAltTexts } from '../images/alt-text.ts';
 import { feedComments, spokenIn } from './conversation.ts';
-import { isGone, isServed } from './documents.ts';
 import {
   commentsFeedResponse,
   COMMENTS_TITLE_PREFIX,

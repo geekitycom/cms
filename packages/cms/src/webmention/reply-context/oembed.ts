@@ -1,7 +1,7 @@
+import { elementsIn, hasRel } from '../../util/html-tree.ts';
+import type { HtmlElement } from '../../util/html-tree.ts';
 import type { PictureSource } from '../cited-picture.ts';
 import { fetchPublic, webUrl } from '../fetch-public.ts';
-import { elementsIn, hasRel } from '../html.ts';
-import type { HtmlElement } from '../html.ts';
 import { plainText } from './source.ts';
 import type { Limits, Source } from './source.ts';
 

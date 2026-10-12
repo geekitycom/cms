@@ -1,6 +1,5 @@
-import { createHash } from 'node:crypto';
-
 import type { Document } from '../content/document.ts';
+import { repliesKey } from '../content/guids.ts';
 import type { AltTextLibrary } from '../images/alt-text.ts';
 import type { User } from '../site/users.ts';
 import type { SiteData } from './context.ts';
@@ -107,11 +106,6 @@ export const REPLIES_ROOT = '/replies/';
  * billion of them.
  */
 const KEY = /^[0-9a-f]{16}$/;
-
-/** The key of an item that has no stored id: the first 16 hex digits of the SHA-256 of its feed guid. */
-export function repliesKey(guid: string): string {
-  return createHash('sha256').update(guid).digest('hex').slice(0, 16);
-}
 
 /**
  * A webmention's key: the key of its source and the post it was sent to,

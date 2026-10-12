@@ -5,6 +5,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { submittedForm } from '../admin/documents.ts';
+import { siteRecords } from '../cms/site-records.ts';
 import { resolveConfig } from '../config.ts';
 import { createForm } from '../micropub/create.ts';
 import { sourceProperties, updateForm } from '../micropub/update.ts';
@@ -76,9 +77,11 @@ async function scratch() {
   const dataDir = await temporaryDir('geekity-post-fields-data-');
   const store = openContentStore({ dataDir, now: () => NOW });
   stores.push(store);
+  const config = resolveConfig({ contentDir, dataDir, baseUrl: 'https://example.com' });
   const site: DocumentSite = {
+    ...siteRecords(config),
     store,
-    config: resolveConfig({ contentDir, dataDir, baseUrl: 'https://example.com' }),
+    config,
     announce: () => Promise.resolve(),
     writer: undefined,
     citedContext: () => Promise.resolve(undefined),

@@ -35,10 +35,10 @@ import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { isRecord } from '../util/guards.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
-import { userForAuthor } from '../web/authors.ts';
+import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
+import { userForAuthor } from '../content/authors.ts';
 import { syndicationTargetsReader } from '../webmention/syndication.ts';
-import type { SyndicationTarget } from '../webmention/syndication.ts';
+import type { SyndicationTarget } from '../content/syndicate-to.ts';
 import { createForm, fromForm, fromJson } from './create.ts';
 import type { CreatedForm, CreateRequest, Property } from './create.ts';
 import { micropubType, parseChanges, sourceProperties, updateForm } from './update.ts';
@@ -376,6 +376,7 @@ const ACTIONS: {
 
     const written = await writeDocument(
       {
+        ...c.var.siteRecords,
         store,
         config,
         announce,
@@ -421,6 +422,7 @@ const ACTIONS: {
 
     const written = await writeDocument(
       {
+        ...c.var.siteRecords,
         store,
         config,
         announce,

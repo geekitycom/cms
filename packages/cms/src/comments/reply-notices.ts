@@ -1,15 +1,16 @@
 import type { AdminStore, ConversationWrite, PostComment } from '../admin/store.ts';
 import type { ResolvedConfig } from '../config.ts';
+import { userForAuthor } from '../content/authors.ts';
 import type { Document } from '../content/document.ts';
+import { isServed } from '../content/served.ts';
 import type { ContentStore } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { authorHref, userForAuthor } from '../web/authors.ts';
+import { authorHref } from '../web/authors.ts';
 import { commentNames } from '../web/conversation.ts';
 import type { ConversationReader } from '../web/conversation.ts';
-import { isServed } from '../web/documents.ts';
 import type { CommentNotices } from './intake.ts';
 
 /**

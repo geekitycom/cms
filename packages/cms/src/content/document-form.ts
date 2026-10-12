@@ -1,7 +1,7 @@
-import { COMMENTS_FRONT_MATTER_KEY } from '../comments/policy.ts';
-import { CONTACT_FRONT_MATTER_KEY } from '../contact/form.ts';
-import { LANG_FRONT_MATTER_KEY } from '../web/locale.ts';
-import type { SyndicationTarget } from '../webmention/syndication.ts';
+import { COMMENTS_FRONT_MATTER_KEY } from './comments.ts';
+import { CONTACT_FRONT_MATTER_KEY } from './contact.ts';
+import { LANG_FRONT_MATTER_KEY } from './language.ts';
+import type { SyndicationTarget } from './syndicate-to.ts';
 import type { CitationProperty } from './citation.ts';
 import type { Document } from './document.ts';
 import type { DocumentKind } from './document-kind.ts';

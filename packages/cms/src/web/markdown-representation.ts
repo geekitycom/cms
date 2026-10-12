@@ -2,14 +2,15 @@ import type { Context } from 'hono';
 
 import type { Document } from '../content/document.ts';
 import { rewriteMarkdownLinks } from '../content/markdown-links.ts';
+import { decodedPath } from '../content/redirects.ts';
+import { isServed } from '../content/served.ts';
+import { landing, siteLinkAt } from '../content/site-links.ts';
 import { calendarDayIn } from '../content/time.ts';
 import { documentFrontMatter, normalizeBody } from '../content/writer.ts';
 import type { GeekityEnv } from '../env.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { landing, siteLinkAt } from '../webmention/links.ts';
 import { authorContext } from './authors.ts';
 import { siteTimezone } from './context.ts';
-import { isServed } from './documents.ts';
 import type { Archive } from './listing-subject.ts';
 import {
   bioOf,
@@ -24,7 +25,6 @@ import type { MarkdownChrome, MarkdownLink, MarkdownUrl } from './markdown-page.
 import { representationHref } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
 import { classifyPath } from './paths.ts';
-import { decodedPath } from './redirects.ts';
 import { documentLabel, encodePath } from './request.ts';
 import { servedPath, siteView } from './site-view.ts';
 

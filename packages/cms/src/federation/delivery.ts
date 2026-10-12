@@ -22,7 +22,7 @@ import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
-import { authorNames } from '../web/authors.ts';
+import { authorNames } from '../content/authors.ts';
 import { ActorUpdate, actorId, senderKeyPairs, userActor } from './actor.ts';
 import {
   articleObjectId,

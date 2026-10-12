@@ -1,3 +1,4 @@
+import { COMMENTS_FRONT_MATTER_KEY } from '../content/comments.ts';
 import type { Document } from '../content/document.ts';
 
 /**
@@ -9,9 +10,6 @@ import type { Document } from '../content/document.ts';
  * submission can never disagree about whether a post is open, which is the
  * only way a comment form can lie to somebody who has just typed a paragraph.
  */
-
-/** The front-matter key a post opens or closes its own comments with. */
-export const COMMENTS_FRONT_MATTER_KEY = 'comments';
 
 /**
  * How long a post takes comments for, in days, before this is decided

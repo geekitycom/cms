@@ -43,6 +43,10 @@ export interface CitedPage {
 
 export type CitedPageReader = (url: string) => CitedPage | undefined;
 
+export function shownInFull(property: string, picture: { readonly kind: string }): boolean {
+  return property === 'repost-of' && picture.kind === 'photo';
+}
+
 export function citesAnImage(context: CitedPage): boolean {
   return (
     context.picture?.kind === 'photo' && context.name === undefined && context.author === undefined

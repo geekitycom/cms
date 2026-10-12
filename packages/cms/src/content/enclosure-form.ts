@@ -12,9 +12,7 @@
  */
 import path from 'node:path';
 
-import { LANGUAGE_TAG_PATTERN } from '../site/setting-values.ts';
 import { rowIndexes, trimmedField } from '../util/forms.ts';
-import { findUpload, UPLOAD_ASSET_PREFIX } from '../web/assets.ts';
 import type { Document } from './document.ts';
 import {
   ALTERNATE_TITLE_MAX_LENGTH,
@@ -27,8 +25,10 @@ import {
 } from './enclosure.ts';
 import type { AlternateEnclosure, Enclosure, Transcript } from './enclosure.ts';
 import type { EditorField, FieldError } from './form-error.ts';
+import { LANGUAGE_TAG_PATTERN } from './language.ts';
 import { canonicalType, UPLOAD_MEDIA_TYPES } from './media.ts';
 import type { UploadMediaType } from './media.ts';
+import { findUpload, UPLOAD_ASSET_PREFIX } from './uploads.ts';
 
 /** One alternate version's row, as the form has it. */
 export interface AlternateRow {

@@ -6,8 +6,8 @@ import { after, describe, it } from 'node:test';
 import { fieldsOf, saveUrlOf } from '../admin/__testing__/editor-form.ts';
 import { sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
+import { repliesKey } from '../content/guids.ts';
 import type { Cms, DocumentChangeHook } from '../index.ts';
-import { repliesKey } from './feed-source.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
