@@ -170,6 +170,7 @@ await cms.serve();
 | `events`                 | Index changes as they happen. See [Hooks](plugins.md#hooks).                                                               |
 | `onDocumentChange(hook)` | Subscribe to every change; returns the unsubscribe.                                                                        |
 | `onPublish(hook)`        | Subscribe to documents becoming visible; returns the unsubscribe.                                                          |
+| `onSettled(listener)`    | Run after each scan, and after each run of watched changes once their `events` listeners finish; returns the unsubscribe.  |
 | `sync()`                 | One full scan of the content directory. See [Keeping the index in step](content.md#keeping-the-index-in-step).             |
 | `serve()`                | Scan, start watching and listen. Resolves with the bound port. Use it when the configured port is `0`.                     |
 | `close()`                | Stop the watcher, the server and the index. Required, because the index holds an open database. Safe to call twice.        |

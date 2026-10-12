@@ -201,6 +201,13 @@ export interface Cms {
    */
   onPublish(hook: DocumentChangeHook): () => void;
   /**
+   * Run `listener` each time the index settles: after every scan, and after
+   * a run of watcher changes once none is waiting, when every listener on
+   * {@link Cms.events} has finished with them. Returns the function that
+   * unsubscribes.
+   */
+  onSettled(listener: () => unknown): () => void;
+  /**
    * Tell the notify server that these feeds changed — absolute URLs, because
    * it is going to fetch them. The hook a site calls for a feed the CMS does
    * not know it has.
@@ -323,6 +330,10 @@ export function createCms(
 
     onPublish(hook) {
       return subscribe('published', hook);
+    },
+
+    onSettled(listener) {
+      return content.onSettled(listener);
     },
 
     notifyFeeds(urls) {
