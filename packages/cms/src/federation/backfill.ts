@@ -14,7 +14,7 @@ import {
 import type { AdminStore, InboxActivity } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { CatalogReader } from '../content/store.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
 import { messageOf } from '../util/errors.ts';
@@ -231,7 +231,7 @@ export interface ReplyBackfillLogger {
 /** What {@link createReplyBackfill} needs. */
 export interface CreateReplyBackfillOptions {
   readonly admin: AdminStore;
-  readonly store: ContentStore;
+  readonly store: CatalogReader;
   readonly conversation: Pick<ConversationReader, 'thread'>;
   readonly config: Pick<ResolvedConfig, 'now' | 'contentDir'>;
   readonly load: RepliesLoader;

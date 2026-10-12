@@ -7,7 +7,7 @@ import type { Context, Hono } from 'hono';
 
 import { postLabel } from '../content/post-type.ts';
 import { isTrashedPath } from '../content/store.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { CatalogReader } from '../content/store.ts';
 import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { writeAltText } from '../content/alt-text.ts';
@@ -85,7 +85,7 @@ export interface MediaReference {
  * warning rather than a decision, and the confirmation step is what makes an
  * out-of-date answer harmless in both directions.
  */
-export function referencesTo(store: ContentStore, url: string): MediaReference[] {
+export function referencesTo(store: CatalogReader, url: string): MediaReference[] {
   // Two queries rather than one because `listAll` shows the live tree or the
   // trash and never both, which is the same reason the taxonomy screens ask
   // twice.

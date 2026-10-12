@@ -18,7 +18,7 @@ import type { DocumentKind } from './document-kind.ts';
 import { keptProperties } from './kept-properties.ts';
 import { postLocations } from './locations.ts';
 import type { PostField } from './post-fields.ts';
-import { openContentStore } from './store.ts';
+import { openContentStore } from './sqlite/open.ts';
 import type { ContentStore } from './store.ts';
 import { writeDocument } from './write.ts';
 import type { DocumentSite } from './write.ts';

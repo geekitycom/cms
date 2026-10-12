@@ -16,7 +16,7 @@ import { citationsOf } from '../content/citation.ts';
 import { isMigrated, isMigratedArrival } from '../content/migrated.ts';
 import { readOf } from '../content/read.ts';
 import { replyTarget } from '../content/post-type.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { CatalogReader, DocumentLookup } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { isFederatedDocument } from '../content/served.ts';
 import { readSiteSettings } from '../site/site-json.ts';
@@ -86,7 +86,7 @@ export interface CreateWebmentionServiceOptions {
   /** Where the outcomes are recorded, and where the comment index lives. */
   admin: AdminStore;
   /** The content index, which a resend reads the post out of. */
-  store: ContentStore;
+  store: DocumentLookup & CatalogReader;
   /**
    * Config after defaults: the base URL, the content and data directories, the
    * clock, and the checker an incoming webmention is put through.
@@ -610,7 +610,7 @@ function isPublic(document: Document | undefined, now: Date): boolean {
  */
 export function followMovedWebmentions(
   admin: AdminStore,
-  store: ContentStore,
+  store: DocumentLookup & CatalogReader,
   baseUrl: string,
 ): void {
   for (const recorded of admin.listSentWebmentionSources()) {
@@ -629,7 +629,7 @@ export function followMovedWebmentions(
  * and the federated list is the fallback for a trashed one standing behind a
  * live page.
  */
-function postBySlug(store: ContentStore, slug: string): Document | undefined {
+function postBySlug(store: DocumentLookup & CatalogReader, slug: string): Document | undefined {
   const direct = store.getBySlug(slug);
   if (direct !== undefined) return direct;
   return store.listFederated().find((document) => document.slug === slug);

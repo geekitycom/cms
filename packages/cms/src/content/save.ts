@@ -7,7 +7,7 @@ import { handleDirectory } from './handles.ts';
 import { parseDocument } from './parser.ts';
 import { defaultPermalink } from './slug.ts';
 import { isTrashedPath } from './store.ts';
-import type { ContentStore } from './store.ts';
+import type { DocumentLookup, IndexWriter } from './store.ts';
 import { DEFAULT_TIMEZONE, toUtcInstant } from './time.ts';
 import { serializeDocument } from './writer.ts';
 
@@ -48,7 +48,7 @@ export interface FreeSlugOptions extends ContentFilePathInput {
   /** The content directory the file would go in. */
   contentDir: string;
   /** The index, consulted so a permalink another file claims is skipped too. */
-  store: ContentStore;
+  store: DocumentLookup;
 }
 
 /**
@@ -83,7 +83,7 @@ export interface SaveDocumentOptions {
   /** The content directory. Missing parent directories are created. */
   contentDir: string;
   /** The index to bring up to date once the bytes have landed. */
-  store: ContentStore;
+  store: DocumentLookup & IndexWriter;
   /** The file's path relative to {@link SaveDocumentOptions.contentDir}. */
   path: string;
   /** The document to serialize. */

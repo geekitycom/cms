@@ -10,7 +10,7 @@ import type { PostLocations } from '../content/locations.ts';
 import type { PermalinkFile } from '../content/permalink-file.ts';
 import type { PostType } from '../content/post-type.ts';
 import { isTrashedPath } from '../content/store.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { DocumentLookup, IndexClock, TaxonomyReader } from '../content/store.ts';
 import { moveDocumentFile } from '../content/trash.ts';
 import { VISIBILITIES } from '../content/visibility.ts';
 import { writeDocument } from '../content/write.ts';
@@ -108,7 +108,7 @@ type Query = (typeof QUERY_NAMES)[number];
 /** What a query is answered from. */
 interface QueryContext {
   readonly baseUrl: string;
-  readonly store: ContentStore;
+  readonly store: DocumentLookup & TaxonomyReader & IndexClock;
   /** The syndication targets the site declares (TASK-155). */
   readonly targets: readonly SyndicationTarget[];
   readonly locations: PostLocations;
@@ -180,7 +180,7 @@ function invalid(description: string): Refusal {
  */
 function postAt(
   url: string | undefined,
-  site: { store: ContentStore; baseUrl: string; users: readonly User[]; user: User },
+  site: { store: DocumentLookup; baseUrl: string; users: readonly User[]; user: User },
 ): Document | Refusal {
   if (url === undefined || url === '') return invalid('A url is required.');
   const root = absoluteUrl('/', site.baseUrl);
@@ -210,7 +210,7 @@ function offered(targets: readonly SyndicationTarget[]): { uid: string; name: st
  * Every tag and category on a published post, once each, alphabetically
  * whatever the case, keeping those containing `filter` when one is given.
  */
-function categories(store: ContentStore, filter: string | undefined): string[] {
+function categories(store: TaxonomyReader, filter: string | undefined): string[] {
   const terms = new Set([
     ...store.listTags().map(({ tag }) => tag),
     ...store.listCategories().map(({ category }) => category),

@@ -90,6 +90,15 @@ A feature that needs a value from a higher layer gets it injected by
 that two layers share moves down to the lower one. Hono handlers live in `web/`
 or `admin/`, not in the feature they serve.
 
+The content index is split the same way. `content/store.ts` declares one
+small interface per kind of question, such as `DocumentLookup`,
+`ArchiveReader`, `TaxonomyReader`, `SearchReader`, `CatalogReader` and
+`IndexWriter`. `ContentStore` is all of them together. A caller names only the
+interfaces it reads, and only `cms/`, `content/` and `exports.ts` name
+`ContentStore`. The SQLite implementation lives in `content/sqlite/`, with one
+module per query family, and it is the only part of `content/` that imports
+`node:sqlite`. `content/store-boundary.test.ts` checks these rules.
+
 The map lists each remaining exception with the file, the unit it may import,
 the task that removes it and the reason. The exceptions left are the route
 files that TASK-368 moves out of `comments/`, `webmention/` and `federation/`.

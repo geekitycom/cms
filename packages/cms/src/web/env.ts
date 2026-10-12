@@ -3,7 +3,17 @@ import type { AvatarService } from '../avatars/avatars.ts';
 import type { SignedInAccount } from '../comments/viewer.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import type { ContentStore } from '../content/store.ts';
+import type {
+  ArchiveReader,
+  BacklinkReader,
+  CatalogReader,
+  DocumentLookup,
+  IndexClock,
+  IndexWriter,
+  ReplyReader,
+  SearchReader,
+  TaxonomyReader,
+} from '../content/store.ts';
 import type { SiteRecords } from '../content/write.ts';
 import type { DocumentChange, SyncResult } from '../content/sync.ts';
 import type { DeliveryService } from '../federation/delivery.ts';
@@ -34,8 +44,19 @@ export interface GeekityEnv {
      * gate in front of the public site and `/healthz` read the same answer.
      */
     maintenance: MaintenanceSwitch;
-    /** The derived content index this CMS booted. */
-    store: ContentStore;
+    /**
+     * The derived content index this CMS booted, without the connection and
+     * the scheduler's reads, which only the composition root drives.
+     */
+    store: IndexClock &
+      DocumentLookup &
+      ArchiveReader &
+      TaxonomyReader &
+      ReplyReader &
+      BacklinkReader &
+      SearchReader &
+      CatalogReader &
+      IndexWriter;
     /** Users and sessions, the part of the database that is not derived. */
     admin: AdminStore;
     /** Config after defaults and environment overrides. */

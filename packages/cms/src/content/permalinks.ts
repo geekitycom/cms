@@ -1,11 +1,14 @@
 import type { Document } from './document.ts';
 import { postObjectId } from './guids.ts';
 import { hiddenReason, isGone, isServed } from './served.ts';
-import type { ContentStore } from './store.ts';
+import type { DocumentLookup, IndexClock } from './store.ts';
 import { withoutTrailingSlash } from '../util/url.ts';
 
 /** The deleted document a public URL used to serve, or `undefined`. */
-export function goneDocumentAt(store: ContentStore, permalink: string): Document | undefined {
+export function goneDocumentAt(
+  store: DocumentLookup & IndexClock,
+  permalink: string,
+): Document | undefined {
   const document = store.getByPermalink(permalink);
   return document !== undefined && isGone(document, store.now()) ? document : undefined;
 }
@@ -17,13 +20,19 @@ export function goneDocumentAt(store: ContentStore, permalink: string): Document
  * document — the theme's HTML, the Markdown file, the JSON object — is the
  * same document found the same way, so they cannot disagree about what exists.
  */
-export function publicDocumentAt(store: ContentStore, permalink: string): Document | undefined {
+export function publicDocumentAt(
+  store: DocumentLookup & IndexClock,
+  permalink: string,
+): Document | undefined {
   const document = store.getByPermalink(permalink);
   if (document === undefined || !isServed(document, store.now())) return undefined;
   return document;
 }
 
-export function previewDocumentAt(store: ContentStore, permalink: string): Document | undefined {
+export function previewDocumentAt(
+  store: DocumentLookup & IndexClock,
+  permalink: string,
+): Document | undefined {
   const document = store.getByPermalink(permalink);
   if (document === undefined) return undefined;
   const reason = hiddenReason(document, store.now());

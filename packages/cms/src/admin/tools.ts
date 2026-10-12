@@ -22,7 +22,7 @@
 import type { Context, Hono } from 'hono';
 
 import { rebuildCommentIndexes } from '../comments/records.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { CatalogReader, IndexWriter } from '../content/store.ts';
 import type { SyncResult } from '../content/sync.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { rebuildFederationIndexes } from '../federation/records.ts';
@@ -72,7 +72,7 @@ export interface ContentIndexRebuild {
 /** What {@link rebuildContentIndex} needs. */
 export interface RebuildContentIndexOptions {
   /** The index to empty and fill again. */
-  store: ContentStore;
+  store: IndexWriter & CatalogReader;
   /** The database the federation and comment indexes live in. */
   admin: AdminStore;
   /** The content directory every one of them is read from. */

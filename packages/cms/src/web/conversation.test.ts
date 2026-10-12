@@ -7,7 +7,7 @@ import { after, describe, it } from 'node:test';
 
 import { openAdminStore } from '../store/admin-store.ts';
 import type { AdminStore, CommentStatus } from '../store/admin-store.ts';
-import { openContentStore } from '../content/store.ts';
+import { openContentStore } from '../content/index.ts';
 import type { ContentStore } from '../content/store.ts';
 import { parseDocument } from '../content/parser.ts';
 import type { Document } from '../content/document.ts';

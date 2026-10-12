@@ -7,7 +7,6 @@ import type { Recipient } from '@fedify/vocab';
 import type { AdminStore, Relay } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
-import type { ContentStore } from '../content/store.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
@@ -28,7 +27,7 @@ export interface CreateRelayServiceOptions {
   /** The settings, which hold the relay list, and the subscription records. */
   admin: AdminStore;
   /** The content index, which the dispatchers read through the context. */
-  store: ContentStore;
+  store: FederationContextData['store'];
   /** Config after defaults and environment overrides. */
   config: ResolvedConfig;
   /** What the federation context carries for the inbox; nothing here calls it. */

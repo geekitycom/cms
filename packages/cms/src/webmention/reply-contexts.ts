@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { Document } from '../content/document.ts';
 import { citationsOf } from '../content/citation.ts';
 import { replyTarget } from '../content/post-type.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { CatalogReader } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { updateFileAtomically } from '../files/atomic.ts';
 import { messageOf } from '../util/errors.ts';
@@ -39,7 +39,7 @@ export interface ReplyContextLogger {
 /** What {@link createReplyContextService} needs. */
 export interface CreateReplyContextServiceOptions {
   /** The index, asked which targets are still cited. */
-  readonly store: ContentStore;
+  readonly store: CatalogReader;
   /** Where the file and the copied pictures live, and the limit a picture is held to. */
   readonly config: CitedPictureConfig;
   /** How host names are resolved before a target is fetched. */

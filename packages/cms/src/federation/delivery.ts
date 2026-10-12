@@ -13,7 +13,7 @@ import type { Document } from '../content/document.ts';
 import { isMigrated } from '../content/migrated.ts';
 import { replyTarget } from '../content/post-type.ts';
 import { saveDocument } from '../content/save.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { CatalogReader, DocumentLookup, IndexWriter } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { documentContent } from '../content/writer.ts';
@@ -86,7 +86,7 @@ export interface CreateDeliveryServiceOptions {
   /** Followers and the delivery log. */
   admin: AdminStore;
   /** The content index, which the dispatchers read through the context. */
-  store: ContentStore;
+  store: FederationContextData['store'] & IndexWriter;
   /** Config after defaults and environment overrides. */
   config: ResolvedConfig;
   /** What the federation context carries for the inbox; nothing here calls it. */
@@ -659,7 +659,7 @@ export function deliveryTargets(
  * standing in front of a trashed one — and it is the right fallback because a
  * post that was never announced is not one a resend has anything to say about.
  */
-function postBySlug(store: ContentStore, slug: string): Document | undefined {
+function postBySlug(store: DocumentLookup & CatalogReader, slug: string): Document | undefined {
   const direct = store.getBySlug(slug);
   if (direct?.type === 'post') return direct;
   return store.listFederated().find((document) => document.slug === slug);

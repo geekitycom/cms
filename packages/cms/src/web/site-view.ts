@@ -4,7 +4,13 @@ import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import { authorNames } from '../content/authors.ts';
 import type { Document } from '../content/document.ts';
 import { isServed } from '../content/served.ts';
-import type { ContentStore } from '../content/store.ts';
+import type {
+  ArchiveReader,
+  CatalogReader,
+  DocumentLookup,
+  IndexClock,
+  TaxonomyReader,
+} from '../content/store.ts';
 import type { GeekityEnv } from './env.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
@@ -35,7 +41,7 @@ export interface AuthorListing {
 }
 
 export interface SiteView {
-  readonly store: ContentStore;
+  readonly store: DocumentLookup & ArchiveReader & TaxonomyReader & CatalogReader & IndexClock;
   readonly pages: FrontPages;
   readonly bases: TaxonomyBases;
   users(): readonly User[];
@@ -87,7 +93,7 @@ function createSiteView(c: Context<GeekityEnv>): SiteView {
  * front page back.
  */
 function frontPages(
-  store: ContentStore,
+  store: DocumentLookup & IndexClock,
   slugs: { homepage: string; postsPage: string },
 ): FrontPages {
   const home = publicPage(store, slugs.homepage);
@@ -99,7 +105,7 @@ function frontPages(
   };
 }
 
-function publicPage(store: ContentStore, slug: string): Document | undefined {
+function publicPage(store: DocumentLookup & IndexClock, slug: string): Document | undefined {
   if (slug === '') return undefined;
   const found = store.getBySlug(slug);
   if (found?.type !== 'page') return undefined;

@@ -39,7 +39,7 @@ import { postLocations } from '../content/locations.ts';
 import { canonicalType, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import { readAltTexts } from '../content/alt-text.ts';
 import { imagesIn } from '../content/image-tags.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { DocumentLookup } from '../content/store.ts';
 import { postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
@@ -171,7 +171,7 @@ export const SOURCE_MEDIA_TYPE = 'text/markdown';
  * migrated post is not found a second time under its permalink.
  */
 export function postByObjectId(
-  store: ContentStore,
+  store: DocumentLookup,
   objectId: string,
   baseUrl: string,
 ): Document | undefined {

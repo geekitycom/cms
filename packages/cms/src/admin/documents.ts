@@ -31,7 +31,7 @@ import { READ_FIELDS } from '../content/read-form.ts';
 import { RSVP_LABELS, RSVP_VALUES, rsvpValue } from '../content/rsvp.ts';
 import { scheduledFor } from '../content/schedule.ts';
 import { isTrashedPath } from '../content/store.ts';
-import type { ContentStore, ListAllOptions } from '../content/store.ts';
+import type { CatalogReader, DocumentLookup, ListAllOptions } from '../content/store.ts';
 import type { Respelling } from '../content/tags.ts';
 import { zoneLabel } from '../content/time.ts';
 import { moveDocumentFile } from '../content/trash.ts';
@@ -162,7 +162,7 @@ export function documentFilter(value: string | undefined): DocumentFilter {
   return DOCUMENT_FILTERS.includes(value as DocumentFilter) ? (value as DocumentFilter) : 'all';
 }
 
-/** {@link ContentStore.listAll} options for one kind and one filter. */
+/** {@link CatalogReader.listAll} options for one kind and one filter. */
 export function listOptionsFor(kind: DocumentKind, filter: DocumentFilter): ListAllOptions {
   return {
     type: kind.type,
@@ -763,7 +763,7 @@ function citedPreviews(
 }
 
 function findEdited(
-  store: ContentStore,
+  store: DocumentLookup & CatalogReader,
   kind: DocumentKind,
   slug: string,
   file: string | undefined,
@@ -782,7 +782,7 @@ function findEdited(
  * document is restored from.
  */
 export function findBySlug(
-  store: ContentStore,
+  store: DocumentLookup & CatalogReader,
   kind: DocumentKind,
   slug: string,
 ): Document | undefined {

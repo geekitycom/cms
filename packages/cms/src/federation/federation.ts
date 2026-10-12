@@ -8,7 +8,13 @@ import type { AdminStore } from '../store/admin-store.ts';
 import type { FederationOverrides, ResolvedConfig } from '../config.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
-import type { ContentStore } from '../content/store.ts';
+import type {
+  ArchiveReader,
+  CatalogReader,
+  DocumentLookup,
+  IndexClock,
+  TaxonomyReader,
+} from '../content/store.ts';
 import { countUsers, listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { authorNames } from '../content/authors.ts';
@@ -50,7 +56,7 @@ export interface FederationContextData {
   /** The followers, the inbox log and the relay records. */
   readonly admin: AdminStore;
   /** The content index, which the outbox and the post articles are built from. */
-  readonly store: ContentStore;
+  readonly store: DocumentLookup & ArchiveReader & CatalogReader & TaxonomyReader & IndexClock;
   /** Config after defaults and environment overrides. */
   readonly config: ResolvedConfig;
   /** Where the inbox asks for the profile of an actor it has just heard from (TASK-184). */
@@ -278,7 +284,10 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
  * match. That is the same rule the admin's own slug lookup follows, so a
  * collision resolves the same way wherever it is asked about.
  */
-export function federatedPost(store: ContentStore, slug: string): Document | undefined {
+export function federatedPost(
+  store: DocumentLookup & IndexClock,
+  slug: string,
+): Document | undefined {
   const document = store.getBySlug(slug);
   return document !== undefined && isFederatedDocument(document, store.now())
     ? document

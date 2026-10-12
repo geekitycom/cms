@@ -7,7 +7,7 @@ import { after, describe, it } from 'node:test';
 
 import { openAdminStore } from '../store/admin-store.ts';
 import type { AdminStore, PostComment } from '../store/admin-store.ts';
-import { openContentStore } from '../content/store.ts';
+import { openContentStore } from '../content/index.ts';
 import type { ContentStore } from '../content/store.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';

@@ -4,7 +4,7 @@ import { MODERATION_ACTIONS } from '../comments/moderate.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import type { AdminStore, PostComment } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { DocumentLookup } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { MailService } from './mail-service.ts';
@@ -160,7 +160,7 @@ export interface CreateCommentDigestOptions {
   /** The comment index, which is what "still pending" is asked of. */
   admin: AdminStore;
   /** The content index, for the posts the items are on. */
-  store: ContentStore;
+  store: DocumentLookup;
   cited?: CitedPageReader | undefined;
   /** The one door out for email. */
   mail: MailService;

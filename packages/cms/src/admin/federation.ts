@@ -2,7 +2,7 @@ import type { Hono } from 'hono';
 
 import type { Document } from '../content/document.ts';
 import { isTrashedPath } from '../content/store.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { CatalogReader, DocumentLookup, IndexClock } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { GeekityEnv } from '../web/env.ts';
@@ -639,7 +639,7 @@ function replyObject(
  * rather than a guess, and so is one whose path the index has never heard of.
  */
 export function localPosts(
-  store: ContentStore,
+  store: DocumentLookup & CatalogReader & IndexClock,
   baseUrl: string,
   cited: CitedPageReader,
   threadOf: (url: string) => Document | undefined = () => undefined,

@@ -36,7 +36,13 @@ import { htmlToText } from './search.ts';
 import { isServed } from './served.ts';
 import { defaultPermalink, slugify } from './slug.ts';
 import { DuplicatePermalinkError, isTrashedPath, TRASH_DIRECTORY } from './store.ts';
-import type { ContentStore } from './store.ts';
+import type {
+  ArchiveReader,
+  DocumentLookup,
+  IndexClock,
+  IndexWriter,
+  TaxonomyReader,
+} from './store.ts';
 import type { DocumentChange } from './sync.ts';
 import type { SyndicationTarget } from './syndicate-to.ts';
 import { respellTags } from './tags.ts';
@@ -60,7 +66,7 @@ export interface WriteConfig {
 
 /** What a write needs from the site, as plain values rather than a request. */
 export interface DocumentSite extends SiteRecords {
-  readonly store: ContentStore;
+  readonly store: DocumentLookup & ArchiveReader & TaxonomyReader & IndexWriter & IndexClock;
   readonly config: WriteConfig;
   readonly announce: (change: DocumentChange) => Promise<void>;
   /** The username of whoever is writing: the author a new document starts on. */
@@ -440,7 +446,7 @@ async function replaceFile(
   return saved;
 }
 
-export function releasePermalink(store: ContentStore, row: Document): () => void {
+export function releasePermalink(store: IndexWriter, row: Document): () => void {
   store.remove(row.path);
   return () => {
     store.upsert(row);

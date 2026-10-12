@@ -22,7 +22,7 @@ export type HiddenReason =
  * The index answers the same rule in SQL, so anything that has to decide
  * about a single document in hand — a permalink, a View link — asks it here
  * rather than deriving the rule again. The clock defaults to the system one; a
- * caller with a store should pass `ContentStore.now` so the answer
+ * caller with a store should pass `IndexClock.now` so the answer
  * matches the listings it came from.
  */
 export function hiddenReason(document: Document, now: Date = new Date()): HiddenReason | undefined {

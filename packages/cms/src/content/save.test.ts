@@ -7,7 +7,7 @@ import { after, describe, it } from 'node:test';
 import type { DocumentContent } from './document.ts';
 import { parseDocument } from './parser.ts';
 import { contentFilePath, freeSlug, saveDocument } from './save.ts';
-import { openContentStore } from './store.ts';
+import { openContentStore } from './sqlite/open.ts';
 import type { ContentStore } from './store.ts';
 
 const temporaryDirs: string[] = [];

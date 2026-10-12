@@ -6,7 +6,7 @@ import { postLabel, postTypeOf } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { RSVP_LABELS } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
-import type { ContentStore } from '../content/store.ts';
+import type { ArchiveReader, DocumentLookup, IndexClock, ReplyReader } from '../content/store.ts';
 import { readAllQuoteAuthorizations } from '../federation/quotes.ts';
 import type { QuoteAuthorizationRecord } from '../federation/quotes.ts';
 import {
@@ -90,7 +90,7 @@ export interface ConversationContext {
    * Where the posts are, for the site-wide reading: an answer is only worth
    * showing while the post it is about is there to read.
    */
-  readonly store: ContentStore;
+  readonly store: DocumentLookup & ArchiveReader & ReplyReader & IndexClock;
   /**
    * Where the quote approvals are: a quote of a post is shown only while the
    * post's author vouches for it (FEP-044f, TASK-171).
