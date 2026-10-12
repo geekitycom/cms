@@ -255,11 +255,11 @@ export interface ServeContext {
  * resolved, which is used as it is.
  *
  * The returned app is a plain Hono app: the public site, the admin UI and the
- * federation endpoints are all mounted on it as later milestones land. Booting
- * opens the SQLite cache under `dataDir` (creating the directory) and applies
- * any migrations, so `close()` has to be called to release it. A missing
- * database is built and read back out of the files; see {@link boot} for what
- * happens to one this version cannot use.
+ * federation endpoints are all mounted on it. Booting opens the SQLite cache
+ * under `dataDir` (creating the directory) and applies any migrations, so
+ * `close()` has to be called to release it. A missing or outdated database is
+ * built again from the files; one written by a newer `@geekity/cms`, or damaged
+ * past opening, throws an `UnusableDatabaseError` naming the file.
  */
 export function createCms(
   config: GeekityConfig | ResolvedConfig = {},

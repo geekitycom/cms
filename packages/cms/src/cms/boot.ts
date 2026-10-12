@@ -6,7 +6,7 @@ import {
   readSiteSettings,
 } from '../admin/index.ts';
 import type { AdminStore } from '../admin/index.ts';
-import { withRebuiltDatabase } from '../cache.ts';
+import { rebuildingIfOutdated } from '../cache.ts';
 import {
   createAkismetChecker,
   migrateCommentEmails,
@@ -29,7 +29,6 @@ import type { InstalledPlugin, PluginRegistry } from '../plugins/registry.ts';
 import { sitePluginRegistry } from '../plugins/site.ts';
 import { listUsers } from '../site/users.ts';
 
-/** What a boot leaves behind: the config as it will be served, and the open database. */
 export interface Booted {
   readonly resolved: ResolvedConfig;
   readonly plugins: PluginRegistry;
@@ -38,11 +37,6 @@ export interface Booted {
   readonly commentRecords: CommentRecords;
 }
 
-/**
- * Resolve the config unless it already is, open the database and carry an
- * older site's data forward into files, refusing the boot only when an actor's
- * keys are unreadable.
- */
 export function boot(
   config: GeekityConfig | ResolvedConfig,
   folderPlugins: readonly InstalledPlugin[] | undefined,
@@ -50,7 +44,9 @@ export function boot(
   const configured = isResolvedConfig(config) ? config : resolveConfig(config);
   if (configured.devMode) enterDevMode(configured.dataDir, 'config');
 
-  const { store, admin } = openCache(configured);
+  const { store, admin } = rebuildingIfOutdated(configured.dataDir, () =>
+    openBothStoresOrNeither(configured),
+  );
 
   // A site upgrading from the version that kept its settings in SQLite has
   // rows nothing would read again: they become content/_data/site.json here,
@@ -113,10 +109,6 @@ export function boot(
   return { resolved, plugins, store, admin, commentRecords };
 }
 
-/**
- * The config as it will be served: a new frozen one with the values the boot
- * settles, read once the settings are in their file.
- */
 function settleConfig(resolved: ResolvedConfig): ResolvedConfig {
   return Object.freeze({
     ...resolved,
@@ -145,34 +137,16 @@ function settleConfig(resolved: ResolvedConfig): ResolvedConfig {
   });
 }
 
-/**
- * The two connections a boot takes on the one database, opened together so
- * that either both of them survive it or neither does.
- *
- * The database is a cache (decision-9), so a version of it this package cannot
- * carry forward is thrown away and read back from the files rather than being
- * a thing anybody has to do something about. That is what
- * {@link withRebuiltDatabase} does with an {@link OutdatedDatabaseError} — and
- * why the content store is closed before the admin store's failure is allowed
- * to leave here: the file cannot be deleted while a connection holds it.
- *
- * The failure it does not recover from is a database written by a newer
- * `@geekity/cms`, or one damaged past opening. Both refuse the boot naming the
- * file, because a downgrade is usually a mistake and because a database from
- * before decision-9 still carries the settings, key and account rows the
- * migrations in {@link boot} write out as files — deleting one of those to get
- * past an error would destroy an actor's private keys. `geekity rebuild` is
- * the door for a person who has looked and decided.
- */
-function openCache(resolved: ResolvedConfig): { store: ContentStore; admin: AdminStore } {
-  return withRebuiltDatabase(resolved.dataDir, () => {
-    const { dataDir, baseUrl } = resolved;
-    const store = openContentStore({ dataDir, baseUrl, now: resolved.now });
-    try {
-      return { store, admin: openAdminStore({ dataDir }) };
-    } catch (error) {
-      store.close();
-      throw error;
-    }
-  });
+function openBothStoresOrNeither(resolved: ResolvedConfig): {
+  store: ContentStore;
+  admin: AdminStore;
+} {
+  const { dataDir, baseUrl } = resolved;
+  const store = openContentStore({ dataDir, baseUrl, now: resolved.now });
+  try {
+    return { store, admin: openAdminStore({ dataDir }) };
+  } catch (error) {
+    store.close();
+    throw error;
+  }
 }

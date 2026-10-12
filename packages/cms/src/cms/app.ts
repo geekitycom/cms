@@ -27,7 +27,6 @@ import {
 import type { Booted } from './boot.ts';
 import type { Services } from './services.ts';
 
-/** The Hono app every request goes through, and the gate a drain closes on its writes. */
 export function createApp(
   { resolved, plugins, store, admin }: Booted,
   services: Services,

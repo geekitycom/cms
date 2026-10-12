@@ -73,7 +73,8 @@ import {
   syndicationTargetsReader,
 } from '../webmention/syndication.ts';
 import type { Booted } from './boot.ts';
-import type { Service } from './lifecycle.ts';
+import type { PluginRegistry } from '../plugins/registry.ts';
+import type { Ending, Service } from './lifecycle.ts';
 
 /**
  * Where the scheduler's watermark lives in {@link AdminStore.getState}: the
@@ -84,7 +85,6 @@ export const SCHEDULE_WATERMARK_KEY = 'schedule.watermark';
 /** Where the instant the scheduler first ran on this site lives in {@link AdminStore.getState}. */
 export const SCHEDULE_FIRST_RUN_KEY = 'schedule.firstRun';
 
-/** Every service a CMS runs, and the one list that starts and ends them. */
 export interface Services {
   readonly content: ContentSync;
   readonly conversation: ConversationReader;
@@ -109,10 +109,6 @@ export interface Services {
   readonly learnHandles: HandleLearner;
   readonly maintenance: MaintenanceSwitch;
   readonly indieauth: IndieAuthState;
-  /**
-   * Started in this order when the site serves, stopped in the reverse order
-   * and settled in this order when it drains or closes.
-   */
   readonly lifecycle: readonly Service[];
 }
 
@@ -182,8 +178,6 @@ export function createServices({
   const copies = syndicationCopies(resolved.contentDir);
   const locations = postLocations(resolved.dataDir);
 
-  // What a reply shows of the post it answers. Built before the renderer,
-  // which reads the stored contexts.
   const replyContexts = createReplyContextService({
     store,
     config: resolved,
@@ -318,7 +312,6 @@ export function createServices({
     load: signedProfileLoader(() => federationContext()),
   });
 
-  // What every federation context and every service that federates is handed.
   const federated = { ...site, actorProfiles, cited };
   const federationContext = () => federation.createContext(new URL(resolved.baseUrl), federated);
 
@@ -400,7 +393,6 @@ export function createServices({
   const relays = createRelayService({ ...federated, federation });
   relays.sync();
 
-  // Each listener is awaited before the next one hears the change.
   const changeSubscribers: readonly ContentEventListener[] = [
     // A watched change waits for its burst to settle, as a scan does: a git
     // pull that moves a post and adds another at its old URL must not hand the
@@ -476,29 +468,16 @@ export function createServices({
       },
     },
     { settled: () => webmentions.settled() },
-    // A reply whose target the contexts file holds nothing for is fetched in
-    // the background once the index is read (TASK-123).
     {
       start: () => {
         replyContexts.catchUp();
       },
       settled: () => replyContexts.settled(),
     },
-    // The avatars the conversations show are fetched or refreshed in the
-    // background now and on a timer from here on, so a reader almost never
-    // waits on a stranger's server for one (TASK-134).
     avatars,
-    // The profiles of whoever is in the inbox log without being a follower:
-    // missing ones are fetched now, which is the backfill of a log written
-    // before profiles were kept, and stale ones on a timer (TASK-184).
     actorProfiles,
     replyBackfill,
-    // Whatever personal data has outlived its period is removed now and every
-    // few hours from here on (TASK-135).
     retention,
-    // Nothing is caught up first: a digest is whatever is pending when a
-    // window comes up, so a site that was down over one simply sends the next
-    // one, with everything still waiting in it.
     digests,
     { settled: () => notifier.settled() },
     {
@@ -511,9 +490,7 @@ export function createServices({
     },
     {
       start: () => plugins.reconcile(readEnabledPlugins(resolved.contentDir)),
-      // A close stops them for good, so a request still in flight cannot
-      // start one again.
-      stop: (ending) => (ending === 'close' ? plugins.close() : plugins.reconcile(new Set())),
+      stop: (ending) => stopPlugins(plugins, ending),
     },
     { settled: () => mail.settled() },
     // A page render derives an upload's variants in the background; the
@@ -552,4 +529,13 @@ export function createServices({
     indieauth: createIndieAuthState(resolved.now),
     lifecycle,
   };
+}
+
+function stopPlugins(plugins: PluginRegistry, ending: Ending): Promise<void> {
+  switch (ending) {
+    case 'drain':
+      return plugins.reconcile(new Set());
+    case 'close':
+      return plugins.close();
+  }
 }

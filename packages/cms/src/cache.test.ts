@@ -14,7 +14,7 @@ import {
   openDatabase,
   OutdatedDatabaseError,
   UnusableDatabaseError,
-  withRebuiltDatabase,
+  rebuildingIfOutdated,
 } from './cache.ts';
 import type { Migration } from './cache.ts';
 
@@ -173,7 +173,7 @@ describe('discardDatabase', () => {
   });
 });
 
-describe('withRebuiltDatabase', () => {
+describe('rebuildingIfOutdated', () => {
   it('discards the database and opens again when one is too old to carry forward', async () => {
     const dir = await dataDir();
     const file = databaseFile(dir);
@@ -183,7 +183,7 @@ describe('withRebuiltDatabase', () => {
     });
 
     let attempts = 0;
-    const rows = withRebuiltDatabase(dir, () => {
+    const rows = rebuildingIfOutdated(dir, () => {
       attempts += 1;
       const db = openDatabase({
         dataDir: dir,
@@ -209,7 +209,7 @@ describe('withRebuiltDatabase', () => {
 
     assert.throws(
       () =>
-        withRebuiltDatabase(dir, () =>
+        rebuildingIfOutdated(dir, () =>
           openDatabase({ dataDir: dir, ledger: 'test_migrations', migrations: SHIPPED }),
         ),
       UnusableDatabaseError,

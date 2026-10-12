@@ -46,7 +46,6 @@ import {
 import { devModeOn, enterDevMode, leaveDevMode } from './dev-mode.ts';
 import { messageOf } from './util/errors.ts';
 
-/** The commands built into the bin. */
 type CoreCommand =
   | 'serve'
   | 'init'
@@ -61,16 +60,12 @@ type CoreCommand =
 
 export type Command = CoreCommand | 'help' | 'version';
 
-/** One built-in command: how the help shows it, and what runs it. */
 interface CommandEntry {
-  /** Its lines under Usage, each after `geekity `. */
   synopsis: readonly string[];
-  /** Its entries under Commands: the words named, and what they do as the lines shown. */
   help: readonly (readonly [words: string, summary: readonly string[]])[];
   run(parsed: ParsedArgs): Promise<number>;
 }
 
-/** Every built-in command, in the order the help lists them. */
 const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
   serve: {
     synopsis: ['[serve] [--config <file>]'],
@@ -253,7 +248,6 @@ export interface ParsedArgs {
   args: readonly string[];
 }
 
-/** The help's sections after the commands, which are about options rather than commands. */
 const OPTIONS_HELP = `Options:
   --config <file>  Config file to load. Defaults to the first of
                    ${CONFIG_FILENAMES.join(', ')} found in the working directory.
@@ -1210,7 +1204,6 @@ async function usage(configPath: string | undefined): Promise<string> {
   return `${coreUsage()}${lines.join('\n')}\n`;
 }
 
-/** The help for the built-in commands, generated from {@link COMMANDS}. */
 function coreUsage(): string {
   const entries = Object.values(COMMANDS);
   return [
@@ -1233,7 +1226,6 @@ function coreUsage(): string {
   ].join('\n');
 }
 
-/** A name and its indented description, side by side when the name leaves room. */
 function helpEntry(head: string, described: string[]): string[] {
   if (head.length < HELP_INDENT.length - 1 && described[0] !== undefined) {
     described[0] = `${head.padEnd(HELP_INDENT.length)}${described[0].trimStart()}`;

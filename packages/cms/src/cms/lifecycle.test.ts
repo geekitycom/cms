@@ -29,7 +29,6 @@ async function site(): Promise<Cms> {
   return cms;
 }
 
-/** Every service on the public object that has queued work to wait for. */
 function queued(cms: Cms): Record<string, { settled(): Promise<void> }> {
   return {
     scheduler: cms.scheduler,
@@ -52,10 +51,6 @@ function tick(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-/**
- * Hold every queue's `settled()` open, then end the CMS and let them go one
- * at a time, checking that the ending is still waiting until the last.
- */
 async function holdsUntilEverySettles(
   cms: Cms,
   end: () => Promise<void>,
@@ -112,6 +107,25 @@ describe('ending a CMS', () => {
     const { called } = await holdsUntilEverySettles(cms, () => cms.drain());
 
     assert.deepEqual([...called].sort(), Object.keys(queued(cms)).sort());
+  });
+
+  it('settles a service that hands work on before the service it hands that work to', async () => {
+    const cms = await site();
+    await cms.serve();
+    const handsWorkTo: [string, string][] = [
+      ['scheduler', 'delivery'],
+      ['scheduler', 'webmentions'],
+      ['scheduler', 'replyContexts'],
+      ['scheduler', 'notifier'],
+      ['scheduler', 'indexNow'],
+      ['digests', 'mail'],
+    ];
+
+    const { called } = await holdsUntilEverySettles(cms, () => cms.close());
+
+    for (const [from, to] of handsWorkTo) {
+      assert.ok(called.indexOf(from) < called.indexOf(to), `${to} settled before ${from}`);
+    }
   });
 });
 

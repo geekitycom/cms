@@ -5,12 +5,6 @@ import { after, describe, it } from 'node:test';
 
 import { cleanupTemporaryDirs, runCli, temporaryDir } from './__testing__/cli.ts';
 
-/**
- * What the bin says about itself: the help, word for word, and what a
- * command that is used wrongly answers. The help is generated from the
- * command table, so these pin the text the table has to produce.
- */
-
 after(cleanupTemporaryDirs);
 
 const HELP = `geekity — the Geekity CMS command line

@@ -6,7 +6,6 @@ import { pathToFileURL } from 'node:url';
 import { resolveConfig } from './config.ts';
 import type { GeekityConfig, ResolvedConfig } from './config.ts';
 
-/** The config files a site may have, in the order they are looked for. */
 export const CONFIG_FILENAMES = ['geekity.config.ts', 'geekity.config.js', 'geekity.config.mjs'];
 
 /** Extensions that need TypeScript support in the loader. */
@@ -53,13 +52,6 @@ export async function loadConfig(
   return {};
 }
 
-/**
- * The site's config, loaded from the working directory and resolved once.
- *
- * `adjust` changes what the site wrote before it is resolved, so an
- * environment variable still wins over what a command sets, as it wins over
- * the file.
- */
 export async function loadResolvedConfig(
   configPath: string | undefined,
   adjust: (config: GeekityConfig) => GeekityConfig = (config) => config,

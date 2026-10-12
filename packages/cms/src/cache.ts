@@ -75,7 +75,7 @@ export class UnusableDatabaseError extends Error {
  * no path forward from it.
  *
  * Unlike {@link UnusableDatabaseError} this one is recoverable without asking
- * anybody, and {@link withRebuiltDatabase} recovers from it: nothing in the
+ * anybody, and {@link rebuildingIfOutdated} recovers from it: nothing in the
  * database is anything but a reading of the files, so a version of it too old
  * to carry forward is thrown away and read again.
  */
@@ -253,7 +253,7 @@ function unusable(file: string, error: unknown): UnusableDatabaseError {
  * connections against the one file, and both of them, or neither, must be over
  * the database that survives.
  */
-export function withRebuiltDatabase<T>(dataDir: string, open: () => T): T {
+export function rebuildingIfOutdated<T>(dataDir: string, open: () => T): T {
   try {
     return open();
   } catch (error) {
