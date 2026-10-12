@@ -10,7 +10,7 @@ import { authorHref, userForAuthor } from '../web/authors.ts';
 import { commentNames } from '../web/conversation.ts';
 import type { ConversationReader } from '../web/conversation.ts';
 import { isServed } from '../web/documents.ts';
-import type { CommentNotices } from './records.ts';
+import type { CommentNotices } from './intake.ts';
 
 /**
  * The reply notice for a reply post (TASK-326): a commenter who asked to hear

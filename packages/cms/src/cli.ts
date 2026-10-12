@@ -14,7 +14,7 @@ import type { AdminStore } from './admin/store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
 import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
 import type { ResolvedConfig } from './config.ts';
-import { migrateCommentEmails, migrateCommentKeys } from './comments/records.ts';
+import { migrateCommentEmails, migrateCommentKeys } from './comments/migrations.ts';
 import { stripStoredUploads } from './content/metadata/sweep.ts';
 import { createUser, DuplicateUsernameError } from './site/users.ts';
 import { UPLOAD_DIRECTORY } from './web/assets.ts';

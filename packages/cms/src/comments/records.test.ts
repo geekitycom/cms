@@ -19,21 +19,15 @@ import {
   commentEmailsFile,
   commentsFile,
   deleteComment,
-  intakeComment,
-  migrateCommentEmails,
-  migrateCommentKeys,
   putComments,
   readComments,
   rebuildCommentIndexes,
   updateComment,
 } from './records.ts';
-import type {
-  CommentIntakeOutcome,
-  CommentRecords,
-  IntakeCommentOptions,
-  NewComment,
-  ProposedComment,
-} from './records.ts';
+import type { CommentRecords, NewComment } from './records.ts';
+import { intakeComment } from './intake.ts';
+import type { CommentIntakeOutcome, IntakeCommentOptions, ProposedComment } from './intake.ts';
+import { migrateCommentEmails, migrateCommentKeys } from './migrations.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from './submission.ts';
 
 const temporaryDirs: string[] = [];

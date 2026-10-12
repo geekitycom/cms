@@ -7,7 +7,8 @@ import type {
   WebmentionSendStatus,
 } from '../admin/store.ts';
 import { permalinkOwner } from '../comments/records.ts';
-import type { CommentNotices, CommentRecords } from '../comments/records.ts';
+import type { CommentNotices } from '../comments/intake.ts';
+import type { CommentRecords } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { holdOutbound } from '../dev-mode.ts';

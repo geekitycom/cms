@@ -12,8 +12,9 @@ import {
 } from '../forms/protection.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { renderCommentMarkdown } from './markdown.ts';
-import { intakeComment } from './records.ts';
-import type { CommentNotices, CommentRecords, ProposedComment } from './records.ts';
+import { intakeComment } from './intake.ts';
+import type { CommentNotices, ProposedComment } from './intake.ts';
+import type { CommentRecords } from './records.ts';
 
 /**
  * What happens between somebody pressing Post and a proposed comment.
