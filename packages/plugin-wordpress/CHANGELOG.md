@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.3.0...plugin-wordpress-v0.4.0) (2026-10-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** openAdminStore, intakeComment, addComment, updateComment, deleteComment, pluginSite, pluginDataFolder and documentContent, and the types OpenAdminStoreOptions, IntakeCommentOptions, CommentIntakeOutcome, CommentOrigin, ProposedComment and NewComment, are no longer exported from @geekity/cms. Tests that build a host import them from the new test-only entry @geekity/cms/testing.
+
+### Features
+
+* **cms:** add a test-only @geekity/cms/testing entry for building a host ([7e4ff28](https://github.com/geekitycom/cms/commit/7e4ff283e12c43feb4a4c0233c2091675c44c089))
+
+
+### Bug Fixes
+
+* **cms:** keep the site base path in email and reset links ([c27443c](https://github.com/geekitycom/cms/commit/c27443cdc2343537ba6c93ea57255ecc3b8059d1))
+* **plugin-wordpress:** decode HTML entities in imported names and titles ([a808f36](https://github.com/geekitycom/cms/commit/a808f3645f78fa1a149b9d2bcd24f59a98ee5562))
+* **plugin-wordpress:** slug, serialize and write imports through core helpers ([514a6ee](https://github.com/geekitycom/cms/commit/514a6ee6c3e63bf7a81bca9cad2dad0665d55529))
+
 ## [0.3.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.2.0...plugin-wordpress-v0.3.0) (2026-10-11)
 
 

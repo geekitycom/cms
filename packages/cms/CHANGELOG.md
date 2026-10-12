@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.31.0](https://github.com/geekitycom/cms/compare/v0.30.0...v0.31.0) (2026-10-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** openAdminStore, intakeComment, addComment, updateComment, deleteComment, pluginSite, pluginDataFolder and documentContent, and the types OpenAdminStoreOptions, IntakeCommentOptions, CommentIntakeOutcome, CommentOrigin, ProposedComment and NewComment, are no longer exported from @geekity/cms. Tests that build a host import them from the new test-only entry @geekity/cms/testing.
+* **cms:** @geekity/cms now exports only the names listed in docs/public-api.md; 1,002 internal exports are gone. A site that imported a removed name should use the documented API (for example the services on the Cms object, or @geekity/cms/plugin for definePlugin and HOST_API_VERSION), or copy the helper into its own code.
+* **cms:** AdminStore drops legacySettings, legacyActorKeys, legacyUsers and dropLegacyTable, and the migrate*ToFile(s) functions take (db, dir).
+* **cms:** formFor takes the document kind as its first argument.
+* **cms:** POST_KIND and PAGE_KIND no longer carry section, basePath or plural; those moved to POST_SCREENS and PAGE_SCREENS.
+* **cms:** readCapped is no longer exported and discoverEndpoint takes a HostLookup argument.
+* **cms:** Markdown representations add navigation front matter, a theme header and footer, and root-relative .md links in listings, and their front matter author is the display name with author_username beside it.
+
+### Features
+
+* **cms:** add a test-only @geekity/cms/testing entry for building a host ([7e4ff28](https://github.com/geekitycom/cms/commit/7e4ff283e12c43feb4a4c0233c2091675c44c089))
+* **cms:** add cms.onSettled for when the content index settles ([646a0ec](https://github.com/geekitycom/cms/commit/646a0ec1f983032c2f615147388fcb14269f17e3))
+* **cms:** export a deliberate public API from the package root ([b18d1f4](https://github.com/geekitycom/cms/commit/b18d1f45b8da883049b620bfae20e007ef770f93))
+* **cms:** export content helpers from the plugin entry point ([9079ece](https://github.com/geekitycom/cms/commit/9079ece8b5570d6771e8a29a176f0ba8e0f30e5f))
+* **cms:** give a page's Markdown its place in the site ([a391eab](https://github.com/geekitycom/cms/commit/a391eabd83d1ff5c1f192300a63331ebc9f20eb6))
+* **cms:** let a page have no title ([d80c1bf](https://github.com/geekitycom/cms/commit/d80c1bf9587e1eddbeeaee78f28702f57a61421d))
+* **cms:** list every published post and page in llms.txt ([a597c9b](https://github.com/geekitycom/cms/commit/a597c9b7314cb863fcb8423ec7e3dcc68aa5e9e4))
+* **cms:** signals for the watcher debounce, the drain and the plugin supervisor ([cf477e3](https://github.com/geekitycom/cms/commit/cf477e3bced3a8f394950d22610213e876ae995a))
+* **cms:** tell templates about dev mode and a signed-in reader ([296c2a9](https://github.com/geekitycom/cms/commit/296c2a919c9754e6b906559f1a1b49812bd6e60b))
+
+
+### Bug Fixes
+
+* **cms:** keep the site base path in email and reset links ([c27443c](https://github.com/geekitycom/cms/commit/c27443cdc2343537ba6c93ea57255ecc3b8059d1))
+* **cms:** let the theme decide the bio on a static homepage's Markdown ([b6daf43](https://github.com/geekitycom/cms/commit/b6daf43e1ca8b292b2346f8ec9f1ed5d849f468c))
+* **cms:** name GEEKITY_BASE_URL when its value is not a URL ([5692a4b](https://github.com/geekitycom/cms/commit/5692a4bba098048e65ed7e6146a477de4870ee1c))
+* **cms:** read the public URL grammar once ([ab8ab58](https://github.com/geekitycom/cms/commit/ab8ab58a14bdc9d8bb65ddce17192a0117085298))
+* **cms:** send webmention fetches through the public-address guard ([c32f012](https://github.com/geekitycom/cms/commit/c32f012dac9673f8266b4a600a49acc577b26706))
+* **cms:** serve the homepage at / in its Markdown and JSON too ([3bbce98](https://github.com/geekitycom/cms/commit/3bbce98b30c9c3e2c74e2f03881b21fc12c041bc))
+* **cms:** write each small helper once ([a54e074](https://github.com/geekitycom/cms/commit/a54e074f274371568a69a54af4ba030cf8e565e7))
+
+
+### Code Refactoring
+
+* **cms:** describe each post field once ([27bc5a2](https://github.com/geekitycom/cms/commit/27bc5a21c4b2e47857c3e0dc74fc585397a0fdad))
+* **cms:** move the document write path from admin to content ([9c6a907](https://github.com/geekitycom/cms/commit/9c6a9072754b5d04072fcbcf470459448e9e8d2f))
+* **cms:** split the admin store by domain ([8c6694c](https://github.com/geekitycom/cms/commit/8c6694c6bb98bf5f2aa93d3cf82d0d29334d4944))
+
 ## [0.30.0](https://github.com/geekitycom/cms/compare/v0.29.0...v0.30.0) (2026-10-11)
 
 
