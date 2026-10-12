@@ -162,7 +162,7 @@ async function temporaryDir(prefix: string): Promise<string> {
 
 /** A CMS over a content directory of its own. */
 async function site(
-  options: { files?: Record<string, string>; webmentionsSend?: boolean } = {},
+  options: { files?: Record<string, string>; webmentionsSend?: boolean; now?: () => Date } = {},
 ): Promise<Cms> {
   const dataDir = await temporaryDir('geekity-wm-send-data-');
   const contentDir = await temporaryDir('geekity-wm-send-content-');
@@ -194,6 +194,7 @@ async function site(
     watch: false,
     baseUrl: BASE_URL,
     hostLookup: lookup,
+    ...(options.now === undefined ? {} : { now: options.now }),
   });
   started.push(cms);
   await cms.sync();
@@ -298,6 +299,24 @@ describe('sending webmentions when a post is published', () => {
 
     assert.deepEqual(sent, []);
     assert.deepEqual(cms.admin.listSentWebmentions('hello-world'), []);
+  });
+});
+
+describe('with the clock pinned through createCms', () => {
+  it('stamps every sent webmention with the pinned instant', async () => {
+    const PINNED = '2026-05-06T07:08:09.000Z';
+    const cms = await site({ now: () => new Date(PINNED) });
+    const agent = await signedIn(cms);
+
+    await publish(agent, `A friendly [one](${FRIENDLY}) and a [quiet one](${QUIET}).`);
+    await cms.webmentions.settled();
+
+    const outcomes = cms.admin.listSentWebmentions('hello-world');
+    assert.ok(outcomes.length > 0, 'the links were recorded');
+    assert.deepEqual(
+      outcomes.map((outcome) => outcome.attemptedAt),
+      outcomes.map(() => PINNED),
+    );
   });
 });
 

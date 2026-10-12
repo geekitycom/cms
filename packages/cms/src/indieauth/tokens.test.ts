@@ -406,7 +406,7 @@ describe('deleting a user', () => {
     ];
     const bobs = await issueTokens(dir, { ...GRANT, userId: bob.id }, T0);
 
-    await deleteUser({ dataDir: dir, userId: ada.id });
+    await deleteUser({ dataDir: dir, userId: ada.id, now: T0 });
 
     for (const issued of adas) {
       assert.equal(verifyAccessToken(dir, issued.accessToken, MICROPUB, T0), undefined);

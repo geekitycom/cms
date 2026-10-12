@@ -9,6 +9,7 @@ import {
   withNotification,
   withNotificationMode,
 } from './notification-preferences.ts';
+import { systemClock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
 import { relText } from './navigation.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
@@ -191,6 +192,8 @@ export interface CreateUserInput {
   password: string;
   /** Where to reach them. Left off, or empty, is a user with no email. */
   email?: string | undefined;
+  /** When the account is created. Defaults to the system clock. */
+  now?: Date | undefined;
 }
 
 /** Thrown when a username is already taken. Usernames are the login key. */
@@ -310,7 +313,7 @@ export async function createUser(input: CreateUserInput): Promise<User> {
       // and the file says only what somebody actually filled in.
       ...(email === '' ? {} : { email }),
       passwordHash: hash,
-      createdAt: new Date().toISOString(),
+      createdAt: (input.now ?? systemClock()).toISOString(),
     };
     return { users: [...contents.users, created], nextId: contents.nextId + 1 };
   });

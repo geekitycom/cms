@@ -110,6 +110,20 @@ the response lives in `web/`, for example `web/comment-routes.ts`,
 The map can list an exception with the file, the unit it may import, the task
 that removes it and the reason. No exceptions are left.
 
+### One clock
+
+Every timestamp the CMS stores or sends comes from one `Clock`
+(`src/util/clock.ts`). `createCms` builds it from the `now` config option and
+passes it to each service: the content index reads it as `store.now()`, the
+operational records as `admin.now()`, and the rest as `config.now()`. A test
+that pins `now` therefore pins every record and every activity id.
+
+`src/clock-boundary.test.ts` runs in `pnpm test`. It fails on a `new Date()`,
+`Date.now()` or `systemClock()` in a source file that it does not list, and
+names the file and line. The list holds the system clock definition, the
+defaults for callers outside `createCms`, and the code that measures elapsed
+wall time, such as a timeout or a retry window. Each entry gives its reason.
+
 ## Requirements
 
 Node 24 or newer and pnpm, for the reason

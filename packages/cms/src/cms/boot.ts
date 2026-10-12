@@ -45,7 +45,7 @@ export function boot(
   folderPlugins: readonly InstalledPlugin[] | undefined,
 ): Booted {
   const configured = isResolvedConfig(config) ? config : resolveConfig(config);
-  if (configured.devMode) enterDevMode(configured.dataDir, 'config');
+  if (configured.devMode) enterDevMode(configured.dataDir, 'config', configured.now());
 
   const { store, admin, adminDb } = rebuildingIfOutdated(configured.dataDir, () =>
     openBothStoresOrNeither(configured),
@@ -145,11 +145,11 @@ function openBothStoresOrNeither(resolved: ResolvedConfig): {
   admin: AdminStore;
   adminDb: DatabaseSync;
 } {
-  const { dataDir, baseUrl } = resolved;
-  const store = openContentStore({ dataDir, baseUrl, now: resolved.now });
+  const { dataDir, baseUrl, now } = resolved;
+  const store = openContentStore({ dataDir, baseUrl, now });
   try {
-    const adminDb = openAdminDatabase(dataDir);
-    return { store, admin: adminStoreOwning(adminDb, databaseFile(dataDir)), adminDb };
+    const adminDb = openAdminDatabase(dataDir, now);
+    return { store, admin: adminStoreOwning(adminDb, databaseFile(dataDir), now), adminDb };
   } catch (error) {
     store.close();
     throw error;

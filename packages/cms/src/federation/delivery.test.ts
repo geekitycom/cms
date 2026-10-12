@@ -1478,6 +1478,64 @@ describe('a user whose record carries a stored actor id', () => {
   });
 });
 
+describe('with the clock pinned through createCms', () => {
+  const PINNED = '2026-05-06T07:08:09.000Z';
+  const pinned = () => new Date(PINNED);
+  const PUBLISHED_FILE = 'posts/2026-03-04-hello-world.md';
+  const PUBLISHED_OBJECT = `${BASE_URL}/2026/03/hello-world/`;
+
+  it('stamps every recorded delivery with the pinned instant', async () => {
+    const { cms } = await site({ now: pinned, followers: 2 });
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+
+    const created = String((delivered('Create')[0] as Delivery).body['id']);
+    const recorded = cms.admin.listDeliveries(created);
+    assert.ok(recorded.length > 0, 'the Create was recorded');
+    assert.deepEqual(
+      recorded.map((delivery) => delivery.attemptedAt),
+      recorded.map(() => PINNED),
+    );
+  });
+
+  it('names a resent Update of an edited post by the pinned instant', async () => {
+    const { cms, contentDir } = await site({ now: pinned });
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+
+    const file = path.join(contentDir, ...PUBLISHED_FILE.split('/'));
+    const edited = (await readFile(file, 'utf8')).replace('The first post.', 'Edited.');
+    await writeFile(file, edited, 'utf8');
+    await cms.sync();
+    deliveries.length = 0;
+
+    const report = await cms.delivery.resend('hello-world');
+
+    const expected = `${PUBLISHED_OBJECT}#update/${encodeURIComponent(PINNED)}`;
+    assert.equal(report?.activityId, expected);
+    assert.deepEqual(
+      delivered('Update').map((update) => update.body['id']),
+      [expected],
+    );
+  });
+
+  it('names an actor Update by the pinned instant', async () => {
+    const { cms, dataDir } = await site({ now: pinned, account: true });
+    const user = listUsers(dataDir)[0];
+    assert.ok(user !== undefined);
+
+    await cms.delivery.updateActor(user);
+    await cms.delivery.settled();
+
+    assert.deepEqual(
+      delivered('Update').map((update) => update.body['id']),
+      [`${ACTOR_URL}#update/${encodeURIComponent(PINNED)}`],
+    );
+  });
+});
+
 describe('resending a post', () => {
   /** Where the editor files the post {@link publishNewPost} writes. */
   const PUBLISHED_FILE = 'posts/2026-03-04-hello-world.md';

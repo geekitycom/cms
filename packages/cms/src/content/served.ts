@@ -2,6 +2,7 @@ import type { Document } from './document.ts';
 import { scheduledFor } from './schedule.ts';
 import { isTrashedPath } from './store.ts';
 import { visibilityOf } from './visibility.ts';
+import { systemClock } from '../util/clock.ts';
 
 /**
  * Why the public site does not serve a document at its URL.
@@ -21,11 +22,10 @@ export type HiddenReason =
 /**
  * The index answers the same rule in SQL, so anything that has to decide
  * about a single document in hand — a permalink, a View link — asks it here
- * rather than deriving the rule again. The clock defaults to the system one; a
- * caller with a store should pass `IndexClock.now` so the answer
- * matches the listings it came from.
+ * rather than deriving the rule again. A caller with a store passes
+ * `IndexClock.now` so the answer matches the listings it came from.
  */
-export function hiddenReason(document: Document, now: Date = new Date()): HiddenReason | undefined {
+export function hiddenReason(document: Document, now: Date): HiddenReason | undefined {
   if (isTrashedPath(document.path)) return { kind: 'trashed' };
   return withheldReason(document, now);
 }
@@ -41,7 +41,7 @@ function withheldReason(document: Document, now: Date): HiddenReason | undefined
   return undefined;
 }
 
-export function isServed(document: Document, now: Date = new Date()): boolean {
+export function isServed(document: Document, now: Date = systemClock()): boolean {
   return hiddenReason(document, now) === undefined;
 }
 
@@ -54,7 +54,7 @@ export function isServed(document: Document, now: Date = new Date()): boolean {
  * trashed draft was never public, so its URL stays a 404 rather than telling
  * anybody something used to be there.
  */
-export function isGone(document: Document, now: Date = new Date()): boolean {
+export function isGone(document: Document, now: Date): boolean {
   return isTrashedPath(document.path) && withheldReason(document, now) === undefined;
 }
 
@@ -65,7 +65,7 @@ export function isGone(document: Document, now: Date = new Date()): boolean {
  * sitemap, search, `llms.txt`, IndexNow — about a document in hand. The
  * index's listing queries answer the same rule in SQL.
  */
-export function isListed(document: Document, now: Date = new Date()): boolean {
+export function isListed(document: Document, now: Date = systemClock()): boolean {
   return isServed(document, now) && visibilityOf(document) === 'public';
 }
 
@@ -78,6 +78,6 @@ export function isListed(document: Document, now: Date = new Date()): boolean {
  * the object dispatcher, the outbox and the permalink all agree about what
  * exists.
  */
-export function isFederatedDocument(document: Document, now: Date = new Date()): boolean {
+export function isFederatedDocument(document: Document, now: Date): boolean {
   return document.type === 'post' && isServed(document, now);
 }

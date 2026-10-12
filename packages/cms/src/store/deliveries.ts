@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 
+import type { Clock } from '../util/clock.ts';
+
 import { countByStatus, nullableText, oneOf } from './rows.ts';
 
 /** How one delivery of one activity to one follower ended. */
@@ -95,7 +97,7 @@ export interface DeliveryStore {
   lastDeliveryToObject(objectId: string): Delivery | undefined;
 }
 
-export function openDeliveryStore(db: DatabaseSync): DeliveryStore {
+export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore {
   const statements = {
     recordDelivery: db.prepare(`
       INSERT INTO ap_deliveries (
@@ -141,7 +143,7 @@ export function openDeliveryStore(db: DatabaseSync): DeliveryStore {
         delivery.inboxId,
         delivery.status,
         delivery.error,
-        delivery.attemptedAt ?? new Date().toISOString(),
+        delivery.attemptedAt ?? clock().toISOString(),
       ) as Record<string, unknown> | undefined;
       if (row === undefined) {
         throw new Error(

@@ -20,7 +20,6 @@ export {
 export type {
   ActivityPubMetadata,
   ChangeOrigin,
-  Clock,
   ContentEventListener,
   ContentEventMap,
   ContentEvents,
@@ -36,6 +35,7 @@ export type {
   SearchHit,
   SyncResult,
 } from './content/index.ts';
+export type { Clock } from './util/clock.ts';
 export type { GeekityEnv } from './web/env.ts';
 export {
   atomFeed,

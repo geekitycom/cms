@@ -4,8 +4,8 @@ import type { KvStore, MessageQueue } from '@fedify/fedify';
 
 import type { CommentChecker } from './forms/checker.ts';
 import { KNOWN_UPLOAD_TYPES, normalizeUploadType } from './content/media.ts';
-import { systemClock } from './content/store.ts';
-import type { Clock } from './content/store.ts';
+import { systemClock } from './util/clock.ts';
+import type { Clock } from './util/clock.ts';
 import type { DocumentChange } from './content/sync.ts';
 import type { MailProvider, MailLogger } from './mail/provider.ts';
 import type { Plugin } from './plugin.ts';

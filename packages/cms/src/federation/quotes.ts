@@ -92,6 +92,7 @@ export async function authorizeQuote(
   contentDir: string,
   username: string,
   asked: QuoteAsked,
+  now: Date,
 ): Promise<QuoteAuthorizationRecord> {
   const file = quotesFile(contentDir, username);
   return await withFileLock(file, () => {
@@ -102,7 +103,7 @@ export async function authorizeQuote(
     const stored: QuoteAuthorizationRecord = {
       id: randomUUID(),
       ...asked,
-      authorizedAt: new Date().toISOString(),
+      authorizedAt: now.toISOString(),
     };
     writeFileAtomicallySync(file, quotesJson([...held, stored]));
     return stored;

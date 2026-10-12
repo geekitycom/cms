@@ -309,7 +309,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     document: Document,
     shape: Shape,
   ): Promise<DeliveryReport> {
-    const deleted = new Date().toISOString();
+    const deleted = store.now().toISOString();
     if (shape.kind === 'object') {
       return await send(
         context,
@@ -447,7 +447,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     const author = documentAuthor(context, after);
     const names = author === undefined ? [] : authorNames(listUsers(config.dataDir), author);
     const featured = store.listPinnedByAuthor(names).some((post) => post.path === after.path);
-    const pin = pinChange(featured, before, after, new Date());
+    const pin = pinChange(featured, before, after, store.now());
     if (pin === undefined) return;
     queue(() => send(context, postPinActivity(context, after, pin.action, pin.revision), after));
   }
@@ -500,7 +500,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
           // avatar removed and put back is the same profile twice, and both
           // times the followers have to be told rather than recognise an id
           // they have already seen and skip it.
-          const activityId = updateActivityId(id, new Date().toISOString());
+          const activityId = updateActivityId(id, store.now().toISOString());
           const activity = new ActorUpdate({
             id: activityId,
             actor: id,
@@ -559,7 +559,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         // the point of a resend is that the followers hear about a revision
         // they have already been sent and ignored, or never received at all,
         // and an activity id a peer has seen is one it is entitled to drop.
-        return await revise(context, stamped, shape, new Date().toISOString());
+        return await revise(context, stamped, shape, store.now().toISOString());
       });
     },
 

@@ -9,11 +9,13 @@ import {
 } from '../web/index.ts';
 import { siteLocale } from '../theme/site-data.ts';
 import type { Document } from './document.ts';
+import { systemClock } from '../util/clock.ts';
 
 const environment = () =>
   createTemplateEnvironment({
     themeDirs: themeSearchPath('/no/such/theme'),
     baseUrl: 'https://geekity.example',
+    now: systemClock,
   });
 
 const instant = '2026-09-02T09:00:00Z';

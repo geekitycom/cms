@@ -7,6 +7,7 @@ import { after, describe, it } from 'node:test';
 import { createThemeSource } from '../theme/themes.ts';
 import type { ThemeSource } from '../theme/themes.ts';
 import { createMailTemplates, mailTemplateFiles } from './mail-templates.ts';
+import { systemClock } from '../util/clock.ts';
 
 const dirs: string[] = [];
 
@@ -53,9 +54,14 @@ describe('mail templates', () => {
     const templates = createMailTemplates({
       themes: await themeSource(),
       baseUrl: 'https://blog.example',
+      now: systemClock,
     });
 
-    const message = templates.render('test', { site: SITE, baseUrl: 'https://blog.example' });
+    const message = templates.render('test', {
+      site: SITE,
+      baseUrl: 'https://blog.example',
+      now: systemClock,
+    });
 
     assert.match(message.subject, /A Site/);
     assert.equal(message.subject.includes('\n'), false);
@@ -69,10 +75,11 @@ describe('mail templates', () => {
       'mail/test.txt.njk': 'The theme wrote this for {{ site.title }}.\n',
     });
 
-    const message = createMailTemplates({ themes, baseUrl: 'https://blog.example' }).render(
-      'test',
-      { site: SITE, baseUrl: 'https://blog.example' },
-    );
+    const message = createMailTemplates({
+      themes,
+      baseUrl: 'https://blog.example',
+      now: systemClock,
+    }).render('test', { site: SITE, baseUrl: 'https://blog.example', now: systemClock });
 
     assert.equal(message.text.trim(), 'The theme wrote this for A Site.');
     // The subject and the HTML twin still come from the package.
@@ -86,10 +93,11 @@ describe('mail templates', () => {
       'mail/welcome.txt.njk': 'Hello, {{ name }}.\n',
     });
 
-    const message = createMailTemplates({ themes, baseUrl: 'https://blog.example' }).render(
-      'welcome',
-      { site: SITE, name: 'Ada' },
-    );
+    const message = createMailTemplates({
+      themes,
+      baseUrl: 'https://blog.example',
+      now: systemClock,
+    }).render('welcome', { site: SITE, name: 'Ada' });
 
     assert.equal(message.subject, 'Welcome to A Site');
     assert.equal(message.text.trim(), 'Hello, Ada.');
@@ -101,6 +109,7 @@ describe('mail templates', () => {
     const templates = createMailTemplates({
       themes: await themeSource(),
       baseUrl: 'https://blog.example',
+      now: systemClock,
     });
 
     assert.throws(() => templates.render('nothing-like-this'), /mail\/nothing-like-this\.txt\.njk/);
@@ -111,10 +120,11 @@ describe('mail templates', () => {
       'mail/link.txt.njk': '{{ "/admin/" | absoluteUrl }}\n',
     });
 
-    const message = createMailTemplates({ themes, baseUrl: 'https://blog.example' }).render(
-      'link',
-      {},
-    );
+    const message = createMailTemplates({
+      themes,
+      baseUrl: 'https://blog.example',
+      now: systemClock,
+    }).render('link', {});
 
     assert.equal(message.text.trim(), 'https://blog.example/admin/');
   });

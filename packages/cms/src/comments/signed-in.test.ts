@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
-import { setTimeout } from 'node:timers/promises';
 
 import { browser, sandbox, signIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
@@ -357,12 +356,13 @@ describe('a session cookie that is worth nothing', () => {
   });
 
   it('falls back to it when the session has expired', async () => {
-    const cms = await site({ sessionLifetime: 0.25 });
+    let now = NOW;
+    const cms = await site({ sessionLifetime: 0.25, now: () => now });
     const agent = await signIn(cms, { username: ADA.username, password: ADA.password });
     assert.match(await postPage(agent), /Commenting as/, 'good while it lasts');
 
     const held = agent.session();
-    await setTimeout(300);
+    now = new Date(NOW.getTime() + 300);
     agent.setSession(held);
 
     assert.ok(!(await postPage(agent)).includes('Commenting as'));

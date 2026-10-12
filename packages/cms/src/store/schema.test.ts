@@ -14,6 +14,7 @@ import {
 } from '../admin/legacy-migrations.ts';
 import { openAdminStore } from './admin-store.ts';
 import { LEDGER, MIGRATIONS, openAdminDatabase } from './schema.ts';
+import { systemClock } from '../util/clock.ts';
 
 interface SchemaShape {
   schema: { type: string; name: string; tbl_name: string; sql: string | null }[];
@@ -67,7 +68,12 @@ describe('the admin schema', () => {
   it('is reached from a database stopped at every earlier migration', async () => {
     for (let applied = 1; applied < MIGRATIONS.length; applied += 1) {
       const dataDir = await temporaryDir();
-      openDatabase({ dataDir, ledger: LEDGER, migrations: MIGRATIONS.slice(0, applied) }).close();
+      openDatabase({
+        dataDir,
+        ledger: LEDGER,
+        migrations: MIGRATIONS.slice(0, applied),
+        now: systemClock,
+      }).close();
 
       openAdminStore({ dataDir }).close();
 
@@ -77,7 +83,7 @@ describe('the admin schema', () => {
 
   it('loses only the three legacy tables to the legacy migrations', async () => {
     const dataDir = await temporaryDir();
-    const db = openAdminDatabase(dataDir);
+    const db = openAdminDatabase(dataDir, systemClock);
     migrateSettingsToFile(db, path.join(dataDir, 'content'));
     migrateActorKeysToFiles(db, dataDir);
     migrateUsersToFile(db, dataDir);

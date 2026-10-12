@@ -11,7 +11,7 @@ import {
 } from './config.ts';
 import type { GeekityConfig } from './config.ts';
 import { KNOWN_UPLOAD_TYPES } from './content/media.ts';
-import { systemClock } from './content/store.ts';
+import { systemClock } from './util/clock.ts';
 import { systemHostLookup } from './util/public-address.ts';
 
 describe('resolveConfig', () => {

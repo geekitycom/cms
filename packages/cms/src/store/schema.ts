@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import { openDatabase } from '../cache.ts';
 import type { Migration } from '../cache.ts';
+import type { Clock } from '../util/clock.ts';
 import { replyTargetOf } from './inbox-replies.ts';
 import { replyKeyOf } from './inbox.ts';
 import { nullableText } from './rows.ts';
@@ -588,6 +589,6 @@ export const MIGRATIONS: readonly Migration[] = [
   },
 ];
 
-export function openAdminDatabase(dataDir: string): DatabaseSync {
-  return openDatabase({ dataDir, ledger: LEDGER, migrations: MIGRATIONS });
+export function openAdminDatabase(dataDir: string, now: Clock): DatabaseSync {
+  return openDatabase({ dataDir, ledger: LEDGER, migrations: MIGRATIONS, now });
 }

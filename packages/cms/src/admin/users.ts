@@ -194,7 +194,13 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
 
     if (Object.keys(problems).length === 0) {
       try {
-        await createUser({ dataDir: c.var.config.dataDir, username, password, email });
+        await createUser({
+          dataDir: c.var.config.dataDir,
+          username,
+          password,
+          email,
+          now: c.var.config.now(),
+        });
       } catch (error) {
         if (!(error instanceof DuplicateUsernameError)) throw error;
         problems.username = error.message;
@@ -489,7 +495,7 @@ export function mountUsers(app: Hono<GeekityEnv>, options: MountUsersOptions): v
       return c.redirect(USERS_PATH, 303);
     }
 
-    await deleteUser({ dataDir, userId: (target as User).id });
+    await deleteUser({ dataDir, userId: (target as User).id, now: c.var.config.now() });
     // Their sessions go with them. The foreign key that used to do this went
     // with the users table (decision-9), so it is done here — and a session
     // that outlives this one, in a database restored from a backup, is not a
@@ -542,9 +548,13 @@ const GONE_USER = 'That user is already gone.';
  * one in a database restored from a backup, say — names a user the file no
  * longer holds, and the admin guard turns that into no session at all.
  */
-export async function deleteUser(input: { dataDir: string; userId: number }): Promise<boolean> {
+export async function deleteUser(input: {
+  dataDir: string;
+  userId: number;
+  now: Date;
+}): Promise<boolean> {
   const deleted = await removeUserRecord(input);
-  await revokeTokensForUser(input.dataDir, input.userId);
+  await revokeTokensForUser(input.dataDir, input.userId, input.now);
   return deleted;
 }
 

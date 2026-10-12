@@ -68,6 +68,19 @@ describe('the users file', () => {
     assert.equal(findUser(dataDir, 'ada')?.passwordHash.startsWith('$argon2id$'), true);
   });
 
+  it('stamps the account with the instant it is given', async () => {
+    const dataDir = await temporaryDir();
+
+    const created = await createUser({
+      dataDir,
+      username: 'ada',
+      password: 'correct horse',
+      now: new Date('2026-05-06T07:08:09.000Z'),
+    });
+
+    assert.equal(created.createdAt, '2026-05-06T07:08:09.000Z');
+  });
+
   it('writes data/users.json, and nothing else can read it (AC #4)', async () => {
     const dataDir = await temporaryDir();
 
@@ -493,11 +506,15 @@ describe('deleting a user', () => {
     const dataDir = await temporaryDir();
     const ada = await createUser({ dataDir, username: 'ada', password: 'correct horse' });
 
-    assert.equal(await deleteUser({ dataDir, userId: ada.id }), true);
+    assert.equal(await deleteUser({ dataDir, userId: ada.id, now: new Date() }), true);
     assert.equal(countUsers(dataDir), 0);
     assert.equal(findUser(dataDir, 'ada'), undefined);
     assert.equal(findUserById(dataDir, ada.id), undefined);
-    assert.equal(await deleteUser({ dataDir, userId: ada.id }), false, 'and only goes once');
+    assert.equal(
+      await deleteUser({ dataDir, userId: ada.id, now: new Date() }),
+      false,
+      'and only goes once',
+    );
 
     const grace = await createUser({ dataDir, username: 'grace', password: 'a password' });
     assert.notEqual(grace.id, ada.id, 'an id is never handed out twice');
@@ -653,7 +670,7 @@ describe('a login and a database that may be deleted (AC #2)', () => {
 
     // Taken out of the file directly, which is the state a database restored
     // from a backup taken before she was deleted leaves behind.
-    await deleteUser({ dataDir: cms.config.dataDir, userId: grace.id });
+    await deleteUser({ dataDir: cms.config.dataDir, userId: grace.id, now: cms.config.now() });
 
     assert.equal((await hers.get('/admin')).status, 302, 'her session is not a login any more');
     assert.match((await hers.get('/admin')).headers.get('location') ?? '', /login/);

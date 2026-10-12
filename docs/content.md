@@ -232,7 +232,8 @@ The index follows these rules:
   `{ scheduled: true }` shows only those documents. The index reads the clock
   through `store.now()`. `createCms` sets it from the `now` config option. The
   listings, the permalink and the scheduler all use this one clock, so they
-  cannot disagree.
+  cannot disagree. The same clock stamps the operational records and the
+  activities the site sends.
 - **Permalinks** are unique and indexed. If you index a second document at a
   URL another file already uses, the store throws `DuplicatePermalinkError`,
   which names both paths.

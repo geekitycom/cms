@@ -35,7 +35,7 @@ export const UPLOAD_ENVELOPE_BYTES = 8192;
  */
 export type UploadConfig = Pick<
   ResolvedConfig,
-  'contentDir' | 'uploadTypes' | 'uploadMaxBytes' | 'uploadMediaMaxBytes'
+  'contentDir' | 'uploadTypes' | 'uploadMaxBytes' | 'uploadMediaMaxBytes' | 'now'
 > &
   ImageConfig;
 
@@ -108,7 +108,7 @@ export async function storeUpload(
   if (refusedUpload(accepted)) return accepted;
   const { extension, media, bytes: clean } = accepted;
 
-  const now = new Date();
+  const now = config.now();
   const month = `${String(now.getUTCFullYear()).padStart(4, '0')}/${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   const directory = path.join(config.contentDir, UPLOAD_DIRECTORY, ...month.split('/'));
   await mkdir(directory, { recursive: true });

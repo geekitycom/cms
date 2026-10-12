@@ -14,6 +14,7 @@ import {
 } from './legacy-migrations.ts';
 import { adminStoreOwning, openAdminDatabase } from '../store/admin-store.ts';
 import type { AdminStore } from '../store/admin-store.ts';
+import { systemClock } from '../util/clock.ts';
 
 const temporaryDirs: string[] = [];
 const openDatabases: DatabaseSync[] = [];
@@ -32,7 +33,7 @@ async function temporaryDir(): Promise<string> {
 }
 
 async function database(): Promise<DatabaseSync> {
-  const opened = openAdminDatabase(await temporaryDir());
+  const opened = openAdminDatabase(await temporaryDir(), systemClock);
   openDatabases.push(opened);
   return opened;
 }
@@ -59,7 +60,7 @@ describe('the settings table an older version wrote', () => {
     `);
     database.close();
 
-    const db = openAdminDatabase(dataDir);
+    const db = openAdminDatabase(dataDir, systemClock);
     assert.deepEqual(legacySettings(db), [
       { key: 'title', value: 'From the rows', updatedAt: '2026-09-01T00:00:00.000Z' },
     ]);
@@ -69,7 +70,7 @@ describe('the settings table an older version wrote', () => {
     dropLegacyTable(db, 'settings');
     db.close();
 
-    const reopened = openAdminDatabase(dataDir);
+    const reopened = openAdminDatabase(dataDir, systemClock);
     assert.equal(legacySettings(reopened), undefined, 'and stays gone across a boot');
     reopened.close();
   });
@@ -107,7 +108,7 @@ describe('the actor key table an older version wrote', () => {
     `);
     database.close();
 
-    const db = openAdminDatabase(dataDir);
+    const db = openAdminDatabase(dataDir, systemClock);
     assert.deepEqual(legacyActorKeys(db), [
       { identifier: 'actor', algorithm: 'Ed25519', privateJwk: '{"d":"private"}' },
     ]);
@@ -117,7 +118,7 @@ describe('the actor key table an older version wrote', () => {
     dropLegacyTable(db, 'actor_keys');
     db.close();
 
-    const reopened = openAdminDatabase(dataDir);
+    const reopened = openAdminDatabase(dataDir, systemClock);
     assert.equal(legacyActorKeys(reopened), undefined, 'and stays gone across a boot');
     reopened.close();
   });
@@ -160,7 +161,7 @@ describe('the users table an older version wrote', () => {
     `);
     database.close();
 
-    const db = openAdminDatabase(dataDir);
+    const db = openAdminDatabase(dataDir, systemClock);
     assert.deepEqual(legacyUsers(db), [
       {
         id: 7,
@@ -175,7 +176,7 @@ describe('the users table an older version wrote', () => {
     dropLegacyTable(db, 'users');
     db.close();
 
-    const reopened = openAdminDatabase(dataDir);
+    const reopened = openAdminDatabase(dataDir, systemClock);
     assert.equal(legacyUsers(reopened), undefined, 'and stays gone across a boot');
     reopened.close();
   });
@@ -190,8 +191,8 @@ describe('the users table an older version wrote', () => {
 
   it('does not take the sessions with it, because they no longer reference it', async () => {
     const dataDir = await temporaryDir();
-    const db = openAdminDatabase(dataDir);
-    const admin = adminStoreOwning(db, databaseFile(dataDir));
+    const db = openAdminDatabase(dataDir, systemClock);
+    const admin = adminStoreOwning(db, databaseFile(dataDir), systemClock);
     openStores.push(admin);
     const session = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR });
 

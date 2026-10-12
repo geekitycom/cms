@@ -139,3 +139,23 @@ describe('storeUpload strips location and camera metadata', () => {
     }
   });
 });
+
+describe('storeUpload files by month', () => {
+  it('files an upload under the month the site clock reads', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'geekity-month-'));
+    directories.push(root);
+    const config = resolveConfig({
+      contentDir: path.join(root, 'content'),
+      dataDir: path.join(root, 'data'),
+      now: () => new Date('2026-05-06T07:08:09.000Z'),
+    });
+
+    const outcome = await storeUpload(
+      new File([new Uint8Array(await pngWithMetadata())], 'dot.png'),
+      config,
+    );
+
+    if (refusedUpload(outcome)) assert.fail(outcome.error);
+    assert.match(outcome.url, /^\/uploads\/2026\/05\//);
+  });
+});

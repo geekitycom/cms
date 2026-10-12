@@ -12,6 +12,7 @@ import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MailProvider, OutgoingMail } from '../mail/provider.ts';
 import { createMailService } from './mail-service.ts';
 import type { MailService } from './mail-service.ts';
+import { systemClock } from '../util/clock.ts';
 
 const dirs: string[] = [];
 
@@ -63,6 +64,7 @@ async function site(
       contentDir,
       dataDir,
       devMode: false,
+      now: systemClock,
       themesDir,
       watch: false,
     },
@@ -207,6 +209,7 @@ describe('sending a templated message', () => {
         contentDir,
         dataDir: await dir('geekity-mail-data-'),
         devMode: false,
+        now: systemClock,
         themesDir,
         watch: false,
       },

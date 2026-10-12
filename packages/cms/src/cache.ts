@@ -2,6 +2,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import type { Clock } from './util/clock.ts';
 import { messageOf } from './util/errors.ts';
 
 /**
@@ -111,6 +112,8 @@ export interface MigrationLedger {
   ledger: string;
   /** Every version this package ships, in order. */
   migrations: readonly Migration[];
+  /** What an applied version is stamped with. */
+  now: Clock;
 }
 
 /**
@@ -182,7 +185,7 @@ export function applyMigrations(db: DatabaseSync, ledger: MigrationLedger): void
     try {
       db.exec(migration.sql);
       migration.run?.(db);
-      record.run(migration.version, new Date().toISOString());
+      record.run(migration.version, ledger.now().toISOString());
       db.exec('COMMIT');
     } catch (error) {
       db.exec('ROLLBACK');
@@ -222,7 +225,12 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseSync {
   }
 
   try {
-    applyMigrations(db, { file, ledger: options.ledger, migrations: options.migrations });
+    applyMigrations(db, {
+      file,
+      ledger: options.ledger,
+      migrations: options.migrations,
+      now: options.now,
+    });
   } catch (error) {
     db.close();
     if (error instanceof UnusableDatabaseError || error instanceof OutdatedDatabaseError)

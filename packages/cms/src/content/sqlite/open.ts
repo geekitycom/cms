@@ -1,5 +1,5 @@
 import { databaseFile, openDatabase } from '../../cache.ts';
-import { systemClock } from '../store.ts';
+import { systemClock } from '../../util/clock.ts';
 import type { ContentStore, IndexConnection, OpenContentStoreOptions } from '../store.ts';
 import { archiveReader } from './archive.ts';
 import { backlinkReader } from './backlinks.ts';
@@ -19,9 +19,15 @@ import { indexWriter, refreshAgainstBase } from './writes.ts';
  * database does nothing.
  */
 export function openContentStore(options: OpenContentStoreOptions): ContentStore {
+  const clock = options.now ?? systemClock;
   const index: IndexDatabase = {
-    db: openDatabase({ dataDir: options.dataDir, ledger: LEDGER, migrations: MIGRATIONS }),
-    clock: options.now ?? systemClock,
+    db: openDatabase({
+      dataDir: options.dataDir,
+      ledger: LEDGER,
+      migrations: MIGRATIONS,
+      now: clock,
+    }),
+    clock,
     baseUrl: options.baseUrl,
     spellings: { current: undefined, staleKeys: new Set() },
     prepared: new Map(),

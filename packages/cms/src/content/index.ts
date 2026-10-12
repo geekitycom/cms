@@ -65,13 +65,11 @@ export {
   dateSortKey,
   DuplicatePermalinkError,
   isTrashedPath,
-  systemClock,
   TRASH_DIRECTORY,
 } from './store.ts';
 export { openContentStore } from './sqlite/open.ts';
 export type {
   CategoryCount,
-  Clock,
   ContentCounts,
   ContentStore,
   ListAllOptions,

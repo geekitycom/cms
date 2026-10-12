@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import type { Clock } from '../content/store.ts';
+import type { Clock } from '../util/clock.ts';
 import type { AuthorizationRequest, CodeChallenge, Scope } from './request.ts';
 
 export interface AuthorizationCode {

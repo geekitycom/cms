@@ -56,7 +56,7 @@ entry. When you change one of those examples, change the test with it.
 | `slugify`                 | function | Turn a title into a URL slug: lowercase ASCII letters, digits and hyphens.                                    |
 | `ActivityPubMetadata`     | type     | Everything about how a post federates, whether its author wrote it or the CMS wrote it back after a delivery. |
 | `ChangeOrigin`            | type     | Where a change came from.                                                                                     |
-| `Clock`                   | type     | What the index reads the time from.                                                                           |
+| `Clock`                   | type     | Where the CMS reads the time from, for every timestamp it stores or sends.                                    |
 | `ContentEventListener`    | type     | A listener for one kind of change.                                                                            |
 | `ContentEventMap`         | type     | The events a subscriber can listen for, and what each one carries.                                            |
 | `ContentEvents`           | type     | Subscription to index changes.                                                                                |

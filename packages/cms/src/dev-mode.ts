@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { readFileIfPresentSync, writeFileAtomicallySync } from './files/atomic.ts';
+import type { Clock } from './util/clock.ts';
 
 const DEV_MODE_FILE = 'dev-mode.json';
 const DEV_MODE_RECORD_FILE = 'dev-mode.jsonl';
@@ -24,14 +25,15 @@ export type DevModeEntry =
 export interface DevModeConfig {
   readonly dataDir: string;
   readonly devMode: boolean;
+  readonly now: Clock;
 }
 
 // Looked for on every call, so `geekity dev-mode off` takes a running site live at once.
-export function devModeOn(config: DevModeConfig): boolean {
+export function devModeOn(config: Pick<DevModeConfig, 'dataDir' | 'devMode'>): boolean {
   return config.devMode || existsSync(stateFile(config.dataDir));
 }
 
-export function enterDevMode(dataDir: string, by: DevModeSource, now = new Date()): boolean {
+export function enterDevMode(dataDir: string, by: DevModeSource, now: Date): boolean {
   if (existsSync(stateFile(dataDir))) return false;
   writeFileAtomicallySync(
     stateFile(dataDir),
@@ -41,7 +43,7 @@ export function enterDevMode(dataDir: string, by: DevModeSource, now = new Date(
   return true;
 }
 
-export function leaveDevMode(dataDir: string, now = new Date()): boolean {
+export function leaveDevMode(dataDir: string, now: Date): boolean {
   if (!existsSync(stateFile(dataDir))) return false;
   rmSync(stateFile(dataDir), { force: true });
   append(dataDir, { type: 'off', at: now.toISOString() });
@@ -53,7 +55,7 @@ export function holdOutbound(config: DevModeConfig, effect: OutboundEffect): boo
   if (!devModeOn(config)) return false;
   append(config.dataDir, {
     type: 'held',
-    at: new Date().toISOString(),
+    at: config.now().toISOString(),
     kind: effect.kind,
     what: effect.what,
     to: [...effect.to],

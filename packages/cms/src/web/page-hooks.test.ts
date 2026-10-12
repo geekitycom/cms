@@ -11,6 +11,7 @@ import type { Cms } from '../index.ts';
 import { deleteUser } from '../admin/users.ts';
 import { listUsers } from '../site/users.ts';
 import { createThemeSource } from '../theme/themes.ts';
+import { systemClock } from '../util/clock.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -191,11 +192,13 @@ describe('the hook partials a site theme fills (TASK-298)', () => {
     const templates = createMailTemplates({
       themes: createThemeSource({ themesDir, chosen: () => 'analytics' }),
       baseUrl: 'https://blog.example',
+      now: systemClock,
     });
 
     const message = templates.render('test', {
       site: { title: 'A Site' },
       baseUrl: 'https://blog.example',
+      now: systemClock,
     });
 
     for (const part of [message.subject, message.text, message.html ?? '']) {
@@ -272,7 +275,8 @@ describe('devMode and signedIn on the context, for a theme to leave analytics ou
   it('treats a session whose user was deleted as a stranger (AC #2)', async () => {
     const { cms, dataDir } = await siteWithGuardedAnalytics();
     const agent = await signedIn(cms);
-    for (const user of listUsers(dataDir)) await deleteUser({ dataDir, userId: user.id });
+    for (const user of listUsers(dataDir))
+      await deleteUser({ dataDir, userId: user.id, now: new Date() });
 
     const html = await (await agent.get('/about/')).text();
     assert.ok(headOf(html).includes(UMAMI));
@@ -292,18 +296,18 @@ describe('devMode and signedIn on the context, for a theme to leave analytics ou
     const about = async (): Promise<string> => await (await cms.app.request('/about/')).text();
 
     assert.ok((await about()).includes(UMAMI));
-    enterDevMode(dataDir, 'command');
+    enterDevMode(dataDir, 'command', cms.config.now());
     assert.equal((await about()).includes('umami'), false);
-    leaveDevMode(dataDir);
+    leaveDevMode(dataDir, cms.config.now());
     assert.ok((await about()).includes(UMAMI));
   });
 
   it('gives a listing a new validator when dev mode ends, so a cached dev-mode copy is replaced', async () => {
     const { cms, dataDir } = await siteWithGuardedAnalytics();
-    enterDevMode(dataDir, 'command');
+    enterDevMode(dataDir, 'command', cms.config.now());
     const etag = (await cms.app.request('/tag/notes/')).headers.get('etag');
     assert.ok(etag !== null, 'the dev-mode listing has a validator');
-    leaveDevMode(dataDir);
+    leaveDevMode(dataDir, cms.config.now());
 
     const live = await cms.app.request('/tag/notes/', { headers: { 'if-none-match': etag } });
     assert.equal(live.status, 200, 'the dev-mode copy is not revalidated');

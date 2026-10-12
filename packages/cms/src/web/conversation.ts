@@ -197,7 +197,7 @@ function gather(
   document: Document,
   seen: ReadonlySet<string> = new Set([document.path]),
 ): Gathered {
-  const deliveredObjectId = activityStreamsId(document, context.baseUrl);
+  const deliveredObjectId = activityStreamsId(document, context.baseUrl, context.store.now());
   const root = rootOf(context, document);
   const stored = context.admin.listCommentsFor(document.slug);
   const naming = authorNaming(context.admin);
@@ -645,7 +645,7 @@ const MAXIMUM_NOTE_DEPTH = 32;
  * native comments, and they have to hang off something.
  */
 function rootOf(context: ConversationContext, document: Document): string {
-  return activityStreamsId(document, context.baseUrl) ?? document.permalink;
+  return activityStreamsId(document, context.baseUrl, context.store.now()) ?? document.permalink;
 }
 
 /**
@@ -1158,7 +1158,7 @@ class PostsByObjectId {
       const document = this.#context.store.getByPermalink(permalink);
       if (
         document !== undefined &&
-        activityStreamsId(document, this.#context.baseUrl) === objectId
+        activityStreamsId(document, this.#context.baseUrl, this.#context.store.now()) === objectId
       ) {
         return document;
       }
@@ -1170,7 +1170,7 @@ class PostsByObjectId {
     if (this.#all === undefined) {
       this.#all = new Map();
       for (const document of this.#context.store.listPosts()) {
-        const id = activityStreamsId(document, this.#context.baseUrl);
+        const id = activityStreamsId(document, this.#context.baseUrl, this.#context.store.now());
         if (id !== undefined) this.#all.set(id, document);
       }
     }

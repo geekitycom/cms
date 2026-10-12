@@ -301,7 +301,7 @@ describe('the Send test email button with Brevo configured (AC #1)', () => {
   it('holds the test message in dev mode and says so (TASK-295)', async () => {
     const { agent, dataDir } = await admin({ mailProvider: 'brevo' });
     await writeMailCredentials(dataDir, { brevo: { apiKey: 'xkeysib-secret-1234' } });
-    enterDevMode(dataDir, 'command');
+    enterDevMode(dataDir, 'command', new Date());
 
     const { screen } = await post(agent, MAIL_TEST_PATH, {
       [MAIL_TEST_FIELDS.to]: 'ada@example.com',

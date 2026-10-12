@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 
+import type { Clock } from '../util/clock.ts';
+
 import { repliesKey } from '../content/guids.ts';
 import { REPLY_ACTIVITY_TYPE, replyIdOf, replyTargetOf } from './inbox-replies.ts';
 import type { ConversationWrite } from './conversation.ts';
@@ -146,6 +148,7 @@ export interface InboxStore {
 export function openInboxStore(
   db: DatabaseSync,
   written: (change: ConversationWrite) => void,
+  clock: Clock,
 ): InboxStore {
   const statements = {
     clearInboxActivities: db.prepare('DELETE FROM ap_inbox'),
@@ -218,7 +221,7 @@ export function openInboxStore(
         replyTargetOf(activity.json),
         replyKeyOf(activity),
         activity.recipient ?? null,
-        activity.receivedAt ?? new Date().toISOString(),
+        activity.receivedAt ?? clock().toISOString(),
         activity.fetched === true ? 1 : 0,
         activity.json,
       ) as Record<string, unknown> | undefined;
@@ -252,7 +255,7 @@ export function openInboxStore(
             replyTargetOf(activity.json),
             replyKeyOf(activity),
             activity.recipient ?? null,
-            activity.receivedAt ?? new Date().toISOString(),
+            activity.receivedAt ?? clock().toISOString(),
             activity.fetched === true ? 1 : 0,
             activity.json,
           );

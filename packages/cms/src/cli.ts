@@ -488,7 +488,7 @@ async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number>
   const config = await loadResolvedConfig(configPath);
 
   if (action === 'on') {
-    enterDevMode(config.dataDir, 'command');
+    enterDevMode(config.dataDir, 'command', config.now());
     process.stdout.write(
       'Dev mode is on: nothing the site does is sent until `geekity dev-mode off`.\n',
     );
@@ -502,7 +502,7 @@ async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number>
           'Remove it, then run geekity dev-mode off again.',
       );
     }
-    const wasOn = leaveDevMode(config.dataDir);
+    const wasOn = leaveDevMode(config.dataDir, config.now());
     process.stdout.write(
       wasOn
         ? 'Dev mode is off: the site is live. Nothing held while it was on will be sent.\n'
@@ -992,12 +992,18 @@ async function userCommand({
   }
 
   const config = await loadResolvedConfig(configPath);
-  const adminDb = openAdminDatabase(config.dataDir);
+  const adminDb = openAdminDatabase(config.dataDir, config.now);
   migrateUsersToFile(adminDb, config.dataDir);
-  const admin = adminStoreOwning(adminDb, databaseFile(config.dataDir));
+  const admin = adminStoreOwning(adminDb, databaseFile(config.dataDir), config.now);
 
   try {
-    const user = await createUser({ dataDir: config.dataDir, username, password, email });
+    const user = await createUser({
+      dataDir: config.dataDir,
+      username,
+      password,
+      email,
+      now: config.now(),
+    });
     process.stdout.write(
       `Created admin user ${user.username}${
         user.email === undefined ? '' : ` (${user.email})`
@@ -1102,9 +1108,9 @@ async function pluginCommand(argv: readonly string[]): Promise<number> {
     withoutConfig(argv).slice(found.command.words.length),
     found.command,
   );
-  const adminDb = openAdminDatabase(config.dataDir);
+  const adminDb = openAdminDatabase(config.dataDir, config.now);
   migrateUsersToFile(adminDb, config.dataDir);
-  const admin = adminStoreOwning(adminDb, databaseFile(config.dataDir));
+  const admin = adminStoreOwning(adminDb, databaseFile(config.dataDir), config.now);
   const comments = { contentDir: config.contentDir, dataDir: config.dataDir };
   migrateCommentEmails(comments);
   migrateCommentKeys(comments);

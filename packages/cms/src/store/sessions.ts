@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 
+import type { Clock } from '../util/clock.ts';
+
 /**
  * A login, or the anonymous session that carries a CSRF token to a visitor who
  * has not logged in yet.
@@ -87,7 +89,11 @@ export interface SessionStore {
   takeFlash(sessionId: string): FlashMessage[];
 }
 
-export function openSessionStore(db: DatabaseSync, isReadOnly: () => boolean): SessionStore {
+export function openSessionStore(
+  db: DatabaseSync,
+  isReadOnly: () => boolean,
+  clock: Clock,
+): SessionStore {
   const statements = {
     deleteSessionsForUser: db.prepare('DELETE FROM sessions WHERE user_id = ? AND id IS NOT ?'),
     insertSession: db.prepare(`
@@ -121,7 +127,7 @@ export function openSessionStore(db: DatabaseSync, isReadOnly: () => boolean): S
 
   return {
     createSession(input) {
-      const now = input.now ?? new Date();
+      const now = input.now ?? clock();
       const session: Session = {
         id: randomToken(),
         userId: input.userId,
@@ -139,7 +145,7 @@ export function openSessionStore(db: DatabaseSync, isReadOnly: () => boolean): S
       return session;
     },
 
-    getSession(id, now = new Date()) {
+    getSession(id, now = clock()) {
       const row = statements.sessionById.get(id) as Record<string, unknown> | undefined;
       if (row === undefined) return undefined;
 
@@ -162,7 +168,7 @@ export function openSessionStore(db: DatabaseSync, isReadOnly: () => boolean): S
       return Number(statements.deleteSessionsForUser.run(userId, options.except ?? null).changes);
     },
 
-    pruneSessions(now = new Date()) {
+    pruneSessions(now = clock()) {
       return Number(statements.pruneSessions.run(now.toISOString()).changes);
     },
 

@@ -18,7 +18,7 @@ import type { PhotoRow } from './photo-form.ts';
 import type { PostField } from './post-fields.ts';
 import { BLANK_READ_OF_FORM } from './read-form.ts';
 import type { ReadOfForm } from './read-form.ts';
-import { DEFAULT_TIMEZONE, wallClockIn } from './time.ts';
+import { wallClockIn } from './time.ts';
 import { VISIBILITY_FRONT_MATTER_KEY, visibilityOf } from './visibility.ts';
 import type { StoredVisibility } from './visibility.ts';
 
@@ -185,11 +185,7 @@ export const AUTHOR_UNTIL_REQUEST = '';
  * not with an instant: what a form offers is what a form takes back, and per
  * decision-11 an offset-less date in this field means the site's zone.
  */
-export function blankForm(
-  kind: DocumentKind,
-  timezone: string = DEFAULT_TIMEZONE,
-  now: Date = new Date(),
-): EditorForm {
+export function blankForm(kind: DocumentKind, timezone: string, now: Date): EditorForm {
   return {
     title: '',
     slug: '',

@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 
+import type { Clock } from '../util/clock.ts';
+
 import { randomToken } from './sessions.ts';
 
 /**
@@ -78,7 +80,7 @@ export interface TokenStore {
   pruneSpentTokens(now?: Date): number;
 }
 
-export function openTokenStore(db: DatabaseSync): TokenStore {
+export function openTokenStore(db: DatabaseSync, clock: Clock): TokenStore {
   const statements = {
     insertPasswordReset: db.prepare(`
       INSERT INTO password_resets (token_hash, user_id, created_at, expires_at)
@@ -95,7 +97,7 @@ export function openTokenStore(db: DatabaseSync): TokenStore {
   };
   return {
     createPasswordReset(input) {
-      const now = input.now ?? new Date();
+      const now = input.now ?? clock();
       const token = randomToken();
       const reset: IssuedPasswordReset = {
         token,
@@ -113,7 +115,7 @@ export function openTokenStore(db: DatabaseSync): TokenStore {
       return reset;
     },
 
-    getPasswordReset(token, now = new Date()) {
+    getPasswordReset(token, now = clock()) {
       const hash = hashToken(token);
       const row = statements.passwordResetByHash.get(hash) as Record<string, unknown> | undefined;
       if (row === undefined) return undefined;
@@ -141,18 +143,18 @@ export function openTokenStore(db: DatabaseSync): TokenStore {
       return Number(statements.deletePasswordResetsForUser.run(userId).changes);
     },
 
-    prunePasswordResets(now = new Date()) {
+    prunePasswordResets(now = clock()) {
       return Number(statements.prunePasswordResets.run(now.toISOString()).changes);
     },
 
-    spendToken(token, expiresAt, now = new Date()) {
+    spendToken(token, expiresAt, now = clock()) {
       // `INSERT OR IGNORE` rather than a read then a write: two clicks on the
       // same link arriving together must not both find nothing and both act.
       const written = statements.spendToken.run(hashToken(token), now.toISOString(), expiresAt);
       return Number(written.changes) > 0;
     },
 
-    pruneSpentTokens(now = new Date()) {
+    pruneSpentTokens(now = clock()) {
       return Number(statements.pruneSpentTokens.run(now.toISOString()).changes);
     },
   };

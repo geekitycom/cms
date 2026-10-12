@@ -90,7 +90,7 @@ export interface SubmitContactMessageOptions {
   /** The rate limiter, kept by the mount so it outlives one request. */
   throttle: ContactThrottle;
   /** The clock. */
-  now?: Date | undefined;
+  now: Date;
 }
 
 /**
@@ -104,7 +104,7 @@ export async function submitContactMessage(
   options: SubmitContactMessageOptions,
 ): Promise<ContactOutcome> {
   const { form, throttle } = options;
-  const now = options.now ?? new Date();
+  const { now } = options;
 
   // The honeypot first, because a submission that tripped it should not reach
   // anything that could tell it why.

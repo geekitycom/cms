@@ -181,6 +181,9 @@ describe('a field added to the table alone (TASK-353 AC #3)', () => {
     );
     assert.ok('form' in created);
     assert.deepEqual(created.keptProperties, { mood: ['happy'] });
-    assert.equal((blankForm(POST_KIND) as Partial<MoodForm>).mood, undefined);
+    assert.equal(
+      (blankForm(POST_KIND, 'UTC', new Date('2026-09-02T10:00:00.000Z')) as Partial<MoodForm>).mood,
+      undefined,
+    );
   });
 });

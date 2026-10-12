@@ -135,7 +135,9 @@ interface Site {
  * happened by the time `settled()` resolves — and the private-address guard
  * off, because the relay host does not resolve.
  */
-async function site(options: { relays?: readonly string[]; dataDir?: string } = {}): Promise<Site> {
+async function site(
+  options: { relays?: readonly string[]; dataDir?: string; now?: () => Date } = {},
+): Promise<Site> {
   const dataDir = options.dataDir ?? (await temporaryDir('geekity-relays-data-'));
   const contentDir = await temporaryDir('geekity-relays-content-');
 
@@ -161,6 +163,7 @@ async function site(options: { relays?: readonly string[]; dataDir?: string } = 
     watch: false,
     baseUrl: BASE_URL,
     federation: { queue: null, allowPrivateAddress: true },
+    ...(options.now === undefined ? {} : { now: options.now }),
   });
   started.push(cms);
   await cms.sync();
@@ -333,6 +336,24 @@ describe('removing a relay', () => {
     assert.equal(ofType('Undo')[0]?.url, RELAY_INBOX);
     assert.equal(ofType('Follow').length, 2, 'the one that stayed was not followed again');
     assert.ok(cms.admin.getRelay(OTHER_RELAY_INBOX) !== undefined);
+  });
+});
+
+describe('with the clock pinned through createCms', () => {
+  const PINNED = '2026-05-06T07:08:09.000Z';
+
+  it('stamps the relay record with the pinned instant when it is followed and answered', async () => {
+    const { cms } = await site({ relays: [RELAY_INBOX], now: () => new Date(PINNED) });
+    await cms.relays.settled();
+
+    const followed = cms.admin.getRelay(RELAY_INBOX);
+    assert.deepEqual([followed?.createdAt, followed?.updatedAt], [PINNED, PINNED]);
+
+    await deliver(cms, accept(String(ofType('Follow')[0]?.body['id'])));
+
+    const accepted = cms.admin.getRelay(RELAY_INBOX);
+    assert.equal(accepted?.state, 'accepted');
+    assert.deepEqual([accepted?.createdAt, accepted?.updatedAt], [PINNED, PINNED]);
   });
 });
 

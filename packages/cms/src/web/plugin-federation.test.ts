@@ -218,7 +218,7 @@ describe('what a plugin’s federation reaches', () => {
 
   it('the inbox handlers, held by dev mode with no switch of the plugin’s own (TASK-295)', async () => {
     const { cms, context } = await contextOf();
-    enterDevMode(cms.config.dataDir, 'command');
+    enterDevMode(cms.config.dataDir, 'command', cms.config.now());
     const follow = await new Follow({
       id: new URL(`${REMOTE_ORIGIN}/follows/2`),
       actor: new URL(REMOTE_ACTOR),

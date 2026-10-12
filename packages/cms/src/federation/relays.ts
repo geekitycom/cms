@@ -285,17 +285,18 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
       for (const inboxId of listed) {
         if (known.some((relay) => relay.inboxId === inboxId)) continue;
         followed.push(inboxId);
-        queue(() =>
-          follow({
+        queue(() => {
+          const at = config.now().toISOString();
+          return follow({
             inboxId,
             actorId: null,
             state: 'pending',
             reason: null,
             followId: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }),
-        );
+            createdAt: at,
+            updatedAt: at,
+          });
+        });
       }
 
       for (const relay of known) {

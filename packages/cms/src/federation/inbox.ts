@@ -251,12 +251,17 @@ export async function handleQuoteRequest(
     return;
   }
 
-  const record = await authorizeQuote(config.contentDir, author.username, {
-    quote: quote.href,
-    post: postObjectId(post, config.baseUrl),
-    request: request.id.href,
-    actor: requester.id.href,
-  });
+  const record = await authorizeQuote(
+    config.contentDir,
+    author.username,
+    {
+      quote: quote.href,
+      post: postObjectId(post, config.baseUrl),
+      request: request.id.href,
+      actor: requester.id.href,
+    },
+    config.now(),
+  );
   const stamp = quoteAuthorization(context, author, record);
   await reply(
     context,

@@ -218,7 +218,12 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
     let user: User;
     try {
-      user = await createUser({ dataDir: c.var.config.dataDir, username, password });
+      user = await createUser({
+        dataDir: c.var.config.dataDir,
+        username,
+        password,
+        now: c.var.config.now(),
+      });
     } catch (error) {
       if (error instanceof DuplicateUsernameError) {
         return refuseSetup(c, username, error.message);

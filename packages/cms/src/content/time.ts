@@ -90,11 +90,11 @@ export function calendarDayIn(instant: string | Date, timezone: string): string 
  *
  * The abbreviation is the one in force at that instant, so a date in January
  * and a date in July say `CST` and `CDT` rather than both claiming whichever
- * one is current.
+ * one is current. A date that does not read as one is labelled as at `now`.
  */
-export function zoneLabel(instant: string | Date, timezone: string): string {
+export function zoneLabel(instant: string | Date, timezone: string, now: Date): string {
   const utc = toUtcInstant(instant, DEFAULT_TIMEZONE);
-  const at = utc === undefined ? new Date() : new Date(utc);
+  const at = utc === undefined ? now : new Date(utc);
 
   let abbreviation: string | undefined;
   try {
