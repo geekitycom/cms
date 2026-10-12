@@ -30,11 +30,6 @@ export function oneOf<T extends string>(value: unknown, allowed: readonly T[], f
   return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
-/**
- * The rows of a `SELECT status, COUNT(*) AS count ... GROUP BY status` as a
- * count for every status, zero for the ones no row has. A status this version
- * does not know is added to whichever one `statusOf` reads it as.
- */
 export function countByStatus<S extends string>(
   rows: readonly Record<string, unknown>[],
   statuses: readonly S[],

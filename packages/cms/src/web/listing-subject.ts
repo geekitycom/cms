@@ -11,12 +11,6 @@ import type { AuthorListing, FrontPages, SiteView } from './site-view.ts';
 import { PAGE_SEGMENT, termHref } from './taxonomy.ts';
 import type { TaxonomyBases, TaxonomyTerm } from './taxonomy.ts';
 
-/**
- * What a listing is over: the site's posts, one taxonomy term, or one person.
- *
- * The site's posts live at `/`, or under the posts page on a site whose
- * Reading setting names one.
- */
 export type ListingSubject =
   | { kind: 'home'; postsPage: Document | undefined }
   | { kind: 'term'; term: TaxonomyTerm }
@@ -29,31 +23,19 @@ export interface ListingRequest {
   pageNumber: number;
 }
 
-/** The site's own posts, at `/` rather than under any posts page. */
 export const SITE_POSTS: ListingSubject = { kind: 'home', postsPage: undefined };
 
-/** What the theme is told about one listing, beyond its page and its posts. */
 type ListingContext = Pick<Listing, 'tag' | 'category' | 'author' | 'template' | 'document'>;
 
-/** Everything that differs between the kinds of listing, answered in one place. */
 export interface Archive {
-  /** How many published documents the listing holds. */
   count: () => number;
-  /** One page of its documents, newest first, or all of them. */
   list: (paging?: ListOptions) => Document[];
-  /** The URL of one of its pages, by zero-based index. */
   href: (index: number) => string;
-  /** The URL of one format of its feed. */
   feedHref: (format: FeedFormat) => string;
-  /** The heading of one of its pages. */
   pageTitle: (site: SiteData) => string;
-  /** What its feed calls itself, so a reader of several of a site's feeds can tell them apart. */
   feedTitle: (site: SiteData) => string;
-  /** The line under the heading of its Markdown. */
   description: (site: SiteData) => string;
-  /** Whose archive it is, for the bio its Markdown carries. */
   author: AuthorContext | undefined;
-  /** The theme's context for it. */
   context: ListingContext;
 }
 
@@ -70,8 +52,6 @@ export function archiveOf(
       count: () => store.counts().posts,
       list: (paging) => store.listPosts(paging),
       href: (index) => listingPageHref(root, index),
-      // The feeds stay at the root wherever the listing is: a subscriber's URL
-      // is the one they already hold.
       feedHref: (format) => feedPathUnder('/', format),
       pageTitle: (site) => postsPage?.title || site.title,
       feedTitle: (site) => site.title,
@@ -109,8 +89,6 @@ export function archiveOf(
     };
   }
 
-  // One shape for a byline and for the heading of the archive it links to, so
-  // a theme that can print one can print the other.
   const { user, names } = subject.author;
   const profile = profileContext(user);
   return {
@@ -125,11 +103,6 @@ export function archiveOf(
   };
 }
 
-/**
- * The home listing as the Reading setting places it: at `/` for a site showing
- * its latest posts, under the posts page on a site that names one, and nowhere
- * on a site whose homepage is a page and which named no posts page.
- */
 export function homeListing(pages: FrontPages): ListingSubject | undefined {
   if (pages.home === undefined) return SITE_POSTS;
   return pages.posts === undefined ? undefined : { kind: 'home', postsPage: pages.posts };

@@ -8,11 +8,6 @@ import type { CitedEntry, CitedEvent } from '../microformats.ts';
 import { NAMELESS_NOTE, resolved, withoutDirectionControls } from './source.ts';
 import type { Limits, Source } from './source.ts';
 
-/**
- * The cited page itself: reading it, and what its microformats and its
- * metadata say.
- */
-
 const IMAGE_TYPE = /^\s*image\//i;
 
 export interface HtmlPage {
@@ -78,7 +73,6 @@ export function eventSource(event: CitedEvent): Source {
   };
 }
 
-/** What the page's `<title>`, Open Graph and Twitter metadata say. */
 export function pageSource(root: HtmlElement, base: string): Source {
   const name =
     pageTitle(metaOf(root, 'og:title')) ||
@@ -153,7 +147,6 @@ export function canonicalLink(root: HtmlElement, base: string): string | undefin
   return undefined;
 }
 
-/** The copies a page lists of itself: its `u-syndication` and its `rel=syndication` links. */
 export function syndicationOf(page: HtmlPage): string[] {
   const listed = [...(page.entry?.syndication ?? [])];
   for (const element of elementsIn(page.root)) {

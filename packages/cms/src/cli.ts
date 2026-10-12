@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 
 import { credentialProblem, emailProblem } from './admin/credentials.ts';
 import { migrateUsersToFile } from './admin/legacy-migrations.ts';
-import { adminStoreOver, openAdminDatabase } from './admin/store.ts';
+import { adminStoreOwning, openAdminDatabase } from './admin/store.ts';
 import type { AdminStore } from './admin/store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
 import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
@@ -994,7 +994,7 @@ async function userCommand({
   const config = await loadResolvedConfig(configPath);
   const adminDb = openAdminDatabase(config.dataDir);
   migrateUsersToFile(adminDb, config.dataDir);
-  const admin = adminStoreOver(adminDb, databaseFile(config.dataDir));
+  const admin = adminStoreOwning(adminDb, databaseFile(config.dataDir));
 
   try {
     const user = await createUser({ dataDir: config.dataDir, username, password, email });
@@ -1104,7 +1104,7 @@ async function pluginCommand(argv: readonly string[]): Promise<number> {
   );
   const adminDb = openAdminDatabase(config.dataDir);
   migrateUsersToFile(adminDb, config.dataDir);
-  const admin = adminStoreOver(adminDb, databaseFile(config.dataDir));
+  const admin = adminStoreOwning(adminDb, databaseFile(config.dataDir));
   const comments = { contentDir: config.contentDir, dataDir: config.dataDir };
   migrateCommentEmails(comments);
   migrateCommentKeys(comments);

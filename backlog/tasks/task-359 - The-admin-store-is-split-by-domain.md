@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-11 17:01'
-updated_date: '2026-10-12 01:08'
+updated_date: '2026-10-12 02:21'
 labels: []
 milestone: m-35
 dependencies:
@@ -48,6 +48,8 @@ Breaking public API: AdminStore no longer has legacySettings/legacyActorKeys/leg
 countByStatus (store/rows.ts) zero-fills the three GROUP BY counters. One tiny difference: countSentWebmentionsByStatus used '=' per row, so two unknown statuses folding into 'failed' overwrote each other; they now add up like the other two counters. relayState/deliveryStatus now use oneOf.
 Schema proof: store/__fixtures__/schema.json is sqlite_master + user_version + ledger from a fresh database made by the pre-split code; v0.30.0 (git worktree) produced byte-identical JSON, fresh and after its boot migrations. store/schema.test.ts asserts a fresh open matches it, a database stopped at each of migrations 1..25 opens to it, and the legacy migrations remove only settings/actor_keys/users. Mutation check: deleting one CREATE INDEX from a migration fails all three. By hand: databases created by v0.30.0 (fresh and booted) opened with the new code give the same sqlite_master, user_version and ledger as v0.30.0 itself.
 Validation: pnpm build, pnpm test (cms 5602 pass, all packages green), pnpm typecheck, pnpm lint, pnpm format:check all pass.
+
+Renamed adminStoreOver to adminStoreOwning before the PR, since closing the store closes the connection it was given.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

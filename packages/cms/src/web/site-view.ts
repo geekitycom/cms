@@ -34,17 +34,11 @@ export interface AuthorListing {
   names: readonly string[];
 }
 
-/**
- * The site as one request sees it: the settings the URL grammar depends on,
- * read once for the whole request rather than once per question asked.
- */
 export interface SiteView {
   readonly store: ContentStore;
   readonly pages: FrontPages;
   readonly bases: TaxonomyBases;
-  /** The site's users, read from `users.json` the first time anything asks. */
   users(): readonly User[];
-  /** The archive a username names, or `undefined` when it is nobody's. */
   author(username: string): AuthorListing | undefined;
   /** Whether this document's page shows its conversation, and so has a comments feed. */
   showsConversation(document: Document): boolean;
@@ -52,7 +46,6 @@ export interface SiteView {
 
 const views = new WeakMap<Context<GeekityEnv>, SiteView>();
 
-/** This request's {@link SiteView}, built on first use. */
 export function siteView(c: Context<GeekityEnv>): SiteView {
   let view = views.get(c);
   if (view === undefined) {

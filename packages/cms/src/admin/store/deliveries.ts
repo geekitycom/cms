@@ -62,7 +62,6 @@ export type NewDelivery = Omit<Delivery, 'attemptedAt'> & {
   attemptedAt?: string | undefined;
 };
 
-/** How each activity's delivery to each follower and relay ended. */
 export interface DeliveryStore {
   /**
    * Record how one delivery to one follower ended, replacing the previous

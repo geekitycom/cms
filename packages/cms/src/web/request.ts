@@ -22,7 +22,6 @@ export function requestPath(c: Context<GeekityEnv>): string {
   }
 }
 
-/** The query string the request arrived with, `?` and all, or `''`. */
 export function requestSearch(c: Context<GeekityEnv>): string {
   return new URL(c.req.url).search;
 }
@@ -94,7 +93,6 @@ export function queryFeedFormat(c: Context<GeekityEnv>): FeedFormat | undefined 
   return FEED_FORMATS.find((format) => FEED_SEGMENTS[format] === asked);
 }
 
-/** What a link to a document calls it: its title, or the label an untitled post gets. */
 export function documentLabel(c: Context<GeekityEnv>, document: Document): string {
   return postLabel(document, (url) => c.var.replyContexts.read(url));
 }

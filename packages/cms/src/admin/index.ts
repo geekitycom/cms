@@ -292,7 +292,7 @@ export {
   usesSecureCookies,
 } from './session.ts';
 export {
-  adminStoreOver,
+  adminStoreOwning,
   COMMENT_KINDS,
   COMMENT_SOURCES,
   COMMENT_STATUSES,

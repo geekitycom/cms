@@ -29,7 +29,6 @@ export interface StoredActorProfile extends ActorProfile {
   readonly fetchedAt: string;
 }
 
-/** Remote actors' profiles, and which of their pictures a reader may be shown. */
 export interface ProfileStore {
   /**
    * Whether a URL is an avatar a reader of this site can be shown: the picture

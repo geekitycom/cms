@@ -4,8 +4,6 @@ import type { HtmlElement } from '../html.ts';
 import { plainText, resolved } from './source.ts';
 import type { Source } from './source.ts';
 
-/** What a page's JSON-LD says: its posting, or its event. */
-
 const POSTING_TYPE = /(Article|^BlogPosting|^SocialMediaPosting|^DiscussionForumPosting)$/;
 
 export function jsonLdSource(root: HtmlElement, base: string): Source | undefined {

@@ -56,7 +56,6 @@ export type NewFollower = Omit<Follower, 'followedAt'> & {
   followedAt?: string | undefined;
 };
 
-/** The followers index, read back from `content/_data/federation/` on every boot. */
 export interface FollowerStore {
   /**
    * How many actors follow one user, or the whole site when no user is named.

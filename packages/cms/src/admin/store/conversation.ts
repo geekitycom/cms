@@ -13,7 +13,6 @@ export type ConversationWrite =
     }
   | { readonly kind: 'activity'; readonly about: readonly string[] };
 
-/** Who hears about conversation writes. */
 export interface ConversationEvents {
   /**
    * Hear about every comment written or forgotten and every activity logged,
@@ -23,7 +22,6 @@ export interface ConversationEvents {
   onConversationWrite(listener: (written: ConversationWrite) => void): () => void;
 }
 
-/** The listeners, and the function the comment and inbox stores tell them through. */
 export function conversationEvents(): {
   events: ConversationEvents;
   written: (change: ConversationWrite) => void;

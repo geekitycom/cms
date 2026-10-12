@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 
 import {
-  adminStoreOver,
+  adminStoreOwning,
   effectiveBaseUrl,
   migrateActorKeysToFiles,
   migrateSettingsToFile,
@@ -140,7 +140,6 @@ function settleConfig(resolved: ResolvedConfig): ResolvedConfig {
   });
 }
 
-/** `adminDb` is the connection under `admin`, for the legacy migrations. */
 function openBothStoresOrNeither(resolved: ResolvedConfig): {
   store: ContentStore;
   admin: AdminStore;
@@ -150,7 +149,7 @@ function openBothStoresOrNeither(resolved: ResolvedConfig): {
   const store = openContentStore({ dataDir, baseUrl, now: resolved.now });
   try {
     const adminDb = openAdminDatabase(dataDir);
-    return { store, admin: adminStoreOver(adminDb, databaseFile(dataDir)), adminDb };
+    return { store, admin: adminStoreOwning(adminDb, databaseFile(dataDir)), adminDb };
   } catch (error) {
     store.close();
     throw error;

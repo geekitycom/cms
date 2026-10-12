@@ -39,7 +39,6 @@ export interface CreatePasswordResetInput {
   now?: Date | undefined;
 }
 
-/** Password reset links and spent one-click tokens, both kept only as hashes. */
 export interface TokenStore {
   /**
    * Issue a password reset link and hand back its token, which is the only

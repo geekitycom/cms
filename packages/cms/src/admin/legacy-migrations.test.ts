@@ -12,7 +12,7 @@ import {
   legacySettings,
   legacyUsers,
 } from './legacy-migrations.ts';
-import { adminStoreOver, openAdminDatabase } from './store.ts';
+import { adminStoreOwning, openAdminDatabase } from './store.ts';
 import type { AdminStore } from './store.ts';
 
 const temporaryDirs: string[] = [];
@@ -31,7 +31,6 @@ async function temporaryDir(): Promise<string> {
   return dir;
 }
 
-/** A new admin database on a data dir of its own, closed when the file finishes. */
 async function database(): Promise<DatabaseSync> {
   const opened = openAdminDatabase(await temporaryDir());
   openDatabases.push(opened);
@@ -192,7 +191,7 @@ describe('the users table an older version wrote', () => {
   it('does not take the sessions with it, because they no longer reference it', async () => {
     const dataDir = await temporaryDir();
     const db = openAdminDatabase(dataDir);
-    const admin = adminStoreOver(db, databaseFile(dataDir));
+    const admin = adminStoreOwning(db, databaseFile(dataDir));
     openStores.push(admin);
     const session = admin.createSession({ userId: ADA, lifetimeSeconds: HOUR });
 

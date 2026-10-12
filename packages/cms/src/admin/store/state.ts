@@ -1,6 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-/** The CMS's own operational state, one string per key. */
 export interface StateStore {
   /**
    * One piece of the CMS's own operational state, or `undefined`.

@@ -21,7 +21,6 @@ interface SchemaShape {
   ledger: number[];
 }
 
-/** What a new database looked like when v0.30.0 created it, captured with that code. */
 const RELEASED: SchemaShape = JSON.parse(
   readFileSync(new URL('./__fixtures__/schema.json', import.meta.url), 'utf8'),
 ) as SchemaShape;

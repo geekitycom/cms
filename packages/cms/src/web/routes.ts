@@ -244,17 +244,6 @@ const declaredQueryRedirect: MiddlewareHandler<GeekityEnv> = async (c, next) => 
   await next();
 };
 
-/**
- * The last stop for a request: whatever {@link classifyPath} finds at this
- * URL, the same thing in the representation a `.md` or `.json` suffix asked
- * for, where it used to live, the canonical URL it should have asked for, or
- * the theme's 404.
- *
- * The suffix is stripped and the *same* classifier runs again, so no
- * representation can resolve to something the others cannot see. Anything
- * found at a spelling that is not its canonical one is redirected there, with
- * the query it arrived with.
- */
 function resolveRequest(c: Context<GeekityEnv>): Response {
   const view = siteView(c);
   const pathname = requestPath(c);
@@ -320,7 +309,6 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   return notFound(c);
 }
 
-/** What lives at a request's own canonical URL, in the representation its `Accept` asks for. */
 function serve(c: Context<GeekityEnv>, view: SiteView, match: PathMatch): Response {
   switch (match.kind) {
     case 'listing':
@@ -341,10 +329,6 @@ function serve(c: Context<GeekityEnv>, view: SiteView, match: PathMatch): Respon
   }
 }
 
-/**
- * A draft, a scheduled post or an unlisted one, drawn for the signed-in reader
- * who asked for its HTML, so a preview link works; anybody else gets the 404.
- */
 function hiddenDocumentForSignedInHtml(
   c: Context<GeekityEnv>,
   pathname: string,

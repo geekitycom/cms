@@ -20,12 +20,6 @@ export type FeedTarget =
   | { kind: 'listing'; subject: ListingSubject }
   | { kind: 'comments'; document: Document | undefined };
 
-/**
- * What a decoded path names on the public site: a feed, a page of a listing,
- * or a document. The one reading of the URL grammar that serving a request,
- * finding where a slashless URL belongs, the `.md` and `.json` spellings, the
- * Markdown's links and the oEmbed provider all share.
- */
 export type PathMatch =
   | {
       kind: 'feed';
@@ -37,15 +31,6 @@ export type PathMatch =
   | ({ kind: 'listing' } & ListingRequest)
   | { kind: 'document'; document: Document };
 
-/**
- * What lives at `pathname`, or `undefined` when nothing does.
- *
- * `/` is the homepage when the site has one. Then a feed, then a listing, and
- * only then a document: a listing's URL means the listing however a document
- * is permalinked, which is what lets the taxonomy bases be a setting without a
- * page ever taking an archive's URL. The posts page is the listing it carries
- * rather than the page it also is.
- */
 export function classifyPath(view: SiteView, pathname: string): PathMatch | undefined {
   if (pathname === '/' && view.pages.home !== undefined) {
     return { kind: 'document', document: view.pages.home };
@@ -61,11 +46,6 @@ export function classifyPath(view: SiteView, pathname: string): PathMatch | unde
   return document === undefined ? undefined : { kind: 'document', document };
 }
 
-/**
- * The URL a match is served at, ready for a `Location` header: a listing's
- * page, a feed's canonical spelling, or where a document is served, which is
- * `/` for the homepage.
- */
 export function canonicalHref(view: SiteView, match: PathMatch): string {
   switch (match.kind) {
     case 'listing':
@@ -79,20 +59,10 @@ export function canonicalHref(view: SiteView, match: PathMatch): string {
   }
 }
 
-/** Whether a listing page exists: its number is short of the listing's last page. */
 function inRange(view: SiteView, request: ListingRequest, pageSize: number): boolean {
   return request.pageNumber < pageCount(archiveOf(view, request.subject).count(), pageSize);
 }
 
-/**
- * Where a path that arrived without its trailing slash canonically lives, or
- * `undefined` when adding one would not resolve either.
- *
- * Redirecting only to somewhere real means a genuinely missing URL costs one
- * 404 rather than a redirect and then a 404. The target is the canonical URL
- * itself rather than the path with a slash bolted on, so `/page/1` lands on
- * `/` in one hop instead of two, and `/feed/rss` on `/feed/`.
- */
 export function slashedHref(
   view: SiteView,
   pathname: string,
@@ -138,11 +108,6 @@ export function commentsFeedHref(document: Document | undefined): string {
  * A path as the feed it names: `/feed/`, `/feed/atom/`, `/{base}/x/feed/json/`,
  * the comments feeds at `/comments/feed/` and `{permalink}feed/`, and the
  * `/feed/rss/` spelling WordPress also answered at any of those roots.
- *
- * A listing's feeds hang off its root whatever the Reading setting says, and
- * only off its first page: a feed is not paginated, so `/{base}/x/page/2/feed/`
- * names nothing. Any other root may be a document whose page shows its
- * conversation, which is the only feed a document has.
  */
 function feedAt(view: SiteView, pathname: string): PathMatch | undefined {
   const split = splitFeedPath(pathname);
@@ -165,15 +130,6 @@ function feedAt(view: SiteView, pathname: string): PathMatch | undefined {
   return feed({ kind: 'comments', document });
 }
 
-/**
- * A path as the page of a listing it names, wherever the Reading setting has
- * put the listing.
- *
- * The posts page first, because its permalink is the listing's root on a site
- * that has one. Then the ordinary grammar, slashed paths only: `/page/N/` is a
- * page of the posts page's listing on a site with one, and nothing on a site
- * whose homepage is a page and which named no posts page.
- */
 function listingAt(view: SiteView, pathname: string): ListingRequest | undefined {
   const { posts } = view.pages;
   const onPostsPage = posts === undefined ? undefined : postsPageRequest(posts, pathname);
@@ -207,11 +163,6 @@ function postsPageRequest(postsPage: Document, pathname: string): ListingRequest
   return page === undefined ? undefined : { subject, pageNumber: page };
 }
 
-/**
- * `/`, `/page/N/`, `/author/{username}/` and `/author/{username}/page/N/`, and
- * either taxonomy's `/{base}/x/` and `/{base}/x/page/N/`, as the listing they
- * spell, whatever the Reading setting says about where the site's posts are.
- */
 function parsedListing(view: SiteView, pathname: string): ListingRequest | undefined {
   const segments = pathname.split('/').filter((segment) => segment !== '');
 

@@ -6,8 +6,6 @@ import type { HtmlPage } from './page.ts';
 import { NAMELESS_NOTE, resolved } from './source.ts';
 import type { Limits, Source } from './source.ts';
 
-/** What the ActivityPub object a cited page links says about it. */
-
 /**
  * A fediverse post as a citation shows it, read from the ActivityPub object a
  * cited page links. `html` is its content, markup and all.
@@ -37,7 +35,6 @@ export type FediverseLookup = (
   signal: AbortSignal,
 ) => Promise<FediversePost | undefined>;
 
-/** The fediverse post a page with no `h-entry` links, when there is a lookup to read it with. */
 export async function fediversePostOf(
   page: HtmlPage,
   lookupPost: FediverseLookup | undefined,

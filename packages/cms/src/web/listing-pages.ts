@@ -38,7 +38,6 @@ import {
 } from './search.ts';
 import { siteView } from './site-view.ts';
 
-/** One page of a paged list, settled: which page, at what URL, in what representation. */
 interface OpenPage {
   pagination: Pagination;
   href: string;
@@ -46,10 +45,6 @@ interface OpenPage {
   paging: ListOptions;
 }
 
-/**
- * The page a request asked for, or the 404 for a page past the last one, or
- * the 406 for an `Accept` none of `available` satisfies.
- */
 function openPage(
   c: Context<GeekityEnv>,
   options: {
@@ -75,14 +70,6 @@ function openPage(
   };
 }
 
-/**
- * One page of a paged list as a response, validated by what the page is made
- * of: the documents on it, where it sits, and whether it carries them whole.
- *
- * The HTML under a watching server is drawn from templates that may change
- * between two requests, so it goes out unvalidated; a page drawn for a
- * signed-in reader is never cached anywhere.
- */
 function pagedResponse(
   c: Context<GeekityEnv>,
   page: OpenPage,
@@ -97,7 +84,7 @@ function pagedResponse(
 ): Response {
   const { representation, href, pagination } = page;
   const { documents } = options;
-  const validated = representation !== 'html' || !c.var.config.watch;
+  const sendsValidators = representation !== 'html' || !c.var.config.watch;
   const fingerprint =
     options.fingerprint ??
     listingFingerprint(href, pagination, documents, options.full ?? false, devModeOn(c.var.config));
@@ -109,7 +96,7 @@ function pagedResponse(
     available: options.available,
     ...(options.links === undefined ? {} : { links: options.links }),
     ...(drawnForSomebody(c, representation) ? { private: true } : {}),
-    ...(validated
+    ...(sendsValidators
       ? {
           etag: representationEtag(representation, fingerprint),
           lastModified: latestModified(documents),

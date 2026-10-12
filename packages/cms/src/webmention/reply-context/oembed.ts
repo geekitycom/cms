@@ -5,24 +5,17 @@ import type { HtmlElement } from '../html.ts';
 import { plainText } from './source.ts';
 import type { Limits, Source } from './source.ts';
 
-/** What an oEmbed endpoint says about a cited page: a known provider's, or the one the page links. */
-
 export interface Oembed {
   readonly title?: string;
   readonly author?: { readonly name: string; readonly url?: string };
   readonly picture?: PictureSource;
 }
 
-/** A provider whose JSON oEmbed endpoint is asked about its pages before the page itself. */
 interface KnownOembedProvider {
-  /** The host names its pages are on. */
   readonly hosts: readonly string[];
-  /** Which of its pages, by path and query, the endpoint answers for. */
   readonly path: RegExp;
   readonly endpoint: string;
-  /** Query parameters the endpoint is asked with, besides the page's `url`. */
   readonly params: Readonly<Record<string, string>>;
-  /** What the provider appends to every title, taken off again. */
   readonly titleSuffix?: string;
 }
 
@@ -65,12 +58,10 @@ const KNOWN_OEMBED_PROVIDERS: readonly KnownOembedProvider[] = [
 ];
 
 export interface KnownEndpoint {
-  /** The endpoint URL to fetch, the page's own URL in its query. */
   readonly endpoint: string;
   readonly titleSuffix?: string | undefined;
 }
 
-/** The endpoint a known provider answers for this page at, or `undefined`. */
 export function knownEndpoint(target: string): KnownEndpoint | undefined {
   const url = webUrl(target);
   if (url === undefined) return undefined;
@@ -107,7 +98,6 @@ export function oembedSource(oembed: Oembed | undefined): Source | undefined {
   };
 }
 
-/** The JSON oEmbed endpoint a page links, or `undefined`. */
 export function oembedEndpoint(root: HtmlElement, base: string): string | undefined {
   for (const element of elementsIn(root)) {
     if (element.name !== 'link') continue;

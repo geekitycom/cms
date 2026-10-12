@@ -38,10 +38,6 @@ export function sitemap(c: Context<GeekityEnv>, page: number | undefined): Respo
   return response ?? notFound(c);
 }
 
-/**
- * The index for language models (TASK-149). Off is a 404; a file of the site's
- * own wins over the generated one.
- */
 export function llmsTxt(c: Context<GeekityEnv>): Response {
   const { contentDir, baseUrl } = c.var.config;
   if (!readSiteSettings(contentDir).llmsTxt) return notFound(c);
@@ -54,10 +50,6 @@ export function llmsTxt(c: Context<GeekityEnv>): Response {
  * Every URL the public site publishes, in the order the sitemap lists them:
  * the home archive's pages, then every post and page, then every tag archive
  * and every category archive with their own pages.
- *
- * Every archive URL is spelled by the archive itself, and the documents are
- * drawn from {@link listedDocuments}, so a sitemap can never advertise a URL
- * the site does not serve, nor anything hidden.
  */
 function sitemapUrls(c: Context<GeekityEnv>): SitemapUrl[] {
   const view = siteView(c);

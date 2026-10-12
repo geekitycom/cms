@@ -48,7 +48,6 @@ export type NewSentWebmention = Omit<SentWebmention, 'attemptedAt'> & {
   attemptedAt?: string | undefined;
 };
 
-/** How each webmention this site sent ended, post by post and target by target. */
 export interface WebmentionStore {
   /**
    * Record how one webmention to one page ended, replacing the previous

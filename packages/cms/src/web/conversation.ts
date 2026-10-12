@@ -449,13 +449,12 @@ function postConversation(context: ConversationContext, document: Document): Con
   };
 }
 
-/** The groups a conversation sorts what was said into, before any threading. */
 type Group = 'written' | 'likes' | 'boosts' | 'mentions' | 'answers';
 
 /**
- * Which group an interaction joins, by what it is. A repost joins the boosts,
- * because a reader looking at the page is being told the same thing by both;
- * a mention is its own group, because it is neither an answer nor a reaction.
+ * A repost joins the boosts, because a reader looking at the page is being
+ * told the same thing by both; a mention is its own group, because it is
+ * neither an answer nor a reaction.
  */
 const GROUP_OF: Readonly<Record<InteractionKind, Group>> = {
   reply: 'written',
@@ -475,7 +474,6 @@ interface Gathered extends Readonly<Record<Group, Interaction[]>> {
   readonly held: ReadonlyMap<string, Interaction>;
 }
 
-/** What one source says about a post, in the order it said it. */
 interface Part {
   readonly said: readonly (readonly [Group, Interaction])[];
   readonly held?: ReadonlyMap<string, Interaction>;
@@ -487,20 +485,18 @@ function gather(
   document: Document,
   seen: ReadonlySet<string> = new Set([document.path]),
 ): Gathered {
-  const objectId = activityStreamsId(document, context.baseUrl);
+  const deliveredObjectId = activityStreamsId(document, context.baseUrl);
   const root = rootOf(context, document);
   const stored = context.admin.listCommentsFor(document.slug);
   const naming = authorNaming(context.admin);
   const isEvent = postTypeOf(document) === 'event';
 
-  // A post that has never been delivered has no object id, and so nothing on
-  // the fediverse can have answered or quoted it.
   const fediverse =
-    objectId === undefined
+    deliveredObjectId === undefined
       ? []
       : [
-          fromQuotes(context, objectId, naming),
-          fromActivities(context, objectId, stored, naming, isEvent),
+          fromQuotes(context, deliveredObjectId, naming),
+          fromActivities(context, deliveredObjectId, stored, naming, isEvent),
         ];
   const comments = fromStored(context, document, stored, isEvent);
   const sources = [...fediverse, comments];
@@ -513,7 +509,6 @@ function gather(
   return merged(root, [...sources, replyPosts]);
 }
 
-/** The parts folded into one conversation, each source's entries in the order it gave them. */
 function merged(root: string, parts: readonly Part[]): Gathered {
   const groups: Record<Group, Interaction[]> = {
     written: [],
@@ -537,7 +532,6 @@ function merged(root: string, parts: readonly Part[]): Gathered {
   return { root, ...groups, held, withdrawn };
 }
 
-/** The approved quotes of a post, as mentions. */
 function fromQuotes(
   context: ConversationContext,
   objectId: string,
@@ -551,10 +545,6 @@ function fromQuotes(
   };
 }
 
-/**
- * What the fediverse said about a post: its RSVPs when it is an event, the
- * likes and boosts of it, and the notes answering it at any depth.
- */
 function fromActivities(
   context: ConversationContext,
   objectId: string,
@@ -628,7 +618,6 @@ function fromActivities(
   return { said, withdrawn };
 }
 
-/** A stored like, boost or repost as the actor's reaction, which the log's own may not repeat. */
 function storedReaction({ kind, actor }: PostComment): string[] {
   const group = GROUP_OF[kind];
   return actor === undefined || (group !== 'likes' && group !== 'boosts')
@@ -640,7 +629,6 @@ function reactionKey(kind: InteractionKind, actor: string): string {
   return `${GROUP_OF[kind]}\0${actor}`;
 }
 
-/** A logged activity that says nothing, as the thread's own shape. */
 function reaction(
   activity: InboxActivity,
   naming: (actorId: string) => InteractionAuthor,
@@ -660,7 +648,6 @@ function reaction(
   };
 }
 
-/** The stored comments on a post: the approved ones in their groups, the rest held. */
 function fromStored(
   context: ConversationContext,
   document: Document,

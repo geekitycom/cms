@@ -48,7 +48,7 @@ export {
   adminAssetResponse,
   adminContentSecurityPolicy,
   adminSecurityHeaders,
-  adminStoreOver,
+  adminStoreOwning,
   akismetPanel,
   AKISMET_FIELDS,
   AKISMET_PATH,

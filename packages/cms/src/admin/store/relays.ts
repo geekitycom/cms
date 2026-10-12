@@ -46,7 +46,6 @@ export type NewRelay = Omit<Relay, 'createdAt' | 'updatedAt'> & {
   createdAt?: string | undefined;
 };
 
-/** The relay subscriptions and where each handshake stands. */
 export interface RelayStore {
   /** Every relay subscription, oldest first, however it stands. */
   listRelays(): Relay[];

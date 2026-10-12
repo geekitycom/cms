@@ -881,7 +881,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     return { ...form, loaded: mark };
   }
 
-  /** A page that answers for the site rather than for a document: a 404, 410, 500 or 503. */
   function statusPage(
     { template, title }: StatusPage,
     url: string,

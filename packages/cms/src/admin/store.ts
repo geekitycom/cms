@@ -117,15 +117,10 @@ export type AdminStore = SessionStore &
  * index holding a second one on the same file.
  */
 export function openAdminStore(options: OpenAdminStoreOptions): AdminStore {
-  return adminStoreOver(openAdminDatabase(options.dataDir), databaseFile(options.dataDir));
+  return adminStoreOwning(openAdminDatabase(options.dataDir), databaseFile(options.dataDir));
 }
 
-/**
- * The admin store over a database {@link openAdminDatabase} opened, for a
- * caller that runs the legacy migrations on the same connection first. Closing
- * the store closes `db`.
- */
-export function adminStoreOver(db: DatabaseSync, file: string): AdminStore {
+export function adminStoreOwning(db: DatabaseSync, file: string): AdminStore {
   let open = true;
   let readOnly = false;
   const { events, written } = conversationEvents();

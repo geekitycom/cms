@@ -74,7 +74,6 @@ export interface LegacyUser {
   createdAt: string;
 }
 
-/** The settings rows, or `undefined` once the table is gone. */
 export function legacySettings(db: DatabaseSync): LegacySetting[] | undefined {
   // Prepared here, after the check, because a statement over a missing table
   // throws when it is prepared rather than when it is run.
@@ -89,7 +88,6 @@ export function legacySettings(db: DatabaseSync): LegacySetting[] | undefined {
   }));
 }
 
-/** The actor key rows, or `undefined` once the table is gone. */
 export function legacyActorKeys(db: DatabaseSync): LegacyActorKey[] | undefined {
   if (!hasTable(db, 'actor_keys')) return undefined;
 
@@ -105,7 +103,6 @@ export function legacyActorKeys(db: DatabaseSync): LegacyActorKey[] | undefined 
   }));
 }
 
-/** The users rows, ids and all, or `undefined` once the table is gone. */
 export function legacyUsers(db: DatabaseSync): LegacyUser[] | undefined {
   if (!hasTable(db, 'users')) return undefined;
 

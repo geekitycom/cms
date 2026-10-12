@@ -588,10 +588,6 @@ export const MIGRATIONS: readonly Migration[] = [
   },
 ];
 
-/**
- * Open (and if needed create) the admin tables in `dataDir`, applying every
- * migration the package ships. Applying them is idempotent.
- */
 export function openAdminDatabase(dataDir: string): DatabaseSync {
   return openDatabase({ dataDir, ledger: LEDGER, migrations: MIGRATIONS });
 }

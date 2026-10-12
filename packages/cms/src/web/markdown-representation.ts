@@ -28,7 +28,6 @@ import { decodedPath } from './redirects.ts';
 import { documentLabel, encodePath } from './request.ts';
 import { servedPath, siteView } from './site-view.ts';
 
-/** One document as the Markdown file a reader or a model is handed. */
 export function documentMarkdown(c: Context<GeekityEnv>, document: Document): string {
   const writer = authorContext(siteView(c).users(), document.author);
   const neighbours = document.type === 'post' ? c.var.store.neighbours(document) : {};
@@ -59,7 +58,6 @@ export function documentMarkdown(c: Context<GeekityEnv>, document: Document): st
   );
 }
 
-/** One page of a listing as Markdown: its description, its posts and its pager. */
 export function listingMarkdown(
   c: Context<GeekityEnv>,
   archive: Archive,
@@ -116,7 +114,6 @@ function markdownPage(
   ]);
 }
 
-/** {@link markdownHrefFor}, keeping a link that names nothing as it was. */
 export function markdownUrlFor(c: Context<GeekityEnv>, pageUrl: string): MarkdownUrl {
   const href = markdownHrefFor(c, pageUrl);
   return (url) => href(url) ?? url;

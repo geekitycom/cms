@@ -17,17 +17,14 @@ import type { SiteDataSource } from './context.ts';
 import type { RedirectSource } from './redirects.ts';
 import type { CreateRendererOptions } from './render.ts';
 
-/** What {@link pageSources} reads a site's pages out of. */
 export interface PageSourcesOptions {
   readonly config: ResolvedConfig;
   readonly store: ContentStore;
   readonly redirects: RedirectSource;
   readonly siteData: SiteDataSource;
-  /** Whether the site can send mail, which is whether the comment form offers notices. */
   readonly mailConfigured: () => boolean;
 }
 
-/** The parts of a page the renderer asks the site's files and index for. */
 export type PageSources = Required<
   Pick<
     CreateRendererOptions,
@@ -44,11 +41,6 @@ export type PageSources = Required<
   >
 >;
 
-/**
- * What a site's pages are drawn with besides the document itself, each read
- * per render so that a save, a setting or a clock tick shows on the very next
- * request.
- */
 export function pageSources({
   config,
   store,
@@ -74,9 +66,6 @@ export function pageSources({
         locations.read(document.permalink),
         readSiteSettings(config.contentDir).locationSharing,
       ),
-    // The pages that put themselves in the site menu are found by asking for
-    // every public page rather than by an index of their own: a site has a
-    // handful, and a page flagged in the editor is in the menu at once.
     pages: () => store.listAll({ type: 'page', draft: false, trashed: false, scheduled: false }),
     users: () => listUsers(config.dataDir),
     commentForm: (document, viewer) =>
@@ -99,10 +88,6 @@ export function pageSources({
   };
 }
 
-/**
- * Whether a document is the page the Reading setting serves at `/`, so a link
- * to `/` is a backlink to it, as the routes resolve it.
- */
 function isHomepage(store: ContentStore, siteData: SiteDataSource, document: Document): boolean {
   if (document.type !== 'page') return false;
   const { homepage } = frontPageSlugs(siteData.read());

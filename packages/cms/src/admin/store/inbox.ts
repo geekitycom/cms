@@ -90,7 +90,6 @@ export type NewInboxActivity = Omit<
   recipient?: string | null | undefined;
 };
 
-/** The log of what the inbox was told, and the replies in it. */
 export interface InboxStore {
   /** How many activities the inbound log holds. */
   countInboxActivities(): number;
@@ -144,7 +143,6 @@ export interface InboxStore {
   listRepliesByKey(key: string): InboxActivity[];
 }
 
-/** The inbox queries over `db`, telling `written` about every activity logged or forgotten. */
 export function openInboxStore(
   db: DatabaseSync,
   written: (change: ConversationWrite) => void,

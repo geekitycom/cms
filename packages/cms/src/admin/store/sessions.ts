@@ -52,7 +52,6 @@ export interface CreateSessionInput {
 /** How long a session id is, in bytes. 32 is the 256 bits doc-5 asks for. */
 export const SESSION_ID_BYTES = 32;
 
-/** The sessions table: logins, their CSRF tokens and the flash queued on each. */
 export interface SessionStore {
   /** Start a session and hand back its id and CSRF token. */
   createSession(input: CreateSessionInput): Session;
@@ -88,7 +87,6 @@ export interface SessionStore {
   takeFlash(sessionId: string): FlashMessage[];
 }
 
-/** The session queries over `db`. `isReadOnly` says whether a read may also clear. */
 export function openSessionStore(db: DatabaseSync, isReadOnly: () => boolean): SessionStore {
   const statements = {
     deleteSessionsForUser: db.prepare('DELETE FROM sessions WHERE user_id = ? AND id IS NOT ?'),

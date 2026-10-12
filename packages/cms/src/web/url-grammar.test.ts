@@ -8,11 +8,6 @@ import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { createUser } from '../site/users.ts';
 
-/**
- * Which of the things a path can name wins when it could name several, and
- * where each spelling of it leads.
- */
-
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 

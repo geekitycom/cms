@@ -246,7 +246,6 @@ export interface ListCommentsOptions extends ListPageOptions {
   status?: CommentStatus | undefined;
 }
 
-/** The comment index, read back from `content/_data/comments/` on every boot. */
 export interface CommentStore {
   /** One post's comments, oldest first, whatever status they are at. */
   listCommentsFor(slug: string): PostComment[];
@@ -285,7 +284,6 @@ export interface CommentStore {
   replaceComments(comments: readonly PostComment[]): void;
 }
 
-/** The comment queries over `db`, telling `written` about every comment written or forgotten. */
 export function openCommentStore(
   db: DatabaseSync,
   written: (change: ConversationWrite) => void,
