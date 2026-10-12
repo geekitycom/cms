@@ -269,6 +269,46 @@ publishes them. The build fails when:
 
 A plugin that needs a native module installs with npm only.
 
+### Testing a plugin
+
+A plugin's tests build a site the way a site does, with `createCms` and the
+other names in [The package API](public-api.md). When a test also needs a part
+of the host on its own, such as the admin store or the `PluginSite` that
+`register` is given, it imports it from `@geekity/cms/testing`.
+
+`@geekity/cms/testing` is for tests only. A plugin's `src/` imports only
+`@geekity/cms/plugin`, so the bundle never carries these helpers. The names
+below are not covered by semantic versioning and can change in a minor
+release.
+
+```ts
+import { createCms } from '@geekity/cms';
+import { pluginDataFolder, pluginSite } from '@geekity/cms/testing';
+```
+
+| Export                  | Kind     | What it is                                                                                             |
+| ----------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| `addComment`            | function | Record a comment: append it to its post's file and index it.                                           |
+| `deleteComment`         | function | Forget a comment altogether.                                                                           |
+| `documentContent`       | function | The writable half of a parsed document: what it would be written back from.                            |
+| `intakeComment`         | function | The one door into `content/_data/comments/`.                                                           |
+| `openAdminStore`        | function | Open (and if needed create) the admin tables in `dataDir`, applying every migration the package ships. |
+| `pluginDataFolder`      | function | `data/plugins/<package name>/`, which only its plugin reads and writes.                                |
+| `pluginSite`            | function | The `PluginSite` a plugin's host is given, built from a site's admin store and config.                 |
+| `updateComment`         | function | Move a stored comment: approve it, mark it spam, put it back, or rewrite what it says.                 |
+| `CommentIntakeOutcome`  | type     | What became of one proposed comment.                                                                   |
+| `CommentOrigin`         | type     | Who is proposing a comment, which is the one thing the rules differ on.                                |
+| `IntakeCommentOptions`  | type     | What `intakeComment` needs around a proposed comment.                                                  |
+| `NewComment`            | type     | A `CommentRecord` on its way in, before the store has named it.                                        |
+| `OpenAdminStoreOptions` | type     | Where `openAdminStore` puts, and finds, its tables. Pass `now` to pin the time its records carry.      |
+| `ProposedComment`       | type     | A comment as its writer proposes it: everything but its name, where it stands, and where it came from. |
+
+`src/public-api.test.ts` in `packages/cms` compares `src/testing.ts` with this
+table, and fails when a value here is not imported by any plugin test. It also
+fails when a plugin test or script imports from `@geekity/cms` a name that
+[The package API](public-api.md) does not list, and when a plugin's `src/`
+imports anything but `@geekity/cms/plugin`.
+
 ## Hooks
 
 Two hooks run a site's own code when content changes. Both are config

@@ -32,7 +32,8 @@ import path from 'node:path';
 
 import { createFederation, generateCryptoKeyPair, MemoryKvStore } from '@fedify/fedify';
 import { Accept, Application, Endpoints, Follow } from '@fedify/vocab';
-import { createCms, pluginDataFolder, pluginSite } from '@geekity/cms';
+import { createCms } from '@geekity/cms';
+import { pluginDataFolder, pluginSite } from '@geekity/cms/testing';
 import { serve } from '@hono/node-server';
 
 import wordpress from '../src/index.ts';

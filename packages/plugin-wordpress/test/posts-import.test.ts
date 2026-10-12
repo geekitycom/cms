@@ -4,14 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import {
-  documentContent,
-  parseDocument,
-  pluginDataFolder,
-  serializeDocument,
-  slugify,
-} from '@geekity/cms';
+import { parseDocument, serializeDocument, slugify } from '@geekity/cms';
 import type { PluginCommandContext, PluginSite } from '@geekity/cms/plugin';
+import { documentContent, pluginDataFolder } from '@geekity/cms/testing';
 import { load } from 'js-yaml';
 
 import { importWordPressContent } from '../src/content-import.ts';

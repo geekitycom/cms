@@ -5,20 +5,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { createCms, createUser, resolveConfig } from '@geekity/cms';
+import type { Cms } from '@geekity/cms';
+import type { PluginCommandContext } from '@geekity/cms/plugin';
 import {
   addComment,
-  createCms,
-  createUser,
   deleteComment,
   intakeComment,
   openAdminStore,
   pluginDataFolder,
   pluginSite,
-  resolveConfig,
   updateComment,
-} from '@geekity/cms';
-import type { Cms } from '@geekity/cms';
-import type { PluginCommandContext } from '@geekity/cms/plugin';
+} from '@geekity/cms/testing';
 
 import { commentsAndReactions } from '../src/comments-import.ts';
 import { importWordPressContent } from '../src/content-import.ts';

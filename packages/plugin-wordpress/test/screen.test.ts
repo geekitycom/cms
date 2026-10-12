@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createCms, createUser, pluginDataFolder } from '@geekity/cms';
+import { createCms, createUser } from '@geekity/cms';
 import type { Cms } from '@geekity/cms';
+import { pluginDataFolder } from '@geekity/cms/testing';
 
 import wordpress from '../src/index.ts';
 import { wordPressRecords } from '../src/records.ts';

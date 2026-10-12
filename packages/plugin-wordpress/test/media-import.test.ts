@@ -4,9 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { createCms, pluginDataFolder } from '@geekity/cms';
+import { createCms } from '@geekity/cms';
 import type { Cms } from '@geekity/cms';
 import type { PluginCommandContext, PluginSite } from '@geekity/cms/plugin';
+import { pluginDataFolder } from '@geekity/cms/testing';
 
 import { importWordPressContent } from '../src/content-import.ts';
 import type { ReportRow } from '../src/content-import.ts';

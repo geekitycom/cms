@@ -42,7 +42,7 @@ const LAYERS: readonly Layer[] = [
   { name: 'endpoints and middleware', units: ['micropub/', 'access-log.ts', 'drain.ts'] },
   { name: 'publish pings', units: ['notify.ts', 'indexnow.ts'] },
   { name: 'composition root', units: ['cms/'] },
-  { name: 'public API', units: ['exports.ts', 'config-loader.ts'] },
+  { name: 'public API', units: ['exports.ts', 'testing.ts', 'config-loader.ts'] },
   { name: 'package index', units: ['index.ts'] },
   { name: 'command line', units: ['cli.ts'] },
 ];

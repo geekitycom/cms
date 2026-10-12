@@ -5,14 +5,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import {
-  createCms,
-  createMemoryMailProvider,
-  pluginDataFolder,
-  pluginSite,
-  resolveConfig,
-} from '@geekity/cms';
+import { createCms, createMemoryMailProvider, resolveConfig } from '@geekity/cms';
 import type { Cms } from '@geekity/cms';
+import { pluginDataFolder, pluginSite } from '@geekity/cms/testing';
 
 import { commentsAndReactions } from '../src/comments-import.ts';
 import { importWordPressContent } from '../src/content-import.ts';

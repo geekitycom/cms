@@ -5,7 +5,6 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import {
-  addComment,
   atomFeed,
   commentsRssFeed,
   createCms,
@@ -22,6 +21,7 @@ import {
   spokenIn,
 } from './index.ts';
 import type { Cms } from './index.ts';
+import { addComment } from './testing.ts';
 
 const BASE_URL = 'https://geekity.example';
 const PERMALINK = '/2026/01/release-one/';
