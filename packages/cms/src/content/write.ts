@@ -56,7 +56,6 @@ export interface SiteRecords {
   readonly hasComments: (slug: string) => boolean;
 }
 
-/** The parts of the site's config a write reads. */
 export interface WriteConfig {
   readonly contentDir: string;
   readonly dataDir: string;

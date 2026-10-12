@@ -309,7 +309,6 @@ async function tombstone(
   return new Response(response.body, { status: 410, headers: response.headers });
 }
 
-/** The user a WebFinger `resource` on this request asks about, by {@link webFingerUser}. */
 export function webFingerSubject(c: Context<GeekityEnv>, resource: string): User | undefined {
   return webFingerUser(listUsers(c.var.config.dataDir), resource, c.var.config.baseUrl);
 }

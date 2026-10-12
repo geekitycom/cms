@@ -1,8 +1,8 @@
 import type { ReplyReader } from '../store.ts';
 import { SERVED_CLAUSE } from './clauses.ts';
-import { nowKey, statement } from './database.ts';
+import { nowKey, cachedStatement } from './database.ts';
 import type { IndexDatabase, Row } from './database.ts';
-import { hydrateAll, select } from './documents.ts';
+import { hydrateAll, selectNewestFirst } from './documents.ts';
 
 const BY_REPLIES_KEY_SQL = `
   SELECT * FROM documents
@@ -15,7 +15,7 @@ export function replyReader(index: IndexDatabase): ReplyReader {
     listRepliesTo(targets) {
       const wanted = [...new Set(targets)];
       if (wanted.length === 0) return [];
-      return select(
+      return selectNewestFirst(
         index,
         ["type = 'post'", SERVED_CLAUSE, `in_reply_to IN (${wanted.map(() => '?').join(', ')})`],
         [nowKey(index), ...wanted],
@@ -24,7 +24,7 @@ export function replyReader(index: IndexDatabase): ReplyReader {
     },
 
     listReplyPosts: (options = {}) =>
-      select(
+      selectNewestFirst(
         index,
         ["type = 'post'", SERVED_CLAUSE, 'in_reply_to IS NOT NULL'],
         [nowKey(index)],
@@ -32,6 +32,9 @@ export function replyReader(index: IndexDatabase): ReplyReader {
       ),
 
     listByRepliesKey: (key) =>
-      hydrateAll(index, statement(index, BY_REPLIES_KEY_SQL).all(key, nowKey(index)) as Row[]),
+      hydrateAll(
+        index,
+        cachedStatement(index, BY_REPLIES_KEY_SQL).all(key, nowKey(index)) as Row[],
+      ),
   };
 }

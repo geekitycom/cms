@@ -19,7 +19,6 @@ export const DUE_CLAUSE = '(date_sort IS NULL OR date_sort <= ?)';
 /** The reverse: a document whose date is still ahead of the clock. */
 export const SCHEDULED_CLAUSE = '(date_sort IS NOT NULL AND date_sort > ?)';
 
-/** The instant the next scheduled document becomes public. */
 export const NEXT_DUE_SQL = `
   SELECT MIN(date_sort) AS due FROM documents
   WHERE draft = 0 AND trashed = 0 AND ${SCHEDULED_CLAUSE}
@@ -53,7 +52,6 @@ export const PINNED_CLAUSE = `COALESCE(json_extract(extra, '$.${PINNED_FRONT_MAT
  */
 export const FEDERATED_CLAUSE = `COALESCE(json_extract(activitypub, '$.published'), '') <> ''`;
 
-/** Where one taxonomy's terms are stored, and how a term is matched there. */
 export interface TermTable {
   readonly table: 'document_tags' | 'document_categories';
   readonly matchColumn: 'key' | 'category';

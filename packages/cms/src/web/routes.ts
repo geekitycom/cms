@@ -71,7 +71,11 @@ import type { TaxonomyTerm } from '../content/taxonomy.ts';
  * routes registered after this one still win, and a permalink can never shadow
  * them, because the document lookup only runs once nothing else has matched.
  */
-export function mountPublicSite(app: Hono<GeekityEnv>): void {
+export function mountPublicSite(
+  app: Hono<GeekityEnv>,
+  { adminBar }: { adminBar?: MiddlewareHandler<GeekityEnv> } = {},
+): void {
+  if (adminBar !== undefined) app.use('*', adminBar);
   app.use('*', advertiseIdentityEndpoints);
   app.use('*', declaredQueryRedirect);
 

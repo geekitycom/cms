@@ -1,8 +1,3 @@
-/**
- * The admin's paths the rest of the site refers to: the robots rules keep
- * crawlers out of it, the public site links into it and leaves it alone.
- */
-
 /** Where the admin lives. Everything under it needs a session. */
 export const ADMIN_PREFIX = '/admin';
 

@@ -5,7 +5,7 @@ import { ownSiteLinks } from '../site-links.ts';
 import { DuplicatePermalinkError } from '../store.ts';
 import type { IndexWriter } from '../store.ts';
 import { tagKey, uniqueTags } from '../tags.ts';
-import { inTransaction, statement, stringOrUndefined } from './database.ts';
+import { inTransaction, cachedStatement, stringOrUndefined } from './database.ts';
 import type { IndexDatabase, Row } from './database.ts';
 import { repliesKeysOf, toDocument, toRow } from './rows.ts';
 import { forgetSpellings, markTagsStaleBeforeWrite } from './spellings.ts';
@@ -67,12 +67,12 @@ export function indexWriter(index: IndexDatabase): IndexWriter {
  */
 export function refreshAgainstBase(index: IndexDatabase, baseUrl: string): void {
   inTransaction(index.db, () => {
-    const rows = statement(index, 'SELECT * FROM documents WHERE keys_base IS NOT ?').all(
+    const rows = cachedStatement(index, 'SELECT * FROM documents WHERE keys_base IS NOT ?').all(
       baseUrl,
     ) as Row[];
     for (const row of rows) {
       const document = toDocument(row, [], []);
-      statement(index, WRITE_KEYS_SQL).run({
+      cachedStatement(index, WRITE_KEYS_SQL).run({
         path: document.path,
         ...repliesKeysOf(document, baseUrl),
       });
@@ -86,7 +86,7 @@ function writeDocument(index: IndexDatabase, document: Document): void {
   markTagsStaleBeforeWrite(index, contentPath);
   for (const tag of document.tags) index.spellings.staleKeys.add(tagKey(tag));
   try {
-    statement(index, UPSERT_SQL).run({
+    cachedStatement(index, UPSERT_SQL).run({
       ...toRow(document),
       ...repliesKeysOf(document, index.baseUrl),
     });
@@ -100,49 +100,48 @@ function writeDocument(index: IndexDatabase, document: Document): void {
 
 function writeTerms(index: IndexDatabase, document: Document): void {
   const contentPath = document.path;
-  statement(index, 'DELETE FROM document_tags WHERE path = ?').run(contentPath);
+  cachedStatement(index, 'DELETE FROM document_tags WHERE path = ?').run(contentPath);
   uniqueTags(document.tags).forEach((tag, position) => {
-    statement(
+    cachedStatement(
       index,
       'INSERT INTO document_tags (path, tag, key, position) VALUES (?, ?, ?, ?)',
     ).run(contentPath, tag, tagKey(tag), position);
   });
-  statement(index, 'DELETE FROM document_categories WHERE path = ?').run(contentPath);
+  cachedStatement(index, 'DELETE FROM document_categories WHERE path = ?').run(contentPath);
   document.categories.forEach((category, position) => {
-    statement(
+    cachedStatement(
       index,
       'INSERT INTO document_categories (path, category, position) VALUES (?, ?, ?)',
     ).run(contentPath, category, position);
   });
-  statement(index, 'DELETE FROM document_redirects WHERE path = ?').run(contentPath);
+  cachedStatement(index, 'DELETE FROM document_redirects WHERE path = ?').run(contentPath);
   (document.redirectFrom ?? []).forEach((url, position) => {
-    statement(index, 'INSERT INTO document_redirects (path, url, position) VALUES (?, ?, ?)').run(
-      contentPath,
-      url,
-      position,
-    );
+    cachedStatement(
+      index,
+      'INSERT INTO document_redirects (path, url, position) VALUES (?, ?, ?)',
+    ).run(contentPath, url, position);
   });
 }
 
 /**
- * The words a document is found by. Replaced rather than updated, because an
- * FTS5 table has no key to conflict on: the path is only a column in it.
+ * Replaced rather than updated, because an FTS5 table has no key to conflict
+ * on: the path is only a column in it.
  */
 function writeWords(index: IndexDatabase, document: Document): void {
   const words = searchText(document);
-  statement(index, 'DELETE FROM documents_fts WHERE path = ?').run(document.path);
-  statement(
+  cachedStatement(index, 'DELETE FROM documents_fts WHERE path = ?').run(document.path);
+  cachedStatement(
     index,
     'INSERT INTO documents_fts (path, title, description, terms, body) VALUES (?, ?, ?, ?, ?)',
   ).run(document.path, words.title, words.description, words.terms, words.body);
 }
 
 function writeLinks(index: IndexDatabase, document: Document, baseUrl: string | undefined): void {
-  statement(index, 'DELETE FROM document_links WHERE path = ?').run(document.path);
+  cachedStatement(index, 'DELETE FROM document_links WHERE path = ?').run(document.path);
   if (baseUrl === undefined) return;
   const pageUrl = absoluteUrl(document.permalink, baseUrl);
   for (const { path, query } of ownSiteLinks(document.html, pageUrl, baseUrl)) {
-    statement(index, 'INSERT INTO document_links (path, target, query) VALUES (?, ?, ?)').run(
+    cachedStatement(index, 'INSERT INTO document_links (path, target, query) VALUES (?, ?, ?)').run(
       document.path,
       path,
       query,
@@ -153,8 +152,10 @@ function writeLinks(index: IndexDatabase, document: Document, baseUrl: string | 
 function removeDocument(index: IndexDatabase, contentPath: string): boolean {
   markTagsStaleBeforeWrite(index, contentPath);
   // Nothing cascades into a virtual table, so the words go by hand.
-  statement(index, 'DELETE FROM documents_fts WHERE path = ?').run(contentPath);
-  return statement(index, 'DELETE FROM documents WHERE path = ?').run(contentPath).changes > 0;
+  cachedStatement(index, 'DELETE FROM documents_fts WHERE path = ?').run(contentPath);
+  return (
+    cachedStatement(index, 'DELETE FROM documents WHERE path = ?').run(contentPath).changes > 0
+  );
 }
 
 function clearIndex(index: IndexDatabase): void {
@@ -180,7 +181,7 @@ function clearIndex(index: IndexDatabase): void {
 function translateWriteError(index: IndexDatabase, error: unknown, document: Document): unknown {
   if (!isUniqueViolation(error, 'documents.permalink')) return error;
 
-  const row = statement(
+  const row = cachedStatement(
     index,
     'SELECT path FROM documents WHERE permalink = ? AND trashed = 0',
   ).get(document.permalink) as Row | undefined;

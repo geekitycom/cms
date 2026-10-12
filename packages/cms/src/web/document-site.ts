@@ -20,7 +20,6 @@ export function documentSite(
   return documentSiteFrom(c.var, writer);
 }
 
-/** The write path from a request's variables, for a request that is not the admin's. */
 export function documentSiteFrom(
   variables: WriteVariables,
   writer: string | undefined,

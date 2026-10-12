@@ -149,10 +149,7 @@ export function createApp(
   // The admin goes on before the public site, for the same reason.
   mountAdmin(app);
   mountPluginRoutes(app, plugins);
-  // Before the public site, so every page it draws, the 404 and the 500
-  // included, knows whether a signed-in user is reading it (TASK-183).
-  app.use('*', publicAdminBar);
-  mountPublicSite(app);
+  mountPublicSite(app, { adminBar: publicAdminBar });
 
   return { app, writes };
 }

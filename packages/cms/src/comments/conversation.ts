@@ -5,14 +5,6 @@ import type { AdminStore, PostComment } from '../store/admin-store.ts';
 import { absoluteUrl } from '../util/url.ts';
 
 /**
- * What has been said about a post, from every source at once, as a shape:
- * the interactions, the threads they make, and the {@link ConversationReader}
- * that answers for them. The reader itself is `web/conversation.ts`, which
- * merges the indexes; what lives here is what the features that write a
- * conversation need to name it.
- */
-
-/**
  * Where an interaction came from.
  *
  * `activitypub` is a reply, a like or a boost the site's inbox was sent.

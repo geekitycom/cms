@@ -1,6 +1,6 @@
 import type { DocumentLookup } from '../store.ts';
 import { SERVED_CLAUSE } from './clauses.ts';
-import { nowKey, statement } from './database.ts';
+import { nowKey, cachedStatement } from './database.ts';
 import type { IndexDatabase, Row } from './database.ts';
 import { hydrate } from './documents.ts';
 
@@ -22,7 +22,7 @@ const BY_SLUG_SQL = `SELECT * FROM documents WHERE slug = ? ORDER BY date_sort D
 
 export function documentLookup(index: IndexDatabase): DocumentLookup {
   const one = (sql: string, ...params: string[]) =>
-    hydrate(index, statement(index, sql).get(...params) as Row | undefined);
+    hydrate(index, cachedStatement(index, sql).get(...params) as Row | undefined);
   return {
     getByPath: (contentPath) => one('SELECT * FROM documents WHERE path = ?', contentPath),
     getByPermalink: (permalink) => one(BY_PERMALINK_SQL, permalink),

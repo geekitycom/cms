@@ -1,16 +1,6 @@
 import type { PostComment } from '../store/admin-store.ts';
 
 /**
- * The one seam a third-party opinion on what the public posts plugs into.
- *
- * A site names a {@link CommentChecker} as `commentChecker` in its config;
- * comments, webmentions and contact messages are all judged through it.
- * Everything Akismet's API asks for is on the submission it is handed, and
- * its four answers are the four the comment intake understands, so nothing
- * else in the CMS has to know such a service exists.
- */
-
-/**
  * What a checker is told a submission is.
  *
  * Akismet's `comment_type`, which is an open vocabulary with a handful of

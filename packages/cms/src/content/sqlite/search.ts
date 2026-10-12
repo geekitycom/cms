@@ -1,7 +1,7 @@
 import { searchExpression, SNIPPET_CLOSE, SNIPPET_OPEN } from '../search.ts';
 import type { SearchReader } from '../store.ts';
 import { LISTED_CLAUSE } from './clauses.ts';
-import { nowKey, statement } from './database.ts';
+import { nowKey, cachedStatement } from './database.ts';
 import type { IndexDatabase, Row } from './database.ts';
 import { hydrateAll } from './documents.ts';
 
@@ -41,7 +41,7 @@ export function searchReader(index: IndexDatabase): SearchReader {
     search(query, options = {}) {
       const expression = searchExpression(query);
       if (expression === undefined) return [];
-      const rows = statement(index, SEARCH_SQL).all(
+      const rows = cachedStatement(index, SEARCH_SQL).all(
         expression,
         nowKey(index),
         options.limit ?? -1,
@@ -56,7 +56,7 @@ export function searchReader(index: IndexDatabase): SearchReader {
     countSearch(query) {
       const expression = searchExpression(query);
       if (expression === undefined) return 0;
-      const row = statement(index, `SELECT COUNT(*) AS count ${SEARCH_FROM}`).get(
+      const row = cachedStatement(index, `SELECT COUNT(*) AS count ${SEARCH_FROM}`).get(
         expression,
         nowKey(index),
       ) as Row;

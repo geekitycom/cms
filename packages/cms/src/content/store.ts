@@ -18,7 +18,6 @@ export type Clock = () => Date;
 /** The clock an index uses when it is not given one. */
 export const systemClock: Clock = () => new Date();
 
-/** Where `openContentStore` puts the database. */
 export interface OpenContentStoreOptions {
   /** Directory the database lives in. Created if it is missing. */
   dataDir: string;
@@ -43,7 +42,6 @@ export interface BacklinkSite {
   readonly home?: boolean | undefined;
 }
 
-/** The index's clock. */
 export interface IndexClock {
   /**
    * What the index thinks the time is: the instant every public query holds a
@@ -57,7 +55,6 @@ export interface IndexClock {
   now(): Date;
 }
 
-/** One document, found by what names it. */
 export interface DocumentLookup {
   /** The document at a content-relative path, or `undefined`. */
   getByPath(path: string): Document | undefined;
@@ -98,7 +95,6 @@ export interface DocumentLookup {
   getBySlug(slug: string): Document | undefined;
 }
 
-/** The public archive: what a reader can page through, and how much of it there is. */
 export interface ArchiveReader {
   /** Published, untrashed, already-due, listed posts, newest first. */
   listPosts(options?: ListOptions): Document[];
@@ -164,7 +160,6 @@ export interface ArchiveReader {
   countByAuthor(names: readonly string[]): number;
 }
 
-/** The terms in use, and how the site spells them. */
 export interface TaxonomyReader {
   /** Every tag in use on published, untrashed documents, once each in the site's spelling, with its count. */
   listTags(): TagCount[];
@@ -195,7 +190,6 @@ export interface TaxonomyReader {
   tagSpelling(tag: string, options?: { excluding?: string | undefined }): string | undefined;
 }
 
-/** The site's own posts that answer something. */
 export interface ReplyReader {
   /**
    * Served posts whose `in-reply-to` is exactly one of these URLs, unlisted
@@ -213,7 +207,6 @@ export interface ReplyReader {
   listByRepliesKey(key: string): Document[];
 }
 
-/** The documents that link to one. */
 export interface BacklinkReader {
   /**
    * The listed posts and pages whose body links to `document`, newest first
@@ -232,7 +225,6 @@ export interface BacklinkReader {
   listBacklinks(document: Document, site?: BacklinkSite): Document[];
 }
 
-/** Full-text search over the public site. */
 export interface SearchReader {
   /**
    * Published, untrashed, already-due posts and pages matching a reader's
@@ -250,7 +242,6 @@ export interface SearchReader {
   countSearch(query: string): number;
 }
 
-/** Every document the index holds, drafts and the trash included. */
 export interface CatalogReader {
   /** Everything the admin may see, trash and drafts included unless filtered. */
   listAll(options?: ListAllOptions): Document[];
@@ -272,7 +263,6 @@ export interface CatalogReader {
   counts(): ContentCounts;
 }
 
-/** What a scheduler asks of the index. */
 export interface ScheduleReader {
   /**
    * When the next scheduled document becomes public, as the UTC instant the
@@ -292,7 +282,6 @@ export interface ScheduleReader {
   listDueSince(after: string): Document[];
 }
 
-/** Writes to the index. */
 export interface IndexWriter {
   /**
    * Insert or replace the row for `document.path`, tags and categories
@@ -326,7 +315,6 @@ export interface IndexWriter {
   clear(): void;
 }
 
-/** The database connection itself. */
 export interface IndexConnection {
   /** Absolute path of the SQLite file. */
   readonly file: string;
@@ -346,9 +334,6 @@ export interface IndexConnection {
  * Files are the source of truth (decision-1); this is a queryable copy that
  * answers the questions a directory walk cannot answer cheaply. Deleting the
  * database is safe because the next boot rebuilds it.
- *
- * Every interface it is made of together. A caller names the parts it reads;
- * only the composition root holds the whole.
  */
 export interface ContentStore
   extends

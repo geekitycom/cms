@@ -1,7 +1,7 @@
 import type { Document } from '../document.ts';
 import type { ListOptions } from '../store.ts';
 import { limitClause, limitParams } from './clauses.ts';
-import { statement } from './database.ts';
+import { cachedStatement } from './database.ts';
 import type { IndexDatabase, Row } from './database.ts';
 import { groupByPath, toDocument } from './rows.ts';
 import { siteSpellings } from './spellings.ts';
@@ -27,13 +27,14 @@ export function hydrateAll(index: IndexDatabase, rows: Row[]): Document[] {
   const paths = JSON.stringify(rows.map((row) => String(row['path'])));
   const spellings = siteSpellings(index);
   const tags = groupByPath(
-    statement(index, TAGS_FOR_PATHS_SQL).all(paths),
+    cachedStatement(index, TAGS_FOR_PATHS_SQL).all(paths),
     (row) => spellings.get(String(row['key'])) ?? String(row['tag']),
   );
-  const categories = groupByPath(statement(index, CATEGORIES_FOR_PATHS_SQL).all(paths), (row) =>
-    String(row['category']),
+  const categories = groupByPath(
+    cachedStatement(index, CATEGORIES_FOR_PATHS_SQL).all(paths),
+    (row) => String(row['category']),
   );
-  const redirects = groupByPath(statement(index, REDIRECTS_FOR_PATHS_SQL).all(paths), (row) =>
+  const redirects = groupByPath(cachedStatement(index, REDIRECTS_FOR_PATHS_SQL).all(paths), (row) =>
     String(row['url']),
   );
 
@@ -47,8 +48,7 @@ export function hydrateAll(index: IndexDatabase, rows: Row[]): Document[] {
   });
 }
 
-/** The documents matching every clause, newest first, a page at a time. */
-export function select(
+export function selectNewestFirst(
   index: IndexDatabase,
   where: string[],
   params: unknown[],

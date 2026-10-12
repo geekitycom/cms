@@ -6,7 +6,7 @@ import type { GeekityEnv } from '../web/env.ts';
 import {
   countUsers,
   createUser,
-  removeUser,
+  removeUserRecord,
   DuplicateUsernameError,
   findUserById,
   listUsers,
@@ -543,7 +543,7 @@ const GONE_USER = 'That user is already gone.';
  * longer holds, and the admin guard turns that into no session at all.
  */
 export async function deleteUser(input: { dataDir: string; userId: number }): Promise<boolean> {
-  const deleted = await removeUser(input);
+  const deleted = await removeUserRecord(input);
   await revokeTokensForUser(input.dataDir, input.userId);
   return deleted;
 }

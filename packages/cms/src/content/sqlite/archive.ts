@@ -4,15 +4,15 @@ import type { ArchiveReader, DocumentNeighbours, ListByTagOptions } from '../sto
 import type { Document } from '../document.ts';
 import { authorClause, LISTED_CLAUSE, PINNED_CLAUSE, TERM_TABLES, termFilter } from './clauses.ts';
 import type { TermTable } from './clauses.ts';
-import { nowKey, statement } from './database.ts';
+import { nowKey, cachedStatement } from './database.ts';
 import type { IndexDatabase, Row } from './database.ts';
-import { hydrate, select } from './documents.ts';
+import { hydrate, selectNewestFirst } from './documents.ts';
 
 export function archiveReader(index: IndexDatabase): ArchiveReader {
   return {
     listPosts: (options = {}) =>
-      select(index, ["type = 'post'", LISTED_CLAUSE], [nowKey(index)], options),
-    listListed: () => select(index, [LISTED_CLAUSE], [nowKey(index)], {}),
+      selectNewestFirst(index, ["type = 'post'", LISTED_CLAUSE], [nowKey(index)], options),
+    listListed: () => selectNewestFirst(index, [LISTED_CLAUSE], [nowKey(index)], {}),
     neighbours: (document) => neighbours(index, document),
     listByTag: (tag, options = {}) => selectByTerm(index, TERM_TABLES.tag, tag, options),
     listByCategory: (category, options = {}) =>
@@ -20,7 +20,7 @@ export function archiveReader(index: IndexDatabase): ArchiveReader {
     listByAuthor: (names, options = {}) =>
       names.length === 0
         ? []
-        : select(
+        : selectNewestFirst(
             index,
             ["type = 'post'", LISTED_CLAUSE, authorClause(names)],
             [nowKey(index), ...names],
@@ -30,7 +30,7 @@ export function archiveReader(index: IndexDatabase): ArchiveReader {
       names.length === 0
         ? []
         : featuredPosts(
-            select(
+            selectNewestFirst(
               index,
               ["type = 'post'", LISTED_CLAUSE, authorClause(names), PINNED_CLAUSE],
               [nowKey(index), ...names],
@@ -79,7 +79,7 @@ function neighbour(
   key: string,
   contentPath: string,
 ): Document | undefined {
-  const row = statement(
+  const row = cachedStatement(
     index,
     `SELECT * FROM documents
      WHERE type = 'post' AND ${LISTED_CLAUSE}
@@ -108,7 +108,7 @@ function selectByTerm(
     where.unshift('type = ?');
     params.unshift(options.type);
   }
-  return select(index, where, params, options);
+  return selectNewestFirst(index, where, params, options);
 }
 
 /** {@link selectByTerm}'s total, for the pager and the archive's existence. */
@@ -125,7 +125,7 @@ function countByTerm(
     where.push('documents.type = ?');
     params.push(options.type);
   }
-  const row = statement(
+  const row = cachedStatement(
     index,
     `SELECT COUNT(*) AS count FROM ${table}
      JOIN documents ON documents.path = ${table}.path

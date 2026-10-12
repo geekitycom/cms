@@ -37,6 +37,16 @@ import type { Renderer } from './render.ts';
  * What every Hono handler in the CMS can read off the context, so a route
  * never has to be handed the store, the config or the theme by hand.
  */
+export type RequestIndex = IndexClock &
+  DocumentLookup &
+  ArchiveReader &
+  TaxonomyReader &
+  ReplyReader &
+  BacklinkReader &
+  SearchReader &
+  CatalogReader &
+  IndexWriter;
+
 export interface GeekityEnv {
   Variables: {
     /**
@@ -44,19 +54,7 @@ export interface GeekityEnv {
      * gate in front of the public site and `/healthz` read the same answer.
      */
     maintenance: MaintenanceSwitch;
-    /**
-     * The derived content index this CMS booted, without the connection and
-     * the scheduler's reads, which only the composition root drives.
-     */
-    store: IndexClock &
-      DocumentLookup &
-      ArchiveReader &
-      TaxonomyReader &
-      ReplyReader &
-      BacklinkReader &
-      SearchReader &
-      CatalogReader &
-      IndexWriter;
+    store: RequestIndex;
     /** Users and sessions, the part of the database that is not derived. */
     admin: AdminStore;
     /** Config after defaults and environment overrides. */

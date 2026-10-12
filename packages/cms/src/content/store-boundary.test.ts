@@ -19,7 +19,6 @@ function sourceFiles(): { relative: string; text: string }[] {
 
 const IMPLEMENTATION = 'content/sqlite/';
 
-/** Where the whole store may be named: the composition root and the package's export list. */
 const HOLDERS_OF_THE_WHOLE_STORE = ['cms/', 'content/', 'exports.ts'];
 
 describe('the content index boundary', () => {

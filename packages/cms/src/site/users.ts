@@ -579,11 +579,10 @@ export class UnknownUserError extends Error {
   }
 }
 
-/**
- * Take a user out of the file. Returns `false` when there was nothing to take.
- * `deleteUser` is what a caller wants: it takes their tokens with them.
- */
-export async function removeUser(input: { dataDir: string; userId: number }): Promise<boolean> {
+export async function removeUserRecord(input: {
+  dataDir: string;
+  userId: number;
+}): Promise<boolean> {
   let deleted = false;
 
   await write(input.dataDir, (contents) => {

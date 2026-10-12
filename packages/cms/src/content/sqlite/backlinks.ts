@@ -3,9 +3,9 @@ import { NO_REDIRECTS } from '../redirects.ts';
 import { linksInto, siteLinkKey, spelling } from '../site-links.ts';
 import type { BacklinkReader, BacklinkSite } from '../store.ts';
 import { LISTED_CLAUSE, SERVED_CLAUSE } from './clauses.ts';
-import { nowKey, statement, stringOrUndefined } from './database.ts';
+import { nowKey, cachedStatement, stringOrUndefined } from './database.ts';
 import type { IndexDatabase, Row } from './database.ts';
-import { select } from './documents.ts';
+import { selectNewestFirst } from './documents.ts';
 import { BY_FORMER_PERMALINK_SQL, BY_PERMALINK_SQL } from './lookups.ts';
 
 const SERVED_AT_SQL = `SELECT 1 FROM documents WHERE permalink = ? AND ${SERVED_CLAUSE} LIMIT 1`;
@@ -31,11 +31,11 @@ function listBacklinks(index: IndexDatabase, document: Document, site: BacklinkS
   const into = linksInto(site.redirects ?? NO_REDIRECTS, answeredAt, (sitePath) =>
     [sitePath, `${sitePath}/`].some(
       (url) =>
-        statement(index, SERVED_AT_SQL).get(url, now) !== undefined ||
-        statement(index, BY_FORMER_PERMALINK_SQL).get(url, now) !== undefined,
+        cachedStatement(index, SERVED_AT_SQL).get(url, now) !== undefined ||
+        cachedStatement(index, BY_FORMER_PERMALINK_SQL).get(url, now) !== undefined,
     ),
   );
-  return select(
+  return selectNewestFirst(
     index,
     [LISTED_CLAUSE, 'path <> ?', LINKS_INTO],
     [
@@ -58,11 +58,11 @@ function listBacklinks(index: IndexDatabase, document: Document, site: BacklinkS
 function linkKeysOf(index: IndexDatabase, document: Document): string[] {
   const former = (document.redirectFrom ?? []).filter(
     (url) =>
-      statement(index, BY_PERMALINK_SQL).get(url) === undefined &&
+      cachedStatement(index, BY_PERMALINK_SQL).get(url) === undefined &&
       stringOrUndefined(
-        (statement(index, BY_FORMER_PERMALINK_SQL).get(url, nowKey(index)) as Row | undefined)?.[
-          'path'
-        ],
+        (
+          cachedStatement(index, BY_FORMER_PERMALINK_SQL).get(url, nowKey(index)) as Row | undefined
+        )?.['path'],
       ) === document.path,
   );
   return [...new Set([document.permalink, ...former].map(siteLinkKey))];

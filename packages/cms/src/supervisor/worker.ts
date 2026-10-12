@@ -18,7 +18,6 @@ export interface WorkerChannel {
   onDisconnect(handler: () => void): void;
 }
 
-/** What a worker asks of the CMS it runs: `Cms` is one. */
 export interface SupervisedCms {
   drain(): Promise<void>;
   resume(): Promise<void>;

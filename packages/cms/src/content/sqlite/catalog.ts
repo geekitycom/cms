@@ -8,9 +8,9 @@ import {
   TERM_TABLES,
   termFilter,
 } from './clauses.ts';
-import { nowKey, statement } from './database.ts';
+import { nowKey, cachedStatement } from './database.ts';
 import type { IndexDatabase, Row } from './database.ts';
-import { select } from './documents.ts';
+import { selectNewestFirst } from './documents.ts';
 
 const COUNTS_SQL = `
   SELECT
@@ -27,14 +27,14 @@ export function catalogReader(index: IndexDatabase): CatalogReader {
   return {
     listAll: (options = {}) => listAll(index, options),
     listFederated: (options = {}) =>
-      select(index, [`type = 'post'`, FEDERATED_CLAUSE], [], options),
+      selectNewestFirst(index, [`type = 'post'`, FEDERATED_CLAUSE], [], options),
     listPaths: () =>
-      statement(index, 'SELECT path FROM documents ORDER BY path')
+      cachedStatement(index, 'SELECT path FROM documents ORDER BY path')
         .all()
         .map((row) => String(row['path'])),
     counts() {
       const now = nowKey(index);
-      const row = statement(index, COUNTS_SQL).get(now, now, now) as Row;
+      const row = cachedStatement(index, COUNTS_SQL).get(now, now, now) as Row;
       return {
         total: Number(row['total']),
         posts: Number(row['posts']),
@@ -75,5 +75,5 @@ function listAll(index: IndexDatabase, options: ListAllOptions): Document[] {
     params.push(TERM_TABLES.category.match(options.category));
   }
 
-  return select(index, where, params, options);
+  return selectNewestFirst(index, where, params, options);
 }

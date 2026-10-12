@@ -3,7 +3,7 @@ import { tagKey } from '../tags.ts';
 import type { Taxonomy } from '../taxonomy.ts';
 import { LISTED_CLAUSE, TERM_TABLES } from './clauses.ts';
 import type { TermTable } from './clauses.ts';
-import { nowKey, statement, stringOrUndefined } from './database.ts';
+import { nowKey, cachedStatement, stringOrUndefined } from './database.ts';
 import type { IndexDatabase } from './database.ts';
 import { siteSpellings, SPELLING_EXCLUDING_SQL } from './spellings.ts';
 
@@ -33,7 +33,7 @@ export function taxonomyReader(index: IndexDatabase): TaxonomyReader {
   return {
     listTags() {
       const spellings = siteSpellings(index);
-      return statement(index, TAG_COUNTS_SQL)
+      return cachedStatement(index, TAG_COUNTS_SQL)
         .all(nowKey(index))
         .map((row) => ({
           tag: spellings.get(String(row['key'])) ?? String(row['tag']),
@@ -43,7 +43,7 @@ export function taxonomyReader(index: IndexDatabase): TaxonomyReader {
     },
 
     listCategories() {
-      return statement(index, CATEGORY_COUNTS_SQL)
+      return cachedStatement(index, CATEGORY_COUNTS_SQL)
         .all(nowKey(index))
         .map((row) => ({ category: String(row['category']), count: Number(row['count']) }));
     },
@@ -51,7 +51,7 @@ export function taxonomyReader(index: IndexDatabase): TaxonomyReader {
     listTermUsage(taxonomy) {
       const spellings: ReadonlyMap<string, string> =
         taxonomy === 'tag' ? siteSpellings(index) : new Map();
-      return statement(index, TERM_USAGE_SQL[taxonomy])
+      return cachedStatement(index, TERM_USAGE_SQL[taxonomy])
         .all(nowKey(index))
         .map((row) => ({
           term: spellings.get(String(row['key'])) ?? String(row['term']),
@@ -63,7 +63,7 @@ export function taxonomyReader(index: IndexDatabase): TaxonomyReader {
 
     tagSpelling(tag, options = {}) {
       if (options.excluding === undefined) return siteSpellings(index).get(tagKey(tag));
-      const row = statement(index, SPELLING_EXCLUDING_SQL).get(
+      const row = cachedStatement(index, SPELLING_EXCLUDING_SQL).get(
         { key: tagKey(tag), excluding: options.excluding },
         nowKey(index),
       );
