@@ -744,7 +744,7 @@ describe('what the environment and config may say', () => {
       ],
       [
         { GEEKITY_BASE_URL: 'geekity' },
-        'TypeError: config.baseUrl must be an absolute URL, received "geekity"',
+        'TypeError: GEEKITY_BASE_URL must be an absolute URL, received "geekity"',
       ],
       [
         { GEEKITY_SESSION_LIFETIME: '0' },

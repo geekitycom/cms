@@ -588,10 +588,8 @@ export function defineConfig(config: GeekityConfig): GeekityConfig {
   return config;
 }
 
-/** What every config {@link resolveConfig} returns carries, so `createCms` can tell one from a site's own. */
 export const RESOLVED: unique symbol = Symbol('geekity.resolvedConfig');
 
-/** Whether this config came out of {@link resolveConfig}, so resolving it again would be wrong. */
 export function isResolvedConfig(config: GeekityConfig | ResolvedConfig): config is ResolvedConfig {
   return RESOLVED in config;
 }
@@ -632,26 +630,17 @@ export function resolveConfig(
   });
 }
 
-/** Where a value is being read from, for the kind to name in an error. */
 interface Source {
-  /** The environment variable, or variables, as an error names them. */
   readonly variable: string;
-  /** `config.<field>`. */
   readonly field: string;
   readonly cwd: string;
 }
 
-/**
- * One kind of setting: how its environment text is read, how its config value
- * is checked, and the words for each refusal. `fromConfig` is handed
- * `undefined` when the site named nothing, and the default is then its answer.
- */
 interface SettingKind<In, Out> {
   fromEnv(text: string, source: Source): Out;
   fromConfig(value: In | undefined, fallback: Out, source: Source): Out;
 }
 
-/** A number checked one way whichever door it came in by. */
 function numberKind(
   valid: (value: number) => boolean,
   mustBe: string,
@@ -674,7 +663,6 @@ function numberKind(
   };
 }
 
-/** A list read from a comma-separated variable or a config array, checked by `check` either way. */
 function listKind<In, Out>(
   split: (text: string) => In[],
   check: (values: In[], source: string) => Out[],
@@ -713,7 +701,6 @@ const SECONDS = numberKind(
   'a positive number of seconds',
 );
 
-/** A directory, absolute, from a non-empty variable, then a non-empty config value, then the default. */
 const DIRECTORY: SettingKind<string, string> = {
   fromEnv: (text, { cwd }) => path.resolve(cwd, text),
   fromConfig: (value, fallback, { cwd }) =>
@@ -726,13 +713,8 @@ const OPTIONAL_DIRECTORY: SettingKind<string, string | undefined> = {
     value === undefined || value === '' ? fallback : path.resolve(cwd, value),
 };
 
-/**
- * An origin and path with no trailing slash, or `undefined` for none named;
- * {@link resolveConfig} puts the port in. Refused as `config.baseUrl` from
- * either door, as it always has been.
- */
 const URL_KIND: SettingKind<string, string | undefined> = {
-  fromEnv: (text, { field }) => normalizedBaseUrl(text, field),
+  fromEnv: (text, { variable }) => normalizedBaseUrl(text, variable),
   fromConfig: (value, fallback, { field }) =>
     value === undefined || value === '' ? fallback : normalizedBaseUrl(value, field),
 };
@@ -749,10 +731,6 @@ const IMAGE_WIDTHS = listKind(
 );
 const IMAGE_FORMATS = listKind((text) => text.split(','), checkedImageFormats);
 
-/**
- * One setting the environment may name: the variables it is read from, first
- * set wins, its kind, and its default.
- */
 interface EnvSetting<In, Out> {
   readonly env: readonly [string, ...string[]];
   readonly kind: SettingKind<In, Out>;
@@ -767,7 +745,6 @@ function setting<In, Out>(
   return { env: typeof env === 'string' ? [env] : env, kind, fallback };
 }
 
-/** Every setting the environment may override, which docs/configuration.md lists too. */
 const ENV_SETTINGS = {
   port: setting(['GEEKITY_PORT', 'PORT'], PORT, DEFAULT_PORT),
   contentDir: setting('GEEKITY_CONTENT_DIR', DIRECTORY, DEFAULT_CONTENT_DIR),
@@ -808,7 +785,6 @@ type EnvValues = {
   [K in keyof EnvSettings]: EnvSettings[K] extends EnvSetting<never, infer Out> ? Out : never;
 };
 
-/** The name of every environment variable the config reads. */
 export const ENV_VARIABLES: readonly string[] = Object.values(ENV_SETTINGS).flatMap(
   (each) => each.env,
 );
@@ -824,15 +800,20 @@ function resolveEnvSettings(
     EnvSetting<unknown, unknown>,
   ][]) {
     const source = { variable: each.env.join('/'), field: `config.${key}`, cwd };
-    // The first variable that is set at all wins, even set empty: GEEKITY_PORT=''
-    // hides PORT, as it always has.
-    const text = each.env.map((name) => env[name]).find((value) => value !== undefined);
+    const text = firstSetVariable(env, each.env);
     values[key] =
       text !== undefined && text !== ''
         ? each.kind.fromEnv(text, source)
         : each.kind.fromConfig(config[key], each.fallback, source);
   }
   return values as EnvValues;
+}
+
+function firstSetVariable(
+  env: Record<string, string | undefined>,
+  names: readonly string[],
+): string | undefined {
+  return names.map((name) => env[name]).find((value) => value !== undefined);
 }
 
 /** RFC 9110's `token`: the characters a header name may be made of. */
@@ -936,12 +917,12 @@ function baseUrlSource(
   return 'default';
 }
 
-function normalizedBaseUrl(chosen: string, field: string): string {
+function normalizedBaseUrl(chosen: string, source: string): string {
   let parsed: URL;
   try {
     parsed = new URL(chosen);
   } catch {
-    throw new TypeError(`${field} must be an absolute URL, received ${JSON.stringify(chosen)}`);
+    throw new TypeError(`${source} must be an absolute URL, received ${JSON.stringify(chosen)}`);
   }
   return parsed.origin + withoutTrailingSlash(parsed.pathname);
 }
