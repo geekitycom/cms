@@ -27,7 +27,6 @@ export {
   usersFile,
   verifyUserPassword,
 } from '../site/users.ts';
-export { migrateUsersToFile } from './users-migration.ts';
 export type { CreateUserInput, ProfileLink, StoredUser, User, UserProfile } from '../site/users.ts';
 export {
   credentialProblem,
@@ -205,7 +204,12 @@ export {
   settingsFromForm,
   settingsProblems,
 } from '../site/settings-form.ts';
-export { migrateSettingsToFile } from './settings-migration.ts';
+export {
+  migrateActorKeysToFiles,
+  migrateSettingsToFile,
+  migrateUsersToFile,
+} from './legacy-migrations.ts';
+export type { LegacyActorKey, LegacySetting, LegacyUser } from './legacy-migrations.ts';
 export {
   readSiteSettings,
   settingsFromSiteJson,
@@ -291,7 +295,9 @@ export {
   COMMENT_KINDS,
   COMMENT_SOURCES,
   COMMENT_STATUSES,
+  adminStoreOver,
   DELIVERY_STATUSES,
+  openAdminDatabase,
   openAdminStore,
   RELAY_STATES,
   SESSION_ID_BYTES,
@@ -316,9 +322,6 @@ export type {
   StoredActorProfile,
   Follower,
   InboxActivity,
-  LegacyActorKey,
-  LegacySetting,
-  LegacyUser,
   ListPageOptions,
   NewDelivery,
   NewFollower,

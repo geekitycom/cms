@@ -64,7 +64,6 @@ export {
   actorKeysDir,
   assertActorKeysUsable,
   loadActorKeyPairs,
-  migrateActorKeysToFiles,
   writeActorKeyFile,
 } from './keys.ts';
 export type { ActorKeyAlgorithm } from './keys.ts';

@@ -1,12 +1,16 @@
+import type { DatabaseSync } from 'node:sqlite';
+
 import {
+  adminStoreOver,
   effectiveBaseUrl,
+  migrateActorKeysToFiles,
   migrateSettingsToFile,
   migrateUsersToFile,
-  openAdminStore,
+  openAdminDatabase,
   readSiteSettings,
 } from '../admin/index.ts';
 import type { AdminStore } from '../admin/index.ts';
-import { rebuildingIfOutdated } from '../cache.ts';
+import { databaseFile, rebuildingIfOutdated } from '../cache.ts';
 import {
   createAkismetChecker,
   migrateCommentEmails,
@@ -21,7 +25,6 @@ import type { ContentStore } from '../content/index.ts';
 import { enterDevMode } from '../dev-mode.ts';
 import {
   assertActorKeysUsable,
-  migrateActorKeysToFiles,
   migrateFederationToFiles,
   rebuildFederationIndexes,
 } from '../federation/index.ts';
@@ -44,7 +47,7 @@ export function boot(
   const configured = isResolvedConfig(config) ? config : resolveConfig(config);
   if (configured.devMode) enterDevMode(configured.dataDir, 'config');
 
-  const { store, admin } = rebuildingIfOutdated(configured.dataDir, () =>
+  const { store, admin, adminDb } = rebuildingIfOutdated(configured.dataDir, () =>
     openBothStoresOrNeither(configured),
   );
 
@@ -52,7 +55,7 @@ export function boot(
   // rows nothing would read again: they become content/_data/site.json here,
   // once, and the table goes (decision-9). A site that has already been
   // through it does nothing but check.
-  migrateSettingsToFile({ admin, contentDir: configured.contentDir });
+  migrateSettingsToFile(adminDb, configured.contentDir);
 
   const resolved = settleConfig(configured);
   let plugins: PluginRegistry;
@@ -69,12 +72,12 @@ export function boot(
   // private key is lost is one every follower stops being able to verify, so
   // the rows are written out before the table is dropped, and a file that is
   // already there always wins.
-  migrateActorKeysToFiles({ admin, dataDir: resolved.dataDir });
+  migrateActorKeysToFiles(adminDb, resolved.dataDir);
 
   // And the accounts, which become data/users.json. The ids come with them, so
   // a session the database already holds still names the person it was made
   // for, and the file wins where there already is one.
-  migrateUsersToFile({ admin, dataDir: resolved.dataDir });
+  migrateUsersToFile(adminDb, resolved.dataDir);
 
   // And the log of what the inbox was told, which becomes
   // content/_data/federation/inbox/{yyyy}-{mm}.jsonl. Unlike the three above,
@@ -137,14 +140,17 @@ function settleConfig(resolved: ResolvedConfig): ResolvedConfig {
   });
 }
 
+/** `adminDb` is the connection under `admin`, for the legacy migrations. */
 function openBothStoresOrNeither(resolved: ResolvedConfig): {
   store: ContentStore;
   admin: AdminStore;
+  adminDb: DatabaseSync;
 } {
   const { dataDir, baseUrl } = resolved;
   const store = openContentStore({ dataDir, baseUrl, now: resolved.now });
   try {
-    return { store, admin: openAdminStore({ dataDir }) };
+    const adminDb = openAdminDatabase(dataDir);
+    return { store, admin: adminStoreOver(adminDb, databaseFile(dataDir)), adminDb };
   } catch (error) {
     store.close();
     throw error;

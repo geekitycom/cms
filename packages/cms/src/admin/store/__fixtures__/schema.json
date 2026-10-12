@@ -1,0 +1,338 @@
+{
+  "schema": [
+    {
+      "type": "index",
+      "name": "actor_profiles_icon_url",
+      "tbl_name": "actor_profiles",
+      "sql": "CREATE INDEX actor_profiles_icon_url ON actor_profiles (icon_url)"
+    },
+    {
+      "type": "index",
+      "name": "ap_deliveries_attempted_at",
+      "tbl_name": "ap_deliveries",
+      "sql": "CREATE INDEX ap_deliveries_attempted_at ON ap_deliveries (attempted_at)"
+    },
+    {
+      "type": "index",
+      "name": "ap_deliveries_object_id",
+      "tbl_name": "ap_deliveries",
+      "sql": "CREATE INDEX ap_deliveries_object_id ON ap_deliveries (object_id, attempted_at)"
+    },
+    {
+      "type": "index",
+      "name": "ap_deliveries_status",
+      "tbl_name": "ap_deliveries",
+      "sql": "CREATE INDEX ap_deliveries_status ON ap_deliveries (status)"
+    },
+    {
+      "type": "index",
+      "name": "ap_inbox_activity_id",
+      "tbl_name": "ap_inbox",
+      "sql": "CREATE UNIQUE INDEX ap_inbox_activity_id ON ap_inbox (activity_id)"
+    },
+    {
+      "type": "index",
+      "name": "ap_inbox_actor_id",
+      "tbl_name": "ap_inbox",
+      "sql": "CREATE INDEX ap_inbox_actor_id ON ap_inbox (actor_id)"
+    },
+    {
+      "type": "index",
+      "name": "ap_inbox_in_reply_to",
+      "tbl_name": "ap_inbox",
+      "sql": "CREATE INDEX ap_inbox_in_reply_to ON ap_inbox (in_reply_to)"
+    },
+    {
+      "type": "index",
+      "name": "ap_inbox_object_id",
+      "tbl_name": "ap_inbox",
+      "sql": "CREATE INDEX ap_inbox_object_id ON ap_inbox (object_id)"
+    },
+    {
+      "type": "index",
+      "name": "ap_inbox_received_at",
+      "tbl_name": "ap_inbox",
+      "sql": "CREATE INDEX ap_inbox_received_at ON ap_inbox (received_at)"
+    },
+    {
+      "type": "index",
+      "name": "ap_inbox_recipient",
+      "tbl_name": "ap_inbox",
+      "sql": "CREATE INDEX ap_inbox_recipient ON ap_inbox (recipient)"
+    },
+    {
+      "type": "index",
+      "name": "ap_inbox_reply_key",
+      "tbl_name": "ap_inbox",
+      "sql": "CREATE INDEX ap_inbox_reply_key ON ap_inbox (reply_key)"
+    },
+    {
+      "type": "index",
+      "name": "ap_relays_actor_id",
+      "tbl_name": "ap_relays",
+      "sql": "CREATE INDEX ap_relays_actor_id ON ap_relays (actor_id)"
+    },
+    {
+      "type": "index",
+      "name": "ap_relays_follow_id",
+      "tbl_name": "ap_relays",
+      "sql": "CREATE INDEX ap_relays_follow_id ON ap_relays (follow_id)"
+    },
+    {
+      "type": "index",
+      "name": "comments_author",
+      "tbl_name": "comments",
+      "sql": "CREATE INDEX comments_author ON comments (author_name, author_email, status)"
+    },
+    {
+      "type": "index",
+      "name": "comments_author_avatar",
+      "tbl_name": "comments",
+      "sql": "CREATE INDEX comments_author_avatar ON comments (author_avatar)"
+    },
+    {
+      "type": "index",
+      "name": "comments_slug",
+      "tbl_name": "comments",
+      "sql": "CREATE INDEX comments_slug ON comments (slug, submitted_at)"
+    },
+    {
+      "type": "index",
+      "name": "comments_status",
+      "tbl_name": "comments",
+      "sql": "CREATE INDEX comments_status ON comments (status, submitted_at)"
+    },
+    {
+      "type": "index",
+      "name": "followers_actor_id",
+      "tbl_name": "followers",
+      "sql": "CREATE INDEX followers_actor_id ON followers (actor_id)"
+    },
+    {
+      "type": "index",
+      "name": "followers_followed_at",
+      "tbl_name": "followers",
+      "sql": "CREATE INDEX followers_followed_at ON followers (followed_at)"
+    },
+    {
+      "type": "index",
+      "name": "followers_icon_url",
+      "tbl_name": "followers",
+      "sql": "CREATE INDEX followers_icon_url ON followers (icon_url)"
+    },
+    {
+      "type": "index",
+      "name": "password_resets_expires_at",
+      "tbl_name": "password_resets",
+      "sql": "CREATE INDEX password_resets_expires_at ON password_resets (expires_at)"
+    },
+    {
+      "type": "index",
+      "name": "password_resets_user_id",
+      "tbl_name": "password_resets",
+      "sql": "CREATE INDEX password_resets_user_id ON password_resets (user_id)"
+    },
+    {
+      "type": "index",
+      "name": "sessions_expires_at",
+      "tbl_name": "sessions",
+      "sql": "CREATE INDEX sessions_expires_at ON sessions (expires_at)"
+    },
+    {
+      "type": "index",
+      "name": "sessions_user_id",
+      "tbl_name": "sessions",
+      "sql": "CREATE INDEX sessions_user_id ON sessions (user_id)"
+    },
+    {
+      "type": "index",
+      "name": "spent_tokens_expires_at",
+      "tbl_name": "spent_tokens",
+      "sql": "CREATE INDEX spent_tokens_expires_at ON spent_tokens (expires_at)"
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_actor_keys_1",
+      "tbl_name": "actor_keys",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_actor_profiles_1",
+      "tbl_name": "actor_profiles",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_ap_deliveries_1",
+      "tbl_name": "ap_deliveries",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_ap_relays_1",
+      "tbl_name": "ap_relays",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_cms_state_1",
+      "tbl_name": "cms_state",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_comments_1",
+      "tbl_name": "comments",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_followers_1",
+      "tbl_name": "followers",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_password_resets_1",
+      "tbl_name": "password_resets",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_sessions_1",
+      "tbl_name": "sessions",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_settings_1",
+      "tbl_name": "settings",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_spent_tokens_1",
+      "tbl_name": "spent_tokens",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "sqlite_autoindex_webmentions_sent_1",
+      "tbl_name": "webmentions_sent",
+      "sql": null
+    },
+    {
+      "type": "index",
+      "name": "users_username",
+      "tbl_name": "users",
+      "sql": "CREATE UNIQUE INDEX users_username ON users (username)"
+    },
+    {
+      "type": "index",
+      "name": "webmentions_sent_attempted_at",
+      "tbl_name": "webmentions_sent",
+      "sql": "CREATE INDEX webmentions_sent_attempted_at ON webmentions_sent (attempted_at)"
+    },
+    {
+      "type": "table",
+      "name": "actor_keys",
+      "tbl_name": "actor_keys",
+      "sql": "CREATE TABLE actor_keys (\n        identifier  TEXT NOT NULL,\n        algorithm   TEXT NOT NULL,\n        private_jwk TEXT NOT NULL,\n        public_jwk  TEXT NOT NULL,\n        created_at  TEXT NOT NULL,\n        PRIMARY KEY (identifier, algorithm)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "actor_profiles",
+      "tbl_name": "actor_profiles",
+      "sql": "CREATE TABLE actor_profiles (\n        actor_id   TEXT PRIMARY KEY,\n        handle     TEXT,\n        name       TEXT,\n        icon_url   TEXT,\n        url        TEXT,\n        fetched_at TEXT NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "admin_migrations",
+      "tbl_name": "admin_migrations",
+      "sql": "CREATE TABLE admin_migrations (\n      version    INTEGER PRIMARY KEY,\n      applied_at TEXT NOT NULL\n    )"
+    },
+    {
+      "type": "table",
+      "name": "ap_deliveries",
+      "tbl_name": "ap_deliveries",
+      "sql": "CREATE TABLE \"ap_deliveries\" (\n        activity_id   TEXT NOT NULL,\n        activity_type TEXT NOT NULL,\n        object_id     TEXT NOT NULL,\n        slug          TEXT,\n        actor_id      TEXT NOT NULL,\n        inbox_id      TEXT NOT NULL,\n        status        TEXT NOT NULL,\n        error         TEXT,\n        attempted_at  TEXT NOT NULL,\n        PRIMARY KEY (activity_id, actor_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "ap_inbox",
+      "tbl_name": "ap_inbox",
+      "sql": "CREATE TABLE ap_inbox (\n        id            INTEGER PRIMARY KEY AUTOINCREMENT,\n        activity_id   TEXT,\n        activity_type TEXT NOT NULL,\n        actor_id      TEXT NOT NULL,\n        object_id     TEXT,\n        received_at   TEXT NOT NULL,\n        json          TEXT NOT NULL\n      , in_reply_to TEXT, recipient TEXT, reply_key TEXT, fetched INTEGER NOT NULL DEFAULT 0)"
+    },
+    {
+      "type": "table",
+      "name": "ap_relays",
+      "tbl_name": "ap_relays",
+      "sql": "CREATE TABLE ap_relays (\n        inbox_id   TEXT PRIMARY KEY,\n        actor_id   TEXT,\n        state      TEXT NOT NULL,\n        reason     TEXT,\n        follow_id  TEXT,\n        created_at TEXT NOT NULL,\n        updated_at TEXT NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "cms_state",
+      "tbl_name": "cms_state",
+      "sql": "CREATE TABLE cms_state (\n        key        TEXT PRIMARY KEY,\n        value      TEXT NOT NULL,\n        updated_at TEXT NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "comments",
+      "tbl_name": "comments",
+      "sql": "CREATE TABLE comments (\n        id           TEXT PRIMARY KEY,\n        slug         TEXT NOT NULL,\n        permalink    TEXT NOT NULL,\n        source       TEXT NOT NULL,\n        kind         TEXT NOT NULL,\n        status       TEXT NOT NULL,\n        author_name  TEXT NOT NULL,\n        author_url   TEXT,\n        author_email TEXT,\n        markdown     TEXT NOT NULL,\n        html         TEXT NOT NULL,\n        submitted_at TEXT NOT NULL,\n        address_hash TEXT,\n        in_reply_to  TEXT\n      , url TEXT, author_avatar TEXT, notify INTEGER NOT NULL DEFAULT 0, redacted TEXT, rsvp TEXT, via TEXT, migrated INTEGER NOT NULL DEFAULT 0, origin TEXT, user TEXT, actor TEXT)"
+    },
+    {
+      "type": "table",
+      "name": "followers",
+      "tbl_name": "followers",
+      "sql": "CREATE TABLE followers (\n        username        TEXT NOT NULL,\n        actor_id        TEXT NOT NULL,\n        inbox_id        TEXT NOT NULL,\n        shared_inbox_id TEXT,\n        handle          TEXT,\n        name            TEXT,\n        icon_url        TEXT,\n        url             TEXT,\n        followed_at     TEXT NOT NULL,\n        PRIMARY KEY (username, actor_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "password_resets",
+      "tbl_name": "password_resets",
+      "sql": "CREATE TABLE password_resets (\n        token_hash TEXT PRIMARY KEY,\n        user_id    INTEGER NOT NULL,\n        created_at TEXT NOT NULL,\n        expires_at TEXT NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "sessions",
+      "tbl_name": "sessions",
+      "sql": "CREATE TABLE \"sessions\" (\n        id         TEXT PRIMARY KEY,\n        user_id    INTEGER,\n        csrf_token TEXT NOT NULL,\n        created_at TEXT NOT NULL,\n        expires_at TEXT NOT NULL,\n        flash      TEXT\n      )"
+    },
+    {
+      "type": "table",
+      "name": "settings",
+      "tbl_name": "settings",
+      "sql": "CREATE TABLE settings (\n        key        TEXT PRIMARY KEY,\n        value      TEXT NOT NULL,\n        updated_at TEXT NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "spent_tokens",
+      "tbl_name": "spent_tokens",
+      "sql": "CREATE TABLE spent_tokens (\n        token_hash TEXT PRIMARY KEY,\n        spent_at   TEXT NOT NULL,\n        expires_at TEXT NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "sqlite_sequence",
+      "tbl_name": "sqlite_sequence",
+      "sql": "CREATE TABLE sqlite_sequence(name,seq)"
+    },
+    {
+      "type": "table",
+      "name": "users",
+      "tbl_name": "users",
+      "sql": "CREATE TABLE users (\n        id            INTEGER PRIMARY KEY AUTOINCREMENT,\n        username      TEXT NOT NULL,\n        password_hash TEXT NOT NULL,\n        created_at    TEXT NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "webmentions_sent",
+      "tbl_name": "webmentions_sent",
+      "sql": "CREATE TABLE webmentions_sent (\n        slug         TEXT NOT NULL,\n        source       TEXT NOT NULL,\n        target       TEXT NOT NULL,\n        endpoint     TEXT,\n        status       TEXT NOT NULL,\n        error        TEXT,\n        attempted_at TEXT NOT NULL,\n        PRIMARY KEY (slug, target)\n      )"
+    }
+  ],
+  "userVersion": 0,
+  "ledger": [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26
+  ]
+}
