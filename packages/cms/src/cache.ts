@@ -112,7 +112,6 @@ export interface MigrationLedger {
   ledger: string;
   /** Every version this package ships, in order. */
   migrations: readonly Migration[];
-  /** What an applied version is stamped with. */
   now: Clock;
 }
 

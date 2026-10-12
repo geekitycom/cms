@@ -92,7 +92,6 @@ interface Delivery {
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
 const deliveries: Delivery[] = [];
-/** Told of each delivery as it arrives. */
 const arrivals = new Set<() => void>();
 const ownFetches: string[] = [];
 

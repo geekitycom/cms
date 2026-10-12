@@ -179,11 +179,6 @@ async function settle(cms: Cms): Promise<void> {
   await cms.indexNow.settled();
 }
 
-/**
- * Resolves once the watcher has indexed each slug with its marker, the index
- * has settled and the queues are empty. Called before the write, so the
- * settling cannot be missed.
- */
 async function indexed(cms: Cms, ...expected: (readonly [slug: string, marker: string])[]) {
   await nextEvent(`the watcher to index ${expected.map(([slug]) => slug).join(' and ')}`, (done) =>
     cms.onSettled(() => {

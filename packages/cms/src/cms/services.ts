@@ -144,6 +144,7 @@ export function createServices({
     store,
     contentDir: resolved.contentDir,
     watch: resolved.watch,
+    debounce: resolved.watchDebounce,
   });
   content.onSettled(async () => {
     await followAllMovedComments(commentRecords, store);

@@ -15,7 +15,7 @@ import { promisify } from 'node:util';
 import { cleanupTemporaryDirs, PACKAGE_ROOT, runCli, temporaryDir } from './__testing__/cli.ts';
 import { fakeNpmRegistry, pluginFiles } from './__testing__/npm-registry.ts';
 import { nextEvent } from './__testing__/wait.ts';
-import { PLUGIN_POLL_MS, PLUGIN_SETTLE_MS } from './supervisor/primary.ts';
+import { PLUGIN_SETTLE_MS } from './supervisor/primary.ts';
 
 after(cleanupTemporaryDirs);
 
@@ -23,6 +23,7 @@ const CLI = path.join(PACKAGE_ROOT, 'src', 'cli.ts');
 const TSX = import.meta.resolve('tsx');
 const PLUGINS_PATH = '/admin/plugins';
 const RELOAD_PATH = '/admin/plugins/reload';
+const PROCESS_EVENT_TIMEOUT_MS = 90_000;
 
 /** A `geekity serve` that is up. */
 interface Serving {
@@ -30,7 +31,6 @@ interface Serving {
   port: number;
   url(pathname: string): string;
   output(): string;
-  /** Resolves once the output so far passes `check`; fails if the server exits first. */
   printed(what: string, check: (output: string) => boolean): Promise<void>;
   exited: Promise<number | null>;
 }
@@ -67,23 +67,27 @@ async function serve(
   const exited = new Promise<number | null>((resolve) => child.once('close', resolve));
 
   function printed(what: string, check: (text: string) => boolean): Promise<void> {
-    return nextEvent(what, (done, fail) => {
-      const read = () => {
-        if (check(output)) done();
-      };
-      const exit = (code: number | null) => {
-        fail(new Error(`serve exited with ${String(code)}: ${output}`));
-      };
-      read();
-      child.stdout?.on('data', read);
-      child.stderr?.on('data', read);
-      child.once('exit', exit);
-      return () => {
-        child.stdout?.off('data', read);
-        child.stderr?.off('data', read);
-        child.off('exit', exit);
-      };
-    });
+    return nextEvent(
+      what,
+      (done, fail) => {
+        const read = () => {
+          if (check(output)) done();
+        };
+        const exit = (code: number | null) => {
+          fail(new Error(`serve exited with ${String(code)}: ${output}`));
+        };
+        read();
+        child.stdout?.on('data', read);
+        child.stderr?.on('data', read);
+        child.once('exit', exit);
+        return () => {
+          child.stdout?.off('data', read);
+          child.stderr?.off('data', read);
+          child.off('exit', exit);
+        };
+      },
+      PROCESS_EVENT_TIMEOUT_MS,
+    );
   }
 
   await printed('the server to print its port', (text) => /on port \d+/.test(text));
@@ -209,16 +213,19 @@ function load(server: Serving, clients = 8) {
     }
   });
   return {
-    /** Resolves once `count` more requests have been answered. */
     answered(count: number): Promise<void> {
       const target = answered + count;
-      return nextEvent(`${String(count)} more answers under load`, (done) => {
-        const check = () => {
-          if (answered >= target) done();
-        };
-        answers.add(check);
-        return () => answers.delete(check);
-      });
+      return nextEvent(
+        `${String(count)} more answers under load`,
+        (done) => {
+          const check = () => {
+            if (answered >= target) done();
+          };
+          answers.add(check);
+          return () => answers.delete(check);
+        },
+        PROCESS_EVENT_TIMEOUT_MS,
+      );
     },
     async stop() {
       stopping = true;
@@ -249,17 +256,6 @@ async function idleConnection(server: Serving) {
   assert.match(received, /^HTTP\/1\.1 200/);
   return { events, closed };
 }
-
-/**
- * Longer than the supervisor's poll and settle time together, so a folder it
- * would have reloaded has been reloaded. A supervisor that leaves the folder
- * alone prints nothing to wait for.
- */
-const windowForTheWatch = () =>
-  new Promise((resolve) => setTimeout(resolve, PLUGIN_POLL_MS + PLUGIN_SETTLE_MS + 2_000));
-
-/** A hand copy that takes a while: the folder changes, then stands still for less than the settle time. */
-const copyingSlowly = () => new Promise((resolve) => setTimeout(resolve, 3_000));
 
 async function site(): Promise<{ site: string; pluginsDir: string }> {
   const directory = await temporaryDir('geekity-reload-');
@@ -443,7 +439,9 @@ describe('geekity serve, supervised', () => {
     const copying = path.join(pluginsDir, 'plugin-copied');
     await fs.mkdir(copying, { recursive: true });
     await fs.writeFile(path.join(copying, 'README.md'), 'Copied by hand, slowly.\n');
-    await copyingSlowly();
+    await server.printed('the supervisor to see the copy begin', (text) =>
+      /The plugins folder is changing/.test(text),
+    );
     await installPlugin(pluginsDir, 'plugin-copied');
     const copied = Date.now();
     await server.printed('the reload of the copied plugin', (text) => /Reloaded/.test(text));
@@ -452,7 +450,7 @@ describe('geekity serve, supervised', () => {
     const { statuses, failures } = await traffic.stop();
     t.diagnostic(`reloaded ${String(took)} ms after the copy; answers ${JSON.stringify(statuses)}`);
 
-    assert.ok(took >= 4000, 'not before the folder had stood still');
+    assert.ok(took >= PLUGIN_SETTLE_MS - 1000, 'not before the folder had stood still');
     assert.equal([...server.output().matchAll(/Reloading:/g)].length, 1, 'one reload for the copy');
     assert.deepEqual(failures, [], 'no request failed');
     assert.deepEqual(Object.keys(statuses), ['200'], 'every request was answered 200');
@@ -471,8 +469,9 @@ describe('geekity serve, supervised', () => {
     const agent = await signedIn(server);
 
     await installPlugin(pluginsDir, 'plugin-twin', '@test/plugin-first');
-    await server.printed('the failed reload', (text) => /Reload failed/.test(text));
-    await windowForTheWatch();
+    await server.printed('the supervisor to leave the failed folder, or try it again', (text) =>
+      /left alone until it changes|Reloading:[\s\S]*Reloading:/.test(text),
+    );
     assert.equal([...server.output().matchAll(/Reloading:/g)].length, 1, 'not tried again');
     const html = await screen(agent);
     assert.match(html, /The last reload failed, so this server carried on/);
@@ -491,8 +490,10 @@ describe('geekity serve, supervised', () => {
     const server = await serve(directory, pluginsDir, { GEEKITY_PLUGIN_WATCH: 'off' });
     const agent = await signedIn(server);
 
+    await server.printed('the supervisor to say it does not watch the folder', (text) =>
+      /The plugins folder is not watched/.test(text),
+    );
     await installPlugin(pluginsDir, 'plugin-second');
-    await windowForTheWatch();
     assert.doesNotMatch(server.output(), /Reloading:/);
     assert.ok((await screen(agent)).includes(RELOAD_PATH), 'Reload is still offered');
 

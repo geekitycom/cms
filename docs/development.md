@@ -131,17 +131,25 @@ time to pass. `nextEvent` in `src/__testing__/wait.ts` subscribes to the event
 and resolves when it comes. If it does not come within 15 seconds, the test
 fails with a message that names the event. Common events are the content
 events on `cms.events`, `cms.onSettled` (the index has settled after a scan or
-a run of watched changes), and a line that a child process prints. To test
-something that depends on the time, pin the clock with `createCms({ now })`
-and move it.
+a run of watched changes), the `waiting` callback of `cms.drain` (the drain
+waits for writes in flight), and a line that a child process prints, such as
+the supervisor's lines about the plugins folder. To test something that
+depends on the time, pin the clock with `createCms({ now })` and move it.
+
+A test that proves something did not happen asks for a state instead of
+waiting to see. `liveWatchers` in `src/__testing__/watchers.ts` counts the
+file watches that are open, so a test asserts that the content watcher never
+started or was closed. A test about the order of watched changes passes
+`heldDebounce()` from `src/__testing__/debounce.ts` as the `watchDebounce`
+config option, and releases each changed path by hand instead of spacing its
+writes in time.
 
 `src/test-waits.test.ts` runs in `pnpm test`. It fails on a `setTimeout`, a
 `node:timers/promises` import, a `sleep(` call, or a `Date.now()` deadline or
-measured duration in a test file that it does not list. The list holds the
-bound in `nextEvent`, the tests that measure a duration they assert on, the
-tests that assert that nothing happens when nothing running can report an
-event, and timers that are part of a scenario, such as a slow copy. Each entry
-gives its reason.
+measured duration in a test file that it does not list. The list holds only
+the bound in `nextEvent`, the tests that measure a duration they assert on,
+and code inside a string that a test runs as a child program. Each entry gives
+its reason.
 
 ## Requirements
 

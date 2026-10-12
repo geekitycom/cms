@@ -44,7 +44,7 @@ export interface SupervisorOptions {
   now(): number;
   log(line: string): void;
   exit(code: number): void;
-  watch?: PluginWatch | undefined;
+  watch?: PluginWatch | 'off' | undefined;
 }
 
 export interface Supervisor {
@@ -100,7 +100,9 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
   let queued: ((outcome: ReloadOutcome) => void)[] = [];
   let seen: { signature: string | undefined; since: number } = { signature: undefined, since: 0 };
   let compared: string | undefined;
+  let changing = false;
   let polling: Cancel | undefined;
+  const watch = options.watch === 'off' ? undefined : options.watch;
 
   function fork(): WorkerHandle {
     const worker = options.fork();
@@ -147,12 +149,12 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     old.send({ type: 'resume', error });
     if (live.has(next)) next.kill();
     failed = reloading;
+    compared = undefined;
     settle({ ok: false, error });
     serve(old, undefined);
   }
 
   function fingerprint(): string | undefined {
-    const { watch } = options;
     return watch === undefined ? undefined : attempt(() => watch.fingerprint());
   }
 
@@ -166,16 +168,30 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
   function look(watch: PluginWatch): void {
     const signature = attempt(() => watch.signature());
     const now = options.now();
-    if (signature === undefined || signature !== seen.signature) {
+    if (signature !== seen.signature) {
+      if (!changing) {
+        changing = true;
+        options.log(
+          `The plugins folder is changing; it loads once it has stood still for ${String(PLUGIN_SETTLE_MS / 1000)} s.`,
+        );
+      }
       seen = { signature, since: now };
       return;
     }
-    if (state.phase !== 'serving' || signature === compared) return;
+    if (signature === undefined) return;
     if (now - seen.since < PLUGIN_SETTLE_MS) return;
+    changing = false;
+    if (state.phase !== 'serving' || signature === compared) return;
     const folder = fingerprint();
     if (folder === undefined) return;
     compared = signature;
-    if (folder === loaded || folder === failed) return;
+    if (folder === loaded) return;
+    if (folder === failed) {
+      options.log(
+        'The plugins folder is as it was when its reload failed, so it is left alone until it changes.',
+      );
+      return;
+    }
     options.log('The plugins folder changed and has settled.');
     beginReload(state.worker, folder);
   }
@@ -189,8 +205,16 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
 
   return {
     start() {
+      if (options.watch === 'off') {
+        options.log(
+          'The plugins folder is not watched: press Reload on the Plugins screen to load a change.',
+        );
+      }
       state = { phase: 'booting', worker: fork() };
-      if (options.watch !== undefined) poll(options.watch);
+      if (watch !== undefined) {
+        seen = { signature: attempt(() => watch.signature()), since: options.now() };
+        poll(watch);
+      }
     },
 
     message(worker, message) {
@@ -367,12 +391,14 @@ export function superviseCluster(options: {
       process.exit(code);
     },
     watch:
-      pluginsDir === undefined || !options.pluginWatch
+      pluginsDir === undefined
         ? undefined
-        : {
-            signature: () => pluginFolderSignature(pluginsDir),
-            fingerprint: () => pluginsFingerprint(scanPluginFolders(pluginsDir)),
-          },
+        : !options.pluginWatch
+          ? 'off'
+          : {
+              signature: () => pluginFolderSignature(pluginsDir),
+              fingerprint: () => pluginsFingerprint(scanPluginFolders(pluginsDir)),
+            },
   });
   const control = listenForControl({
     dataDir: options.dataDir,

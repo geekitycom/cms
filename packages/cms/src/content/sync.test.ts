@@ -6,9 +6,11 @@ import { after, afterEach, describe, it } from 'node:test';
 
 import { openContentStore } from './sqlite/open.ts';
 import type { ContentStore } from './store.ts';
-import { createContentSync } from './sync.ts';
-import type { ContentSync, DocumentChange } from './sync.ts';
+import { createContentSync, debounceFor } from './sync.ts';
+import type { ContentSync, DocumentChange, WatchDebounce } from './sync.ts';
+import { heldDebounce } from '../__testing__/debounce.ts';
 import { nextEvent } from '../__testing__/wait.ts';
+import { liveWatchers } from '../__testing__/watchers.ts';
 
 const temporaryDirs: string[] = [];
 const openStores: ContentStore[] = [];
@@ -95,6 +97,7 @@ async function sync(
   options: {
     watch?: boolean;
     debounceMs?: number;
+    debounce?: WatchDebounce;
     store?: ContentStore;
     logger?: { warn(message: string): void };
   } = {},
@@ -104,7 +107,7 @@ async function sync(
     store: index,
     contentDir: dir,
     watch: options.watch ?? false,
-    debounceMs: options.debounceMs ?? 20,
+    debounce: options.debounce ?? debounceFor(options.debounceMs ?? 20),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
   runningSyncs.push(created);
@@ -152,17 +155,8 @@ async function caughtUp(content: ContentSync, dir: string): Promise<void> {
   await indexed;
 }
 
-/** The changes to anything but the sentinel. */
 function besidesSentinel(changes: readonly DocumentChange[]): DocumentChange[] {
   return changes.filter((change) => change.path !== SENTINEL);
-}
-
-/**
- * Long enough for a watcher event and its debounce to have happened, had
- * there been a watcher. With none running there is no event to wait for.
- */
-function windowForAWatcher(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 500));
 }
 
 describe('a full scan', () => {
@@ -409,6 +403,66 @@ describe('a full scan', () => {
 });
 
 describe('the watcher', () => {
+  it('re-reads a changed path only once its debounce lets it', async () => {
+    const dir = await contentDir({
+      'pages/about.md': markdown({ title: 'About', permalink: '/about/', body: 'One.' }),
+    });
+    const held = heldDebounce();
+    const { sync: content, store: index } = await sync(dir, {
+      watch: true,
+      debounce: held.debounce,
+    });
+    await content.start();
+
+    await writeFiles(dir, {
+      'pages/about.md': markdown({ title: 'About', permalink: '/about/', body: 'Two.' }),
+    });
+    await held.holding('pages/about.md');
+    assert.match(index.getByPath('pages/about.md')?.html ?? '', /One\./, 'not while it is held');
+
+    const updated = nextEvent('the held edit to be indexed', (done) =>
+      content.events.on('updated', () => done()),
+    );
+    held.releaseHeldThenPassThrough();
+    await updated;
+    assert.match(index.getByPath('pages/about.md')?.html ?? '', /Two\./);
+  });
+
+  it('settles once, after the last path waiting out its debounce has been read', async () => {
+    const dir = await contentDir({});
+    const held = heldDebounce();
+    const { sync: content, store: index } = await sync(dir, {
+      watch: true,
+      debounce: held.debounce,
+    });
+    await content.start();
+    const seen: string[] = [];
+    content.events.on('created', (change) => seen.push(change.path));
+
+    await writeFiles(dir, {
+      'pages/first.md': markdown({ title: 'First', permalink: '/first/' }),
+      'pages/second.md': markdown({ title: 'Second', permalink: '/second/' }),
+    });
+    await held.holding('pages/first.md');
+    await held.holding('pages/second.md');
+    const settled = nextEvent('the sync to settle after both pages', (done) =>
+      content.onSettled(() => {
+        seen.push('settled');
+        if (index.getByPath('pages/second.md') !== undefined) done();
+      }),
+    );
+    const first = nextEvent('the first page to be indexed', (done) =>
+      content.events.on('created', () => done()),
+    );
+    held.release('pages/first.md');
+    await first;
+    await new Promise(setImmediate);
+    held.releaseHeldThenPassThrough();
+    await settled;
+
+    assert.deepEqual(seen, ['pages/first.md', 'pages/second.md', 'settled']);
+  });
+
   it('indexes what is already there when it starts', async () => {
     const dir = await contentDir({
       'pages/about.md': markdown({ title: 'About', permalink: '/about/' }),
@@ -651,16 +705,17 @@ describe('the watcher', () => {
     const dir = await contentDir({
       'pages/about.md': markdown({ title: 'About', permalink: '/about/', body: 'One.' }),
     });
-    const { sync: content, store: index } = await sync(dir, { watch: true });
-    await content.start();
+    const { sync: content } = await sync(dir, { watch: true });
+    const watchers = liveWatchers();
+    try {
+      await content.start();
+      assert.equal(watchers.live(), 1, 'it watches while it runs');
 
-    await content.stop();
-    await writeFiles(dir, {
-      'pages/about.md': markdown({ title: 'About', permalink: '/about/', body: 'Two.' }),
-    });
-    await windowForAWatcher();
-
-    assert.match(index.getByPath('pages/about.md')?.html ?? '', /One\./);
+      await content.stop();
+      assert.equal(watchers.live(), 0, 'the watch is closed');
+    } finally {
+      watchers.restore();
+    }
   });
 
   it('does not watch when watching is off', async () => {
@@ -668,14 +723,14 @@ describe('the watcher', () => {
       'pages/about.md': markdown({ title: 'About', permalink: '/about/', body: 'One.' }),
     });
     const { sync: content, store: index } = await sync(dir, { watch: false });
-    await content.start();
-
-    await writeFiles(dir, {
-      'pages/about.md': markdown({ title: 'About', permalink: '/about/', body: 'Two.' }),
-    });
-    await windowForAWatcher();
-
-    assert.match(index.getByPath('pages/about.md')?.html ?? '', /One\./);
+    const watchers = liveWatchers();
+    try {
+      await content.start();
+      assert.equal(watchers.live(), 0);
+    } finally {
+      watchers.restore();
+    }
+    assert.match(index.getByPath('pages/about.md')?.html ?? '', /One\./, 'it still scans');
   });
 
   it('follows a post moved into the trash, whichever event arrives first', async () => {

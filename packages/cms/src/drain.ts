@@ -32,8 +32,7 @@ const SQLITE_READONLY = 8;
 export interface WriteGate {
   readonly refusing: boolean;
   readonly middleware: MiddlewareHandler<GeekityEnv>;
-  /** Refuse new writes, and resolve once those in flight have finished. */
-  refuse(): Promise<void>;
+  refuse(onWritesInFlight?: (writes: number) => void): Promise<void>;
   reopen(): void;
   /** Stop counting a request as a write in flight, so the drain it is about to wait on does not wait on it. */
   leave(request: object): void;
@@ -94,9 +93,10 @@ export function createWriteGate(options: { waitMs?: number } = {}): WriteGate {
     },
     middleware,
 
-    async refuse() {
+    async refuse(onWritesInFlight) {
       refusing = true;
       if (inFlight === 0) return;
+      onWritesInFlight?.(inFlight);
       let timer: NodeJS.Timeout | undefined;
       await Promise.race([
         new Promise<void>((resolve) => idle.push(resolve)),

@@ -33,6 +33,7 @@ export type {
   Scheduler,
   SearchHit,
   SyncResult,
+  WatchDebounce,
 } from './content/index.ts';
 export type { Clock } from './util/clock.ts';
 export type { GeekityEnv } from './web/env.ts';

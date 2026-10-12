@@ -6,7 +6,8 @@ import type { CommentChecker } from './forms/checker.ts';
 import { KNOWN_UPLOAD_TYPES, normalizeUploadType } from './content/media.ts';
 import { systemClock } from './util/clock.ts';
 import type { Clock } from './util/clock.ts';
-import type { DocumentChange } from './content/sync.ts';
+import { defaultWatchDebounce } from './content/sync.ts';
+import type { DocumentChange, WatchDebounce } from './content/sync.ts';
 import type { MailProvider, MailLogger } from './mail/provider.ts';
 import type { Plugin } from './plugin.ts';
 import { withoutTrailingSlash } from './util/url.ts';
@@ -384,6 +385,13 @@ export interface GeekityConfig {
    */
   now?: Clock;
   /**
+   * How the content watcher waits for a changed file to stand still before
+   * it re-reads it. Defaults to 100 ms per path. A site has no reason to name
+   * one; a test about the order of watched changes names one it releases by
+   * hand.
+   */
+  watchDebounce?: WatchDebounce;
+  /**
    * Federation stores and guards. Every field has a default; see
    * {@link FederationOverrides}.
    */
@@ -492,6 +500,8 @@ export interface ResolvedConfig {
   readonly indexNow: IndexNowOverrides;
   /** The clock the index and the scheduler read. */
   readonly now: Clock;
+  /** How the content watcher waits for a changed file to stand still. */
+  readonly watchDebounce: WatchDebounce;
   /** Federation stores and guards, empty when the site named none. */
   readonly federation: FederationOverrides;
   /** How host names are resolved before a stranger's page is fetched. */
@@ -631,6 +641,7 @@ export function resolveConfig(
     mail: config.mail ?? {},
     indexNow: config.indexNow ?? {},
     now: config.now ?? systemClock,
+    watchDebounce: config.watchDebounce ?? defaultWatchDebounce,
     federation: config.federation ?? {},
     hostLookup: config.hostLookup ?? systemHostLookup,
     plugins: config.plugins ?? [],

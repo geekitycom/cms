@@ -5,10 +5,6 @@ import { describe, it } from 'node:test';
 
 const SOURCE_ROOT = import.meta.dirname;
 
-/**
- * What a test waits on when it waits on time rather than on an event: a
- * timer, a sleep, or a Date.now() deadline, compared or measured.
- */
 const TIME_WAIT = new RegExp(
   [
     /\bsetTimeout\s*\(/,
@@ -31,8 +27,6 @@ interface Allowance {
 }
 
 const DURATION = 'measures a duration the test asserts on';
-const NOTHING_HAPPENS =
-  'asserts that nothing happens; with no watcher running there is no event to wait for';
 
 const ALLOWED: readonly Allowance[] = [
   {
@@ -44,42 +38,6 @@ const ALLOWED: readonly Allowance[] = [
     file: '__testing__/offline.test.ts',
     line: 'await new Promise((resolve) => setTimeout(resolve, 10));',
     because: 'the source of a child test program, which swallows a fetch and carries on',
-  },
-  {
-    file: 'index.test.ts',
-    line: 'const windowForAWatcher = () => new Promise((resolve) => setTimeout(resolve, 500));',
-    because: NOTHING_HAPPENS,
-  },
-  {
-    file: 'content/sync.test.ts',
-    line: 'return new Promise((resolve) => setTimeout(resolve, 500));',
-    because: NOTHING_HAPPENS,
-  },
-  {
-    file: 'drain.test.ts',
-    line: 'return new Promise((resolve) => setTimeout(resolve, 400));',
-    because: `${NOTHING_HAPPENS}: the drain stopped it`,
-  },
-  {
-    file: 'drain.test.ts',
-    line: 'return new Promise((resolve) => setTimeout(resolve, 50));',
-    because: 'asserts the drain is still waiting for a write; a waiting drain announces nothing',
-  },
-  {
-    file: 'web/moved-identity.test.ts',
-    line: 'await new Promise((resolve) => setTimeout(resolve, 40));',
-    because: 'spaces two writes inside one debounce, the burst the test is about',
-  },
-  {
-    file: 'cli-reload.test.ts',
-    line: 'new Promise((resolve) => setTimeout(resolve, PLUGIN_POLL_MS + PLUGIN_SETTLE_MS + 2_000));',
-    because:
-      'asserts the supervisor leaves a folder alone; it prints nothing when it does (the state machine is covered with a fake clock in supervisor/primary.test.ts)',
-  },
-  {
-    file: 'cli-reload.test.ts',
-    line: 'const copyingSlowly = () => new Promise((resolve) => setTimeout(resolve, 3_000));',
-    because: 'a slow hand copy is the scenario: the folder changes, then stands still',
   },
   { file: 'cli-reload.test.ts', line: 'const took = Date.now() - started;', because: DURATION },
   { file: 'cli-reload.test.ts', line: 'const took = Date.now() - copied;', because: DURATION },
@@ -116,8 +74,7 @@ interface TimeWait {
   readonly at: string;
 }
 
-/** Checks whose own text quotes the lines they look for. */
-const QUOTES_SOURCE = new Set(['test-waits.test.ts', 'clock-boundary.test.ts']);
+const SELF_QUOTING_CHECKS = new Set(['test-waits.test.ts', 'clock-boundary.test.ts']);
 
 function isTest(relative: string): boolean {
   return (
@@ -134,7 +91,7 @@ function timeWaits(): TimeWait[] {
     const relative = path.relative(SOURCE_ROOT, absolute);
     if (!isTest(relative)) continue;
     const file = relative.split(path.sep).join('/');
-    if (QUOTES_SOURCE.has(file)) continue;
+    if (SELF_QUOTING_CHECKS.has(file)) continue;
     readFileSync(absolute, 'utf8')
       .split('\n')
       .forEach((text, index) => {

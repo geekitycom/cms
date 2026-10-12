@@ -73,6 +73,7 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `Scheduler`               | type     | Publishes a document when its date arrives.                                                                   |
 | `SearchHit`               | type     | One document a search found, and the passage it was found in.                                                 |
 | `SyncResult`              | type     | What a full scan did.                                                                                         |
+| `WatchDebounce`           | type     | How the content watcher waits for a changed file to stand still: the `watchDebounce` config option.           |
 
 ## Rendering, feeds and conversations
 

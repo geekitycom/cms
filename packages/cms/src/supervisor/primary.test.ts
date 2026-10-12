@@ -18,7 +18,7 @@ interface FakeFolder {
 }
 
 /** A supervisor over fake workers and a clock the test moves. */
-function harness(options: { folder?: FakeFolder } = {}) {
+function harness(options: { folder?: FakeFolder; watchOff?: boolean } = {}) {
   const { folder } = options;
   const workers: FakeWorker[] = [];
   const timers: { at: number; task: () => void; cancelled: boolean }[] = [];
@@ -54,9 +54,11 @@ function harness(options: { folder?: FakeFolder } = {}) {
     log: (line) => lines.push(line),
     exit: (code) => exits.push(code),
     watch:
-      folder === undefined
-        ? undefined
-        : { signature: () => folder.signature, fingerprint: () => folder.fingerprint },
+      options.watchOff === true
+        ? 'off'
+        : folder === undefined
+          ? undefined
+          : { signature: () => folder.signature, fingerprint: () => folder.fingerprint },
   });
 
   function worker(id: number): FakeWorker {
@@ -92,7 +94,7 @@ function harness(options: { folder?: FakeFolder } = {}) {
   };
 }
 
-function serving(options: { folder?: FakeFolder } = {}) {
+function serving(options: { folder?: FakeFolder; watchOff?: boolean } = {}) {
   const h = harness(options);
   h.supervisor.start();
   h.supervisor.message(h.worker(1), {
@@ -244,6 +246,14 @@ function completeReload(h: ReturnType<typeof harness>, old: number, plugins: str
   h.supervisor.message(h.worker(h.workers.length), { type: 'ready', pluginsFingerprint: plugins });
 }
 
+const CHANGING = `The plugins folder is changing; it loads once it has stood still for ${String(PLUGIN_SETTLE_MS / 1000)} s.`;
+const SETTLED = 'The plugins folder changed and has settled.';
+const RELOADING = 'Reloading: the running server is draining.';
+const LEFT_ALONE =
+  'The plugins folder is as it was when its reload failed, so it is left alone until it changes.';
+const NOT_WATCHED =
+  'The plugins folder is not watched: press Reload on the Plugins screen to load a change.';
+
 describe('the supervisor watching the plugins folder', () => {
   it('reloads once the folder has stood still for the settle time', () => {
     const folder = { signature: 'one', fingerprint: 'A' };
@@ -361,6 +371,83 @@ describe('the supervisor watching the plugins folder', () => {
 
   it('reloads only when asked when the watch is off', async () => {
     const h = serving();
+    h.advance(PLUGIN_SETTLE_MS * 10);
+    assert.equal(h.nextTimer(), undefined, 'nothing polls');
+
+    const outcome = h.supervisor.reload();
+    completeReload(h, 1, '');
+    assert.deepEqual(await outcome, { ok: true } satisfies ReloadOutcome);
+  });
+
+  it('says once that the folder is changing, however long the copy takes', () => {
+    const folder = { signature: 'one', fingerprint: 'A' };
+    const h = serving({ folder });
+    h.advance(PLUGIN_POLL_MS * 2);
+    assert.deepEqual(h.lines, [], 'reading the folder the first time is not a change');
+
+    folder.signature = 'copying';
+    h.advance(PLUGIN_POLL_MS);
+    assert.deepEqual(h.lines, [CHANGING]);
+    folder.signature = 'copied';
+    folder.fingerprint = 'B';
+    h.advance(PLUGIN_POLL_MS);
+    assert.deepEqual(h.lines, [CHANGING], 'the second change is the same copy');
+
+    h.advance(PLUGIN_SETTLE_MS + PLUGIN_POLL_MS);
+    assert.deepEqual(h.lines, [CHANGING, SETTLED, RELOADING]);
+    completeReload(h, 1, 'B');
+
+    folder.signature = 'again';
+    h.advance(PLUGIN_POLL_MS);
+    assert.equal(h.lines.filter((line) => line === CHANGING).length, 2, 'a later change is new');
+  });
+
+  it('compares with the folder as it was at start, so a change before its first look counts', () => {
+    const folder = { signature: 'one', fingerprint: 'A' };
+    const h = serving({ folder });
+
+    folder.signature = 'two';
+    folder.fingerprint = 'B';
+    h.advance(PLUGIN_POLL_MS);
+    assert.deepEqual(h.lines, [CHANGING]);
+    h.advance(PLUGIN_SETTLE_MS + PLUGIN_POLL_MS);
+    assert.deepEqual(h.worker(1).told, ['drain']);
+  });
+
+  it('says nothing while there is no folder to read', () => {
+    const folder: { signature: string | undefined; fingerprint: string } = {
+      signature: undefined,
+      fingerprint: '',
+    };
+    const h = serving({ folder: folder as FakeFolder });
+
+    h.advance(PLUGIN_SETTLE_MS * 3);
+    assert.deepEqual(h.lines, []);
+    folder.signature = 'made';
+    h.advance(PLUGIN_POLL_MS);
+    assert.deepEqual(h.lines, [CHANGING], 'making the folder is a change');
+  });
+
+  it('says once that it leaves a folder whose reload failed', () => {
+    const folder = { signature: 'one', fingerprint: 'A' };
+    const h = serving({ folder });
+    folder.signature = 'broken';
+    folder.fingerprint = 'B';
+    h.advance(PLUGIN_SETTLE_MS + PLUGIN_POLL_MS * 2);
+    h.supervisor.message(h.worker(1), { type: 'drained' });
+    h.supervisor.message(h.worker(2), { type: 'boot-failed', error: 'Two plugins share a name.' });
+    assert.ok(!h.lines.includes(LEFT_ALONE));
+
+    h.advance(PLUGIN_POLL_MS);
+    assert.equal(h.lines.at(-1), LEFT_ALONE);
+    h.advance(PLUGIN_SETTLE_MS * 10);
+    assert.equal(h.lines.filter((line) => line === LEFT_ALONE).length, 1);
+    assert.deepEqual(h.worker(1).told, ['drain', 'resume'], 'not tried again');
+  });
+
+  it('says the folder is not watched when the watch is off, and reloads only when asked', async () => {
+    const h = serving({ watchOff: true });
+    assert.deepEqual(h.lines, [NOT_WATCHED]);
     h.advance(PLUGIN_SETTLE_MS * 10);
     assert.equal(h.nextTimer(), undefined, 'nothing polls');
 

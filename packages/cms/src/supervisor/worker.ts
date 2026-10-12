@@ -19,7 +19,7 @@ export interface WorkerChannel {
 }
 
 export interface SupervisedCms {
-  drain(): Promise<void>;
+  drain(onWritesInFlight?: (writes: number) => void): Promise<void>;
   resume(): Promise<void>;
   close(): Promise<void>;
 }
@@ -94,7 +94,11 @@ export function superviseWorker(options: {
           switch (message.type) {
             case 'drain':
               try {
-                await cms.drain();
+                await cms.drain((writes) => {
+                  log(
+                    `Draining: waiting for ${String(writes)} ${writes === 1 ? 'write' : 'writes'} in flight to finish.`,
+                  );
+                });
               } catch (error) {
                 log(`The server could not drain for a reload: ${messageOf(error)}`);
                 exit(EXIT_FOR_REPLACEMENT);

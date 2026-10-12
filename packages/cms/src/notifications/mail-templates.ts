@@ -68,7 +68,6 @@ export interface CreateMailTemplatesOptions {
   themes: ThemeSource;
   /** Public origin, for the `url` and `absoluteUrl` filters. */
   baseUrl: string;
-  /** What `"now" | date` reads. */
   now: Clock;
   /**
    * Recompile a template on every render instead of caching it. On while the

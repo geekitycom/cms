@@ -26,6 +26,23 @@ const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
 /** How long the watcher waits for a path to stop changing before re-reading it. */
 export const DEFAULT_DEBOUNCE_MS = 100;
 
+/**
+ * How the watcher waits for a changed path to stand still. It is called on
+ * every event for `path` with the run that re-reads the path, and returns the
+ * function that cancels that run, which the sync calls when the path changes
+ * again before the run has gone ahead.
+ */
+export type WatchDebounce = (path: string, run: () => void) => () => void;
+
+export function debounceFor(ms: number): WatchDebounce {
+  return (_path, run) => {
+    const timer = setTimeout(run, ms);
+    return () => clearTimeout(timer);
+  };
+}
+
+export const defaultWatchDebounce: WatchDebounce = debounceFor(DEFAULT_DEBOUNCE_MS);
+
 /** Name prefix of the directory the watcher makes to learn that it is listening. */
 const PROBE_PREFIX = '.geekity-watch-';
 
@@ -109,8 +126,7 @@ export interface CreateContentSyncOptions {
   contentDir: string;
   /** Watch for changes after the boot scan. Default `true`. */
   watch?: boolean | undefined;
-  /** Per-path debounce for watcher events, in milliseconds. Default 100. */
-  debounceMs?: number | undefined;
+  debounce?: WatchDebounce | undefined;
   /** Where parse failures are reported. Defaults to `console`. */
   logger?: SyncLogger | undefined;
 }
@@ -360,7 +376,8 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
   // Watcher events are debounced per path and then handled one at a time, on
   // the same queue as a full scan, so a burst of writes to one file costs a
   // single re-parse and no two reconciles of one path ever interleave.
-  const pending = new Map<string, NodeJS.Timeout>();
+  const pending = new Map<string, () => void>();
+  const debounce = options.debounce ?? defaultWatchDebounce;
   const queue = createSerialQueue();
   let watcher: FSWatcher | undefined;
 
@@ -390,10 +407,10 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
    * removed, so every document under it, on disk or in the index, is.
    */
   function handle(relativePath: string): void {
-    clearTimeout(pending.get(relativePath));
+    pending.get(relativePath)?.();
     pending.set(
       relativePath,
-      setTimeout(() => {
+      debounce(relativePath, () => {
         pending.delete(relativePath);
         void queue.run(async () => {
           const paths = isDocumentPath(relativePath)
@@ -411,7 +428,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
           // its debounce: the burst is over.
           if (unsettled && pending.size === 0 && queue.pending() === 1) await settle();
         });
-      }, options.debounceMs ?? DEFAULT_DEBOUNCE_MS),
+      }),
     );
   }
 
@@ -530,7 +547,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     },
 
     async stop() {
-      for (const timer of pending.values()) clearTimeout(timer);
+      for (const cancel of pending.values()) cancel();
       pending.clear();
 
       watcher?.close();

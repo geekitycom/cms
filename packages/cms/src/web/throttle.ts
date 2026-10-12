@@ -23,7 +23,6 @@ export interface LoginThrottleOptions {
   attempts: number;
   /** How long the first lockout lasts, in seconds. */
   lockoutSeconds: number;
-  /** Where the time comes from. A test hands one it can move. */
   now: Clock;
 }
 

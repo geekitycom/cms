@@ -25,7 +25,6 @@ export interface CreateTemplateEnvironmentOptions {
   themeDirs?: readonly string[] | undefined;
   /** Public origin, for the `url` and `absoluteUrl` filters. */
   baseUrl: string;
-  /** What `"now" | date` reads: the site's clock, asked at render time. */
   now: Clock;
   /**
    * Recompile a template on every render instead of caching it. On while the
@@ -136,9 +135,6 @@ function addFilters(
 ): Environment {
   const basePath = withoutTrailingSlash(new URL(withTrailingSlash(baseUrl)).pathname);
 
-  // `"now"` is read from the site's clock at render time, for the footer's
-  // copyright year: a site left running over New Year says the new one, in
-  // the site's zone. `docs/eleventy.config.example.js` answers to it too.
   environment.addFilter(
     'date',
     function (
@@ -311,7 +307,6 @@ function renderSite(context: unknown): SiteData {
   return typeof site === 'object' && site !== null ? (site as SiteData) : none;
 }
 
-/** A value as an instant, or `undefined` when it is not one. */
 function toDate(value: unknown): Date | undefined {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? undefined : value;
   if (typeof value === 'string' || typeof value === 'number') {

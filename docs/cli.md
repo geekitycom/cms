@@ -63,8 +63,11 @@ which is a reload, when one of these events happens:
   how the reload went, or says that no supervisor answered.
 - The plugins folder (`pluginsDir`) differs from what the running worker
   loaded, and it has not changed for five seconds. The supervisor reads the
-  folder every second, so a slow copy loads once, when it is complete. Set
-  `GEEKITY_PLUGIN_WATCH=off` to turn this off.
+  folder every second, so a slow copy loads once, when it is complete. It
+  prints a line when it first sees the folder change, and a line when the
+  folder settles as it was when its last reload failed, which it leaves alone
+  until the folder changes again. Set `GEEKITY_PLUGIN_WATCH=off` to turn this
+  off. The supervisor then says at start that the folder is not watched.
 - You press **Reload** on Admin > Plugins. The screen offers the button
   whenever the folder differs from what the running worker loaded. It names the
   folders added, removed and updated.
@@ -74,8 +77,8 @@ reload after the first. Each reload runs these steps in order:
 
 1. The running worker stops taking writes. It answers GET and HEAD, and it
    answers any other method with `503` and `Retry-After: 5`. It lets the writes
-   already in flight finish. Then it stops its timers, its watcher and its
-   plugins.
+   already in flight finish, and prints how many it waits for. Then it stops
+   its timers, its watcher and its plugins.
 2. The running worker sends what its queues hold and stops writing to the
    database, `data/` and `content/`.
 3. A new worker boots, runs the boot migrations alone and starts listening.

@@ -6,5 +6,4 @@
  */
 export type Clock = () => Date;
 
-/** The clock a site runs on when it names none. */
 export const systemClock: Clock = () => new Date();

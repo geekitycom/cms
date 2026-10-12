@@ -15,6 +15,7 @@ import {
 } from './index.ts';
 import type { Cms, GeekityConfig } from './index.ts';
 import { nextEvent } from './__testing__/wait.ts';
+import { liveWatchers } from './__testing__/watchers.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -179,12 +180,6 @@ describe('keeping the index in step with the content directory', () => {
     return { cms: await cms({ contentDir, watch: false, ...config }), contentDir };
   }
 
-  /**
-   * Long enough for a watcher event and its debounce to have happened, had
-   * there been a watcher. With none running there is no event to wait for.
-   */
-  const windowForAWatcher = () => new Promise((resolve) => setTimeout(resolve, 500));
-
   const page = (title: string, permalink: string, body = 'Body.'): string =>
     `---\ntitle: ${title}\npermalink: ${permalink}\n---\n\n${body}\n`;
 
@@ -213,12 +208,15 @@ describe('keeping the index in step with the content directory', () => {
     assert.equal(instance.store.getByPermalink('/about/')?.title, 'About');
   });
 
-  it('picks up an edit while it is serving, and stops when it closes', async () => {
+  it('picks up an edit while it is serving, and stops when it closes', async (t) => {
     const { cms: instance, contentDir } = await site(
       { 'pages/about.md': page('About', '/about/', 'First.') },
       { port: 0, watch: true },
     );
+    const watchers = liveWatchers();
+    t.after(() => watchers.restore());
     await instance.serve();
+    assert.equal(watchers.live(), 1, 'it watches while it serves');
 
     const edited = nextEvent('the watcher to report the edit to pages/about.md', (done) =>
       instance.events.on('updated', (change) => {
@@ -235,12 +233,7 @@ describe('keeping the index in step with the content directory', () => {
     assert.match(instance.store.getByPath('pages/about.md')?.html ?? '', /Second\./);
 
     await instance.close();
-    await writeFile(
-      path.join(contentDir, 'pages/about.md'),
-      page('About', '/about/', 'Third.'),
-      'utf8',
-    );
-    await windowForAWatcher();
+    assert.equal(watchers.live(), 0, 'closing stopped the watch');
   });
 
   it('tells subscribers about a document it indexed', async () => {
@@ -311,20 +304,16 @@ describe('keeping the index in step with the content directory', () => {
     assert.equal(settled, 1);
   });
 
-  it('does not watch when the config turns watching off', async () => {
-    const { cms: instance, contentDir } = await site(
+  it('does not watch when the config turns watching off', async (t) => {
+    const { cms: instance } = await site(
       { 'pages/about.md': page('About', '/about/', 'First.') },
       { port: 0, watch: false },
     );
+    const watchers = liveWatchers();
+    t.after(() => watchers.restore());
     await instance.serve();
 
-    await writeFile(
-      path.join(contentDir, 'pages/about.md'),
-      page('About', '/about/', 'Second.'),
-      'utf8',
-    );
-    await windowForAWatcher();
-
+    assert.equal(watchers.live(), 0);
     assert.match(instance.store.getByPath('pages/about.md')?.html ?? '', /First\./);
     await instance.close();
   });

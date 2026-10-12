@@ -234,9 +234,10 @@ export interface Cms {
    * timers, the watcher and the plugins, send what the queues hold, and then
    * write nothing more to the database, `dataDir` or `contentDir`. What
    * `geekity serve` does to the old worker on a reload, before the new one
-   * boots.
+   * boots. `onWritesInFlight` hears how many writes are in flight when the drain has
+   * to wait for them.
    */
-  drain(): Promise<void>;
+  drain(onWritesInFlight?: (writes: number) => void): Promise<void>;
   /** Undo {@link Cms.drain}: the new server did not boot, so this one carries on. */
   resume(): Promise<void>;
   /**
@@ -362,8 +363,8 @@ export function createCms(
       });
     },
 
-    async drain() {
-      await writes.refuse();
+    async drain(onWritesInFlight) {
+      await writes.refuse(onWritesInFlight);
       await endServices(lifecycle, 'drain');
       store.setReadOnly(true);
       admin.setReadOnly(true);
