@@ -8,6 +8,7 @@ CMS is and how to start a site.
 - [Getting started](getting-started.md). Create a site, add the package to a project, and upgrade it.
 - [The `geekity` command](cli.md). What each `geekity` command does, and how `geekity serve` reloads.
 - [Configuration](configuration.md). Every config field and environment variable, `createCms`, and the access log.
+- [The package API](public-api.md). Every export of `@geekity/cms` a site's own code can import.
 
 ## Write content
 
