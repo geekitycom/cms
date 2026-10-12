@@ -3,7 +3,6 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** A value as a list of strings: one non-empty string, or the non-empty strings of a list. */
 export function nonEmptyStrings(value: unknown): string[] {
   if (typeof value === 'string') return value === '' ? [] : [value];
   if (!Array.isArray(value)) return [];

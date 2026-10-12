@@ -7,7 +7,6 @@ import { readSiteSettings } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import { syndicationTargetsReader } from '../webmention/syndication.ts';
 
-/** The records a write reads about the site, from the files that keep them. */
 export function siteRecords(config: Pick<ResolvedConfig, 'contentDir' | 'dataDir'>): SiteRecords {
   const syndicationTargets = syndicationTargetsReader(config.contentDir);
   return {

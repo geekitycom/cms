@@ -9,7 +9,6 @@ interface TestUser {
   readonly profile?: { readonly displayName?: string | undefined } | undefined;
 }
 
-/** A user, with a display name when a case needs one. */
 function user(username: string, profile?: TestUser['profile']): TestUser {
   return { id: username.length, username, ...(profile === undefined ? {} : { profile }) };
 }

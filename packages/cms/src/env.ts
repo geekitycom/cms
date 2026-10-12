@@ -111,7 +111,6 @@ export interface GeekityEnv {
     replyContexts: ReplyContextService;
     /** Resolves the fediverse handles a save names before it is written (TASK-194). */
     learnHandles: HandleLearner;
-    /** What a write reads about the site beyond its content: users, timezone, targets, comments. */
     siteRecords: SiteRecords;
     /**
      * The site's outgoing email (TASK-53), so a handler can send one: the

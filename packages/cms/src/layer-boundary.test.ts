@@ -6,17 +6,15 @@ import { describe, it } from 'node:test';
 const SOURCE_ROOT = import.meta.dirname;
 
 interface LayerRule {
-  /** The top-level directories the rule holds for. */
   readonly layer: readonly string[];
-  /** The top-level directories no non-test module in the layer may import. */
-  readonly above: readonly string[];
+  readonly mayNotImport: readonly string[];
 }
 
 const RULES: readonly LayerRule[] = [
-  { layer: ['content', 'media', 'micropub', 'site'], above: ['admin'] },
+  { layer: ['content', 'media', 'micropub', 'site'], mayNotImport: ['admin'] },
   {
     layer: ['content'],
-    above: [
+    mayNotImport: [
       'web',
       'webmention',
       'federation',
@@ -32,7 +30,6 @@ const RULES: readonly LayerRule[] = [
 
 const RELATIVE_IMPORT = /(?:\bfrom\s+|\bimport\s*\(\s*|^\s*import\s+)['"](\.{1,2}\/[^'"]+)['"]/g;
 
-/** Every relative import in the layer, as the top-level directory it lands in and where it is. */
 function importsOf(directory: string): { target: string; at: string }[] {
   const found: { target: string; at: string }[] = [];
   for (const entry of readdirSync(path.join(SOURCE_ROOT, directory), {
@@ -59,11 +56,11 @@ function importsOf(directory: string): { target: string; at: string }[] {
 }
 
 describe('the layer boundaries', () => {
-  for (const { layer, above } of RULES) {
+  for (const { layer, mayNotImport } of RULES) {
     for (const directory of layer) {
-      it(`keeps ${directory}/ from importing ${above.map((name) => `${name}/`).join(', ')}`, () => {
+      it(`keeps ${directory}/ from importing ${mayNotImport.map((name) => `${name}/`).join(', ')}`, () => {
         const offences = importsOf(directory)
-          .filter(({ target }) => above.includes(target))
+          .filter(({ target }) => mayNotImport.includes(target))
           .map(({ target, at }) => `${directory}/ must not import from ${target}/: ${at}`);
         assert.deepEqual(offences, []);
       });

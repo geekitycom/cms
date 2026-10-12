@@ -10,14 +10,6 @@ import {
 import type { RedirectTable } from './redirects.ts';
 
 /**
- * Which pages of this site a body links to, and which links land on a page.
- *
- * Content policy rather than webmention policy: the index keeps every link a
- * document makes to the site as the linked page's backlinks, and the
- * Markdown representation reads a link the same way.
- */
-
-/**
  * One link to a page of this site, as the index keeps it: the path, spelled
  * as {@link siteLinkKey} spells a permalink, and the query sorted as a
  * redirect source's is, or `''`. The query is kept because the site answers
@@ -31,9 +23,6 @@ export interface SiteLink {
 /**
  * Every page of this site a rendered body links to, each named once
  * (TASK-322).
- *
- * No webmention is sent for these: the index keeps them as the linked page's
- * backlinks instead.
  */
 export function ownSiteLinks(html: string, pageUrl: string, baseUrl: string): SiteLink[] {
   const found = new Map<string, SiteLink>();

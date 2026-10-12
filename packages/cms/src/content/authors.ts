@@ -1,4 +1,3 @@
-/** What a document's `author` is resolved against: a user's login and display name. */
 export interface AuthorUser {
   readonly id: number;
   readonly username: string;

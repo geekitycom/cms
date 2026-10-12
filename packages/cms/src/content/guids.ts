@@ -6,10 +6,6 @@ import type { Document } from './document.ts';
 /**
  * The names this site gives things to the world outside it: a post's object
  * id, a feed guid, a comment's page.
- *
- * Content policy rather than delivery, so the content index names things the
- * way the feeds and the federation do: it keys `/replies/` feeds by these
- * guids (TASK-327).
  */
 
 /**

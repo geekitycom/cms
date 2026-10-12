@@ -44,19 +44,10 @@ import { respellTags } from './tags.ts';
 import type { Respelling } from './tags.ts';
 import { calendarDayIn, toUtcInstant } from './time.ts';
 
-/**
- * What a write reads about the site beyond its content, each read as it is
- * now. The composition root gives it, so the write path names none of the
- * features that keep these records.
- */
 export interface SiteRecords {
-  /** The site's users, whom a save's `author` is resolved against. */
   readonly users: () => readonly AuthorUser[];
-  /** The timezone an offset-less date is the wall clock of. */
   readonly timezone: () => string;
-  /** The places the site declares a post may be syndicated to. */
   readonly syndicationTargets: () => readonly SyndicationTarget[];
-  /** Whether anybody has commented on the document with this slug. */
   readonly hasComments: (slug: string) => boolean;
 }
 
@@ -69,7 +60,6 @@ export interface DocumentSite extends SiteRecords {
   readonly writer: string | undefined;
   readonly citedContext: (target: string) => Promise<CitedPage | undefined>;
   readonly storedContext: (target: string) => CitedPage | undefined;
-  /** Resolves the fediverse handles a body names before it is written. */
   readonly learnHandles: (body: string) => Promise<void>;
 }
 
