@@ -217,11 +217,11 @@ export function createServices({
 
   const federationKv = resolved.federation.kv ?? new MemoryKvStore();
   const federationQueue =
-    resolved.federation.queue === undefined ? createSettlingQueue() : undefined;
+    resolved.federation.queue === null ? undefined : createSettlingQueue(resolved.federation.queue);
   const federation = createSiteFederation({
     baseUrl: resolved.baseUrl,
     ...resolved.federation,
-    ...(federationQueue === undefined ? {} : { queue: federationQueue }),
+    queue: federationQueue ?? null,
     kv: federationKv,
   });
 

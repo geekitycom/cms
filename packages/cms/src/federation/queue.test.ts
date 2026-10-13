@@ -87,4 +87,35 @@ describe('createSettlingQueue', () => {
     await assert.rejects(Promise.resolve(deliver(carried[0])), /refused/);
     await queue.settled();
   });
+
+  it('waits for its own messages, not ones a durable queue kept from an earlier worker', async () => {
+    const stored: unknown[] = [];
+    let deliver: (message: unknown) => Promise<void> | void = () => undefined;
+    const durable = {
+      enqueue: (message: unknown) => {
+        stored.push(message);
+        return Promise.resolve();
+      },
+      listen: (handler: (message: unknown) => Promise<void> | void) => {
+        deliver = handler;
+        return Promise.resolve();
+      },
+    };
+    await createSettlingQueue(durable).enqueue({ id: 'left over' });
+
+    const queue = createSettlingQueue(durable);
+    await queue.listen(() => undefined);
+    await deliver(stored.shift());
+    await queue.enqueue({ id: 'mine' });
+
+    let settled = false;
+    const settling = queue.settled().then(() => {
+      settled = true;
+    });
+    await new Promise(setImmediate);
+    assert.equal(settled, false, 'it waited for the message it queued itself');
+
+    await deliver(stored.shift());
+    await settling;
+  });
 });
