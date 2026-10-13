@@ -1,10 +1,11 @@
 ---
 id: TASK-380
 title: 'Spike: a job queue interface that a Redis or RabbitMQ backend could implement'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-10-13 11:24'
-updated_date: '2026-10-13 15:29'
+updated_date: '2026-10-13 16:48'
 labels: []
 milestone: m-38
 dependencies: []
@@ -15,6 +16,9 @@ references:
   - >-
     backlog/decisions/decision-52 -
     A-site-is-one-container-and-its-directory-foundational-systems-sit-behind-async-interfaces-a-build-can-swap.md
+  - >-
+    backlog/decisions/decision-54 -
+    Admin-jobs-run-on-a-swappable-transport-with-their-status-in-a-CMS-owned-job-record.md
 priority: medium
 type: spike
 ordinal: 339800
@@ -36,17 +40,31 @@ Questions to answer: where job status, progress and results live when the broker
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A decision record gives the job queue interface: its operations, the job and status types, and the guarantees a handler may rely on, such as at least once delivery and how it should behave when run twice
-- [ ] #2 A table maps every operation and guarantee in the interface onto BullMQ, RabbitMQ and Fedify MessageQueue (with @fedify/sqlite), saying for each how it is done or why it cannot be, and what the in-process implementation does
-- [ ] #3 Where a backend keeps no job status, the record says where status lives instead, and the interface separates running jobs from reporting their status if that is the answer
-- [ ] #4 Claims about BullMQ and RabbitMQ are checked against the real thing: a throwaway adapter for each passes the same contract test as the in-process one, run against a real Redis and a real RabbitMQ (for example in Docker), with the results in the record; the adapters are not merged
-- [ ] #5 The record says whether one backend could carry both admin jobs and Fedify messages, and what that would take
-- [ ] #6 Follow-up tasks are filed for the chosen interface and its in-process implementation; nothing is implemented for production in this task
+- [x] #1 A decision record gives the job queue interface: its operations, the job and status types, and the guarantees a handler may rely on, such as at least once delivery and how it should behave when run twice
+- [x] #2 A table maps every operation and guarantee in the interface onto BullMQ, RabbitMQ and Fedify MessageQueue (with @fedify/sqlite), saying for each how it is done or why it cannot be, and what the in-process implementation does
+- [x] #3 Where a backend keeps no job status, the record says where status lives instead, and the interface separates running jobs from reporting their status if that is the answer
+- [x] #4 Claims about BullMQ and RabbitMQ are checked against the real thing: a throwaway adapter for each passes the same contract test as the in-process one, run against a real Redis and a real RabbitMQ (for example in Docker), with the results in the record; the adapters are not merged
+- [x] #5 The record says whether one backend could carry both admin jobs and Fedify messages, and what that would take
+- [x] #6 Follow-up tasks are filed for the chosen interface and its in-process implementation; nothing is implemented for production in this task
 - [ ] #7 The user has read the decision record and accepted it, or asked for changes that are made; follow-up build tasks are not started before then
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Read the Fedify MessageQueue types and @fedify/sqlite's SqliteMessageQueue in node_modules; read BullMQ and amqplib type definitions after installing them in a scratch directory; check SQS limits and pg-boss/Graphile Worker on paper.
+2. Draft the interface: job = name + JSON payload, handlers registered by name, a JobQueue (enqueue/run side) separate from a JobStatusStore (status side), statuses queued/running/finished/failed/interrupted.
+3. Write one contract test (node:test) parameterised by a factory, plus an in-process implementation on createSerialQueue with a file status store, a throwaway BullMQ adapter and a throwaway RabbitMQ (amqplib) adapter; also a Fedify SqliteMessageQueue adapter to test whether one backend carries both.
+4. Run the contract against real Redis and RabbitMQ in Docker; record versions and per-case results; remove the containers.
+5. Write the decision record (proposed): interface sketch, guarantees, mapping table, status location, settled/close, interruption, delays and retries, shared backend and TASK-379.
+6. File follow-up tasks under m-38 with dependencies; note TASK-379 if the finding changes it.
+7. Delete the scratch code so git status shows only backlog/ changes; check the ACs with proof, leave #7 open and the task In Progress for user review.
+<!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Scope added 2026-10-13: also check the interface on paper against Amazon SQS as a pattern a future AWS build (SQS plus Aurora, swapped in by a different Docker build) might use. No SQS adapter or test is written. Note the SQS constraints the interface must not rule out: at-least-once delivery, a 15-minute maximum delay, a 256 KB message limit, a visibility timeout instead of a lock, and no job status kept by the queue.
+
+Decision record decision-54 (status proposed) holds the interface, the mapping table, the measured results, the TASK-379 implications and the contract test (Appendix A). Measured with Docker (Redis 8.2.10, RabbitMQ 4.1.8, Node 24.18.0): the contract (C1 to C11) passed 11 of 11 on the in-process transport, a throwaway BullMQ 6.3.14 adapter and a throwaway amqplib 2.2.0 adapter in 3 runs each, and on Fedify SqliteMessageQueue 2.4.0 (3 runs) and RedisMessageQueue 2.4.0 (2 runs) unchanged. @fedify/amqp 2.4.0 failed 9 of 11 with default options (double ack, 406 unknown delivery tag) and failed C7 in 3 of 5 runs with nativeRetrial. Injected defects (no recovery, no requeue on stop, settled at once, no claim guard) each failed the cases expected. The throwaway code and containers were removed. Follow-ups filed: TASK-391 (queue and in-process implementation), TASK-392 (strip-metadata) and TASK-393 (resend), both depending on TASK-391. A note was added to TASK-379. AC #7 waits for the user to read and accept decision-54; the task stays In Progress until then.
 <!-- SECTION:NOTES:END -->
