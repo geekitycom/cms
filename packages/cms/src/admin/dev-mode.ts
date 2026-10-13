@@ -1,7 +1,7 @@
 import type { Context, Hono } from 'hono';
 
 import { DEV_MODE, DEV_MODE_LATCHED, readDevModeRecord } from '../settings/dev-mode.ts';
-import type { DevModeEntry, DevModeSource, HeldKind } from '../settings/dev-mode.ts';
+import type { DevModeEntry, DevModeRecordSpelling, HeldKind } from '../settings/dev-mode.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
@@ -22,14 +22,14 @@ const KIND_LABELS: Record<HeldKind, string> = {
   mail: 'Email',
 };
 
-const ON_BY: Record<DevModeSource, string> = {
+const ON_BY: Record<DevModeRecordSpelling, string> = {
   config: 'GEEKITY_DEV_MODE or the devMode setting',
   command: 'geekity dev-mode on',
   admin: 'the admin switch',
   plugin: 'a plugin',
 };
 
-const OFF_BY: Record<DevModeSource, string> = {
+const OFF_BY: Record<DevModeRecordSpelling, string> = {
   ...ON_BY,
   command: 'geekity dev-mode off',
 };
@@ -81,7 +81,7 @@ function row(entry: DevModeEntry): {
     return { at: entry.at, what: 'Dev mode on', detail: ON_BY[entry.by], to: [] };
   }
   if (entry.type === 'off') {
-    return { at: entry.at, what: 'Went live', detail: OFF_BY[entry.by ?? 'command'], to: [] };
+    return { at: entry.at, what: 'Went live', detail: OFF_BY[entry.by], to: [] };
   }
   return { at: entry.at, what: KIND_LABELS[entry.kind], detail: entry.what, to: entry.to };
 }

@@ -2,10 +2,10 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 
 import { readFileIfPresentSync } from '../files/atomic.ts';
-import { isRecord } from '../util/guards.ts';
 import { declareNamespace } from './declare.ts';
 import { boolean } from './kinds.ts';
-import type { ChangedBy, SettingChange } from './types.ts';
+import { presenceMeansOn } from './presence.ts';
+import type { ChangedBy, SettingChange, SettingsRegistry } from './types.ts';
 
 const DEV_MODE_RECORD_FILE = 'dev-mode.jsonl';
 
@@ -17,9 +17,9 @@ export interface OutboundEffect {
   readonly to: readonly string[];
 }
 
-export type DevModeSource = 'config' | 'command' | 'admin' | 'plugin';
+export type DevModeRecordSpelling = 'config' | 'command' | 'admin' | 'plugin';
 
-const SOURCES: Record<ChangedBy, DevModeSource> = {
+const RECORD_SPELLING: Record<ChangedBy, DevModeRecordSpelling> = {
   boot: 'config',
   cli: 'command',
   admin: 'admin',
@@ -27,15 +27,17 @@ const SOURCES: Record<ChangedBy, DevModeSource> = {
 };
 
 export type DevModeEntry =
-  | { readonly type: 'on'; readonly at: string; readonly by: DevModeSource }
-  | { readonly type: 'off'; readonly at: string; readonly by?: DevModeSource }
+  | { readonly type: 'on'; readonly at: string; readonly by: DevModeRecordSpelling }
+  | { readonly type: 'off'; readonly at: string; readonly by: DevModeRecordSpelling }
   | ({ readonly type: 'held'; readonly at: string } & OutboundEffect);
+
+type LegacyOffEntry = { readonly type: 'off'; readonly at: string; readonly by?: undefined };
 
 export const DEV_MODE = declareNamespace({
   namespace: 'dev_mode',
   storage: { kind: 'file', under: 'data', path: 'dev-mode.json', dataClass: { kept: false } },
   envPrefix: 'GEEKITY_DEV_MODE',
-  legacy: (raw) => (isRecord(raw) && 'on' in raw ? raw : { on: true }),
+  legacy: presenceMeansOn,
   settings: {
     on: {
       type: boolean,
@@ -49,11 +51,17 @@ export const DEV_MODE = declareNamespace({
 
 export const DEV_MODE_LATCHED = 'GEEKITY_DEV_MODE or the devMode setting still asks for dev mode.';
 
+export function latchDevModeOn(settings: SettingsRegistry): void {
+  settings.set('dev_mode', new Map([['on', true]]), 'boot').catch((error: unknown) => {
+    console.error('Dev mode could not be turned on at boot:', error);
+  });
+}
+
 function recordGoingOnOrOff({ next, at, by, dirs }: SettingChange<boolean>): void {
   appendDevModeEntry(dirs.dataDir, {
     type: next ? 'on' : 'off',
     at: at.toISOString(),
-    by: SOURCES[by],
+    by: RECORD_SPELLING[by],
   });
 }
 
@@ -69,12 +77,18 @@ export function readDevModeRecord(dataDir: string): DevModeEntry[] {
   for (const line of text.split('\n')) {
     if (line.trim() === '') continue;
     try {
-      entries.push(JSON.parse(line) as DevModeEntry);
+      entries.push(fromRecordLine(line));
     } catch {
       continue;
     }
   }
   return entries;
+}
+
+function fromRecordLine(line: string): DevModeEntry {
+  const entry = JSON.parse(line) as DevModeEntry | LegacyOffEntry;
+  if (entry.type === 'off') return { type: 'off', at: entry.at, by: entry.by ?? 'command' };
+  return entry;
 }
 
 function recordFile(dataDir: string): string {

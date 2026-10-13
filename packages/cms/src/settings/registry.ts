@@ -128,6 +128,21 @@ export function createSettingsRegistry({
         };
   }
 
+  function writeEveryKeySoNeverReadAsLegacy(
+    namespace: NamespaceDeclaration,
+    next: Record<string, unknown>,
+    stored: Stored,
+    changes: ReadonlyMap<string, unknown>,
+  ): void {
+    for (const declaration of namespace.settings) {
+      if (next[declaration.key] !== undefined) continue;
+      const kept = changes.has(declaration.key)
+        ? undefined
+        : storedValue(namespace, declaration, stored).value;
+      next[declaration.key] = declaration.type.toJson(kept ?? declaration.default);
+    }
+  }
+
   function resolveIn<V>(
     namespace: NamespaceDeclaration,
     declaration: SettingDeclaration<V>,
@@ -208,13 +223,7 @@ export function createSettingsRegistry({
         }
         if (Object.keys(problems).length > 0) return { problems, changed: [] };
         if (namespace.legacy !== undefined) {
-          for (const declaration of namespace.settings) {
-            if (next[declaration.key] !== undefined) continue;
-            const kept = changes.has(declaration.key)
-              ? undefined
-              : storedValue(namespace, declaration, stored).value;
-            next[declaration.key] = declaration.type.toJson(kept ?? declaration.default);
-          }
+          writeEveryKeySoNeverReadAsLegacy(namespace, next, stored, changes);
         }
         const { dataClass } = namespace.storage;
         writeFileAtomicallySync(

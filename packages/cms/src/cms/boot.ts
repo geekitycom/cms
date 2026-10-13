@@ -29,6 +29,7 @@ import {
 } from '../federation/index.ts';
 import type { InstalledPlugin, PluginRegistry } from '../plugins/registry.ts';
 import { sitePluginRegistry } from '../plugins/site.ts';
+import { latchDevModeOn } from '../settings/dev-mode.ts';
 import { createSettingsRegistry } from '../settings/registry.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import { listUsers } from '../site/users.ts';
@@ -48,11 +49,7 @@ export function boot(
 ): Booted {
   const configured = isResolvedConfig(config) ? config : resolveConfig(config);
   const settings = createSettingsRegistry({ config: configured });
-  if (configured.devMode) {
-    settings.set('dev_mode', new Map([['on', true]]), 'boot').catch((error: unknown) => {
-      console.error('Dev mode could not be turned on at boot:', error);
-    });
-  }
+  if (configured.devMode) latchDevModeOn(settings);
 
   const { store, admin, adminDb } = rebuildingIfOutdated(configured.dataDir, () =>
     openBothStoresOrNeither(configured),

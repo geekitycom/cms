@@ -1,12 +1,12 @@
-import { isRecord } from '../util/guards.ts';
 import { declareNamespace } from './declare.ts';
 import { boolean, instantOrEmpty } from './kinds.ts';
+import { presenceMeansOn } from './presence.ts';
 
 export const MAINTENANCE = declareNamespace({
   namespace: 'maintenance',
   storage: { kind: 'file', under: 'data', path: 'maintenance.json', dataClass: { kept: false } },
   envPrefix: 'GEEKITY_MAINTENANCE',
-  legacy: (raw) => (isRecord(raw) ? ('on' in raw ? raw : { on: true, ...raw }) : { on: true }),
+  legacy: presenceMeansOn,
   settings: {
     on: {
       type: boolean,
