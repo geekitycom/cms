@@ -55,3 +55,42 @@ describe('the settings registry', () => {
     );
   });
 });
+
+const RENDERER = ['web/render.ts', 'web/page-sources.ts'];
+
+const REGISTRY = ['settings/', 'site/namespace.ts'];
+
+function registryReads(): string[] {
+  const found: string[] = [];
+  for (const file of RENDERER) {
+    const absolute = path.join(SOURCE_ROOT, file);
+    readFileSync(absolute, 'utf8')
+      .split('\n')
+      .forEach((line, index) => {
+        const where = `${file}:${String(index + 1)}`;
+        if (/\bSettingsRegistry\b/.test(line)) found.push(`${where} names SettingsRegistry`);
+        for (const [, specifier] of line.matchAll(IMPORT)) {
+          if (specifier === undefined || !specifier.startsWith('.')) continue;
+          const landed = path
+            .relative(SOURCE_ROOT, path.resolve(path.dirname(absolute), specifier))
+            .split(path.sep)
+            .join('/');
+          if (REGISTRY.some((place) => landed === place || landed.startsWith(place))) {
+            found.push(`${where} imports ${specifier}`);
+          }
+        }
+      });
+  }
+  return found;
+}
+
+describe('the renderer', () => {
+  it('reads no settings of its own, only the site values its caller hands it', () => {
+    assert.deepEqual(
+      registryReads(),
+      [],
+      'the renderer stays synchronous: a handler reads the settings and hands the values in ' +
+        'as a request input (decision-53, wave 3)',
+    );
+  });
+});

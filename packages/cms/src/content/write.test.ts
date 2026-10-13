@@ -60,6 +60,7 @@ async function scratch(
       return Promise.resolve();
     },
     writer: undefined,
+    timezone: 'UTC',
     citedContext: () => Promise.resolve(undefined),
     storedContext: () => undefined,
     learnHandles,
@@ -287,11 +288,13 @@ describe('what a write reads about the site', () => {
     assert.equal((await renamed(site, quiet)).redirectFrom, undefined);
   });
 
-  it('reads an offset-less date on the site’s timezone', async () => {
-    const { site, contentDir } = await scratch();
-    await writeData(contentDir, 'site.json', { timezone: 'America/Chicago' });
+  it('reads an offset-less date in the site’s time zone it is given', async () => {
+    const { site } = await scratch();
 
-    const saved = await created(site, { title: 'Dated', body: 'Words.', date: '2026-09-02T09:00' });
+    const saved = await created(
+      { ...site, timezone: 'America/Chicago' },
+      { title: 'Dated', body: 'Words.', date: '2026-09-02T09:00' },
+    );
 
     assert.equal(saved.date, '2026-09-02T14:00:00Z');
   });
@@ -355,7 +358,7 @@ describe('the site records a write is given', () => {
     const given: DocumentSite = {
       ...site,
       users: () => [{ id: 1, username: 'ada', profile: { displayName: 'Ada Lovelace' } }],
-      timezone: () => 'Asia/Tokyo',
+      timezone: 'Asia/Tokyo',
       syndicationTargets: () => [{ id: 'news', name: 'News', url: 'https://news.example/' }],
       hasComments: (slug) => slug === 'answered',
     };

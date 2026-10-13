@@ -11,7 +11,11 @@ import { createContentSync, createScheduler } from '../content/index.ts';
 import type { ContentEventListener, ContentSync, Scheduler } from '../content/index.ts';
 import { createReplyBackfill, signedRepliesLoader } from '../federation/backfill.ts';
 import type { ReplyBackfill } from '../federation/backfill.ts';
+import type { ConversationSite } from '../comments/conversation.ts';
+import type { CitedPageReader } from '../content/citation.ts';
 import { citedPostReader } from '../federation/cited-post.ts';
+import { SITE } from '../site/namespace.ts';
+import { messageOf } from '../util/errors.ts';
 import { handleLearner } from '../federation/handles.ts';
 import type { HandleLearner } from '../federation/handles.ts';
 import {
@@ -176,19 +180,26 @@ export function createServices({
     config: resolved,
     lookup: resolved.hostLookup,
     fediverse: citedPostReader(() => federationContext()),
-    held: (target) => {
-      const found = conversation.heldAt(target);
-      return found === undefined ? undefined : heldReplyContext(target, found);
+    held: {
+      settings,
+      at: (target, site) => {
+        const found = conversation.heldAt(target, site);
+        return found === undefined ? undefined : heldReplyContext(target, found);
+      },
     },
     onStored: (target, previous) => {
       delivery.citedPageStored(target, previous);
-      const original = replyContexts.read(target)?.original;
+      const original = replyContexts.stored(target)?.original;
       if (original !== undefined && original !== previous?.original) {
         webmentions.originalFound(target, original);
       }
     },
   });
-  const cited = (url: string) => replyContexts.read(url);
+  const citedWith =
+    (site: ConversationSite): CitedPageReader =>
+    (url) =>
+      replyContexts.read(url, site);
+  const cited = async (): Promise<CitedPageReader> => citedWith(await settings.values(SITE));
 
   // The faces in a conversation, fetched here and served from here so a
   // reader's address never reaches the servers they live on (TASK-134).
@@ -196,14 +207,14 @@ export function createServices({
 
   // What keeps a site from holding its readers' personal data for longer than
   // its settings say (TASK-135).
-  const retention = createRetentionService({ admin, config: resolved });
+  const retention = createRetentionService({ admin, config: resolved, settings });
 
   const renderer = createRenderer({
     config: resolved,
     themes,
     // The stored context of a reply's target: a file read, never a fetch, so
     // a page is drawn without waiting on anybody's server (TASK-123).
-    replyContext: cited,
+    replyContext: (target, site) => replyContexts.read(target, site),
     // What has been said about a post, from the very reader the comments
     // feeds are published from, so the page and the feed cannot disagree.
     conversation: conversation.thread,
@@ -233,8 +244,15 @@ export function createServices({
     load: signedProfileLoader(() => federationContext()),
   });
 
-  const federated = { ...site, actorProfiles, cited };
-  const federationContext = () => federation.createContext(new URL(resolved.baseUrl), federated);
+  const federated = { ...site, actorProfiles, cited: citedWith };
+  const federationContext = async () => {
+    const settled = await settings.values(SITE);
+    return federation.createContext(new URL(resolved.baseUrl), {
+      ...federated,
+      site: settled,
+      cited: citedWith(settled),
+    });
+  };
 
   const learnHandles = handleLearner(federationContext);
 
@@ -275,7 +293,7 @@ export function createServices({
   const webmentions = createWebmentionService({
     ...site,
     notifications,
-    originalOf: (url) => replyContexts.read(url)?.original,
+    originalOf: (url) => replyContexts.stored(url)?.original,
     conversation,
   });
 
@@ -312,7 +330,9 @@ export function createServices({
   // database has never heard of is followed here, which is what makes a
   // rebuilt database catch up rather than silently stop federating to it.
   const relays = createRelayService({ ...federated, federation });
-  relays.sync();
+  relays.sync().catch((thrown: unknown) => {
+    console.warn(`The relays could not be read: ${messageOf(thrown)}`);
+  });
 
   const changeSubscribers: readonly ContentEventListener[] = [
     // A watched change waits for its burst to settle, as a scan does: a git
@@ -352,7 +372,7 @@ export function createServices({
   // (a salmention, TASK-320).
   const conversationWriteSubscribers: readonly ((written: ConversationWrite) => void)[] = [
     (written) => {
-      replyNotices.heard(written);
+      replyNotices.queueNoticesFor(written);
     },
     (written) => {
       webmentions.heard(written);
@@ -413,6 +433,7 @@ export function createServices({
       start: () => plugins.reconcile(readEnabledPlugins(resolved.contentDir)),
       stop: (ending) => stopPlugins(plugins, ending),
     },
+    { settled: () => replyNotices.settled() },
     { settled: () => notifications.settled() },
     { settled: () => mail.settled() },
     // A page render derives an upload's variants in the background; the

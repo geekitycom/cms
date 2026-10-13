@@ -15,6 +15,7 @@ import type { UserProfile } from '../site/users.ts';
 import { seedActorKeys } from './__testing__/keys.ts';
 import { FOLLOWERS_PAGE_SIZE, followersPage } from './followers.ts';
 import { attributionDomainOf, federationOrigin } from './paths.ts';
+import { SITE } from '../site/namespace.ts';
 
 /** The origin every request in this file is sent to; Fedify checks it. */
 const BASE_URL = 'https://blog.example';
@@ -62,9 +63,9 @@ async function site(
       ...DEFAULT_SITE_SETTINGS,
       title: 'Geekity',
       tagline: 'A file-first CMS',
-      baseUrl: BASE_URL,
+      base_url: BASE_URL,
       timezone: 'UTC',
-      postsPerPage: 10,
+      posts_per_page: 10,
       author: ADA,
       ...settings,
     },
@@ -694,6 +695,7 @@ describe('the followers collection', () => {
       config: instance.config,
       settings: instance.settings,
       actorProfiles: instance.actorProfiles,
+      site: await instance.settings.values(SITE),
       cited: () => undefined,
     });
 

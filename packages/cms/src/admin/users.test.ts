@@ -64,7 +64,7 @@ async function siteSendingMail(): Promise<Cms> {
 
   await writeSiteJson({
     contentDir,
-    settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', mailProvider: 'brevo' },
+    settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', mail_provider: 'brevo' },
   });
   await settingsOver({ dataDir }).set(
     'mail',

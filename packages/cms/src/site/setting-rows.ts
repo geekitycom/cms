@@ -7,15 +7,13 @@ import { sourceFile } from '../images/paths.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import { isFileSync } from '../util/files.ts';
 import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from './feed-settings.ts';
-import { generateIndexNowKey, isIndexNowKey } from './indexnow-key.ts';
-import { classifyLicense, isLicenseUrl, NO_LICENSE } from '../content/license.ts';
+import { generateIndexNowKey } from './indexnow-key.ts';
+import { isLicenseUrl } from '../content/license.ts';
 import { canonicalLocale } from '../content/locale.ts';
-import { menusOf } from './navigation.ts';
 import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from './robots.ts';
-import { taxonomyBaseProblems, taxonomyRedirectsOf } from '../content/taxonomy.ts';
+import { taxonomyBaseProblems } from '../content/taxonomy.ts';
 import { PACKAGED_THEME, readTheme, themeNameProblem } from '../theme/themes.ts';
 import {
-  clientsWithoutPkceOf,
   EMAIL_PATTERN,
   isAiCrawlerPolicy,
   isContentSignalChoice,
@@ -34,12 +32,14 @@ import {
   securityContactList,
 } from './setting-values.ts';
 import { DEFAULT_SITE_SETTINGS } from './settings.ts';
-import type { SiteSettings } from './settings.ts';
+import type { SiteLicense, SiteSettings } from './settings.ts';
 
-export type CarriedField = 'taxonomyRedirects' | 'menus' | 'indexNowKey' | 'clientsWithoutPkce';
+export type CarriedField =
+  'taxonomy_redirects' | 'menus' | 'index_now_key' | 'clients_without_pkce' | 'avatar';
 
-/** The settings the form on the settings screen carries. */
-export type SettingsField = Exclude<keyof SiteSettings, CarriedField>;
+type FormKey = Exclude<keyof SiteSettings, CarriedField>;
+
+export type SettingsField = FormKey | 'license_url' | 'license_name';
 
 export type CarriedSettings = Partial<Pick<SiteSettings, CarriedField>>;
 
@@ -58,66 +58,26 @@ export interface OnDiskCheck {
   readonly problem: (value: string, dir: string) => string | undefined;
 }
 
-type SiteJson = Readonly<Record<string, unknown>>;
-
 export interface SettingRow<V> {
-  readonly read: (file: SiteJson) => V | undefined;
-  readonly write: (file: Record<string, unknown>, settings: SiteSettings) => void;
   readonly submitted: (form: SettingsForm, onFile: CarriedSettings) => V;
 }
 
-export interface FormSettingRow<V> extends SettingRow<V> {
+export interface FieldRow<V> {
   readonly field: string;
   readonly shown: (value: V) => string;
   readonly check: (form: SettingsForm) => string | undefined;
   readonly onDisk?: OnDiskCheck;
 }
 
-type CarriedRow<K extends CarriedField> = SettingRow<SiteSettings[K]> & { readonly field?: never };
+export type FormSettingRow<V> = SettingRow<V> & FieldRow<V>;
 
-type SettingRows = { readonly [K in SettingsField]: FormSettingRow<SiteSettings[K]> } & {
-  readonly [K in CarriedField]: CarriedRow<K>;
+export type FieldValue<F extends SettingsField> = F extends keyof SiteSettings
+  ? SiteSettings[F]
+  : SiteLicense;
+
+type SettingRows = { readonly [K in FormKey]: FormSettingRow<SiteSettings[K]> } & {
+  readonly [K in CarriedField]: SettingRow<SiteSettings[K]>;
 };
-
-type Writer = SettingRow<unknown>['write'];
-
-function always(key: string, value: (settings: SiteSettings) => unknown): Writer {
-  return (file, settings) => {
-    file[key] = value(settings);
-  };
-}
-
-function unlessEmpty(key: TextField | 'indexNowKey' | 'clientsWithoutPkce'): Writer {
-  return (file, settings) => {
-    const value = settings[key];
-    if (value.length === 0) delete file[key];
-    else file[key] = typeof value === 'string' ? value : [...value];
-  };
-}
-
-function stringIn(file: SiteJson, key: string): string | undefined {
-  const value = file[key];
-  return typeof value === 'string' ? value : undefined;
-}
-
-function nonEmptyStringIn(file: SiteJson, key: string): string | undefined {
-  const value = stringIn(file, key);
-  return value === '' ? undefined : value;
-}
-
-function stringsIn(file: SiteJson, key: string): string[] | undefined {
-  const value = file[key];
-  return Array.isArray(value) ? value.filter((entry) => typeof entry === 'string') : undefined;
-}
-
-function chosen<V>(
-  file: SiteJson,
-  key: string,
-  guard: (value: unknown) => value is V,
-): V | undefined {
-  const value = file[key];
-  return guard(value) ? value : undefined;
-}
 
 const checkbox = (value: boolean): string => (value ? '1' : '');
 const ticked = (value: string): boolean => value !== '';
@@ -126,36 +86,31 @@ const lines = (value: readonly string[]): string => value.join('\n');
 const nothingWrong = (): undefined => undefined;
 
 type TextField = {
-  [K in SettingsField]: string extends SiteSettings[K] ? K : never;
-}[SettingsField];
+  [K in FormKey]: string extends SiteSettings[K] ? K : never;
+}[FormKey];
 
 type FlagField = {
-  [K in SettingsField]: SiteSettings[K] extends boolean ? K : never;
-}[SettingsField];
+  [K in FormKey]: SiteSettings[K] extends boolean ? K : never;
+}[FormKey];
 
 type ChoiceField =
-  'feedUpdatePeriod' | 'aiCrawlers' | ContentSignalField | 'mailProvider' | 'locationSharing';
+  'feed_update_period' | 'ai_crawlers' | ContentSignalField | 'mail_provider' | 'location_sharing';
 
-type ContentSignalField = 'contentSignalSearch' | 'contentSignalAiInput' | 'contentSignalAiTrain';
+type ContentSignalField =
+  'content_signal_search' | 'content_signal_ai_input' | 'content_signal_ai_train';
 
 type RetentionField =
-  'commentEmailRetentionDays' | 'addressHashRetentionDays' | 'contactMessageRetentionDays';
+  'comment_email_retention_days' | 'address_hash_retention_days' | 'contact_message_retention_days';
 
-type ListField = 'robotsRules' | 'securityContacts' | 'relays';
+type ListField = 'robots_rules' | 'security_contacts' | 'relays';
 
 function text(
   key: TextField,
   field: string,
-  options: {
-    empty: 'value' | 'default' | 'absent';
-    check?: FormSettingRow<string>['check'];
-  },
+  options: { check?: FormSettingRow<string>['check'] } = {},
 ): FormSettingRow<string> {
   return {
     field,
-    read: (file) =>
-      options.empty === 'default' ? nonEmptyStringIn(file, key) : stringIn(file, key),
-    write: options.empty === 'absent' ? unlessEmpty(key) : always(key, (settings) => settings[key]),
     submitted: (form) => form[key].trim(),
     shown: asIs,
     check: options.check ?? nothingWrong,
@@ -166,8 +121,6 @@ function text(
 function flag(key: FlagField, field: string): FormSettingRow<boolean> {
   return {
     field,
-    read: (file) => chosen(file, key, (value) => typeof value === 'boolean'),
-    write: always(key, (settings) => settings[key]),
     submitted: (form) => ticked(form[key]),
     shown: checkbox,
     check: nothingWrong,
@@ -183,8 +136,6 @@ function choice<K extends ChoiceField>(
 ): FormSettingRow<SiteSettings[K]> {
   return {
     field,
-    read: (file) => chosen(file, key, guard),
-    write: always(key, (settings) => settings[key]),
     submitted: (form) => (guard(form[key]) ? form[key] : fallback),
     shown: (value) => value,
     check: (form) => (guard(form[key]) ? undefined : problem),
@@ -201,8 +152,6 @@ export function requiredWholeDays(typed: string): number | undefined {
 function retention(key: RetentionField, field: string): FormSettingRow<number> {
   return {
     field,
-    read: (file) => chosen(file, key, isWholeDays),
-    write: always(key, (settings) => settings[key]),
     submitted: (form) => Number(form[key]),
     shown: String,
     check: (form) =>
@@ -227,27 +176,9 @@ function list(
 ): FormSettingRow<readonly string[]> {
   return {
     field,
-    read: (file) => {
-      const entries = stringsIn(file, key);
-      return entries === undefined ? undefined : parse(entries.join('\n'));
-    },
-    write: always(key, (settings) => [...settings[key]]),
     submitted: (form) => parse(form[key]),
     shown: lines,
     check,
-  };
-}
-
-function licenseIn(
-  file: SiteJson,
-): Pick<SiteSettings, 'license' | 'licenseUrl' | 'licenseName'> | undefined {
-  const said = classifyLicense(file['license']);
-  if (said === undefined || said === NO_LICENSE) return undefined;
-  if ('key' in said) return { license: said.key, licenseUrl: '', licenseName: '' };
-  return {
-    license: 'custom',
-    licenseUrl: said.url,
-    licenseName: stringIn(file, 'licenseName')?.trim() ?? '',
   };
 }
 
@@ -285,11 +216,11 @@ const ICON_UPLOADED: OnDiskCheck = {
   },
 };
 
-export type FrontPage = Pick<SiteSettings, 'homepage' | 'postsPage'>;
+export type FrontPage = Pick<SiteSettings, 'homepage' | 'posts_page'>;
 
 export function frontPageOf(form: SettingsForm): FrontPage {
   const homepage = form.homepage.trim();
-  return { homepage, postsPage: homepage === '' ? '' : form.postsPage.trim() };
+  return { homepage, posts_page: homepage === '' ? '' : form.posts_page.trim() };
 }
 
 export function frontPageProblems(form: SettingsForm): {
@@ -298,37 +229,28 @@ export function frontPageProblems(form: SettingsForm): {
   const homepage = form.homepage.trim();
   return {
     homepage: slugProblem(homepage, 'A homepage'),
-    postsPage: postsPageProblem(homepage, form.postsPage.trim()),
+    posts_page: postsPageProblem(homepage, form.posts_page.trim()),
   };
 }
 
-function postsPageProblem(homepage: string, postsPage: string): string | undefined {
-  if (postsPage === '') return undefined;
+function postsPageProblem(homepage: string, posts_page: string): string | undefined {
+  if (posts_page === '') return undefined;
   if (homepage === '') {
     return 'A posts page needs a homepage: pick the page the front page shows first.';
   }
-  if (postsPage === homepage) {
+  if (posts_page === homepage) {
     return 'The homepage and the posts page have to be two different pages.';
   }
-  return slugProblem(postsPage, 'A posts page');
+  return slugProblem(posts_page, 'A posts page');
 }
 
 function frontPageRows(): { readonly [K in keyof FrontPage]: FormSettingRow<string> } {
   const row = (key: keyof FrontPage, field: string): FormSettingRow<string> => ({
-    ...text(key, field, { empty: 'absent' }),
+    ...text(key, field),
     submitted: (form) => frontPageOf(form)[key],
     check: (form) => frontPageProblems(form)[key],
   });
-  return { homepage: row('homepage', 'homepage'), postsPage: row('postsPage', 'posts_page') };
-}
-
-function countIn(
-  file: SiteJson,
-  key: string,
-  accept: (count: number) => boolean,
-): number | undefined {
-  const count = Number(file[key]);
-  return Number.isInteger(count) && accept(count) ? count : undefined;
+  return { homepage: row('homepage', 'homepage'), posts_page: row('posts_page', 'posts_page') };
 }
 
 function emailCheck(key: TextField, problem: string): FormSettingRow<string>['check'] {
@@ -347,32 +269,27 @@ const THEME_INSTALLED: OnDiskCheck = {
 
 const SETTING_ROWS: SettingRows = {
   title: text('title', 'title', {
-    empty: 'default',
     check: (form) => (form.title.trim() === '' ? 'The site needs a title.' : undefined),
   }),
 
-  tagline: text('tagline', 'tagline', { empty: 'value' }),
+  tagline: text('tagline', 'tagline'),
 
-  baseUrl: {
+  base_url: {
     field: 'base_url',
-    read: (file) => stringIn(file, 'url'),
-    write: always('url', (settings) => settings.baseUrl),
-    submitted: (form) => normalizeBaseUrl(form.baseUrl) ?? '',
+    submitted: (form) => normalizeBaseUrl(form.base_url) ?? '',
     shown: asIs,
     check: (form) =>
-      normalizeBaseUrl(form.baseUrl) === undefined
+      normalizeBaseUrl(form.base_url) === undefined
         ? 'The base URL has to be an absolute http:// or https:// URL.'
         : undefined,
   },
 
-  postsPerPage: {
+  posts_per_page: {
     field: 'posts_per_page',
-    read: (file) => countIn(file, 'postsPerPage', (count) => count > 0),
-    write: always('postsPerPage', (settings) => settings.postsPerPage),
-    submitted: (form) => Number(form.postsPerPage),
+    submitted: (form) => Number(form.posts_per_page),
     shown: String,
     check: (form) => {
-      const perPage = Number(form.postsPerPage);
+      const perPage = Number(form.posts_per_page);
       return !Number.isInteger(perPage) || perPage < 1
         ? 'Posts per page has to be a whole number of one or more.'
         : undefined;
@@ -380,7 +297,6 @@ const SETTING_ROWS: SettingRows = {
   },
 
   timezone: text('timezone', 'timezone', {
-    empty: 'default',
     check: (form) =>
       isValidTimezone(form.timezone)
         ? undefined
@@ -388,7 +304,6 @@ const SETTING_ROWS: SettingRows = {
   }),
 
   language: text('language', 'language', {
-    empty: 'default',
     check: (form) =>
       LANGUAGE_TAG_PATTERN.test(form.language.trim())
         ? undefined
@@ -399,15 +314,13 @@ const SETTING_ROWS: SettingRows = {
   // that they differ, and that neither takes a path the site already answers
   // on — are about the pair rather than either one. They are on one page for
   // exactly that reason.
-  tagBase: text('tagBase', 'tag_base', {
-    empty: 'default',
-    check: (form) => taxonomyBaseProblems({ tag: form.tagBase, category: form.categoryBase }).tag,
+  tag_base: text('tag_base', 'tag_base', {
+    check: (form) => taxonomyBaseProblems({ tag: form.tag_base, category: form.category_base }).tag,
   }),
 
-  categoryBase: text('categoryBase', 'category_base', {
-    empty: 'default',
+  category_base: text('category_base', 'category_base', {
     check: (form) =>
-      taxonomyBaseProblems({ tag: form.tagBase, category: form.categoryBase }).category,
+      taxonomyBaseProblems({ tag: form.tag_base, category: form.category_base }).category,
   }),
 
   comments: flag('comments', 'comments'),
@@ -415,14 +328,12 @@ const SETTING_ROWS: SettingRows = {
   // The empty string is refused rather than read as zero, which is what
   // `Number('')` would make it: a cleared field is a mistake, and "never close
   // comments" should have to be typed.
-  commentsCloseAfterDays: {
+  comments_close_after_days: {
     field: 'comments_close_after_days',
-    read: (file) => countIn(file, 'commentsCloseAfterDays', (days) => days >= 0),
-    write: always('commentsCloseAfterDays', (settings) => settings.commentsCloseAfterDays),
-    submitted: (form) => Number(form.commentsCloseAfterDays),
+    submitted: (form) => Number(form.comments_close_after_days),
     shown: String,
     check: (form) => {
-      const typed = form.commentsCloseAfterDays.trim();
+      const typed = form.comments_close_after_days.trim();
       const days = Number(typed);
       return typed === '' || !Number.isInteger(days) || days < 0
         ? 'Comments close after a whole number of days, or 0 for never.'
@@ -430,114 +341,115 @@ const SETTING_ROWS: SettingRows = {
     },
   },
 
-  commentEmailRetentionDays: retention('commentEmailRetentionDays', 'comment_email_retention_days'),
+  comment_email_retention_days: retention(
+    'comment_email_retention_days',
+    'comment_email_retention_days',
+  ),
 
-  addressHashRetentionDays: retention('addressHashRetentionDays', 'address_hash_retention_days'),
+  address_hash_retention_days: retention(
+    'address_hash_retention_days',
+    'address_hash_retention_days',
+  ),
 
-  contactMessageRetentionDays: retention(
-    'contactMessageRetentionDays',
+  contact_message_retention_days: retention(
+    'contact_message_retention_days',
     'contact_message_retention_days',
   ),
 
-  webmentionsSend: flag('webmentionsSend', 'webmentions_send'),
+  webmentions_send: flag('webmentions_send', 'webmentions_send'),
 
-  webmentionsReceive: flag('webmentionsReceive', 'webmentions_receive'),
+  webmentions_receive: flag('webmentions_receive', 'webmentions_receive'),
 
   // Empty is a value here — it is how a site turns real-time notification off
   // — so only a non-empty one has to be a URL. http as well as https, because
   // a notify server on a private network or a loopback port is a real one.
-  notifyServer: {
-    ...text('notifyServer', 'notify_server', { empty: 'value' }),
-    submitted: (form) => normalizeBaseUrl(form.notifyServer) ?? '',
+  notify_server: {
+    ...text('notify_server', 'notify_server'),
+    submitted: (form) => normalizeBaseUrl(form.notify_server) ?? '',
     check: (form) =>
-      form.notifyServer.trim() !== '' && normalizeBaseUrl(form.notifyServer) === undefined
+      form.notify_server.trim() !== '' && normalizeBaseUrl(form.notify_server) === undefined
         ? 'A notify server is an absolute http:// or https:// URL, or empty for none.'
         : undefined,
   },
 
-  feedUpdatePeriod: choice(
-    'feedUpdatePeriod',
+  feed_update_period: choice(
+    'feed_update_period',
     'feed_update_period',
     isUpdatePeriod,
     DEFAULT_FEED_CADENCE.period,
     `An update period is one of ${UPDATE_PERIODS.join(', ')}.`,
   ),
 
-  feedUpdateFrequency: {
+  feed_update_frequency: {
     field: 'feed_update_frequency',
-    read: (file) => chosen(file, 'feedUpdateFrequency', isPollCount),
-    write: always('feedUpdateFrequency', (settings) => settings.feedUpdateFrequency),
-    submitted: (form) => Number(form.feedUpdateFrequency),
+    submitted: (form) => Number(form.feed_update_frequency),
     shown: String,
     check: (form) =>
-      form.feedUpdateFrequency.trim() !== '' && isPollCount(Number(form.feedUpdateFrequency))
+      form.feed_update_frequency.trim() !== '' && isPollCount(Number(form.feed_update_frequency))
         ? undefined
         : 'Polls per period is a whole number, 1 or more.',
   },
 
-  aiCrawlers: choice(
-    'aiCrawlers',
+  ai_crawlers: choice(
+    'ai_crawlers',
     'ai_crawlers',
     isAiCrawlerPolicy,
     'allow',
     `An AI-crawler policy is one of ${AI_CRAWLER_POLICIES.join(', ')}.`,
   ),
 
-  contentSignalSearch: contentSignal('contentSignalSearch', 'content_signal_search'),
+  content_signal_search: contentSignal('content_signal_search', 'content_signal_search'),
 
-  contentSignalAiInput: contentSignal('contentSignalAiInput', 'content_signal_ai_input'),
+  content_signal_ai_input: contentSignal('content_signal_ai_input', 'content_signal_ai_input'),
 
-  contentSignalAiTrain: contentSignal('contentSignalAiTrain', 'content_signal_ai_train'),
+  content_signal_ai_train: contentSignal('content_signal_ai_train', 'content_signal_ai_train'),
 
-  robotsRules: list(
-    'robotsRules',
+  robots_rules: list(
+    'robots_rules',
     'robots_rules',
     (typed) => robotsRuleLines([typed]),
-    (form) => robotsRuleProblem([form.robotsRules]),
+    (form) => robotsRuleProblem([form.robots_rules]),
   ),
 
-  llmsTxt: flag('llmsTxt', 'llms_txt'),
+  llms_txt: flag('llms_txt', 'llms_txt'),
 
-  indexNow: flag('indexNow', 'index_now'),
+  index_now: flag('index_now', 'index_now'),
 
-  mailProvider: choice(
-    'mailProvider',
+  mail_provider: choice(
+    'mail_provider',
     'mail_provider',
     isMailProvider,
     'none',
     `A mail provider is one of ${MAIL_PROVIDERS.join(', ')}.`,
   ),
 
-  mailFromName: text('mailFromName', 'mail_from_name', { empty: 'value' }),
+  mail_from_name: text('mail_from_name', 'mail_from_name'),
 
-  mailFromAddress: text('mailFromAddress', 'mail_from_address', {
-    empty: 'value',
+  mail_from_address: text('mail_from_address', 'mail_from_address', {
     check: emailCheck(
-      'mailFromAddress',
+      'mail_from_address',
       'A From address is an email address, such as blog@example.com, or empty for the default.',
     ),
   }),
 
-  mailReplyTo: text('mailReplyTo', 'mail_reply_to', {
-    empty: 'value',
+  mail_reply_to: text('mail_reply_to', 'mail_reply_to', {
     check: emailCheck(
-      'mailReplyTo',
+      'mail_reply_to',
       'A reply-to is an email address, such as hello@example.com, or empty to reply to the From address.',
     ),
   }),
 
-  contactEmail: text('contactEmail', 'contact_email', {
-    empty: 'value',
+  contact_email: text('contact_email', 'contact_email', {
     check: emailCheck(
-      'contactEmail',
+      'contact_email',
       'A contact address is an email address, such as hello@example.com, or empty for the first admin with one.',
     ),
   }),
 
   // These three are printed line by line into security.txt, so a hand edit
   // with a line break in it must not become a field nobody set.
-  securityContacts: list('securityContacts', 'security_contacts', securityContactList, (form) => {
-    const bad = relayLines(form.securityContacts).find(
+  security_contacts: list('security_contacts', 'security_contacts', securityContactList, (form) => {
+    const bad = relayLines(form.security_contacts).find(
       (line) => normalizeSecurityContact(line) === undefined,
     );
     return bad === undefined
@@ -547,29 +459,21 @@ const SETTING_ROWS: SettingRows = {
   }),
 
   // RFC 9116 wants every web URI in the file to be https.
-  securityPolicy: {
-    ...text('securityPolicy', 'security_policy', { empty: 'value' }),
-    read: (file) => {
-      const policy = stringIn(file, 'securityPolicy');
-      return policy === undefined ? undefined : (normalizeSecurityPolicy(policy) ?? '');
-    },
-    submitted: (form) => normalizeSecurityPolicy(form.securityPolicy) ?? '',
+  security_policy: {
+    ...text('security_policy', 'security_policy'),
+    submitted: (form) => normalizeSecurityPolicy(form.security_policy) ?? '',
     check: (form) =>
-      form.securityPolicy.trim() !== '' &&
-      normalizeSecurityPolicy(form.securityPolicy) === undefined
+      form.security_policy.trim() !== '' &&
+      normalizeSecurityPolicy(form.security_policy) === undefined
         ? 'A security policy is an https:// URL, or empty for none.'
         : undefined,
   },
 
-  securityLanguages: {
-    ...text('securityLanguages', 'security_languages', { empty: 'value' }),
-    read: (file) => {
-      const languages = stringIn(file, 'securityLanguages');
-      return languages === undefined ? undefined : (normalizeLanguageList(languages) ?? '');
-    },
-    submitted: (form) => normalizeLanguageList(form.securityLanguages) ?? '',
+  security_languages: {
+    ...text('security_languages', 'security_languages'),
+    submitted: (form) => normalizeLanguageList(form.security_languages) ?? '',
     check: (form) =>
-      normalizeLanguageList(form.securityLanguages) === undefined
+      normalizeLanguageList(form.security_languages) === undefined
         ? 'Preferred languages are language tags separated by commas, such as en, fr, or empty for none.'
         : undefined,
   },
@@ -582,51 +486,29 @@ const SETTING_ROWS: SettingRows = {
           `"${bad}" is not one.`;
   }),
 
-  locationSharing: choice(
-    'locationSharing',
+  location_sharing: choice(
+    'location_sharing',
     'location_sharing',
     isLocationSharing,
     'none',
     `Location sharing is one of ${LOCATION_SHARING.join(', ')}.`,
   ),
 
-  menus: {
-    read: (file) => (file['menus'] === undefined ? undefined : menusOf(file['menus'])),
-    write: always('menus', (settings) =>
-      Object.fromEntries(
-        Object.entries(settings.menus).map(([name, items]) => [
-          name,
-          items.map((item) => ({ ...item })),
-        ]),
-      ),
-    ),
-    submitted: (_form, onFile) => onFile.menus ?? DEFAULT_SITE_SETTINGS.menus,
-  },
+  menus: { submitted: (_form, onFile) => onFile.menus ?? DEFAULT_SITE_SETTINGS.menus },
 
-  taxonomyRedirects: {
-    read: (file) =>
-      Array.isArray(file['taxonomyRedirects'])
-        ? taxonomyRedirectsOf(file['taxonomyRedirects'])
-        : undefined,
-    write: always('taxonomyRedirects', (settings) =>
-      settings.taxonomyRedirects.map((entry) => ({ ...entry })),
-    ),
+  taxonomy_redirects: {
     submitted: (_form, onFile) =>
-      onFile.taxonomyRedirects ?? DEFAULT_SITE_SETTINGS.taxonomyRedirects,
+      onFile.taxonomy_redirects ?? DEFAULT_SITE_SETTINGS.taxonomy_redirects,
   },
 
   ...frontPageRows(),
 
   theme: {
-    ...text('theme', 'theme', {
-      empty: 'absent',
-      check: (form) => themeNameProblem(form.theme),
-    }),
+    ...text('theme', 'theme', { check: (form) => themeNameProblem(form.theme) }),
     onDisk: THEME_INSTALLED,
   },
 
   locale: text('locale', 'locale', {
-    empty: 'absent',
     check: (form) => {
       const locale = form.locale.trim();
       return locale === '' ||
@@ -636,99 +518,81 @@ const SETTING_ROWS: SettingRows = {
     },
   }),
 
-  author: text('author', 'author', { empty: 'absent' }),
+  author: text('author', 'author'),
 
   icon: {
-    ...text('icon', 'icon', {
-      empty: 'absent',
-      check: (form) => iconProblem(form.icon.trim()),
-    }),
+    ...text('icon', 'icon', { check: (form) => iconProblem(form.icon.trim()) }),
     onDisk: ICON_UPLOADED,
-    read: (file) => stringIn(file, 'icon')?.trim(),
   },
+
+  avatar: { submitted: (_form, onFile) => onFile.avatar ?? DEFAULT_SITE_SETTINGS.avatar },
 
   license: {
     field: 'license',
-    read: (file) => licenseIn(file)?.license,
-    write: (file, settings) => {
-      if (settings.license === '') delete file['license'];
-      else file['license'] = settings.license === 'custom' ? settings.licenseUrl : settings.license;
-    },
     submitted: (form) => {
-      const license = form.license.trim();
-      return isLicenseChoice(license) ? license : '';
+      const choice = form.license.trim();
+      if (!isLicenseChoice(choice) || choice === '') return DEFAULT_SITE_SETTINGS.license;
+      return choice === 'custom'
+        ? { choice, url: form.license_url.trim(), name: form.license_name.trim() }
+        : { choice, url: '', name: '' };
     },
-    shown: asIs,
+    shown: (value) => value.choice,
     check: (form) =>
       isLicenseChoice(form.license.trim()) ? undefined : 'Choose a license from the list.',
   },
 
-  licenseUrl: {
-    field: 'license_url',
-    read: (file) => licenseIn(file)?.licenseUrl,
-    write: () => undefined,
-    submitted: (form) => (isCustomLicense(form) ? form.licenseUrl.trim() : ''),
-    shown: asIs,
-    check: (form) =>
-      isCustomLicense(form) && !isLicenseUrl(form.licenseUrl.trim())
-        ? 'A custom license needs the URL of its terms, starting http:// or https://.'
-        : undefined,
-  },
-
-  licenseName: {
-    field: 'license_name',
-    read: (file) => licenseIn(file)?.licenseName,
-    write: (file, settings) => {
-      delete file['licenseName'];
-      if (settings.license === 'custom') file['licenseName'] = settings.licenseName;
-    },
-    submitted: (form) => (isCustomLicense(form) ? form.licenseName.trim() : ''),
-    shown: asIs,
-    check: (form) =>
-      isCustomLicense(form) && form.licenseName.trim() === ''
-        ? 'A custom license needs a name for the footer to show.'
-        : undefined,
-  },
-
-  // Minted the first time IndexNow is turned on and never again, so the key
-  // the search engines verified outlives turning it off and on. A key IndexNow
-  // would refuse is no key: the site then has none to serve or send, which is
-  // IndexNow off rather than a stream of 403s.
-  indexNowKey: {
-    read: (file) => {
-      const key = stringIn(file, 'indexNowKey');
-      return key !== undefined && isIndexNowKey(key) ? key : undefined;
-    },
-    write: unlessEmpty('indexNowKey'),
+  index_now_key: {
     submitted: (form, onFile) =>
-      onFile.indexNowKey !== undefined && onFile.indexNowKey !== ''
-        ? onFile.indexNowKey
-        : ticked(form.indexNow)
+      onFile.index_now_key !== undefined && onFile.index_now_key !== ''
+        ? onFile.index_now_key
+        : ticked(form.index_now)
           ? generateIndexNowKey()
           : '',
   },
 
-  clientsWithoutPkce: {
-    read: (file) =>
-      Array.isArray(file['clientsWithoutPkce'])
-        ? clientsWithoutPkceOf(file['clientsWithoutPkce'])
-        : undefined,
-    write: unlessEmpty('clientsWithoutPkce'),
+  clients_without_pkce: {
     submitted: (_form, onFile) =>
-      onFile.clientsWithoutPkce ?? DEFAULT_SITE_SETTINGS.clientsWithoutPkce,
+      onFile.clients_without_pkce ?? DEFAULT_SITE_SETTINGS.clients_without_pkce,
+  },
+};
+
+const LICENSE_FIELD_ROWS: {
+  readonly [F in 'license_url' | 'license_name']: FieldRow<SiteLicense>;
+} = {
+  license_url: {
+    field: 'license_url',
+    shown: (value) => value.url,
+    check: (form) =>
+      isCustomLicense(form) && !isLicenseUrl(form.license_url.trim())
+        ? 'A custom license needs the URL of its terms, starting http:// or https://.'
+        : undefined,
+  },
+  license_name: {
+    field: 'license_name',
+    shown: (value) => value.name,
+    check: (form) =>
+      isCustomLicense(form) && form.license_name.trim() === ''
+        ? 'A custom license needs a name for the footer to show.'
+        : undefined,
   },
 };
 
 export const ROWS: { readonly [K in keyof SiteSettings]: SettingRow<SiteSettings[K]> } =
   SETTING_ROWS;
 
-export const FORM_ROWS: { readonly [K in SettingsField]: FormSettingRow<SiteSettings[K]> } =
-  SETTING_ROWS;
+export const FORM_ROWS: { readonly [F in SettingsField]: FieldRow<FieldValue<F>> } = {
+  ...SETTING_ROWS,
+  ...LICENSE_FIELD_ROWS,
+};
 
 export const SETTING_KEYS = Object.keys(SETTING_ROWS) as readonly (keyof SiteSettings)[];
 
-function isFormKey(key: keyof SiteSettings): key is SettingsField {
-  return SETTING_ROWS[key].field !== undefined;
+function isFormKey(key: keyof SiteSettings): key is FormKey {
+  return 'field' in SETTING_ROWS[key];
 }
 
-export const SETTINGS_FIELD_NAMES: readonly SettingsField[] = SETTING_KEYS.filter(isFormKey);
+export const SETTINGS_FIELD_NAMES: readonly SettingsField[] = [
+  ...SETTING_KEYS.filter(isFormKey),
+  'license_url',
+  'license_name',
+];

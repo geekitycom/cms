@@ -29,7 +29,6 @@ import {
 } from '../plugins/manage.ts';
 import type { ManageOptions, ManageResult } from '../plugins/manage.ts';
 import { describeUpgrade } from '../plugins/upgrade.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { findUserById, verifyUserPassword } from '../site/users.ts';
 import type { Supervision } from '../supervisor/supervision.ts';
 import { PACKAGE_NAME } from '../plugins/registry.ts';
@@ -165,7 +164,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
         ? installedFolders(installer.pluginsDir)
         : new Map<string, unknown>();
     const check = installer.state === 'on' ? lastUpdateCheck(installer.pluginsDir) : undefined;
-    const timezone = readSiteSettings(config.contentDir).timezone;
+    const timezone = c.var.siteAtRequestStart.timezone;
 
     const supervision = c.var.supervision;
     const changes =

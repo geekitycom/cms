@@ -647,8 +647,8 @@ export interface PluginHost<
    * with the page's CSRF token reaches.
    */
   editorAction(action: PluginEditorAction): void;
-  /** The site's base URL and title, read when asked. */
-  siteInfo(): PluginSiteInfo;
+  /** The site's base URL and its title as the settings have it when asked. */
+  siteInfo(): Promise<PluginSiteInfo>;
   /**
    * `GET` another site's URL. Redirects are followed, at most five, and every
    * address on the way must be public: a loopback, private or link-local

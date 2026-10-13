@@ -185,7 +185,7 @@ async function site(files: Record<string, string> = {}): Promise<Cms> {
   }
   await writeSiteJson({
     contentDir,
-    settings: { ...DEFAULT_SITE_SETTINGS, baseUrl: BASE_URL, notifyServer: '' },
+    settings: { ...DEFAULT_SITE_SETTINGS, base_url: BASE_URL, notify_server: '' },
   });
   const cms = createCms({
     dataDir,

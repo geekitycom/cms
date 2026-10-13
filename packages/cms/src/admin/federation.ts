@@ -6,7 +6,6 @@ import type { CatalogReader, DocumentLookup, IndexClock } from '../content/store
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
@@ -108,14 +107,14 @@ export function mountFederationScreen(
   app.get(FEDERATION_PATH, (c) => {
     const admin = c.var.admin;
     const baseUrl = c.var.config.baseUrl;
-    const cited: CitedPageReader = (url) => c.var.replyContexts.read(url);
+    const cited: CitedPageReader = (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart);
     const post = localPosts(c.var.store, baseUrl, cited, (url) =>
       c.var.conversation.documentOf(url),
     );
     const users = listUsers(c.var.config.dataDir);
     const targets = syndicationTargetsReader(c.var.config.contentDir);
     const copies = syndicationCopies(c.var.config.contentDir);
-    const siteLanguage = readSiteSettings(c.var.config.contentDir).language;
+    const siteLanguage = c.var.siteAtRequestStart.language;
 
     return render(c, ADMIN_TEMPLATES.federation, {
       section: 'federation',

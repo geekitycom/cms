@@ -1,11 +1,11 @@
 import { FORM_ROWS, ROWS, SETTING_KEYS, SETTINGS_FIELD_NAMES } from './setting-rows.ts';
 import type {
   CarriedSettings,
+  FieldValue,
   SettingsContext,
   SettingsField,
   SettingsForm,
 } from './setting-rows.ts';
-import { DEFAULT_SITE_SETTINGS } from './settings.ts';
 import type { SiteSettings } from './settings.ts';
 
 export { SETTINGS_FIELD_NAMES } from './setting-rows.ts';
@@ -66,15 +66,6 @@ function onDiskProblem(
   return dir === undefined ? undefined : onDisk.problem(form[name].trim(), dir);
 }
 
-function submitSetting<K extends keyof SiteSettings>(
-  settings: SiteSettings,
-  key: K,
-  form: SettingsForm,
-  carriedOnFile: CarriedSettings,
-): void {
-  settings[key] = ROWS[key].submitted(form, carriedOnFile);
-}
-
 /**
  * A validated form as settings. Only call it on a form
  * {@link settingsProblems} found nothing wrong with.
@@ -87,13 +78,18 @@ export function settingsFromForm(
   form: SettingsForm,
   carriedOnFile: CarriedSettings = {},
 ): SiteSettings {
-  const settings = { ...DEFAULT_SITE_SETTINGS };
-  for (const key of SETTING_KEYS) submitSetting(settings, key, form, carriedOnFile);
-  return settings;
+  return Object.fromEntries(
+    SETTING_KEYS.map((key) => [key, ROWS[key].submitted(form, carriedOnFile)]),
+  ) as SiteSettings;
 }
 
-function shownSetting<K extends SettingsField>(settings: SiteSettings, key: K): string {
-  return FORM_ROWS[key].shown(settings[key]);
+function shownSetting<F extends SettingsField>(settings: SiteSettings, name: F): string {
+  const value = (
+    name === 'license_url' || name === 'license_name'
+      ? settings.license
+      : settings[name as keyof SiteSettings]
+  ) as FieldValue<F>;
+  return FORM_ROWS[name].shown(value);
 }
 
 /** The settings as the form shows them. */

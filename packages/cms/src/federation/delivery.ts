@@ -9,7 +9,8 @@ import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import { citationsOf } from '../content/citation.ts';
-import type { CitedPage } from '../content/citation.ts';
+import type { CitedPage, CitedPageReader } from '../content/citation.ts';
+import type { ConversationSite } from '../comments/conversation.ts';
 import type { Document } from '../content/document.ts';
 import { isMigrated } from '../content/migrated.ts';
 import { replyTarget } from '../content/post-type.ts';
@@ -18,7 +19,7 @@ import type { CatalogReader, DocumentLookup, IndexWriter } from '../content/stor
 import type { DocumentChange } from '../content/sync.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { documentContent } from '../content/writer.ts';
-import { readSiteSettings } from '../site/site-json.ts';
+import { SITE } from '../site/namespace.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { messageOf } from '../util/errors.ts';
@@ -94,7 +95,7 @@ export interface CreateDeliveryServiceOptions {
   /** What the federation context carries for the inbox; nothing here calls it. */
   actorProfiles: FederationContextData['actorProfiles'];
   /** What the federation context carries for the post objects. */
-  cited: FederationContextData['cited'];
+  cited: (site: ConversationSite) => CitedPageReader;
   /** Where failures are reported. Defaults to `console`. */
   logger?: DeliveryLogger | undefined;
 }
@@ -184,16 +185,16 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   const deliveryQueue = createSerialQueue();
 
   /** A context outside any request, which is where a delivery happens from. */
-  function deliveryContext(
-    cited: FederationContextData['cited'] = options.cited,
-  ): Context<FederationContextData> {
+  async function deliveryContext(cited?: CitedPageReader): Promise<Context<FederationContextData>> {
+    const site = await settings.values(SITE);
     return federation.createContext(new URL(config.baseUrl), {
       admin,
       store,
       config,
       settings,
       actorProfiles: options.actorProfiles,
-      cited,
+      site,
+      cited: cited ?? options.cited(site),
     });
   }
 
@@ -222,7 +223,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     return await saveDocument({
       contentDir: config.contentDir,
       store,
-      timezone: readSiteSettings(config.contentDir).timezone,
+      timezone: await settings.get(SITE.timezone),
       path: document.path,
       content: {
         ...documentContent(document),
@@ -460,7 +461,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       const delivery = deliveryChange(change, store.now());
       if (delivery === undefined) return;
 
-      const context = deliveryContext();
+      const context = await deliveryContext();
       if (documentAuthor(context, delivery.subject) === undefined) return;
 
       if (delivery.kind === 'withdraw') {
@@ -495,7 +496,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
 
       return await deliveryQueue
         .run(async () => {
-          const context = deliveryContext();
+          const context = await deliveryContext();
           const id = actorId(context, user);
           const actor = await userActor(context, user, { baseUrl: config.baseUrl });
 
@@ -542,7 +543,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       if (!announced && (!published || isMigrated(document))) return undefined;
 
       return await deliveryQueue.run(async () => {
-        const context = deliveryContext();
+        const context = await deliveryContext();
 
         if (!published) {
           // A draft, a trashed post, or one re-dated into the future: every
@@ -569,8 +570,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     citedPageStored(target, previous) {
       queue(async () => {
         const now = store.now();
-        const context = deliveryContext();
-        const before = deliveryContext((url) => (url === target ? previous : options.cited(url)));
+        const context = await deliveryContext();
+        const cited = context.data.cited;
+        const before = await deliveryContext((url) => (url === target ? previous : cited(url)));
         const citing = store
           .listFederated()
           .filter(

@@ -31,7 +31,6 @@ import type {
   PluginEditorSuggestion,
   PluginPostType,
 } from '../plugin.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { messageOf } from '../util/errors.ts';
 import { submittedForm } from './documents.ts';
 import { PLUGINS_PATH } from './plugins.ts';
@@ -110,7 +109,7 @@ function editorDraft(
   form: EditorForm,
 ): PluginEditorDraft {
   const { contentDir } = c.var.config;
-  const settings = readSiteSettings(contentDir);
+  const settings = c.var.siteAtRequestStart;
   return {
     type: kind.type,
     postType:

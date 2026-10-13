@@ -2,7 +2,7 @@
 {% import "components/fields.njk" as field %}
 
 {% block settingsProblems %}
-  {{ field.problem('settings-location-sharing', problems.locationSharing) }}
+  {{ field.problem('settings-location-sharing', problems.location_sharing) }}
 {% endblock %}
 
 {% block settingsFields %}
@@ -16,13 +16,13 @@
     are right now. Changing this changes every post at once, and nothing is
     rewritten.
   {% endset %}
-  {% call field.select('settings-location-sharing', fields.locationSharing, 'Location on posts',
-       error=problems.locationSharing, hint=locationHint, autofocus=true) %}
+  {% call field.select('settings-location-sharing', fields.location_sharing, 'Location on posts',
+       error=problems.location_sharing, hint=locationHint, autofocus=true) %}
     {% for option in [
          ['none', 'Keep it, publish nothing'],
          ['place', 'Publish the place only: its name, locality, region and country'],
          ['exact', 'Publish the exact coordinates too']] %}
-      <option value="{{ option[0] }}"{% if option[0] == form.locationSharing %} selected{% endif %}>{{ option[1] }}</option>
+      <option value="{{ option[0] }}"{% if option[0] == form.location_sharing %} selected{% endif %}>{{ option[1] }}</option>
     {% endfor %}
   {% endcall %}
 

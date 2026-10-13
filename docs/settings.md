@@ -104,7 +104,15 @@ read-only and says which value is in effect and why.
 
 When neither sets a value, the file's `url` becomes the base URL at boot. It
 takes effect at boot, not on save, so saving an `https` base URL cannot log out
-the admin who submitted it over `http`.
+the admin who submitted it over `http`. IndieAuth and Micropub use the same
+base URL as the rest of the site, so a new `url` reaches them at the next boot
+too.
+
+Every `geekity` command settles the base URL this way before it builds the
+CMS. A site that calls `createCms` from its own entry file passes it
+`await settleConfig(config)` for the same result; built from the plain config,
+it uses `baseUrl` or the `http://localhost:<port>` fallback and `serve()` logs
+that the setting was not applied.
 
 ## Credentials
 

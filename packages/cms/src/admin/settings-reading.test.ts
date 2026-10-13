@@ -3,9 +3,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { readSiteSettings } from '../site/site-json.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 /**
  * The Reading settings page: what the homepage shows, how many posts a listing
@@ -79,9 +79,9 @@ describe('what the homepage displays', () => {
       303,
     );
 
-    const settings = readSiteSettings(contentDir);
+    const settings = await siteSettingsIn(contentDir);
     assert.equal(settings.homepage, 'about');
-    assert.equal(settings.postsPage, 'news');
+    assert.equal(settings.posts_page, 'news');
 
     const written = await siteJson(contentDir);
     assert.equal(written['homepage'], 'about', 'an Eleventy build reads it from the file');
@@ -96,7 +96,7 @@ describe('what the homepage displays', () => {
     const cleared = await siteJson(contentDir);
     assert.equal('homepage' in cleared, false);
     assert.equal('postsPage' in cleared, false);
-    assert.equal(readSiteSettings(contentDir).homepage, '');
+    assert.equal((await siteSettingsIn(contentDir)).homepage, '');
   });
 
   it('refuses a posts page with no homepage (AC #1)', async () => {
@@ -108,7 +108,7 @@ describe('what the homepage displays', () => {
     assert.equal(response.status, 400);
     assert.match(await response.text(), /posts page/i);
 
-    assert.equal(readSiteSettings(contentDir).postsPage, '', 'nothing was written');
+    assert.equal((await siteSettingsIn(contentDir)).posts_page, '', 'nothing was written');
   });
 
   it('offers Your latest posts beside every published page, and keeps the pick (AC #1)', async () => {
@@ -149,7 +149,7 @@ describe('what the homepage displays', () => {
     assert.match(html, /no longer published/i, 'the Reading page says why the pick is empty');
     assert.match(html, /about/);
     assert.doesNotMatch(html, /<option value="about"/, 'and it is off the list');
-    assert.equal(readSiteSettings(contentDir).homepage, 'about', 'the pick itself is kept');
+    assert.equal((await siteSettingsIn(contentDir)).homepage, 'about', 'the pick itself is kept');
   });
 
   it('refuses one page picked as both', async () => {
@@ -162,7 +162,7 @@ describe('what the homepage displays', () => {
       posts_page: 'about',
     });
     assert.equal(response.status, 400);
-    assert.equal(readSiteSettings(contentDir).homepage, '');
+    assert.equal((await siteSettingsIn(contentDir)).homepage, '');
   });
 });
 
@@ -218,7 +218,10 @@ describe('the notify server setting', () => {
       (await saveSettings(agent, 'reading', { notify_server: 'https://cloud.example/' })).status,
       303,
     );
-    assert.equal(readSiteSettings(cms.config.contentDir).notifyServer, 'https://cloud.example');
+    assert.equal(
+      (await siteSettingsIn(cms.config.contentDir)).notify_server,
+      'https://cloud.example',
+    );
 
     const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
@@ -232,7 +235,7 @@ describe('the notify server setting', () => {
     const agent = await signedIn(cms);
 
     assert.equal((await saveSettings(agent, 'reading', { notify_server: '' })).status, 303);
-    assert.equal(readSiteSettings(cms.config.contentDir).notifyServer, '');
+    assert.equal((await siteSettingsIn(cms.config.contentDir)).notify_server, '');
 
     const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
@@ -245,7 +248,7 @@ describe('the notify server setting', () => {
       contentDir,
       dataDir: await box.dir('geekity-settings-notify-boot-'),
     });
-    assert.equal(readSiteSettings(again.config.contentDir).notifyServer, '');
+    assert.equal((await siteSettingsIn(again.config.contentDir)).notify_server, '');
   });
 
   it('refuses anything that is not an absolute URL, and keeps the stored one', async () => {
@@ -267,7 +270,10 @@ describe('the notify server setting', () => {
       );
     }
 
-    assert.equal(readSiteSettings(cms.config.contentDir).notifyServer, 'https://kept.example');
+    assert.equal(
+      (await siteSettingsIn(cms.config.contentDir)).notify_server,
+      'https://kept.example',
+    );
   });
 });
 
@@ -296,7 +302,7 @@ describe('the menu box that moved to Navigation (TASK-108)', () => {
 
     assert.equal((await saveSettings(agent, 'reading', { posts_per_page: '7' })).status, 303);
 
-    assert.equal(readSiteSettings(cms.config.contentDir).postsPerPage, 7);
+    assert.equal((await siteSettingsIn(cms.config.contentDir)).posts_per_page, 7);
     assert.deepEqual(
       (await siteJson(contentDir))['menus'],
       {
@@ -379,7 +385,7 @@ describe('what crawlers are told (TASK-148)', () => {
       assert.match(await response.text(), says, rules);
     }
 
-    assert.deepEqual(readSiteSettings(contentDir).robotsRules, [], 'nothing was written');
+    assert.deepEqual((await siteSettingsIn(contentDir)).robots_rules, [], 'nothing was written');
   });
 
   it('refuses a policy or a signal that is not one on offer', async () => {
@@ -446,9 +452,9 @@ describe('how often the RSS feeds say to poll (TASK-152)', () => {
       assert.equal(response.status, 400, JSON.stringify(fields));
     }
 
-    const settings = readSiteSettings(contentDir);
-    assert.equal(settings.feedUpdatePeriod, 'hourly', 'nothing was written');
-    assert.equal(settings.feedUpdateFrequency, 1, 'nothing was written');
+    const settings = await siteSettingsIn(contentDir);
+    assert.equal(settings.feed_update_period, 'hourly', 'nothing was written');
+    assert.equal(settings.feed_update_frequency, 1, 'nothing was written');
   });
 });
 

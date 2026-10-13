@@ -25,6 +25,7 @@ import {
   redirectBy,
 } from '../web/index.ts';
 import { DEV_MODE } from '../settings/dev-mode.ts';
+import { SITE } from '../site/namespace.ts';
 import { drawnWith } from '../web/render.ts';
 import { serverError } from './server-error.ts';
 import type { Booted } from './boot.ts';
@@ -92,9 +93,11 @@ export function createApp(
     );
     const devMode = await settings.get(DEV_MODE.on);
     const mailConfigured = await services.mail.configured();
+    const site = await settings.values(SITE);
     c.set('devMode', devMode);
     c.set('mailConfigured', mailConfigured);
-    await drawnWith({ devMode, mailConfigured }, next);
+    c.set('siteAtRequestStart', site);
+    await drawnWith({ devMode, mailConfigured, site }, next);
   });
 
   app.use(

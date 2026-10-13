@@ -14,7 +14,6 @@ import type { AkismetKeyStatus } from '../settings/akismet.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { flash } from './flash.ts';
 import { forgetStored, setElsewhere } from './setting-overrides.ts';
@@ -50,12 +49,12 @@ export const DISCUSSION_SETTINGS: SettingsPage = {
   template: ADMIN_TEMPLATES.settingsDiscussion,
   fields: [
     'comments',
-    'commentsCloseAfterDays',
-    'webmentionsSend',
-    'webmentionsReceive',
-    'commentEmailRetentionDays',
-    'addressHashRetentionDays',
-    'contactMessageRetentionDays',
+    'comments_close_after_days',
+    'webmentions_send',
+    'webmentions_receive',
+    'comment_email_retention_days',
+    'address_hash_retention_days',
+    'contact_message_retention_days',
   ],
 
   panels: (c) => akismetPanel(c.var.settings),
@@ -125,7 +124,7 @@ function mountAkismet(app: Hono<GeekityEnv>, _options: MountSettingsOptions): vo
 }
 
 function blogOf(c: Context<GeekityEnv>): string {
-  return effectiveBaseUrl(c.var.config, readSiteSettings(c.var.config.contentDir));
+  return effectiveBaseUrl(c.var.config, c.var.siteAtRequestStart);
 }
 
 function verifiedSentence(status: AkismetKeyStatus | undefined): string {

@@ -5,11 +5,11 @@ import { after, describe, it } from 'node:test';
 
 import sharp from 'sharp';
 
-import { readSiteSettings } from '../site/site-json.ts';
 import { createUser, setUserProfile } from '../site/users.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { saveSettings, SETTINGS_PAGE_FORMS } from './__testing__/settings.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 /**
  * The General settings page: what the site is called and where it lives.
@@ -249,7 +249,10 @@ describe('the base URL', () => {
       title: 'Still saved',
     });
     assert.equal(saved.status, 303);
-    assert.equal(readSiteSettings(cms.config.contentDir).baseUrl, 'https://deployed.example');
+    assert.equal(
+      (await siteSettingsIn(cms.config.contentDir)).base_url,
+      'https://deployed.example',
+    );
     assert.equal(cms.config.baseUrl, 'https://deployed.example');
   });
 });

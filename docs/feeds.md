@@ -557,6 +557,8 @@ await cms.notifyFeeds(['https://example.com/podcast/feed/']);
 
 `cms.notifier` is the service behind it, already subscribed to the index. It
 has `notify(urls)`, `feedsFor(change)`, `handle(change)`, and `settled()`.
+`feedsFor` resolves to the feed URLs, because it reads the taxonomy bases from
+the settings.
 
 [rsscloud]: https://rpc.rsscloud.io/docs
 [websub]: https://www.w3.org/TR/websub/
@@ -654,6 +656,7 @@ import {
   createConversation,
   feedComments,
   listUsers,
+  SITE,
 } from '@geekity/cms';
 
 const conversation = createConversation({
@@ -663,13 +666,14 @@ const conversation = createConversation({
   baseUrl: cms.config.baseUrl,
   users: () => listUsers(cms.config.dataDir),
 });
+const settings = await cms.settings.values(SITE);
 
 commentsRssFeed({
   site,
-  comments: feedComments(conversation.latest(20), {
+  comments: feedComments(conversation.latest(20, settings), {
     baseUrl: cms.config.baseUrl,
     limit: 20,
-    cited: (url) => cms.replyContexts.read(url),
+    cited: (url) => cms.replyContexts.read(url, settings),
   }),
   title: `${site.title}: comments`,
   href: '/',
@@ -678,12 +682,15 @@ commentsRssFeed({
 });
 ```
 
-The conversation reader also has these:
+Each question takes the site settings as its last argument: a post with no
+author is by the site's author or title, and `latest` leaves out what the
+comment policy closes. Read them once with `cms.settings.values(SITE)` and pass
+the same object to every call. The conversation reader also has these:
 
-- `conversation.thread(document)` reads one post, in the shape the theme's
-  `conversation.njk` receives.
+- `conversation.thread(document, settings)` reads one post, in the shape the
+  theme's `conversation.njk` receives.
 - `spokenIn` flattens a thread into the entries a feed carries, each with the
   reply it sits under.
-- `conversation.counts(documents)` returns the number of direct replies that
+- `conversation.counts(documents, settings)` returns the number of direct replies that
   `source:comments` puts beside each item of a post feed.
-- `conversation.repliesTo(segment)` returns what one `/replies/` feed holds.
+- `conversation.repliesTo(segment, settings)` returns what one `/replies/` feed holds.

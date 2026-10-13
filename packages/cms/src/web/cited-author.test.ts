@@ -11,6 +11,7 @@ import { FIRST_ADMIN, sandbox } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import type { Cms } from '../index.ts';
 import type { HostLookup } from '../util/public-address.ts';
+import { SITE } from '../site/namespace.ts';
 
 const box = sandbox();
 
@@ -246,7 +247,10 @@ describe('the author of what a reply answers', () => {
     await cms.replyContexts.settled();
 
     assert.equal(described?.author?.name, 'Aaron Parecki');
-    assert.match(cms.replyContexts.read(target)?.author?.photo?.src ?? '', /^\/uploads\/cited\//);
+    assert.match(
+      cms.replyContexts.read(target, await cms.settings.values(SITE))?.author?.photo?.src ?? '',
+      /^\/uploads\/cited\//,
+    );
   });
 
   it('leaves the author without a photo when theirs is not an image', () => {

@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { readSiteSettings } from '../site/site-json.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 /**
  * The Email settings page: how the site sends mail, and where a message
@@ -34,7 +34,7 @@ describe('the contact address', () => {
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
     ) as Record<string, unknown>;
     assert.equal(written['contactEmail'], 'hello@example.org');
-    assert.equal(readSiteSettings(contentDir).contactEmail, 'hello@example.org');
+    assert.equal((await siteSettingsIn(contentDir)).contact_email, 'hello@example.org');
   });
 
   it('refuses something that is not an address, and writes nothing (TASK-56)', async () => {
@@ -49,6 +49,6 @@ describe('the contact address', () => {
 
     assert.equal(refused.status, 400);
     assert.match(await refused.text(), /A contact address is an email address/);
-    assert.equal(readSiteSettings(contentDir).title, 'Geekity', 'nothing at all was written');
+    assert.equal((await siteSettingsIn(contentDir)).title, 'Geekity', 'nothing at all was written');
   });
 });

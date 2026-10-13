@@ -102,13 +102,17 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       const answered = await submitReplyPost({
         site: documentSite(c, viewer.username),
         document,
-        conversation: c.var.conversation.thread(document),
+        conversation: c.var.conversation.thread(document, c.var.siteAtRequestStart),
         form,
         throttle: throttle(config),
         address: clientAddress(c, config),
       });
       if (answered.kind === 'saved') {
-        const reply = c.var.conversation.replyNamed(document, answered.saved.permalink);
+        const reply = c.var.conversation.replyNamed(
+          document,
+          answered.saved.permalink,
+          c.var.siteAtRequestStart,
+        );
         const anchor = reply === undefined ? 'comments' : commentAnchor(reply.key);
         return c.redirect(`${document.permalink}?${COMMENT_NOTICE_PARAM}=posted#${anchor}`, 303);
       }
@@ -118,7 +122,7 @@ export function mountComments(app: Hono<GeekityEnv>): void {
     const outcome = await submitComment({
       records: { admin, contentDir: config.contentDir, dataDir: config.dataDir },
       document,
-      cited: (url) => c.var.replyContexts.read(url),
+      cited: (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart),
       form,
       dataDir: config.dataDir,
       baseUrl: config.baseUrl,

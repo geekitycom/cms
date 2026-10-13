@@ -29,6 +29,7 @@ import {
   createReplyBackfill,
 } from './backfill.ts';
 import { appendInboxActivity } from './records.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 
 const box = sandbox();
 
@@ -247,7 +248,7 @@ function tree(cms: Cms, contentDir: string): unknown[] {
     replies.map((reply) =>
       reply.replies.length === 0 ? reply.id : { [reply.id]: shape(reply.replies) },
     );
-  return shape(reader.thread(post).replies);
+  return shape(reader.thread(post, DEFAULT_SITE_SETTINGS).replies);
 }
 
 function conversationOf(cms: Cms, contentDir: string) {
@@ -259,7 +260,7 @@ function conversationOf(cms: Cms, contentDir: string) {
     contentDir,
     baseUrl: BASE_URL,
     users: () => [],
-  }).thread(post);
+  }).thread(post, DEFAULT_SITE_SETTINGS);
 }
 
 function creates(cms: Cms, noteId: string) {
@@ -574,6 +575,7 @@ describe('a server that publishes nothing or fails (AC #4)', () => {
         users: () => [],
       }),
       config: cms.config,
+      settings: cms.settings,
       load: (noteId) => {
         asked.push(noteId);
         return noteId === A

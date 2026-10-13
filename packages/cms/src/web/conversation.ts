@@ -1,5 +1,5 @@
 import { avatarHref } from '../avatars/avatars.ts';
-import { answerable, commentPolicyOf } from '../comments/policy.ts';
+import { answerable } from '../comments/policy.ts';
 import type { ActorProfile, AdminStore, InboxActivity, PostComment } from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel, postTypeOf } from '../content/post-type.ts';
@@ -16,7 +16,6 @@ import {
   replyFrom,
   REPLY_ACTIVITY_TYPE,
 } from '../store/inbox-replies.ts';
-import { readSiteJson, readSiteSettings } from '../site/site-json.ts';
 import type { User } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorContext, profileContext, siteAuthorContext } from '../site/authors.ts';
@@ -31,6 +30,7 @@ import type {
   CommentThread,
   Conversation,
   ConversationReader,
+  ConversationSite,
   HeldAt,
   Interaction,
   InteractionAuthor,
@@ -102,6 +102,8 @@ export interface ConversationContext {
   readonly users: () => readonly User[];
 }
 
+type Reading = ConversationContext & { readonly site: ConversationSite };
+
 /**
  * The reader over one site's two indexes.
  *
@@ -110,17 +112,18 @@ export interface ConversationContext {
  * and nothing else — without anybody having to wrap it in a closure to keep
  * `this`.
  */
-export function createConversation(context: ConversationContext): ConversationReader {
+export function createConversation(base: ConversationContext): ConversationReader {
+  const reading = (site: ConversationSite): Reading => ({ ...base, site });
   return {
-    thread: (document) => postConversation(context, document),
-    counts: (documents) => directCounts(context, documents),
-    latest: (limit) => siteConversation(context, limit),
-    comment: (id) => commentThread(context, id),
-    replyNamed: (document, url) => replyNamed(context, document, url),
-    heldAt: (url) => heldAt(context, url),
-    repliesTo: (segment) => repliesTo(context, segment),
-    documentOf: (url) => documentNamed(context, url),
-    upstreams: (document) => upstreamsOf(context, document),
+    thread: (document, site) => postConversation(reading(site), document),
+    counts: (documents, site) => directCounts(reading(site), documents),
+    latest: (limit, site) => siteConversation(reading(site), limit),
+    comment: (id, site) => commentThread(reading(site), id),
+    replyNamed: (document, url, site) => replyNamed(reading(site), document, url),
+    heldAt: (url, site) => heldAt(reading(site), url),
+    repliesTo: (segment, site) => repliesTo(reading(site), segment),
+    documentOf: (url) => documentNamed(base, url),
+    upstreams: (document, site) => upstreamsOf(reading(site), document),
   };
 }
 
@@ -132,7 +135,7 @@ export function createConversation(context: ConversationContext): ConversationRe
  * have no fediverse replies — nothing out there has a name for it yet — but it
  * can still have native comments, which hang off its permalink instead.
  */
-function postConversation(context: ConversationContext, document: Document): Conversation {
+function postConversation(context: Reading, document: Document): Conversation {
   const said = gather(context, document);
   const replies = threadOf(said);
   sortThread(replies);
@@ -193,7 +196,7 @@ interface Part {
 }
 
 function gather(
-  context: ConversationContext,
+  context: Reading,
   document: Document,
   seen: ReadonlySet<string> = new Set([document.path]),
 ): Gathered {
@@ -245,7 +248,7 @@ function merged(root: string, parts: readonly Part[]): Gathered {
 }
 
 function fromQuotes(
-  context: ConversationContext,
+  context: Reading,
   objectId: string,
   naming: (actorId: string) => InteractionAuthor,
 ): Part {
@@ -258,7 +261,7 @@ function fromQuotes(
 }
 
 function fromActivities(
-  context: ConversationContext,
+  context: Reading,
   objectId: string,
   stored: readonly PostComment[],
   naming: (actorId: string) => InteractionAuthor,
@@ -361,7 +364,7 @@ function reaction(
 }
 
 function fromStored(
-  context: ConversationContext,
+  context: Reading,
   document: Document,
   stored: readonly PostComment[],
   isEvent: boolean,
@@ -387,7 +390,7 @@ function fromStored(
  * the reply post, and this is what stitches it into the thread it is in.
  */
 function fromReplyPosts(
-  context: ConversationContext,
+  context: Reading,
   document: Document,
   root: string,
   seen: ReadonlySet<string>,
@@ -419,7 +422,7 @@ function fromReplyPosts(
  * the post, so a reply the post's thread shows is shown here, and one it
  * leaves out is left out here.
  */
-function commentThread(context: ConversationContext, id: string): CommentThread | undefined {
+function commentThread(context: Reading, id: string): CommentThread | undefined {
   const stored = context.admin.getComment(id);
   if (stored?.source !== 'comment' || stored.status !== 'approved') return undefined;
   const post = context.store.getBySlug(stored.slug);
@@ -438,17 +441,13 @@ function commentThread(context: ConversationContext, id: string): CommentThread 
   };
 }
 
-function replyNamed(
-  context: ConversationContext,
-  document: Document,
-  url: string,
-): Interaction | undefined {
+function replyNamed(context: Reading, document: Document, url: string): Interaction | undefined {
   return namedIn(context, document, gather(context, document), url);
 }
 
 /** The entry of a gathered conversation a URL names, held ones included. */
 function namedIn(
-  context: ConversationContext,
+  context: Reading,
   document: Document,
   said: Gathered,
   url: string,
@@ -469,7 +468,7 @@ function namedIn(
   );
 }
 
-function heldAt(context: ConversationContext, url: string): HeldAt | undefined {
+function heldAt(context: Reading, url: string): HeldAt | undefined {
   const post = documentNamed(context, url);
   if (post === undefined || !isServed(post, context.store.now())) return undefined;
   if (url === absoluteUrl(post.permalink, context.baseUrl) || url === rootOf(context, post)) {
@@ -483,7 +482,7 @@ function heldAt(context: ConversationContext, url: string): HeldAt | undefined {
   return { kind: 'reply', post, reply };
 }
 
-function repliesTo(context: ConversationContext, key: string): RepliesOf | undefined {
+function repliesTo(context: Reading, key: string): RepliesOf | undefined {
   if (!isKey(key)) return undefined;
 
   // Each source's index is asked in turn, so a key naming nothing costs three
@@ -516,11 +515,7 @@ function repliesTo(context: ConversationContext, key: string): RepliesOf | undef
  * The direct replies of one reply in a document's thread, or of the document
  * itself, while the document is served and the reply is one a reader sees.
  */
-function repliesIn(
-  context: ConversationContext,
-  post: Document,
-  key: string | null,
-): RepliesOf | undefined {
+function repliesIn(context: Reading, post: Document, key: string | null): RepliesOf | undefined {
   if (!isServed(post, context.store.now())) return undefined;
   const thread = postConversation(context, post).replies;
   const reply = key === null ? null : visibleReply(thread, key);
@@ -532,7 +527,7 @@ function repliesIn(
   };
 }
 
-function upstreamsOf(context: ConversationContext, document: Document): Upstream[] {
+function upstreamsOf(context: Reading, document: Document): Upstream[] {
   const top = threadRootOf(context, document) ?? document;
   if (!isServed(top, context.store.now())) return [];
   const said = gather(context, top);
@@ -625,7 +620,7 @@ function documentNamed(context: ConversationContext, url: string, depth = 0): Do
  * `undefined` for a reply post answering nothing on this site.
  */
 function threadRootOf(
-  context: ConversationContext,
+  context: Reading,
   document: Document,
   seen: Set<string> = new Set(),
 ): Document | undefined {
@@ -644,7 +639,7 @@ const MAXIMUM_NOTE_DEPTH = 32;
  * permalink otherwise: a post that has never been delivered can still have
  * native comments, and they have to hang off something.
  */
-function rootOf(context: ConversationContext, document: Document): string {
+function rootOf(context: Reading, document: Document): string {
   return activityStreamsId(document, context.baseUrl, context.store.now()) ?? document.permalink;
 }
 
@@ -655,7 +650,7 @@ function rootOf(context: ConversationContext, document: Document): string {
  * written here, its page and its anchor.
  */
 function namesIn(
-  context: ConversationContext,
+  context: Reading,
   document: Document,
   root: string,
   replies: readonly Interaction[],
@@ -680,7 +675,7 @@ function namesOf(reply: Interaction, permalink: string, baseUrl: string): string
 
 /** A reply post as the thread's own shape, answering `inReplyTo`. */
 function replyPostInteraction(
-  context: ConversationContext,
+  context: Reading,
   post: Document,
   id: string,
   inReplyTo: string,
@@ -700,9 +695,9 @@ function replyPostInteraction(
 }
 
 /** Who a post or page on this site is by: its author, else the site's. */
-function documentAuthor(context: ConversationContext, post: Document): InteractionAuthor {
+function documentAuthor(context: Reading, post: Document): InteractionAuthor {
   const users = context.users();
-  const site = readSiteSettings(context.contentDir);
+  const { site } = context;
   const author = authorContext(users, post.author) ?? siteAuthorContext(users, site.author);
   return bylineAuthor(author, site.title);
 }
@@ -792,11 +787,14 @@ function latestAnswerPerPerson(answers: readonly Interaction[]): Interaction[] {
  * post that has since been unpublished is dropped after the index has already
  * counted it — and the merged list is cut to size at the end.
  */
-function siteConversation(context: ConversationContext, limit: number): SiteInteraction[] {
+function siteConversation(context: Reading, limit: number): SiteInteraction[] {
   const naming = authorNaming(context.admin);
   const posts = new PostsByObjectId(context);
   const now = context.store.now();
-  const policy = commentPolicyOf(readSiteJson(context.contentDir));
+  const policy = {
+    enabled: context.site.comments,
+    closeAfterDays: context.site.comments_close_after_days,
+  };
   // A page that takes no comments shows none, so the site's feed has none of its.
   const shown = (post: Document | undefined): post is Document =>
     post !== undefined && isListed(post, now) && answerable(post, policy, now);
@@ -876,10 +874,7 @@ function siteConversation(context: ConversationContext, limit: number): SiteInte
 }
 
 /** How many visible replies answer each of these documents directly, by permalink. */
-function directCounts(
-  context: ConversationContext,
-  documents: readonly Document[],
-): Map<string, number> {
+function directCounts(context: Reading, documents: readonly Document[]): Map<string, number> {
   return new Map(
     documents.map((document) => [
       document.permalink,
@@ -1139,11 +1134,11 @@ function newestFirst<T extends { published: Date }>(said: T[], limit: number): T
  * no permalink spells that.
  */
 class PostsByObjectId {
-  readonly #context: ConversationContext;
+  readonly #context: Reading;
   readonly #found = new Map<string, Document | undefined>();
   #all: Map<string, Document> | undefined;
 
-  constructor(context: ConversationContext) {
+  constructor(context: Reading) {
     this.#context = context;
   }
 

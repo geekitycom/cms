@@ -7,10 +7,11 @@ import { after, describe, it } from 'node:test';
 import { resolveNothing } from '../admin/__testing__/harness.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
-import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { createUser, listUsers, setUserProfile } from '../site/users.ts';
 import { child, childrenNamed, parseXml } from './__testing__/xml.ts';
 import type { XmlElement } from './__testing__/xml.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -63,7 +64,10 @@ async function site(
 /** Point the site's feeds at another notify server, or at none. */
 async function setNotifyServer(cms: Cms, notifyServer: string): Promise<void> {
   const contentDir = cms.config.contentDir;
-  await writeSiteJson({ contentDir, settings: { ...readSiteSettings(contentDir), notifyServer } });
+  await writeSiteJson({
+    contentDir,
+    settings: { ...(await siteSettingsIn(contentDir)), notify_server: notifyServer },
+  });
 }
 
 /** A post file. */
@@ -2053,9 +2057,9 @@ describe('the update cadence an RSS feed declares', () => {
     await writeSiteJson({
       contentDir,
       settings: {
-        ...readSiteSettings(contentDir),
-        feedUpdatePeriod: period as 'daily',
-        feedUpdateFrequency: frequency,
+        ...(await siteSettingsIn(contentDir)),
+        feed_update_period: period as 'daily',
+        feed_update_frequency: frequency,
       },
     });
   }
@@ -2321,7 +2325,10 @@ describe('the license a feed declares (TASK-206)', () => {
     const before = (await cms.app.request('/feed/atom/')).headers.get('etag');
     await writeSiteJson({
       contentDir,
-      settings: { ...readSiteSettings(contentDir), license: 'cc0' },
+      settings: {
+        ...(await siteSettingsIn(contentDir)),
+        license: { choice: 'cc0', url: '', name: '' },
+      },
     });
     const after = (await cms.app.request('/feed/atom/')).headers.get('etag');
     assert.notEqual(after, before);

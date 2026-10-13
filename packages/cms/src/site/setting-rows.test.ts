@@ -27,46 +27,46 @@ describe('requiredWholeDays', () => {
 
 describe('frontPageOf', () => {
   it('keeps both picks when there is a homepage', () => {
-    assert.deepEqual(frontPageOf({ ...FORM, homepage: ' home ', postsPage: ' blog ' }), {
+    assert.deepEqual(frontPageOf({ ...FORM, homepage: ' home ', posts_page: ' blog ' }), {
       homepage: 'home',
-      postsPage: 'blog',
+      posts_page: 'blog',
     });
   });
 
   it('clears the posts page with the homepage', () => {
-    assert.deepEqual(frontPageOf({ ...FORM, homepage: '', postsPage: 'blog' }), {
+    assert.deepEqual(frontPageOf({ ...FORM, homepage: '', posts_page: 'blog' }), {
       homepage: '',
-      postsPage: '',
+      posts_page: '',
     });
   });
 });
 
 describe('frontPageProblems', () => {
   it('finds nothing wrong with no picks, or with two different pages', () => {
-    assert.deepEqual(frontPageProblems({ ...FORM, homepage: '', postsPage: '' }), {
+    assert.deepEqual(frontPageProblems({ ...FORM, homepage: '', posts_page: '' }), {
       homepage: undefined,
-      postsPage: undefined,
+      posts_page: undefined,
     });
-    assert.deepEqual(frontPageProblems({ ...FORM, homepage: 'home', postsPage: 'blog' }), {
+    assert.deepEqual(frontPageProblems({ ...FORM, homepage: 'home', posts_page: 'blog' }), {
       homepage: undefined,
-      postsPage: undefined,
+      posts_page: undefined,
     });
   });
 
   it('refuses a posts page without a homepage, and one page picked twice', () => {
     assert.match(
-      frontPageProblems({ ...FORM, homepage: '', postsPage: 'blog' }).postsPage ?? '',
+      frontPageProblems({ ...FORM, homepage: '', posts_page: 'blog' }).posts_page ?? '',
       /needs a homepage/,
     );
     assert.match(
-      frontPageProblems({ ...FORM, homepage: 'home', postsPage: ' home ' }).postsPage ?? '',
+      frontPageProblems({ ...FORM, homepage: 'home', posts_page: ' home ' }).posts_page ?? '',
       /two different pages/,
     );
   });
 
   it('refuses a pick that is not a slug, on the field it was typed in', () => {
-    const problems = frontPageProblems({ ...FORM, homepage: 'a b', postsPage: 'c/d' });
+    const problems = frontPageProblems({ ...FORM, homepage: 'a b', posts_page: 'c/d' });
     assert.match(problems.homepage ?? '', /A homepage is the slug/);
-    assert.match(problems.postsPage ?? '', /A posts page is the slug/);
+    assert.match(problems.posts_page ?? '', /A posts page is the slug/);
   });
 });

@@ -8,7 +8,8 @@ import { brotliDecompressSync } from 'node:zlib';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { avatarHref } from '../avatars/avatars.ts';
-import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
+import { writeSiteJson } from '../site/site-json.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 const started: Cms[] = [];
 const temporaryDirs: string[] = [];
@@ -1388,7 +1389,7 @@ describe('the timezone setting as a lens on the dates', () => {
   async function setTimezone(contentDir: string, timezone: string): Promise<void> {
     await writeSiteJson({
       contentDir,
-      settings: { ...readSiteSettings(contentDir), timezone },
+      settings: { ...(await siteSettingsIn(contentDir)), timezone },
     });
   }
 

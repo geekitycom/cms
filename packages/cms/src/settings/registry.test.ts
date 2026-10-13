@@ -8,11 +8,12 @@ import { resolveConfig } from '../config.ts';
 import type { GeekityConfig } from '../config.ts';
 import { declareNamespace } from './declare.ts';
 import { DEV_MODE, readDevModeRecord } from './dev-mode.ts';
-import { boolean } from './kinds.ts';
+import { boolean, port } from './kinds.ts';
 import { MAINTENANCE } from './maintenance.ts';
 import { CORE_NAMESPACES, coreEnvPrefix, pluginEnvPrefix } from './names.ts';
 import { createSettingsRegistry } from './registry.ts';
-import type { NamespaceDeclaration } from './types.ts';
+import type { NamespaceDeclaration, SettingType } from './types.ts';
+import { isRecord } from '../util/guards.ts';
 
 const dirs: string[] = [];
 after(() => Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true }))));
@@ -207,6 +208,70 @@ describe('the settings registry', () => {
 
     assert.deepEqual(await fileOf(dataDir, 'plain.json'), { theirs: 1 });
     assert.equal(await registry.get(plain.on), false);
+  });
+
+  it('reads and writes a setting under its file key, and one value under several file keys', async () => {
+    const { registry, dataDir } = await site();
+    const spelled = declareNamespace({
+      namespace: 'spelled',
+      storage: {
+        kind: 'file',
+        under: 'data',
+        path: 'spelled.json',
+        dataClass: { kept: true, secret: false },
+      },
+      envPrefix: 'SPELLED',
+      settings: {
+        posts_per_page: {
+          fileKey: 'postsPerPage',
+          type: port,
+          default: 10,
+          description: 'A count.',
+        },
+        pair: {
+          fileKeys: ['first', 'second'],
+          type: {
+            fromJson: (raw) =>
+              isRecord(raw) && typeof raw['first'] === 'string'
+                ? {
+                    ok: true,
+                    value: `${raw['first']}/${typeof raw['second'] === 'string' ? raw['second'] : ''}`,
+                  }
+                : { ok: false, problem: 'needs a first' },
+            fromText: (text) => ({ ok: true, value: text }),
+            toJson: (value) => {
+              const [first, second] = value.split('/');
+              return { first, second: second === '' ? undefined : second };
+            },
+            toText: (value) => value,
+          } satisfies SettingType<string>,
+          default: '',
+          description: 'Two keys, one value.',
+        },
+      },
+    });
+    registry.register(spelled.declaration);
+    await writeFile(
+      path.join(dataDir, 'spelled.json'),
+      JSON.stringify({ postsPerPage: 7, posts_per_page: 99, first: 'a', second: 'b', theirs: 1 }),
+    );
+
+    assert.deepEqual(await registry.values(spelled), { posts_per_page: 7, pair: 'a/b' });
+
+    assert.deepEqual(
+      await registry.set('spelled', changes({ posts_per_page: 8, pair: { first: 'c' } }), 'cli'),
+      { ok: true },
+    );
+    assert.deepEqual(await fileOf(dataDir, 'spelled.json'), {
+      postsPerPage: 8,
+      posts_per_page: 99,
+      first: 'c',
+      theirs: 1,
+    });
+    assert.deepEqual(await registry.values(spelled), { posts_per_page: 8, pair: 'c/' });
+
+    await registry.set('spelled', changes({ posts_per_page: undefined, pair: undefined }), 'cli');
+    assert.deepEqual(await fileOf(dataDir, 'spelled.json'), { posts_per_page: 99, theirs: 1 });
   });
 
   it('answers a read after a write it did not wait for with what was written', async () => {

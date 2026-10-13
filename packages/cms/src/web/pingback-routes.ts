@@ -1,7 +1,6 @@
 import type { Context, Hono } from 'hono';
 
 import { publicDocumentAt } from '../content/permalinks.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import {
   PINGBACK_FAULTS,
   PINGBACK_MAX_BYTES,
@@ -20,7 +19,7 @@ import { clientAddress } from './throttle.ts';
 /** Register the pingback endpoint. Mounted by the public site. */
 export function mountPingbacks(app: Hono<GeekityEnv>): void {
   app.post(PINGBACK_PATH, async (c) => {
-    if (!readSiteSettings(c.var.config.contentDir).webmentionsReceive) {
+    if (!c.var.siteAtRequestStart.webmentions_receive) {
       return c.text('This site does not take pingbacks.', 404);
     }
 
@@ -61,6 +60,7 @@ async function answerPing(c: Context<GeekityEnv>): Promise<string | PingbackFaul
     baseUrl: config.baseUrl,
     documentAt: (pathname) => publicDocumentAt(store, pathname),
     conversation,
+    site: c.var.siteAtRequestStart,
   });
   if (!checked.ok)
     return { code: PINGBACK_REQUEST_FAULTS[checked.problem], message: checked.message };

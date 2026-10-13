@@ -12,10 +12,10 @@ import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
 import type { Cms } from '../index.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { createUser } from '../site/users.ts';
 import type { AuthorizationCode } from '../indieauth/grants.ts';
 import { issueTokens, listTokens, recordUse } from '../indieauth/tokens.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -189,8 +189,8 @@ describe('the list of apps allowed without PKCE (TASK-225)', () => {
   const REMOVE = '/admin/users/apps/without-pkce/remove';
   const IA_WRITER = 'https://ia.net/writer';
 
-  function listed(cms: Cms): readonly string[] {
-    return readSiteSettings(cms.config.contentDir).clientsWithoutPkce;
+  async function listed(cms: Cms): Promise<readonly string[]> {
+    return (await siteSettingsIn(cms.config.contentDir)).clients_without_pkce;
   }
 
   async function add(agent: Browser, clientId: string): Promise<Response> {
@@ -201,7 +201,7 @@ describe('the list of apps allowed without PKCE (TASK-225)', () => {
   it('starts empty and says every app needs PKCE', async () => {
     const { cms, agent } = await site();
     const html = await screen(agent);
-    assert.deepEqual(listed(cms), []);
+    assert.deepEqual(await listed(cms), []);
     assert.match(html, /<h2[^>]*>Apps allowed without PKCE<\/h2>/);
     assert.match(html, /No apps are listed\. Every app must use PKCE to sign in\./);
   });
@@ -211,7 +211,7 @@ describe('the list of apps allowed without PKCE (TASK-225)', () => {
     const response = await add(agent, ` ${IA_WRITER} `);
     assert.equal(response.status, 303);
     assert.equal(response.headers.get('location'), SCREEN);
-    assert.deepEqual(listed(cms), [IA_WRITER]);
+    assert.deepEqual(await listed(cms), [IA_WRITER]);
 
     const html = await screen(agent);
     assert.match(
@@ -236,13 +236,13 @@ describe('the list of apps allowed without PKCE (TASK-225)', () => {
       assert.match(html, /Nothing was saved/);
       assert.match(html, /aria-invalid="true"/);
     }
-    assert.deepEqual(listed(cms), []);
+    assert.deepEqual(await listed(cms), []);
 
     await add(agent, IA_WRITER);
     const again = await add(agent, 'https://IA.net/writer');
     assert.equal(again.status, 400);
     assert.match(await again.text(), /already on the list/);
-    assert.deepEqual(listed(cms), [IA_WRITER]);
+    assert.deepEqual(await listed(cms), [IA_WRITER]);
   });
 
   it('removes a listed client_id', async () => {
@@ -252,7 +252,7 @@ describe('the list of apps allowed without PKCE (TASK-225)', () => {
     const csrf = csrfField(await screen(agent)) ?? '';
     const response = await agent.post(REMOVE, { csrf_token: csrf, client_id: IA_WRITER });
     assert.equal(response.status, 303);
-    assert.deepEqual(listed(cms), ['https://inklings.io/inkstone/']);
+    assert.deepEqual(await listed(cms), ['https://inklings.io/inkstone/']);
     assert.match(await screen(agent), /https:\/\/ia\.net\/writer must use PKCE again\./);
   });
 
@@ -261,18 +261,18 @@ describe('the list of apps allowed without PKCE (TASK-225)', () => {
     await add(agent, IA_WRITER);
     const response = await saveSettings(agent, 'general', { title: 'Renamed' });
     assert.equal(response.status, 303);
-    assert.equal(readSiteSettings(cms.config.contentDir).title, 'Renamed');
-    assert.deepEqual(listed(cms), [IA_WRITER]);
+    assert.equal((await siteSettingsIn(cms.config.contentDir)).title, 'Renamed');
+    assert.deepEqual(await listed(cms), [IA_WRITER]);
   });
 
   it('refuses an add or a remove without the CSRF token', async () => {
     const { cms, agent } = await site();
     assert.equal((await agent.post(ADD, { client_id: IA_WRITER })).status, 403);
-    assert.deepEqual(listed(cms), []);
+    assert.deepEqual(await listed(cms), []);
 
     await add(agent, IA_WRITER);
     assert.equal((await agent.post(REMOVE, { client_id: IA_WRITER })).status, 403);
-    assert.deepEqual(listed(cms), [IA_WRITER]);
+    assert.deepEqual(await listed(cms), [IA_WRITER]);
   });
 });
 

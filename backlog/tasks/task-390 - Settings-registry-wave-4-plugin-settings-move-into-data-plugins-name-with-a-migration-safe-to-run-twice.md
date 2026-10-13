@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-13 16:45'
+updated_date: '2026-10-13 22:09'
 labels: []
 milestone: m-38
 dependencies:
@@ -36,3 +37,9 @@ decision-53 section 7 (wave 4) and section 8. A plugin's host.settings(fields) d
 - [ ] #7 admin/plugins.ts draws a plugin screen through the generic renderer over the registry, using the field label and hint for layout; a plugin screen test covers a text, url, select, checkbox and secret field
 - [ ] #8 docs/plugins.md and docs/configuration.md describe data/plugins/<name>/settings.json, the migration and the environment variables for every setting; pnpm lint, typecheck and test pass
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+From TASK-388 (2026-10-13): host.siteInfo() already returns a Promise, but HOST_API_VERSION is still 1. Raise it to 2 once, in this task, so siteInfo and the async current() ship in one release. Update the four plugins' hostApi in source and package.json, the two demo plugins, docs/plugins.md, the plugin-llm README, and the test fixtures that pin 1, including __testing__/npm-registry.ts. sitePluginRegistry(config, folderPlugins, settings) already takes the registry; plugins/enabled.ts reads site.json directly for the enabled set.
+<!-- SECTION:NOTES:END -->

@@ -4,14 +4,14 @@
 
 {% block settingsProblems %}
   {{ field.problem('settings-title', problems.title) }}
-  {{ field.problem('settings-base-url', problems.baseUrl) }}
+  {{ field.problem('settings-base-url', problems.base_url) }}
   {{ field.problem('settings-timezone', problems.timezone) }}
   {{ field.problem('settings-language', problems.language) }}
   {{ field.problem('settings-locale', problems.locale) }}
   {{ field.problem('settings-icon', problems.icon) }}
   {{ field.problem('settings-license', problems.license) }}
-  {{ field.problem('settings-license-url', problems.licenseUrl) }}
-  {{ field.problem('settings-license-name', problems.licenseName) }}
+  {{ field.problem('settings-license-url', problems.license_url) }}
+  {{ field.problem('settings-license-name', problems.license_name) }}
 {% endblock %}
 
 {% block settingsFields %}
@@ -30,8 +30,8 @@
   {% endcall %}
 
   {% set baseUrlHint %}In effect: <code>{{ baseUrlInEffect }}</code>. {{ baseUrlNote }}{% endset %}
-  {{ field.text('settings-base-url', fields.baseUrl, 'Base URL', form.baseUrl,
-       error=problems.baseUrl, hint=baseUrlHint, inputmode='url',
+  {{ field.text('settings-base-url', fields.base_url, 'Base URL', form.base_url,
+       error=problems.base_url, hint=baseUrlHint, inputmode='url',
        readonly=baseUrlOverridden, disabled=baseUrlOverridden) }}
 
   {% set timezoneHint %}An IANA name, such as <code>Europe/London</code> or <code>UTC</code>.{% endset %}
@@ -86,11 +86,11 @@
     <option value="custom"{% if form.license == 'custom' %} selected{% endif %}>Custom license</option>
   {% endcall %}
 
-  {{ field.text('settings-license-url', fields.licenseUrl, 'Custom license URL', form.licenseUrl,
-       error=problems.licenseUrl, inputmode='url', hint='Where its terms are. Only read for a custom license.') }}
+  {{ field.text('settings-license-url', fields.license_url, 'Custom license URL', form.license_url,
+       error=problems.license_url, inputmode='url', hint='Where its terms are. Only read for a custom license.') }}
 
-  {{ field.text('settings-license-name', fields.licenseName, 'Custom license name', form.licenseName,
-       error=problems.licenseName, hint='What the footer calls it. Only read for a custom license.') }}
+  {{ field.text('settings-license-name', fields.license_name, 'Custom license name', form.license_name,
+       error=problems.license_name, hint='What the footer calls it. Only read for a custom license.') }}
 {% endblock %}
 
 {% block settingsPanels %}{% endblock %}

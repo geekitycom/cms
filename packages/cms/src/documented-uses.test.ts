@@ -22,6 +22,7 @@ import {
 } from './index.ts';
 import type { Cms } from './index.ts';
 import { addComment } from './testing.ts';
+import { SITE } from './site/namespace.ts';
 
 const BASE_URL = 'https://geekity.example';
 const PERMALINK = '/2026/01/release-one/';
@@ -110,15 +111,16 @@ describe('the feed builders, as docs/feeds.md uses them', () => {
       baseUrl: cms.config.baseUrl,
       users: () => listUsers(cms.config.dataDir),
     });
+    const settings = await cms.settings.values(SITE);
     const options = {
       baseUrl: cms.config.baseUrl,
       limit: 20,
-      cited: (url: string) => cms.replyContexts.read(url),
+      cited: (url: string) => cms.replyContexts.read(url, settings),
     };
 
     const siteWide = commentsRssFeed({
       site,
-      comments: feedComments(conversation.latest(20), options),
+      comments: feedComments(conversation.latest(20, settings), options),
       title: `${site.title}: comments`,
       href: '/',
       feedHref: '/comments/feed/',
@@ -126,7 +128,10 @@ describe('the feed builders, as docs/feeds.md uses them', () => {
     });
     const post = cms.store.getByPermalink(PERMALINK);
     assert.ok(post);
-    const onePost = feedComments(spokenIn(conversation.thread(post)), { ...options, post });
+    const onePost = feedComments(spokenIn(conversation.thread(post, settings)), {
+      ...options,
+      post,
+    });
 
     assert.match(siteWide, /Congratulations\./);
     assert.deepEqual(

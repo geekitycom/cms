@@ -1,8 +1,6 @@
 import type { Hono, MiddlewareHandler } from 'hono';
 
 import type { GeekityEnv } from './env.ts';
-import { effectiveBaseUrl } from '../site/settings.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { parseAuthorPath } from '../content/authors.ts';
 import { requestPath } from './request.ts';
 import { SCOPES } from '../indieauth/request.ts';
@@ -108,22 +106,16 @@ export function protectedResourceMetadata(baseUrl: string): ProtectedResourceMet
   };
 }
 
-/** The site's base URL as every absolute URL it hands out is built from. */
-export function siteBaseUrl(c: { var: Pick<GeekityEnv['Variables'], 'config'> }): string {
-  const { config } = c.var;
-  return effectiveBaseUrl(config, readSiteSettings(config.contentDir));
-}
-
 /**
  * Mount the authorization server metadata at its own path and at the
  * well-known one, and the protected resource metadata at its well-known one.
  */
 export function mountIndieAuthDiscovery(app: Hono<GeekityEnv>): void {
   for (const pathname of [INDIEAUTH_METADATA_PATH, OAUTH_METADATA_WELL_KNOWN_PATH]) {
-    app.get(pathname, (c) => c.json(authorizationServerMetadata(siteBaseUrl(c))));
+    app.get(pathname, (c) => c.json(authorizationServerMetadata(c.var.config.baseUrl)));
   }
   app.get(PROTECTED_RESOURCE_METADATA_PATH, (c) =>
-    c.json(protectedResourceMetadata(siteBaseUrl(c))),
+    c.json(protectedResourceMetadata(c.var.config.baseUrl)),
   );
 }
 
@@ -156,7 +148,7 @@ export const advertiseIdentityEndpoints: MiddlewareHandler<GeekityEnv> = async (
   const { status } = c.res;
   if (status !== 304 && (status < 200 || status >= 300)) return;
 
-  const baseUrl = siteBaseUrl(c);
+  const baseUrl = c.var.config.baseUrl;
   const metadata = authorizationServerMetadata(baseUrl);
   const links = [
     { rel: 'indieauth-metadata', href: `${baseUrl}${INDIEAUTH_METADATA_PATH}` },

@@ -53,10 +53,10 @@ export type ActorProfileLoader = (actorId: string) => Promise<ActorProfile | und
  * the one that can be chosen without asking, as it is for a relay.
  */
 export function signedProfileLoader(
-  contextOf: () => Context<FederationContextData>,
+  contextOf: () => Promise<Context<FederationContextData>>,
 ): ActorProfileLoader {
   return async (actorId) => {
-    const context = contextOf();
+    const context = await contextOf();
     const loaders = await siteLoaders(context);
     const found = await context.lookupObject(actorId, loaders);
     return isActor(found) ? await profileFrom(found, loaders) : undefined;

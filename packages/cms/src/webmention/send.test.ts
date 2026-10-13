@@ -181,9 +181,9 @@ async function site(
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,
-      baseUrl: BASE_URL,
-      notifyServer: '',
-      webmentionsSend: options.webmentionsSend ?? true,
+      base_url: BASE_URL,
+      notify_server: '',
+      webmentions_send: options.webmentionsSend ?? true,
     },
   });
 

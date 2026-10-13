@@ -13,6 +13,7 @@ import type { Cms } from '../index.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import { commentsFile } from './records.ts';
 import { COMMENT_FIELDS } from './submission.ts';
+import { SITE } from '../site/namespace.ts';
 
 /**
  * A signed-in user's reply in a thread is a reply post (TASK-300): one record,
@@ -353,7 +354,10 @@ describe('a reply post written in the editor or over Micropub (AC #7)', () => {
     const cms = await site({ 'posts/2026-09-19-answer.md': ANSWER });
     await cms.replyContexts.settled();
 
-    const context = cms.replyContexts.read(`${BASE_URL}/comment/${NATIVE}/`);
+    const context = cms.replyContexts.read(
+      `${BASE_URL}/comment/${NATIVE}/`,
+      await cms.settings.values(SITE),
+    );
     assert.equal(context?.text, 'Ann says so.');
     assert.equal(context.author?.name, 'Ann');
 

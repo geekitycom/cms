@@ -333,7 +333,7 @@ inbox, as it does for a follower. Resend therefore reaches relays too.
 
 ```ts
 cms.admin.listRelays(); // inbox, actor, state, reason, follow id, times
-cms.relays.sync(); // reconcile the records with the setting
+await cms.relays.sync(); // reconcile the records with the setting
 await cms.relays.retry(inboxId); // send the follow again
 ```
 

@@ -149,16 +149,20 @@ nothing can delete `server.ts` and run
 [`geekity serve`](cli.md#how-geekity-serve-runs).
 
 ```ts
-import { createCms } from '@geekity/cms';
+import { createCms, settleConfig } from '@geekity/cms';
 
 import config from './geekity.config.ts';
 
-const cms = createCms(config);
+const cms = createCms(await settleConfig(config));
 
 cms.app.get('/hello/', (c) => c.text('a route of my own'));
 
 await cms.serve();
 ```
+
+`settleConfig(config)` resolves the config and takes the base URL from the
+site's settings when the environment and the config file set none. See
+[The base URL setting](settings.md#the-base-url-setting).
 
 `createCms(config)` returns a `Cms`:
 

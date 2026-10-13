@@ -107,7 +107,7 @@ export interface AkismetCheckerOptions {
    * rewrites: reading it when a comment arrives is what makes a change to it
    * take effect at once, the way every other setting does (decision-9).
    */
-  language: () => string;
+  language: () => Promise<string>;
   /** The HTTP client. Defaults to the global `fetch`; a test hands in its own. */
   fetch?: typeof fetch | undefined;
   /** Where a failure is reported. Defaults to the console. */
@@ -143,15 +143,16 @@ export function createAkismetChecker(options: AkismetCheckerOptions): CommentChe
   /** Send one call, or nothing at all when the site has no key. */
   async function send(
     method: 'comment-check' | 'submit-spam' | 'submit-ham',
-    fields: (key: string) => URLSearchParams,
+    fields: (key: string, language: string) => URLSearchParams,
   ): Promise<AkismetAnswer | undefined> {
     const key = await options.settings.get(AKISMET.key);
     if (key === '') return undefined;
+    const language = await options.language();
 
     try {
       const answer = await post(
         `${AKISMET_ENDPOINT}/${method}`,
-        fields(key),
+        fields(key, language),
         options.fetch,
         options.timeoutMs,
       );
@@ -170,7 +171,9 @@ export function createAkismetChecker(options: AkismetCheckerOptions): CommentChe
 
   return {
     async check(submission) {
-      const answer = await send('comment-check', (key) => checkFields(key, submission, options));
+      const answer = await send('comment-check', (key, language) =>
+        checkFields(key, language, submission, options),
+      );
       if (answer === undefined) return 'unknown';
 
       const said = answer.body.trim();
@@ -191,11 +194,11 @@ export function createAkismetChecker(options: AkismetCheckerOptions): CommentChe
     },
 
     async reportSpam(report) {
-      await send('submit-spam', (key) => reportFields(key, report, options));
+      await send('submit-spam', (key, language) => reportFields(key, language, report, options));
     },
 
     async reportHam(report) {
-      await send('submit-ham', (key) => reportFields(key, report, options));
+      await send('submit-ham', (key, language) => reportFields(key, language, report, options));
     },
   };
 }
@@ -203,6 +206,7 @@ export function createAkismetChecker(options: AkismetCheckerOptions): CommentChe
 /** The fields one `comment-check` carries. */
 function checkFields(
   key: string,
+  language: string,
   submission: CommentSubmission,
   options: AkismetCheckerOptions,
 ): URLSearchParams {
@@ -216,7 +220,7 @@ function checkFields(
     api_key: key,
     blog: submission.baseUrl,
     blog_charset: 'UTF-8',
-    blog_lang: blogLang(options.language()),
+    blog_lang: blogLang(language),
     user_ip: submission.address,
     user_agent: submission.userAgent,
     referrer: submission.referrer,
@@ -250,6 +254,7 @@ function checkFields(
  */
 function reportFields(
   key: string,
+  language: string,
   report: CommentReport,
   options: AkismetCheckerOptions,
 ): URLSearchParams {
@@ -259,7 +264,7 @@ function reportFields(
     api_key: key,
     blog: report.baseUrl,
     blog_charset: 'UTF-8',
-    blog_lang: blogLang(options.language()),
+    blog_lang: blogLang(language),
     permalink: report.url,
     comment_type: comment.source === 'webmention' ? 'webmention' : 'comment',
     comment_author: comment.author.name,

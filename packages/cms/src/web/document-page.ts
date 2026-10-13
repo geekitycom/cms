@@ -8,7 +8,6 @@ import { CONTACT_NOTICE_PARAM, contactNoticeFor } from '../contact/form.ts';
 import type { Document } from '../content/document.ts';
 import { isListed } from '../content/served.ts';
 import type { GeekityEnv } from './env.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { pingbackEndpointFor } from '../webmention/pingback.ts';
 import { WEBMENTION_PATH } from '../webmention/endpoint.ts';
@@ -133,7 +132,10 @@ function commentNotice(
       admin: c.var.admin,
       document,
       id: c.req.query(COMMENT_REPLY_PARAM),
-      thread: viewer === undefined ? undefined : c.var.conversation.thread(document),
+      thread:
+        viewer === undefined
+          ? undefined
+          : c.var.conversation.thread(document, c.var.siteAtRequestStart),
     }),
     // And the thank-you after a contact form was sent, which travels the same
     // way for the same reason (TASK-56).
@@ -162,6 +164,6 @@ function contactNotice(c: Context<GeekityEnv>): Record<string, unknown> {
  * off the next restart.
  */
 function webmentionLinks(c: Context<GeekityEnv>): string[] {
-  if (!readSiteSettings(c.var.config.contentDir).webmentionsReceive) return [];
+  if (!c.var.siteAtRequestStart.webmentions_receive) return [];
   return [`<${WEBMENTION_PATH}>; rel="webmention"`];
 }

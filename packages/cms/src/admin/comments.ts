@@ -5,7 +5,6 @@ import { isModerationAction, moderateComment } from '../comments/moderate.ts';
 import { writeReplyPost } from '../comments/reply-post.ts';
 import type { CommentRecords } from '../comments/records.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { pageCount } from '../web/pagination.ts';
 import { documentSite } from '../web/document-site.ts';
@@ -287,7 +286,7 @@ function recordsOf(c: Context<GeekityEnv>): CommentRecords {
 /** One stored comment as the screen shows it. */
 function commentRow(c: Context<GeekityEnv>, comment: PostComment): CommentRow {
   const document = c.var.store.getBySlug(comment.slug);
-  const timezone = readSiteSettings(c.var.config.contentDir).timezone;
+  const timezone = c.var.siteAtRequestStart.timezone;
 
   return {
     id: comment.id,
@@ -305,7 +304,7 @@ function commentRow(c: Context<GeekityEnv>, comment: PostComment): CommentRow {
     post:
       document === undefined
         ? comment.slug
-        : postLabel(document, (url) => c.var.replyContexts.read(url)),
+        : postLabel(document, (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart)),
     postUrl: comment.permalink === '' ? null : comment.permalink,
     editUrl:
       document === undefined

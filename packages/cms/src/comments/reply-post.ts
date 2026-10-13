@@ -3,7 +3,6 @@ import { blankForm } from '../content/document-form.ts';
 import { POST_KIND } from '../content/document-kind.ts';
 import { writeDocument } from '../content/write.ts';
 import type { DocumentSite, WriteOutcome } from '../content/write.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { visibleReply } from './conversation.ts';
 import { commentPageHref } from '../content/guids.ts';
@@ -39,13 +38,13 @@ export async function writeReplyPost(
   site: DocumentSite,
   write: ReplyPostWrite,
 ): Promise<WriteOutcome> {
-  const { baseUrl, contentDir } = site.config;
+  const { baseUrl } = site.config;
   return await writeDocument(site, {
     kind: POST_KIND,
     document: undefined,
     draft: false,
     form: {
-      ...blankForm(POST_KIND, readSiteSettings(contentDir).timezone, site.store.now()),
+      ...blankForm(POST_KIND, site.timezone, site.store.now()),
       body: write.body,
       inReplyTo:
         write.answered === undefined

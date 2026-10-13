@@ -20,7 +20,7 @@ describe('the "email me about replies" box on a public post', () => {
     const dataDir = await box.dir('geekity-notify-field-data-');
     await writeSiteJson({
       contentDir,
-      settings: { ...DEFAULT_SITE_SETTINGS, baseUrl: BASE_URL, mailProvider: 'brevo' },
+      settings: { ...DEFAULT_SITE_SETTINGS, base_url: BASE_URL, mail_provider: 'brevo' },
     });
     const file = path.join(contentDir, 'posts', 'hello.md');
     await mkdir(path.dirname(file), { recursive: true });

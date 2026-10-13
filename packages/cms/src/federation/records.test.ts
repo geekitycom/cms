@@ -616,7 +616,7 @@ async function federatedDirs(): Promise<{ contentDir: string; dataDir: string }>
     settings: {
       ...DEFAULT_SITE_SETTINGS,
       title: 'Geekity',
-      baseUrl: BASE_URL,
+      base_url: BASE_URL,
       timezone: 'UTC',
     },
   });

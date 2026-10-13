@@ -71,3 +71,54 @@ export function oneOf<const T extends string>(choices: readonly T[]): SettingTyp
         };
   return { fromJson: parse, fromText: parse, toJson: (value) => value, toText: (value) => value };
 }
+
+export const nonEmptyText: SettingType<string> = {
+  fromJson: (raw) =>
+    typeof raw === 'string' && raw !== ''
+      ? { ok: true, value: raw }
+      : { ok: false, problem: 'must be text that is not empty' },
+  fromText: (value) => nonEmptyText.fromJson(value),
+  toJson: (value) => value,
+  toText: (value) => value,
+};
+
+export const optionalText: SettingType<string> = {
+  ...text,
+  toJson: (value) => (value === '' ? undefined : value),
+};
+
+export function wholeNumber(min: number, { coerced = false } = {}): SettingType<number> {
+  const parse = (raw: unknown, received: unknown = raw): Parsed<number> => {
+    const count = coerced ? Number(raw) : raw;
+    return typeof count === 'number' && Number.isInteger(count) && count >= min
+      ? { ok: true, value: count }
+      : {
+          ok: false,
+          problem: `must be a whole number of ${String(min)} or more, received ${JSON.stringify(received)}`,
+        };
+  };
+  return {
+    fromJson: (raw) => parse(raw),
+    fromText: (value) => parse(value.trim() === '' ? NaN : Number(value), value),
+    toJson: (value) => value,
+    toText: (value) => String(value),
+  };
+}
+
+export function jsonValue<V>(
+  fromJson: (raw: unknown) => Parsed<V>,
+  toJson: (value: V) => unknown,
+): SettingType<V> {
+  return {
+    fromJson,
+    fromText(value) {
+      try {
+        return fromJson(JSON.parse(value));
+      } catch {
+        return { ok: false, problem: `must be JSON, received ${JSON.stringify(value)}` };
+      }
+    },
+    toJson,
+    toText: (value) => JSON.stringify(toJson(value) ?? null),
+  };
+}

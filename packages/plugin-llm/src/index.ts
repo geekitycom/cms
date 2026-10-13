@@ -167,14 +167,14 @@ function lastCallCard(data: PluginDataFolder): PluginScreenCard {
 }
 
 function llmScreen(
-  connection: () => LlmConnection,
+  settings: PluginSettings<typeof LLM_SETTINGS>,
   data: PluginDataFolder,
   call: (request: LlmRequest) => Promise<ModelCall>,
 ): PluginScreen {
   return {
     title: 'LLM',
     render() {
-      const now = connection();
+      const now = settings.current();
       return [
         {
           title: 'Connection',
@@ -182,11 +182,11 @@ function llmScreen(
             {
               paragraph: [
                 'Calls go to ',
-                { code: `${withoutTrailingSlash(now.baseUrl)}/chat/completions` },
+                { code: `${withoutTrailingSlash(now.base_url)}/chat/completions` },
                 ' and ask for ',
-                { code: now.model },
+                { code: now.default_model },
                 ' unless they name a model. ',
-                now.apiKey === undefined
+                now.api_key === undefined
                   ? 'No API key is set, so no call is made.'
                   : 'An API key is set.',
               ],
@@ -229,11 +229,14 @@ export default definePlugin({
   hostApi: 1,
   register(host) {
     const settings = host.settings(LLM_SETTINGS);
-    const connection = () => connectionFrom(settings, host.siteInfo());
     const catalog = modelCatalog();
 
     async function call(request: LlmRequest): Promise<ModelCall> {
-      const made = await callModel(connection(), request, catalog);
+      const made = await callModel(
+        connectionFrom(settings, await host.siteInfo()),
+        request,
+        catalog,
+      );
       await recordCall(host.data, made);
       return made;
     }
@@ -249,6 +252,6 @@ export default definePlugin({
     }
 
     host.provide({ complete });
-    host.screen(llmScreen(connection, host.data, call));
+    host.screen(llmScreen(settings, host.data, call));
   },
 });

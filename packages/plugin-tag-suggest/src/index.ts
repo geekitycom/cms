@@ -267,13 +267,13 @@ export default definePlugin({
       id: 'suggest-tags',
       field: 'tags',
       label: 'Suggest tags',
-      suggest: (context) =>
+      suggest: async (context) =>
         suggestTags(
           host.use(LLM),
           {
             fetch: (url, init) => host.fetch(url, init),
             server: settings.current().tags_server,
-            userAgent: `Geekity-Tag-Suggest/${VERSION} (+${host.siteInfo().baseUrl})`,
+            userAgent: `Geekity-Tag-Suggest/${VERSION} (+${(await host.siteInfo()).baseUrl})`,
             data: host.data,
             timeoutMs: LOOKUP_TIMEOUT_MS,
           },

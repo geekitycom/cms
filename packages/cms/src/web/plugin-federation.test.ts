@@ -88,7 +88,7 @@ async function site(middleware: PluginFederationMiddleware, enabled = true): Pro
   writeUsers(dataDir, [{ username: USER, profile: { displayName: 'Ada' }, actorId: STORED_ID }]);
   await writeSiteJson({
     contentDir,
-    settings: { ...DEFAULT_SITE_SETTINGS, title: 'Geekity', baseUrl: BASE_URL, author: USER },
+    settings: { ...DEFAULT_SITE_SETTINGS, title: 'Geekity', base_url: BASE_URL, author: USER },
   });
   if (enabled) {
     const file = path.join(contentDir, '_data', 'site.json');

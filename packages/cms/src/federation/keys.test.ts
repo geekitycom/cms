@@ -225,7 +225,7 @@ describe('the actor’s keys across boots', () => {
 
     await writeSiteJson({
       contentDir,
-      settings: { ...DEFAULT_SITE_SETTINGS, baseUrl: BASE_URL },
+      settings: { ...DEFAULT_SITE_SETTINGS, base_url: BASE_URL },
     });
     // decision-14: the actor is a user, so there has to be one before the
     // site can publish a key at all.

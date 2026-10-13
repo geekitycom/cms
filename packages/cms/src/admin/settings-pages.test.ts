@@ -4,11 +4,11 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { SETTINGS_FIELDS } from '../site/settings-form.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
 import { ALL_SETTINGS_PAGES, SETTINGS_PAGES } from './settings-pages.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -84,11 +84,11 @@ describe('saving one settings page', () => {
       category_base: 'section',
     });
 
-    const settings = readSiteSettings(contentDir);
+    const settings = await siteSettingsIn(contentDir);
     assert.equal(settings.title, 'A Renamed Site', 'the General save landed');
-    assert.equal(settings.tagBase, 'topic', 'and so did the Permalinks one');
+    assert.equal(settings.tag_base, 'topic', 'and so did the Permalinks one');
     assert.equal(settings.tagline, 'and re-said', 'and neither undid the other');
-    assert.equal(settings.postsPerPage, 10, 'a field on neither page is untouched');
+    assert.equal(settings.posts_per_page, 10, 'a field on neither page is untouched');
   });
 
   it('lands beside a save of another page made at the same moment (AC #2)', async () => {
@@ -124,9 +124,9 @@ describe('saving one settings page', () => {
       [303, 303],
     );
 
-    const settings = readSiteSettings(contentDir);
+    const settings = await siteSettingsIn(contentDir);
     assert.equal(settings.title, 'Renamed', 'the General save is in the file');
-    assert.equal(settings.postsPerPage, 25, 'and so is the Reading one');
+    assert.equal(settings.posts_per_page, 25, 'and so is the Reading one');
 
     const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
@@ -158,9 +158,9 @@ describe('saving one settings page', () => {
       'and it is the Reading page that came back',
     );
 
-    const settings = readSiteSettings(contentDir);
-    assert.equal(settings.postsPerPage, 7, 'nothing at all was written');
-    assert.equal(settings.notifyServer, 'https://notify.example', 'not even the valid field');
+    const settings = await siteSettingsIn(contentDir);
+    assert.equal(settings.posts_per_page, 7, 'nothing at all was written');
+    assert.equal(settings.notify_server, 'https://notify.example', 'not even the valid field');
   });
 
   it('says nothing about a field on another page, however that page stands (AC #3)', async () => {
@@ -180,7 +180,7 @@ describe('saving one settings page', () => {
     const saved = await save(agent, '/admin/settings/reading', { posts_per_page: '3' });
 
     assert.equal(saved.status, 303, 'the Reading page saved');
-    assert.equal(readSiteSettings(contentDir).postsPerPage, 3);
+    assert.equal((await siteSettingsIn(contentDir)).posts_per_page, 3);
   });
 });
 

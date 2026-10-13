@@ -86,7 +86,7 @@ export interface PluginRegistryOptions extends PluginFetchOptions {
   dataDir: string;
   contentDir: string;
   env: Readonly<Record<string, string | undefined>>;
-  siteInfo(): PluginSiteInfo;
+  siteInfo(): Promise<PluginSiteInfo>;
 }
 
 /** An installed plugin after registration. */

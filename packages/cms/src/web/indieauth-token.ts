@@ -10,7 +10,6 @@ import {
   REVOCATION_PATH,
   TOKEN_PATH,
   USERINFO_PATH,
-  siteBaseUrl,
 } from './indieauth-discovery.ts';
 import { profileResponse, redeemCode, redemptionForm } from '../indieauth/redeem.ts';
 import type { RedemptionForm } from '../indieauth/redeem.ts';
@@ -78,7 +77,7 @@ function answer(c: Context<GeekityEnv>, issued: IssuedTokens, user: User): Respo
     scope: token.scopes.join(' '),
     expires_in: ACCESS_TOKEN_LIFETIME_MS / 1000,
     refresh_token: issued.refreshToken,
-    ...profileResponse(token, user, siteBaseUrl(c)),
+    ...profileResponse(token, user, c.var.config.baseUrl),
   });
 }
 
@@ -133,7 +132,7 @@ export function mountTokenInfoEndpoints(app: Hono<GeekityEnv>): void {
     (c) => {
       c.header('cache-control', 'no-store');
       const { token, user } = c.var.bearer;
-      return c.json(profileResponse(token, user, siteBaseUrl(c)).profile ?? {});
+      return c.json(profileResponse(token, user, c.var.config.baseUrl).profile ?? {});
     },
   );
 }

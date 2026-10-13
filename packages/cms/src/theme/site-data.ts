@@ -135,7 +135,9 @@ export interface SiteDataSource {
  * file that is missing or will not parse falls back to the defaults instead
  * of failing the request: a typo in `site.json` should not take the site down.
  */
-export function createSiteDataSource(config: ResolvedConfig): SiteDataSource {
+export function createSiteDataSource(
+  config: Pick<ResolvedConfig, 'contentDir' | 'baseUrl'>,
+): SiteDataSource {
   const file = path.join(config.contentDir, ...SITE_DATA_FILE.split('/'));
 
   let cached: Record<string, unknown> = {};

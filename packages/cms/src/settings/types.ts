@@ -46,7 +46,13 @@ export interface ConfigOverride<V> {
   value(config: ResolvedConfig): V | undefined;
 }
 
-export interface SettingDeclaration<V> {
+export type FileSpelling =
+  | { readonly fileKey?: string; readonly fileKeys?: never }
+  | { readonly fileKeys: readonly string[]; readonly fileKey?: never };
+
+export type SettingDeclaration<V> = SettingFields<V> & FileSpelling;
+
+export interface SettingFields<V> {
   readonly key: string;
   readonly type: SettingType<V>;
   readonly default: V;

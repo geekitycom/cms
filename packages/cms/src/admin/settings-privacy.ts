@@ -7,5 +7,5 @@ export const PRIVACY_SETTINGS: SettingsPage = {
   label: 'Privacy',
   path: settingsPagePath('privacy'),
   template: ADMIN_TEMPLATES.settingsPrivacy,
-  fields: ['locationSharing'],
+  fields: ['location_sharing'],
 };

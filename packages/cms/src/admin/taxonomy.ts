@@ -20,7 +20,7 @@ import { saveDocument } from '../content/save.ts';
 import type { TermUsage } from '../content/store.ts';
 import { documentContent } from '../content/writer.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
+import { updateSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import {
   forgetTerm,
@@ -252,7 +252,7 @@ export async function rewriteTerm(
     const saved = await saveDocument({
       contentDir,
       store,
-      timezone: readSiteSettings(c.var.config.contentDir).timezone,
+      timezone: c.var.siteAtRequestStart.timezone,
       path: indexed.path,
       content: {
         ...documentContent(document),
@@ -330,7 +330,7 @@ async function recordRedirects(
     contentDir: c.var.config.contentDir,
     change: (settings) => ({
       ...settings,
-      taxonomyRedirects: change(settings.taxonomyRedirects),
+      taxonomy_redirects: change(settings.taxonomy_redirects),
     }),
   });
 }

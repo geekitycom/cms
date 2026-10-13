@@ -6,7 +6,13 @@ import type { GeekityEnv } from './env.ts';
 
 type WriteVariables = Pick<
   GeekityEnv['Variables'],
-  'siteRecords' | 'store' | 'config' | 'announce' | 'replyContexts' | 'learnHandles'
+  | 'siteRecords'
+  | 'store'
+  | 'config'
+  | 'announce'
+  | 'replyContexts'
+  | 'learnHandles'
+  | 'siteAtRequestStart'
 >;
 
 /**
@@ -30,8 +36,9 @@ export function documentSiteFrom(
     config: variables.config,
     announce: variables.announce,
     writer,
+    timezone: variables.siteAtRequestStart.timezone,
     citedContext: (target) => variables.replyContexts.describe(target),
-    storedContext: (target) => variables.replyContexts.read(target),
+    storedContext: (target) => variables.replyContexts.read(target, variables.siteAtRequestStart),
     learnHandles: variables.learnHandles,
   };
 }

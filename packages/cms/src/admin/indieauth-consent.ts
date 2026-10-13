@@ -4,8 +4,6 @@ import type { AdminRender } from './documents.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { effectiveBaseUrl } from '../site/settings.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { findUserById, listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
@@ -72,7 +70,7 @@ export function mountAuthorizationEndpoint(app: Hono<GeekityEnv>): void {
       );
     }
     noteActivity(c, { user: user.username });
-    const baseUrl = effectiveBaseUrl(config, readSiteSettings(config.contentDir));
+    const baseUrl = config.baseUrl;
     return c.json(profileResponse(grant, user, baseUrl));
   });
 }
@@ -91,13 +89,13 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
     const { config } = c.var;
     const user = signedInUser(c);
     if (user === undefined) return c.redirect(ADMIN_PREFIX, 302);
-    const settings = readSiteSettings(config.contentDir);
-    const baseUrl = effectiveBaseUrl(config, settings);
+    const settings = c.var.siteAtRequestStart;
+    const { baseUrl } = config;
 
     const parsed = parseAuthorizationRequest(
       new URL(c.req.url).searchParams,
       baseUrl,
-      settings.clientsWithoutPkce,
+      settings.clients_without_pkce,
     );
     if (parsed.kind === 'unredirectable') return refuse(c, parsed.message);
     const { clientId, redirectUri } = parsed.kind === 'valid' ? parsed.request : parsed;
@@ -174,7 +172,7 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
     }
 
     const { request } = pending;
-    const baseUrl = effectiveBaseUrl(config, readSiteSettings(config.contentDir));
+    const baseUrl = config.baseUrl;
     if (stringOrEmpty(body['decision']) !== 'approve') {
       return c.redirect(
         answer(request.redirectUri, baseUrl, { error: 'access_denied', state: request.state }),

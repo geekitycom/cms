@@ -207,7 +207,6 @@ export {
 } from './legacy-migrations.ts';
 export type { LegacyActorKey, LegacySetting, LegacyUser } from './legacy-migrations.ts';
 export {
-  readSiteSettings,
   settingsFromSiteJson,
   siteDataPath,
   siteJsonFor,

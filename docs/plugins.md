@@ -235,6 +235,11 @@ variable overrides it, as
 [Plugin secrets](configuration.md#plugin-secrets) describes.
 `host.data` reads and writes other files in that folder.
 
+**Site info.** `await host.siteInfo()` resolves to the site's base URL and its
+title as the settings have it at that moment. It reads the settings, so it
+returns a promise; call it when the plugin handles a request, a command or a
+job rather than once in `register`.
+
 **The host API version and the peer range.** `HOST_API_VERSION` in
 `@geekity/cms/plugin` is the version of the host API this core provides. A
 plugin that targets another version is unavailable, with the reason on the

@@ -18,7 +18,8 @@ import { actorKeyFile, loadActorKeyPairs, writeActorKeyFile } from '../federatio
 import { addFollower, readFollowers } from '../federation/records.ts';
 import { acceptUpload, refusedUpload } from '../media/uploads.ts';
 import type { PluginComment, PluginSite } from '../plugin.ts';
-import { readSiteSettings } from '../site/site-json.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
+import { SITE } from '../site/namespace.ts';
 import { listUsers, setUserActorId } from '../site/users.ts';
 import { createPluginRegistry } from './registry.ts';
 import type { InstalledPlugin, PluginRegistry } from './registry.ts';
@@ -26,7 +27,8 @@ import type { InstalledPlugin, PluginRegistry } from './registry.ts';
 /** Every plugin the site config installs, and those from the plugins folder, registered. */
 export function sitePluginRegistry(
   config: ResolvedConfig,
-  folderPlugins: readonly InstalledPlugin[] = [],
+  folderPlugins: readonly InstalledPlugin[],
+  settings: Pick<SettingsRegistry, 'get'>,
 ): PluginRegistry {
   return createPluginRegistry(
     [
@@ -42,9 +44,9 @@ export function sitePluginRegistry(
       env: process.env,
       allowPrivateAddress: config.federation.allowPrivateAddress ?? false,
       lookup: config.hostLookup,
-      siteInfo: () => ({
+      siteInfo: async () => ({
         baseUrl: config.baseUrl,
-        title: readSiteSettings(config.contentDir).title,
+        title: await settings.get(SITE.title),
       }),
     },
   );

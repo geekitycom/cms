@@ -11,7 +11,8 @@ import type { ContactMessage } from '../contact/records.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
 import type { NotificationTimers } from '../notifications/digest.ts';
 import { retentionPolicyOf } from '../site/settings.ts';
-import { readSiteSettings } from '../site/site-json.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
+import { SITE } from '../site/namespace.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { outlived } from '../site/retention-policy.ts';
@@ -110,6 +111,7 @@ export interface CreateRetentionServiceOptions {
   readonly admin: AdminStore;
   /** Where the files are, and the clock the ages are measured by. */
   readonly config: Pick<ResolvedConfig, 'contentDir' | 'dataDir' | 'now'>;
+  readonly settings: Pick<SettingsRegistry, 'values'>;
   /** Defaults to the real interval timer. */
   readonly timers?: NotificationTimers | undefined;
   /** Defaults to `console`. */
@@ -132,7 +134,7 @@ const NOTHING: RetentionReport = { comments: 0, messagesDeleted: 0, messagesReda
 
 /** Build the retention sweep for one site. */
 export function createRetentionService(options: CreateRetentionServiceOptions): RetentionService {
-  const { admin, config } = options;
+  const { admin, config, settings } = options;
   const timers = options.timers ?? systemNotificationTimers;
   const logger = options.logger ?? console;
   const sweeps = createSerialQueue();
@@ -141,7 +143,7 @@ export function createRetentionService(options: CreateRetentionServiceOptions): 
   async function sweepOnce(): Promise<RetentionReport> {
     // Read every time, so a period changed on the Discussion screen holds from
     // the next sweep without a restart.
-    const policy = retentionPolicyOf(readSiteSettings(config.contentDir));
+    const policy = retentionPolicyOf(await settings.values(SITE));
     const now = config.now();
     const records = { admin, contentDir: config.contentDir, dataDir: config.dataDir };
 

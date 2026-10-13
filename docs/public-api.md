@@ -30,21 +30,22 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 
 ## Creating a site
 
-| Export                 | Kind     | What it is                                                                                                                      |
-| ---------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `createCms`            | function | Build a CMS around a site's config, or around one `resolveConfig` already resolved, which is used as it is.                     |
-| `defineConfig`         | function | Identity helper that gives a `geekity.config.ts` file type checking and completion without the site importing the type by hand. |
-| `resolveConfig`        | function | Merge a site's config with environment overrides and defaults.                                                                  |
-| `Cms`                  | type     | A running (or runnable) CMS instance.                                                                                           |
-| `DocumentChangeHook`   | type     | Something a site wants to happen when the index changes.                                                                        |
-| `FederationOverrides`  | type     | The federation stores and guards a site may swap through its config.                                                            |
-| `GeekityConfig`        | type     | What a site writes in `geekity.config.ts`.                                                                                      |
-| `GeekityEnv`           | type     | The Hono environment of `cms.app`: what a route handler reads from `c.var`.                                                     |
-| `IndexNowOverrides`    | type     | The IndexNow pieces a site may swap.                                                                                            |
-| `MailOverrides`        | type     | The mail pieces a site may swap.                                                                                                |
-| `ResolveConfigContext` | type     | Ambient inputs `resolveConfig` reads, injectable so the resolution is testable.                                                 |
-| `ResolvedConfig`       | type     | A `GeekityConfig` with every field filled in and every path absolute, frozen.                                                   |
-| `ServeContext`         | type     | What `geekity serve` hands the CMS it runs, beyond the site's config.                                                           |
+| Export                 | Kind     | What it is                                                                                                                                                                                    |
+| ---------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createCms`            | function | Build a CMS around a site's config, or around one `resolveConfig` already resolved, which is used as it is.                                                                                   |
+| `defineConfig`         | function | Identity helper that gives a `geekity.config.ts` file type checking and completion without the site importing the type by hand.                                                               |
+| `resolveConfig`        | function | Merge a site's config with environment overrides and defaults.                                                                                                                                |
+| `settleConfig`         | function | Resolve a config and take the base URL from the site's settings when the environment and the config file set none. `geekity` does this; a site that calls `createCms` itself awaits it first. |
+| `Cms`                  | type     | A running (or runnable) CMS instance.                                                                                                                                                         |
+| `DocumentChangeHook`   | type     | Something a site wants to happen when the index changes.                                                                                                                                      |
+| `FederationOverrides`  | type     | The federation stores and guards a site may swap through its config.                                                                                                                          |
+| `GeekityConfig`        | type     | What a site writes in `geekity.config.ts`.                                                                                                                                                    |
+| `GeekityEnv`           | type     | The Hono environment of `cms.app`: what a route handler reads from `c.var`.                                                                                                                   |
+| `IndexNowOverrides`    | type     | The IndexNow pieces a site may swap.                                                                                                                                                          |
+| `MailOverrides`        | type     | The mail pieces a site may swap.                                                                                                                                                              |
+| `ResolveConfigContext` | type     | Ambient inputs `resolveConfig` reads, injectable so the resolution is testable.                                                                                                               |
+| `ResolvedConfig`       | type     | A `GeekityConfig` with every field filled in and every path absolute, frozen.                                                                                                                 |
+| `ServeContext`         | type     | What `geekity serve` hands the CMS it runs, beyond the site's config.                                                                                                                         |
 
 ## Documents
 
@@ -97,6 +98,7 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `Conversation`          | type     | Everything under one post.                                                                                                                                                                                             |
 | `ConversationContext`   | type     | What reading a conversation needs: both indexes and the site's origin.                                                                                                                                                 |
 | `ConversationReader`    | type     | The three questions anything showing a conversation asks.                                                                                                                                                              |
+| `ConversationSite`      | type     | The site settings a conversation is read with: the title and author a post with no author is by, and the comment policy.                                                                                               |
 | `CreateRendererOptions` | type     | How to build a `Renderer`.                                                                                                                                                                                             |
 | `FeedComment`           | type     | One comment, as a feed shows it.                                                                                                                                                                                       |
 | `FeedSource`            | type     | Everything one feed is built from, whichever format it ends up in.                                                                                                                                                     |
@@ -150,43 +152,44 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 
 ## Users, settings and comments
 
-| Export               | Kind     | What it is                                                                                          |
-| -------------------- | -------- | --------------------------------------------------------------------------------------------------- |
-| `CONTACT_FIELDS`     | constant | The fields the contact form submits.                                                                |
-| `CONTACT_POST_PATH`  | constant | Where the contact form posts, under the CMS's own prefix.                                           |
-| `createUser`         | function | Hash the password and add the user to the file.                                                     |
-| `listUsers`          | function | Every user, by name, without password hashes.                                                       |
-| `readSiteSettings`   | function | A site's settings, as its `content/_data/site.json` says them right now.                            |
-| `setUserProfile`     | function | Write a user's profile, replacing whatever was there.                                               |
-| `CommentAuthor`      | type     | Who wrote a comment, as much as the site knows.                                                     |
-| `CommentChecker`     | type     | A third-party opinion on comments: the one seam anything like Akismet plugs into.                   |
-| `CommentContent`     | type     | What a comment says, in both the forms the site keeps.                                              |
-| `CommentFormContext` | type     | The comment form as a template receives it.                                                         |
-| `CommentKind`        | type     | One of `COMMENT_KINDS`.                                                                             |
-| `CommentNotices`     | type     | Whoever is told about a comment that has just been written.                                         |
-| `CommentProblems`    | type     | What a form got wrong, one message per field.                                                       |
-| `CommentRecord`      | type     | One comment, as its post's file under `content/_data/comments/` holds it.                           |
-| `CommentRecords`     | type     | What every writer here needs: the files it owns, and the index over them.                           |
-| `CommentReport`      | type     | What a stored comment's later reclassification tells the checker.                                   |
-| `CommentSource`      | type     | One of `COMMENT_SOURCES`.                                                                           |
-| `CommentStatus`      | type     | One of `COMMENT_STATUSES`.                                                                          |
-| `CommentSubmission`  | type     | Everything a checker is told about a comment on its way in.                                         |
-| `CommentVerdict`     | type     | What a checker can say.                                                                             |
-| `CommentViewer`      | type     | Who the site knows is commenting, when a valid session says so.                                     |
-| `ContactFormContext` | type     | The contact form as a template receives it.                                                         |
-| `ContactProblems`    | type     | What a form got wrong, one message per field.                                                       |
-| `CreateUserInput`    | type     | What `createUser` is given.                                                                         |
-| `Delivery`           | type     | How one attempt to deliver one activity to one recipient ended, and what the activity was.          |
-| `DeliveryStatus`     | type     | One of `DELIVERY_STATUSES`.                                                                         |
-| `PostComment`        | type     | A `CommentRecord` with the post it is on.                                                           |
-| `ProfileLink`        | type     | One thing a profile points at: somewhere else this person is.                                       |
-| `Relay`              | type     | The site's subscription to one relay.                                                               |
-| `RelayState`         | type     | One of `RELAY_STATES`.                                                                              |
-| `Session`            | type     | A login, or the anonymous session that carries a CSRF token to a visitor who has not logged in yet. |
-| `SiteSettings`       | type     | The settings a site holds, as `content/_data/site.json` says them.                                  |
-| `SubmissionType`     | type     | What a checker is told a submission is.                                                             |
-| `User`               | type     | An admin user.                                                                                      |
-| `UserProfile`        | type     | The public face of a user: what their archive is headed with and what their actor will carry.       |
+| Export               | Kind     | What it is                                                                                                  |
+| -------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `CONTACT_FIELDS`     | constant | The fields the contact form submits.                                                                        |
+| `CONTACT_POST_PATH`  | constant | Where the contact form posts, under the CMS's own prefix.                                                   |
+| `createUser`         | function | Hash the password and add the user to the file.                                                             |
+| `listUsers`          | function | Every user, by name, without password hashes.                                                               |
+| `SITE`               | constant | The `site` settings namespace, for `cms.settings.values(SITE)` and `cms.settings.get(SITE.title)`.          |
+| `setUserProfile`     | function | Write a user's profile, replacing whatever was there.                                                       |
+| `CommentAuthor`      | type     | Who wrote a comment, as much as the site knows.                                                             |
+| `CommentChecker`     | type     | A third-party opinion on comments: the one seam anything like Akismet plugs into.                           |
+| `CommentContent`     | type     | What a comment says, in both the forms the site keeps.                                                      |
+| `CommentFormContext` | type     | The comment form as a template receives it.                                                                 |
+| `CommentKind`        | type     | One of `COMMENT_KINDS`.                                                                                     |
+| `CommentNotices`     | type     | Whoever is told about a comment that has just been written.                                                 |
+| `CommentProblems`    | type     | What a form got wrong, one message per field.                                                               |
+| `CommentRecord`      | type     | One comment, as its post's file under `content/_data/comments/` holds it.                                   |
+| `CommentRecords`     | type     | What every writer here needs: the files it owns, and the index over them.                                   |
+| `CommentReport`      | type     | What a stored comment's later reclassification tells the checker.                                           |
+| `CommentSource`      | type     | One of `COMMENT_SOURCES`.                                                                                   |
+| `CommentStatus`      | type     | One of `COMMENT_STATUSES`.                                                                                  |
+| `CommentSubmission`  | type     | Everything a checker is told about a comment on its way in.                                                 |
+| `CommentVerdict`     | type     | What a checker can say.                                                                                     |
+| `CommentViewer`      | type     | Who the site knows is commenting, when a valid session says so.                                             |
+| `ContactFormContext` | type     | The contact form as a template receives it.                                                                 |
+| `ContactProblems`    | type     | What a form got wrong, one message per field.                                                               |
+| `CreateUserInput`    | type     | What `createUser` is given.                                                                                 |
+| `Delivery`           | type     | How one attempt to deliver one activity to one recipient ended, and what the activity was.                  |
+| `DeliveryStatus`     | type     | One of `DELIVERY_STATUSES`.                                                                                 |
+| `PostComment`        | type     | A `CommentRecord` with the post it is on.                                                                   |
+| `ProfileLink`        | type     | One thing a profile points at: somewhere else this person is.                                               |
+| `Relay`              | type     | The site's subscription to one relay.                                                                       |
+| `RelayState`         | type     | One of `RELAY_STATES`.                                                                                      |
+| `Session`            | type     | A login, or the anonymous session that carries a CSRF token to a visitor who has not logged in yet.         |
+| `SiteLicense`        | type     | The `license` setting: a Creative Commons key, or a custom license's URL and name.                          |
+| `SiteSettings`       | type     | The `site` namespace's values, one snake_case key per setting, as `cms.settings.values(SITE)` returns them. |
+| `SubmissionType`     | type     | What a checker is told a submission is.                                                                     |
+| `User`               | type     | An admin user.                                                                                              |
+| `UserProfile`        | type     | The public face of a user: what their archive is headed with and what their actor will carry.               |
 
 ## Mail
 

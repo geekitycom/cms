@@ -84,6 +84,7 @@ async function scratch() {
     config,
     announce: () => Promise.resolve(),
     writer: undefined,
+    timezone: 'UTC',
     citedContext: () => Promise.resolve(undefined),
     storedContext: () => undefined,
     learnHandles: () => Promise.resolve(),

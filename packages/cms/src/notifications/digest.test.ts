@@ -97,7 +97,7 @@ async function site(
     await writeFile(file, POST, 'utf8');
     await writeSiteJson({
       contentDir,
-      settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', baseUrl: BASE_URL },
+      settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', base_url: BASE_URL },
     });
   }
 

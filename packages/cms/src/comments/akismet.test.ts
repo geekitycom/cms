@@ -245,7 +245,7 @@ describe('asking Akismet about a comment', () => {
     const { fetch: stubbed, calls } = stub(() => new Response('false'));
     const checker = createAkismetChecker({
       settings: await keyed('the-key'),
-      language: () => 'en-GB',
+      language: () => Promise.resolve('en-GB'),
       fetch: stubbed,
     });
 
@@ -282,7 +282,7 @@ describe('asking Akismet about a comment', () => {
     const { fetch: stubbed, calls } = stub(() => new Response('true'));
     const checker = createAkismetChecker({
       settings: await unkeyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
     });
 
@@ -294,7 +294,7 @@ describe('asking Akismet about a comment', () => {
     const { fetch: stubbed } = stub(() => new Response('true'));
     const checker = createAkismetChecker({
       settings: await keyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
     });
 
@@ -307,7 +307,7 @@ describe('asking Akismet about a comment', () => {
     );
     const checker = createAkismetChecker({
       settings: await keyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
     });
 
@@ -318,7 +318,7 @@ describe('asking Akismet about a comment', () => {
     const { fetch: stubbed } = stub(() => new Response('false'));
     const checker = createAkismetChecker({
       settings: await keyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
     });
 
@@ -336,7 +336,7 @@ describe('asking Akismet about a comment', () => {
     });
     const checker = createAkismetChecker({
       settings: await keyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
       logger,
     });
@@ -356,7 +356,7 @@ describe('asking Akismet about a comment', () => {
     );
     const checker = createAkismetChecker({
       settings: await keyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
       logger,
     });
@@ -370,7 +370,7 @@ describe('asking Akismet about a comment', () => {
     const { fetch: stubbed } = stub(() => new Response('busy', { status: 503 }));
     const checker = createAkismetChecker({
       settings: await keyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
       logger,
     });
@@ -383,7 +383,7 @@ describe('asking Akismet about a comment', () => {
     const { fetch: stubbed, calls } = stub(() => new Response('false'));
     const checker = createAkismetChecker({
       settings: await keyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
     });
 
@@ -406,7 +406,7 @@ describe('asking Akismet about a comment', () => {
     const { fetch: stubbed, calls } = stub(() => new Response('false'));
     const checker = createAkismetChecker({
       settings: await keyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
     });
 
@@ -421,7 +421,7 @@ describe('asking Akismet about a comment', () => {
     const { fetch: stubbed, calls } = stub(() => new Response('false'));
     const checker = createAkismetChecker({
       settings: await keyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
       isTest: true,
     });
@@ -445,7 +445,7 @@ describe('telling Akismet a moderator disagreed', () => {
     );
     const checker = createAkismetChecker({
       settings: await keyed('the-key'),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
     });
 
@@ -471,7 +471,7 @@ describe('telling Akismet a moderator disagreed', () => {
     );
     const checker = createAkismetChecker({
       settings: await keyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
     });
 
@@ -485,7 +485,7 @@ describe('telling Akismet a moderator disagreed', () => {
     const { fetch: stubbed, calls } = stub(() => new Response('ok'));
     const checker = createAkismetChecker({
       settings: await unkeyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
     });
 
@@ -501,7 +501,7 @@ describe('telling Akismet a moderator disagreed', () => {
     });
     const checker = createAkismetChecker({
       settings: await keyed(),
-      language: () => 'en',
+      language: () => Promise.resolve('en'),
       fetch: stubbed,
       logger,
     });

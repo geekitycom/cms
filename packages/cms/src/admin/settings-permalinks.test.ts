@@ -3,9 +3,10 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 /**
  * The Permalinks settings page: the URLs the archives live at, and the ones
@@ -18,10 +19,10 @@ after(() => box.cleanup());
 describe('the taxonomy bases', () => {
   it('default to tag and category (AC #1, AC #3)', async () => {
     const cms = await box.site();
-    const settings = readSiteSettings(cms.config.contentDir);
+    const settings = await siteSettingsIn(cms.config.contentDir);
 
-    assert.equal(settings.tagBase, 'tag');
-    assert.equal(settings.categoryBase, 'category');
+    assert.equal(settings.tag_base, 'tag');
+    assert.equal(settings.category_base, 'category');
   });
 
   it('are seeded from an existing site.json, and defaulted when it has none (AC #3)', async () => {
@@ -34,10 +35,10 @@ describe('the taxonomy bases', () => {
     );
 
     const cms = await box.site({ contentDir });
-    const settings = readSiteSettings(cms.config.contentDir);
+    const settings = await siteSettingsIn(cms.config.contentDir);
 
-    assert.equal(settings.tagBase, 'topics');
-    assert.equal(settings.categoryBase, 'category', 'a key the old file lacks gets the default');
+    assert.equal(settings.tag_base, 'topics');
+    assert.equal(settings.category_base, 'category', 'a key the old file lacks gets the default');
   });
 
   it('move the archives and reach site.json when saved (AC #2, AC #3)', async () => {
@@ -91,9 +92,9 @@ describe('the taxonomy bases', () => {
       const response = await saveSettings(agent, 'permalinks', fields);
       assert.equal(response.status, 400, `${JSON.stringify(fields)} should be refused`);
 
-      const settings = readSiteSettings(cms.config.contentDir);
-      assert.equal(settings.tagBase, 'tag', 'the stored tag base is unchanged');
-      assert.equal(settings.categoryBase, 'category', 'and so is the category base');
+      const settings = await siteSettingsIn(cms.config.contentDir);
+      assert.equal(settings.tag_base, 'tag', 'the stored tag base is unchanged');
+      assert.equal(settings.category_base, 'category', 'and so is the category base');
     }
   });
 });
@@ -106,15 +107,19 @@ describe('the recorded archive renames', () => {
     await writeSiteJson({
       contentDir: cms.config.contentDir,
       settings: {
-        ...readSiteSettings(cms.config.contentDir),
-        taxonomyRedirects: [{ taxonomy: 'category', from: 'misc', to: 'general' }],
+        ...(await siteSettingsIn(cms.config.contentDir)),
+        taxonomy_redirects: [{ taxonomy: 'category', from: 'misc', to: 'general' }],
       },
     });
 
     await saveSettings(agent, 'permalinks', { tag_base: 'topics' });
 
-    assert.equal(readSiteSettings(cms.config.contentDir).tagBase, 'topics', 'the save landed');
-    assert.deepEqual(readSiteSettings(cms.config.contentDir).taxonomyRedirects, [
+    assert.equal(
+      (await siteSettingsIn(cms.config.contentDir)).tag_base,
+      'topics',
+      'the save landed',
+    );
+    assert.deepEqual((await siteSettingsIn(cms.config.contentDir)).taxonomy_redirects, [
       { taxonomy: 'category', from: 'misc', to: 'general' },
     ]);
 

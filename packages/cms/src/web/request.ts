@@ -94,5 +94,5 @@ export function queryFeedFormat(c: Context<GeekityEnv>): FeedFormat | undefined 
 }
 
 export function documentLabel(c: Context<GeekityEnv>, document: Document): string {
-  return postLabel(document, (url) => c.var.replyContexts.read(url));
+  return postLabel(document, (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart));
 }

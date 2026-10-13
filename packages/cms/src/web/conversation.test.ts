@@ -17,6 +17,7 @@ import type { Cms } from '../index.ts';
 import { createConversation } from './conversation.ts';
 import type { ConversationReader, Interaction, ThreadReply } from '../comments/conversation.ts';
 import { avatarHref } from '../avatars/avatars.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 
 const temporaryDirs: string[] = [];
 const stores: (AdminStore | ContentStore)[] = [];
@@ -176,7 +177,7 @@ describe('a post’s conversation', () => {
       published: '2026-09-02T11:00:00Z',
     });
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     assert.equal(conversation.counts.replies, 2);
     assert.equal(conversation.counts.total, 2);
@@ -222,7 +223,7 @@ describe('a post’s conversation', () => {
     });
     logReply(admin, { inReplyTo: POST, id: 'https://remote.example/notes/1' });
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     assert.deepEqual(visible(conversation.replies[0])?.author, {
       name: 'Ada Lovelace',
@@ -260,7 +261,7 @@ describe('a post’s conversation', () => {
       published: '2026-09-02T13:00:00Z',
     });
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     // Four replies in the thread, two of them at the top of it.
     assert.equal(conversation.counts.replies, 4);
@@ -292,7 +293,7 @@ describe('a post’s conversation', () => {
       id: 'https://remote.example/notes/1',
     });
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     assert.deepEqual(conversation.replies, []);
     assert.equal(conversation.counts.likes, 1);
@@ -329,7 +330,7 @@ describe('a post’s conversation', () => {
       }),
     });
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     assert.deepEqual(
       conversation.replies.map((reply) => reply.id),
@@ -358,7 +359,7 @@ describe('a post’s conversation', () => {
       }),
     });
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     assert.deepEqual(
       conversation.replies.map((reply) => reply.id),
@@ -376,7 +377,7 @@ describe('a post’s conversation', () => {
         '<a href="https://elsewhere.example/">link</a></p>',
     });
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     assert.equal(
       visible(conversation.replies[0])?.content,
@@ -408,7 +409,7 @@ describe('a post’s conversation', () => {
       object: 'https://blog.example/2026/09/other/',
     });
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     assert.equal(conversation.counts.likes, 2);
     assert.equal(conversation.counts.boosts, 1);
@@ -442,7 +443,7 @@ describe('a post’s conversation', () => {
       actor: 'https://remote.example/users/ada',
     });
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     assert.equal(conversation.counts.likes, 1);
   });
@@ -481,7 +482,7 @@ describe('a post’s conversation', () => {
       }),
     });
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     assert.equal(conversation.counts.likes, 0);
     assert.equal(conversation.counts.boosts, 1);
@@ -490,7 +491,7 @@ describe('a post’s conversation', () => {
   it('is empty for a post nobody has answered', async () => {
     const { conversation: read } = await reader();
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     assert.deepEqual(conversation.replies, []);
     assert.deepEqual(conversation.likes, []);
@@ -573,7 +574,7 @@ describe('how many answers a post has', () => {
       submitted: '2026-09-02T14:00:00.000Z',
     });
 
-    const counts = read.counts([hello(), second()]);
+    const counts = read.counts([hello(), second()], DEFAULT_SITE_SETTINGS);
 
     assert.equal(counts.get('/2026/09/hello/'), 3);
     assert.equal(counts.get('/2026/09/second/'), 1);
@@ -582,7 +583,7 @@ describe('how many answers a post has', () => {
   it('says zero for a post nobody has answered', async () => {
     const { conversation: read } = await reader();
 
-    assert.equal(read.counts([hello()]).get('/2026/09/hello/'), 0);
+    assert.equal(read.counts([hello()], DEFAULT_SITE_SETTINGS).get('/2026/09/hello/'), 0);
   });
 });
 
@@ -639,7 +640,7 @@ describe('a quote of a post (TASK-171)', () => {
     await approve(contentDir);
     logQuote(admin);
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     assert.deepEqual(conversation.replies, []);
     assert.equal(conversation.counts.mentions, 1);
@@ -660,7 +661,7 @@ describe('a quote of a post (TASK-171)', () => {
       await approve(contentDir);
       logQuote(admin, { spelling });
 
-      assert.equal(read.thread(hello()).counts.mentions, 1);
+      assert.equal(read.thread(hello(), DEFAULT_SITE_SETTINGS).counts.mentions, 1);
     });
   }
 
@@ -680,8 +681,8 @@ describe('a quote of a post (TASK-171)', () => {
       await arrange(contentDir);
       logQuote(admin);
 
-      assert.deepEqual(read.thread(hello()).mentions, []);
-      assert.equal(read.counts([hello()]).get('/2026/09/hello/'), 0);
+      assert.deepEqual(read.thread(hello(), DEFAULT_SITE_SETTINGS).mentions, []);
+      assert.equal(read.counts([hello()], DEFAULT_SITE_SETTINGS).get('/2026/09/hello/'), 0);
     });
   }
 
@@ -690,7 +691,7 @@ describe('a quote of a post (TASK-171)', () => {
     await approve(contentDir);
     logQuote(admin, { quoted: 'https://elsewhere.example/notes/1' });
 
-    assert.deepEqual(read.thread(hello()).mentions, []);
+    assert.deepEqual(read.thread(hello(), DEFAULT_SITE_SETTINGS).mentions, []);
   });
 
   it('is a reply, and only a reply, when it also answers the post', async () => {
@@ -698,14 +699,14 @@ describe('a quote of a post (TASK-171)', () => {
     await approve(contentDir);
     logQuote(admin, { inReplyTo: POST });
 
-    const conversation = read.thread(hello());
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
 
     assert.deepEqual(conversation.mentions, []);
     assert.deepEqual(
       conversation.replies.map((reply) => reply.id),
       [QUOTE],
     );
-    assert.equal(read.counts([hello()]).get('/2026/09/hello/'), 1);
+    assert.equal(read.counts([hello()], DEFAULT_SITE_SETTINGS).get('/2026/09/hello/'), 1);
     assert.equal(conversation.counts.total, 1);
   });
 
@@ -715,8 +716,11 @@ describe('a quote of a post (TASK-171)', () => {
     logQuote(admin);
     logReply(admin, { inReplyTo: POST, id: 'https://remote.example/notes/1' });
 
-    assert.equal(read.counts([hello(), second()]).get('/2026/09/hello/'), 1);
-    assert.equal(read.counts([hello(), second()]).get('/2026/09/second/'), 0);
+    assert.equal(read.counts([hello(), second()], DEFAULT_SITE_SETTINGS).get('/2026/09/hello/'), 1);
+    assert.equal(
+      read.counts([hello(), second()], DEFAULT_SITE_SETTINGS).get('/2026/09/second/'),
+      0,
+    );
   });
 
   it('is among the site’s latest answers, naming the post it quotes', async () => {
@@ -730,7 +734,7 @@ describe('a quote of a post (TASK-171)', () => {
       published: '2026-09-02T10:00:00Z',
     });
 
-    const latest = read.latest(10);
+    const latest = read.latest(10, DEFAULT_SITE_SETTINGS);
 
     assert.deepEqual(
       latest.map((said) => [said.id, said.kind, said.post.permalink]),
@@ -771,7 +775,7 @@ describe('the site’s latest answers', () => {
       status: 'pending',
     });
 
-    const latest = read.latest(10);
+    const latest = read.latest(10, DEFAULT_SITE_SETTINGS);
 
     assert.deepEqual(
       latest.map((said) => said.id),
@@ -811,7 +815,7 @@ describe('the site’s latest answers', () => {
       submitted: '2026-09-02T09:00:00.000Z',
     });
 
-    assert.deepEqual(read.latest(10), []);
+    assert.deepEqual(read.latest(10, DEFAULT_SITE_SETTINGS), []);
   });
 
   it('cuts the merged list to the limit', async () => {
@@ -832,7 +836,7 @@ describe('the site’s latest answers', () => {
     });
 
     assert.deepEqual(
-      read.latest(2).map((said) => said.id),
+      read.latest(2, DEFAULT_SITE_SETTINGS).map((said) => said.id),
       ['comment-1', 'https://remote.example/notes/10'],
     );
   });
@@ -1088,7 +1092,7 @@ describe('the RSVPs to an event (TASK-200 AC #2, AC #3)', () => {
       submitted: '2026-09-03T13:00:00Z',
     });
 
-    const conversation = read.thread(camp());
+    const conversation = read.thread(camp(), DEFAULT_SITE_SETTINGS);
 
     assert.deepEqual(
       conversation.rsvps.map((group) => [group.value, group.label]),
@@ -1136,7 +1140,9 @@ describe('the RSVPs to an event (TASK-200 AC #2, AC #3)', () => {
       receivedAt: '2026-09-04T09:00:00Z',
     });
 
-    assert.deepEqual(grouped(read.thread(camp())), { 'Not going': ['@ada@remote.example'] });
+    assert.deepEqual(grouped(read.thread(camp(), DEFAULT_SITE_SETTINGS)), {
+      'Not going': ['@ada@remote.example'],
+    });
   });
 
   it('shows no webmention RSVP a moderator has not approved', async () => {
@@ -1150,7 +1156,7 @@ describe('the RSVPs to an event (TASK-200 AC #2, AC #3)', () => {
       submitted: '2026-09-03T12:00:00Z',
     });
 
-    assert.deepEqual(read.thread(camp()).rsvps, []);
+    assert.deepEqual(read.thread(camp(), DEFAULT_SITE_SETTINGS).rsvps, []);
   });
 
   it('takes no Accept of a post that is no event, and no answer to something else', async () => {
@@ -1168,9 +1174,9 @@ describe('the RSVPs to an event (TASK-200 AC #2, AC #3)', () => {
       receivedAt: '2026-09-03T09:00:00Z',
     });
 
-    assert.deepEqual(read.thread(hello()).rsvps, []);
-    assert.equal(read.thread(hello()).counts.total, 0);
-    assert.deepEqual(read.thread(camp()).rsvps, []);
+    assert.deepEqual(read.thread(hello(), DEFAULT_SITE_SETTINGS).rsvps, []);
+    assert.equal(read.thread(hello(), DEFAULT_SITE_SETTINGS).counts.total, 0);
+    assert.deepEqual(read.thread(camp(), DEFAULT_SITE_SETTINGS).rsvps, []);
   });
 });
 
@@ -1199,13 +1205,13 @@ describe('reply posts in a conversation (TASK-300)', () => {
     logReply(admin, { inReplyTo: POST, id: 'https://remote.example/notes/1' });
     posts.upsert(replyPost('answer', 'https://remote.example/notes/1'));
 
-    const [note] = read.thread(hello()).replies;
+    const [note] = read.thread(hello(), DEFAULT_SITE_SETTINGS).replies;
     const answer = visible(note)?.replies[0];
     assert.equal(visible(answer)?.source, 'post');
     assert.equal(visible(answer)?.url, '/2026/09/answer/');
-    assert.equal(read.thread(hello()).counts.replies, 2);
+    assert.equal(read.thread(hello(), DEFAULT_SITE_SETTINGS).counts.replies, 2);
     // Only the note answers the post directly; the reply post answers the note.
-    assert.equal(read.counts([hello()]).get('/2026/09/hello/'), 1);
+    assert.equal(read.counts([hello()], DEFAULT_SITE_SETTINGS).get('/2026/09/hello/'), 1);
   });
 
   it('drops a note under a reply post once its author deletes it', async () => {
@@ -1227,7 +1233,7 @@ describe('reply posts in a conversation (TASK-300)', () => {
       }),
     });
 
-    const [answer] = read.thread(hello()).replies;
+    const [answer] = read.thread(hello(), DEFAULT_SITE_SETTINGS).replies;
     assert.equal(visible(answer)?.url, '/2026/09/answer/');
     assert.deepEqual(
       visible(answer)?.replies.map((reply) => reply.id),
@@ -1241,7 +1247,7 @@ describe('reply posts in a conversation (TASK-300)', () => {
     posts.upsert(two);
     posts.upsert(replyPost('three', 'https://blog.example/2026/09/two/'));
 
-    const thread = read.thread(two);
+    const thread = read.thread(two, DEFAULT_SITE_SETTINGS);
     assert.equal(thread.counts.replies, 1);
     assert.equal(visible(thread.replies[0])?.url, '/2026/09/three/');
   });
@@ -1252,7 +1258,7 @@ describe('reply posts in a conversation (TASK-300)', () => {
     posts.upsert(replyPost('one', POST));
     posts.upsert(replyPost('two', 'https://blog.example/2026/09/one/', '2026-09-04T09:00:00Z'));
 
-    const latest = read.latest(10);
+    const latest = read.latest(10, DEFAULT_SITE_SETTINGS);
     assert.deepEqual(
       latest.map((entry) => [entry.url, entry.post.permalink]),
       [
@@ -1298,16 +1304,28 @@ describe('what a /replies/ key names (TASK-327)', () => {
       users: () => [],
     });
 
-    assert.equal(read.repliesTo('0123456789abcdef'), undefined, 'an unknown key');
-    assert.equal(read.repliesTo(keyOf(POST))?.reply, null, 'the post itself');
-    assert.equal(read.repliesTo('00000000000000c1')?.reply?.id, '00000000000000c1', 'a comment');
     assert.equal(
-      read.repliesTo(keyOf(`${BASE_URL}/comment/00000000000000c1/`)),
+      read.repliesTo('0123456789abcdef', DEFAULT_SITE_SETTINGS),
+      undefined,
+      'an unknown key',
+    );
+    assert.equal(
+      read.repliesTo(keyOf(POST), DEFAULT_SITE_SETTINGS)?.reply,
+      null,
+      'the post itself',
+    );
+    assert.equal(
+      read.repliesTo('00000000000000c1', DEFAULT_SITE_SETTINGS)?.reply?.id,
+      '00000000000000c1',
+      'a comment',
+    );
+    assert.equal(
+      read.repliesTo(keyOf(`${BASE_URL}/comment/00000000000000c1/`), DEFAULT_SITE_SETTINGS),
       undefined,
       'a comment is named by its key alone, not the key of its page',
     );
     assert.equal(
-      read.repliesTo(keyOf('https://remote.example/notes/1'))?.reply?.id,
+      read.repliesTo(keyOf('https://remote.example/notes/1'), DEFAULT_SITE_SETTINGS)?.reply?.id,
       'https://remote.example/notes/1',
       'a fediverse note',
     );

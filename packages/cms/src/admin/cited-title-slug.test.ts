@@ -172,7 +172,7 @@ describe('a new untitled post that cites a page is named after its title (TASK-2
     const { cms, contentDir } = await site();
     await updateSiteSettings({
       contentDir,
-      change: (settings) => ({ ...settings, webmentionsSend: false }),
+      change: (settings) => ({ ...settings, webmentions_send: false }),
     });
     assert.equal(
       await micropubSlug(cms, [['like-of', VIDEO]]),

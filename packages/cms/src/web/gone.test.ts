@@ -73,11 +73,11 @@ async function site(files: Record<string, string>): Promise<Site> {
     settings: {
       ...DEFAULT_SITE_SETTINGS,
       title: 'Geekity',
-      baseUrl: BASE_URL,
+      base_url: BASE_URL,
       timezone: 'UTC',
       author: ADA.username,
-      notifyServer: '',
-      webmentionsReceive: true,
+      notify_server: '',
+      webmentions_receive: true,
     },
   });
   writeUsers(dataDir, [ADA]);

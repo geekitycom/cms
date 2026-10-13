@@ -47,6 +47,7 @@ export { createConversation, feedComments, spokenIn } from './conversation.ts';
 export type {
   Conversation,
   ConversationReader,
+  ConversationSite,
   Interaction,
   InteractionAuthor,
   InteractionCounts,

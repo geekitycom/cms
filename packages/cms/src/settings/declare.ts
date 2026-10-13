@@ -2,26 +2,30 @@ import { SETTING_NAME } from './names.ts';
 import type {
   DeclaredNamespace,
   NamespaceDeclaration,
-  SettingDeclaration,
+  FileSpelling,
+  SettingFields,
   SettingRef,
-  SettingType,
+  ValuesOf,
 } from './types.ts';
 
-type SettingInput<V> = Omit<SettingDeclaration<V>, 'key'>;
+type SettingInput<V> = Omit<SettingFields<V>, 'key' | 'default'> &
+  FileSpelling & {
+    readonly default: NoInfer<V>;
+  };
 
-type RefsOf<S> = {
-  readonly [K in keyof S]: S[K] extends { type: SettingType<infer V> } ? SettingRef<V> : never;
-};
+type RefsOf<S> = { readonly [K in keyof S]: SettingRef<S[K]> };
 
-export function declareNamespace<S extends Record<string, SettingInput<unknown>>>(
-  input: Omit<NamespaceDeclaration, 'settings'> & { readonly settings: S },
+export function declareNamespace<S extends Record<string, unknown>>(
+  input: Omit<NamespaceDeclaration, 'settings'> & {
+    readonly settings: { readonly [K in keyof S]: SettingInput<S[K]> };
+  },
 ): DeclaredNamespace & RefsOf<S> {
   const { settings: inputs, ...rest } = input;
   const settings = Object.entries(inputs).map(([key, each]) => {
     if (!SETTING_NAME.test(key) || key === 'declaration') {
       throw new Error(`${input.namespace}.${key} is not lower case words joined by "_".`);
     }
-    return { key, ...each };
+    return { key, ...(each as SettingInput<unknown>) };
   });
   const declaration: NamespaceDeclaration = { ...rest, settings };
   const refs = Object.fromEntries(
@@ -31,4 +35,10 @@ export function declareNamespace<S extends Record<string, SettingInput<unknown>>
     ]),
   );
   return { declaration, ...refs } as DeclaredNamespace & RefsOf<S>;
+}
+
+export function defaultValues<N extends DeclaredNamespace>(declared: N): ValuesOf<N> {
+  return Object.fromEntries(
+    declared.declaration.settings.map((each) => [each.key, each.default]),
+  ) as ValuesOf<N>;
 }

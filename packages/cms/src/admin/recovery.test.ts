@@ -36,7 +36,7 @@ async function site(
 
   await writeSiteJson({
     contentDir,
-    settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', baseUrl: 'https://blog.example' },
+    settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', base_url: 'https://blog.example' },
   });
 
   const cms = await box.open({
@@ -63,7 +63,7 @@ async function siteWithoutMail(): Promise<Cms> {
   const dataDir = await box.dir('geekity-recovery-nomail-data-');
   await writeSiteJson({
     contentDir,
-    settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', baseUrl: 'https://blog.example' },
+    settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', base_url: 'https://blog.example' },
   });
 
   const cms = await box.open({ contentDir, dataDir, baseUrl: 'https://blog.example' });
@@ -394,8 +394,8 @@ describe('a site that sends no email (AC #5)', () => {
       settings: {
         ...DEFAULT_SITE_SETTINGS,
         title: 'A Site',
-        baseUrl: 'https://blog.example',
-        mailProvider: 'smtp',
+        base_url: 'https://blog.example',
+        mail_provider: 'smtp',
       },
     });
     await settingsOver({ dataDir: cms.config.dataDir }).set(

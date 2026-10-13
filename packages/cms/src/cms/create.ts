@@ -30,6 +30,7 @@ import type { InstalledPlugin } from '../plugins/registry.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import type { RetentionService } from '../privacy/retention.ts';
 import type { Supervision } from '../supervisor/supervision.ts';
+import { SITE } from '../site/namespace.ts';
 import { messageOf } from '../util/errors.ts';
 import type { ReplyContextService, WebmentionService } from '../webmention/index.ts';
 import { syndicationTargetProblems } from '../webmention/syndication.ts';
@@ -359,6 +360,14 @@ export function createCms(
       }
 
       await startServices(lifecycle);
+
+      const stored = await booted.settings.get(SITE.base_url);
+      if (resolved.baseUrlSource === 'default' && stored !== '' && stored !== resolved.baseUrl) {
+        console.warn(
+          `The settings give the base URL as ${stored}, but this CMS was built for ` +
+            `${resolved.baseUrl}. Build it from \`await settleConfig(config)\` to serve the setting.`,
+        );
+      }
 
       // A syndication target the site declares badly is ignored everywhere,
       // and said so once here rather than on every page (TASK-155).

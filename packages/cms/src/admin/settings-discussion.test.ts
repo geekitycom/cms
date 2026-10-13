@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { readSiteSettings } from '../site/site-json.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings, settingsPageUrl } from './__testing__/settings.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 /**
  * The Discussion settings page: comments, webmentions, and the closing window.
@@ -27,12 +27,12 @@ describe('the Discussion settings page', () => {
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
 
-    assert.equal(readSiteSettings(contentDir).comments, true, 'a new site takes comments');
+    assert.equal((await siteSettingsIn(contentDir)).comments, true, 'a new site takes comments');
 
     // The box cleared: a browser sends the field not at all.
     const off = await saveSettings(agent, 'discussion', { comments: '' });
     assert.equal(off.status, 303);
-    assert.equal(readSiteSettings(contentDir).comments, false);
+    assert.equal((await siteSettingsIn(contentDir)).comments, false);
 
     const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
@@ -40,7 +40,7 @@ describe('the Discussion settings page', () => {
     assert.equal(written['comments'], false, 'and site.json says so');
 
     await saveSettings(agent, 'discussion', { comments: '1' });
-    assert.equal(readSiteSettings(contentDir).comments, true);
+    assert.equal((await siteSettingsIn(contentDir)).comments, true);
   });
 
   it('keeps the closing window and both webmention switches', async () => {
@@ -55,10 +55,10 @@ describe('the Discussion settings page', () => {
     });
     assert.equal(saved.status, 303);
 
-    const settings = readSiteSettings(contentDir);
-    assert.equal(settings.commentsCloseAfterDays, 30);
-    assert.equal(settings.webmentionsSend, true);
-    assert.equal(settings.webmentionsReceive, false);
+    const settings = await siteSettingsIn(contentDir);
+    assert.equal(settings.comments_close_after_days, 30);
+    assert.equal(settings.webmentions_send, true);
+    assert.equal(settings.webmentions_receive, false);
   });
 
   it('refuses a closing window that is not a whole number of days, and writes nothing', async () => {
@@ -77,8 +77,8 @@ describe('the Discussion settings page', () => {
       assert.match(await response.text(), /whole number of days/, JSON.stringify(bad));
     }
 
-    const settings = readSiteSettings(contentDir);
-    assert.equal(settings.commentsCloseAfterDays, 21, 'nothing was written');
+    const settings = await siteSettingsIn(contentDir);
+    assert.equal(settings.comments_close_after_days, 21, 'nothing was written');
     assert.equal(settings.comments, true, 'not even the field that was valid');
   });
 
@@ -86,10 +86,10 @@ describe('the Discussion settings page', () => {
     const contentDir = await box.dir('geekity-settings-retention-default-');
     const cms = await box.site({ contentDir });
 
-    const settings = readSiteSettings(contentDir);
-    assert.equal(settings.commentEmailRetentionDays, 0);
-    assert.equal(settings.addressHashRetentionDays, 0);
-    assert.equal(settings.contactMessageRetentionDays, 0);
+    const settings = await siteSettingsIn(contentDir);
+    assert.equal(settings.comment_email_retention_days, 0);
+    assert.equal(settings.address_hash_retention_days, 0);
+    assert.equal(settings.contact_message_retention_days, 0);
 
     const agent = await signedIn(cms);
     const page = await (await agent.get(settingsPageUrl('discussion'))).text();
@@ -127,10 +127,10 @@ describe('the Discussion settings page', () => {
     });
     assert.equal(saved.status, 303);
 
-    const settings = readSiteSettings(contentDir);
-    assert.equal(settings.commentEmailRetentionDays, 90);
-    assert.equal(settings.addressHashRetentionDays, 0);
-    assert.equal(settings.contactMessageRetentionDays, 730);
+    const settings = await siteSettingsIn(contentDir);
+    assert.equal(settings.comment_email_retention_days, 90);
+    assert.equal(settings.address_hash_retention_days, 0);
+    assert.equal(settings.contact_message_retention_days, 730);
 
     const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
@@ -154,6 +154,10 @@ describe('the Discussion settings page', () => {
       assert.equal(response.status, 400, field);
       assert.match(await response.text(), /whole number of days, or 0 to keep/, field);
     }
-    assert.equal(readSiteSettings(contentDir).commentEmailRetentionDays, 0, 'nothing written');
+    assert.equal(
+      (await siteSettingsIn(contentDir)).comment_email_retention_days,
+      0,
+      'nothing written',
+    );
   });
 });

@@ -23,7 +23,7 @@ import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../web/env.ts';
 import { formFromSettings, SETTINGS_FIELDS, settingsProblems } from '../site/settings-form.ts';
-import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
+import { updateSiteSettings } from '../site/site-json.ts';
 import { trimmedField } from '../util/forms.ts';
 import { listSiteThemes, PACKAGED_THEME, PACKAGED_THEME_DIR, readTheme } from '../theme/themes.ts';
 import type { Theme } from '../theme/themes.ts';
@@ -145,7 +145,7 @@ export function mountAppearanceScreen(
     // a typed one would have been refused by: a folder that is not a theme, a
     // theme that has been deleted, and a name that is a path are all one "no".
     const form = {
-      ...formFromSettings(readSiteSettings(c.var.config.contentDir)),
+      ...formFromSettings(c.var.siteAtRequestStart),
       theme: submitted,
     };
     const problem = settingsProblems(form, ['theme'], { themesDir: c.var.config.themesDir }).theme;
@@ -173,7 +173,7 @@ export function mountAppearanceScreen(
   /** Everything the themes template renders. */
   function screen(c: Context<GeekityEnv>): Record<string, unknown> {
     const themesDir = c.var.config.themesDir;
-    const chosen = readSiteSettings(c.var.config.contentDir).theme;
+    const chosen = c.var.siteAtRequestStart.theme;
     const found = listSiteThemes(themesDir);
 
     return {

@@ -109,12 +109,12 @@ describe('a site with no mail configuration (AC #5)', () => {
   });
 
   it('is not configured when the provider is named but its credential is missing', async () => {
-    const { mail } = await site({ settings: { mailProvider: 'brevo' } });
+    const { mail } = await site({ settings: { mail_provider: 'brevo' } });
     assert.equal(await mail.configured(), false);
   });
 
   it('is configured the moment the credential lands, with no restart', async () => {
-    const { mail, contentDir, dataDir } = await site({ settings: { mailProvider: 'brevo' } });
+    const { mail, contentDir, dataDir } = await site({ settings: { mail_provider: 'brevo' } });
     assert.equal(await mail.configured(), false);
 
     await settingsOver({ contentDir, dataDir }).set(
@@ -132,9 +132,9 @@ describe('sending a templated message', () => {
     const { mail } = await site({
       provider,
       settings: {
-        mailFromName: 'A Site',
-        mailFromAddress: 'site@blog.example',
-        mailReplyTo: 'hello@blog.example',
+        mail_from_name: 'A Site',
+        mail_from_address: 'site@blog.example',
+        mail_reply_to: 'hello@blog.example',
       },
     });
 
@@ -167,7 +167,7 @@ describe('sending a templated message', () => {
 
   it("lets the caller's own subject and reply-to win over the template and the settings", async () => {
     const provider = createMemoryMailProvider();
-    const { mail } = await site({ provider, settings: { mailReplyTo: 'hello@blog.example' } });
+    const { mail } = await site({ provider, settings: { mail_reply_to: 'hello@blog.example' } });
 
     await mail.send({
       to: [{ address: 'ada@example.com', name: 'Ada' }],

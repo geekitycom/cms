@@ -113,8 +113,8 @@ async function site(
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,
-      baseUrl: BASE_URL,
-      notifyServer: options.notifyServer ?? NOTIFY_SERVER,
+      base_url: BASE_URL,
+      notify_server: options.notifyServer ?? NOTIFY_SERVER,
     },
   });
 

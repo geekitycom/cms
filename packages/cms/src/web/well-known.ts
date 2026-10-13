@@ -5,7 +5,6 @@ import { signedInAccount } from './signed-in.ts';
 import type { GeekityEnv } from './env.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 
 /** RFC 9116's location for a site's vulnerability disclosure contacts. */
 export const SECURITY_TXT_PATH = '/.well-known/security.txt';
@@ -33,15 +32,15 @@ export function securityTxt(input: {
   canonical: string;
 }): string | undefined {
   const { settings } = input;
-  if (settings.securityContacts.length === 0) return undefined;
+  if (settings.security_contacts.length === 0) return undefined;
 
   const lines = [
-    ...settings.securityContacts.map((contact) => `Contact: ${contact}`),
+    ...settings.security_contacts.map((contact) => `Contact: ${contact}`),
     `Expires: ${new Date(input.now.getTime() + SECURITY_TXT_LIFETIME_MS).toISOString()}`,
-    ...(settings.securityPolicy === '' ? [] : [`Policy: ${settings.securityPolicy}`]),
-    ...(settings.securityLanguages === ''
+    ...(settings.security_policy === '' ? [] : [`Policy: ${settings.security_policy}`]),
+    ...(settings.security_languages === ''
       ? []
-      : [`Preferred-Languages: ${settings.securityLanguages}`]),
+      : [`Preferred-Languages: ${settings.security_languages}`]),
     `Canonical: ${input.canonical}`,
   ];
   return `${lines.join('\n')}\n`;
@@ -51,7 +50,7 @@ export function securityTxt(input: {
 export function mountWellKnown(app: Hono<GeekityEnv>): void {
   app.get(SECURITY_TXT_PATH, (c) => {
     const config = c.var.config;
-    const settings = readSiteSettings(config.contentDir);
+    const settings = c.var.siteAtRequestStart;
     const body = securityTxt({
       settings,
       now: config.now(),

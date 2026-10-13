@@ -146,7 +146,7 @@ async function site(
     settings: {
       ...DEFAULT_SITE_SETTINGS,
       title: 'Geekity',
-      baseUrl: BASE_URL,
+      base_url: BASE_URL,
       relays: options.relays ?? [],
     },
   });

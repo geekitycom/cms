@@ -16,9 +16,11 @@ import { siteLoaders } from './site-loaders.ts';
  * A post behind a content warning shows the warning, not its words or its
  * picture, as a fediverse client would before the reader opens it.
  */
-export function citedPostReader(contextOf: () => Context<FederationContextData>): FediverseLookup {
+export function citedPostReader(
+  contextOf: () => Promise<Context<FederationContextData>>,
+): FediverseLookup {
   return async (url, signal) => {
-    const context = contextOf();
+    const context = await contextOf();
     const loaders = await siteLoaders(context, signal);
     const object = await context.lookupObject(url, { ...loaders, signal });
     if (

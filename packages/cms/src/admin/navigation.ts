@@ -28,7 +28,7 @@
 import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../web/env.ts';
-import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
+import { updateSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import {
   menuItemLineProblem,
@@ -220,7 +220,7 @@ export function mountNavigationScreen(
     const name = stringOrEmpty(body[NAVIGATION_FIELDS.menu]).trim();
     const items = stringOrEmpty(body[NAVIGATION_FIELDS.items]);
 
-    const settings = readSiteSettings(c.var.config.contentDir);
+    const settings = c.var.siteAtRequestStart;
     const shown = navigationScreen({
       menus: settings.menus,
       themesDir: c.var.config.themesDir,
@@ -261,7 +261,7 @@ export function mountNavigationScreen(
     const body = await c.req.parseBody();
     const name = stringOrEmpty(body[NAVIGATION_FIELDS.name]).trim();
 
-    const settings = readSiteSettings(c.var.config.contentDir);
+    const settings = c.var.siteAtRequestStart;
     const problem = addMenuProblem(name, settings.menus);
 
     if (problem !== undefined) {
@@ -309,7 +309,7 @@ export function mountNavigationScreen(
     const body = await c.req.parseBody();
     const name = stringOrEmpty(body[NAVIGATION_FIELDS.menu]).trim();
 
-    const settings = readSiteSettings(c.var.config.contentDir);
+    const settings = c.var.siteAtRequestStart;
     const shown = navigationScreen({
       menus: settings.menus,
       themesDir: c.var.config.themesDir,
@@ -347,7 +347,7 @@ export function mountNavigationScreen(
     c: Context<GeekityEnv>,
     typed?: { menu: string; items: string; problem: string },
   ): Record<string, unknown> {
-    const settings = readSiteSettings(c.var.config.contentDir);
+    const settings = c.var.siteAtRequestStart;
     const shown = navigationScreen({
       menus: settings.menus,
       themesDir: c.var.config.themesDir,

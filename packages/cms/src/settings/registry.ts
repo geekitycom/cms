@@ -10,7 +10,7 @@ import { AKISMET } from './akismet.ts';
 import { DEV_MODE } from './dev-mode.ts';
 import { MAIL } from './mail.ts';
 import { MAINTENANCE } from './maintenance.ts';
-import { reservedNamespaceProblem, settingVariable } from './names.ts';
+import { CORE_NAMESPACES, reservedNamespaceProblem, settingVariable } from './names.ts';
 import type {
   DeclaredNamespace,
   NamespaceDeclaration,
@@ -28,12 +28,62 @@ const CORE: readonly DeclaredNamespace[] = [MAINTENANCE, DEV_MODE, MAIL, AKISMET
 export interface CreateSettingsRegistryOptions {
   readonly config: ResolvedConfig;
   readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly coreDeclaredAbove?: readonly DeclaredNamespace[];
 }
 
 type Stored = Readonly<Record<string, unknown>>;
 
 type Override<V> =
   { readonly value: V; readonly source: ValueSource } | { readonly problem: string };
+
+function rawIn(declaration: SettingDeclaration<unknown>, stored: Stored): unknown {
+  const { fileKeys } = declaration;
+  if (fileKeys === undefined) return stored[declaration.fileKey ?? declaration.key];
+  if (fileKeys.every((key) => stored[key] === undefined)) return undefined;
+  return Object.fromEntries(fileKeys.map((key) => [key, stored[key]]));
+}
+
+function writeRaw(
+  next: Record<string, unknown>,
+  declaration: SettingDeclaration<unknown>,
+  json: unknown,
+): void {
+  const { fileKeys } = declaration;
+  const entries: [string, unknown][] =
+    fileKeys === undefined
+      ? [[declaration.fileKey ?? declaration.key, json]]
+      : fileKeys.map((key) => [key, isRecord(json) ? json[key] : undefined]);
+  for (const [key, value] of entries) {
+    if (value === undefined) delete next[key];
+    else next[key] = value;
+  }
+}
+
+export function storedValues<N extends DeclaredNamespace>(
+  declared: N,
+  stored: Readonly<Record<string, unknown>>,
+): ValuesOf<N> {
+  return Object.fromEntries(
+    declared.declaration.settings.map((declaration) => {
+      const raw = rawIn(declaration, stored);
+      const parsed = raw === undefined ? undefined : declaration.type.fromJson(raw);
+      return [declaration.key, parsed?.ok === true ? parsed.value : declaration.default];
+    }),
+  ) as ValuesOf<N>;
+}
+
+export function fileWith<N extends DeclaredNamespace>(
+  declared: N,
+  values: ValuesOf<N>,
+  existing: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const file: Record<string, unknown> = { ...existing };
+  const byKey = values as Readonly<Record<string, unknown>>;
+  for (const declaration of declared.declaration.settings) {
+    writeRaw(file, declaration, declaration.type.toJson(byKey[declaration.key]));
+  }
+  return file;
+}
 
 export function sourceText(source: ValueSource): string {
   switch (source.tier) {
@@ -55,9 +105,12 @@ export function overridden(source: ValueSource): boolean {
 export function createSettingsRegistry({
   config,
   env = process.env,
+  coreDeclaredAbove = [],
 }: CreateSettingsRegistryOptions): SettingsRegistry {
   const dirs = { contentDir: config.contentDir, dataDir: config.dataDir };
-  const namespaces = new Map(CORE.map(({ declaration }) => [declaration.namespace, declaration]));
+  const namespaces = new Map(
+    [...CORE, ...coreDeclaredAbove].map(({ declaration }) => [declaration.namespace, declaration]),
+  );
 
   function namespaceOf(name: string): NamespaceDeclaration {
     const found = namespaces.get(name);
@@ -119,7 +172,7 @@ export function createSettingsRegistry({
     declaration: SettingDeclaration<V>,
     stored: Stored,
   ): { value: V | undefined; problem: string | undefined } {
-    const raw = stored[declaration.key];
+    const raw = rawIn(declaration, stored);
     if (raw === undefined) return { value: undefined, problem: undefined };
     const parsed = declaration.type.fromJson(raw);
     return parsed.ok
@@ -137,11 +190,11 @@ export function createSettingsRegistry({
     changes: ReadonlyMap<string, unknown>,
   ): void {
     for (const declaration of namespace.settings) {
-      if (next[declaration.key] !== undefined) continue;
+      if (rawIn(declaration, next) !== undefined) continue;
       const kept = changes.has(declaration.key)
         ? undefined
         : storedValue(namespace, declaration, stored).value;
-      next[declaration.key] = declaration.type.toJson(kept ?? declaration.default);
+      writeRaw(next, declaration, declaration.type.toJson(kept ?? declaration.default));
     }
   }
 
@@ -238,8 +291,11 @@ export function createSettingsRegistry({
             continue;
           }
           accepted.set(key, parsed.value);
-          if (given === undefined) delete next[key];
-          else next[key] = declaration.type.toJson(parsed.value);
+          writeRaw(
+            next,
+            declaration,
+            given === undefined ? undefined : declaration.type.toJson(parsed.value),
+          );
           const previous = storedValue(namespace, declaration, stored).value ?? declaration.default;
           if (!isDeepStrictEqual(previous, parsed.value)) {
             changed.push([declaration, previous, parsed.value]);
@@ -295,7 +351,7 @@ export function createSettingsRegistry({
     },
 
     unregister(name) {
-      if (CORE.some(({ declaration }) => declaration.namespace === name)) return;
+      if ((CORE_NAMESPACES as readonly string[]).includes(name)) return;
       namespaces.delete(name);
     },
   };

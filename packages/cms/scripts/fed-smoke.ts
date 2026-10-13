@@ -160,9 +160,9 @@ async function main(): Promise<void> {
         ...DEFAULT_SITE_SETTINGS,
         title: 'Federation Smoke',
         tagline: 'A site that exists for one test',
-        baseUrl,
+        base_url: baseUrl,
         timezone: 'UTC',
-        postsPerPage: 10,
+        posts_per_page: 10,
         author: USERNAME,
       },
     });
