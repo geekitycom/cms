@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
 
-import { exportJwk, importJwk } from '@fedify/fedify';
+import { exportJwk, importJwk, InProcessMessageQueue } from '@fedify/fedify';
+import type { MessageQueue } from '@fedify/fedify';
 import { CryptographicKey, Endpoints, Image, Note, Person } from '@fedify/vocab';
 
 import { csrfField, signedIn } from '../admin/__testing__/harness.ts';
@@ -298,6 +299,8 @@ async function site(
     actorId?: string;
     /** Fedify's in-process queue, as a site that names none runs, instead of sending inline. */
     queued?: boolean;
+    /** A queue of the site's own, passed through config as `federation.queue`. */
+    queue?: MessageQueue;
   } = {},
 ): Promise<Site> {
   slowPage = Promise.resolve();
@@ -339,9 +342,11 @@ async function site(
     watch: options.watch ?? false,
     baseUrl: BASE_URL,
     federation:
-      options.queued === true
-        ? { allowPrivateAddress: true }
-        : { queue: null, allowPrivateAddress: true },
+      options.queue !== undefined
+        ? { queue: options.queue, allowPrivateAddress: true }
+        : options.queued === true
+          ? { allowPrivateAddress: true }
+          : { queue: null, allowPrivateAddress: true },
     hostLookup: (host) =>
       Promise.resolve(host === new URL(REMOTE_ORIGIN).hostname ? ['203.0.113.7'] : []),
     ...(options.now === undefined ? {} : { now: options.now }),
@@ -775,6 +780,43 @@ describe('a reload under geekity serve (TASK-288 AC #4)', () => {
     await next.close();
 
     assert.equal(delivered('Create').length, 1, 'the next worker did not send it again');
+  });
+});
+
+describe('a queue the site passes in (TASK-382)', () => {
+  it('sends a delivery queued just before the drain before the drain resolves', async () => {
+    const { cms } = await site({ queue: new InProcessMessageQueue() });
+    const agent = await signedIn(cms);
+
+    const response = await publishNewPost(agent);
+    assert.equal(response.status, 303, await response.text());
+    await cms.drain();
+
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+  });
+
+  it('stops listening on it when the site closes', async () => {
+    const inner = new InProcessMessageQueue();
+    const listening: Promise<void>[] = [];
+    const queue: MessageQueue = {
+      enqueue: (message, options) => inner.enqueue(message, options),
+      listen: (handler, options) => {
+        const listened = inner.listen(handler, options);
+        listening.push(listened);
+        return listened;
+      },
+    };
+    const { cms } = await site({ queue });
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    assert.ok(listening.length > 0, 'the site listened on the queue it was given');
+
+    await cms.close();
+
+    await nextEvent('every listener on the queue ending', (done, fail) => {
+      Promise.all(listening).then(() => done(), fail);
+    });
   });
 });
 
