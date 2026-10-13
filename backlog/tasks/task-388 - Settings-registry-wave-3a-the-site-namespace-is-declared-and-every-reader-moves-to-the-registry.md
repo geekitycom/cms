@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-13 16:45'
-updated_date: '2026-10-13 22:13'
+updated_date: '2026-10-13 22:30'
 labels: []
 milestone: m-38
 dependencies:
@@ -73,4 +73,6 @@ Verification: pnpm build && pnpm test (cms 5853, demo 32, plugin-llm 48, plugin-
 AC #4 is left for the commit: the code and both plugins are done; the commit that lands it is the orchestrator's (feat(cms)! with a BREAKING CHANGE footer). AC #5 is left open: createCms is synchronous and boot reads no site.json, but settleConfig runs before createCms rather than inside serve(); see the departure note above.
 
 AC #4: host.siteInfo() returns Promise<PluginSiteInfo>; plugin-llm and plugin-tag-suggest are updated in 0a836a6d and f95571a1; the core commit 5e8ac717 carries the BREAKING CHANGE footer. AC #5 is left unchecked on purpose: settleConfig is an exported async step that loadResolvedConfig and the test harness run before createCms, not a step inside serve(), because sync, resend and rebuild never call serve(). createCms stays synchronous and boot reads no site.json. Waiting on the user to accept the departure or ask for a change.
+
+Deslop flagged two behaviour shifts against main; both were checked and kept (5ccb99ef). (1) webmention/reply-contexts.ts handle no longer filters held targets out of 'after', because held became async. Main and the branch differ only when the citing post is trashed: main's forget then deleted a held target's entry, while a non-held target is never forgotten on either. Measured with a throwaway test running main's file beside the branch's; the branch now treats held and non-held targets alike, and a kept entry is not read while held. (2) notify.ts handle awaits notify() inside the gathering queue because notify() now awaits server() before queueing the ping; the fire-and-forget shape failed 'says nothing while a post is scheduled, and everything when it comes due' (settled() returned before the ping was queued). With 300 ms pings and two changes 10 ms apart, the second ping went out at 329 ms in both shapes; only gathering waits.
 <!-- SECTION:NOTES:END -->
