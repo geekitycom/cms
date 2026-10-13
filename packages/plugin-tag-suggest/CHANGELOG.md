@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/geekitycom/cms/compare/plugin-tag-suggest-v0.2.1...plugin-tag-suggest-v0.2.2) (2026-10-12)
+
+
+### Bug Fixes
+
+* **cms:** keep the site base path in email and reset links ([c27443c](https://github.com/geekitycom/cms/commit/c27443cdc2343537ba6c93ea57255ecc3b8059d1))
+
 ## [0.2.1](https://github.com/geekitycom/cms/compare/plugin-tag-suggest-v0.2.0...plugin-tag-suggest-v0.2.1) (2026-10-09)
 
 
