@@ -16,7 +16,6 @@ import { MAIL } from '../settings/mail.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import { EMAIL_PATTERN } from '../site/setting-values.ts';
 import type { SiteSettings } from '../site/settings.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { flash } from './flash.ts';
 import { forgetStored, setElsewhere } from './setting-overrides.ts';
@@ -66,14 +65,14 @@ export const EMAIL_SETTINGS: SettingsPage = {
   path: settingsPagePath('email'),
   template: ADMIN_TEMPLATES.settingsEmail,
   fields: [
-    'mailProvider',
-    'mailFromName',
-    'mailFromAddress',
-    'mailReplyTo',
-    'contactEmail',
-    'securityContacts',
-    'securityPolicy',
-    'securityLanguages',
+    'mail_provider',
+    'mail_from_name',
+    'mail_from_address',
+    'mail_reply_to',
+    'contact_email',
+    'security_contacts',
+    'security_policy',
+    'security_languages',
   ],
 
   panels: (c, settings) => mailPanel(c.var.settings, settings),
@@ -127,7 +126,7 @@ function mountMail(app: Hono<GeekityEnv>, _options: MountSettingsOptions): void 
     flash(
       c,
       'notice',
-      readSiteSettings(c.var.config.contentDir).mailProvider === 'none'
+      c.var.site.mail_provider === 'none'
         ? 'Saved. Choose a provider above and save the settings to start sending.'
         : 'Saved. Send a test message to prove it reaches you.',
     );
@@ -225,7 +224,7 @@ export async function mailPanel(
   const setBy = await setElsewhere(registry, MAIL);
   const brevoPresent = mail.brevo_api_key !== '';
   const smtpPresent = mail.smtp_host !== '';
-  const present = settings.mailProvider === 'brevo' ? brevoPresent : smtpPresent;
+  const present = settings.mail_provider === 'brevo' ? brevoPresent : smtpPresent;
 
   return {
     mailUrl: MAIL_PATH,
@@ -234,11 +233,11 @@ export async function mailPanel(
     mailTestUrl: MAIL_TEST_PATH,
     mailTestFields: MAIL_TEST_FIELDS,
     mailProviders: MAIL_PROVIDERS,
-    mailProvider: settings.mailProvider,
+    mailProvider: settings.mail_provider,
     mailSetBy: setBy,
     // Whether the chosen provider has what it needs. A key stored for the
     // provider that is not chosen is not "configured": nothing would use it.
-    mailConfigured: settings.mailProvider !== 'none' && present,
+    mailConfigured: settings.mail_provider !== 'none' && present,
     mailBrevoPresent: brevoPresent,
     mailSmtpPresent: smtpPresent,
     ...(brevoPresent && setBy['brevo_api_key'] === undefined
@@ -256,11 +255,11 @@ export async function mailPanel(
         }
       : {}),
     mailHint:
-      settings.mailProvider === 'none'
+      settings.mail_provider === 'none'
         ? 'This site sends no email. Password resets, moderation notices and contact messages are still recorded; they are simply not sent.'
         : present
           ? 'Mail is configured. Send a test message to prove it reaches you.'
-          : settings.mailProvider === 'brevo'
+          : settings.mail_provider === 'brevo'
             ? 'Brevo is chosen but there is no API key, so nothing is sent.'
             : 'SMTP is chosen but there is no server, so nothing is sent.',
   };

@@ -27,8 +27,8 @@ import {
   createCms,
   createUser,
   PACKAGED_THEME_DIR,
-  readSiteSettings,
   setUserProfile,
+  SITE,
 } from '@geekity/cms';
 import type { Cms } from '@geekity/cms';
 
@@ -440,7 +440,7 @@ describe('the demo contact page', () => {
   });
 
   it('keeps the address a message goes to out of the HTML', async () => {
-    const { contactEmail } = readSiteSettings(demo.contentDir);
+    const { contact_email: contactEmail } = await demo.cms.settings.values(SITE);
     assert.notEqual(contactEmail, '', 'the demo configures no contact address to look for');
 
     // Both what a visitor asks for and what the form itself is rendered into:

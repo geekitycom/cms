@@ -75,7 +75,7 @@ function hostFor(allowPrivateAddress: boolean): PluginHost {
       dataDir: DATA_DIR,
       contentDir: path.join(DATA_DIR, 'content'),
       env: {},
-      siteInfo: () => ({ baseUrl: 'https://example.test/', title: 'Example' }),
+      siteInfo: () => Promise.resolve({ baseUrl: 'https://example.test/', title: 'Example' }),
       allowPrivateAddress,
       lookup: (hostname) =>
         Promise.resolve(hostname === 'public.example' ? ['93.184.216.34'] : ['10.0.0.8']),

@@ -20,6 +20,7 @@ import { listUsers } from '../site/users.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { addFollower } from './records.ts';
+import { SITE } from '../site/namespace.ts';
 
 /** The site under test. Fedify answers by origin, so every request uses this one. */
 const BASE_URL = 'https://blog.example';
@@ -320,9 +321,9 @@ async function site(
       ...DEFAULT_SITE_SETTINGS,
       title: 'Geekity',
       tagline: 'A file-first CMS',
-      baseUrl: BASE_URL,
+      base_url: BASE_URL,
       timezone: 'UTC',
-      postsPerPage: 10,
+      posts_per_page: 10,
       author: ADA,
     },
   });
@@ -2133,7 +2134,10 @@ bookmark-of: ${SLOW_PAGE}
 
     await storeContext(cms, open);
 
-    assert.equal(cms.replyContexts.read(SLOW_PAGE)?.name, 'A slow page');
+    assert.equal(
+      cms.replyContexts.read(SLOW_PAGE, await cms.settings.values(SITE))?.name,
+      'A slow page',
+    );
     assert.deepEqual(deliveries, [], `saw ${JSON.stringify(deliveries)}`);
   });
 
@@ -2187,7 +2191,11 @@ Agreed.
     await cms.replyContexts.settled();
     await cms.delivery.settled();
 
-    assert.equal(cms.replyContexts.read(PLAIN_PAGE)?.name, 'A page', 'the context was stored');
+    assert.equal(
+      cms.replyContexts.read(PLAIN_PAGE, await cms.settings.values(SITE))?.name,
+      'A page',
+      'the context was stored',
+    );
     assert.deepEqual(
       warn.mock.calls.map((call) => String(call.arguments[0])),
       [],

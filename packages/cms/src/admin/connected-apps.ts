@@ -15,13 +15,12 @@ import { formatInTimezone } from './formatting.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { CONNECTED_APPS_CHILD, CONNECTED_APPS_PATH } from './users.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
+import { updateSiteSettings } from '../site/site-json.ts';
 import { findUserById, listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { clientIdentifier, sameClient } from '../util/client-id.ts';
 import { SCOPE_LABELS } from './indieauth-consent.ts';
 import { SCOPES } from '../indieauth/request.ts';
-import { siteBaseUrl } from '../web/indieauth-discovery.ts';
 import { meForSignIn } from '../indieauth/identity.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { createToken, lapsesAt, listTokens, revokeConnection } from '../indieauth/tokens.ts';
@@ -86,10 +85,10 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
     await updateSiteSettings({
       contentDir: c.var.config.contentDir,
       change: (current) => {
-        listed = current.clientsWithoutPkce.some((id) => sameClient(id, value));
+        listed = current.clients_without_pkce.some((id) => sameClient(id, value));
         return listed
           ? current
-          : { ...current, clientsWithoutPkce: [...current.clientsWithoutPkce, value] };
+          : { ...current, clients_without_pkce: [...current.clients_without_pkce, value] };
       },
     });
     if (listed) return refuse(`${value} is already on the list.`);
@@ -103,9 +102,9 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
     await updateSiteSettings({
       contentDir: c.var.config.contentDir,
       change: (current) => {
-        const kept = current.clientsWithoutPkce.filter((id) => id !== value);
-        removed = kept.length < current.clientsWithoutPkce.length;
-        return { ...current, clientsWithoutPkce: kept };
+        const kept = current.clients_without_pkce.filter((id) => id !== value);
+        removed = kept.length < current.clients_without_pkce.length;
+        return { ...current, clients_without_pkce: kept };
       },
     });
     if (removed) flash(c, 'notice', `${value} must use PKCE again.`);
@@ -148,7 +147,7 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
       );
     }
 
-    const baseUrl = siteBaseUrl(c);
+    const baseUrl = c.var.config.baseUrl;
     const { accessToken } = await createToken(
       config.dataDir,
       {
@@ -156,7 +155,7 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
         me: meForSignIn(`${baseUrl}/`, user, {
           baseUrl,
           users: listUsers(config.dataDir),
-          settings: readSiteSettings(config.contentDir),
+          settings: c.var.site,
         }),
         name: form.name,
         scopes,
@@ -191,7 +190,7 @@ function screen(
 ): Record<string, unknown> {
   const { config } = c.var;
   const userId = c.var.session?.userId;
-  const settings = readSiteSettings(config.contentDir);
+  const settings = c.var.site;
   const now = config.now().getTime();
   const connections = listTokens(config.dataDir)
     .filter((stored) => stored.userId === userId && Date.parse(lapsesAt(stored)) > now)
@@ -206,7 +205,7 @@ function screen(
     connectionField: CONNECTION_FIELD,
     connections,
     withoutPkce: {
-      clients: settings.clientsWithoutPkce,
+      clients: settings.clients_without_pkce,
       addUrl: ADD_CLIENT_WITHOUT_PKCE_PATH,
       removeUrl: REMOVE_CLIENT_WITHOUT_PKCE_PATH,
       field: CLIENT_FIELD,

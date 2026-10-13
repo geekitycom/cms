@@ -132,7 +132,7 @@ async function site(settings: Partial<typeof DEFAULT_SITE_SETTINGS> = {}): Promi
     settings: {
       ...DEFAULT_SITE_SETTINGS,
       title: 'Geekity',
-      baseUrl: BASE_URL,
+      base_url: BASE_URL,
       timezone: 'UTC',
       author: LOCAL_USER,
       ...settings,

@@ -54,18 +54,18 @@ export const READING_SETTINGS: SettingsPage = {
   template: ADMIN_TEMPLATES.settingsReading,
   fields: [
     'homepage',
-    'postsPage',
-    'postsPerPage',
-    'notifyServer',
-    'feedUpdatePeriod',
-    'feedUpdateFrequency',
-    'aiCrawlers',
-    'contentSignalSearch',
-    'contentSignalAiInput',
-    'contentSignalAiTrain',
-    'robotsRules',
-    'llmsTxt',
-    'indexNow',
+    'posts_page',
+    'posts_per_page',
+    'notify_server',
+    'feed_update_period',
+    'feed_update_frequency',
+    'ai_crawlers',
+    'content_signal_search',
+    'content_signal_ai_input',
+    'content_signal_ai_train',
+    'robots_rules',
+    'llms_txt',
+    'index_now',
   ],
 
   panels: (c, settings) => {
@@ -76,7 +76,7 @@ export const READING_SETTINGS: SettingsPage = {
     return {
       pageChoices: choices,
       homepageMissing: missing(settings.homepage),
-      postsPageMissing: missing(settings.postsPage),
+      postsPageMissing: missing(settings.posts_page),
     };
   },
 };

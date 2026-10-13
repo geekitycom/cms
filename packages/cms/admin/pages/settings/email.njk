@@ -7,13 +7,13 @@
 {% from "components/card.njk" import card, cardActions %}
 
 {% block settingsProblems %}
-  {{ field.problem('settings-mail-provider', problems.mailProvider) }}
-  {{ field.problem('settings-mail-from-address', problems.mailFromAddress) }}
-  {{ field.problem('settings-mail-reply-to', problems.mailReplyTo) }}
-  {{ field.problem('settings-contact-email', problems.contactEmail) }}
-  {{ field.problem('settings-security-contacts', problems.securityContacts) }}
-  {{ field.problem('settings-security-policy', problems.securityPolicy) }}
-  {{ field.problem('settings-security-languages', problems.securityLanguages) }}
+  {{ field.problem('settings-mail-provider', problems.mail_provider) }}
+  {{ field.problem('settings-mail-from-address', problems.mail_from_address) }}
+  {{ field.problem('settings-mail-reply-to', problems.mail_reply_to) }}
+  {{ field.problem('settings-contact-email', problems.contact_email) }}
+  {{ field.problem('settings-security-contacts', problems.security_contacts) }}
+  {{ field.problem('settings-security-policy', problems.security_policy) }}
+  {{ field.problem('settings-security-languages', problems.security_languages) }}
 {% endblock %}
 
 {% block settingsFields %}
@@ -21,28 +21,28 @@
     The key or password each one needs is a credential and is saved below,
     in <code>data/mail.json</code> rather than in <code>site.json</code>.
   {% endset %}
-  {% call field.select('settings-mail-provider', fields.mailProvider, 'Provider',
-       error=problems.mailProvider, hint=providerHint) %}
+  {% call field.select('settings-mail-provider', fields.mail_provider, 'Provider',
+       error=problems.mail_provider, hint=providerHint) %}
     {% for provider in mailProviders %}
-      <option value="{{ provider }}"{% if form.mailProvider == provider %} selected{% endif %}>
+      <option value="{{ provider }}"{% if form.mail_provider == provider %} selected{% endif %}>
         {% if provider == 'none' %}None &mdash; this site sends no email{% elif provider == 'brevo' %}Brevo (transactional API){% else %}SMTP{% endif %}
       </option>
     {% endfor %}
   {% endcall %}
 
-  {{ field.text('settings-mail-from-name', fields.mailFromName, 'From name', form.mailFromName,
+  {{ field.text('settings-mail-from-name', fields.mail_from_name, 'From name', form.mail_from_name,
        hint='The name on the From line. Empty uses the site title.') }}
 
   {% set fromAddressHint %}
     Providers only send from an address they have verified, so this should be
     one you own. Empty falls back to <code>no-reply@</code> at the site's host.
   {% endset %}
-  {{ field.text('settings-mail-from-address', fields.mailFromAddress, 'From address',
-       form.mailFromAddress, error=problems.mailFromAddress, hint=fromAddressHint,
+  {{ field.text('settings-mail-from-address', fields.mail_from_address, 'From address',
+       form.mail_from_address, error=problems.mail_from_address, hint=fromAddressHint,
        inputmode='email') }}
 
-  {{ field.text('settings-mail-reply-to', fields.mailReplyTo, 'Reply-to', form.mailReplyTo,
-       error=problems.mailReplyTo, inputmode='email',
+  {{ field.text('settings-mail-reply-to', fields.mail_reply_to, 'Reply-to', form.mail_reply_to,
+       error=problems.mail_reply_to, inputmode='email',
        hint='Where a reply goes. Empty replies to the From address.') }}
 
   {% set contactHint %}
@@ -50,8 +50,8 @@
     wrote it. Empty writes to the first admin with an email address. It is read when a
     message arrives and never appears on the public site.
   {% endset %}
-  {{ field.text('settings-contact-email', fields.contactEmail, 'Contact address',
-       form.contactEmail, error=problems.contactEmail, hint=contactHint, inputmode='email') }}
+  {{ field.text('settings-contact-email', fields.contact_email, 'Contact address',
+       form.contact_email, error=problems.contact_email, hint=contactHint, inputmode='email') }}
 
   <h2 class="mt-6 text-lg font-semibold">Security contact</h2>
 
@@ -61,16 +61,16 @@
     published at <a href="/.well-known/security.txt"><code>/.well-known/security.txt</code></a>,
     which is not served at all while this is empty.
   {% endset %}
-  {{ field.textarea('settings-security-contacts', fields.securityContacts, 'Contacts',
-       form.securityContacts, error=problems.securityContacts, hint=securityContactsHint,
+  {{ field.textarea('settings-security-contacts', fields.security_contacts, 'Contacts',
+       form.security_contacts, error=problems.security_contacts, hint=securityContactsHint,
        rows='2', spellcheck='false') }}
 
-  {{ field.text('settings-security-policy', fields.securityPolicy, 'Disclosure policy',
-       form.securityPolicy, error=problems.securityPolicy, inputmode='url',
+  {{ field.text('settings-security-policy', fields.security_policy, 'Disclosure policy',
+       form.security_policy, error=problems.security_policy, inputmode='url',
        hint='Optional. An https:// URL for the page that says how reports are handled.') }}
 
-  {{ field.text('settings-security-languages', fields.securityLanguages, 'Preferred languages',
-       form.securityLanguages, error=problems.securityLanguages,
+  {{ field.text('settings-security-languages', fields.security_languages, 'Preferred languages',
+       form.security_languages, error=problems.security_languages,
        hint='Optional. The languages a report may be written in, such as en, fr.') }}
 {% endblock %}
 

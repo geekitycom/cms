@@ -80,9 +80,9 @@ async function site(
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,
-      baseUrl,
-      indexNow: options.indexNow ?? true,
-      indexNowKey: KEY,
+      base_url: baseUrl,
+      index_now: options.indexNow ?? true,
+      index_now_key: KEY,
     },
   });
 

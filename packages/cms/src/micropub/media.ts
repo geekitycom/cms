@@ -8,7 +8,7 @@ import type { GeekityEnv } from '../web/env.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { logMediaRequest } from '../web/indieauth-activity-log.ts';
 import type { BearerEnv } from '../web/indieauth-bearer.ts';
-import { MICROPUB_MEDIA_PATH, siteBaseUrl } from '../web/indieauth-discovery.ts';
+import { MICROPUB_MEDIA_PATH } from '../web/indieauth-discovery.ts';
 import { resolveUpload } from '../media/library.ts';
 import { refusedUpload, storeUpload, UPLOAD_FIELD } from '../media/uploads.ts';
 import { absoluteUrl } from '../util/url.ts';
@@ -101,7 +101,7 @@ export function mountMicropubMedia(app: Hono<GeekityEnv>): void {
         published: c.var.store.now().toISOString(),
       });
       c.header('cache-control', 'no-store');
-      c.header('location', absoluteUrl(stored.url, siteBaseUrl(c)));
+      c.header('location', absoluteUrl(stored.url, c.var.config.baseUrl));
       return c.body(null, 201);
     },
   );
@@ -125,7 +125,7 @@ export function mountMicropubMedia(app: Hono<GeekityEnv>): void {
     const item =
       upload === undefined
         ? undefined
-        : { url: absoluteUrl(upload.url, siteBaseUrl(c)), published: upload.published };
+        : { url: absoluteUrl(upload.url, c.var.config.baseUrl), published: upload.published };
     c.header('cache-control', 'no-store');
     if (q === 'last') return c.json(item === undefined ? {} : { url: item.url });
     return c.json({ items: item === undefined || Number(limit) === 0 ? [] : [item] });

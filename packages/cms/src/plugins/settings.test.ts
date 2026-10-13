@@ -77,7 +77,7 @@ function site(
       dataDir,
       contentDir,
       env,
-      siteInfo: () => ({ baseUrl: 'https://example.test/', title: 'Example' }),
+      siteInfo: () => Promise.resolve({ baseUrl: 'https://example.test/', title: 'Example' }),
       allowPrivateAddress: false,
       lookup: () => Promise.reject(new Error('a test resolves no names')),
     },

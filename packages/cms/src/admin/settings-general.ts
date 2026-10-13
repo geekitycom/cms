@@ -13,7 +13,6 @@ import { iconSetting, siteIcons } from '../images/icons.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import { SETTINGS_FIELDS } from '../site/settings-form.ts';
-import { readSiteJson } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { CREATIVE_COMMONS_LICENSES } from '../content/license.ts';
@@ -31,14 +30,14 @@ export const GENERAL_SETTINGS: SettingsPage = {
     'title',
     'tagline',
     'author',
-    'baseUrl',
+    'base_url',
     'timezone',
     'language',
     'locale',
     'icon',
     'license',
-    'licenseUrl',
-    'licenseName',
+    'license_url',
+    'license_name',
   ],
 
   // The base URL field shows the one in effect rather than the one the file
@@ -51,9 +50,9 @@ export const GENERAL_SETTINGS: SettingsPage = {
   // selects Several authors.
   shown: (config, settings) => ({
     ...settings,
-    baseUrl: effectiveBaseUrl(config, settings),
+    base_url: effectiveBaseUrl(config, settings),
     author: siteAuthorUsername(config, settings.author),
-    icon: iconInEffect(config, settings) ?? '',
+    icon: iconInEffect(settings) ?? '',
   }),
 
   panels: (c, settings) => ({
@@ -76,12 +75,12 @@ export const GENERAL_SETTINGS: SettingsPage = {
   // not a user, so the file only ever holds a username or no author at all.
   reads: ({ c, body, current }) => ({
     author: siteAuthorUsername(c.var.config, stringOrEmpty(body[SETTINGS_FIELDS.author])),
-    baseUrl:
+    base_url:
       c.var.config.baseUrlSource === 'default'
-        ? stringOrEmpty(body[SETTINGS_FIELDS.baseUrl])
-        : current.baseUrl === ''
+        ? stringOrEmpty(body[SETTINGS_FIELDS.base_url])
+        : current.base_url === ''
           ? c.var.config.baseUrl
-          : current.baseUrl,
+          : current.base_url,
   }),
 };
 
@@ -90,15 +89,12 @@ function siteAuthorUsername(config: Pick<ResolvedConfig, 'dataDir'>, author: str
   return userForAuthor(listUsers(config.dataDir), author)?.username ?? '';
 }
 
-function iconInEffect(
-  config: Pick<ResolvedConfig, 'contentDir'>,
-  settings: SiteSettings,
-): string | undefined {
-  return iconSetting({ icon: settings.icon, avatar: readSiteJson(config.contentDir)['avatar'] });
+function iconInEffect(settings: SiteSettings): string | undefined {
+  return iconSetting({ icon: settings.icon, avatar: settings.avatar });
 }
 
 function iconPanel(config: ResolvedConfig, settings: SiteSettings): Record<string, unknown> {
-  const inEffect = iconInEffect(config, settings);
+  const inEffect = iconInEffect(settings);
   const preview = siteIcons(config, inEffect).find((icon) => icon.rel === 'apple-touch-icon');
 
   return {

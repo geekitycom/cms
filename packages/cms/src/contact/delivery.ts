@@ -1,5 +1,4 @@
 import type { MailService } from '../notifications/mail-service.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import type { ContactMessage } from './records.ts';
@@ -24,8 +23,8 @@ export const CONTACT_MESSAGE_TEMPLATE = 'contact-message';
 
 /** What {@link contactRecipient} reads. */
 export interface ContactRecipientOptions {
-  /** Where `site.json` is, for the `contactEmail` setting. */
-  contentDir: string;
+  /** The `site.contact_email` setting. */
+  contactEmail: string;
   /** Where `users.json` is, for the fallback. */
   dataDir: string;
 }
@@ -38,7 +37,7 @@ export interface ContactRecipientOptions {
  * a stable answer rather than whichever account happens to come back first.
  */
 export function contactRecipient(options: ContactRecipientOptions): string | undefined {
-  const setting = readSiteSettings(options.contentDir).contactEmail.trim();
+  const setting = options.contactEmail.trim();
   if (setting !== '') return setting;
 
   for (const user of listUsers(options.dataDir)) {
@@ -51,8 +50,8 @@ export function contactRecipient(options: ContactRecipientOptions): string | und
 export interface SendContactMessageOptions {
   /** The one door out for email. */
   mail: MailService;
-  /** Where `site.json` is. */
-  contentDir: string;
+  /** The `site.contact_email` setting. */
+  contactEmail: string;
   /** Where `users.json` is. */
   dataDir: string;
   /** The site's public origin, so the message can link to the Messages screen. */

@@ -13,6 +13,8 @@ import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
+import { SITE } from '../site/namespace.ts';
+import type { SiteSettings } from '../site/settings.ts';
 import { citationsOf } from '../content/citation.ts';
 import { isMigrated, isMigratedArrival } from '../content/migrated.ts';
 import { readOf } from '../content/read.ts';
@@ -20,7 +22,6 @@ import { replyTarget } from '../content/post-type.ts';
 import type { CatalogReader, DocumentLookup } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { isFederatedDocument } from '../content/served.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { absoluteUrl } from '../util/url.ts';
@@ -180,19 +181,9 @@ export function createWebmentionService(
 
   const sends = createSerialQueue();
 
-  /** Whether the site is sending webmentions at all, as the file says now. */
-  function sending(): boolean {
-    return readSiteSettings(config.contentDir).webmentionsSend;
-  }
-
   const targets = syndicationTargetsReader(config.contentDir);
   const originalOf = options.originalOf ?? (() => undefined);
   const copies = syndicationCopies(config.contentDir);
-
-  /** The language a post that names none is in, as the file says now. */
-  function siteLanguage(): string {
-    return readSiteSettings(config.contentDir).language;
-  }
 
   /**
    * Tell one page about one post, and answer with what happened and, when the
@@ -244,9 +235,9 @@ export function createWebmentionService(
   }
 
   /** The URLs of the targets a version of a post selects. */
-  function selectedUrls(document: Document | undefined): string[] {
+  function selectedUrls(document: Document | undefined, language: string): string[] {
     if (document === undefined) return [];
-    return selectedTargets(document, targets(), siteLanguage()).map((target) => target.url);
+    return selectedTargets(document, targets(), language).map((target) => target.url);
   }
 
   async function held(source: string, links: readonly string[]): Promise<boolean> {
@@ -276,9 +267,10 @@ export function createWebmentionService(
     versions: readonly (Document | undefined)[],
     current: Document | undefined,
     outcomes: readonly Told[],
+    language: string,
   ): Promise<void> {
-    const targeted = new Set(versions.flatMap((version) => selectedUrls(version)));
-    const selected = new Set(selectedUrls(current));
+    const targeted = new Set(versions.flatMap((version) => selectedUrls(version, language)));
+    const selected = new Set(selectedUrls(current, language));
     for (const { sent, copy } of outcomes) {
       if (!targeted.has(sent.target)) continue;
       if (!selected.has(sent.target)) await copies.write(permalink, sent.target, undefined);
@@ -301,8 +293,11 @@ export function createWebmentionService(
         looking = false;
         const documents = [...changed.values()];
         changed.clear();
+        const site = await settings.values(SITE);
         for (const one of documents) {
-          for (const upstream of options.conversation.upstreams(one)) await salmention(upstream);
+          for (const upstream of options.conversation.upstreams(one, site)) {
+            await salmention(upstream);
+          }
         }
       })
       .catch((thrown: unknown) => {
@@ -350,7 +345,7 @@ export function createWebmentionService(
   }
 
   /** Tell whatever pages one change of a post moved, as {@link WebmentionService.handle} says. */
-  function sendFor(change: DocumentChange): void {
+  function sendFor(change: DocumentChange, language: string): void {
     const now = config.now();
     const document = change.next ?? change.previous;
     if (document === undefined || isMigratedArrival(change, now)) return;
@@ -370,7 +365,7 @@ export function createWebmentionService(
       [change.previous, change.next],
       targets(),
       config.baseUrl,
-      siteLanguage(),
+      language,
       originalOf,
     );
     if (links.length === 0) return;
@@ -393,7 +388,38 @@ export function createWebmentionService(
           [change.previous, change.next],
           current,
           await tellAll(document.slug, source, links),
+          language,
         );
+      })
+      .catch((thrown: unknown) => {
+        logger.warn(`A webmention failed: ${messageOf(thrown)}`);
+      });
+  }
+
+  /** Tell the original of a copy a reply answers about every public post replying to the copy. */
+  function tellOriginal(copy: string, target: string): void {
+    const now = config.now();
+    for (const document of store.listAll()) {
+      if (replyTarget(document) !== copy || !isPublic(document, now) || isMigrated(document)) {
+        continue;
+      }
+      const source = absoluteUrl(document.permalink, config.baseUrl);
+      sends
+        .run(async () => {
+          if (!(await held(source, [target]))) await tell(document.slug, source, target);
+        })
+        .catch((thrown: unknown) => {
+          logger.warn(`A webmention failed: ${messageOf(thrown)}`);
+        });
+    }
+  }
+
+  /** Run `then` on the send queue once the settings say the site is sending webmentions. */
+  function whenSending(then: (site: SiteSettings) => void): void {
+    sends
+      .run(async () => {
+        const site = await settings.values(SITE);
+        if (site.webmentions_send) then(site);
       })
       .catch((thrown: unknown) => {
         logger.warn(`A webmention failed: ${messageOf(thrown)}`);
@@ -404,24 +430,27 @@ export function createWebmentionService(
     handle(change) {
       // A full scan is a rebuild of the index, not news about the site.
       if (change.origin === 'scan') return;
-      if (!sending()) return;
-      sendFor(change);
-      // And a reply post edited, published or withdrawn changes the replies
-      // under whatever it is in.
-      for (const version of [change.previous, change.next]) {
-        if (version !== undefined) conversationChanged(version);
-      }
+      whenSending((site) => {
+        sendFor(change, site.language);
+        // And a reply post edited, published or withdrawn changes the replies
+        // under whatever it is in.
+        for (const version of [change.previous, change.next]) {
+          if (version !== undefined) conversationChanged(version);
+        }
+      });
     },
 
     heard(written) {
-      if (!sending()) return;
       const document =
         written.kind === 'comment'
           ? store.getBySlug(written.slug)
           : written.about
               .map((url) => options.conversation.documentOf(url))
               .find((found) => found !== undefined);
-      if (document !== undefined) conversationChanged(document);
+      if (document === undefined) return;
+      whenSending(() => {
+        conversationChanged(document);
+      });
     },
 
     async send(slug) {
@@ -429,14 +458,15 @@ export function createWebmentionService(
       if (document === undefined) return undefined;
 
       const source = absoluteUrl(document.permalink, config.baseUrl);
-      if (!sending()) return { slug, source, sent: [] };
+      const site = await settings.values(SITE);
+      if (!site.webmentions_send) return { slug, source, sent: [] };
 
-      const links = targetsOf([document], targets(), config.baseUrl, siteLanguage(), originalOf);
+      const links = targetsOf([document], targets(), config.baseUrl, site.language, originalOf);
 
       return await sends.run(async () => {
         const outcomes = await tellAll(slug, source, links);
         const current = isPublic(document, config.now()) ? document : undefined;
-        await keepCopies(document.permalink, [document], current, outcomes);
+        await keepCopies(document.permalink, [document], current, outcomes, site.language);
         return { slug, source, sent: outcomes.map((one) => one.sent) };
       });
     },
@@ -450,6 +480,7 @@ export function createWebmentionService(
             dataDir: config.dataDir,
             baseUrl: config.baseUrl,
             conversation: options.conversation,
+            site: await settings.values(SITE),
             checker: config.commentChecker,
             // The intake decides whether this one is news: a page that is
             // edited and re-sent updates the entry it made, and putting the
@@ -475,21 +506,10 @@ export function createWebmentionService(
 
     originalFound(copy, original) {
       const target = externalTarget(original, config.baseUrl);
-      if (target === undefined || !sending()) return;
-      const now = config.now();
-      for (const document of store.listAll()) {
-        if (replyTarget(document) !== copy || !isPublic(document, now) || isMigrated(document)) {
-          continue;
-        }
-        const source = absoluteUrl(document.permalink, config.baseUrl);
-        sends
-          .run(async () => {
-            if (!(await held(source, [target]))) await tell(document.slug, source, target);
-          })
-          .catch((thrown: unknown) => {
-            logger.warn(`A webmention failed: ${messageOf(thrown)}`);
-          });
-      }
+      if (target === undefined) return;
+      whenSending(() => {
+        tellOriginal(copy, target);
+      });
     },
 
     async settled() {

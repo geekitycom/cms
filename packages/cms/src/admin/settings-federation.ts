@@ -36,10 +36,10 @@ export const FEDERATION_SETTINGS: SettingsPage = {
   template: ADMIN_TEMPLATES.federationSettings,
   fields: ['relays'],
 
-  saved: (c) => {
+  saved: async (c) => {
     // The reconciliation reads the settings that were just written, so it has
     // to come after the save rather than be derived from the form.
-    return toldRelays(c.var.relays.sync());
+    return toldRelays(await c.var.relays.sync());
   },
 
   endpoints: (app) => {

@@ -641,7 +641,7 @@ Words.
     const { cms, contentDir } = await site();
     await writeSiteJson({
       contentDir,
-      settings: { ...DEFAULT_SITE_SETTINGS, baseUrl: BASE_URL, comments: false },
+      settings: { ...DEFAULT_SITE_SETTINGS, base_url: BASE_URL, comments: false },
     });
 
     assert.ok(!(await postPage(cms)).includes('id="respond"'), 'no form anywhere');
@@ -652,7 +652,7 @@ Words.
     const { cms, contentDir } = await site({ 'posts/2026-01-01-hello-world.md': OLD });
     await writeSiteJson({
       contentDir,
-      settings: { ...DEFAULT_SITE_SETTINGS, baseUrl: BASE_URL, commentsCloseAfterDays: 0 },
+      settings: { ...DEFAULT_SITE_SETTINGS, base_url: BASE_URL, comments_close_after_days: 0 },
     });
 
     assert.match(await postPage(cms), /id="respond"/);
@@ -667,7 +667,7 @@ Words.
     // Now close the site's comments and ask again.
     await writeSiteJson({
       contentDir,
-      settings: { ...DEFAULT_SITE_SETTINGS, baseUrl: BASE_URL, comments: false },
+      settings: { ...DEFAULT_SITE_SETTINGS, base_url: BASE_URL, comments: false },
     });
 
     const html = await postPage(cms);

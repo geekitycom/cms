@@ -17,6 +17,7 @@ import { writeSiteJson } from '../site/site-json.ts';
 import { postObject } from './article.ts';
 import { OUTBOX_PAGE_SIZE } from './federation.ts';
 import { createActivityId } from './paths.ts';
+import { SITE } from '../site/namespace.ts';
 
 /** The origin every request in this file is sent to; Fedify checks it. */
 const BASE_URL = 'https://blog.example';
@@ -75,9 +76,9 @@ async function site(
       ...DEFAULT_SITE_SETTINGS,
       title: 'Geekity',
       tagline: 'A file-first CMS',
-      baseUrl: BASE_URL,
+      base_url: BASE_URL,
       timezone: 'UTC',
-      postsPerPage: 10,
+      posts_per_page: 10,
       author: ADA,
       ...settings,
     },
@@ -269,6 +270,7 @@ describe('the post object', () => {
       config: instance.config,
       settings: instance.settings,
       actorProfiles: instance.actorProfiles,
+      site: await instance.settings.values(SITE),
       cited: () => undefined,
     });
     const built = postObject(context, { ...indexed, tags: ['NOTES'] });
@@ -282,7 +284,7 @@ describe('the post object', () => {
   });
 
   it('points its hashtags at the bases the site is configured with (AC #5)', async () => {
-    const instance = await site(HELLO, { tagBase: 'topics', categoryBase: 'filed' });
+    const instance = await site(HELLO, { tag_base: 'topics', category_base: 'filed' });
 
     const article = (await (
       await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS)
@@ -1465,9 +1467,9 @@ describe('a site in a subdirectory', () => {
         ...DEFAULT_SITE_SETTINGS,
         title: 'Geekity',
         tagline: '',
-        baseUrl: 'https://example.com/blog',
+        base_url: 'https://example.com/blog',
         timezone: 'UTC',
-        postsPerPage: 10,
+        posts_per_page: 10,
         author: ADA,
       },
     });

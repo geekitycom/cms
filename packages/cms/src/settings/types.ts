@@ -48,6 +48,12 @@ export interface ConfigOverride<V> {
 
 export interface SettingDeclaration<V> {
   readonly key: string;
+  /**
+   * Where the file holds the value when that is not under `key`: one key, or
+   * several for a value the file spreads over them. With several, the type's
+   * `fromJson` is given an object of those keys and its `toJson` returns one.
+   */
+  readonly fileKey?: string | readonly string[];
   readonly type: SettingType<V>;
   readonly default: V;
   /** One sentence the CLI prints beside the key. Not a label for a form. */

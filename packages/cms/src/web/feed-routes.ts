@@ -49,9 +49,11 @@ export function feed(
     // Only RSS carries the comment pointers; the other two formats have no
     // vocabulary for them, and counting for a feed that cannot say the number
     // would be a query per item for nothing.
-    ...(format === 'rss' ? { commentCounts: c.var.conversation.counts(documents) } : {}),
+    ...(format === 'rss'
+      ? { commentCounts: c.var.conversation.counts(documents, c.var.site) }
+      : {}),
     altTexts: readAltTexts(config.contentDir),
-    replyContext: (target) => c.var.replyContexts.read(target),
+    replyContext: (target) => c.var.replyContexts.read(target, c.var.site),
   };
 
   return feedResponse({ format, source, conditional: conditionalHeaders(c) });
@@ -75,11 +77,13 @@ export function comments(c: Context<GeekityEnv>, document: Document | undefined)
   // with no post attached, and so its items name no post: there, every item
   // answers the same one.
   const found: readonly FeedComment[] = feedComments(
-    document === undefined ? conversation.latest(limit) : spokenIn(conversation.thread(document)),
+    document === undefined
+      ? conversation.latest(limit, c.var.site)
+      : spokenIn(conversation.thread(document, c.var.site)),
     {
       baseUrl: config.baseUrl,
       limit,
-      cited: (url) => c.var.replyContexts.read(url),
+      cited: (url) => c.var.replyContexts.read(url, c.var.site),
       post: document,
     },
   );
@@ -90,7 +94,7 @@ export function comments(c: Context<GeekityEnv>, document: Document | undefined)
     title:
       document === undefined
         ? `${site.title}: comments`
-        : `${COMMENTS_TITLE_PREFIX}${postLabel(document, (url) => c.var.replyContexts.read(url))}`,
+        : `${COMMENTS_TITLE_PREFIX}${postLabel(document, (url) => c.var.replyContexts.read(url, c.var.site))}`,
     href: document?.permalink ?? '/',
     feedHref: commentsFeedHref(document),
     baseUrl: config.baseUrl,
@@ -108,11 +112,11 @@ export function comments(c: Context<GeekityEnv>, document: Document | undefined)
  */
 export function repliesFeed(c: Context<GeekityEnv>, segment: string): Response {
   const { conversation, renderer, config } = c.var;
-  const found = conversation.repliesTo(segment);
+  const found = conversation.repliesTo(segment, c.var.site);
   if (found === undefined || !siteView(c).showsConversation(found.post)) return notFound(c);
 
   const site = renderer.site();
-  const cited = (url: string) => c.var.replyContexts.read(url);
+  const cited = (url: string) => c.var.replyContexts.read(url, c.var.site);
   const label = postLabel(found.post, cited);
   const source: CommentFeedSource = {
     site,
@@ -140,7 +144,7 @@ export function repliesFeed(c: Context<GeekityEnv>, segment: string): Response {
  */
 export function commentPage(c: Context<GeekityEnv>, id: string): Response {
   const { conversation, renderer, store } = c.var;
-  const found = conversation.comment(id);
+  const found = conversation.comment(id, c.var.site);
   if (found === undefined) return notFound(c);
 
   const now = store.now();

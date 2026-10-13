@@ -7,9 +7,10 @@ import { after, describe, it } from 'node:test';
 
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { formFromSettings, settingsFromForm, settingsProblems } from '../site/settings-form.ts';
-import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
+import { updateSiteSettings } from '../site/site-json.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 /**
  * The settings themselves: `content/_data/site.json`, which is what every
@@ -163,7 +164,7 @@ describe('where the values come from', () => {
     await first.close();
 
     const second = await box.site({ contentDir, dataDir });
-    assert.equal(readSiteSettings(contentDir).title, 'Before the restart');
+    assert.equal((await siteSettingsIn(contentDir)).title, 'Before the restart');
     assert.match(await (await second.app.request('/')).text(), /Before the restart/);
   });
 
@@ -295,7 +296,7 @@ describe('a database whose settings are still rows', () => {
     // The second boot has nothing to migrate and must not fall back to the
     // defaults for a site whose file already says everything.
     const again = await box.site({ contentDir, dataDir });
-    assert.equal(readSiteSettings(contentDir).title, 'A Site With Rows');
+    assert.equal((await siteSettingsIn(contentDir)).title, 'A Site With Rows');
     assert.match(await (await again.app.request('/')).text(), /A Site With Rows/);
   });
 
@@ -350,7 +351,7 @@ describe('the recorded archive renames', () => {
 
     const cms = await box.site({ contentDir });
 
-    assert.deepEqual(readSiteSettings(cms.config.contentDir).taxonomyRedirects, [
+    assert.deepEqual((await siteSettingsIn(cms.config.contentDir)).taxonomy_redirects, [
       { taxonomy: 'tag', from: 'eleventy', to: '11ty' },
     ]);
   });
@@ -366,7 +367,7 @@ describe('the apps allowed without PKCE (TASK-225)', () => {
 
   it('are none by default, and a site with none writes no key', async () => {
     const contentDir = await siteWith({ title: 'A Site' });
-    assert.deepEqual(readSiteSettings(contentDir).clientsWithoutPkce, []);
+    assert.deepEqual((await siteSettingsIn(contentDir)).clients_without_pkce, []);
     await updateSiteSettings({ contentDir, change: (current) => current });
     const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
@@ -385,7 +386,7 @@ describe('the apps allowed without PKCE (TASK-225)', () => {
         'https://inklings.io/inkstone/',
       ],
     });
-    assert.deepEqual(readSiteSettings(contentDir).clientsWithoutPkce, [
+    assert.deepEqual((await siteSettingsIn(contentDir)).clients_without_pkce, [
       'https://ia.net/writer',
       'https://inklings.io/inkstone/',
     ]);
@@ -418,13 +419,13 @@ describe('the theme setting', () => {
     const file = path.join(contentDir, '_data', 'site.json');
     const chosen = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
     assert.equal(chosen['theme'], 'midnight');
-    assert.equal(readSiteSettings(contentDir).theme, 'midnight');
+    assert.equal((await siteSettingsIn(contentDir)).theme, 'midnight');
 
     await updateSiteSettings({ contentDir, change: (current) => ({ ...current, theme: '' }) });
 
     const packaged = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
     assert.ok(!('theme' in packaged), 'the packaged theme is the absence of the key');
-    assert.equal(readSiteSettings(contentDir).theme, '');
+    assert.equal((await siteSettingsIn(contentDir)).theme, '');
   });
 
   it('survives a save of a settings page that does not carry it', async () => {
@@ -438,7 +439,7 @@ describe('the theme setting', () => {
     const agent = await signedIn(cms);
     await saveSettings(agent, 'general', { title: 'Renamed' });
 
-    const settings = readSiteSettings(contentDir);
+    const settings = await siteSettingsIn(contentDir);
     assert.equal(settings.title, 'Renamed');
     assert.equal(settings.theme, 'midnight', 'the Appearance choice is not a General field');
   });

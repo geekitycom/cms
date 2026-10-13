@@ -5,7 +5,7 @@ import type { AdminStore, PostComment } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { DocumentLookup } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
-import type { CitedPageReader } from '../content/citation.ts';
+import type { CitedPageReader, CitedPagesNow } from '../content/citation.ts';
 import type { MailService } from './mail-service.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { absoluteUrl } from '../util/url.ts';
@@ -59,7 +59,7 @@ export interface CreateCommentNotifierOptions {
   admin: AdminStore;
   /** The content index, for the post's title. */
   store: DocumentLookup;
-  cited?: CitedPageReader | undefined;
+  cited?: CitedPagesNow | undefined;
   /** The one door out for email. */
   mail: MailService;
   /**
@@ -91,10 +91,13 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
   const notices = createSerialQueue();
 
   /** The post a comment is on, as a message names it. */
-  function postOf(comment: PostComment): { title: string; url: string } {
+  function postOf(
+    comment: PostComment,
+    cited: CitedPageReader | undefined,
+  ): { title: string; url: string } {
     const document = store.getBySlug(comment.slug);
     return {
-      title: document === undefined ? comment.slug : postLabel(document, options.cited),
+      title: document === undefined ? comment.slug : postLabel(document, cited),
       url: absoluteUrl(comment.permalink, config.baseUrl),
     };
   }
@@ -162,7 +165,7 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
 
     const data = {
       comment: commentIn(comment),
-      post: postOf(comment),
+      post: postOf(comment, await options.cited?.()),
       actions,
       queueUrl: absoluteUrl('/admin/comments', config.baseUrl),
     };
@@ -190,7 +193,7 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
     if (hasOptedOut(config.dataDir, address)) return;
 
     const context = { dataDir: config.dataDir, baseUrl: config.baseUrl, now: config.now() };
-    const post = postOf(reply);
+    const post = postOf(reply, await options.cited?.());
 
     void mail.send({
       to: address,

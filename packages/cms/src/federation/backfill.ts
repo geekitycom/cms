@@ -26,6 +26,8 @@ import type { FederationContextData } from './federation.ts';
 import { appendInboxActivity, removeInboxActivities } from './records.ts';
 import type { FederationRecords } from './records.ts';
 import { siteLoaders } from './site-loaders.ts';
+import { SITE } from '../site/namespace.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
 
 /**
  * The fediverse replies nobody delivered (TASK-321).
@@ -115,10 +117,10 @@ const GONE = new Set([404, 410]);
  * never from this site: what this site published is in the thread already.
  */
 export function signedRepliesLoader(
-  contextOf: () => Context<FederationContextData>,
+  contextOf: () => Promise<Context<FederationContextData>>,
 ): RepliesLoader {
   return async (noteId) => {
-    const context = contextOf();
+    const context = await contextOf();
     const site = new URL(context.data.config.baseUrl).origin;
     const signed = await siteLoaders(context, AbortSignal.timeout(BACKFILL_TIMEOUT_MS));
     const documentLoader: DocumentLoader = (url, options) =>
@@ -234,6 +236,7 @@ export interface CreateReplyBackfillOptions {
   readonly store: CatalogReader;
   readonly conversation: Pick<ConversationReader, 'thread'>;
   readonly config: Pick<ResolvedConfig, 'now' | 'contentDir'>;
+  readonly settings: Pick<SettingsRegistry, 'values'>;
   readonly load: RepliesLoader;
   /** Told the author of every reply logged, so the thread can name them. */
   readonly heard?: ((actorId: string) => void) | undefined;
@@ -257,7 +260,7 @@ export interface ReplyBackfill {
 
 /** Build the backfill for one site. */
 export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyBackfill {
-  const { admin, store, conversation, config, load } = options;
+  const { admin, store, conversation, config, settings, load } = options;
   const timers = options.timers ?? systemNotificationTimers;
   const logger = options.logger ?? console;
   const records: FederationRecords = { admin, contentDir: config.contentDir };
@@ -266,6 +269,7 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
   let handle: unknown;
 
   async function sweepOnce(): Promise<void> {
+    const site = await settings.values(SITE);
     for (const post of recentPosts()) {
       const now = config.now();
       const key = `${BACKFILL_STATE_PREFIX}${post.permalink}`;
@@ -275,7 +279,7 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
       // again on every sweep.
       admin.setState(key, now.toISOString());
 
-      await backfill(level(conversation.thread(post).replies));
+      await backfill(level(conversation.thread(post, site).replies));
     }
   }
 

@@ -9,8 +9,11 @@ import { openAdminStore } from '../store/admin-store.ts';
 import type { AdminStore } from '../store/admin-store.ts';
 import { addComment } from '../comments/records.ts';
 import { resolveConfig } from '../config.ts';
-import type { PluginComment, PluginSite } from '../plugin.ts';
-import { pluginSite } from './site.ts';
+import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
+import type { PluginComment, PluginHost, PluginSite } from '../plugin.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
+import { createSettings } from '../site/namespace.ts';
+import { pluginSite, sitePluginRegistry } from './site.ts';
 
 const roots: string[] = [];
 const stores: AdminStore[] = [];
@@ -244,5 +247,55 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
       /hello\.json: comment "0000000000007004" cannot take id "0000000000007005"/,
     );
     assert.equal(await readFile(file, 'utf8'), before);
+  });
+});
+
+describe('PluginHost.siteInfo', () => {
+  async function hostOf(env: Record<string, string>): Promise<{
+    host: PluginHost;
+    settings: SettingsRegistry;
+  }> {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'geekity-plugin-site-info-'));
+    roots.push(root);
+    const config = resolveConfig(
+      {
+        contentDir: path.join(root, 'content'),
+        dataDir: path.join(root, 'data'),
+        baseUrl: 'https://blog.example',
+      },
+      { env: {} },
+    );
+    const settings = createSettings({ config, env });
+    let captured: PluginHost | undefined;
+    const plugin = definePlugin({
+      name: '@acme/plugin-site-info',
+      label: 'Site info',
+      description: 'Reads the site info.',
+      version: '1.0.0',
+      hostApi: HOST_API_VERSION,
+      register(host) {
+        captured = host;
+      },
+    });
+    sitePluginRegistry({ ...config, plugins: [plugin] }, [], settings);
+    assert.ok(captured, 'the plugin registered');
+    return { host: captured, settings };
+  }
+
+  it('resolves to the base URL and the title the settings hold when asked', async () => {
+    const { host, settings } = await hostOf({});
+    assert.deepEqual(await host.siteInfo(), { baseUrl: 'https://blog.example', title: 'Geekity' });
+
+    await settings.set('site', new Map([['title', 'Shell Notes']]), 'admin');
+
+    assert.deepEqual(await host.siteInfo(), {
+      baseUrl: 'https://blog.example',
+      title: 'Shell Notes',
+    });
+  });
+
+  it('reads the title the environment sets over the file', async () => {
+    const { host } = await hostOf({ GEEKITY_SITE__TITLE: 'From the environment' });
+    assert.equal((await host.siteInfo()).title, 'From the environment');
   });
 });

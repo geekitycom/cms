@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-13 16:45'
+updated_date: '2026-10-13 22:09'
 labels: []
 milestone: m-38
 dependencies:
@@ -35,3 +36,9 @@ decision-53 section 7 (wave 3) and section 9. With the `site` namespace declared
 - [ ] #6 site/site-json.ts is deleted; site/setting-rows.ts holds no read or write code; the form halves live in admin/
 - [ ] #7 docs/settings.md describes the `site` namespace and `geekity settings list site`; pnpm lint, typecheck and test pass
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+From TASK-388 (2026-10-13): the settings pages render from c.var.site, which holds values in effect, so a GEEKITY_SITE__* override shows in their forms. Until this task refuses overridden fields, saving a page writes the env value into site.json. That is a bug only for sites using the new GEEKITY_SITE__* variables, which TASK-388 introduced, so this task should land before the next release. settingsFromSiteJson, siteJsonFor, updateSiteSettings and writeSiteJson remain for the pages, Navigation, Taxonomy, Connected apps and Appearance, and they already parse through SITE. site.avatar is now declared.
+<!-- SECTION:NOTES:END -->

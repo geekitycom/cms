@@ -58,6 +58,7 @@ export type {
   Conversation,
   ConversationContext,
   ConversationReader,
+  ConversationSite,
   CreateRendererOptions,
   FeedComment,
   FeedSource,
@@ -108,7 +109,9 @@ export type {
   ImageVariant,
   SiteIcon,
 } from './images/index.ts';
-export { createUser, listUsers, readSiteSettings, setUserProfile } from './admin/index.ts';
+export { createUser, listUsers, setUserProfile } from './admin/index.ts';
+export { SITE } from './site/namespace.ts';
+export type { SiteLicense } from './site/namespace.ts';
 export type {
   CommentAuthor,
   CommentContent,

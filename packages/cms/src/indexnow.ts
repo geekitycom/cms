@@ -4,7 +4,7 @@ import { isMigratedArrival } from './content/migrated.ts';
 import { holdOutbound } from './dev-mode.ts';
 import type { SettingsRegistry } from './settings/types.ts';
 import type { DocumentChange } from './content/sync.ts';
-import { readSiteSettings } from './site/site-json.ts';
+import { SITE } from './site/namespace.ts';
 import { messageOf } from './util/errors.ts';
 import { createSerialQueue } from './util/queue.ts';
 import { retry } from './util/retry.ts';
@@ -48,7 +48,7 @@ export interface IndexNowNotifier {
    * and after, so a deletion and a move are submitted as well as a publish.
    * Empty for a full scan, a draft, and a site that is not sending.
    */
-  urlsFor(change: DocumentChange): string[];
+  urlsFor(change: DocumentChange): Promise<string[]>;
   /** Gather a change's URLs into the next batch. Returns at once. */
   handle(change: DocumentChange): void;
   /** Send what has been gathered now, and resolve once every batch has finished. */
@@ -77,17 +77,19 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
   const pending = new Set<string>();
   let timer: NodeJS.Timeout | undefined;
   const batches = createSerialQueue();
+  const gathering = createSerialQueue();
+  let closed = false;
 
   /** Read per batch, so the settings screen takes effect on the next publish. */
-  function sending(): Sending | undefined {
-    const settings = readSiteSettings(config.contentDir);
-    if (!settings.indexNow || settings.indexNowKey === '') return undefined;
+  async function sending(): Promise<Sending | undefined> {
+    const site = await settings.values(SITE);
+    if (!site.index_now || site.index_now_key === '') return undefined;
     const host = new URL(config.baseUrl).hostname;
     if (isPrivateHost(host)) return undefined;
     return {
-      key: settings.indexNowKey,
+      key: site.index_now_key,
       host,
-      keyLocation: absoluteUrl(indexNowKeyPath(settings.indexNowKey), config.baseUrl),
+      keyLocation: absoluteUrl(indexNowKeyPath(site.index_now_key), config.baseUrl),
     };
   }
 
@@ -102,7 +104,7 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
   }
 
   async function submit(urls: readonly string[]): Promise<void> {
-    const target = sending();
+    const target = await sending();
     if (target === undefined) return;
 
     for (let start = 0; start < urls.length; start += MAX_URLS_PER_REQUEST) {
@@ -146,10 +148,10 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
   }
 
   return {
-    urlsFor(change) {
+    async urlsFor(change) {
       // A full scan is a rebuilt index, not news: submitting it would announce
       // the whole archive every time somebody deleted the database.
-      if (change.origin === 'scan' || sending() === undefined) return [];
+      if (change.origin === 'scan' || (await sending()) === undefined) return [];
 
       const now = config.now();
       if (isMigratedArrival(change, now)) return [];
@@ -162,21 +164,27 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
     },
 
     handle(change) {
-      const urls = this.urlsFor(change);
-      if (urls.length === 0) return;
-      for (const url of urls) pending.add(url);
-      if (timer === undefined) {
-        timer = setTimeout(flush, batchMs);
-        timer.unref();
-      }
+      void gathering
+        .run(async () => {
+          const urls = await this.urlsFor(change);
+          if (urls.length === 0 || closed) return;
+          for (const url of urls) pending.add(url);
+          if (timer === undefined) {
+            timer = setTimeout(flush, batchMs);
+            timer.unref();
+          }
+        })
+        .catch(ignore);
     },
 
     async settled() {
+      await gathering.settled();
       flush();
       await batches.settled();
     },
 
     close() {
+      closed = true;
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
       pending.clear();

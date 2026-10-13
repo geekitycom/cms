@@ -25,11 +25,11 @@ export type HandleLearner = (body: string) => Promise<void>;
  * the next save; the save itself never fails over one.
  */
 export function handleLearner(
-  contextOf: () => Context<FederationContextData>,
+  contextOf: () => Promise<Context<FederationContextData>>,
   logger: { warn(message: string): void } = console,
 ): HandleLearner {
   return async (body) => {
-    const context = contextOf();
+    const context = await contextOf();
     const { contentDir } = context.data.config;
     const known = handleDirectory(contentDir);
     const unknown = handlesIn(body).filter((handle) => known(handle) === undefined);

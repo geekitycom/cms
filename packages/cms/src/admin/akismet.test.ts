@@ -112,7 +112,7 @@ async function admin(config: GeekityConfig = {}): Promise<{
   // So there is a settings file for the key to be provably absent from.
   await writeSiteJson({
     contentDir,
-    settings: { ...DEFAULT_SITE_SETTINGS, baseUrl: 'https://blog.example' },
+    settings: { ...DEFAULT_SITE_SETTINGS, base_url: 'https://blog.example' },
   });
 
   const cms = await box.open({

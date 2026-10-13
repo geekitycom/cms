@@ -174,9 +174,9 @@ async function site(
       ...DEFAULT_SITE_SETTINGS,
       title: 'Geekity',
       tagline: 'A file-first CMS',
-      baseUrl: BASE_URL,
+      base_url: BASE_URL,
       timezone: 'UTC',
-      postsPerPage: 10,
+      posts_per_page: 10,
       author: LOCAL_USER,
     },
   });

@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { settleConfig } from './cms/boot.ts';
 import { resolveConfig } from './config.ts';
 import type { GeekityConfig, ResolvedConfig } from './config.ts';
 
@@ -56,7 +57,7 @@ export async function loadResolvedConfig(
   configPath: string | undefined,
   adjust: (config: GeekityConfig) => GeekityConfig = (config) => config,
 ): Promise<ResolvedConfig> {
-  return resolveConfig(adjust(await loadConfig(process.cwd(), configPath)));
+  return await settleConfig(resolveConfig(adjust(await loadConfig(process.cwd(), configPath))));
 }
 
 /**

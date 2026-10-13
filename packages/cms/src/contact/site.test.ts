@@ -11,11 +11,12 @@ import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
-import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { createUser } from '../site/users.ts';
 import { CONTACT_ANCHOR, CONTACT_FIELDS, CONTACT_NOTICE_PARAM, CONTACT_POST_PATH } from './form.ts';
 import { listContactMessages } from './records.ts';
 import { CONTACT_RATE_LIMIT, CONTACT_RATE_WINDOW_SECONDS } from './submission.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 /**
  * The contact form as a visitor meets it: a form under a page that asked for
@@ -139,7 +140,7 @@ function mailing(provider: MemoryMailProvider): GeekityConfig {
 async function writeContactEmail(contentDir: string, contactEmail: string): Promise<void> {
   await writeSiteJson({
     contentDir,
-    settings: { ...readSiteSettings(contentDir), contactEmail },
+    settings: { ...(await siteSettingsIn(contentDir)), contact_email: contactEmail },
   });
 }
 

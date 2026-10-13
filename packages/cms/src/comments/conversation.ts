@@ -1,6 +1,7 @@
 import type { Document } from '../content/document.ts';
 import { COMMENT_PAGE_PREFIX, commentPageHref, isKey, repliesKey } from '../content/guids.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
+import type { SiteSettings } from '../site/settings.ts';
 import type { AdminStore, PostComment } from '../store/admin-store.ts';
 import { absoluteUrl } from '../util/url.ts';
 
@@ -204,6 +205,15 @@ export interface SiteInteraction extends Placed {
 }
 
 /**
+ * The site settings a conversation is read with: who the site's own posts are
+ * by when they name nobody, and whether comments are on.
+ */
+export type ConversationSite = Pick<
+  SiteSettings,
+  'author' | 'title' | 'comments' | 'comments_close_after_days'
+>;
+
+/**
  * The three questions anything showing a conversation asks.
  *
  * Every one of them is answered from both indexes at once, because a reader
@@ -214,14 +224,14 @@ export interface SiteInteraction extends Placed {
  */
 export interface ConversationReader {
   /** Everything said about one post, threaded. */
-  readonly thread: (document: Document) => Conversation;
+  readonly thread: (document: Document, site: ConversationSite) => Conversation;
   /**
    * How many visible replies answer each of these documents directly, by
    * permalink: what a reader following `source:comments` finds in its
    * `/replies/` feed (TASK-324). Read off each thread, since that is the only
    * reading that knows which replies a reader sees and where they sit.
    */
-  readonly counts: (documents: readonly Document[]) => Map<string, number>;
+  readonly counts: (documents: readonly Document[], site: ConversationSite) => Map<string, number>;
   /**
    * The site's latest answers, newest first, each with the post it answers.
    *
@@ -230,14 +240,14 @@ export interface ConversationReader {
    * showing a conversation about nothing. That filtering happens after the
    * indexes have paged, so the pages are read until enough survive.
    */
-  readonly latest: (limit: number) => SiteInteraction[];
+  readonly latest: (limit: number, site: ConversationSite) => SiteInteraction[];
   /**
    * One native comment as its own page reads it (TASK-318), or `undefined`
    * for an id that names no approved comment written on this site. The post
    * comes back in whatever state it is in, so the page can answer as the post
    * itself would.
    */
-  readonly comment: (id: string) => CommentThread | undefined;
+  readonly comment: (id: string, site: ConversationSite) => CommentThread | undefined;
   /**
    * The reply on a post that a URL names, or `undefined` (TASK-319):
    * a comment by its own page or by the post's `#comment-` anchor, a
@@ -246,7 +256,11 @@ export interface ConversationReader {
    * reply answers is a fact about it, and whether a reader may see the one it
    * answers is decided when the thread is read.
    */
-  readonly replyNamed: (document: Document, url: string) => Interaction | undefined;
+  readonly replyNamed: (
+    document: Document,
+    url: string,
+    site: ConversationSite,
+  ) => Interaction | undefined;
   /**
    * What a URL names on this site, while a reader may see it: a reply (a
    * comment by its page or its anchor, a webmention by the page it was sent
@@ -254,12 +268,12 @@ export interface ConversationReader {
    * with the post it is on, or a served post or page itself (TASK-300,
    * TASK-326). What a reply post answering it cites, instead of fetching a page.
    */
-  readonly heldAt: (url: string) => HeldAt | undefined;
+  readonly heldAt: (url: string, site: ConversationSite) => HeldAt | undefined;
   /**
    * What a key names and its direct replies (TASK-324, decision-51), or
    * `undefined`: a served post or page, or a reply a reader can see.
    */
-  readonly repliesTo: (key: string) => RepliesOf | undefined;
+  readonly repliesTo: (key: string, site: ConversationSite) => RepliesOf | undefined;
   /**
    * The document whose conversation a URL is in (TASK-320): the post a
    * comment's page or anchor is on, the post a webmention was sent to, the
@@ -273,7 +287,7 @@ export interface ConversationReader {
    * comment's own page answers the webmention reply it is under. One
    * answering something here has nobody to tell: this site already knows.
    */
-  readonly upstreams: (document: Document) => Upstream[];
+  readonly upstreams: (document: Document, site: ConversationSite) => Upstream[];
 }
 
 /** One page of this site's answering a page elsewhere (TASK-320). */

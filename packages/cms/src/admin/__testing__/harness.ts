@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import '../../__testing__/stub-notify-pings.ts';
 import { seedActorKeys } from '../../federation/__testing__/keys.ts';
-import { createCms } from '../../index.ts';
+import { createCms, settleConfig } from '../../index.ts';
 import { sessionCookieName } from '../../web/session.ts';
 import type { Cms, GeekityConfig, ServeContext } from '../../index.ts';
 
@@ -92,7 +92,7 @@ export function sandbox(): Sandbox {
         seedActorKeys(config.dataDir, username);
       }
       const instance = createCms(
-        { watch: false, hostLookup: resolveNothing, ...config },
+        await settleConfig({ watch: false, hostLookup: resolveNothing, ...config }),
         options.serve,
       );
       started.push(instance);

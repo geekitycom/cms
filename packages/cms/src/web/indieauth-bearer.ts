@@ -3,7 +3,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import type { GeekityEnv } from './env.ts';
 import { findUserById } from '../site/users.ts';
 import type { User } from '../site/users.ts';
-import { PROTECTED_RESOURCE_METADATA_PATH, siteBaseUrl } from './indieauth-discovery.ts';
+import { PROTECTED_RESOURCE_METADATA_PATH } from './indieauth-discovery.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { findAccessToken, recordUse, verifyAccessToken } from '../indieauth/tokens.ts';
 import type { Audience, StoredToken } from '../indieauth/tokens.ts';
@@ -134,7 +134,7 @@ function refuse(
 ): Response {
   const challenge = Object.entries({
     ...params,
-    resource_metadata: `${siteBaseUrl(c)}${PROTECTED_RESOURCE_METADATA_PATH}`,
+    resource_metadata: `${c.var.config.baseUrl}${PROTECTED_RESOURCE_METADATA_PATH}`,
   })
     .map(([name, value]) => `${name}="${value}"`)
     .join(', ');

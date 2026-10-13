@@ -8,6 +8,8 @@ import type { Document } from '../content/document.ts';
 import { citationsOf, citesAnImage, previewShown } from '../content/citation.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
 import type { SharedLocation } from '../content/location.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import type { SiteSettings } from '../site/settings.ts';
 import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
@@ -331,7 +333,7 @@ export interface CreateRendererOptions {
    * renderer built without it renders no conversation at all, which is what
    * every test over one template wants.
    */
-  conversation?: ((document: Document) => Conversation) | undefined;
+  conversation?: ((document: Document, site: SiteSettings) => Conversation) | undefined;
   /**
    * What is stored about a page a post cites, by its URL: what a reply
    * answers (TASK-123), and what a like, repost or bookmark cites (TASK-244).
@@ -340,21 +342,21 @@ export interface CreateRendererOptions {
    * synced, so drawing it waits on nobody's server. A renderer built without
    * it draws every citation with a bare link.
    */
-  replyContext?: ((target: string) => ReplyContext | undefined) | undefined;
+  replyContext?: ((target: string, site: SiteSettings) => ReplyContext | undefined) | undefined;
   /**
    * The syndication targets a post selects and the copies they answered with
    * (TASK-155), read from the site's files and never fetched. A renderer built
    * without it links a post to no target and prints only the copies its front
    * matter lists by hand.
    */
-  syndication?: ((document: Document) => PostSyndication) | undefined;
+  syndication?: ((document: Document, site: SiteSettings) => PostSyndication) | undefined;
   /**
    * What the site shares of where a post was written (TASK-223), already
    * reduced by Settings > Privacy (decision-29). Read per render so the
    * setting takes effect on the next request. A renderer built without it
    * prints no location, which is what every test over one template wants.
    */
-  location?: ((document: Document) => SharedLocation | undefined) | undefined;
+  location?: ((document: Document, site: SiteSettings) => SharedLocation | undefined) | undefined;
   /**
    * The comment form for a post that is taking comments, and `undefined` for
    * one that is not (TASK-50).
@@ -472,6 +474,8 @@ export function drawnForSignedInReader<T>(draw: () => T): T {
 export interface RequestInputs {
   readonly devMode: boolean;
   readonly mailConfigured: boolean;
+  /** The site's settings in effect, which the request's handler read. */
+  readonly site: SiteSettings;
 }
 
 const requestInputs = new AsyncLocalStorage<RequestInputs>();
@@ -480,12 +484,22 @@ export function drawnWith<T>(inputs: RequestInputs, draw: () => T): T {
   return requestInputs.run(inputs, draw);
 }
 
+/** The site's settings the request read, or the defaults for a page drawn outside one. */
+function requestSite(): SiteSettings {
+  return requestInputs.getStore()?.site ?? DEFAULT_SITE_SETTINGS;
+}
+
 /** Half the time a form stays submittable: the oldest stamp a 304 hands back. */
 const STAMP_WINDOW_MS = (MAXIMUM_FORM_AGE_SECONDS * 1000) / 2;
 
 export function createRenderer(options: CreateRendererOptions): Renderer {
   const { config } = options;
   const siteData = createSiteDataSource(config);
+  const { replyContext } = options;
+  const citedPage =
+    replyContext === undefined
+      ? undefined
+      : (url: string): ReplyContext | undefined => replyContext(url, requestSite());
   // What a form's loaded-at stamp is drawn as while its page is fingerprinted.
   // Random per renderer so no post, reply or theme text can spell it.
   const stampMark = `geekity-stamp-${randomUUID()}`;
@@ -616,7 +630,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   } {
     const shown = previewShown(document.extra);
     const contextOf = (target: string, property: string): Record<string, unknown> | undefined => {
-      const cited = options.replyContext?.(target);
+      const cited = citedPage?.(target);
       if (cited === undefined) return undefined;
       const { picture, author, ...rest } = cited;
       const image = citesAnImage(cited);
@@ -666,7 +680,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       config,
       authorContext(people, document.author),
       loading,
-      options.replyContext,
+      citedPage,
     );
     return { ...context, ...citedBy(document) };
   }
@@ -706,12 +720,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
     const site = siteData.read();
     return {
-      archiveMonths: archiveMonths(
-        posts,
-        siteTimezone(site),
-        siteLocale(site),
-        options.replyContext,
-      ),
+      archiveMonths: archiveMonths(posts, siteTimezone(site), siteLocale(site), citedPage),
     };
   }
 
@@ -768,7 +777,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // `documentContext` for the reason the object id is: it needs the site's
     // users, which a document on its own does not carry.
     const writer = authorContext(users(), document.author);
-    const context = documentContext(document, config, writer, { lead: true }, options.replyContext);
+    const context = documentContext(document, config, writer, { lead: true }, citedPage);
     // The URL it is being served at, which is its own permalink everywhere but
     // the front page.
     const url = options_.url ?? context.url;
@@ -784,8 +793,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // shows one, and is set here rather than in a layout so that a site which
     // overrides `post.njk` or `page.njk` keeps the link.
     const site = siteData.read();
+    const settings = requestSite();
     const shows = answerable(document, commentPolicyOf(site), now);
-    const said = shows ? options.conversation?.(document) : undefined;
+    const said = shows ? options.conversation?.(document, settings) : undefined;
     const feedsIt = shows && isServed(document, now);
     // `commentForm` is on the context only when the post is open, so the
     // theme asks `{% if commentForm %}` rather than working the rules out
@@ -818,8 +828,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // The targets this post links to and the copies they made of it
     // (TASK-155): the links a target verifies sit inside the h-entry, so they
     // are on the post's own page, which is the page a target fetches.
-    const syndicated = options.syndication?.(document);
-    const shared = options.location?.(document);
+    const syndicated = options.syndication?.(document, settings);
+    const shared = options.location?.(document, settings);
 
     const drawn = render(template, {
       ...context,
@@ -827,10 +837,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // the byline and the identity a theme prints are one object, so what a
       // reader sees and what the structured data says cannot drift.
       ...(writer === undefined ? {} : { siteAuthor: writer }),
-      ...neighbourContext('previous', either.previous, options.replyContext),
-      ...neighbourContext('next', either.next, options.replyContext),
+      ...neighbourContext('previous', either.previous, citedPage),
+      ...neighbourContext('next', either.next, citedPage),
       backlinks: (options.backlinks?.(document) ?? []).map((linking) =>
-        backlinkContext(linking, options.replyContext),
+        backlinkContext(linking, citedPage),
       ),
       url,
       page: { ...context.page, url },
@@ -1006,7 +1016,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
               config,
               authorContext(people, listing.document.author),
               { lead: bodyLeads },
-              options.replyContext,
+              citedPage,
             );
 
       return render(listingTemplate(listing), {
@@ -1039,7 +1049,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
           config,
           authorContext(people, hit.document.author),
           undefined,
-          options.replyContext,
+          citedPage,
         ),
         // Escaped here and marked up here, so a theme prints it with `safe`
         // and cannot get the order of the two wrong.

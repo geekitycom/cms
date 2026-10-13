@@ -6,6 +6,7 @@ import { Create, type Object as APObject, QuoteAuthorization } from '@fedify/voc
 
 import type { AdminStore } from '../store/admin-store.ts';
 import type { FederationOverrides, ResolvedConfig } from '../config.ts';
+import type { SiteSettings } from '../site/settings.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
@@ -63,6 +64,8 @@ export interface FederationContextData {
   readonly settings: SettingsRegistry;
   /** Where the inbox asks for the profile of an actor it has just heard from (TASK-184). */
   readonly actorProfiles: Pick<ActorProfileService, 'capture'>;
+  /** The site's settings, as whoever made this context read them. */
+  readonly site: SiteSettings;
   /** The stored contexts a note names the pages it cites by. */
   readonly cited: CitedPageReader;
 }

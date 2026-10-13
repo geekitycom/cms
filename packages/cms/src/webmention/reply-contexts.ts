@@ -1,12 +1,15 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import type { ConversationSite } from '../comments/conversation.ts';
 import type { Document } from '../content/document.ts';
 import { citationsOf } from '../content/citation.ts';
 import { replyTarget } from '../content/post-type.ts';
 import type { CatalogReader } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
 import { updateFileAtomically } from '../files/atomic.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
+import { SITE } from '../site/namespace.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { isRecord } from '../util/guards.ts';
@@ -53,9 +56,15 @@ export interface CreateReplyContextServiceOptions {
    * from the index rather than fetched or stored: a reply post answering a
    * comment cites the comment, not the post page it is on.
    */
-  readonly held?: ((target: string) => ReplyContext | undefined) | undefined;
+  readonly held?: HeldReplies | undefined;
   /** Told each time a target's context is stored, with the one it replaced. */
   readonly onStored?: ((target: string, previous: ReplyContext | undefined) => void) | undefined;
+}
+
+/** The replies this site holds, named with the site's settings at the time. */
+export interface HeldReplies {
+  readonly at: (target: string, site: ConversationSite) => ReplyContext | undefined;
+  readonly settings: Pick<SettingsRegistry, 'values'>;
 }
 
 /**
@@ -85,8 +94,13 @@ export interface ReplyContextService {
    * `undefined` when the target could not be read in time.
    */
   describe(target: string): Promise<ReplyContext | undefined>;
-  /** The stored context for a target, from the file. Never touches the network. */
-  read(target: string): ReplyContext | undefined;
+  /**
+   * The stored context for a target, from the file, or the reply this site
+   * holds there, named with `site`. Never touches the network.
+   */
+  read(target: string, site: ConversationSite): ReplyContext | undefined;
+  /** The context the file holds for a target, leaving out the replies this site holds. */
+  stored(target: string): ReplyContext | undefined;
   /** Resolve once everything queued has finished, however it finished. */
   settled(): Promise<void>;
 }
@@ -96,7 +110,9 @@ export function createReplyContextService(
   options: CreateReplyContextServiceOptions,
 ): ReplyContextService {
   const { store, lookup, config, fediverse } = options;
-  const held = options.held ?? noneHeld;
+  const { held } = options;
+  const isHeld = async (target: string): Promise<ReplyContext | undefined> =>
+    held === undefined ? undefined : held.at(target, await held.settings.values(SITE));
   const logger = options.logger ?? console;
   const file = path.join(config.contentDir, ...REPLY_CONTEXTS_FILE.split('/'));
 
@@ -167,7 +183,7 @@ export function createReplyContextService(
   }
 
   async function refresh(target: string): Promise<void> {
-    if (held(target) !== undefined) return;
+    if ((await isHeld(target)) !== undefined) return;
     const fetched = await fetchReplyContext(target, { lookup, fediverse });
     if (!fetched.ok) {
       logger.warn(`Could not read ${target} for a citation's context: ${fetched.reason}`);
@@ -211,7 +227,7 @@ export function createReplyContextService(
   return {
     handle(change) {
       const before = targetsOf(change.previous);
-      const after = targetsOf(change.next).filter((target) => held(target) === undefined);
+      const after = targetsOf(change.next);
       const stored = readAll();
 
       // A scan rebuilds the index from files the contexts file sits beside, so
@@ -232,7 +248,7 @@ export function createReplyContextService(
       const missing = new Set<string>();
       for (const document of store.listAll()) {
         for (const target of targetsOf(document)) {
-          if (!(target in stored) && held(target) === undefined) missing.add(target);
+          if (!(target in stored)) missing.add(target);
         }
       }
       for (const target of missing) enqueue(() => refresh(target));
@@ -240,7 +256,7 @@ export function createReplyContextService(
     },
 
     async describe(target) {
-      const known = held(target) ?? readAll()[target];
+      const known = (await isHeld(target)) ?? readAll()[target];
       if (known !== undefined) return known;
       const deadline = Date.now() + CITED_SLUG_TIMEOUT_MS;
       const fetched = await fetchReplyContext(target, {
@@ -270,8 +286,12 @@ export function createReplyContextService(
       return fetched.context;
     },
 
-    read(target) {
-      return held(target) ?? readAll()[target];
+    read(target, site) {
+      return held?.at(target, site) ?? readAll()[target];
+    },
+
+    stored(target) {
+      return readAll()[target];
     },
 
     settled() {
@@ -370,8 +390,4 @@ function webUrlOf(value: unknown): string | undefined {
 
 function optional<K extends string>(key: K, value: string | undefined): Partial<Record<K, string>> {
   return value === undefined ? {} : ({ [key]: value } as Record<K, string>);
-}
-
-function noneHeld(): undefined {
-  return undefined;
 }

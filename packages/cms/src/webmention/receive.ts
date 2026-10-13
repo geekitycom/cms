@@ -9,7 +9,7 @@ import type { Document } from '../content/document.ts';
 import { postLabel } from '../content/post-type.ts';
 import { escapeText } from '../util/html.ts';
 import { commentKeyAt } from '../comments/conversation.ts';
-import type { ConversationReader } from '../comments/conversation.ts';
+import type { ConversationReader, ConversationSite } from '../comments/conversation.ts';
 import { sanitizeCommentHtml } from '../content/sanitize.ts';
 import { DISCOVERY_MAX_BYTES } from './discovery.ts';
 import { fetchPublic } from './fetch-public.ts';
@@ -96,6 +96,8 @@ export interface CheckWebmentionOptions {
   readonly syndicatedAt?: ((url: string) => Document | undefined) | undefined;
   /** What says which post a comment's own page (TASK-318) is on. */
   readonly conversation: Pick<ConversationReader, 'comment'>;
+  /** The site settings the conversation is read with. */
+  readonly site: ConversationSite;
 }
 
 /**
@@ -137,7 +139,9 @@ export function checkWebmentionRequest(
   // post it is under (TASK-319).
   const key = commentKeyAt(to.pathname);
   const pathname =
-    key === undefined ? to.pathname : options.conversation.comment(key)?.post.permalink;
+    key === undefined
+      ? to.pathname
+      : options.conversation.comment(key, options.site)?.post.permalink;
   const document = pathname === undefined ? undefined : options.documentAt(pathname);
   if (document === undefined) return refuse('target', 'There is no page here at that address.');
 
@@ -156,6 +160,8 @@ export interface VerifyWebmentionOptions {
   readonly baseUrl: string;
   /** What says which reply on the post a source answers (TASK-319). */
   readonly conversation: Pick<ConversationReader, 'replyNamed'>;
+  /** The site settings the conversation is read with. */
+  readonly site: ConversationSite;
   /** The checker, when the site named one. */
   readonly checker?: CommentChecker | undefined;
   /** Who to tell when one lands in the queue, handed to the intake (TASK-55). */
@@ -228,7 +234,7 @@ export async function verifyWebmention(
   // answering one is a reply here even when it never names the post itself.
   const inReplyTo =
     entry?.inReplyTo
-      .map((url) => options.conversation.replyNamed(incoming.document, url)?.id)
+      .map((url) => options.conversation.replyNamed(incoming.document, url, options.site)?.id)
       .find((id) => id !== undefined) ?? null;
   const kind = inReplyTo === null ? (entry?.kind ?? 'mention') : 'reply';
   const author = {
@@ -322,7 +328,7 @@ async function keepCarried(
 
   const bring = async (nested: readonly NestedReply[], parent: string): Promise<void> => {
     for (const reply of nested) {
-      const named = options.conversation.replyNamed(incoming.document, reply.url)?.id;
+      const named = options.conversation.replyNamed(incoming.document, reply.url, options.site)?.id;
       const theirs =
         named !== undefined && records.admin.getComment(named)?.via === incoming.source;
       let id = named;

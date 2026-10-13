@@ -7,8 +7,10 @@ import type { Recipient } from '@fedify/vocab';
 import type { AdminStore, Relay } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
+import type { ConversationSite } from '../comments/conversation.ts';
+import type { CitedPageReader } from '../content/citation.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
-import { readSiteSettings } from '../site/site-json.ts';
+import { SITE } from '../site/namespace.ts';
 import { primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { messageOf } from '../util/errors.ts';
@@ -35,7 +37,7 @@ export interface CreateRelayServiceOptions {
   /** What the federation context carries for the inbox; nothing here calls it. */
   actorProfiles: FederationContextData['actorProfiles'];
   /** What the federation context carries for the post objects. */
-  cited: FederationContextData['cited'];
+  cited: (site: ConversationSite) => CitedPageReader;
   /** Where failures are reported. Defaults to `console`. */
   logger?: RelayLogger | undefined;
 }
@@ -67,7 +69,7 @@ export interface RelayService {
    * content directory — is followed again, which is what makes the file the
    * source and the records derivable from it.
    */
-  sync(): RelaySyncReport;
+  sync(): Promise<RelaySyncReport>;
   /**
    * Send the `Follow` again for one relay, under a fresh id, and put its
    * record back to pending. This is the Retry on the federation screen: a
@@ -123,16 +125,21 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
   // A relay that is told to unfollow before it has been told to follow keeps
   // the subscription.
   const subscriptions = createSerialQueue();
+  // Reading the list is queued apart from the subscriptions, so a save waits
+  // for the read and not for a relay's server.
+  const syncs = createSerialQueue();
 
   /** A context outside any request, which is where a follow is sent from. */
-  function relayContext(): Context<FederationContextData> {
+  async function relayContext(): Promise<Context<FederationContextData>> {
+    const site = await settings.values(SITE);
     return federation.createContext(new URL(config.baseUrl), {
       admin,
       store,
       config,
       settings,
       actorProfiles: options.actorProfiles,
-      cited: options.cited,
+      site,
+      cited: options.cited(site),
     });
   }
 
@@ -194,7 +201,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
    * a synchronous test — finds something to mark accepted.
    */
   async function follow(relay: Relay): Promise<Relay> {
-    const context = relayContext();
+    const context = await relayContext();
     const user = subscriber();
     if (user === undefined) {
       logger.warn(
@@ -251,7 +258,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
     const user = subscriber();
     if (relay.followId !== null && user !== undefined) {
       try {
-        const context = relayContext();
+        const context = await relayContext();
         const id = actorId(context, user);
         await send(
           context,
@@ -279,36 +286,38 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
 
   return {
     sync() {
-      const listed = readSiteSettings(config.contentDir).relays;
-      const known = admin.listRelays();
+      return syncs.run(async () => {
+        const listed = await settings.get(SITE.relays);
+        const known = admin.listRelays();
 
-      const followed: string[] = [];
-      const unfollowed: string[] = [];
+        const followed: string[] = [];
+        const unfollowed: string[] = [];
 
-      for (const inboxId of listed) {
-        if (known.some((relay) => relay.inboxId === inboxId)) continue;
-        followed.push(inboxId);
-        queue(() => {
-          const at = config.now().toISOString();
-          return follow({
-            inboxId,
-            actorId: null,
-            state: 'pending',
-            reason: null,
-            followId: null,
-            createdAt: at,
-            updatedAt: at,
+        for (const inboxId of listed) {
+          if (known.some((relay) => relay.inboxId === inboxId)) continue;
+          followed.push(inboxId);
+          queue(() => {
+            const at = config.now().toISOString();
+            return follow({
+              inboxId,
+              actorId: null,
+              state: 'pending',
+              reason: null,
+              followId: null,
+              createdAt: at,
+              updatedAt: at,
+            });
           });
-        });
-      }
+        }
 
-      for (const relay of known) {
-        if (listed.includes(relay.inboxId)) continue;
-        unfollowed.push(relay.inboxId);
-        queue(() => unfollow(relay));
-      }
+        for (const relay of known) {
+          if (listed.includes(relay.inboxId)) continue;
+          unfollowed.push(relay.inboxId);
+          queue(() => unfollow(relay));
+        }
 
-      return { followed, unfollowed };
+        return { followed, unfollowed };
+      });
     },
 
     async retry(inboxId) {
@@ -317,8 +326,9 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
       return await subscriptions.run(() => follow(relay));
     },
 
-    settled() {
-      return subscriptions.settled();
+    async settled() {
+      await syncs.settled();
+      await subscriptions.settled();
     },
   };
 

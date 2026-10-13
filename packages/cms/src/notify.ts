@@ -6,7 +6,7 @@ import type { SettingsRegistry } from './settings/types.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { isFederatedDocument, isListed } from './content/served.ts';
 import { taxonomyBasesFromSettings } from './site/settings.ts';
-import { readSiteSettings } from './site/site-json.ts';
+import { SITE } from './site/namespace.ts';
 import { messageOf } from './util/errors.ts';
 import { createSerialQueue } from './util/queue.ts';
 import { absoluteUrl } from './util/url.ts';
@@ -91,7 +91,7 @@ export interface FeedNotifier {
    * the post carried before or after it. Absolute, deduplicated, and empty
    * when the change moved no feed at all.
    */
-  feedsFor(change: DocumentChange): string[];
+  feedsFor(change: DocumentChange): Promise<string[]>;
   /** Resolve once every queued ping has finished, however it finished. */
   settled(): Promise<void>;
 }
@@ -108,10 +108,11 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
   const logger = options.logger ?? console;
 
   const pings = createSerialQueue();
+  const gathering = createSerialQueue();
 
   /** The server the settings name, or `undefined` when they name none. */
-  function server(): NotifyServer | undefined {
-    return notifyEndpoints(readSiteSettings(config.contentDir).notifyServer);
+  async function server(): Promise<NotifyServer | undefined> {
+    return notifyEndpoints(await settings.get(SITE.notify_server));
   }
 
   /** Tell one server about one feed, answering with what happened. */
@@ -138,7 +139,7 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
 
   return {
     async notify(urls) {
-      const endpoint = server();
+      const endpoint = await server();
       const wanted = [...new Set(urls)];
       if (endpoint === undefined || wanted.length === 0) return { pings: [] };
       return await pings.run(async () => {
@@ -160,7 +161,7 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
       });
     },
 
-    feedsFor(change) {
+    async feedsFor(change) {
       // A full scan is a rebuild of the index, not news about the site: the
       // boot scan reports a cold index as a directory full of creations, and
       // pinging for each would announce the whole archive every time somebody
@@ -173,7 +174,7 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
       const after = inFeeds(change.next, now);
       if (before === undefined && after === undefined) return [];
 
-      const bases = taxonomyBasesFromSettings(readSiteSettings(config.contentDir));
+      const bases = taxonomyBasesFromSettings(await settings.values(SITE));
       const urls = new Set<string>();
 
       for (const format of FEED_FORMATS) {
@@ -191,12 +192,19 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
     },
 
     handle(change) {
-      const urls = this.feedsFor(change);
-      if (urls.length > 0) void this.notify(urls);
+      void gathering
+        .run(async () => {
+          const urls = await this.feedsFor(change);
+          if (urls.length > 0) await this.notify(urls);
+        })
+        .catch((thrown: unknown) => {
+          logger.warn(`Could not work out which feeds changed: ${messageOf(thrown)}`);
+        });
     },
 
-    settled() {
-      return pings.settled();
+    async settled() {
+      await gathering.settled();
+      await pings.settled();
     },
   };
 }

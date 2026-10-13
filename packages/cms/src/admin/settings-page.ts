@@ -30,7 +30,7 @@ import {
   settingsProblems,
 } from '../site/settings-form.ts';
 import type { SettingsField, SettingsForm } from '../site/settings-form.ts';
-import { readSiteSettings, updateSiteSettings } from '../site/site-json.ts';
+import { updateSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
@@ -140,16 +140,12 @@ export function mountSettingsPage(
   const { render } = options;
 
   app.get(page.path, async (c) =>
-    render(
-      c,
-      page.template,
-      await settingsScreen(c, page, readSiteSettings(c.var.config.contentDir)),
-    ),
+    render(c, page.template, await settingsScreen(c, page, c.var.site)),
   );
 
   app.post(page.path, async (c) => {
     const body: SubmittedBody = await c.req.parseBody();
-    const stored = readSiteSettings(c.var.config.contentDir);
+    const stored = c.var.site;
     const submitted = pageForm(c, page, body, stored);
 
     const problems = settingsProblems(submitted, page.fields, {

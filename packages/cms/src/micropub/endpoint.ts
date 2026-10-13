@@ -18,7 +18,7 @@ import { documentSiteFrom } from '../web/document-site.ts';
 import { logMicropubRequest } from '../web/indieauth-activity-log.ts';
 import { insufficientScope, requireBearer } from '../web/indieauth-bearer.ts';
 import type { BearerEnv, Scopes } from '../web/indieauth-bearer.ts';
-import { MICROPUB_MEDIA_PATH, MICROPUB_PATH, siteBaseUrl } from '../web/indieauth-discovery.ts';
+import { MICROPUB_MEDIA_PATH, MICROPUB_PATH } from '../web/indieauth-discovery.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import type { Scope } from '../indieauth/request.ts';
 import type { ResolvedConfig } from '../config.ts';
@@ -242,7 +242,7 @@ export function requireSiteToken(scopes?: Scopes): MiddlewareHandler<BearerEnv> 
       return c.json({ error: 'invalid_request', error_description: tooLargeMessage(limit) }, 400);
     }
     return await requireBearer({
-      audience: { resource: siteBaseUrl(c), acceptsUnbound: true },
+      audience: { resource: c.var.config.baseUrl, acceptsUnbound: true },
       ...(scopes === undefined ? {} : { scopes }),
       insufficientScopeStatus: MICROPUB_INSUFFICIENT_SCOPE_STATUS,
     })(c, next);
@@ -360,12 +360,12 @@ const ACTIONS: {
 } = {
   create: async (c, { request }) => {
     const { store, config, bearer } = c.var;
-    const timezone = c.var.siteRecords.timezone();
+    const timezone = c.var.site.timezone;
     const created = createForm(request, {
       author: bearer.user.username,
       timezone,
       now: store.now(),
-      baseUrl: siteBaseUrl(c),
+      baseUrl: c.var.config.baseUrl,
       targets: c.var.siteRecords.syndicationTargets(),
     });
     if ('errors' in created) return invalid(created.errors.join(' ')).answer(c);
@@ -386,7 +386,7 @@ const ACTIONS: {
     if (written.outcome === 'conflict') throw new Error('A new post has no file to conflict with.');
 
     c.header('cache-control', 'no-store');
-    c.header('location', absoluteUrl(written.saved.permalink, siteBaseUrl(c)));
+    c.header('location', absoluteUrl(written.saved.permalink, c.var.config.baseUrl));
     return c.body(null, 201);
   },
 
@@ -398,9 +398,9 @@ const ACTIONS: {
     if (document instanceof Refusal) return document.answer(c);
     const { store, config, bearer } = c.var;
     const updated = updateForm(document, changes, {
-      timezone: c.var.siteRecords.timezone(),
+      timezone: c.var.site.timezone,
       now: store.now(),
-      baseUrl: siteBaseUrl(c),
+      baseUrl: c.var.config.baseUrl,
       targets: c.var.siteRecords.syndicationTargets(),
       locations: postLocations(config.dataDir),
       kept: keptProperties(config.dataDir),
@@ -420,7 +420,7 @@ const ACTIONS: {
 
     c.header('cache-control', 'no-store');
     if (written.saved.permalink === document.permalink) return c.body(null, 204);
-    c.header('location', absoluteUrl(written.saved.permalink, siteBaseUrl(c)));
+    c.header('location', absoluteUrl(written.saved.permalink, c.var.config.baseUrl));
     return c.body(null, 201);
   },
 
@@ -432,7 +432,7 @@ function postFor(c: Context<BearerEnv>, url: string | undefined): Document | Ref
   const { store, config, bearer } = c.var;
   return postAt(url, {
     store,
-    baseUrl: siteBaseUrl(c),
+    baseUrl: c.var.config.baseUrl,
     users: listUsers(config.dataDir),
     user: bearer.user,
   });
@@ -496,7 +496,7 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
       return invalid(description).answer(c);
     }
     const answer = QUERIES[q]({
-      baseUrl: siteBaseUrl(c),
+      baseUrl: c.var.config.baseUrl,
       store: c.var.store,
       targets: c.var.siteRecords.syndicationTargets(),
       locations: postLocations(c.var.config.dataDir),

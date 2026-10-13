@@ -5,11 +5,14 @@ import type { Document } from '../content/document.ts';
 import { isServed } from '../content/served.ts';
 import type { DocumentLookup, IndexClock, ReplyReader } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
-import { readSiteSettings } from '../site/site-json.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
+import { SITE } from '../site/namespace.ts';
 import { listUsers } from '../site/users.ts';
+import { messageOf } from '../util/errors.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { commentNames } from './conversation.ts';
-import type { ConversationReader } from './conversation.ts';
+import type { ConversationReader, ConversationSite } from './conversation.ts';
 import type { CommentNotices } from './intake.ts';
 
 /**
@@ -35,7 +38,8 @@ export interface CreateReplyNoticesOptions {
   readonly store: DocumentLookup & ReplyReader & IndexClock;
   readonly conversation: ConversationReader;
   readonly notices: CommentNotices;
-  readonly config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir'>;
+  readonly config: Pick<ResolvedConfig, 'baseUrl' | 'dataDir'>;
+  readonly settings: Pick<SettingsRegistry, 'values'>;
 }
 
 /** Listens to the indexes for reply posts that answer a native comment. */
@@ -43,25 +47,40 @@ export interface ReplyNotices {
   handle(change: DocumentChange): void;
   /**
    * Consider one comment write. Run inside the comment file's lock, so it
-   * reads the indexes and queues mail, and writes no comment.
+   * only queues: the indexes are read once the site's settings are.
    */
   heard(written: ConversationWrite): void;
+  /** Resolve once every notice queued so far has been considered. */
+  settled(): Promise<void>;
 }
 
 /** Build the reply post notices for one site. */
 export function createReplyNotices(options: CreateReplyNoticesOptions): ReplyNotices {
-  const { admin, store, conversation, notices, config } = options;
+  const { admin, store, conversation, notices, config, settings } = options;
+  const queue = createSerialQueue();
 
-  const tell = (reply: Document): void => {
+  const consider = (reply: Document, site: ConversationSite): void => {
     if (reply.inReplyTo === undefined) return;
-    const answered = conversation.heldAt(absoluteUrl(reply.inReplyTo, config.baseUrl));
+    const answered = conversation.heldAt(absoluteUrl(reply.inReplyTo, config.baseUrl), site);
     if (answered?.kind !== 'reply' || answered.reply.source !== 'comment') return;
 
     const told = `reply-notice:${answered.reply.id}:${reply.permalink}`;
     if (admin.getState(told) !== undefined) return;
     admin.setState(told, store.now().toISOString());
 
-    notices.replyApproved(noticeOf(reply, answered.reply.id, answered.post, config));
+    notices.replyApproved(noticeOf(reply, answered.reply.id, answered.post, config, site));
+  };
+
+  const tell = (replies: readonly Document[]): void => {
+    if (replies.length === 0) return;
+    queue
+      .run(async () => {
+        const site = await settings.values(SITE);
+        for (const reply of replies) consider(reply, site);
+      })
+      .catch((thrown: unknown) => {
+        console.warn(`A reply notice failed: ${messageOf(thrown)}`);
+      });
   };
 
   return {
@@ -76,7 +95,7 @@ export function createReplyNotices(options: CreateReplyNoticesOptions): ReplyNot
       ) {
         return;
       }
-      tell(reply);
+      tell([reply]);
     },
 
     heard(written) {
@@ -84,12 +103,10 @@ export function createReplyNotices(options: CreateReplyNoticesOptions): ReplyNot
       const post = store.getBySlug(written.slug);
       if (post === undefined || admin.getComment(written.id)?.source !== 'comment') return;
       const permalink = absoluteUrl(post.permalink, config.baseUrl);
-      for (const reply of store.listRepliesTo(
-        commentNames(written.id, permalink, config.baseUrl),
-      )) {
-        tell(reply);
-      }
+      tell(store.listRepliesTo(commentNames(written.id, permalink, config.baseUrl)));
     },
+
+    settled: () => queue.settled(),
   };
 }
 
@@ -99,6 +116,7 @@ function noticeOf(
   parent: string,
   post: Document,
   config: CreateReplyNoticesOptions['config'],
+  site: ConversationSite,
 ): PostComment {
   const user = userForAuthor(listUsers(config.dataDir), reply.author);
   return {
@@ -109,11 +127,7 @@ function noticeOf(
     kind: 'reply',
     status: 'approved',
     author: {
-      name:
-        user?.profile?.displayName ??
-        user?.username ??
-        reply.author ??
-        readSiteSettings(config.contentDir).title,
+      name: user?.profile?.displayName ?? user?.username ?? reply.author ?? site.title,
       url: user === undefined ? null : authorHref(user.username),
       email: user?.email ?? null,
       avatar: null,

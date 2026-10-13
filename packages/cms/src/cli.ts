@@ -39,7 +39,8 @@ import { superviseCluster } from './supervisor/primary.ts';
 import { processChannel, superviseWorker } from './supervisor/worker.ts';
 import { DEV_MODE, DEV_MODE_LATCHED } from './settings/dev-mode.ts';
 import { MAINTENANCE } from './settings/maintenance.ts';
-import { createSettingsRegistry, overridden } from './settings/registry.ts';
+import { overridden } from './settings/registry.ts';
+import { createSettings } from './site/namespace.ts';
 import type { SettingRef, SettingsRegistry, ValueSource } from './settings/types.ts';
 import { messageOf } from './util/errors.ts';
 
@@ -473,7 +474,7 @@ async function initCommand({ args }: ParsedArgs): Promise<number> {
 async function maintenanceCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const action = args[0];
   const config = await loadResolvedConfig(configPath);
-  const settings = createSettingsRegistry({ config });
+  const settings = createSettings({ config });
 
   if (action === 'on') {
     const until = untilFlag(text(flags, 'until'));
@@ -511,7 +512,7 @@ async function maintenanceCommand({ args, configPath, flags }: ParsedArgs): Prom
 async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number> {
   const action = args[0];
   const config = await loadResolvedConfig(configPath);
-  const settings = createSettingsRegistry({ config });
+  const settings = createSettings({ config });
 
   if (action === 'on') {
     await setOrThrow(settings, 'dev_mode', { on: true });
@@ -548,7 +549,7 @@ async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number>
 async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const [action, name, value] = args;
   const config = await loadResolvedConfig(configPath);
-  const settings = createSettingsRegistry({ config });
+  const settings = createSettings({ config });
 
   if (action === 'list') {
     const refs = settings.list().filter((ref) => name === undefined || ref.namespace === name);
@@ -1215,7 +1216,7 @@ interface FoundCommand {
  */
 async function pluginCommands(config: ResolvedConfig): Promise<FoundCommand[]> {
   const folderPlugins = await importPluginFolders(scanPluginFolders(config.pluginsDir));
-  return sitePluginRegistry(config, folderPlugins)
+  return sitePluginRegistry(config, folderPlugins, createSettings({ config }))
     .plugins.filter((entry) => entry.problem === undefined)
     .flatMap((entry) => entry.commands.map((command) => ({ plugin: entry.plugin.name, command })))
     .sort((a, b) => b.command.words.length - a.command.words.length);

@@ -8,7 +8,7 @@ import { after, describe, it } from 'node:test';
 import { databaseFile } from '../cache.ts';
 import { resolveConfig } from '../config.ts';
 import { DEV_MODE, readDevModeRecord } from '../settings/dev-mode.ts';
-import { createCms } from '../index.ts';
+import { createCms, settleConfig } from '../index.ts';
 import type { Cms } from '../index.ts';
 
 const temporaryDirs: string[] = [];
@@ -26,6 +26,54 @@ async function dirs(): Promise<{ contentDir: string; dataDir: string }> {
   return { contentDir, dataDir };
 }
 
+async function siteJson(contentDir: string, file: Record<string, unknown>): Promise<void> {
+  await mkdir(path.join(contentDir, '_data'), { recursive: true });
+  await writeFile(path.join(contentDir, '_data', 'site.json'), JSON.stringify(file));
+}
+
+describe('settleConfig', () => {
+  it('takes the base URL site.json holds into a new frozen config, and leaves the resolved one alone', async () => {
+    const { contentDir, dataDir } = await dirs();
+    await siteJson(contentDir, { url: 'https://settings.example' });
+    const resolved = resolveConfig({ contentDir, dataDir, watch: false, port: 0 }, { env: {} });
+
+    const settled = await settleConfig(resolved);
+
+    assert.notEqual(settled, resolved);
+    assert.ok(Object.isFrozen(settled));
+    assert.equal(settled.baseUrl, 'https://settings.example');
+    assert.equal(settled.baseUrlSource, 'default');
+    assert.equal(resolved.baseUrl, 'http://localhost:0');
+    const cms = createCms(settled);
+    started.push(cms);
+    assert.equal(cms.config.baseUrl, 'https://settings.example');
+  });
+
+  it('keeps a base URL the environment or the config file sets over the one in site.json', async () => {
+    const { contentDir, dataDir } = await dirs();
+    await siteJson(contentDir, { url: 'https://settings.example' });
+
+    const fromEnv = resolveConfig(
+      { contentDir, dataDir },
+      { env: { GEEKITY_BASE_URL: 'https://env.example' } },
+    );
+    const fromFile = resolveConfig(
+      { contentDir, dataDir, baseUrl: 'https://config.example' },
+      { env: {} },
+    );
+
+    assert.equal((await settleConfig(fromEnv)).baseUrl, 'https://env.example');
+    assert.equal((await settleConfig(fromFile)).baseUrl, 'https://config.example');
+  });
+
+  it('keeps the configured base URL when site.json names none', async () => {
+    const { contentDir, dataDir } = await dirs();
+    const resolved = resolveConfig({ contentDir, dataDir, port: 0 }, { env: {} });
+
+    assert.equal((await settleConfig(resolved)).baseUrl, 'http://localhost:0');
+  });
+});
+
 describe('createCms', () => {
   it('uses a config that is already resolved as it is, without reading the environment again', async () => {
     const { contentDir, dataDir } = await dirs();
@@ -41,13 +89,8 @@ describe('createCms', () => {
     assert.equal(cms.config.baseUrl, 'https://env.example');
   });
 
-  it('settles the boot-time values into a new frozen config and leaves the resolved one alone', async () => {
+  it('adds the comment checker in a new frozen config and leaves the resolved one alone', async () => {
     const { contentDir, dataDir } = await dirs();
-    await mkdir(path.join(contentDir, '_data'), { recursive: true });
-    await writeFile(
-      path.join(contentDir, '_data', 'site.json'),
-      JSON.stringify({ url: 'https://settings.example' }),
-    );
     const resolved = resolveConfig({ contentDir, dataDir, watch: false, port: 0 }, { env: {} });
 
     const cms = createCms(resolved);
@@ -55,10 +98,38 @@ describe('createCms', () => {
 
     assert.notEqual(cms.config, resolved);
     assert.ok(Object.isFrozen(cms.config));
-    assert.equal(cms.config.baseUrl, 'https://settings.example');
     assert.notEqual(cms.config.commentChecker, undefined);
-    assert.equal(resolved.baseUrl, 'http://localhost:0');
     assert.equal(resolved.commentChecker, undefined);
+  });
+
+  it('builds on the base URL its config holds, without reading site.json for one', async () => {
+    const { contentDir, dataDir } = await dirs();
+    await siteJson(contentDir, { url: 'https://settings.example' });
+
+    const cms = createCms(
+      resolveConfig({ contentDir, dataDir, watch: false, port: 0 }, { env: {} }),
+    );
+    started.push(cms);
+
+    assert.equal(cms.config.baseUrl, 'http://localhost:0');
+  });
+
+  it('says on serving when the settings name a base URL it was not built for', async (t) => {
+    const { contentDir, dataDir } = await dirs();
+    await siteJson(contentDir, { url: 'https://settings.example' });
+    const warned: string[] = [];
+    t.mock.method(console, 'warn', (message: string) => warned.push(message));
+
+    const cms = createCms(
+      resolveConfig({ contentDir, dataDir, watch: false, port: 0 }, { env: {} }),
+    );
+    started.push(cms);
+    await cms.serve();
+
+    assert.ok(
+      warned.some((message) => message.includes('https://settings.example')),
+      warned.join('\n'),
+    );
   });
 
   it('still resolves a config a site wrote by hand', async () => {

@@ -22,10 +22,10 @@ export const PERMALINKS_SETTINGS: SettingsPage = {
   label: 'Permalinks',
   path: settingsPagePath('permalinks'),
   template: ADMIN_TEMPLATES.settingsPermalinks,
-  fields: ['tagBase', 'categoryBase'],
+  fields: ['tag_base', 'category_base'],
 
   panels: (_c, settings) => ({
-    taxonomyRedirects: settings.taxonomyRedirects.map((entry) => ({
+    taxonomyRedirects: settings.taxonomy_redirects.map((entry) => ({
       ...entry,
       // What the taxonomy is called in a sentence, so the list reads as the
       // taxonomy screens name it rather than as the file spells it.

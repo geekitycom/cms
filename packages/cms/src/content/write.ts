@@ -51,7 +51,6 @@ import { calendarDayIn, toUtcInstant } from './time.ts';
 
 export interface SiteRecords {
   readonly users: () => readonly AuthorUser[];
-  readonly timezone: () => string;
   readonly syndicationTargets: () => readonly SyndicationTarget[];
   readonly hasComments: (slug: string) => boolean;
 }
@@ -70,6 +69,8 @@ export interface DocumentSite extends SiteRecords {
   readonly announce: (change: DocumentChange) => Promise<void>;
   /** The username of whoever is writing: the author a new document starts on. */
   readonly writer: string | undefined;
+  /** The site's time zone, which an offset-less date in the form is read in. */
+  readonly timezone: string;
   readonly citedContext: (target: string) => Promise<CitedPage | undefined>;
   readonly storedContext: (target: string) => CitedPage | undefined;
   readonly learnHandles: (body: string) => Promise<void>;
@@ -235,7 +236,7 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
     );
   }
 
-  const timezone = site.timezone();
+  const { timezone } = site;
 
   const event = resolveEvent(form.event, timezone);
   if ('error' in event) return refused(event.error, event.field);

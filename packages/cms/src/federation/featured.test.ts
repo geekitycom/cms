@@ -24,7 +24,7 @@ async function site(posts: [string, string[]][]): Promise<Cms> {
 
   await writeSiteJson({
     contentDir,
-    settings: { ...DEFAULT_SITE_SETTINGS, title: 'Geekity', baseUrl: BASE_URL, author: 'ada' },
+    settings: { ...DEFAULT_SITE_SETTINGS, title: 'Geekity', base_url: BASE_URL, author: 'ada' },
   });
   writeUsers(dataDir, [{ username: 'ada' }]);
 

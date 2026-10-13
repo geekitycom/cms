@@ -14,7 +14,6 @@ import { calendarDayIn, toUtcInstant } from '../content/time.ts';
 import { normalizeBody } from '../content/writer.ts';
 import { currentUsername } from '../web/document-site.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { authorContext } from '../site/authors.ts';
@@ -56,7 +55,7 @@ export function mountPreview(app: Hono<GeekityEnv>): void {
             c.var.config,
             authorContext(listUsers(c.var.config.dataDir), document.author),
             { lead: true },
-            (url) => c.var.replyContexts.read(url),
+            (url) => c.var.replyContexts.read(url, c.var.site),
           ),
           editorPreview: true,
         },
@@ -72,7 +71,7 @@ function previewDocument(
 ): Document {
   const { type, body } = input;
 
-  const timezone = readSiteSettings(c.var.config.contentDir).timezone;
+  const timezone = c.var.site.timezone;
   const title = stringOrEmpty(body['title']).trim();
   // The editor's field is wall-clock time in the site's zone (decision-11), so
   // the preview reads it the way the save will and shows the date the saved

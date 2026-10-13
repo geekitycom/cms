@@ -25,6 +25,7 @@ import type { MailService } from '../notifications/mail-service.ts';
 import type { MaintenanceSwitch } from '../maintenance.ts';
 import type { PluginRegistry } from '../plugins/registry.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
+import type { SiteSettings } from '../site/settings.ts';
 import type { Supervision } from '../supervisor/supervision.ts';
 import type { CommentNotifier } from '../notifications/comments.ts';
 import type { ReplyContextService } from '../webmention/reply-contexts.ts';
@@ -59,6 +60,11 @@ export interface GeekityEnv {
     devMode: boolean;
     /** Whether the site can send mail, read once per request (see `MailService.configured`). */
     mailConfigured: boolean;
+    /**
+     * The site's settings in effect, read once per request. A handler that
+     * writes them and reads them back asks the registry instead.
+     */
+    site: SiteSettings;
     store: RequestIndex;
     /** Users and sessions, the part of the database that is not derived. */
     admin: AdminStore;

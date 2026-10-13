@@ -2,8 +2,10 @@ import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
 import { MAIL } from '../settings/mail.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
+import { SITE } from '../site/namespace.ts';
 import type { SiteSettings } from '../site/settings.ts';
-import { readSiteSettings } from '../site/site-json.ts';
+import { createSiteDataSource, themeName } from '../theme/site-data.ts';
+import type { SiteData } from '../theme/site-data.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { retry } from '../util/retry.ts';
@@ -166,7 +168,7 @@ export interface MailService {
   /** Which provider would carry the next message, or `none`. */
   providerName(): Promise<MailProviderName>;
   /** The From line the next message would carry. */
-  from(): MailAddress;
+  from(): Promise<MailAddress>;
   /**
    * Render a message from the theme and queue it.
    *
@@ -184,8 +186,9 @@ export interface MailService {
 
 /** Build the mail service for one site. */
 export function createMailService(options: CreateMailServiceOptions): MailService {
-  const { config } = options;
+  const { config, settings } = options;
   const logger = options.logger ?? console;
+  const siteData = createSiteDataSource(config);
   const attempts = Math.max(1, options.attempts ?? DEFAULT_MAIL_ATTEMPTS);
   const backoffMs = options.backoffMs ?? defaultMailBackoffMs;
 
@@ -196,7 +199,7 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
         options.themes ??
         createThemeSource({
           themesDir: config.themesDir,
-          chosen: () => readSiteSettings(config.contentDir).theme,
+          chosen: () => themeName(siteData.read()),
         }),
       baseUrl: config.baseUrl,
       now: config.now,
@@ -216,8 +219,8 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
   async function provider(): Promise<MailProvider | undefined> {
     if (options.provider !== undefined) return options.provider;
 
-    const { mailProvider } = readSiteSettings(config.contentDir);
-    const credentials = await options.settings.values(MAIL);
+    const mailProvider = await settings.get(SITE.mail_provider);
+    const credentials = await settings.values(MAIL);
 
     if (mailProvider === 'brevo' && credentials.brevo_api_key !== '') {
       return createBrevoProvider({ apiKey: credentials.brevo_api_key });
@@ -235,17 +238,17 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
   }
 
   /** The From line, as the settings say it now. */
-  function from(settings: SiteSettings): MailAddress {
+  function from(site: SiteSettings): MailAddress {
     const address =
-      settings.mailFromAddress === '' ? fallbackAddress(config.baseUrl) : settings.mailFromAddress;
-    const name = settings.mailFromName === '' ? settings.title : settings.mailFromName;
+      site.mail_from_address === '' ? fallbackAddress(config.baseUrl) : site.mail_from_address;
+    const name = site.mail_from_name === '' ? site.title : site.mail_from_name;
     return name === '' ? { address } : { name, address };
   }
 
   /** Try one message until it goes or the site runs out of patience. */
   async function deliver(carrier: MailProvider, message: OutgoingMail): Promise<MailResult> {
     const to = message.to.map((recipient) => recipient.address);
-    if (await holdOutbound(options.settings, config, { kind: 'mail', what: message.subject, to })) {
+    if (await holdOutbound(settings, config, { kind: 'mail', what: message.subject, to })) {
       logger.info(`Dev mode held "${message.subject}" to ${to.join(', ')}.`);
       return {
         ok: true,
@@ -296,7 +299,7 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
   function queue(
     to: MailRecipient | readonly MailRecipient[],
     replyTo: MailRecipient | undefined,
-    build: (settings: SiteSettings) => { subject: string; text: string; html?: string | undefined },
+    build: (site: SiteData) => { subject: string; text: string; html?: string | undefined },
   ): Promise<MailResult> {
     return messages.run(() => send(addressesOf(to), replyTo, build));
   }
@@ -304,7 +307,7 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
   async function send(
     recipients: MailAddress[],
     replyTo: MailRecipient | undefined,
-    build: (settings: SiteSettings) => { subject: string; text: string; html?: string | undefined },
+    build: (site: SiteData) => { subject: string; text: string; html?: string | undefined },
   ): Promise<MailResult> {
     const carrier = await provider();
 
@@ -328,11 +331,11 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
       };
     }
 
-    const settings = readSiteSettings(config.contentDir);
+    const site = await settings.values(SITE);
 
     let body: { subject: string; text: string; html?: string | undefined };
     try {
-      body = build(settings);
+      body = build(siteData.read());
     } catch (thrown) {
       // A template that will not render is a mistake in this site's own
       // files, not a provider that refused: there is nothing to retry, and
@@ -353,10 +356,10 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
       };
     }
 
-    const answerTo = replyTo === undefined ? replyToIn(settings) : addressOf(replyTo);
+    const answerTo = replyTo === undefined ? replyToIn(site) : addressOf(replyTo);
 
     return await deliver(carrier, {
-      from: from(settings),
+      from: from(site),
       to: recipients,
       ...(answerTo === undefined ? {} : { replyTo: answerTo }),
       subject: body.subject,
@@ -374,14 +377,14 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
       return (await provider())?.name ?? 'none';
     },
 
-    from() {
-      return from(readSiteSettings(config.contentDir));
+    async from() {
+      return from(await settings.values(SITE));
     },
 
     send(message) {
-      return queue(message.to, message.replyTo, (settings) => {
+      return queue(message.to, message.replyTo, (site) => {
         const rendered = templates.render(message.template, {
-          site: settings,
+          site,
           baseUrl: config.baseUrl,
           ...message.data,
         });
@@ -410,8 +413,8 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
 }
 
 /** Where a reply goes, as the settings say it, or nowhere in particular. */
-function replyToIn(settings: SiteSettings): MailAddress | undefined {
-  return settings.mailReplyTo === '' ? undefined : { address: settings.mailReplyTo };
+function replyToIn(site: SiteSettings): MailAddress | undefined {
+  return site.mail_reply_to === '' ? undefined : { address: site.mail_reply_to };
 }
 
 /**

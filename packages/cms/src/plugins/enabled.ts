@@ -4,16 +4,25 @@
  * a plugin's public settings can sit beside `enabled` and survive a disable.
  */
 
-import { updateFileAtomically } from '../files/atomic.ts';
-import { parseSiteJson, readSiteJson, siteDataPath } from '../site/site-json.ts';
+import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
+import { parseSiteJson, siteDataPath } from '../site/site-json.ts';
 import { isRecord } from '../util/guards.ts';
 
 export const PLUGINS_KEY = 'plugins';
 
+/**
+ * `site.json` as it is now. The enabled set is read here rather than through
+ * the settings registry: it decides which plugin namespaces exist, so it is
+ * read before any of them registers (decision-53).
+ */
+function siteFile(contentDir: string): Record<string, unknown> {
+  return parseSiteJson(readFileIfPresentSync(siteDataPath(contentDir)) ?? '');
+}
+
 /** The names the site has enabled, read from the file now. */
 export function readEnabledPlugins(contentDir: string): ReadonlySet<string> {
   const enabled = new Set<string>();
-  for (const [name, entry] of Object.entries(pluginsOf(readSiteJson(contentDir)))) {
+  for (const [name, entry] of Object.entries(pluginsOf(siteFile(contentDir)))) {
     if (isRecord(entry) && entry['enabled'] === true) enabled.add(name);
   }
   return enabled;
@@ -31,7 +40,7 @@ export async function setPluginEnabled(options: {
 
 /** One plugin's object under `plugins`, empty when it has none. */
 export function readPluginEntry(contentDir: string, name: string): Record<string, unknown> {
-  const entry = pluginsOf(readSiteJson(contentDir))[name];
+  const entry = pluginsOf(siteFile(contentDir))[name];
   return isRecord(entry) ? entry : {};
 }
 

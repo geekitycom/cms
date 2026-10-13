@@ -61,12 +61,12 @@ async function devSite(): Promise<DevSite> {
     settings: {
       ...DEFAULT_SITE_SETTINGS,
       title: 'Geekity',
-      baseUrl: BASE_URL,
+      base_url: BASE_URL,
       timezone: 'UTC',
       author: FIRST_ADMIN.username,
-      webmentionsSend: true,
-      indexNow: true,
-      indexNowKey: INDEXNOW_KEY,
+      webmentions_send: true,
+      index_now: true,
+      index_now_key: INDEXNOW_KEY,
       relays: [RELAY_INBOX],
     },
   });

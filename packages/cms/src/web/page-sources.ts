@@ -11,7 +11,6 @@ import type {
   CatalogReader,
   DocumentLookup,
 } from '../content/store.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { listUsers } from '../site/users.ts';
 import {
   selectedTargets,
@@ -56,19 +55,12 @@ export function pageSources({
   const locations = postLocations(config.dataDir);
 
   return {
-    syndication: (document) => ({
-      targets: selectedTargets(
-        document,
-        syndicationTargets(),
-        readSiteSettings(config.contentDir).language,
-      ),
+    syndication: (document, site) => ({
+      targets: selectedTargets(document, syndicationTargets(), site.language),
       copies: Object.values(copies.read(document.permalink)),
     }),
-    location: (document) =>
-      shareLocation(
-        locations.read(document.permalink),
-        readSiteSettings(config.contentDir).locationSharing,
-      ),
+    location: (document, site) =>
+      shareLocation(locations.read(document.permalink), site.location_sharing),
     pages: () => store.listAll({ type: 'page', draft: false, trashed: false, scheduled: false }),
     users: () => listUsers(config.dataDir),
     commentForm: (document, viewer, notifiable) =>

@@ -34,7 +34,7 @@ interface Site {
 async function site(sharing: LocationSharing = 'none'): Promise<Site> {
   const contentDir = await box.dir('geekity-micropub-location-content-');
   if (sharing !== 'none') {
-    await updateSiteSettings({ contentDir, change: (s) => ({ ...s, locationSharing: sharing }) });
+    await updateSiteSettings({ contentDir, change: (s) => ({ ...s, location_sharing: sharing }) });
   }
   const cms = await box.open({
     contentDir,

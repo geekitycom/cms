@@ -91,7 +91,7 @@ export function mountContact(app: Hono<GeekityEnv>): void {
       // notification rather than the message.
       sendContactMessage({
         mail: c.var.mail,
-        contentDir: config.contentDir,
+        contactEmail: c.var.site.contact_email,
         dataDir: config.dataDir,
         baseUrl: config.baseUrl,
         message: outcome.message,

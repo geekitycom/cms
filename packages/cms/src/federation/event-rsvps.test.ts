@@ -102,7 +102,7 @@ async function site(): Promise<Cms> {
     settings: {
       ...DEFAULT_SITE_SETTINGS,
       title: 'Geekity',
-      baseUrl: BASE_URL,
+      base_url: BASE_URL,
       timezone: 'UTC',
       author: LOCAL_USER,
     },

@@ -46,7 +46,6 @@ import { htmlToText } from '../content/search.ts';
 import { respellTags } from '../content/tags.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { taxonomyBasesFromSettings } from '../site/settings.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { listUsers, primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { escapeAttribute, escapeText } from '../util/html.ts';
@@ -268,7 +267,7 @@ export function postObject(
   const { actor, followers } = attribution(context, document);
   // The archives an activity points at are wherever the site currently serves
   // them, which is a setting rather than a constant (TASK-36).
-  const settings = readSiteSettings(context.data.config.contentDir);
+  const settings = context.data.site;
   const bases = taxonomyBasesFromSettings(settings);
   // The language a client filters and translates the post by: its own, else
   // the site's (TASK-154).
@@ -302,7 +301,7 @@ export function postObject(
     location: place(
       shareLocation(
         postLocations(context.data.config.dataDir).read(document.permalink),
-        settings.locationSharing,
+        settings.location_sharing,
       ),
     ),
     // Both taxonomies become hashtags: a relay or a search that keys on a

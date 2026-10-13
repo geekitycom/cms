@@ -6,7 +6,7 @@ import type { AdminStore, PostComment } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { DocumentLookup } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
-import type { CitedPageReader } from '../content/citation.ts';
+import type { CitedPageReader, CitedPagesNow } from '../content/citation.ts';
 import type { MailService } from './mail-service.ts';
 import { listUsers } from '../site/users.ts';
 import { messageOf } from '../util/errors.ts';
@@ -161,7 +161,7 @@ export interface CreateCommentDigestOptions {
   admin: AdminStore;
   /** The content index, for the posts the items are on. */
   store: DocumentLookup;
-  cited?: CitedPageReader | undefined;
+  cited?: CitedPagesNow | undefined;
   /** The one door out for email. */
   mail: MailService;
   /**
@@ -206,10 +206,13 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
   let running: Promise<unknown> = Promise.resolve();
 
   /** The post an item is on, as a message names it. */
-  function postOf(comment: PostComment): { title: string; url: string } {
+  function postOf(
+    comment: PostComment,
+    cited: CitedPageReader | undefined,
+  ): { title: string; url: string } {
     const document = store.getBySlug(comment.slug);
     return {
-      title: document === undefined ? comment.slug : postLabel(document, options.cited),
+      title: document === undefined ? comment.slug : postLabel(document, cited),
       url: absoluteUrl(comment.permalink, config.baseUrl),
     };
   }
@@ -222,7 +225,11 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
    * moderation link is spent the first time it is used: two moderators sharing
    * one link would mean the second of them clicking a dead one.
    */
-  function itemFor(comment: PostComment, now: Date): Record<string, unknown> {
+  function itemFor(
+    comment: PostComment,
+    now: Date,
+    cited: CitedPageReader | undefined,
+  ): Record<string, unknown> {
     const context = { dataDir: config.dataDir, baseUrl: config.baseUrl, now };
     return {
       comment: {
@@ -237,7 +244,7 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
         submitted: comment.submitted,
         url: comment.url,
       },
-      post: postOf(comment),
+      post: postOf(comment, cited),
       actions: MODERATION_ACTIONS.map((action) => ({
         action,
         label: action === 'approve' ? 'Approve' : action === 'spam' ? 'Spam' : 'Delete',
@@ -272,13 +279,14 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
 
     const listed = pending.slice(0, maxItems);
     const queueUrl = absoluteUrl('/admin/comments', config.baseUrl);
+    const cited = await options.cited?.();
 
     for (const recipient of due) {
       void mail.send({
         to: recipient.email,
         template: COMMENT_DIGEST_TEMPLATE,
         data: {
-          items: listed.map((comment) => itemFor(comment, now)),
+          items: listed.map((comment) => itemFor(comment, now, cited)),
           total: pending.length,
           more: pending.length - listed.length,
           mode: notificationMode(recipient.user, COMMENTS_NOTIFICATION),

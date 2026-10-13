@@ -17,10 +17,10 @@
 {% endmacro %}
 
 {% block settingsProblems %}
-  {{ field.problem('settings-comments-close', problems.commentsCloseAfterDays) }}
-  {{ field.problem('settings-comment-email-retention', problems.commentEmailRetentionDays) }}
-  {{ field.problem('settings-address-hash-retention', problems.addressHashRetentionDays) }}
-  {{ field.problem('settings-contact-message-retention', problems.contactMessageRetentionDays) }}
+  {{ field.problem('settings-comments-close', problems.comments_close_after_days) }}
+  {{ field.problem('settings-comment-email-retention', problems.comment_email_retention_days) }}
+  {{ field.problem('settings-address-hash-retention', problems.address_hash_retention_days) }}
+  {{ field.problem('settings-contact-message-retention', problems.contact_message_retention_days) }}
 {% endblock %}
 
 {% block settingsFields %}
@@ -40,9 +40,9 @@
     <code>comments: true</code> or <code>comments: false</code>, which the
     editor offers as a field. Pages are closed unless they say otherwise.
   {% endset %}
-  {{ field.text('settings-comments-close', fields.commentsCloseAfterDays, 'Close comments after',
-       form.commentsCloseAfterDays, type='number', min='0', step='1',
-       error=problems.commentsCloseAfterDays, hint=closeHint) }}
+  {{ field.text('settings-comments-close', fields.comments_close_after_days, 'Close comments after',
+       form.comments_close_after_days, type='number', min='0', step='1',
+       error=problems.comments_close_after_days, hint=closeHint) }}
 
   <h2 class="mt-6 text-lg font-semibold">Webmentions</h2>
 
@@ -51,8 +51,8 @@
     asked whether it takes webmentions and told about the post if it does.
     The Resend button on the federation screen sends them again.
   {% endset %}
-  {{ field.checkbox('settings-webmentions-send', fields.webmentionsSend,
-       'Tell the pages a post links to', checked=form.webmentionsSend, hint=sendHint) }}
+  {{ field.checkbox('settings-webmentions-send', fields.webmentions_send,
+       'Tell the pages a post links to', checked=form.webmentions_send, hint=sendHint) }}
 
   {% set receiveHint %}
     Every post advertises an endpoint, and a page that links to one and says
@@ -60,8 +60,8 @@
     is gone from the pages and answers nothing; what has already arrived
     stays where it is.
   {% endset %}
-  {{ field.checkbox('settings-webmentions-receive', fields.webmentionsReceive,
-       'Accept webmentions sent here', checked=form.webmentionsReceive, hint=receiveHint) }}
+  {{ field.checkbox('settings-webmentions-receive', fields.webmentions_receive,
+       'Accept webmentions sent here', checked=form.webmentions_receive, hint=receiveHint) }}
 
   <h2 class="mt-6 text-lg font-semibold">Keeping personal data</h2>
 
@@ -76,34 +76,34 @@
   </p>
 
   {% set emailHint %}
-    {{ retention(form.commentEmailRetentionDays) }}
+    {{ retention(form.comment_email_retention_days) }}
     Past this a comment loses its author's email. The comment, its place in
     the thread and its moderation status stay; the author is no longer told
     about replies, and their next comment waits for a moderator. Recommended:
     <code>180</code>.
   {% endset %}
-  {{ field.text('settings-comment-email-retention', fields.commentEmailRetentionDays,
-       'Keep commenter emails for', form.commentEmailRetentionDays, type='number', min='0',
-       step='1', error=problems.commentEmailRetentionDays, hint=emailHint) }}
+  {{ field.text('settings-comment-email-retention', fields.comment_email_retention_days,
+       'Keep commenter emails for', form.comment_email_retention_days, type='number', min='0',
+       step='1', error=problems.comment_email_retention_days, hint=emailHint) }}
 
   {% set hashHint %}
-    {{ retention(form.addressHashRetentionDays) }}
+    {{ retention(form.address_hash_retention_days) }}
     The salted hash of the address a comment, webmention or contact message
     came from, which shows a moderator that two came from one place.
     Recommended: <code>30</code>.
   {% endset %}
-  {{ field.text('settings-address-hash-retention', fields.addressHashRetentionDays,
-       'Keep address hashes for', form.addressHashRetentionDays, type='number', min='0',
-       step='1', error=problems.addressHashRetentionDays, hint=hashHint) }}
+  {{ field.text('settings-address-hash-retention', fields.address_hash_retention_days,
+       'Keep address hashes for', form.address_hash_retention_days, type='number', min='0',
+       step='1', error=problems.address_hash_retention_days, hint=hashHint) }}
 
   {% set contactHint %}
-    {{ retention(form.contactMessageRetentionDays) }}
+    {{ retention(form.contact_message_retention_days) }}
     Past this a contact message is deleted from the Messages screen and from
     <code>data/contact/</code>. Recommended: <code>365</code>.
   {% endset %}
-  {{ field.text('settings-contact-message-retention', fields.contactMessageRetentionDays,
-       'Keep contact messages for', form.contactMessageRetentionDays, type='number', min='0',
-       step='1', error=problems.contactMessageRetentionDays, hint=contactHint) }}
+  {{ field.text('settings-contact-message-retention', fields.contact_message_retention_days,
+       'Keep contact messages for', form.contact_message_retention_days, type='number', min='0',
+       step='1', error=problems.contact_message_retention_days, hint=contactHint) }}
 {% endblock %}
 
 {% block settingsPanels %}

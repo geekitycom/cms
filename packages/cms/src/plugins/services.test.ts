@@ -29,7 +29,7 @@ const SITE = {
   dataDir: DATA_DIR,
   contentDir: path.join(DATA_DIR, 'content'),
   env: {},
-  siteInfo: () => ({ baseUrl: 'https://example.test/', title: 'Example' }),
+  siteInfo: () => Promise.resolve({ baseUrl: 'https://example.test/', title: 'Example' }),
   allowPrivateAddress: false,
   lookup: () => Promise.reject(new Error('a test resolves no names')),
 };
@@ -191,8 +191,8 @@ describe('services between plugins', () => {
     });
   });
 
-  it('hands register the site base URL and title, read when asked', () => {
-    let info: unknown;
+  it('hands register the site base URL and title, read when asked', async () => {
+    let info: Promise<unknown> | undefined;
     registry(
       definePlugin({
         ...META,
@@ -203,6 +203,6 @@ describe('services between plugins', () => {
         },
       }),
     );
-    assert.deepEqual(info, { baseUrl: 'https://example.test/', title: 'Example' });
+    assert.deepEqual(await info, { baseUrl: 'https://example.test/', title: 'Example' });
   });
 });

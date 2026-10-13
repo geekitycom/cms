@@ -3,10 +3,10 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { readSiteSettings } from '../site/site-json.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -38,7 +38,7 @@ describe('Settings > Privacy (AC #2)', () => {
     assert.match(html, /<option value="none" selected>/, 'a new site publishes no location');
     assert.match(html, /<option value="place"/);
     assert.match(html, /<option value="exact"/);
-    assert.equal(readSiteSettings(cms.config.contentDir).locationSharing, 'none');
+    assert.equal((await siteSettingsIn(cms.config.contentDir)).location_sharing, 'none');
   });
 
   it('says that location and camera metadata is always removed from uploads', async () => {
@@ -58,14 +58,14 @@ describe('Settings > Privacy (AC #2)', () => {
     const response = await saveSettings(agent, 'privacy', { location_sharing: 'place' });
     assert.equal(response.status, 303);
 
-    assert.equal(readSiteSettings(contentDir).locationSharing, 'place');
+    assert.equal((await siteSettingsIn(contentDir)).location_sharing, 'place');
     assert.equal((await siteJson(contentDir))['locationSharing'], 'place');
 
     const back = await (await agent.get('/admin/settings/privacy')).text();
     assert.match(back, /<option value="place" selected>/);
 
     assert.equal((await saveSettings(agent, 'privacy', { location_sharing: 'exact' })).status, 303);
-    assert.equal(readSiteSettings(contentDir).locationSharing, 'exact');
+    assert.equal((await siteSettingsIn(contentDir)).location_sharing, 'exact');
   });
 
   it('refuses a choice that is not one on offer, and writes nothing', async () => {
@@ -77,7 +77,7 @@ describe('Settings > Privacy (AC #2)', () => {
     const response = await saveSettings(agent, 'privacy', { location_sharing: 'everything' });
     assert.equal(response.status, 400);
     assert.match(await response.text(), /none, place, exact/);
-    assert.equal(readSiteSettings(contentDir).locationSharing, 'place');
+    assert.equal((await siteSettingsIn(contentDir)).location_sharing, 'place');
   });
 
   it('reads a hand-edited value this version does not know as the default', async () => {
@@ -89,6 +89,6 @@ describe('Settings > Privacy (AC #2)', () => {
       JSON.stringify({ title: 'A Site', locationSharing: 'all' }),
       'utf8',
     );
-    assert.equal(readSiteSettings(contentDir).locationSharing, 'none');
+    assert.equal((await siteSettingsIn(contentDir)).location_sharing, 'none');
   });
 });

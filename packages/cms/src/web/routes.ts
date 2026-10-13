@@ -11,7 +11,6 @@ import { iconSetting } from '../images/icons.ts';
 import { advertiseIdentityEndpoints } from './indieauth-discovery.ts';
 import { mountNotificationLinks } from './notification-routes.ts';
 import { robotsPolicyOf } from '../site/settings.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { mountPingbacks } from './pingback-routes.ts';
 import { mountWebmentions } from './webmention-routes.ts';
 import { favicon, imageVariant, themeAsset, upload } from './asset-routes.ts';
@@ -120,7 +119,7 @@ export function mountPublicSite(
         : negotiateDocument(c, home, selectFromAccept(c, DOCUMENT_REPRESENTATIONS));
     // The home page is where a tool that found the site looks for its index
     // (TASK-149): a header, so it is found without parsing the page.
-    if (readSiteSettings(c.var.config.contentDir).llmsTxt) {
+    if (c.var.site.llms_txt) {
       response.headers.append('link', LLMS_TXT_LINK);
     }
     return response;
@@ -152,11 +151,7 @@ export function mountPublicSite(
   app.get(SITEMAP_PATH, (c) => sitemap(c, undefined));
   app.get(SITEMAP_CHILD_ROUTE, (c) => sitemap(c, Number(c.req.param('page'))));
   app.get(ROBOTS_PATH, (c) =>
-    robotsResponse(
-      c.var.config.baseUrl,
-      conditionalHeaders(c),
-      robotsPolicyOf(readSiteSettings(c.var.config.contentDir)),
-    ),
+    robotsResponse(c.var.config.baseUrl, conditionalHeaders(c), robotsPolicyOf(c.var.site)),
   );
 
   // The web app manifest and the root favicon (TASK-147), fixed paths at the
@@ -200,9 +195,9 @@ export function mountPublicSite(
   // engine checks for it. Any other `.txt` path is not this route's: it falls
   // through to whatever document or 404 would have answered it.
   app.get('/:file{[A-Za-z0-9-]{8,128}\\.txt}', async (c, next) => {
-    const settings = readSiteSettings(c.var.config.contentDir);
-    const key = settings.indexNowKey;
-    if (!settings.indexNow || key === '' || c.req.path !== indexNowKeyPath(key)) {
+    const settings = c.var.site;
+    const key = settings.index_now_key;
+    if (!settings.index_now || key === '' || c.req.path !== indexNowKeyPath(key)) {
       await next();
       return;
     }

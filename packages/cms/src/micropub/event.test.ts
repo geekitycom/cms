@@ -15,8 +15,9 @@ import type { Browser } from '../admin/__testing__/harness.ts';
 import { postTypeOf } from '../content/post-type.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
-import { readSiteSettings, writeSiteJson } from '../site/site-json.ts';
+import { writeSiteJson } from '../site/site-json.ts';
 import { findUser } from '../site/users.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 remoteHostsDoNotExist();
 
@@ -41,7 +42,10 @@ async function site(timezone = 'UTC'): Promise<Site> {
     baseUrl: BASE,
     now: () => NOW,
   });
-  await writeSiteJson({ contentDir, settings: { ...readSiteSettings(contentDir), timezone } });
+  await writeSiteJson({
+    contentDir,
+    settings: { ...(await siteSettingsIn(contentDir)), timezone },
+  });
   const agent = await signedIn(cms);
   const ada = findUser(cms.config.dataDir, FIRST_ADMIN.username);
   assert.ok(ada !== undefined, 'the first admin exists');

@@ -22,6 +22,7 @@ import { moderationLink, NOTIFICATION_FIELDS } from '../notifications/links.ts';
 import { COMMENT_POST_PATH } from './form.ts';
 import type { ModerationAction } from './moderate.ts';
 import { COMMENT_FIELDS } from './submission.ts';
+import { SITE } from '../site/namespace.ts';
 
 /**
  * Every signed-in reply is a reply post (TASK-326): the moderation screen
@@ -376,7 +377,10 @@ describe('the reply context of a reply post answering this site (AC #3)', () => 
     await settled(cms);
 
     assert.deepEqual(looked, [], 'nothing was looked up');
-    const context = cms.replyContexts.read(`${BASE_URL}${POST_URL}`);
+    const context = cms.replyContexts.read(
+      `${BASE_URL}${POST_URL}`,
+      await cms.settings.values(SITE),
+    );
     assert.equal(context?.name, 'Hello world');
     assert.equal(context.author?.name, ADA.displayName);
     assert.equal(context.text, 'Words.');

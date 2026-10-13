@@ -13,11 +13,11 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import type { Cms } from '../index.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { THEMES_PATH } from './appearance.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { ADMIN_SECTIONS } from './menu.ts';
+import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -202,7 +202,7 @@ describe('activating a theme', () => {
 
     assert.equal(response.status, 303);
     assert.equal(response.headers.get('location'), THEMES_PATH, 'back to the screen');
-    assert.equal(readSiteSettings(contentDir).theme, 'midnight');
+    assert.equal((await siteSettingsIn(contentDir)).theme, 'midnight');
     assert.match(await post(cms), /<h1>Midnight: Hello<\/h1>/, 'and the site is wearing it');
     assert.match(await screen(agent), /Midnight/, 'and says so on the way back');
   });
@@ -217,7 +217,7 @@ describe('activating a theme', () => {
     const response = await activate(agent, '');
 
     assert.equal(response.status, 303);
-    assert.equal(readSiteSettings(contentDir).theme, '');
+    assert.equal((await siteSettingsIn(contentDir)).theme, '');
     const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
     ) as Record<string, unknown>;
@@ -231,7 +231,7 @@ describe('activating a theme', () => {
     const response = await agent.post(THEMES_PATH, { theme: 'midnight' });
 
     assert.equal(response.status, 403);
-    assert.equal(readSiteSettings(contentDir).theme, '', 'nothing was written');
+    assert.equal((await siteSettingsIn(contentDir)).theme, '', 'nothing was written');
   });
 });
 
@@ -264,7 +264,7 @@ describe('a folder that is not a theme', () => {
     const response = await activate(agent, 'halfway');
 
     assert.equal(response.status, 303);
-    assert.equal(readSiteSettings(contentDir).theme, '', 'nothing was written');
+    assert.equal((await siteSettingsIn(contentDir)).theme, '', 'nothing was written');
     assert.match(await screen(agent), /halfway/, 'and the screen says why not');
     assert.match(await post(cms), /<article class="blog-post h-entry">/, 'the site is untouched');
   });
@@ -276,7 +276,7 @@ describe('a folder that is not a theme', () => {
       const response = await activate(agent, name);
 
       assert.equal(response.status, 303, name);
-      assert.equal(readSiteSettings(contentDir).theme, '', `${name} was taken as a theme`);
+      assert.equal((await siteSettingsIn(contentDir)).theme, '', `${name} was taken as a theme`);
     }
   });
 
@@ -286,7 +286,7 @@ describe('a folder that is not a theme', () => {
     const response = await activate(agent, 'daylight');
 
     assert.equal(response.status, 303);
-    assert.equal(readSiteSettings(contentDir).theme, '');
+    assert.equal((await siteSettingsIn(contentDir)).theme, '');
     assert.match(await screen(agent), /daylight/, 'and says which one is not there');
   });
 });

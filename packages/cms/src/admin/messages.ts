@@ -9,7 +9,6 @@ import {
 } from '../contact/records.ts';
 import type { ContactMessage, ContactStatus } from '../contact/records.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { pageCount } from '../web/pagination.ts';
 import type { AdminRender } from './documents.ts';
@@ -105,12 +104,12 @@ export function mountMessagesScreen(
   const { render } = options;
 
   app.get(MESSAGES_PATH, (c) => {
-    const { dataDir, contentDir } = c.var.config;
+    const { dataDir } = c.var.config;
     const status = statusOf(c.req.query('status'));
     const page = Math.max(1, Math.trunc(Number(c.req.query('page') ?? '1')) || 1);
 
     const counts = countContactMessagesByStatus(dataDir);
-    const timezone = readSiteSettings(contentDir).timezone;
+    const timezone = c.var.site.timezone;
     const rows = listContactMessages(dataDir, { status })
       .slice((page - 1) * MESSAGES_PER_PAGE, page * MESSAGES_PER_PAGE)
       .map((message) => messageRow(message, timezone));

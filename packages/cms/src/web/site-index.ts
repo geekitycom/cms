@@ -4,7 +4,6 @@ import type { Document } from '../content/document.ts';
 import { isListed } from '../content/served.ts';
 import { calendarDayIn } from '../content/time.ts';
 import type { GeekityEnv } from './env.ts';
-import { readSiteSettings } from '../site/site-json.ts';
 import { siteTimezone } from '../theme/site-data.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
 import { archiveOf, homeListing } from './listing-subject.ts';
@@ -40,7 +39,7 @@ export function sitemap(c: Context<GeekityEnv>, page: number | undefined): Respo
 
 export function llmsTxt(c: Context<GeekityEnv>): Response {
   const { contentDir, baseUrl } = c.var.config;
-  if (!readSiteSettings(contentDir).llmsTxt) return notFound(c);
+  if (!c.var.site.llms_txt) return notFound(c);
   const file =
     ownLlmsTxt(contentDir) ?? generatedLlmsTxt(llmsIndex(c), baseUrl, markdownUrlFor(c, '/'));
   return llmsTxtResponse(file, conditionalHeaders(c));
