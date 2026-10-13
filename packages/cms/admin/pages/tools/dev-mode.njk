@@ -1,4 +1,8 @@
 {% extends "layouts/shell.njk" %}
+{% import "components/fields.njk" as field %}
+{% from "components/alert.njk" import alert %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
 {% from "components/table.njk" import table %}
 
 {% block title %}{{ heading }}{% endblock %}
@@ -7,17 +11,39 @@
   <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
 
   <div class="flex flex-col gap-6">
+    {% if problem %}
+      {% call field.summary('Nothing was saved.') %}
+        {{ field.problem('dev-mode-on', problem) }}
+      {% endcall %}
+    {% endif %}
+
     <p class="max-w-prose">
       {% if on %}
         Dev mode is on. Nothing this site does reaches the outside world: no ActivityPub
         delivery or relay follow, no webmention, no rssCloud or WebSub ping, no IndexNow
-        submission and no email. Each one is recorded here instead. Run
-        <code>geekity dev-mode off</code> to take the site live; nothing held is sent then.
+        submission and no email. Each one is recorded here instead. Turn the switch off, or
+        run <code>geekity dev-mode off</code>, to take the site live; nothing held is sent then.
       {% else %}
         Dev mode is off, and the site is live. This is what it held while it was on. To hold
-        everything again, run <code>geekity dev-mode on</code>.
+        everything again, turn the switch on or run <code>geekity dev-mode on</code>.
       {% endif %}
     </p>
+
+    {% if latched %}
+      {% call alert(color='warning', style='soft') %}
+        <span>{{ latched }}</span>
+      {% endcall %}
+    {% endif %}
+
+    {% call card(title='Dev mode') %}
+      <form method="post" action="{{ saveUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        {{ field.checkbox('dev-mode-on', 'on', 'Hold everything this site would send', checked=on, error=problem) }}
+        {% call cardActions() %}
+          {{ button('Save', type='submit', color='primary') }}
+        {% endcall %}
+      </form>
+    {% endcall %}
 
     <p>{{ heldCount }} held in all{% if rows.length >= shown %}; the newest {{ shown }} entries are listed, and <code>data/dev-mode.jsonl</code> has the rest{% endif %}.</p>
 

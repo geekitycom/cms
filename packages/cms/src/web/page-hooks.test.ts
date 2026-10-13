@@ -5,7 +5,6 @@ import { after, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { sessionCookieName } from './session.ts';
-import { enterDevMode, leaveDevMode } from '../dev-mode.ts';
 import { createMailTemplates } from '../notifications/mail-templates.ts';
 import type { Cms } from '../index.ts';
 import { deleteUser } from '../admin/users.ts';
@@ -292,22 +291,22 @@ describe('devMode and signedIn on the context, for a theme to leave analytics ou
   });
 
   it('follows the latched dev mode on the next request, with no restart (AC #1)', async () => {
-    const { cms, dataDir } = await siteWithGuardedAnalytics();
+    const { cms } = await siteWithGuardedAnalytics();
     const about = async (): Promise<string> => await (await cms.app.request('/about/')).text();
 
     assert.ok((await about()).includes(UMAMI));
-    enterDevMode(dataDir, 'command', cms.config.now());
+    await cms.settings.set('dev_mode', new Map([['on', true]]), 'cli');
     assert.equal((await about()).includes('umami'), false);
-    leaveDevMode(dataDir, cms.config.now());
+    await cms.settings.set('dev_mode', new Map([['on', false]]), 'cli');
     assert.ok((await about()).includes(UMAMI));
   });
 
   it('gives a listing a new validator when dev mode ends, so a cached dev-mode copy is replaced', async () => {
-    const { cms, dataDir } = await siteWithGuardedAnalytics();
-    enterDevMode(dataDir, 'command', cms.config.now());
+    const { cms } = await siteWithGuardedAnalytics();
+    await cms.settings.set('dev_mode', new Map([['on', true]]), 'cli');
     const etag = (await cms.app.request('/tag/notes/')).headers.get('etag');
     assert.ok(etag !== null, 'the dev-mode listing has a validator');
-    leaveDevMode(dataDir, cms.config.now());
+    await cms.settings.set('dev_mode', new Map([['on', false]]), 'cli');
 
     const live = await cms.app.request('/tag/notes/', { headers: { 'if-none-match': etag } });
     assert.equal(live.status, 200, 'the dev-mode copy is not revalidated');

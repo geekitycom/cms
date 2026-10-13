@@ -11,7 +11,6 @@ import { after, describe, it } from 'node:test';
 import { browser, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import { saveSettings } from '../admin/__testing__/settings.ts';
 import type { Cms } from '../index.ts';
-import { enterMaintenance } from '../maintenance.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -113,10 +112,10 @@ describe('/.well-known/security.txt', () => {
   });
 
   it('stays reachable in maintenance mode, when a researcher may need it most', async () => {
-    const { cms, dataDir, advance } = await site({
+    const { cms, advance } = await site({
       securityContacts: ['mailto:security@blog.example'],
     });
-    await enterMaintenance(dataDir, {});
+    await cms.settings.set('maintenance', new Map([['on', true]]), 'cli');
     advance(1001);
 
     assert.equal((await cms.app.request('/2026/09/anything/')).status, 503, 'the site is down');
@@ -217,9 +216,9 @@ describe('/.well-known/change-password', () => {
   });
 
   it('still redirects in maintenance mode, since the admin it leads to is open', async () => {
-    const { cms, dataDir, advance } = await site();
+    const { cms, advance } = await site();
     const agent = await signedIn(cms);
-    await enterMaintenance(dataDir, {});
+    await cms.settings.set('maintenance', new Map([['on', true]]), 'cli');
     advance(1001);
 
     assert.equal(

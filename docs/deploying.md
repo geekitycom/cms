@@ -347,6 +347,10 @@ when, what kind, what the site would have sent, and to whom. Tools > Dev mode
 in the admin lists the lines, newest first. Every admin screen shows a banner
 while the mode is on, and `geekity serve` prints a notice when it boots.
 
+Tools > Dev mode also has a switch that turns the mode on and takes the site
+live. It does what `geekity dev-mode on` and `off` do, and the record says
+which of them was used.
+
 ```sh
 $ geekity dev-mode on
 Dev mode is on: nothing the site does is sent until `geekity dev-mode off`.
@@ -356,16 +360,21 @@ $ geekity dev-mode off
 Dev mode is off: the site is live. Nothing held while it was on will be sent.
 ```
 
-`devMode: true` in the config, or `GEEKITY_DEV_MODE=true`, starts a site in
-dev mode. Boot writes `data/dev-mode.json`, and that file keeps the mode on
-from then on. Removing the variable does not take the site live. Only
-`geekity dev-mode off` does. The command refuses while the config or the
-environment still sets dev mode, because the next boot would turn it on again.
+The mode is the setting `dev_mode.on`, stored in `data/dev-mode.json` as
+`{ "on": true }` (see [Runtime settings](settings.md#runtime-settings)). A file
+written by an older version, where the file being there meant on, is still read
+as on.
 
-The running site checks the file before every send, so going live needs no
-restart. The exception is a server started with the variable. That process
-stays in dev mode until it restarts without the variable. Going live also adds
-a line to the record.
+`devMode: true` in the config, or `GEEKITY_DEV_MODE=true`, starts a site in
+dev mode. Boot sets `dev_mode.on` to true, and the stored value keeps the mode
+on from then on. The variable is a latch, not an override: removing it does not
+take the site live. Only `geekity dev-mode off` or the admin switch does. Both
+refuse while the config or the environment still sets dev mode, because the
+next boot would turn it on again. There is no `GEEKITY_DEV_MODE__ON`.
+
+The running site reads the setting before every send, so going live needs no
+restart. Going live adds a line to the record, with who did it: the command or
+the admin switch.
 
 Going live replays nothing. The site drops each held side effect. It does not
 queue it, and it does not record a delivery or webmention as failed. Neither
@@ -391,7 +400,8 @@ services:
 ```
 
 To go live, remove the variable and recreate the container. The file in the
-`data` volume keeps the mode on through the restart. Then run:
+`data` volume keeps the mode on through the restart. Then turn the switch off at
+Tools > Dev mode, or run:
 
 ```sh
 docker compose exec geekity geekity dev-mode off

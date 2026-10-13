@@ -37,13 +37,10 @@ import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
 import { askToReload } from './supervisor/control.ts';
 import { superviseCluster } from './supervisor/primary.ts';
 import { processChannel, superviseWorker } from './supervisor/worker.ts';
-import {
-  enterMaintenance,
-  leaveMaintenance,
-  maintenanceFile,
-  readMaintenance,
-} from './maintenance.ts';
-import { devModeOn, enterDevMode, leaveDevMode } from './dev-mode.ts';
+import { DEV_MODE, DEV_MODE_LATCHED } from './settings/dev-mode.ts';
+import { MAINTENANCE } from './settings/maintenance.ts';
+import { createSettingsRegistry, overridden } from './settings/registry.ts';
+import type { SettingRef, SettingsRegistry, ValueSource } from './settings/types.ts';
 import { messageOf } from './util/errors.ts';
 
 type CoreCommand =
@@ -54,6 +51,7 @@ type CoreCommand =
   | 'resend'
   | 'maintenance'
   | 'dev-mode'
+  | 'settings'
   | 'strip-metadata'
   | 'user'
   | 'plugin';
@@ -145,6 +143,33 @@ const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
     ],
     run: devModeCommand,
   },
+  settings: {
+    synopsis: [
+      'settings list [<namespace>] [--config <file>]',
+      'settings get <namespace.key> [--config <file>]',
+      'settings set <namespace.key> (<value> | --unset) [--config <file>]',
+    ],
+    help: [
+      [
+        'settings list',
+        [
+          'Print every runtime setting: its value in effect, where',
+          'that value came from (env, config, file or default) and',
+          'what it does. A secret prints as (set) or (not set).',
+        ],
+      ],
+      ['settings get', ['Print one value in effect, and what overrides it, if', 'anything.']],
+      [
+        'settings set',
+        [
+          'Store one value, or remove it with --unset so the default',
+          'applies. A setting the environment or the config overrides',
+          'is refused. A secret set here is left in the shell history.',
+        ],
+      ],
+    ],
+    run: settingsCommand,
+  },
   'strip-metadata': {
     synopsis: ['strip-metadata [--config <file>]'],
     help: [
@@ -218,7 +243,7 @@ const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
 const VALUE_FLAGS = ['until'] as const;
 
 /** The options that are simply on or off. */
-const SWITCH_FLAGS = ['all', 'check'] as const;
+const SWITCH_FLAGS = ['all', 'check', 'unset'] as const;
 
 export interface ParsedArgs {
   command: Command;
@@ -261,6 +286,7 @@ const OPTIONS_HELP = `Options:
                    ISO 8601 time such as 2026-09-28T14:00:00Z. It is the
                    Retry-After a client is sent, and the maintenance page
                    says it.
+  --unset          With settings set: remove the stored value.
   --all            With resend: every announced post rather than named ones.
   --check          With plugin upgrade: say what would change, install nothing.
   -h, --help       Show this help.
@@ -445,7 +471,7 @@ async function initCommand({ args }: ParsedArgs): Promise<number> {
 }
 
 /**
- * `geekity maintenance on|off|status` (TASK-130).
+ * `geekity maintenance on|off|status` (TASK-130), over `maintenance.*`.
  *
  * Only the file under `data/` is touched, so this works the same with the
  * site running or stopped: a running site re-reads it within a second.
@@ -453,28 +479,33 @@ async function initCommand({ args }: ParsedArgs): Promise<number> {
 async function maintenanceCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const action = args[0];
   const config = await loadResolvedConfig(configPath);
-  const file = maintenanceFile(config.dataDir);
+  const settings = createSettingsRegistry({ config });
 
   if (action === 'on') {
     const until = untilFlag(text(flags, 'until'));
-    await enterMaintenance(config.dataDir, { until });
+    await setOrThrow(settings, 'maintenance', { on: true, until: until?.toISOString() ?? '' });
+    const file = path.join(config.dataDir, MAINTENANCE.declaration.storage.path);
     process.stdout.write(`Maintenance mode is on (${file}).${untilLine(until)}\n`);
     return 0;
   }
 
   if (action === 'off') {
-    await leaveMaintenance(config.dataDir);
-    process.stdout.write(`Maintenance mode is off.${forcedLine(config.maintenance)}\n`);
+    if (overridden((await settings.resolve(MAINTENANCE.on)).source)) {
+      throw new Error(`Maintenance mode is still on.${forcedLine(true)}`);
+    }
+    await setOrThrow(settings, 'maintenance', { on: false });
+    process.stdout.write('Maintenance mode is off.\n');
     return 0;
   }
 
   if (action === 'status') {
-    const window = readMaintenance(config.dataDir);
-    if (window === undefined && !config.maintenance) {
+    const on = await settings.resolve(MAINTENANCE.on);
+    if (!on.value) {
       process.stdout.write('Maintenance mode is off.\n');
     } else {
+      const until = await settings.get(MAINTENANCE.until);
       process.stdout.write(
-        `Maintenance mode is on.${untilLine(window?.until)}${forcedLine(config.maintenance)}\n`,
+        `Maintenance mode is on.${untilLine(until === '' ? undefined : new Date(until))}${forcedLine(overridden(on.source))}\n`,
       );
     }
     return 0;
@@ -483,12 +514,14 @@ async function maintenanceCommand({ args, configPath, flags }: ParsedArgs): Prom
   throw new Error('geekity maintenance needs on, off or status.');
 }
 
+/** `geekity dev-mode on|off|status` (TASK-295), over `dev_mode.on`. */
 async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number> {
   const action = args[0];
   const config = await loadResolvedConfig(configPath);
+  const settings = createSettingsRegistry({ config });
 
   if (action === 'on') {
-    enterDevMode(config.dataDir, 'command', config.now());
+    await setOrThrow(settings, 'dev_mode', { on: true });
     process.stdout.write(
       'Dev mode is on: nothing the site does is sent until `geekity dev-mode off`.\n',
     );
@@ -497,12 +530,10 @@ async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number>
 
   if (action === 'off') {
     if (config.devMode) {
-      throw new Error(
-        'GEEKITY_DEV_MODE or the devMode setting still asks for dev mode. ' +
-          'Remove it, then run geekity dev-mode off again.',
-      );
+      throw new Error(`${DEV_MODE_LATCHED} Remove it, then run geekity dev-mode off again.`);
     }
-    const wasOn = leaveDevMode(config.dataDir, config.now());
+    const wasOn = await settings.get(DEV_MODE.on);
+    await setOrThrow(settings, 'dev_mode', { on: false });
     process.stdout.write(
       wasOn
         ? 'Dev mode is off: the site is live. Nothing held while it was on will be sent.\n'
@@ -512,11 +543,130 @@ async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number>
   }
 
   if (action === 'status') {
-    process.stdout.write(devModeOn(config) ? 'Dev mode is on.\n' : 'Dev mode is off.\n');
+    process.stdout.write(
+      (await settings.get(DEV_MODE.on)) ? 'Dev mode is on.\n' : 'Dev mode is off.\n',
+    );
     return 0;
   }
 
   throw new Error('geekity dev-mode needs on, off or status.');
+}
+
+/** `geekity settings list|get|set` (decision-53). */
+async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
+  const [action, name, value] = args;
+  const config = await loadResolvedConfig(configPath);
+  const settings = createSettingsRegistry({ config });
+
+  if (action === 'list') {
+    const refs = settings.list().filter((ref) => name === undefined || ref.namespace === name);
+    if (refs.length === 0) throw new Error(`There is no settings namespace ${String(name)}.`);
+    const rows = await Promise.all(refs.map((ref) => settingRow(settings, ref)));
+    process.stdout.write(table(rows));
+    return 0;
+  }
+
+  if (action === 'get' && name !== undefined) {
+    const ref = settingNamed(settings, name);
+    const resolved = await settings.resolve(ref);
+    const lines = [shown(ref, resolved.value)];
+    if (overridden(resolved.source)) {
+      const held = resolved.stored === undefined ? 'nothing' : shown(ref, resolved.stored);
+      lines.push(`overridden by ${sourceLabel(resolved.source)}; the file holds ${held}`);
+    }
+    process.stdout.write(`${lines.join('\n')}\n`);
+    return 0;
+  }
+
+  if (
+    action === 'set' &&
+    name !== undefined &&
+    (value !== undefined) !== (flags['unset'] === true)
+  ) {
+    const ref = settingNamed(settings, name);
+    const { type } = ref.declaration;
+    let stored: unknown;
+    if (value !== undefined) {
+      const parsed = type.fromText(value);
+      if (!parsed.ok) throw new Error(`${name} ${parsed.problem}.`);
+      stored = type.toJson(parsed.value);
+    }
+    await setOrThrow(settings, ref.namespace, { [ref.key]: stored });
+    process.stdout.write(table([await settingRow(settings, ref)]));
+    return 0;
+  }
+
+  throw new Error(
+    'geekity settings needs list [<namespace>], get <namespace.key>, or set <namespace.key> with a value or --unset.',
+  );
+}
+
+/** A plugin namespace such as `@geekity/plugin-llm` has no `.`, and a key never does. */
+function settingNamed(settings: SettingsRegistry, name: string): SettingRef<unknown> {
+  const dot = name.lastIndexOf('.');
+  const found = settings
+    .list()
+    .find((ref) => ref.namespace === name.slice(0, dot) && ref.key === name.slice(dot + 1));
+  if (found === undefined) {
+    throw new Error(`There is no setting ${name}. geekity settings list names them.`);
+  }
+  return found;
+}
+
+async function setOrThrow(
+  settings: SettingsRegistry,
+  namespace: string,
+  changes: Record<string, unknown>,
+): Promise<void> {
+  const result = await settings.set(namespace, new Map(Object.entries(changes)), 'cli');
+  if (!result.ok) throw new Error(Object.values(result.problems).join(' '));
+}
+
+function shown(ref: SettingRef<unknown>, value: unknown): string {
+  if (ref.declaration.secret === true) {
+    return value === ref.declaration.default ? '(not set)' : '(set)';
+  }
+  return ref.declaration.type.toText(value);
+}
+
+function sourceLabel(source: ValueSource): string {
+  switch (source.tier) {
+    case 'env':
+      return `env ${source.variable}`;
+    case 'config':
+      return `config ${source.field}`;
+    default:
+      return source.tier;
+  }
+}
+
+async function settingRow(
+  settings: SettingsRegistry,
+  ref: SettingRef<unknown>,
+): Promise<readonly string[]> {
+  const resolved = await settings.resolve(ref);
+  let source = sourceLabel(resolved.source);
+  if (overridden(resolved.source) && resolved.stored !== undefined) {
+    source += ` (file: ${shown(ref, resolved.stored)})`;
+  }
+  if (ref.declaration.env === false) source += ', not overridable';
+  return [
+    `${ref.namespace}.${ref.key}`,
+    shown(ref, resolved.value),
+    source,
+    ref.declaration.description,
+  ];
+}
+
+function table(rows: readonly (readonly string[])[]): string {
+  const widths =
+    rows[0]?.map((_, column) => Math.max(...rows.map((row) => row[column]?.length ?? 0))) ?? [];
+  return rows
+    .map(
+      (row) =>
+        `${row.map((cell, column) => (column === row.length - 1 ? cell : cell.padEnd(widths[column] ?? 0))).join('  ')}\n`,
+    )
+    .join('');
 }
 
 function untilFlag(value: string | undefined): Date | undefined {
@@ -831,7 +981,7 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
       supervision: worker.supervision,
     });
     const { port } = await cms.serve();
-    if (devModeOn(cms.config)) {
+    if (await cms.settings.get(DEV_MODE.on)) {
       process.stdout.write(
         'Dev mode is on: ActivityPub, webmentions, feed pings, IndexNow and email are held ' +
           'and recorded in data/dev-mode.jsonl. `geekity dev-mode off` takes the site live.\n',

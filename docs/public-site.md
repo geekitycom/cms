@@ -133,12 +133,18 @@ purpose.
 Maintenance mode takes the public site down for an upgrade or a restore.
 Browsers, crawlers and fediverse servers all treat the outage as temporary.
 
+Turn it on and off at Tools > Maintenance in the admin, or from the command
+line:
+
 ```
 $ geekity maintenance on --until 2026-09-28T14:00:00Z
 Maintenance mode is on (/srv/site/data/maintenance.json). Expected back by Mon, 28 Sep 2026 14:00:00 GMT.
 $ geekity maintenance status
 $ geekity maintenance off
 ```
+
+The admin screen has a switch and an optional expected-back time, which is the
+same time `--until` sets.
 
 While it is on, every public page, feed, sitemap, `robots.txt` and ActivityPub
 endpoint answers `503 Service Unavailable` with `Retry-After` and
@@ -157,16 +163,21 @@ These requests are still served:
   turning maintenance off. These responses carry `Cache-Control: private,
 no-store`, so no shared cache keeps one and hands it to a stranger.
 
-The switch is the file `data/maintenance.json`. `on` writes it and `off`
-removes it. The running site checks it at most once a second, so neither needs
-a restart. The file is in `data/`, not `content/`, because it is operational
-state. `content/` is published and committed, and a flag in it would take down
-every checkout of the site.
+The switch is the setting `maintenance.on`, and the expected-back time is
+`maintenance.until` (see [Runtime settings](settings.md#runtime-settings)). Both
+are stored in `data/maintenance.json` as `{ "on": true, "until": "…" }`. The
+running site reads them at most once a second, so a change needs no restart.
+The file is in `data/`, not `content/`, because it is operational state.
+`content/` is published and committed, and a flag in it would take down every
+checkout of the site. A `data/maintenance.json` written by an older version,
+where the file being there meant on, is still read as on. The next change
+stores the new shape.
 
 `GEEKITY_MAINTENANCE=on`, or `maintenance: true` in the config, puts the site in
 maintenance from boot for the life of the process. Use it for a site that must
-start in maintenance. Removing the file does not end it. Restart without the
-setting to end it.
+start in maintenance. While it is set, Tools > Maintenance says so and refuses
+to save, and `geekity maintenance off` refuses with the same reason. Restart
+without the setting to end it.
 
 ## Moved URLs
 

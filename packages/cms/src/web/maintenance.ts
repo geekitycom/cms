@@ -80,9 +80,9 @@ function isExempt(pathname: string): boolean {
  * comment form applies: a live session naming a user who still exists.
  */
 export const maintenanceGate: MiddlewareHandler<GeekityEnv> = async (c, next) => {
-  const window = c.var.maintenance();
+  const { on, until } = await c.var.maintenance();
   const pathname = requestPath(c);
-  if (window === undefined || isExempt(pathname)) return await next();
+  if (!on || isExempt(pathname)) return await next();
 
   if (signedInAccount(c) !== undefined) {
     await next();
@@ -90,7 +90,7 @@ export const maintenanceGate: MiddlewareHandler<GeekityEnv> = async (c, next) =>
     return;
   }
 
-  return unavailable(c, pathname, window.until);
+  return unavailable(c, pathname, until === '' ? undefined : new Date(until));
 };
 
 function unavailable(c: Context<GeekityEnv>, pathname: string, until: Date | undefined): Response {

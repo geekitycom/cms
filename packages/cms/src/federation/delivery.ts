@@ -7,6 +7,7 @@ import type { Object as ActivityObject } from '@fedify/vocab';
 import type { AdminStore, Delivery, DeliveryStatus } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
 import { citationsOf } from '../content/citation.ts';
 import type { CitedPage } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
@@ -89,6 +90,8 @@ export interface CreateDeliveryServiceOptions {
   store: FederationContextData['store'] & IndexWriter;
   /** Config after defaults and environment overrides. */
   config: ResolvedConfig;
+  /** Where dev mode is read, which holds what this sends (decision-35). */
+  settings: SettingsRegistry;
   /** What the federation context carries for the inbox; nothing here calls it. */
   actorProfiles: FederationContextData['actorProfiles'];
   /** What the federation context carries for the post objects. */
@@ -166,7 +169,7 @@ export interface DeliveryService {
  * archive to every follower every time somebody deleted the database.
  */
 export function createDeliveryService(options: CreateDeliveryServiceOptions): DeliveryService {
-  const { federation, admin, store, config } = options;
+  const { federation, admin, store, config, settings } = options;
   const logger = options.logger ?? console;
 
   /**
@@ -189,6 +192,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       admin,
       store,
       config,
+      settings,
       actorProfiles: options.actorProfiles,
       cited,
     });
@@ -389,11 +393,11 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     const targets = fanOutTargets(deliveryTargets(admin, sender.username, { relays }), also);
     const held =
       targets.length > 0 &&
-      holdOutbound(config, {
+      (await holdOutbound(settings, config, {
         kind: 'activitypub',
         what: `${about.activityType} ${about.objectId}`,
         to: targets.map((target) => target.inboxId),
-      });
+      }));
     const report = {
       activityId: about.activityId,
       activityType: about.activityType,

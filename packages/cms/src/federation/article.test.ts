@@ -267,6 +267,7 @@ describe('the post object', () => {
       admin: instance.admin,
       store: instance.store,
       config: instance.config,
+      settings: instance.settings,
       actorProfiles: instance.actorProfiles,
       cited: () => undefined,
     });

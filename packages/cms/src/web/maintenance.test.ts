@@ -11,7 +11,6 @@ import { after, describe, it } from 'node:test';
 import { sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { GeekityConfig } from '../config.ts';
 import type { Cms } from '../index.ts';
-import { enterMaintenance, leaveMaintenance } from '../maintenance.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -40,7 +39,15 @@ interface Site {
  * trusts its last look at the file for, as the CLI does to a live site.
  */
 async function turnOn(target: Site, window: { until?: Date } = {}): Promise<void> {
-  await enterMaintenance(target.dataDir, window);
+  const until = window.until?.toISOString() ?? '';
+  await target.cms.settings.set(
+    'maintenance',
+    new Map<string, unknown>([
+      ['on', true],
+      ['until', until],
+    ]),
+    'cli',
+  );
   target.clock.advance(1001);
 }
 
@@ -153,24 +160,25 @@ describe('maintenance mode, on', () => {
   });
 
   it('turns on and off without a restart, noticing within a second', async () => {
-    const { cms, dataDir, clock } = await site();
+    const { cms, clock } = await site();
 
     assert.equal((await cms.app.request('/2026/09/hello/')).status, 200);
 
-    await enterMaintenance(dataDir);
+    await cms.settings.set('maintenance', new Map([['on', true]]), 'cli');
     clock.advance(1001);
     assertUnavailable(await cms.app.request('/2026/09/hello/'));
 
-    await leaveMaintenance(dataDir);
+    await cms.settings.set('maintenance', new Map([['on', false]]), 'cli');
     clock.advance(1001);
     assert.equal((await cms.app.request('/2026/09/hello/')).status, 200);
   });
 
   it('is forced on for the life of the process by the maintenance setting', async () => {
-    const { cms, dataDir, clock } = await site({ maintenance: true });
+    const { cms, clock } = await site({ maintenance: true });
 
     assertUnavailable(await cms.app.request('/2026/09/hello/'));
-    await leaveMaintenance(dataDir);
+    const off = await cms.settings.set('maintenance', new Map([['on', false]]), 'cli');
+    assert.equal(off.ok, false, 'turning it off is refused');
     clock.advance(1001);
     assertUnavailable(await cms.app.request('/2026/09/hello/'));
   });

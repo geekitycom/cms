@@ -12,7 +12,6 @@ import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { visibilityOf } from '../content/visibility.ts';
-import { devModeOn } from '../dev-mode.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
 import { iconSetting, siteIcons } from '../images/icons.ts';
 import type { User } from '../site/users.ts';
@@ -465,6 +464,13 @@ export function drawnForSignedInReader<T>(draw: () => T): T {
   return signedInReader.run(true, draw);
 }
 
+const devModeReader = new AsyncLocalStorage<true>();
+
+/** Run `draw` as a request made while the site is in dev mode, so its pages say `devMode`. */
+export function drawnInDevMode<T>(draw: () => T): T {
+  return devModeReader.run(true, draw);
+}
+
 /** Half the time a form stays submittable: the oldest stamp a 304 hands back. */
 const STAMP_WINDOW_MS = (MAXIMUM_FORM_AGE_SECONDS * 1000) / 2;
 
@@ -583,7 +589,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(siteOwner === undefined ? {} : { soloAuthor: siteOwner }),
       ...context,
       ...licenseContext(site, context),
-      devMode: devModeOn(config),
+      devMode: devModeReader.getStore() === true,
       signedIn: signedInReader.getStore() === true,
     });
   }

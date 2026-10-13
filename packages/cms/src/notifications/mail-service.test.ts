@@ -13,6 +13,7 @@ import type { MailProvider, OutgoingMail } from '../mail/provider.ts';
 import { createMailService } from './mail-service.ts';
 import type { MailService } from './mail-service.ts';
 import { systemClock } from '../util/clock.ts';
+import { settingsOver } from '../__testing__/settings.ts';
 
 const dirs: string[] = [];
 
@@ -63,11 +64,11 @@ async function site(
       baseUrl: 'https://blog.example',
       contentDir,
       dataDir,
-      devMode: false,
       now: systemClock,
       themesDir,
       watch: false,
     },
+    settings: settingsOver({ contentDir, dataDir }),
     ...(options.provider === undefined ? {} : { provider: options.provider }),
     // Always a logger of the test's own, so a passing run says nothing.
     logger: options.log ?? new Log(),
@@ -203,16 +204,17 @@ describe('sending a templated message', () => {
       settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', theme: 'fixture' },
     });
 
+    const dataDir = await dir('geekity-mail-data-');
     const mail = createMailService({
       config: {
         baseUrl: 'https://blog.example',
         contentDir,
-        dataDir: await dir('geekity-mail-data-'),
-        devMode: false,
+        dataDir,
         now: systemClock,
         themesDir,
         watch: false,
       },
+      settings: settingsOver({ contentDir, dataDir }),
       provider,
       logger: new Log(),
     });

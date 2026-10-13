@@ -27,6 +27,7 @@ import type { IndexNowNotifier } from '../indexnow.ts';
 import type { MailService, CommentDigest, CommentNotifier } from '../notifications/index.ts';
 import type { FeedNotifier, NotifyReport } from '../notify.ts';
 import type { InstalledPlugin } from '../plugins/registry.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
 import type { RetentionService } from '../privacy/retention.ts';
 import type { Supervision } from '../supervisor/supervision.ts';
 import { messageOf } from '../util/errors.ts';
@@ -57,6 +58,12 @@ export interface Cms {
    * actor's keys, which are not, are files under `dataDir`.
    */
   readonly admin: AdminStore;
+  /**
+   * Every runtime setting (decision-53): maintenance and dev mode so far, each
+   * read through the environment, the config, its file under `dataDir` and its
+   * default, and written by the admin and `geekity settings`.
+   */
+  readonly settings: SettingsRegistry;
   /**
    * The site's ActivityPub actor, already mounted on {@link Cms.app}: the
    * actor document, WebFinger, NodeInfo, the inbox and the collections.
@@ -308,6 +315,7 @@ export function createCms(
     config: resolved,
     store,
     admin,
+    settings: booted.settings,
     federation: services.federation,
     delivery: services.delivery,
     relays: services.relays,

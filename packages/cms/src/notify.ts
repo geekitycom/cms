@@ -2,6 +2,7 @@ import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
 import { isMigratedArrival } from './content/migrated.ts';
 import { holdOutbound } from './dev-mode.ts';
+import type { SettingsRegistry } from './settings/types.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { isFederatedDocument, isListed } from './content/served.ts';
 import { taxonomyBasesFromSettings } from './site/settings.ts';
@@ -53,7 +54,9 @@ export interface CreateFeedNotifierOptions {
    * scheduled post is held against, and the content directory the settings —
    * the notify server and the two archive bases — are read from.
    */
-  config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'now'>;
+  config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir' | 'now'>;
+  /** Where dev mode is read, which holds what this sends (decision-35). */
+  settings: SettingsRegistry;
   /** Where failures are reported. Defaults to `console`. */
   logger?: NotifyLogger | undefined;
 }
@@ -102,7 +105,7 @@ export interface FeedNotifier {
  * restart — the same way the feeds pick up the new address.
  */
 export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNotifier {
-  const { config } = options;
+  const { config, settings } = options;
   const logger = options.logger ?? console;
 
   const pings = createSerialQueue();
@@ -139,13 +142,13 @@ export function createFeedNotifier(options: CreateFeedNotifierOptions): FeedNoti
       const endpoint = server();
       const wanted = [...new Set(urls)];
       if (endpoint === undefined || wanted.length === 0) return { pings: [] };
-      if (
-        holdOutbound(config, { kind: 'feed-ping', what: wanted.join(' '), to: [endpoint.ping] })
-      ) {
-        return { server: endpoint.base, pings: [] };
-      }
-
       return await pings.run(async () => {
+        const held = await holdOutbound(settings, config, {
+          kind: 'feed-ping',
+          what: wanted.join(' '),
+          to: [endpoint.ping],
+        });
+        if (held) return { server: endpoint.base, pings: [] };
         const sent: NotifyPing[] = [];
         for (const url of wanted) {
           const result = await ping(endpoint, url);

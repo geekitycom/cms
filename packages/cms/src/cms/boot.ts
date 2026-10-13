@@ -22,7 +22,6 @@ import { isResolvedConfig, resolveConfig } from '../config.ts';
 import type { GeekityConfig, ResolvedConfig } from '../config.ts';
 import { openContentStore } from '../content/index.ts';
 import type { ContentStore } from '../content/index.ts';
-import { enterDevMode } from '../dev-mode.ts';
 import {
   assertActorKeysUsable,
   migrateFederationToFiles,
@@ -30,6 +29,8 @@ import {
 } from '../federation/index.ts';
 import type { InstalledPlugin, PluginRegistry } from '../plugins/registry.ts';
 import { sitePluginRegistry } from '../plugins/site.ts';
+import { createSettingsRegistry } from '../settings/registry.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
 import { listUsers } from '../site/users.ts';
 
 export interface Booted {
@@ -38,6 +39,7 @@ export interface Booted {
   readonly store: ContentStore;
   readonly admin: AdminStore;
   readonly commentRecords: CommentRecords;
+  readonly settings: SettingsRegistry;
 }
 
 export function boot(
@@ -45,7 +47,15 @@ export function boot(
   folderPlugins: readonly InstalledPlugin[] | undefined,
 ): Booted {
   const configured = isResolvedConfig(config) ? config : resolveConfig(config);
-  if (configured.devMode) enterDevMode(configured.dataDir, 'config', configured.now());
+  const settings = createSettingsRegistry({ config: configured });
+  // A latch, not an override (decision-35): the file keeps the site in dev
+  // mode after the variable is gone. Not awaited, because boot is synchronous;
+  // every read of the file queues behind this write.
+  if (configured.devMode) {
+    settings.set('dev_mode', new Map([['on', true]]), 'boot').catch((error: unknown) => {
+      console.error('Dev mode could not be turned on at boot:', error);
+    });
+  }
 
   const { store, admin, adminDb } = rebuildingIfOutdated(configured.dataDir, () =>
     openBothStoresOrNeither(configured),
@@ -109,7 +119,7 @@ export function boot(
     assertActorKeysUsable(resolved.dataDir, user.username);
   }
 
-  return { resolved, plugins, store, admin, commentRecords };
+  return { resolved, plugins, store, admin, commentRecords, settings };
 }
 
 function settleConfig(resolved: ResolvedConfig): ResolvedConfig {

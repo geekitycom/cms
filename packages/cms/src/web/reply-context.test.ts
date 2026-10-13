@@ -54,6 +54,7 @@ const lookedUp: string[] = [];
 const fetched: string[] = [];
 const everFetched = new Set<string>();
 let slowAnswer: ((response: Response) => void) | undefined;
+const slowWaiting: ((response: Response) => void)[] = [];
 
 const lookup: HostLookup = (hostname) => {
   lookedUp.push(hostname);
@@ -66,8 +67,13 @@ globalThis.fetch = ((input: string | URL | Request) => {
   fetched.push(url);
   everFetched.add(url);
   if (url === SLOW) {
+    // The reply context and the webmention sender both ask the target, in
+    // either order, and both wait for the one answer.
     return new Promise<Response>((resolve) => {
-      slowAnswer = resolve;
+      slowWaiting.push(resolve);
+      slowAnswer = (response) => {
+        for (const waiting of slowWaiting.splice(0)) waiting(response.clone());
+      };
     });
   }
   const page = PAGES[url];

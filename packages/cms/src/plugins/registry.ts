@@ -34,8 +34,8 @@ import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { pluginFetch } from './fetch.ts';
 import type { PluginFetchOptions } from './fetch.ts';
+import { pluginEnvPrefix, reservedNamespaceProblem } from '../settings/names.ts';
 import {
-  pluginEnvPrefix,
   pluginFolderPath,
   resolvePluginSettings,
   settingFieldsProblem,
@@ -214,6 +214,8 @@ export function createPluginRegistry(
   function resolveProblem(name: string): string | undefined {
     const entry = bySource.get(name);
     if (entry === undefined) return 'It is not installed.';
+    const reserved = reservedNamespaceProblem(name, pluginEnvPrefix(name));
+    if (reserved !== undefined) return `${reserved} Rename the package.`;
     const shared = sharedPrefixes.get(name);
     if (shared !== undefined) {
       return `Its environment variables would start ${pluginEnvPrefix(name)}__, as those of ${shared.join(' and ')} would, so none of them loads. Rename one package.`;

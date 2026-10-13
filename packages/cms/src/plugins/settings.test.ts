@@ -13,12 +13,8 @@ import { after, describe, it } from 'node:test';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { PluginSettings } from '../plugin.ts';
 import { createPluginRegistry } from './registry.ts';
-import {
-  pluginEnvPrefix,
-  pluginVariable,
-  resolvePluginSettings,
-  savePluginSettings,
-} from './settings.ts';
+import { pluginEnvPrefix } from '../settings/names.ts';
+import { pluginVariable, resolvePluginSettings, savePluginSettings } from './settings.ts';
 
 const ROOT = mkdtempSync(path.join(tmpdir(), 'geekity-plugin-settings-'));
 after(() => rmSync(ROOT, { recursive: true, force: true }));

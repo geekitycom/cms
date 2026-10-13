@@ -17,6 +17,9 @@ Usage:
   geekity resend (--all | <slug>...) [--config <file>]
   geekity maintenance (on [--until <time>] | off | status) [--config <file>]
   geekity dev-mode (on | off | status) [--config <file>]
+  geekity settings list [<namespace>] [--config <file>]
+  geekity settings get <namespace.key> [--config <file>]
+  geekity settings set <namespace.key> (<value> | --unset) [--config <file>]
   geekity strip-metadata [--config <file>]
   geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
   geekity plugin (add <package>[@version] | remove <package>) [--config <file>]
@@ -45,6 +48,14 @@ Commands:
                    built or migrated, and record each one in
                    data/dev-mode.jsonl. off takes the site live: nothing held
                    is sent then, and the record says when it went live.
+  settings list    Print every runtime setting: its value in effect, where
+                   that value came from (env, config, file or default) and
+                   what it does. A secret prints as (set) or (not set).
+  settings get     Print one value in effect, and what overrides it, if
+                   anything.
+  settings set     Store one value, or remove it with --unset so the default
+                   applies. A setting the environment or the config overrides
+                   is refused. A secret set here is left in the shell history.
   strip-metadata   Remove location and camera metadata (EXIF, XMP, IPTC, a
                    video's location) from files already in content/uploads.
                    New uploads are stripped as they arrive; this is for the
@@ -80,6 +91,7 @@ Options:
                    ISO 8601 time such as 2026-09-28T14:00:00Z. It is the
                    Retry-After a client is sent, and the maintenance page
                    says it.
+  --unset          With settings set: remove the stored value.
   --all            With resend: every announced post rather than named ones.
   --check          With plugin upgrade: say what would change, install nothing.
   -h, --help       Show this help.

@@ -12,6 +12,7 @@ import type { CommentRecords } from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
 import { holdOutbound } from '../dev-mode.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
 import { citationsOf } from '../content/citation.ts';
 import { isMigrated, isMigratedArrival } from '../content/migrated.ts';
 import { readOf } from '../content/read.ts';
@@ -93,8 +94,10 @@ export interface CreateWebmentionServiceOptions {
    */
   config: Pick<
     ResolvedConfig,
-    'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'now' | 'commentChecker' | 'hostLookup'
+    'baseUrl' | 'contentDir' | 'dataDir' | 'now' | 'commentChecker' | 'hostLookup'
   >;
+  /** Where dev mode is read, which holds what this sends (decision-35). */
+  settings: SettingsRegistry;
   /** Where failures are reported. Defaults to `console`. */
   logger?: WebmentionLogger | undefined;
   /**
@@ -164,7 +167,7 @@ export interface WebmentionService {
 export function createWebmentionService(
   options: CreateWebmentionServiceOptions,
 ): WebmentionService {
-  const { admin, store, config } = options;
+  const { admin, store, config, settings } = options;
   const logger = options.logger ?? console;
 
   /** The comment files an incoming webmention is written into. */
@@ -247,15 +250,16 @@ export function createWebmentionService(
     return selectedTargets(document, targets(), siteLanguage()).map((target) => target.url);
   }
 
-  function held(source: string, links: readonly string[]): boolean {
+  async function held(source: string, links: readonly string[]): Promise<boolean> {
     return (
-      links.length > 0 && holdOutbound(config, { kind: 'webmention', what: source, to: links })
+      links.length > 0 &&
+      (await holdOutbound(settings, config, { kind: 'webmention', what: source, to: links }))
     );
   }
 
   /** Tell every one of a post's targets, one after another. */
   async function tellAll(slug: string, source: string, links: readonly string[]): Promise<Told[]> {
-    if (held(source, links)) return [];
+    if (await held(source, links)) return [];
     const outcomes: Told[] = [];
     for (const target of links) outcomes.push(await tell(slug, source, target));
     return outcomes;
@@ -340,7 +344,7 @@ export function createWebmentionService(
         );
         continue;
       }
-      if (held(upstream.source, [target])) continue;
+      if (await held(upstream.source, [target])) continue;
       admin.setState(key, JSON.stringify({ fingerprint, sent: [...recent, at.toISOString()] }));
       await tell(upstream.post.slug, upstream.source, target);
     }
@@ -479,9 +483,10 @@ export function createWebmentionService(
           continue;
         }
         const source = absoluteUrl(document.permalink, config.baseUrl);
-        if (held(source, [target])) continue;
         sends
-          .run(() => tell(document.slug, source, target))
+          .run(async () => {
+            if (!(await held(source, [target]))) await tell(document.slug, source, target);
+          })
           .catch((thrown: unknown) => {
             logger.warn(`A webmention failed: ${messageOf(thrown)}`);
           });

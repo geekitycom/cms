@@ -478,7 +478,7 @@ async function reply(
   recipient: Actor,
   activity: Accept | Reject,
 ): Promise<void> {
-  const held = holdOutbound(context.data.config, {
+  const held = await holdOutbound(context.data.settings, context.data.config, {
     kind: 'activitypub',
     what: `${activity instanceof Accept ? 'Accept' : 'Reject'} ${activity.id?.href ?? ''}`,
     to: [recipient.inboxId?.href ?? recipient.id?.href ?? ''],

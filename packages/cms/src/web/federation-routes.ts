@@ -319,6 +319,7 @@ export function contextData(c: Context<GeekityEnv>): FederationContextData {
     admin: c.var.admin,
     store: c.var.store,
     config: c.var.config,
+    settings: c.var.settings,
     actorProfiles: c.var.actorProfiles,
     cited: (url) => c.var.replyContexts.read(url),
   };

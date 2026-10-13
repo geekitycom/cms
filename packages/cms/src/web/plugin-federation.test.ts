@@ -12,7 +12,7 @@ import { exportJwk, importJwk } from '@fedify/fedify';
 import { CryptographicKey, Endpoints, Follow, Person } from '@fedify/vocab';
 
 import { writeUsers } from '../admin/__testing__/users.ts';
-import { enterDevMode, readDevModeRecord } from '../dev-mode.ts';
+import { readDevModeRecord } from '../settings/dev-mode.ts';
 import { seedActorKeys, testKeyPair } from '../federation/__testing__/keys.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
@@ -218,7 +218,7 @@ describe('what a plugin’s federation reaches', () => {
 
   it('the inbox handlers, held by dev mode with no switch of the plugin’s own (TASK-295)', async () => {
     const { cms, context } = await contextOf();
-    enterDevMode(cms.config.dataDir, 'command', cms.config.now());
+    await cms.settings.set('dev_mode', new Map([['on', true]]), 'cli');
     const follow = await new Follow({
       id: new URL(`${REMOTE_ORIGIN}/follows/2`),
       actor: new URL(REMOTE_ACTOR),

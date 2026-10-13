@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import { enterDevMode } from '../dev-mode.ts';
+import { settingsOver } from '../__testing__/settings.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { startTestSmtpServer } from '../mail/__testing__/smtp-server.ts';
 import type { TestSmtpServer } from '../mail/__testing__/smtp-server.ts';
@@ -301,7 +301,7 @@ describe('the Send test email button with Brevo configured (AC #1)', () => {
   it('holds the test message in dev mode and says so (TASK-295)', async () => {
     const { agent, dataDir } = await admin({ mailProvider: 'brevo' });
     await writeMailCredentials(dataDir, { brevo: { apiKey: 'xkeysib-secret-1234' } });
-    enterDevMode(dataDir, 'command', new Date());
+    await settingsOver({ dataDir }).set('dev_mode', new Map([['on', true]]), 'cli');
 
     const { screen } = await post(agent, MAIL_TEST_PATH, {
       [MAIL_TEST_FIELDS.to]: 'ada@example.com',
