@@ -8,9 +8,6 @@ import type {
 } from '@fedify/fedify';
 
 /**
- * A Fedify queue, the in-process one unless a site passes its own, which can
- * say when everything it was handed has been handled.
- *
  * A delivery is queued and sent a moment later, so a server that closes once
  * its own promises settle would drop a delivery still in the queue: the
  * queue lives in the process. `geekity serve` closes a worker on every
@@ -27,11 +24,6 @@ export interface SettlingQueue extends MessageQueue {
   close(): void;
 }
 
-/**
- * A message as it travels through the inner queue: which settling queue
- * counts it, if any, and itself. A durable queue can hand a worker messages
- * an earlier worker queued; those are handled but were never counted here.
- */
 interface Carried {
   readonly countedBy: string | null;
   readonly message: unknown;
@@ -40,7 +32,7 @@ interface Carried {
 export function createSettlingQueue(
   inner: MessageQueue = new InProcessMessageQueue(),
 ): SettlingQueue {
-  const id = randomUUID();
+  const thisQueue = randomUUID();
   let pending = 0;
   let waiters: (() => void)[] = [];
   const closing = new AbortController();
@@ -48,7 +40,7 @@ export function createSettlingQueue(
   function carry(message: unknown, options: MessageQueueEnqueueOptions | undefined): Carried {
     const counted = options?.delay === undefined || options.delay.sign <= 0;
     if (counted) pending += 1;
-    return { countedBy: counted ? id : null, message };
+    return { countedBy: counted ? thisQueue : null, message };
   }
 
   function handled(): void {
@@ -83,7 +75,7 @@ export function createSettlingQueue(
           try {
             await handler(carried.message);
           } finally {
-            if (carried.countedBy === id) handled();
+            if (carried.countedBy === thisQueue) handled();
           }
         },
         { ...options, signal },

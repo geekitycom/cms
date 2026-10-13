@@ -299,7 +299,6 @@ async function site(
     actorId?: string;
     /** Fedify's in-process queue, as a site that names none runs, instead of sending inline. */
     queued?: boolean;
-    /** A queue of the site's own, passed through config as `federation.queue`. */
     queue?: MessageQueue;
   } = {},
 ): Promise<Site> {

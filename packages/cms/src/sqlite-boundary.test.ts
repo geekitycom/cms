@@ -1,9 +1,3 @@
-/**
- * decision-52: every database access goes through the store interfaces
- * (`ContentStore`, `AdminStore`), so a build can swap SQLite for another
- * database. Only the stores import `node:sqlite`; the files below that still
- * do are named one by one, and the list only shrinks.
- */
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
