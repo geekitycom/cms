@@ -248,8 +248,7 @@ export function createServices({
   const federationContext = async () => {
     const settled = await settings.values(SITE);
     return federation.createContext(new URL(resolved.baseUrl), {
-      ...site,
-      actorProfiles,
+      ...federated,
       site: settled,
       cited: citedWith(settled),
     });

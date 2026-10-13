@@ -125,8 +125,6 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
   // A relay that is told to unfollow before it has been told to follow keeps
   // the subscription.
   const subscriptions = createSerialQueue();
-  // Reading the list is queued apart from the subscriptions, so a save waits
-  // for the read and not for a relay's server.
   const syncs = createSerialQueue();
 
   /** A context outside any request, which is where a follow is sent from. */

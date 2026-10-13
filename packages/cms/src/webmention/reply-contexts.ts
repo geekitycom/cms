@@ -61,7 +61,6 @@ export interface CreateReplyContextServiceOptions {
   readonly onStored?: ((target: string, previous: ReplyContext | undefined) => void) | undefined;
 }
 
-/** The replies this site holds, named with the site's settings at the time. */
 export interface HeldReplies {
   readonly at: (target: string, site: ConversationSite) => ReplyContext | undefined;
   readonly settings: Pick<SettingsRegistry, 'values'>;

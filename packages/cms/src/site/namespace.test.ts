@@ -13,11 +13,6 @@ const DEMO_SITE_JSON = fileURLToPath(
   new URL('../../../../apps/demo/content/_data/site.json', import.meta.url),
 );
 
-/**
- * Every key `content/_data/site.json` held a setting under before the site
- * namespace, as the settings rows read them: themes, Eleventy builds and hand
- * edits rely on these spellings.
- */
 const FILE_KEYS = [
   'title',
   'tagline',

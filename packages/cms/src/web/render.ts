@@ -474,7 +474,6 @@ export function drawnForSignedInReader<T>(draw: () => T): T {
 export interface RequestInputs {
   readonly devMode: boolean;
   readonly mailConfigured: boolean;
-  /** The site's settings in effect, which the request's handler read. */
   readonly site: SiteSettings;
 }
 
@@ -484,7 +483,6 @@ export function drawnWith<T>(inputs: RequestInputs, draw: () => T): T {
   return requestInputs.run(inputs, draw);
 }
 
-/** The site's settings the request read, or the defaults for a page drawn outside one. */
 function requestSite(): SiteSettings {
   return requestInputs.getStore()?.site ?? DEFAULT_SITE_SETTINGS;
 }

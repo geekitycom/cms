@@ -102,7 +102,6 @@ export interface ConversationContext {
   readonly users: () => readonly User[];
 }
 
-/** One reading of the conversations, with the site settings its caller read. */
 type Reading = ConversationContext & { readonly site: ConversationSite };
 
 /**

@@ -94,7 +94,6 @@ const license: SettingType<SiteLicense> = {
   toText: (value) => (value.choice === 'custom' ? value.url : value.choice),
 };
 
-/** A list of lines, each read through `parse` as the settings screen reads its textarea. */
 function lines(parse: (typed: string) => string[]): SettingType<readonly string[]> {
   return jsonValue(
     (raw) =>
@@ -105,7 +104,6 @@ function lines(parse: (typed: string) => string[]): SettingType<readonly string[
   );
 }
 
-/** Text the file may hold in any spelling, read through `normalize`; one it cannot read is empty. */
 function normalized(normalize: (value: string) => string | undefined): SettingType<string> {
   return {
     ...text,
@@ -516,7 +514,6 @@ function iconProblem(icon: string, contentDir: string): string | undefined {
   return file !== undefined && isFileSync(file) ? undefined : `There is no upload at ${icon}.`;
 }
 
-/** The settings registry with the site namespace beside the ones `settings/` declares. */
 export function createSettings(options: CreateSettingsRegistryOptions): SettingsRegistry {
   return createSettingsRegistry({ ...options, core: [SITE] });
 }

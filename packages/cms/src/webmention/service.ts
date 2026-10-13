@@ -396,7 +396,6 @@ export function createWebmentionService(
       });
   }
 
-  /** Tell the original of a copy a reply answers about every public post replying to the copy. */
   function tellOriginal(copy: string, target: string): void {
     const now = config.now();
     for (const document of store.listAll()) {
@@ -414,7 +413,6 @@ export function createWebmentionService(
     }
   }
 
-  /** Run `then` on the send queue once the settings say the site is sending webmentions. */
   function whenSending(then: (site: SiteSettings) => void): void {
     sends
       .run(async () => {

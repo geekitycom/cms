@@ -29,12 +29,6 @@ import { hashPassword, verifyPasswordHash } from './passwords.ts';
  * something to hand a reader or a mirror. The file is written 0600 for the
  * same reason; it sits directly in `dataDir`, so there is no private directory
  * around it to lean on.
- *
- * Reads are synchronous and per call: the file is a few hundred bytes and
- * nothing anywhere can then be holding a stale copy of who exists. Writes go through
- * {@link updateFileAtomically}, which puts the read inside the same queue as
- * the write, so the uniqueness rule that used to be a `UNIQUE` index is
- * checked and acted on as one step.
  */
 
 /** The file, relative to `dataDir`. */

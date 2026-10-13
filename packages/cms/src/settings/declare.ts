@@ -13,7 +13,6 @@ type SettingInput<V> = Omit<SettingDeclaration<V>, 'key' | 'default'> & {
 
 type RefsOf<S> = { readonly [K in keyof S]: SettingRef<S[K]> };
 
-/** `S` maps each key to its value type, inferred from the declaration's `type` and `default`. */
 export function declareNamespace<S extends Record<string, unknown>>(
   input: Omit<NamespaceDeclaration, 'settings'> & {
     readonly settings: { readonly [K in keyof S]: SettingInput<S[K]> };

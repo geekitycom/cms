@@ -45,12 +45,7 @@ export interface CreateReplyNoticesOptions {
 /** Listens to the indexes for reply posts that answer a native comment. */
 export interface ReplyNotices {
   handle(change: DocumentChange): void;
-  /**
-   * Consider one comment write. Run inside the comment file's lock, so it
-   * only queues: the indexes are read once the site's settings are.
-   */
   heard(written: ConversationWrite): void;
-  /** Resolve once every notice queued so far has been considered. */
   settled(): Promise<void>;
 }
 

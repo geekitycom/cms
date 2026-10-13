@@ -43,7 +43,6 @@ export interface CitedPage {
 
 export type CitedPageReader = (url: string) => CitedPage | undefined;
 
-/** A {@link CitedPageReader} over what the site holds now, for one piece of work. */
 export type CitedPagesNow = () => Promise<CitedPageReader>;
 
 export function shownInFull(property: string, picture: { readonly kind: string }): boolean {

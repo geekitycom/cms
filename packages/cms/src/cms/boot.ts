@@ -119,12 +119,9 @@ export function boot(
  * environment nor the config file sets one: `site.base_url`, which the
  * General settings page writes to `url` in `content/_data/site.json`.
  *
- * It is settled once, before the CMS is built, rather than per request: the
- * base URL is in every absolute URL the services build, the ActivityPub ids
- * among them, and decides whether the session cookie is `Secure`, and
- * flipping that under a signed-in admin would log them out of the form they
- * just submitted. `geekity` settles every config it loads; a site that builds
- * its own CMS and keeps its base URL in the settings awaits this first.
+ * It is settled once, before the CMS is built, rather than per request.
+ * `geekity` settles every config it loads; a site that builds its own CMS and
+ * keeps its base URL in the settings awaits this first.
  */
 export async function settleConfig(
   config: GeekityConfig | ResolvedConfig,

@@ -23,7 +23,6 @@ export const CONTACT_MESSAGE_TEMPLATE = 'contact-message';
 
 /** What {@link contactRecipient} reads. */
 export interface ContactRecipientOptions {
-  /** The `site.contact_email` setting. */
   contactEmail: string;
   /** Where `users.json` is, for the fallback. */
   dataDir: string;
@@ -50,7 +49,6 @@ export function contactRecipient(options: ContactRecipientOptions): string | und
 export interface SendContactMessageOptions {
   /** The one door out for email. */
   mail: MailService;
-  /** The `site.contact_email` setting. */
   contactEmail: string;
   /** Where `users.json` is. */
   dataDir: string;

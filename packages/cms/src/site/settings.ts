@@ -15,12 +15,6 @@ export type ContentSignalChoice = '' | 'yes' | 'no';
 
 export type LicenseChoice = '' | CreativeCommonsKey | 'custom';
 
-/**
- * What a site is worth before anybody has said otherwise.
- *
- * `base_url` is empty rather than a guess: only the resolved config knows what
- * port the site is on, so the fallback is applied where the config is in hand.
- */
 export const DEFAULT_SITE_SETTINGS: SiteSettings = defaultValues(SITE);
 
 /** What the settings say the robots file should carry. */

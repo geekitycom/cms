@@ -28,7 +28,6 @@ const CORE: readonly DeclaredNamespace[] = [MAINTENANCE, DEV_MODE, MAIL, AKISMET
 export interface CreateSettingsRegistryOptions {
   readonly config: ResolvedConfig;
   readonly env?: Readonly<Record<string, string | undefined>>;
-  /** Core namespaces declared above `settings/`, such as `site`, whose parsing needs the site's own rules. */
   readonly core?: readonly DeclaredNamespace[];
 }
 
@@ -60,10 +59,6 @@ function writeRaw(
   }
 }
 
-/**
- * A namespace's values as a file holds them, defaults for what it lacks or
- * cannot parse, with no override applied.
- */
 export function storedValues<N extends DeclaredNamespace>(
   declared: N,
   stored: Readonly<Record<string, unknown>>,
@@ -77,7 +72,6 @@ export function storedValues<N extends DeclaredNamespace>(
   ) as ValuesOf<N>;
 }
 
-/** A file holding every value of a namespace, over the keys `existing` already has. */
 export function fileWith<N extends DeclaredNamespace>(
   declared: N,
   values: ValuesOf<N>,

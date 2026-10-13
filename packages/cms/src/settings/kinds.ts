@@ -82,16 +82,11 @@ export const nonEmptyText: SettingType<string> = {
   toText: (value) => value,
 };
 
-/** Text the file leaves out when it is empty. */
 export const optionalText: SettingType<string> = {
   ...text,
   toJson: (value) => (value === '' ? undefined : value),
 };
 
-/**
- * A whole number of at least `min`. `coerced` also reads a number written as
- * text, as `"7"`, which files written by hand hold.
- */
 export function wholeNumber(min: number, { coerced = false } = {}): SettingType<number> {
   const parse = (raw: unknown, received: unknown = raw): Parsed<number> => {
     const count = coerced ? Number(raw) : raw;
@@ -110,7 +105,6 @@ export function wholeNumber(min: number, { coerced = false } = {}): SettingType<
   };
 }
 
-/** A value the file holds as JSON, given in the environment and the CLI as JSON text. */
 export function jsonValue<V>(
   fromJson: (raw: unknown) => Parsed<V>,
   toJson: (value: V) => unknown,

@@ -39,10 +39,6 @@ export type CarriedField =
 
 type FormKey = Exclude<keyof SiteSettings, CarriedField>;
 
-/**
- * The fields of the settings form. A custom license's URL and name are fields
- * of their own, held in the one `license` setting.
- */
 export type SettingsField = FormKey | 'license_url' | 'license_name';
 
 export type CarriedSettings = Partial<Pick<SiteSettings, CarriedField>>;
@@ -62,12 +58,10 @@ export interface OnDiskCheck {
   readonly problem: (value: string, dir: string) => string | undefined;
 }
 
-/** How one setting comes out of a submitted form. */
 export interface SettingRow<V> {
   readonly submitted: (form: SettingsForm, onFile: CarriedSettings) => V;
 }
 
-/** How one form field shows the setting it is part of, and what is wrong with it. */
 export interface FieldRow<V> {
   readonly field: string;
   readonly shown: (value: V) => string;
@@ -77,7 +71,6 @@ export interface FieldRow<V> {
 
 export type FormSettingRow<V> = SettingRow<V> & FieldRow<V>;
 
-/** The setting a form field shows. */
 export type FieldValue<F extends SettingsField> = F extends keyof SiteSettings
   ? SiteSettings[F]
   : SiteLicense;
@@ -538,7 +531,7 @@ const SETTING_ROWS: SettingRows = {
     field: 'license',
     submitted: (form) => {
       const choice = form.license.trim();
-      if (!isLicenseChoice(choice) || choice === '') return NO_SITE_LICENSE;
+      if (!isLicenseChoice(choice) || choice === '') return DEFAULT_SITE_SETTINGS.license;
       return choice === 'custom'
         ? { choice, url: form.license_url.trim(), name: form.license_name.trim() }
         : { choice, url: '', name: '' };
@@ -548,8 +541,6 @@ const SETTING_ROWS: SettingRows = {
       isLicenseChoice(form.license.trim()) ? undefined : 'Choose a license from the list.',
   },
 
-  // Minted the first time IndexNow is turned on and never again, so the key
-  // the search engines verified outlives turning it off and on.
   index_now_key: {
     submitted: (form, onFile) =>
       onFile.index_now_key !== undefined && onFile.index_now_key !== ''
@@ -564,8 +555,6 @@ const SETTING_ROWS: SettingRows = {
       onFile.clients_without_pkce ?? DEFAULT_SITE_SETTINGS.clients_without_pkce,
   },
 };
-
-const NO_SITE_LICENSE: SiteLicense = { choice: '', url: '', name: '' };
 
 const LICENSE_FIELD_ROWS: {
   readonly [F in 'license_url' | 'license_name']: FieldRow<SiteLicense>;

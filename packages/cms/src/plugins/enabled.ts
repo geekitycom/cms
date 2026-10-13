@@ -10,11 +10,6 @@ import { isRecord } from '../util/guards.ts';
 
 export const PLUGINS_KEY = 'plugins';
 
-/**
- * `site.json` as it is now. The enabled set is read here rather than through
- * the settings registry: it decides which plugin namespaces exist, so it is
- * read before any of them registers (decision-53).
- */
 function siteFile(contentDir: string): Record<string, unknown> {
   return parseSiteJson(readFileIfPresentSync(siteDataPath(contentDir)) ?? '');
 }

@@ -69,7 +69,6 @@ export interface DocumentSite extends SiteRecords {
   readonly announce: (change: DocumentChange) => Promise<void>;
   /** The username of whoever is writing: the author a new document starts on. */
   readonly writer: string | undefined;
-  /** The site's time zone, which an offset-less date in the form is read in. */
   readonly timezone: string;
   readonly citedContext: (target: string) => Promise<CitedPage | undefined>;
   readonly storedContext: (target: string) => CitedPage | undefined;

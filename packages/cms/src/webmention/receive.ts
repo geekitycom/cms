@@ -96,7 +96,6 @@ export interface CheckWebmentionOptions {
   readonly syndicatedAt?: ((url: string) => Document | undefined) | undefined;
   /** What says which post a comment's own page (TASK-318) is on. */
   readonly conversation: Pick<ConversationReader, 'comment'>;
-  /** The site settings the conversation is read with. */
   readonly site: ConversationSite;
 }
 
@@ -160,7 +159,6 @@ export interface VerifyWebmentionOptions {
   readonly baseUrl: string;
   /** What says which reply on the post a source answers (TASK-319). */
   readonly conversation: Pick<ConversationReader, 'replyNamed'>;
-  /** The site settings the conversation is read with. */
   readonly site: ConversationSite;
   /** The checker, when the site named one. */
   readonly checker?: CommentChecker | undefined;

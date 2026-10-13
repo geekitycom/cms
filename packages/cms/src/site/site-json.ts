@@ -25,18 +25,10 @@ export function siteDataPath(contentDir: string): string {
   return path.join(contentDir, ...SITE_DATA_FILE.split('/'));
 }
 
-/**
- * `content/_data/site.json` as the settings it names, defaults filled in, with
- * no override applied: what a save starts from.
- */
 export function settingsFromSiteJson(file: Record<string, unknown>): SiteSettings {
   return storedValues(SITE, file);
 }
 
-/**
- * `content/_data/site.json` as it should read for these settings, every key
- * the file already had and the namespace does not declare kept.
- */
 export function siteJsonFor(
   settings: SiteSettings,
   existing: Record<string, unknown> = {},

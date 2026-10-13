@@ -60,10 +60,6 @@ export interface GeekityEnv {
     devMode: boolean;
     /** Whether the site can send mail, read once per request (see `MailService.configured`). */
     mailConfigured: boolean;
-    /**
-     * The site's settings in effect, read once per request. A handler that
-     * writes them and reads them back asks the registry instead.
-     */
     site: SiteSettings;
     store: RequestIndex;
     /** Users and sessions, the part of the database that is not derived. */
