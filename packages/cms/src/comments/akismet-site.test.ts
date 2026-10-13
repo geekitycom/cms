@@ -5,7 +5,7 @@ import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
 import { resolvePublic } from '../admin/__testing__/harness.ts';
-import { writeAkismetKey } from './akismet.ts';
+import { settingsOver } from '../__testing__/settings.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { COMMENT_POST_PATH } from './form.ts';
@@ -132,11 +132,15 @@ async function site(
   await writeFile(file, POST, 'utf8');
 
   if (options.key !== undefined) {
-    await writeAkismetKey(dataDir, {
-      key: options.key,
-      status: 'valid',
-      checkedAt: '2026-09-04T00:00:00.000Z',
-    });
+    await settingsOver({ contentDir, dataDir }).set(
+      'akismet',
+      new Map<string, unknown>([
+        ['key', options.key],
+        ['status', 'valid'],
+        ['checked_at', '2026-09-04T00:00:00.000Z'],
+      ]),
+      'admin',
+    );
   }
 
   const instance = createCms({
@@ -188,7 +192,7 @@ async function stored(contentDir: string): Promise<Record<string, unknown>[]> {
   return parsed.comments ?? [];
 }
 
-describe('a site with an Akismet key in data/', () => {
+describe('a site with an Akismet key in its settings', () => {
   it('checks every submitted comment, with no checker in its config (AC #1)', async () => {
     const { cms, contentDir } = await site({ key: 'the-key' });
 

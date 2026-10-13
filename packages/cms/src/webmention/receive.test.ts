@@ -837,6 +837,7 @@ describe('telling the moderators about it (TASK-55)', () => {
     });
 
     await sendAndSettle(cms, 'https://them.example/note');
+    await cms.notifications.settled();
     await cms.mail.settled();
 
     assert.equal(provider.sent.length, 1);
@@ -850,10 +851,12 @@ describe('telling the moderators about it (TASK-55)', () => {
       body: reply(`<a class="u-in-reply-to" href="${POST_URL}">re</a>`),
     });
     await sendAndSettle(cms, 'https://them.example/note');
+    await cms.notifications.settled();
     await cms.mail.settled();
     provider.clear();
 
     await sendAndSettle(cms, 'https://them.example/note');
+    await cms.notifications.settled();
     await cms.mail.settled();
 
     assert.equal(provider.sent.length, 0, 'an edited page re-sending is not new news');

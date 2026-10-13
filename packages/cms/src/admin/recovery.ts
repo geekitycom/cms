@@ -138,7 +138,7 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
 
     const user = identifier === '' ? undefined : findUserByIdentifier(config.dataDir, identifier);
 
-    if (user?.email !== undefined && c.var.mail.configured()) {
+    if (user?.email !== undefined && c.var.mailConfigured) {
       // A good moment to sweep: resets are rare, and this is the one handler
       // that writes a row to the table.
       c.var.admin.prunePasswordResets();
@@ -251,7 +251,7 @@ export function mountRecovery(app: Hono<GeekityEnv>, options: MountRecoveryOptio
       // Read per request, exactly as the mail service reads it: a credential
       // pasted into the settings screen turns recovery on for the next visitor
       // without a restart.
-      configured: c.var.mail.configured(),
+      configured: c.var.mailConfigured,
       answer: RECOVERY_ANSWER,
       sent: false,
       ...extra,

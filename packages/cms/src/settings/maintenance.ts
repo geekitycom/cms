@@ -7,6 +7,7 @@ export const MAINTENANCE = declareNamespace({
   storage: { kind: 'file', under: 'data', path: 'maintenance.json', dataClass: { kept: false } },
   envPrefix: 'GEEKITY_MAINTENANCE',
   legacy: presenceMeansOn,
+  writtenWhole: true,
   settings: {
     on: {
       type: boolean,

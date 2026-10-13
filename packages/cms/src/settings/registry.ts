@@ -6,7 +6,9 @@ import { configVariables } from '../config.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { isRecord } from '../util/guards.ts';
+import { AKISMET } from './akismet.ts';
 import { DEV_MODE } from './dev-mode.ts';
+import { MAIL } from './mail.ts';
 import { MAINTENANCE } from './maintenance.ts';
 import { reservedNamespaceProblem, settingVariable } from './names.ts';
 import type {
@@ -21,7 +23,7 @@ import type {
   ValuesOf,
 } from './types.ts';
 
-const CORE: readonly DeclaredNamespace[] = [MAINTENANCE, DEV_MODE];
+const CORE: readonly DeclaredNamespace[] = [MAINTENANCE, DEV_MODE, MAIL, AKISMET];
 
 export interface CreateSettingsRegistryOptions {
   readonly config: ResolvedConfig;
@@ -143,6 +145,26 @@ export function createSettingsRegistry({
     }
   }
 
+  function checkProblems(
+    namespace: NamespaceDeclaration,
+    stored: Stored,
+    accepted: ReadonlyMap<string, unknown>,
+  ): Record<string, string> {
+    const after = Object.fromEntries(
+      namespace.settings.map((each) => [
+        each.key,
+        accepted.has(each.key) ? accepted.get(each.key) : resolveIn(namespace, each, stored).value,
+      ]),
+    );
+    const problems: Record<string, string> = {};
+    for (const [key, value] of accepted) {
+      const declaration = namespace.settings.find((each) => each.key === key);
+      const problem = declaration?.check?.(value, after, dirs);
+      if (problem !== undefined) problems[key] = problem;
+    }
+    return problems;
+  }
+
   function resolveIn<V>(
     namespace: NamespaceDeclaration,
     declaration: SettingDeclaration<V>,
@@ -194,6 +216,7 @@ export function createSettingsRegistry({
         const next: Record<string, unknown> = { ...stored };
         const problems: Record<string, string> = {};
         const changed: [SettingDeclaration<unknown>, unknown, unknown][] = [];
+        const accepted = new Map<string, unknown>();
         for (const [key, given] of changes) {
           const declaration = namespace.settings.find((each) => each.key === key);
           if (declaration === undefined) {
@@ -214,6 +237,7 @@ export function createSettingsRegistry({
             problems[key] = `${name}.${key} ${parsed.problem}.`;
             continue;
           }
+          accepted.set(key, parsed.value);
           if (given === undefined) delete next[key];
           else next[key] = declaration.type.toJson(parsed.value);
           const previous = storedValue(namespace, declaration, stored).value ?? declaration.default;
@@ -221,8 +245,11 @@ export function createSettingsRegistry({
             changed.push([declaration, previous, parsed.value]);
           }
         }
+        if (Object.keys(problems).length === 0) {
+          Object.assign(problems, checkProblems(namespace, stored, accepted));
+        }
         if (Object.keys(problems).length > 0) return { problems, changed: [] };
-        if (namespace.legacy !== undefined) {
+        if (namespace.writtenWhole === true) {
           writeEveryKeySoNeverReadAsLegacy(namespace, next, stored, changes);
         }
         const { dataClass } = namespace.storage;

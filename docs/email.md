@@ -24,11 +24,31 @@ private, has mode `0600`, and is next to the password hashes and the users'
 private keys. The site never writes a key or password to `site.json`, and never
 prints one back into the settings screen.
 
+The values in `data/mail.json` are the `mail` namespace of the
+[runtime settings](settings.md#runtime-settings): `mail.brevo_api_key`,
+`mail.smtp_host`, `mail.smtp_port`, `mail.smtp_secure`, `mail.smtp_user` and
+`mail.smtp_password`. Each can be set in the environment instead, for example:
+
+```sh
+GEEKITY_MAIL__SMTP_HOST=smtp.example.com
+GEEKITY_MAIL__SMTP_USER=postmaster
+GEEKITY_MAIL__SMTP_PASSWORD=...
+GEEKITY_MAIL__BREVO_API_KEY=xkeysib-...
+```
+
+A value from the environment is in effect whatever the file holds. The Email
+page names the variable in place of the field and refuses to save a value over
+it. `geekity settings list mail` prints each value and its source, and prints
+a secret as `(set)` or `(not set)`.
+
+Port 465 is TLS from the first byte and port 587 upgrades with STARTTLS, so a
+save that pairs 465 with the TLS flag off, or 587 with it on, is refused.
+
 The panel shows the last four characters of an API key, and the host and user
 of an SMTP connection. That is enough to identify what is stored and not enough
 to use it. A secret field left blank keeps the stored value, so you can correct
-the SMTP port without typing the password again. **Remove credentials** deletes
-both.
+the SMTP port without typing the password again. **Remove credentials** clears
+every stored value. A value the environment sets stays in effect.
 
 The panel shows the fields for the saved provider only:
 
@@ -42,7 +62,7 @@ its fields. The panel tells you this. A credential stored for a provider that
 is not the chosen one still gets its own line, because it is still on disk and
 **Remove credentials** still deletes it.
 
-The site reads both files on every send. A credential pasted into the settings
+The site reads `site.json` and the `mail` settings on every send. A credential pasted into the settings
 screen sends the next message, and a removed credential stops the message after
 it. Neither change needs a restart.
 
@@ -112,7 +132,7 @@ built. Both resolve when the message is sent, abandoned or skipped. To ignore
 the result, drop the promise with `void`.
 
 A test sets a provider in the config and reads back what the site would have
-sent. That provider takes precedence over the settings and `data/mail.json`, as
+sent. That provider takes precedence over the settings and the `mail` settings, as
 a `commentChecker` does over the Akismet key:
 
 ```ts

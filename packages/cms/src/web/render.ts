@@ -365,7 +365,12 @@ export interface CreateRendererOptions {
    * hour ago. A renderer built without it renders no form at all.
    */
   commentForm?:
-    ((document: Document, viewer?: CommentViewer) => CommentFormContext | undefined) | undefined;
+    | ((
+        document: Document,
+        viewer: CommentViewer | undefined,
+        notifiable: boolean,
+      ) => CommentFormContext | undefined)
+    | undefined;
   /**
    * The contact form for a page whose front matter asks for one, and
    * `undefined` for every other document (TASK-56).
@@ -464,10 +469,15 @@ export function drawnForSignedInReader<T>(draw: () => T): T {
   return signedInReader.run(true, draw);
 }
 
-const devModeReader = new AsyncLocalStorage<true>();
+export interface RequestInputs {
+  readonly devMode: boolean;
+  readonly mailConfigured: boolean;
+}
 
-export function drawnInDevMode<T>(draw: () => T): T {
-  return devModeReader.run(true, draw);
+const requestInputs = new AsyncLocalStorage<RequestInputs>();
+
+export function drawnWith<T>(inputs: RequestInputs, draw: () => T): T {
+  return requestInputs.run(inputs, draw);
 }
 
 /** Half the time a form stays submittable: the oldest stamp a 304 hands back. */
@@ -588,7 +598,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(siteOwner === undefined ? {} : { soloAuthor: siteOwner }),
       ...context,
       ...licenseContext(site, context),
-      devMode: devModeReader.getStore() === true,
+      devMode: requestInputs.getStore()?.devMode === true,
       signedIn: signedInReader.getStore() === true,
     });
   }
@@ -781,7 +791,15 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // theme asks `{% if commentForm %}` rather than working the rules out
     // for itself — and a closed post shows the thread with no form.
     const stamps: [mark: string, loaded: string][] = [];
-    const form = heldStamp(options.commentForm?.(document, options_.viewer), 'comment', stamps);
+    const form = heldStamp(
+      options.commentForm?.(
+        document,
+        options_.viewer,
+        requestInputs.getStore()?.mailConfigured === true,
+      ),
+      'comment',
+      stamps,
+    );
     // And the contact form, when the page's front matter asked for one
     // (TASK-56). Nothing about where a message would go is on the context:
     // the address is read when a submission arrives, so a theme cannot

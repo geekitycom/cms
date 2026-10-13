@@ -1,13 +1,12 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { writeAkismetKey } from '../../comments/akismet.ts';
 import { addComment } from '../../comments/records.ts';
 import type { NewComment } from '../../comments/records.ts';
 import { addContactMessage } from '../../contact/records.ts';
 import type { NewContactMessage } from '../../contact/records.ts';
 import type { Cms } from '../../index.ts';
-import { writeMailCredentials } from '../../mail/credentials.ts';
+import { settingsOver } from '../../__testing__/settings.ts';
 import { csrfField, signIn } from './harness.ts';
 import type { Browser, Sandbox } from './harness.ts';
 import { writeUsers } from './users.ts';
@@ -158,21 +157,28 @@ export async function remainingSite(
     },
     { username: 'grace' },
   ]);
-  await writeAkismetKey(dataDir, {
-    key: 'abcdef123456',
-    status: 'invalid',
-    checkedAt: '2026-10-01T09:00:00.000Z',
-  });
-  await writeMailCredentials(dataDir, {
-    brevo: { apiKey: 'xkeysib-secret-1234' },
-    smtp: {
-      host: 'smtp.example',
-      port: 587,
-      secure: false,
-      user: 'ada',
-      password: 'hunter2',
-    },
-  });
+  const settings = settingsOver({ dataDir });
+  await settings.set(
+    'akismet',
+    new Map<string, unknown>([
+      ['key', 'abcdef123456'],
+      ['status', 'invalid'],
+      ['checked_at', '2026-10-01T09:00:00.000Z'],
+    ]),
+    'admin',
+  );
+  await settings.set(
+    'mail',
+    new Map<string, unknown>([
+      ['brevo_api_key', 'xkeysib-secret-1234'],
+      ['smtp_host', 'smtp.example'],
+      ['smtp_port', 587],
+      ['smtp_secure', false],
+      ['smtp_user', 'ada'],
+      ['smtp_password', 'hunter2'],
+    ]),
+    'admin',
+  );
 
   for (let index = 0; index < 26; index += 1) {
     await addContactMessage(

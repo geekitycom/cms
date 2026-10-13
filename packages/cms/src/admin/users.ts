@@ -736,7 +736,7 @@ function userScreen(
     deleteRefusal: deleteUserRefusal({ target: user, signedInAs, total }),
     passwordProblems: {},
     profileProblems: {},
-    mailConfigured: c.var.mail.configured(),
+    mailConfigured: c.var.mailConfigured,
     ...extra,
   };
 }

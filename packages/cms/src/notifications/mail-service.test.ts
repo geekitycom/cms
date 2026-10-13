@@ -7,7 +7,6 @@ import { after, describe, it } from 'node:test';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';
-import { writeMailCredentials } from '../mail/credentials.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MailProvider, OutgoingMail } from '../mail/provider.ts';
 import { createMailService } from './mail-service.ts';
@@ -88,7 +87,7 @@ describe('a site with no mail configuration (AC #5)', () => {
     const log = new Log();
     const { mail } = await site({ log });
 
-    assert.equal(mail.configured(), false);
+    assert.equal(await mail.configured(), false);
 
     const result = await mail.send({ to: 'ada@example.com', template: 'test' });
 
@@ -111,15 +110,19 @@ describe('a site with no mail configuration (AC #5)', () => {
 
   it('is not configured when the provider is named but its credential is missing', async () => {
     const { mail } = await site({ settings: { mailProvider: 'brevo' } });
-    assert.equal(mail.configured(), false);
+    assert.equal(await mail.configured(), false);
   });
 
   it('is configured the moment the credential lands, with no restart', async () => {
-    const { mail, dataDir } = await site({ settings: { mailProvider: 'brevo' } });
-    assert.equal(mail.configured(), false);
+    const { mail, contentDir, dataDir } = await site({ settings: { mailProvider: 'brevo' } });
+    assert.equal(await mail.configured(), false);
 
-    await writeMailCredentials(dataDir, { brevo: { apiKey: 'xkeysib-secret' } });
-    assert.equal(mail.configured(), true);
+    await settingsOver({ contentDir, dataDir }).set(
+      'mail',
+      new Map([['brevo_api_key', 'xkeysib-secret']]),
+      'admin',
+    );
+    assert.equal(await mail.configured(), true);
   });
 });
 

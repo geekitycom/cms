@@ -1,7 +1,6 @@
-import { rm } from 'node:fs/promises';
-import path from 'node:path';
-
-import { readFileIfPresentSync, writeFileAtomically } from '../files/atomic.ts';
+import { AKISMET } from '../settings/akismet.ts';
+import type { AkismetKeyStatus } from '../settings/akismet.ts';
+import type { ChangedBy, SettingsRegistry } from '../settings/types.ts';
 import { messageOf } from '../util/errors.ts';
 import { COMMENT_FIELDS } from './submission.ts';
 import type { CommentChecker, CommentReport, CommentSubmission } from '../forms/checker.ts';
@@ -15,19 +14,16 @@ import type { CommentChecker, CommentReport, CommentSubmission } from '../forms/
  *
  * Two things make it optional at runtime rather than at build time:
  *
- * - **The key is a credential**, so it lives in `data/akismet.json` at mode
- *   `0600` beside the password hashes and the actor's private keys, and never
- *   in `content/_data/site.json`, which is public, in git and published with
- *   the site.
- * - **The key file is read on every call**, so a key pasted into the settings
+ * - **The key is a credential**, so it is the secret `akismet.key` setting,
+ *   kept in `data/akismet.json` at mode `0600` or set by
+ *   `GEEKITY_AKISMET__KEY`, and never in `content/_data/site.json`, which is
+ *   public, in git and published with the site.
+ * - **The key is read on every call**, so a key pasted into the settings
  *   screen starts filtering the next comment and a key removed stops filtering
  *   at once. Without one, nothing is sent anywhere and the verdict is
  *   `unknown` — the site's own rules decide, exactly as they did before
  *   anybody had heard of Akismet.
  */
-
-/** Where the key lives, under `dataDir`. */
-export const AKISMET_KEY_FILE = 'akismet.json';
 
 /** The API this speaks. */
 export const AKISMET_ENDPOINT = 'https://rest.akismet.com/1.1';
@@ -48,79 +44,13 @@ export const AKISMET_USER_AGENT = 'Geekity CMS/1.0 | Akismet/1.1';
  */
 export const AKISMET_TIMEOUT_MS = 10_000;
 
-/** What the last {@link verifyAkismetKey} of a key came to. */
-export type AkismetKeyStatus =
-  /** Akismet said `valid`. */
-  | 'valid'
-  /** Akismet said `invalid`: the key is not one of theirs, or not any more. */
-  | 'invalid'
-  /** Akismet could not be reached, so nothing is known either way. */
-  | 'unchecked';
-
-/** The key as `data/akismet.json` holds it. */
-export interface AkismetKeyRecord {
-  /** The key itself. */
-  key: string;
-  /** What Akismet said about it when it was last checked. */
-  status: AkismetKeyStatus;
-  /** When that was, as an instant. */
-  checkedAt: string;
-}
-
-/**
- * The stored key, or `undefined` when the site has none.
- *
- * Read tolerantly and synchronously, like every other file this CMS treats as
- * truth: a file that will not parse, or one with no key in it, is a site with
- * no Akismet rather than a site that will not boot.
- */
-export function readAkismetKey(dataDir: string): AkismetKeyRecord | undefined {
-  const raw = readFileIfPresentSync(akismetKeyPath(dataDir));
-  if (raw === undefined) return undefined;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-
-  if (typeof parsed !== 'object' || parsed === null) return undefined;
-  const file = parsed as Record<string, unknown>;
-  const key = typeof file['key'] === 'string' ? file['key'].trim() : '';
-  if (key === '') return undefined;
-
-  const status = file['status'];
-  return {
-    key,
-    status: status === 'valid' || status === 'invalid' ? status : 'unchecked',
-    checkedAt: typeof file['checkedAt'] === 'string' ? file['checkedAt'] : '',
-  };
-}
-
-/** Write the key, private to the account the site runs as. */
-export async function writeAkismetKey(dataDir: string, record: AkismetKeyRecord): Promise<void> {
-  await writeFileAtomically(akismetKeyPath(dataDir), `${JSON.stringify(record, null, 2)}\n`, {
-    mode: 0o600,
-  });
-}
-
-/** Forget the key, which is how a site turns Akismet off. */
-export async function removeAkismetKey(dataDir: string): Promise<void> {
-  await rm(akismetKeyPath(dataDir), { force: true });
-}
-
-/** Where one site's key file is. */
-export function akismetKeyPath(dataDir: string): string {
-  return path.join(dataDir, AKISMET_KEY_FILE);
-}
-
 /** What {@link verifyAkismetKey} needs. */
 export interface VerifyAkismetKeyOptions {
-  /** The key to check. */
-  key: string;
+  settings: SettingsRegistry;
   /** The site's public origin, which Akismet calls the blog. */
   blog: string;
+  at: Date;
+  by: ChangedBy;
   /** The HTTP client. Defaults to the global `fetch`; a test hands in its own. */
   fetch?: typeof fetch | undefined;
   /** How long to wait. */
@@ -128,16 +58,33 @@ export interface VerifyAkismetKeyOptions {
 }
 
 /**
- * Ask Akismet whether a key is one of theirs.
- *
  * Three answers rather than two, because "we could not ask" is not "no": a key
  * typed while the machine is offline should not be reported as a bad key, and
  * the settings screen says which of the two happened.
  */
 export async function verifyAkismetKey(
   options: VerifyAkismetKeyOptions,
+): Promise<AkismetKeyStatus | undefined> {
+  const key = await options.settings.get(AKISMET.key);
+  if (key === '') return undefined;
+
+  const status = await askAboutKey(key, options);
+  await options.settings.set(
+    'akismet',
+    new Map<string, unknown>([
+      ['status', status],
+      ['checked_at', options.at.toISOString()],
+    ]),
+    options.by,
+  );
+  return status;
+}
+
+async function askAboutKey(
+  key: string,
+  options: VerifyAkismetKeyOptions,
 ): Promise<AkismetKeyStatus> {
-  const body = new URLSearchParams({ api_key: options.key, blog: options.blog });
+  const body = new URLSearchParams({ api_key: key, blog: options.blog });
 
   let answer: AkismetAnswer;
   try {
@@ -152,8 +99,7 @@ export async function verifyAkismetKey(
 
 /** What {@link createAkismetChecker} needs around it. */
 export interface AkismetCheckerOptions {
-  /** Where the key file lives. Read on every call, so a new key needs no restart. */
-  dataDir: string;
+  settings: SettingsRegistry;
   /**
    * The site's language, as `blog_lang` wants it.
    *
@@ -199,13 +145,13 @@ export function createAkismetChecker(options: AkismetCheckerOptions): CommentChe
     method: 'comment-check' | 'submit-spam' | 'submit-ham',
     fields: (key: string) => URLSearchParams,
   ): Promise<AkismetAnswer | undefined> {
-    const stored = readAkismetKey(options.dataDir);
-    if (stored === undefined) return undefined;
+    const key = await options.settings.get(AKISMET.key);
+    if (key === '') return undefined;
 
     try {
       const answer = await post(
         `${AKISMET_ENDPOINT}/${method}`,
-        fields(stored.key),
+        fields(key),
         options.fetch,
         options.timeoutMs,
       );

@@ -111,6 +111,35 @@ describe('geekity settings', () => {
     );
   });
 
+  it('prints (set) or (not set) for each mail secret and never its value', async () => {
+    const directory = await temporaryDir('geekity-settings-cli-');
+    await mkdir(path.join(directory, 'data'));
+    await writeFile(
+      path.join(directory, 'data', 'mail.json'),
+      JSON.stringify({ brevo: { apiKey: 'xkeysib-stored-secret' } }),
+    );
+    const env = { GEEKITY_MAIL__SMTP_PASSWORD: 'env-held-secret' };
+
+    const listed = await runCli(['settings', 'list', 'mail'], directory, undefined, env);
+
+    assert.equal(listed.code, 0, listed.stderr);
+    assert.match(lineOf(listed.stdout, 'mail.brevo_api_key'), /^mail\.brevo_api_key \(set\) file /);
+    assert.match(
+      lineOf(listed.stdout, 'mail.smtp_password'),
+      /^mail\.smtp_password \(set\) env GEEKITY_MAIL__SMTP_PASSWORD /,
+    );
+    assert.match(lineOf(listed.stdout, 'mail.smtp_host'), /^mail\.smtp_host default /);
+    assert.doesNotMatch(listed.stdout, /xkeysib-stored-secret|env-held-secret/);
+    assert.doesNotMatch(listed.stdout, /maintenance|akismet/);
+
+    const emptied = await runCli(['settings', 'set', 'mail.brevo_api_key', '--unset'], directory);
+    assert.equal(emptied.code, 0, emptied.stderr);
+    assert.match(lineOf(emptied.stdout, 'mail.brevo_api_key'), /^mail\.brevo_api_key \(not set\) /);
+
+    const got = await runCli(['settings', 'get', 'mail.smtp_password'], directory, undefined, env);
+    assert.doesNotMatch(got.stdout, /env-held-secret/);
+  });
+
   it('refuses a value that does not parse, an unknown setting and a missing verb, writing nothing', async () => {
     const directory = await temporaryDir('geekity-settings-cli-');
 

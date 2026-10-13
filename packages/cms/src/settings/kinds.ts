@@ -36,3 +36,38 @@ function instant(text: string): Parsed<string> {
       }
     : { ok: true, value: date.toISOString() };
 }
+
+export const text: SettingType<string> = {
+  fromJson: (raw) =>
+    typeof raw === 'string' ? { ok: true, value: raw } : { ok: false, problem: 'must be text' },
+  fromText: (value) => ({ ok: true, value }),
+  toJson: (value) => value,
+  toText: (value) => value,
+};
+
+export const port: SettingType<number> = {
+  fromJson: (raw) => portIn(raw),
+  fromText: (value) => portIn(value.trim() === '' ? NaN : Number(value), value),
+  toJson: (value) => value,
+  toText: (value) => String(value),
+};
+
+function portIn(raw: unknown, received: unknown = raw): Parsed<number> {
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 1 && raw <= 65535
+    ? { ok: true, value: raw }
+    : {
+        ok: false,
+        problem: `must be a whole number between 1 and 65535, received ${JSON.stringify(received)}`,
+      };
+}
+
+export function oneOf<const T extends string>(choices: readonly T[]): SettingType<T> {
+  const parse = (raw: unknown): Parsed<T> =>
+    choices.includes(raw as T)
+      ? { ok: true, value: raw as T }
+      : {
+          ok: false,
+          problem: `must be one of ${choices.join(', ')}, received ${JSON.stringify(raw)}`,
+        };
+  return { fromJson: parse, fromText: parse, toJson: (value) => value, toText: (value) => value };
+}

@@ -7,6 +7,7 @@ import type { DocumentLookup } from '../content/store.ts';
 import { postLabel } from '../content/post-type.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import type { MailService } from './mail-service.ts';
+import { createSerialQueue } from '../util/queue.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { moderationLink, unsubscribeLink } from './links.ts';
 import { hasOptedOut } from './optouts.ts';
@@ -80,11 +81,14 @@ export interface CommentNotifier {
    * be told and are still listening.
    */
   replyApproved(reply: PostComment): void;
+  /** Resolve once every notice asked for so far has been handed to the mail service. */
+  settled(): Promise<void>;
 }
 
 /** Build the notifier for one site. */
 export function createCommentNotifier(options: CreateCommentNotifierOptions): CommentNotifier {
   const { admin, store, mail, config } = options;
+  const notices = createSerialQueue();
 
   /** The post a comment is on, as a message names it. */
   function postOf(comment: PostComment): { title: string; url: string } {
@@ -117,79 +121,92 @@ export function createCommentNotifier(options: CreateCommentNotifierOptions): Co
   return {
     pending(comment) {
       if (comment.status !== 'pending') return;
-      // Asked before anything else, so a site that sends no mail never mints a
-      // signing secret it would have no use for.
-      if (!mail.configured()) return;
-
-      // Everybody who wants the notice as it happens. A user on an hourly or
-      // daily digest is deliberately not written to here: the whole of what
-      // choosing a window means is that this moment is not one of the moments
-      // they hear about (TASK-60), and `createCommentDigest` writes to them
-      // instead, from the queue as it stands when their window comes up.
-      const recipients = notificationRecipients(
-        listUsers(config.dataDir),
-        COMMENTS_NOTIFICATION,
-      ).filter(
-        (recipient) => !isBatchedMode(notificationMode(recipient.user, COMMENTS_NOTIFICATION)),
-      );
-      if (recipients.length === 0) return;
-
-      const context = { dataDir: config.dataDir, baseUrl: config.baseUrl, now: config.now() };
-      const actions = MODERATION_ACTIONS.map((action) => ({
-        action,
-        label: action === 'approve' ? 'Approve' : action === 'spam' ? 'Spam' : 'Delete',
-        url: moderationLink(context, comment.id, action),
-      }));
-
-      const data = {
-        comment: commentIn(comment),
-        post: postOf(comment),
-        actions,
-        queueUrl: absoluteUrl('/admin/comments', config.baseUrl),
-      };
-
-      for (const recipient of recipients) {
-        // One message each rather than one with everybody on it: a moderator's
-        // address is not something to show the other moderators, and a message
-        // per person is what lets a later version say something different to
-        // each of them.
-        void mail.send({ to: recipient.email, template: COMMENT_PENDING_TEMPLATE, data });
-      }
+      void notices.run(() => tellModerators(comment));
     },
 
     replyApproved(reply) {
       if (reply.status !== 'approved' || reply.inReplyTo === null) return;
-      if (!mail.configured()) return;
+      const parentId = reply.inReplyTo;
+      void notices.run(() => tellParent(reply, parentId));
+    },
 
-      const parent = admin.getComment(reply.inReplyTo);
-      if (parent === undefined || !parent.notify) return;
-
-      const address = parent.author.email;
-      if (address === null || address === '') return;
-      // Nobody wants an email about their own reply, and a thread of two
-      // people talking would otherwise send one on every message.
-      if (address.toLowerCase() === (reply.author.email ?? '').toLowerCase()) return;
-      if (hasOptedOut(config.dataDir, address)) return;
-
-      const context = { dataDir: config.dataDir, baseUrl: config.baseUrl, now: config.now() };
-      const post = postOf(reply);
-
-      void mail.send({
-        to: address,
-        template: COMMENT_REPLY_TEMPLATE,
-        data: {
-          reply: {
-            ...commentIn(reply),
-            url: reply.url ?? `${post.url}#${commentAnchor(reply.id)}`,
-          },
-          comment: {
-            ...commentIn(parent),
-            url: parent.url ?? `${post.url}#${commentAnchor(parent.id)}`,
-          },
-          post,
-          unsubscribeUrl: unsubscribeLink(context, address),
-        },
-      });
+    settled() {
+      return notices.settled();
     },
   };
+
+  async function tellModerators(comment: PostComment): Promise<void> {
+    // Asked before anything else, so a site that sends no mail never mints a
+    // signing secret it would have no use for.
+    if (!(await mail.configured())) return;
+
+    // Everybody who wants the notice as it happens. A user on an hourly or
+    // daily digest is deliberately not written to here: the whole of what
+    // choosing a window means is that this moment is not one of the moments
+    // they hear about (TASK-60), and `createCommentDigest` writes to them
+    // instead, from the queue as it stands when their window comes up.
+    const recipients = notificationRecipients(
+      listUsers(config.dataDir),
+      COMMENTS_NOTIFICATION,
+    ).filter(
+      (recipient) => !isBatchedMode(notificationMode(recipient.user, COMMENTS_NOTIFICATION)),
+    );
+    if (recipients.length === 0) return;
+
+    const context = { dataDir: config.dataDir, baseUrl: config.baseUrl, now: config.now() };
+    const actions = MODERATION_ACTIONS.map((action) => ({
+      action,
+      label: action === 'approve' ? 'Approve' : action === 'spam' ? 'Spam' : 'Delete',
+      url: moderationLink(context, comment.id, action),
+    }));
+
+    const data = {
+      comment: commentIn(comment),
+      post: postOf(comment),
+      actions,
+      queueUrl: absoluteUrl('/admin/comments', config.baseUrl),
+    };
+
+    for (const recipient of recipients) {
+      // One message each rather than one with everybody on it: a moderator's
+      // address is not something to show the other moderators, and a message
+      // per person is what lets a later version say something different to
+      // each of them.
+      void mail.send({ to: recipient.email, template: COMMENT_PENDING_TEMPLATE, data });
+    }
+  }
+
+  async function tellParent(reply: PostComment, parentId: string): Promise<void> {
+    if (!(await mail.configured())) return;
+
+    const parent = admin.getComment(parentId);
+    if (parent === undefined || !parent.notify) return;
+
+    const address = parent.author.email;
+    if (address === null || address === '') return;
+    // Nobody wants an email about their own reply, and a thread of two
+    // people talking would otherwise send one on every message.
+    if (address.toLowerCase() === (reply.author.email ?? '').toLowerCase()) return;
+    if (hasOptedOut(config.dataDir, address)) return;
+
+    const context = { dataDir: config.dataDir, baseUrl: config.baseUrl, now: config.now() };
+    const post = postOf(reply);
+
+    void mail.send({
+      to: address,
+      template: COMMENT_REPLY_TEMPLATE,
+      data: {
+        reply: {
+          ...commentIn(reply),
+          url: reply.url ?? `${post.url}#${commentAnchor(reply.id)}`,
+        },
+        comment: {
+          ...commentIn(parent),
+          url: parent.url ?? `${post.url}#${commentAnchor(parent.id)}`,
+        },
+        post,
+        unsubscribeUrl: unsubscribeLink(context, address),
+      },
+    });
+  }
 }

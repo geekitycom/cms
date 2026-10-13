@@ -1,5 +1,6 @@
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
+import { MAIL } from '../settings/mail.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import { readSiteSettings } from '../site/site-json.ts';
@@ -10,7 +11,6 @@ import type { Tried } from '../util/retry.ts';
 import { createThemeSource } from '../theme/themes.ts';
 import type { ThemeSource } from '../theme/themes.ts';
 import { createBrevoProvider } from '../mail/brevo.ts';
-import { readMailCredentials } from '../mail/credentials.ts';
 import type {
   MailAddress,
   MailLogger,
@@ -36,7 +36,7 @@ import type { MailTemplates } from './mail-templates.ts';
  * - **A site with no mail configuration still works.** `send` resolves
  *   successfully, having sent nothing and said so in the log. A feature that
  *   emails is not a feature that breaks without a mail account.
- * - **Nothing is decided at boot.** The settings and `data/mail.json` are read
+ * - **Nothing is decided at boot.** The settings and the `mail` namespace are read
  *   per send, so a key pasted into the settings screen sends the next message
  *   and a provider switched there takes effect at once, neither needing a
  *   restart — the same way every other setting behaves under decision-9.
@@ -129,7 +129,7 @@ export interface CreateMailServiceOptions {
   settings: SettingsRegistry;
   /**
    * A provider named by the site, which wins outright over the settings and
-   * `data/mail.json` — the way a `commentChecker` in the config wins over the
+   * the `mail` namespace — the way a `commentChecker` in the config wins over the
    * Akismet key. {@link createMemoryMailProvider} is what a test names here.
    */
   provider?: MailProvider | undefined;
@@ -159,12 +159,12 @@ export interface CreateMailServiceOptions {
 export interface MailService {
   /**
    * Whether anything would actually be sent: a provider named in the config,
-   * or a provider chosen in the settings whose credential is in
-   * `data/mail.json`. Read per call, so it changes the moment the file does.
+   * or a provider chosen in the settings whose credential the `mail` namespace
+   * holds. Read per call, so it changes the moment the credential does.
    */
-  configured(): boolean;
+  configured(): Promise<boolean>;
   /** Which provider would carry the next message, or `none`. */
-  providerName(): MailProviderName;
+  providerName(): Promise<MailProviderName>;
   /** The From line the next message would carry. */
   from(): MailAddress;
   /**
@@ -213,17 +213,23 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
    * settings screen reaches the very next message, and how one removed stops
    * the one after it.
    */
-  function provider(): MailProvider | undefined {
+  async function provider(): Promise<MailProvider | undefined> {
     if (options.provider !== undefined) return options.provider;
 
-    const settings = readSiteSettings(config.contentDir);
-    const credentials = readMailCredentials(config.dataDir);
+    const { mailProvider } = readSiteSettings(config.contentDir);
+    const credentials = await options.settings.values(MAIL);
 
-    if (settings.mailProvider === 'brevo' && credentials.brevo !== undefined) {
-      return createBrevoProvider({ apiKey: credentials.brevo.apiKey });
+    if (mailProvider === 'brevo' && credentials.brevo_api_key !== '') {
+      return createBrevoProvider({ apiKey: credentials.brevo_api_key });
     }
-    if (settings.mailProvider === 'smtp' && credentials.smtp !== undefined) {
-      return createSmtpProvider(credentials.smtp);
+    if (mailProvider === 'smtp' && credentials.smtp_host !== '') {
+      return createSmtpProvider({
+        host: credentials.smtp_host,
+        port: credentials.smtp_port,
+        secure: credentials.smtp_secure,
+        user: credentials.smtp_user,
+        password: credentials.smtp_password,
+      });
     }
     return undefined;
   }
@@ -287,21 +293,20 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
     return result;
   }
 
-  /**
-   * The one path both `send` and `sendRaw` take: settle the provider, build
-   * the message, and queue it.
-   *
-   * `build` runs inside the queue rather than before it, so a template read is
-   * one of the things that is serialised — and so a template edited while a
-   * message is waiting is the one that goes out.
-   */
   function queue(
     to: MailRecipient | readonly MailRecipient[],
     replyTo: MailRecipient | undefined,
     build: (settings: SiteSettings) => { subject: string; text: string; html?: string | undefined },
   ): Promise<MailResult> {
-    const recipients = addressesOf(to);
-    const carrier = provider();
+    return messages.run(() => send(addressesOf(to), replyTo, build));
+  }
+
+  async function send(
+    recipients: MailAddress[],
+    replyTo: MailRecipient | undefined,
+    build: (settings: SiteSettings) => { subject: string; text: string; html?: string | undefined },
+  ): Promise<MailResult> {
+    const carrier = await provider();
 
     if (carrier === undefined) {
       // Not a failure. A site with no mail account is a site whose password
@@ -312,7 +317,7 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
           .map((recipient) => recipient.address)
           .join(', ')} was not sent.`,
       );
-      return Promise.resolve({
+      return {
         ok: true,
         skipped: true,
         held: false,
@@ -320,55 +325,53 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
         to: recipients.map((recipient) => recipient.address),
         subject: '',
         attempts: 0,
-      });
+      };
     }
 
-    return messages.run(async () => {
-      const settings = readSiteSettings(config.contentDir);
+    const settings = readSiteSettings(config.contentDir);
 
-      let body: { subject: string; text: string; html?: string | undefined };
-      try {
-        body = build(settings);
-      } catch (thrown) {
-        // A template that will not render is a mistake in this site's own
-        // files, not a provider that refused: there is nothing to retry, and
-        // the message names the file to fix.
-        const error = messageOf(thrown);
-        logger.warn(
-          `Could not build a message for ${recipients.map((r) => r.address).join(', ')}: ${error}`,
-        );
-        return {
-          ok: false,
-          skipped: false,
-          held: false,
-          provider: carrier.name,
-          to: recipients.map((recipient) => recipient.address),
-          subject: '',
-          attempts: 0,
-          error,
-        };
-      }
+    let body: { subject: string; text: string; html?: string | undefined };
+    try {
+      body = build(settings);
+    } catch (thrown) {
+      // A template that will not render is a mistake in this site's own
+      // files, not a provider that refused: there is nothing to retry, and
+      // the message names the file to fix.
+      const error = messageOf(thrown);
+      logger.warn(
+        `Could not build a message for ${recipients.map((r) => r.address).join(', ')}: ${error}`,
+      );
+      return {
+        ok: false,
+        skipped: false,
+        held: false,
+        provider: carrier.name,
+        to: recipients.map((recipient) => recipient.address),
+        subject: '',
+        attempts: 0,
+        error,
+      };
+    }
 
-      const answerTo = replyTo === undefined ? replyToIn(settings) : addressOf(replyTo);
+    const answerTo = replyTo === undefined ? replyToIn(settings) : addressOf(replyTo);
 
-      return await deliver(carrier, {
-        from: from(settings),
-        to: recipients,
-        ...(answerTo === undefined ? {} : { replyTo: answerTo }),
-        subject: body.subject,
-        text: body.text,
-        ...(body.html === undefined ? {} : { html: body.html }),
-      });
+    return await deliver(carrier, {
+      from: from(settings),
+      to: recipients,
+      ...(answerTo === undefined ? {} : { replyTo: answerTo }),
+      subject: body.subject,
+      text: body.text,
+      ...(body.html === undefined ? {} : { html: body.html }),
     });
   }
 
   return {
-    configured() {
-      return provider() !== undefined;
+    async configured() {
+      return (await provider()) !== undefined;
     },
 
-    providerName() {
-      return provider()?.name ?? 'none';
+    async providerName() {
+      return (await provider())?.name ?? 'none';
     },
 
     from() {

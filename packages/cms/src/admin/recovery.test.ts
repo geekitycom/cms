@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
 import type { Cms, GeekityConfig } from '../index.ts';
-import { writeMailCredentials } from '../mail/credentials.ts';
+import { settingsOver } from '../__testing__/settings.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import type { OutgoingMail } from '../mail/provider.ts';
@@ -398,9 +398,15 @@ describe('a site that sends no email (AC #5)', () => {
         mailProvider: 'smtp',
       },
     });
-    await writeMailCredentials(cms.config.dataDir, {
-      smtp: { host: 'smtp.example.com', port: 587, secure: false, user: 'a', password: 'b' },
-    });
+    await settingsOver({ dataDir: cms.config.dataDir }).set(
+      'mail',
+      new Map<string, unknown>([
+        ['smtp_host', 'smtp.example.com'],
+        ['smtp_user', 'a'],
+        ['smtp_password', 'b'],
+      ]),
+      'admin',
+    );
 
     const html = await (await browser(cms).get(FORGOT_PATH)).text();
 

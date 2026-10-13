@@ -27,7 +27,6 @@ export interface PageSourcesOptions {
   readonly store: DocumentLookup & ArchiveReader & BacklinkReader & CatalogReader;
   readonly redirects: RedirectSource;
   readonly siteData: SiteDataSource;
-  readonly mailConfigured: () => boolean;
 }
 
 export type PageSources = Required<
@@ -51,7 +50,6 @@ export function pageSources({
   store,
   redirects,
   siteData,
-  mailConfigured,
 }: PageSourcesOptions): PageSources {
   const syndicationTargets = syndicationTargetsReader(config.contentDir);
   const copies = syndicationCopies(config.contentDir);
@@ -73,13 +71,13 @@ export function pageSources({
       ),
     pages: () => store.listAll({ type: 'page', draft: false, trashed: false, scheduled: false }),
     users: () => listUsers(config.dataDir),
-    commentForm: (document, viewer) =>
+    commentForm: (document, viewer, notifiable) =>
       commentFormFor({
         document,
         site: siteData.read(),
         now: config.now(),
         viewer,
-        notifiable: mailConfigured(),
+        notifiable,
       }),
     contactForm: (document) => contactFormFor({ document, now: config.now() }),
     neighbours: (document) => store.neighbours(document),

@@ -133,6 +133,7 @@ async function submit(site: Site, fields: Record<string, string>): Promise<Respo
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(fields).toString(),
   });
+  await site.cms.notifications.settled();
   await site.cms.mail.settled();
   return response;
 }
@@ -184,6 +185,7 @@ async function confirm(site: Site, link: string): Promise<{ status: number; html
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: url.searchParams.toString(),
   });
+  await site.cms.notifications.settled();
   await site.cms.mail.settled();
   return { status: response.status, html: await response.text() };
 }

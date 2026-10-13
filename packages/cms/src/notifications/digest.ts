@@ -250,7 +250,7 @@ export function createCommentDigest(options: CreateCommentDigestOptions): Commen
     // Asked before anything else, so a site that sends no mail never mints a
     // signing secret it would have no use for and never writes a record of
     // digests it did not send.
-    if (!mail.configured()) return 0;
+    if (!(await mail.configured())) return 0;
 
     const now = config.now();
     // Read per run rather than held, so a record written by another process —

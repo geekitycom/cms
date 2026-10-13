@@ -133,6 +133,7 @@ async function settle(cms: Cms): Promise<void> {
   await cms.webmentions.settled();
   await cms.notifier.settled();
   await cms.indexNow.settled();
+  await cms.notifications.settled();
   await cms.mail.settled();
 }
 

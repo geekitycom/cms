@@ -133,7 +133,7 @@ export function mountComments(app: Hono<GeekityEnv>): void {
       throttle: throttle(config),
       // Whether the box on the form meant anything, read per submission so a
       // credential saved a moment ago is honoured now (TASK-55).
-      notifiable: c.var.mail.configured(),
+      notifiable: c.var.mailConfigured,
       now,
     });
 

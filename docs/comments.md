@@ -331,9 +331,17 @@ no visit to the users screen.
 ### Akismet
 
 Akismet is the one checker the package ships. It is off until a site has a key.
-The key is a credential, not a setting. It is in `data/akismet.json` at mode
-`0600`, beside the password hashes and the users' private keys. It is never in
-`content/_data/site.json`, which is public, in git and published with the site.
+The key is a credential. It is the secret `akismet.key`
+[runtime setting](settings.md#runtime-settings), kept in `data/akismet.json` at
+mode `0600`, beside the password hashes and the users' private keys. It is
+never in `content/_data/site.json`, which is public, in git and published with
+the site. The same file holds `akismet.status` and `akismet.checked_at`, the
+last `verify-key` answer and when it was given.
+
+A deployment can set the key in the environment instead, as
+`GEEKITY_AKISMET__KEY`. That key is in effect whatever the file holds. The
+panel says the key is set by `GEEKITY_AKISMET__KEY`, offers no box to type
+over it, and refuses a key saved over it.
 
 To connect Akismet, paste the key into **Spam checking** on
 `/admin/settings/discussion`. The server checks the key with Akismet's
@@ -344,10 +352,12 @@ To connect Akismet, paste the key into **Spam checking** on
 - "Akismet could not be reached"
 - Not connected
 
-The panel never shows the key. It shows the last four characters, so you can
-tell which key is stored. The **Remove key** button turns Akismet off.
+The panel never shows the key. It shows the last four characters of a stored
+key, so you can tell which key is stored. **Check key with Akismet** asks
+`verify-key` about the key in effect again, which is how a key from the
+environment is checked. The **Remove key** button turns Akismet off.
 
-The server reads the file on every call. A key saved on that screen filters the
+The server reads the key on every call. A key saved on that screen filters the
 next comment, and a removed key stops filtering at once. Neither needs a
 restart.
 

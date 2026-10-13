@@ -79,7 +79,10 @@ export interface SettingsPage {
    */
   shown?: (config: ResolvedConfig, settings: SiteSettings) => SiteSettings;
   /** What the page renders beyond its own fields: a panel, a credential, a list. */
-  panels?: (c: Context<GeekityEnv>, settings: SiteSettings) => Record<string, unknown>;
+  panels?: (
+    c: Context<GeekityEnv>,
+    settings: SiteSettings,
+  ) => Promise<Record<string, unknown>> | Record<string, unknown>;
   /**
    * The fields this page does not read straight off the body, because
    * something other than the form decides them — a field rendered read-only
@@ -136,8 +139,12 @@ export function mountSettingsPage(
 ): void {
   const { render } = options;
 
-  app.get(page.path, (c) =>
-    render(c, page.template, settingsScreen(c, page, readSiteSettings(c.var.config.contentDir))),
+  app.get(page.path, async (c) =>
+    render(
+      c,
+      page.template,
+      await settingsScreen(c, page, readSiteSettings(c.var.config.contentDir)),
+    ),
   );
 
   app.post(page.path, async (c) => {
@@ -152,7 +159,7 @@ export function mountSettingsPage(
     if (Object.keys(problems).length > 0) {
       c.status(400);
       return render(c, page.template, {
-        ...settingsScreen(c, page, stored),
+        ...(await settingsScreen(c, page, stored)),
         form: submitted,
         problems,
         hasProblems: true,
@@ -179,11 +186,11 @@ export function mountSettingsPage(
 }
 
 /** Everything one settings page's template renders. */
-export function settingsScreen(
+export async function settingsScreen(
   c: Context<GeekityEnv>,
   page: SettingsPage,
   settings: SiteSettings,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   const shown = page.shown === undefined ? settings : page.shown(c.var.config, settings);
 
   return {
@@ -198,7 +205,7 @@ export function settingsScreen(
     // an object whether it is empty, and every page would otherwise spell out
     // the list of its own fields to find out.
     hasProblems: false,
-    ...page.panels?.(c, settings),
+    ...(await page.panels?.(c, settings)),
   };
 }
 

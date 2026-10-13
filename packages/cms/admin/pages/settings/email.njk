@@ -76,9 +76,9 @@
 
 {% block settingsPanels %}
   {# The mail credential is its own pair of forms for the reason the Akismet
-     key is: an API key and an SMTP password belong in data/mail.json, not in
-     the public site.json, and a mistyped one must not lose an edit to the
-     From line. #}
+     key is: an API key and an SMTP password are the mail settings, kept in
+     data/mail.json, not in the public site.json, and a mistyped one must not
+     lose an edit to the From line. #}
   {% call card(title='Mail credentials') %}
 
     <p>
@@ -125,40 +125,64 @@
 
         {% if mailProvider == 'brevo' %}
           <h3 class="font-semibold">Brevo</h3>
-          {% if mailBrevoPresent %}
-            <p class="text-sm">A key is stored, ending {{ mailBrevoKeyHint }}.</p>
-            {% set brevoPlaceholder = 'Leave blank to keep the stored key' %}
+          {% if mailSetBy.brevo_api_key %}
+            <p class="text-sm">The API key is set by <code>{{ mailSetBy.brevo_api_key }}</code> and cannot be changed here.</p>
           {% else %}
-            {% set brevoPlaceholder = 'Paste your key' %}
+            {% if mailBrevoPresent %}
+              <p class="text-sm">A key is stored, ending {{ mailBrevoKeyHint }}.</p>
+              {% set brevoPlaceholder = 'Leave blank to keep the stored key' %}
+            {% else %}
+              {% set brevoPlaceholder = 'Paste your key' %}
+            {% endif %}
+            {{ field.password('settings-mail-brevo-key', mailFields.brevoApiKey, 'API key',
+                 autocomplete='off', spellcheck='false', placeholder=brevoPlaceholder) }}
           {% endif %}
-          {{ field.password('settings-mail-brevo-key', mailFields.brevoApiKey, 'API key',
-               autocomplete='off', spellcheck='false', placeholder=brevoPlaceholder) }}
         {% else %}
           <h3 class="font-semibold">SMTP</h3>
-          {{ field.text('settings-mail-smtp-host', mailFields.smtpHost, 'Host', mailSmtp.host,
-               autocomplete='off') }}
+          {% if mailSetBy.smtp_host %}
+            <p class="text-sm">Host {{ mailSmtp.host }}, set by <code>{{ mailSetBy.smtp_host }}</code>.</p>
+          {% else %}
+            {{ field.text('settings-mail-smtp-host', mailFields.smtpHost, 'Host', mailSmtp.host,
+                 autocomplete='off') }}
+          {% endif %}
 
-          {{ field.text('settings-mail-smtp-port', mailFields.smtpPort, 'Port',
-               mailSmtp.port if mailSmtp else 587, inputmode='numeric') }}
+          {% if mailSetBy.smtp_port %}
+            <p class="text-sm">Port {{ mailSmtp.port }}, set by <code>{{ mailSetBy.smtp_port }}</code>.</p>
+          {% else %}
+            {{ field.text('settings-mail-smtp-port', mailFields.smtpPort, 'Port',
+                 mailSmtp.port if mailSmtp else 587, inputmode='numeric') }}
+          {% endif %}
 
           {# Its own box with the sentence beside it, like every other switch in
              the admin. It used to be a label wrapped round the tick in a class the
              stylesheet has never heard of, so it was the one switch here that
              rendered unstyled. #}
-          {{ field.checkbox('settings-mail-smtp-secure', mailFields.smtpSecure,
-               'TLS from the first byte (port 465)', checked=mailSmtp.secure,
-               hint='Leave this off for port 587, which upgrades with STARTTLS.') }}
-
-          {{ field.text('settings-mail-smtp-user', mailFields.smtpUser, 'Username', mailSmtp.user,
-               autocomplete='off') }}
-
-          {% if mailSmtp.hasPassword %}
-            {% set smtpPlaceholder = 'Leave blank to keep the stored password' %}
+          {% if mailSetBy.smtp_secure %}
+            <p class="text-sm">TLS from the first byte {{ 'on' if mailSmtp.secure else 'off' }}, set by <code>{{ mailSetBy.smtp_secure }}</code>.</p>
           {% else %}
-            {% set smtpPlaceholder = 'The SMTP password' %}
+            {{ field.checkbox('settings-mail-smtp-secure', mailFields.smtpSecure,
+                 'TLS from the first byte (port 465)', checked=mailSmtp.secure,
+                 hint='Leave this off for port 587, which upgrades with STARTTLS.') }}
           {% endif %}
-          {{ field.password('settings-mail-smtp-password', mailFields.smtpPassword, 'Password',
-               autocomplete='off', spellcheck='false', placeholder=smtpPlaceholder) }}
+
+          {% if mailSetBy.smtp_user %}
+            <p class="text-sm">Username {{ mailSmtp.user }}, set by <code>{{ mailSetBy.smtp_user }}</code>.</p>
+          {% else %}
+            {{ field.text('settings-mail-smtp-user', mailFields.smtpUser, 'Username', mailSmtp.user,
+                 autocomplete='off') }}
+          {% endif %}
+
+          {% if mailSetBy.smtp_password %}
+            <p class="text-sm">The password is set by <code>{{ mailSetBy.smtp_password }}</code> and cannot be changed here.</p>
+          {% else %}
+            {% if mailSmtp.hasPassword %}
+              {% set smtpPlaceholder = 'Leave blank to keep the stored password' %}
+            {% else %}
+              {% set smtpPlaceholder = 'The SMTP password' %}
+            {% endif %}
+            {{ field.password('settings-mail-smtp-password', mailFields.smtpPassword, 'Password',
+                 autocomplete='off', spellcheck='false', placeholder=smtpPlaceholder) }}
+          {% endif %}
         {% endif %}
 
         <div class="mt-2">{{ button('Save credentials', type='submit', color='primary') }}</div>
@@ -225,7 +249,11 @@
       page. Both are kept in <code>data/mail.json</code> at mode
       <code>0600</code>, beside the password hashes and the actor's private
       keys, and never in <code>site.json</code>, which is public and in git.
-      Leaving a secret blank keeps the one already stored.
+      Leaving a secret blank keeps the one already stored. A deployment can set
+      any of them instead with <code>GEEKITY_MAIL__BREVO_API_KEY</code>,
+      <code>GEEKITY_MAIL__SMTP_PASSWORD</code> and the other
+      <code>GEEKITY_MAIL__*</code> variables, and then this page shows what sets
+      them.
     </p>
   {% endcall %}
 {% endblock %}

@@ -383,6 +383,7 @@ describe('the reply notices this screen sets off (TASK-55)', () => {
       [COMMENT_ADMIN_FIELDS.id]: reply,
       [COMMENT_ADMIN_FIELDS.action]: 'approve',
     });
+    await cms.notifications.settled();
     await cms.mail.settled();
 
     assert.equal(provider.sent.length, 1);
@@ -402,6 +403,7 @@ describe('the reply notices this screen sets off (TASK-55)', () => {
       [COMMENT_ADMIN_FIELDS.id]: parent,
       [COMMENT_ADMIN_FIELDS.body]: 'Thank you for reading.',
     });
+    await cms.notifications.settled();
     await cms.mail.settled();
 
     assert.equal(provider.sent.length, 1);
@@ -418,6 +420,7 @@ describe('the reply notices this screen sets off (TASK-55)', () => {
       [COMMENT_ADMIN_FIELDS.id]: reply,
       [COMMENT_ADMIN_FIELDS.action]: 'spam',
     });
+    await cms.notifications.settled();
     await cms.mail.settled();
 
     assert.equal(provider.sent.length, 0);

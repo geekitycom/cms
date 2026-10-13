@@ -8,8 +8,6 @@ import { settingsOver } from '../__testing__/settings.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { startTestSmtpServer } from '../mail/__testing__/smtp-server.ts';
 import type { TestSmtpServer } from '../mail/__testing__/smtp-server.ts';
-import { writeMailCredentials } from '../mail/credentials.ts';
-import type { MailCredentials } from '../mail/credentials.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
@@ -135,12 +133,50 @@ async function post(
   return { response, screen: await (await agent.get(SETTINGS_PATH)).text() };
 }
 
+interface Credentials {
+  brevo?: { apiKey: string };
+  smtp?: { host: string; port: number; secure: boolean; user: string; password: string };
+}
+
+async function storeMail(dataDir: string, credentials: Credentials): Promise<void> {
+  const { brevo, smtp } = credentials;
+  const result = await settingsOver({ dataDir }).set(
+    'mail',
+    new Map<string, unknown>([
+      ...(brevo === undefined ? [] : [['brevo_api_key', brevo.apiKey] as const]),
+      ...(smtp === undefined
+        ? []
+        : ([
+            ['smtp_host', smtp.host],
+            ['smtp_port', smtp.port],
+            ['smtp_secure', smtp.secure],
+            ['smtp_user', smtp.user],
+            ['smtp_password', smtp.password],
+          ] as const)),
+    ]),
+    'admin',
+  );
+  assert.deepEqual(result, { ok: true });
+}
+
 /** `data/mail.json` as it stands, or `undefined` when there is none. */
-function credentialFile(dataDir: string): MailCredentials | undefined {
+function credentialFile(dataDir: string): Record<string, unknown> | undefined {
   try {
-    return JSON.parse(readFileSync(path.join(dataDir, 'mail.json'), 'utf8')) as MailCredentials;
+    return JSON.parse(readFileSync(path.join(dataDir, 'mail.json'), 'utf8')) as Record<
+      string,
+      unknown
+    >;
   } catch {
     return undefined;
+  }
+}
+
+async function withEnv<T>(name: string, value: string, body: () => Promise<T>): Promise<T> {
+  process.env[name] = value;
+  try {
+    return await body();
+  } finally {
+    delete process.env[name];
   }
 }
 
@@ -158,12 +194,12 @@ describe('where mail credentials live (AC #3)', () => {
 
     await post(agent, MAIL_PATH, { [MAIL_FIELDS.brevoApiKey]: 'xkeysib-secret-1234' });
 
-    assert.deepEqual(credentialFile(dataDir)?.brevo, { apiKey: 'xkeysib-secret-1234' });
+    assert.equal(credentialFile(dataDir)?.['brevo_api_key'], 'xkeysib-secret-1234');
     assert.equal(statSync(path.join(dataDir, 'mail.json')).mode & 0o777, 0o600);
 
     const file = JSON.stringify(await siteJson(contentDir));
     assert.equal(file.includes('xkeysib-secret-1234'), false, 'the key reached site.json');
-    assert.equal(file.includes('apiKey'), false);
+    assert.equal(file.includes('brevo_api_key'), false);
   });
 
   it('keeps an SMTP password in the same place and never in site.json', async () => {
@@ -176,12 +212,12 @@ describe('where mail credentials live (AC #3)', () => {
       [MAIL_FIELDS.smtpPassword]: 'hunter2-secret',
     });
 
-    assert.deepEqual(credentialFile(dataDir)?.smtp, {
-      host: 'smtp.example.com',
-      port: 587,
-      secure: false,
-      user: 'postmaster',
-      password: 'hunter2-secret',
+    assert.deepEqual(credentialFile(dataDir), {
+      smtp_host: 'smtp.example.com',
+      smtp_port: 587,
+      smtp_secure: false,
+      smtp_user: 'postmaster',
+      smtp_password: 'hunter2-secret',
     });
 
     const file = JSON.stringify(await siteJson(contentDir));
@@ -231,10 +267,10 @@ describe('where mail credentials live (AC #3)', () => {
     });
 
     const stored = credentialFile(dataDir);
-    assert.equal(stored?.brevo?.apiKey, 'xkeysib-secret-1234');
-    assert.equal(stored?.smtp?.password, 'hunter2-secret');
-    assert.equal(stored?.smtp?.port, 465);
-    assert.equal(stored?.smtp?.secure, true);
+    assert.equal(stored?.['brevo_api_key'], 'xkeysib-secret-1234');
+    assert.equal(stored?.['smtp_password'], 'hunter2-secret');
+    assert.equal(stored?.['smtp_port'], 465);
+    assert.equal(stored?.['smtp_secure'], true);
   });
 
   it('forgets everything when the credentials are removed', async () => {
@@ -243,8 +279,97 @@ describe('where mail credentials live (AC #3)', () => {
 
     const { screen } = await post(agent, MAIL_PATH, { [MAIL_FIELDS.action]: MAIL_REMOVE });
 
-    assert.equal(credentialFile(dataDir), undefined);
+    assert.deepEqual(credentialFile(dataDir), {});
     assert.match(screen, /No email is sent any more/);
+  });
+
+  it('refuses an SMTP port that cannot be one, saying so and saving nothing', async () => {
+    const { agent, dataDir } = await admin({ mailProvider: 'smtp' });
+
+    const { screen } = await post(agent, MAIL_PATH, {
+      [MAIL_FIELDS.smtpHost]: 'smtp.example.com',
+      [MAIL_FIELDS.smtpPort]: '70000',
+      [MAIL_FIELDS.smtpPassword]: 'hunter2-secret',
+    });
+
+    assert.match(screen, /mail\.smtp_port must be a whole number between 1 and 65535/);
+    assert.match(screen, /Nothing was saved/);
+    assert.equal(credentialFile(dataDir), undefined);
+  });
+
+  it('shows an SMTP password the environment sets as set by it, and refuses to store one over it', async () => {
+    await withEnv('GEEKITY_MAIL__SMTP_PASSWORD', 'env-held-secret', async () => {
+      const { agent, dataDir } = await admin({ mailProvider: 'smtp' });
+
+      const shown = await (await agent.get(SETTINGS_PATH)).text();
+      assert.match(shown, /The password is set by <code>GEEKITY_MAIL__SMTP_PASSWORD<\/code>/);
+      assert.ok(!shown.includes('env-held-secret'), 'the screen never prints the password');
+      assert.ok(!shown.includes(`name="${MAIL_FIELDS.smtpPassword}"`), 'no box to type over it');
+
+      const refused = await post(agent, MAIL_PATH, {
+        [MAIL_FIELDS.smtpHost]: 'smtp.example.com',
+        [MAIL_FIELDS.smtpPort]: '587',
+        [MAIL_FIELDS.smtpUser]: 'postmaster',
+        [MAIL_FIELDS.smtpPassword]: 'typed-secret',
+      });
+      assert.match(
+        refused.screen,
+        /mail\.smtp_password is set by GEEKITY_MAIL__SMTP_PASSWORD and cannot be changed here\. Nothing was saved\./,
+      );
+      assert.equal(credentialFile(dataDir), undefined);
+
+      const saved = await post(agent, MAIL_PATH, {
+        [MAIL_FIELDS.smtpHost]: 'smtp.example.com',
+        [MAIL_FIELDS.smtpPort]: '587',
+        [MAIL_FIELDS.smtpUser]: 'postmaster',
+      });
+      assert.match(saved.screen, /Mail is configured/);
+      assert.equal(credentialFile(dataDir)?.['smtp_host'], 'smtp.example.com');
+      assert.equal(JSON.stringify(credentialFile(dataDir)).includes('env-held-secret'), false);
+
+      const forgotten = await post(agent, MAIL_PATH, { [MAIL_FIELDS.action]: MAIL_REMOVE });
+      assert.match(
+        forgotten.screen,
+        /GEEKITY_MAIL__SMTP_PASSWORD still sets mail\.smtp_password\./,
+      );
+      assert.deepEqual(credentialFile(dataDir), {});
+    });
+  });
+
+  it('removes the stored credentials while the environment forces the SMTP port', async () => {
+    await withEnv('GEEKITY_MAIL__SMTP_PORT', '465', async () => {
+      const { agent, dataDir } = await admin({ mailProvider: 'smtp' });
+      await post(agent, MAIL_PATH, {
+        [MAIL_FIELDS.smtpHost]: 'smtp.example.com',
+        [MAIL_FIELDS.smtpSecure]: 'on',
+        [MAIL_FIELDS.smtpPassword]: 'hunter2-secret',
+      });
+      assert.equal(credentialFile(dataDir)?.['smtp_password'], 'hunter2-secret');
+
+      const { screen } = await post(agent, MAIL_PATH, { [MAIL_FIELDS.action]: MAIL_REMOVE });
+
+      assert.match(screen, /credentials are gone/);
+      assert.equal(credentialFile(dataDir)?.['smtp_password'], undefined);
+    });
+  });
+
+  it('says nothing was removed when forgetting the stored credentials is refused', async () => {
+    await withEnv('GEEKITY_MAIL__SMTP_HOST', 'smtp.example.com', async () => {
+      await withEnv('GEEKITY_MAIL__SMTP_PORT', '465', async () => {
+        const { agent, dataDir } = await admin({ mailProvider: 'smtp' });
+        await post(agent, MAIL_PATH, {
+          [MAIL_FIELDS.smtpSecure]: 'on',
+          [MAIL_FIELDS.smtpPassword]: 'hunter2-secret',
+        });
+        assert.equal(credentialFile(dataDir)?.['smtp_password'], 'hunter2-secret');
+
+        const { screen } = await post(agent, MAIL_PATH, { [MAIL_FIELDS.action]: MAIL_REMOVE });
+
+        assert.match(screen, /smtp_secure must be true\. Nothing was removed\./);
+        assert.doesNotMatch(screen, /credentials are gone/);
+        assert.equal(credentialFile(dataDir)?.['smtp_password'], 'hunter2-secret');
+      });
+    });
   });
 
   it('puts the provider, the From line and the reply-to in site.json like every other setting', async () => {
@@ -277,7 +402,7 @@ describe('the Send test email button with Brevo configured (AC #1)', () => {
       mailFromAddress: 'blog@example.com',
       mailReplyTo: 'hello@example.com',
     });
-    await writeMailCredentials(dataDir, { brevo: { apiKey: 'xkeysib-secret-1234' } });
+    await storeMail(dataDir, { brevo: { apiKey: 'xkeysib-secret-1234' } });
 
     const { screen } = await post(agent, MAIL_TEST_PATH, {
       [MAIL_TEST_FIELDS.to]: 'ada@example.com',
@@ -300,7 +425,7 @@ describe('the Send test email button with Brevo configured (AC #1)', () => {
 
   it('holds the test message in dev mode and says so (TASK-295)', async () => {
     const { agent, dataDir } = await admin({ mailProvider: 'brevo' });
-    await writeMailCredentials(dataDir, { brevo: { apiKey: 'xkeysib-secret-1234' } });
+    await storeMail(dataDir, { brevo: { apiKey: 'xkeysib-secret-1234' } });
     await settingsOver({ dataDir }).set('dev_mode', new Map([['on', true]]), 'cli');
 
     const { screen } = await post(agent, MAIL_TEST_PATH, {
@@ -313,7 +438,7 @@ describe('the Send test email button with Brevo configured (AC #1)', () => {
 
   it("puts Brevo's own words on the screen when it refuses", async () => {
     const { agent, dataDir } = await admin({ mailProvider: 'brevo' });
-    await writeMailCredentials(dataDir, { brevo: { apiKey: 'xkeysib-wrong' } });
+    await storeMail(dataDir, { brevo: { apiKey: 'xkeysib-wrong' } });
     brevoAnswer = {
       status: 400,
       body: JSON.stringify({ code: 'invalid_parameter', message: 'sender is not valid' }),
@@ -342,7 +467,7 @@ describe('the Send test email button with Brevo configured (AC #1)', () => {
 
   it('refuses an address that is not one, without sending anything', async () => {
     const { agent, dataDir } = await admin({ mailProvider: 'brevo' });
-    await writeMailCredentials(dataDir, { brevo: { apiKey: 'xkeysib-secret-1234' } });
+    await storeMail(dataDir, { brevo: { apiKey: 'xkeysib-secret-1234' } });
 
     const { screen } = await post(agent, MAIL_TEST_PATH, { [MAIL_TEST_FIELDS.to]: 'not-an-email' });
 
@@ -366,7 +491,7 @@ describe('the Send test email button with SMTP configured (AC #2)', () => {
       mailFromName: 'A Site',
       mailFromAddress: 'blog@example.com',
     });
-    await writeMailCredentials(dataDir, {
+    await storeMail(dataDir, {
       smtp: {
         host: '127.0.0.1',
         port: server.port,
@@ -412,10 +537,10 @@ describe('which credential boxes the panel draws (AC #1, #2, #3, #4, #6)', () =>
   /** The Email screen of a site with this provider saved and this stored. */
   async function screenFor(
     mailProvider: 'none' | 'brevo' | 'smtp',
-    stored?: MailCredentials,
+    stored?: Credentials,
   ): Promise<string> {
     const { agent, dataDir } = await admin({ mailProvider });
-    if (stored !== undefined) await writeMailCredentials(dataDir, stored);
+    if (stored !== undefined) await storeMail(dataDir, stored);
     return await (await agent.get(SETTINGS_PATH)).text();
   }
 
