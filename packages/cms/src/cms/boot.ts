@@ -61,7 +61,7 @@ export function boot(
   // through it does nothing but check.
   migrateSettingsToFile(adminDb, configured.contentDir);
 
-  const resolved = settleConfig(configured);
+  const resolved = settleConfig(configured, settings);
   let plugins: PluginRegistry;
   try {
     plugins = sitePluginRegistry(resolved, folderPlugins);
@@ -116,7 +116,7 @@ export function boot(
   return { resolved, plugins, store, admin, commentRecords, settings };
 }
 
-function settleConfig(resolved: ResolvedConfig): ResolvedConfig {
+function settleConfig(resolved: ResolvedConfig, settings: SettingsRegistry): ResolvedConfig {
   return Object.freeze({
     ...resolved,
     // The one thing the settings decide before a request arrives. It is settled
@@ -129,14 +129,14 @@ function settleConfig(resolved: ResolvedConfig): ResolvedConfig {
     // checker meant it; this is the one the settings screen turns on with a key
     // rather than a deployment.
     //
-    // Built whether or not there is a key in `data/akismet.json`: it reads that
-    // file on every call, so a key pasted into the settings screen filters the
+    // Built whether or not there is an `akismet.key`: it reads the key on
+    // every call, so a key pasted into the settings screen filters the
     // next comment and a key removed stops filtering at once, neither of them
     // needing a restart. With no key it sends nothing anywhere.
     commentChecker:
       resolved.commentChecker ??
       createAkismetChecker({
-        dataDir: resolved.dataDir,
+        settings,
         // Read when a comment arrives rather than now, so a change of language on
         // the settings screen reaches Akismet without a restart either.
         language: () => readSiteSettings(resolved.contentDir).language,

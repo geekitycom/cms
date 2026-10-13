@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
-import { statSync } from 'node:fs';
 import { after, describe, it } from 'node:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { resolveConfig } from '../config.ts';
+import { AKISMET } from '../settings/akismet.ts';
+import { createSettingsRegistry } from '../settings/registry.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
 import type { PostComment } from '../store/admin-store.ts';
-import { createAkismetChecker, verifyAkismetKey, writeAkismetKey } from './akismet.ts';
+import { createAkismetChecker, verifyAkismetKey } from './akismet.ts';
 import type { CommentReport, CommentSubmission } from '../forms/checker.ts';
 
 /**
@@ -24,11 +27,19 @@ after(async () => {
   await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-async function dir(): Promise<string> {
-  const made = await mkdtemp(path.join(tmpdir(), 'geekity-akismet-'));
-  dirs.push(made);
-  return made;
+async function unkeyed(env: Record<string, string> = {}): Promise<SettingsRegistry> {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-akismet-'));
+  dirs.push(dataDir);
+  return createSettingsRegistry({ config: resolveConfig({ dataDir }, { env }), env });
 }
+
+async function keyed(key = 'the-key'): Promise<SettingsRegistry> {
+  const settings = await unkeyed();
+  await settings.set('akismet', new Map([['key', key]]), 'admin');
+  return settings;
+}
+
+const CHECKED_AT = new Date('2026-09-04T00:00:00.000Z');
 
 /** One request the module made, as the stub saw it. */
 interface Call {
@@ -74,13 +85,21 @@ describe('verifying an Akismet key', () => {
   it('posts the key and the blog to verify-key and believes "valid" (AC #5)', async () => {
     const { fetch: stubbed, calls } = stub(() => new Response('valid'));
 
+    const settings = await keyed('secret-key');
     const status = await verifyAkismetKey({
-      key: 'secret-key',
+      settings,
       blog: 'https://blog.example',
+      at: CHECKED_AT,
+      by: 'admin',
       fetch: stubbed,
     });
 
     assert.equal(status, 'valid');
+    assert.deepEqual(await settings.values(AKISMET), {
+      key: 'secret-key',
+      status: 'valid',
+      checked_at: CHECKED_AT.toISOString(),
+    });
     assert.equal(calls.length, 1);
     const call = calls[0];
     assert.equal(call?.url, 'https://rest.akismet.com/1.1/verify-key');
@@ -100,7 +119,13 @@ describe('verifying an Akismet key', () => {
     );
 
     assert.equal(
-      await verifyAkismetKey({ key: 'nope', blog: 'https://blog.example', fetch: stubbed }),
+      await verifyAkismetKey({
+        settings: await keyed('nope'),
+        blog: 'https://blog.example',
+        at: CHECKED_AT,
+        by: 'admin',
+        fetch: stubbed,
+      }),
       'invalid',
     );
   });
@@ -111,7 +136,13 @@ describe('verifying an Akismet key', () => {
     });
 
     assert.equal(
-      await verifyAkismetKey({ key: 'unknowable', blog: 'https://blog.example', fetch: stubbed }),
+      await verifyAkismetKey({
+        settings: await keyed('unknowable'),
+        blog: 'https://blog.example',
+        at: CHECKED_AT,
+        by: 'admin',
+        fetch: stubbed,
+      }),
       'unchecked',
     );
   });
@@ -120,34 +151,47 @@ describe('verifying an Akismet key', () => {
     const { fetch: stubbed } = stub(() => new Response('oh dear', { status: 500 }));
 
     assert.equal(
-      await verifyAkismetKey({ key: 'k', blog: 'https://blog.example', fetch: stubbed }),
+      await verifyAkismetKey({
+        settings: await keyed('k'),
+        blog: 'https://blog.example',
+        at: CHECKED_AT,
+        by: 'admin',
+        fetch: stubbed,
+      }),
       'unchecked',
     );
   });
 });
 
-describe('the stored Akismet key', () => {
-  it('is nothing at all until one is written', async () => {
-    const { readAkismetKey } = await import('./akismet.ts');
-    assert.equal(readAkismetKey(await dir()), undefined);
-  });
+describe('verifying the key in effect', () => {
+  it('asks about the key the environment sets, and asks nothing when there is none', async () => {
+    const { fetch: stubbed, calls } = stub(() => new Response('valid'));
 
-  it('comes back as it was written, and only to its owner', async () => {
-    const { readAkismetKey } = await import('./akismet.ts');
-    const dataDir = await dir();
+    const fromEnv = await unkeyed({ GEEKITY_AKISMET__KEY: 'env-key' });
+    assert.equal(
+      await verifyAkismetKey({
+        settings: fromEnv,
+        blog: 'https://blog.example',
+        at: CHECKED_AT,
+        by: 'admin',
+        fetch: stubbed,
+      }),
+      'valid',
+    );
+    assert.equal(calls[0]?.fields['api_key'], 'env-key');
+    assert.equal(await fromEnv.get(AKISMET.status), 'valid');
 
-    await writeAkismetKey(dataDir, {
-      key: 'abc123',
-      status: 'valid',
-      checkedAt: '2026-09-04T00:00:00.000Z',
-    });
-
-    assert.deepEqual(readAkismetKey(dataDir), {
-      key: 'abc123',
-      status: 'valid',
-      checkedAt: '2026-09-04T00:00:00.000Z',
-    });
-    assert.equal(statSync(path.join(dataDir, 'akismet.json')).mode & 0o777, 0o600);
+    assert.equal(
+      await verifyAkismetKey({
+        settings: await unkeyed(),
+        blog: 'https://blog.example',
+        at: CHECKED_AT,
+        by: 'admin',
+        fetch: stubbed,
+      }),
+      undefined,
+    );
+    assert.equal(calls.length, 1);
   });
 });
 
@@ -185,17 +229,6 @@ const SUBMISSION: CommentSubmission = {
   baseUrl: 'https://blog.example',
 };
 
-/** A site with a key already in it. */
-async function keyed(key = 'the-key'): Promise<string> {
-  const dataDir = await dir();
-  await writeAkismetKey(dataDir, {
-    key,
-    status: 'valid',
-    checkedAt: '2026-09-04T00:00:00.000Z',
-  });
-  return dataDir;
-}
-
 /** Somewhere for a checker's complaints to go. */
 function log(): { warn(message: string): void; warnings: string[] } {
   const warnings: string[] = [];
@@ -211,7 +244,7 @@ describe('asking Akismet about a comment', () => {
   it('sends every field the API documents (AC #1)', async () => {
     const { fetch: stubbed, calls } = stub(() => new Response('false'));
     const checker = createAkismetChecker({
-      dataDir: await keyed('the-key'),
+      settings: await keyed('the-key'),
       language: () => 'en-GB',
       fetch: stubbed,
     });
@@ -248,7 +281,7 @@ describe('asking Akismet about a comment', () => {
   it('sends nothing at all when the site has no key (AC #1)', async () => {
     const { fetch: stubbed, calls } = stub(() => new Response('true'));
     const checker = createAkismetChecker({
-      dataDir: await dir(),
+      settings: await unkeyed(),
       language: () => 'en',
       fetch: stubbed,
     });
@@ -260,7 +293,7 @@ describe('asking Akismet about a comment', () => {
   it('calls a true answer spam (AC #2)', async () => {
     const { fetch: stubbed } = stub(() => new Response('true'));
     const checker = createAkismetChecker({
-      dataDir: await keyed(),
+      settings: await keyed(),
       language: () => 'en',
       fetch: stubbed,
     });
@@ -273,7 +306,7 @@ describe('asking Akismet about a comment', () => {
       () => new Response('true', { headers: { 'x-akismet-pro-tip': 'discard' } }),
     );
     const checker = createAkismetChecker({
-      dataDir: await keyed(),
+      settings: await keyed(),
       language: () => 'en',
       fetch: stubbed,
     });
@@ -284,7 +317,7 @@ describe('asking Akismet about a comment', () => {
   it('leaves a false answer to the site’s own rules (AC #2)', async () => {
     const { fetch: stubbed } = stub(() => new Response('false'));
     const checker = createAkismetChecker({
-      dataDir: await keyed(),
+      settings: await keyed(),
       language: () => 'en',
       fetch: stubbed,
     });
@@ -302,7 +335,7 @@ describe('asking Akismet about a comment', () => {
       throw new TypeError('fetch failed');
     });
     const checker = createAkismetChecker({
-      dataDir: await keyed(),
+      settings: await keyed(),
       language: () => 'en',
       fetch: stubbed,
       logger,
@@ -322,7 +355,7 @@ describe('asking Akismet about a comment', () => {
         }),
     );
     const checker = createAkismetChecker({
-      dataDir: await keyed(),
+      settings: await keyed(),
       language: () => 'en',
       fetch: stubbed,
       logger,
@@ -336,7 +369,7 @@ describe('asking Akismet about a comment', () => {
     const logger = log();
     const { fetch: stubbed } = stub(() => new Response('busy', { status: 503 }));
     const checker = createAkismetChecker({
-      dataDir: await keyed(),
+      settings: await keyed(),
       language: () => 'en',
       fetch: stubbed,
       logger,
@@ -349,7 +382,7 @@ describe('asking Akismet about a comment', () => {
   it('calls an incoming webmention a webmention (AC #6)', async () => {
     const { fetch: stubbed, calls } = stub(() => new Response('false'));
     const checker = createAkismetChecker({
-      dataDir: await keyed(),
+      settings: await keyed(),
       language: () => 'en',
       fetch: stubbed,
     });
@@ -372,7 +405,7 @@ describe('asking Akismet about a comment', () => {
   it('calls a contact message a contact-form when the caller says so (TASK-56)', async () => {
     const { fetch: stubbed, calls } = stub(() => new Response('false'));
     const checker = createAkismetChecker({
-      dataDir: await keyed(),
+      settings: await keyed(),
       language: () => 'en',
       fetch: stubbed,
     });
@@ -387,7 +420,7 @@ describe('asking Akismet about a comment', () => {
   it('marks a test call as one when it is told to (AC #1)', async () => {
     const { fetch: stubbed, calls } = stub(() => new Response('false'));
     const checker = createAkismetChecker({
-      dataDir: await keyed(),
+      settings: await keyed(),
       language: () => 'en',
       fetch: stubbed,
       isTest: true,
@@ -411,7 +444,7 @@ describe('telling Akismet a moderator disagreed', () => {
       () => new Response('Thanks for making the web a better place.'),
     );
     const checker = createAkismetChecker({
-      dataDir: await keyed('the-key'),
+      settings: await keyed('the-key'),
       language: () => 'en',
       fetch: stubbed,
     });
@@ -437,7 +470,7 @@ describe('telling Akismet a moderator disagreed', () => {
       () => new Response('Thanks for making the web a better place.'),
     );
     const checker = createAkismetChecker({
-      dataDir: await keyed(),
+      settings: await keyed(),
       language: () => 'en',
       fetch: stubbed,
     });
@@ -451,7 +484,7 @@ describe('telling Akismet a moderator disagreed', () => {
   it('sends no correction when the site has no key (AC #3)', async () => {
     const { fetch: stubbed, calls } = stub(() => new Response('ok'));
     const checker = createAkismetChecker({
-      dataDir: await dir(),
+      settings: await unkeyed(),
       language: () => 'en',
       fetch: stubbed,
     });
@@ -467,7 +500,7 @@ describe('telling Akismet a moderator disagreed', () => {
       throw new TypeError('fetch failed');
     });
     const checker = createAkismetChecker({
-      dataDir: await keyed(),
+      settings: await keyed(),
       language: () => 'en',
       fetch: stubbed,
       logger,

@@ -6,7 +6,7 @@ import {
   notificationMode,
   notificationWanted,
 } from '../site/notification-preferences.ts';
-import { writeMailCredentials } from '../mail/credentials.ts';
+import { settingsOver } from '../__testing__/settings.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';
 import {
@@ -66,7 +66,11 @@ async function siteSendingMail(): Promise<Cms> {
     contentDir,
     settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', mailProvider: 'brevo' },
   });
-  await writeMailCredentials(dataDir, { brevo: { apiKey: 'xkeysib-not-used' } });
+  await settingsOver({ dataDir }).set(
+    'mail',
+    new Map([['brevo_api_key', 'xkeysib-not-used']]),
+    'admin',
+  );
 
   return box.open({ contentDir, dataDir });
 }

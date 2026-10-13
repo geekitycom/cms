@@ -212,7 +212,6 @@ export function createServices({
       store,
       redirects,
       siteData,
-      mailConfigured: () => mail.configured(),
     }),
   });
 
@@ -414,6 +413,7 @@ export function createServices({
       start: () => plugins.reconcile(readEnabledPlugins(resolved.contentDir)),
       stop: (ending) => stopPlugins(plugins, ending),
     },
+    { settled: () => notifications.settled() },
     { settled: () => mail.settled() },
     // A page render derives an upload's variants in the background; the
     // encode finishes before the directories it writes into can be removed.

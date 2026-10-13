@@ -58,6 +58,11 @@ export interface SettingDeclaration<V> {
   readonly override?: ConfigOverride<V>;
   /** False when the setting has no generic environment variable. */
   readonly env?: boolean;
+  check?(
+    value: V,
+    namespaceAfterSet: Readonly<Record<string, unknown>>,
+    dirs: SettingsDirs,
+  ): string | undefined;
   /** Runs after the file is written, with what changed. Errors are logged, not thrown. */
   onChange?(change: SettingChange<V>): Promise<void> | void;
 }
@@ -75,10 +80,10 @@ export interface NamespaceDeclaration {
    * A file written before this namespace had its shape. Runs on a file that is
    * there, with its parsed JSON, its text when it is not JSON, or `undefined`
    * when it cannot be read; the result is read as if it were the file, and the
-   * next write stores the new shape. A namespace with one is always written
-   * whole, every declared key, so its own files are never read as legacy.
+   * next write stores the new shape.
    */
   legacy?(raw: unknown): unknown;
+  readonly writtenWhole?: boolean;
   /** `GEEKITY_<NS>` for core. A plugin gives `pluginEnvPrefix(name)`. */
   readonly envPrefix: string;
 }

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
 import { addComment } from '../comments/records.ts';
-import { writeAkismetKey } from '../comments/akismet.ts';
+import { settingsOver } from '../__testing__/settings.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteJson } from '../site/site-json.ts';
@@ -15,6 +15,7 @@ import {
   AKISMET_FIELDS,
   AKISMET_PATH,
   AKISMET_REMOVE,
+  AKISMET_VERIFY,
   DISCUSSION_SETTINGS,
 } from './settings-discussion.ts';
 
@@ -136,6 +137,27 @@ async function saveKey(
   return { response, screen: await (await agent.get(SETTINGS_PATH)).text() };
 }
 
+async function storeKey(dataDir: string, key: string): Promise<void> {
+  await settingsOver({ dataDir }).set(
+    'akismet',
+    new Map<string, unknown>([
+      ['key', key],
+      ['status', 'valid'],
+      ['checked_at', '2026-09-01T00:00:00.000Z'],
+    ]),
+    'admin',
+  );
+}
+
+async function withEnv<T>(name: string, value: string, body: () => Promise<T>): Promise<T> {
+  process.env[name] = value;
+  try {
+    return await body();
+  } finally {
+    delete process.env[name];
+  }
+}
+
 /** `data/akismet.json` as it stands, or `undefined` when there is none. */
 function keyFile(dataDir: string): Record<string, unknown> | undefined {
   try {
@@ -215,8 +237,48 @@ describe('the Akismet key on the settings screen', () => {
 
     const { screen } = await saveKey(agent, { [AKISMET_FIELDS.action]: AKISMET_REMOVE });
 
-    assert.equal(keyFile(dataDir), undefined, 'the file is gone');
+    assert.deepEqual(keyFile(dataDir), {}, 'the key is gone from the file');
     assert.match(screen, /not connected|no key/i);
+  });
+
+  it('asks Akismet about the stored key again when asked to check it', async () => {
+    answers['verify-key'] = { body: 'invalid' };
+    const { agent, dataDir } = await admin();
+    await storeKey(dataDir, 'the-key');
+
+    const { screen } = await saveKey(agent, { [AKISMET_FIELDS.action]: AKISMET_VERIFY });
+
+    assert.equal(akismet[0]?.method, 'verify-key');
+    assert.equal(akismet[0]?.fields['api_key'], 'the-key');
+    assert.equal(keyFile(dataDir)?.['status'], 'invalid');
+    assert.equal(keyFile(dataDir)?.['checked_at'], NOW.toISOString());
+    assert.match(screen, /does not recognise/);
+  });
+
+  it('shows a key the environment sets as set by it, checks it, and refuses to store one over it', async () => {
+    answers['verify-key'] = { body: 'valid' };
+    await withEnv('GEEKITY_AKISMET__KEY', 'env-key-9876', async () => {
+      const { agent, dataDir } = await admin();
+
+      const shown = await (await agent.get(SETTINGS_PATH)).text();
+      assert.match(shown, /set by <code>GEEKITY_AKISMET__KEY<\/code>/);
+      assert.ok(!shown.includes('env-key-9876'), 'the screen never prints the key');
+      assert.ok(!shown.includes(`name="${AKISMET_FIELDS.key}"`), 'there is no box to type over it');
+
+      const { screen } = await saveKey(agent, { [AKISMET_FIELDS.key]: 'typed-key' });
+      assert.match(
+        screen,
+        /akismet\.key is set by GEEKITY_AKISMET__KEY and cannot be changed here\. Nothing was saved\./,
+      );
+      assert.equal(keyFile(dataDir), undefined);
+      assert.equal(akismet.length, 0, 'a refused key is not sent to Akismet');
+
+      const checked = await saveKey(agent, { [AKISMET_FIELDS.action]: AKISMET_VERIFY });
+      assert.equal(akismet[0]?.fields['api_key'], 'env-key-9876');
+      assert.match(checked.screen, /Akismet is connected/);
+      assert.equal(keyFile(dataDir)?.['status'], 'valid');
+      assert.ok(!JSON.stringify(keyFile(dataDir)).includes('env-key-9876'));
+    });
   });
 
   it('refuses an empty key rather than storing one (AC #5)', async () => {
@@ -328,11 +390,7 @@ describe('the corrections the moderation screen sends', () => {
   it('tells Akismet about a comment a moderator files as spam (AC #3)', async () => {
     answers['submit-spam'] = { body: 'Thanks for making the web a better place.' };
     const { cms, agent, dataDir } = await admin();
-    await writeAkismetKey(dataDir, {
-      key: 'the-key',
-      status: 'valid',
-      checkedAt: '2026-09-01T00:00:00.000Z',
-    });
+    await storeKey(dataDir, 'the-key');
 
     await moderate(agent, await comment(cms, 'pending'), 'spam');
 
@@ -347,11 +405,7 @@ describe('the corrections the moderation screen sends', () => {
   it('tells it about one let out of the spam list (AC #3)', async () => {
     answers['submit-ham'] = { body: 'Thanks for making the web a better place.' };
     const { cms, agent, dataDir } = await admin();
-    await writeAkismetKey(dataDir, {
-      key: 'the-key',
-      status: 'valid',
-      checkedAt: '2026-09-01T00:00:00.000Z',
-    });
+    await storeKey(dataDir, 'the-key');
 
     await moderate(agent, await comment(cms, 'spam'), 'approve');
 

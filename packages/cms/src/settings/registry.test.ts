@@ -143,7 +143,7 @@ describe('the settings registry', () => {
     assert.deepEqual(await fileOf(dataDir, 'maintenance.json'), { on: true, until: '' });
   });
 
-  it('writes a namespace with a legacy reader whole, so its own file is never read as legacy', async () => {
+  it('writes maintenance whole, so its own file is never read as a presence-means-on file', async () => {
     const { registry, dataDir } = await site();
 
     await registry.set('maintenance', changes({ until: '2026-10-14T09:00:00Z' }), 'cli');
@@ -313,14 +313,23 @@ describe('registering a plugin namespace', () => {
     registry.register(pluginNamespace('@acme/plugin-llm'));
 
     const named = () => registry.list().map((ref) => `${ref.namespace}.${ref.key}`);
-    assert.deepEqual(named(), [
+    const core = [
       'maintenance.on',
       'maintenance.until',
       'dev_mode.on',
-      '@acme/plugin-llm.api_key',
-    ]);
+      'mail.brevo_api_key',
+      'mail.smtp_host',
+      'mail.smtp_port',
+      'mail.smtp_secure',
+      'mail.smtp_user',
+      'mail.smtp_password',
+      'akismet.key',
+      'akismet.status',
+      'akismet.checked_at',
+    ];
+    assert.deepEqual(named(), [...core, '@acme/plugin-llm.api_key']);
     registry.unregister('@acme/plugin-llm');
-    assert.deepEqual(named(), ['maintenance.on', 'maintenance.until', 'dev_mode.on']);
+    assert.deepEqual(named(), core);
   });
 
   it('writes a secret namespace at mode 0600', async () => {

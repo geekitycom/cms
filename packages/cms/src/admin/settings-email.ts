@@ -2,26 +2,24 @@
  * Email: how the site sends mail, and where a message written to it goes.
  *
  * The settings are here and the credentials are not: an API key and an SMTP
- * password live in `data/mail.json` at mode 0600, never in the public
- * `site.json`, and they are their own pair of forms so a credential typed wrong
- * cannot lose an edit to the From line beside it.
+ * connection are the `mail` settings namespace, kept in `data/mail.json` at
+ * mode 0600 or set by `GEEKITY_MAIL__*`, never in the public `site.json`, and
+ * they are their own pair of forms so a credential typed wrong cannot lose an
+ * edit to the From line beside it.
  */
 
 import type { Hono } from 'hono';
 
 import type { GeekityEnv } from '../web/env.ts';
-import {
-  readMailCredentials,
-  removeMailCredentials,
-  writeMailCredentials,
-} from '../mail/credentials.ts';
-import type { MailCredentials } from '../mail/credentials.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
+import { MAIL } from '../settings/mail.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
 import { EMAIL_PATTERN } from '../site/setting-values.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { flash } from './flash.ts';
+import { forgetStored, setElsewhere } from './setting-overrides.ts';
 import { SETTINGS_PATH } from './settings.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { MountSettingsOptions, SettingsPage } from './settings-page.ts';
@@ -31,7 +29,7 @@ import { ADMIN_TEMPLATES } from './templates.ts';
  * Where the mail credential's form and its Remove button post.
  *
  * Its own endpoint for the reason the Akismet key has one: an API key and an
- * SMTP password are credentials, they live in `data/mail.json` rather than in
+ * SMTP password are credentials, they are the `mail` namespace rather than
  * `content/_data/site.json`, and a credential typed wrong must not lose an edit
  * to the From line. Which provider is in use and who mail is from are settings
  * and stay on the Email form.
@@ -78,7 +76,7 @@ export const EMAIL_SETTINGS: SettingsPage = {
     'securityLanguages',
   ],
 
-  panels: (c, settings) => mailPanel(c.var.config.dataDir, settings),
+  panels: (c, settings) => mailPanel(c.var.settings, settings),
 
   endpoints: mountMail,
 };
@@ -99,56 +97,37 @@ function mountMail(app: Hono<GeekityEnv>, _options: MountSettingsOptions): void 
    */
   app.post(MAIL_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const { config } = c.var;
-    const stored = readMailCredentials(config.dataDir);
+    const { settings } = c.var;
 
     if (stringOrEmpty(body[MAIL_FIELDS.action]) === MAIL_REMOVE) {
-      await removeMailCredentials(config.dataDir);
-      flash(c, 'notice', 'The mail credentials are gone. No email is sent any more.');
+      const forgotten = await forgetStored(settings, MAIL, 'admin');
+      if (!forgotten.ok) {
+        flash(c, 'error', `${Object.values(forgotten.problems).join(' ')} Nothing was removed.`);
+        return c.redirect(here, 303);
+      }
+      const elsewhere = Object.entries(await setElsewhere(settings, MAIL));
+      flash(
+        c,
+        'notice',
+        elsewhere.length === 0
+          ? 'The mail credentials are gone. No email is sent any more.'
+          : `The stored mail credentials are gone. ${elsewhere
+              .map(([key, source]) => `${source} still sets mail.${key}.`)
+              .join(' ')}`,
+      );
       return c.redirect(here, 303);
     }
 
-    const apiKey = stringOrEmpty(body[MAIL_FIELDS.brevoApiKey]).trim();
-    const host = stringOrEmpty(body[MAIL_FIELDS.smtpHost]).trim();
-    const port = Number(stringOrEmpty(body[MAIL_FIELDS.smtpPort]).trim());
-    const password = stringOrEmpty(body[MAIL_FIELDS.smtpPassword]);
-
-    if (host !== '' && (!Number.isInteger(port) || port < 1 || port > 65535)) {
-      flash(c, 'error', 'An SMTP port is a whole number between 1 and 65535. Nothing was saved.');
+    const result = await settings.set('mail', await submittedCredentials(settings, body), 'admin');
+    if (!result.ok) {
+      flash(c, 'error', `${Object.values(result.problems).join(' ')} Nothing was saved.`);
       return c.redirect(here, 303);
     }
 
-    const credentials: MailCredentials = {
-      ...(apiKey === ''
-        ? stored.brevo === undefined
-          ? {}
-          : { brevo: stored.brevo }
-        : { brevo: { apiKey } }),
-      ...(host === ''
-        ? stored.smtp === undefined
-          ? {}
-          : { smtp: stored.smtp }
-        : {
-            smtp: {
-              host,
-              port,
-              secure: stringOrEmpty(body[MAIL_FIELDS.smtpSecure]) !== '',
-              user: stringOrEmpty(body[MAIL_FIELDS.smtpUser]).trim(),
-              // A blank password keeps the stored one, so the port and the user
-              // can be edited without retyping a secret the form was never
-              // allowed to show.
-              password: password === '' ? (stored.smtp?.password ?? '') : password,
-            },
-          }),
-    };
-
-    await writeMailCredentials(config.dataDir, credentials);
-
-    const settings = readSiteSettings(config.contentDir);
     flash(
       c,
       'notice',
-      settings.mailProvider === 'none'
+      readSiteSettings(c.var.config.contentDir).mailProvider === 'none'
         ? 'Saved. Choose a provider above and save the settings to start sending.'
         : 'Saved. Send a test message to prove it reaches you.',
     );
@@ -196,20 +175,57 @@ function mountMail(app: Hono<GeekityEnv>, _options: MountSettingsOptions): void 
   });
 }
 
+async function submittedCredentials(
+  settings: SettingsRegistry,
+  body: Record<string, unknown>,
+): Promise<Map<string, unknown>> {
+  const elsewhere = await setElsewhere(settings, MAIL);
+  const changes = new Map<string, unknown>();
+  const typed = (field: string): string => stringOrEmpty(body[field]);
+
+  const apiKey = typed(MAIL_FIELDS.brevoApiKey).trim();
+  if (apiKey !== '') changes.set('brevo_api_key', apiKey);
+
+  const host = typed(MAIL_FIELDS.smtpHost).trim();
+  if (host === '' && elsewhere['smtp_host'] === undefined) return changes;
+
+  const portText = typed(MAIL_FIELDS.smtpPort).trim();
+  const portNumber = Number(portText);
+  const connection: [string, unknown][] = [
+    ['smtp_host', host],
+    ['smtp_port', portText === '' || Number.isNaN(portNumber) ? portText : portNumber],
+    ['smtp_secure', typed(MAIL_FIELDS.smtpSecure) !== ''],
+    ['smtp_user', typed(MAIL_FIELDS.smtpUser).trim()],
+  ];
+  for (const [key, value] of connection) {
+    if (elsewhere[key] === undefined) changes.set(key, value);
+  }
+
+  const password = typed(MAIL_FIELDS.smtpPassword);
+  if (password !== '') changes.set('smtp_password', password);
+  return changes;
+}
+
 /**
  * What the page says about email: which provider is chosen, whether the
  * credential it needs is there, and enough of it to recognise which one.
  *
  * Nothing here ever prints a key or a password. A settings screen that echoed
  * one would put a credential in every browser cache, every screenshot and every
- * `view-source`; the last four characters of an API key and the host and user
- * of an SMTP connection are enough for somebody to tell what is stored without
- * being handed the means to use it.
+ * `view-source`; the last four characters of a stored API key and the host and
+ * user of an SMTP connection are enough for somebody to tell what is stored
+ * without being handed the means to use it. A secret the environment sets is
+ * named by its variable and not even that.
  */
-export function mailPanel(dataDir: string, settings: SiteSettings): Record<string, unknown> {
-  const stored = readMailCredentials(dataDir);
-  const present =
-    settings.mailProvider === 'brevo' ? stored.brevo !== undefined : stored.smtp !== undefined;
+export async function mailPanel(
+  registry: SettingsRegistry,
+  settings: SiteSettings,
+): Promise<Record<string, unknown>> {
+  const mail = await registry.values(MAIL);
+  const setBy = await setElsewhere(registry, MAIL);
+  const brevoPresent = mail.brevo_api_key !== '';
+  const smtpPresent = mail.smtp_host !== '';
+  const present = settings.mailProvider === 'brevo' ? brevoPresent : smtpPresent;
 
   return {
     mailUrl: MAIL_PATH,
@@ -219,27 +235,26 @@ export function mailPanel(dataDir: string, settings: SiteSettings): Record<strin
     mailTestFields: MAIL_TEST_FIELDS,
     mailProviders: MAIL_PROVIDERS,
     mailProvider: settings.mailProvider,
+    mailSetBy: setBy,
     // Whether the chosen provider has what it needs. A key stored for the
     // provider that is not chosen is not "configured": nothing would use it.
     mailConfigured: settings.mailProvider !== 'none' && present,
-    mailBrevoPresent: stored.brevo !== undefined,
-    mailSmtpPresent: stored.smtp !== undefined,
-    ...(stored.brevo === undefined
-      ? {}
-      : { mailBrevoKeyHint: `…${stored.brevo.apiKey.slice(-4)}` }),
-    ...(stored.smtp === undefined
-      ? {}
-      : {
+    mailBrevoPresent: brevoPresent,
+    mailSmtpPresent: smtpPresent,
+    ...(brevoPresent && setBy['brevo_api_key'] === undefined
+      ? { mailBrevoKeyHint: `…${mail.brevo_api_key.slice(-4)}` }
+      : {}),
+    ...(smtpPresent
+      ? {
           mailSmtp: {
-            host: stored.smtp.host,
-            port: stored.smtp.port,
-            secure: stored.smtp.secure,
-            user: stored.smtp.user,
-            // Not the password. Whether there is one at all is all the screen
-            // needs to say.
-            hasPassword: stored.smtp.password !== '',
+            host: mail.smtp_host,
+            port: mail.smtp_port,
+            secure: mail.smtp_secure,
+            user: mail.smtp_user,
+            hasPassword: mail.smtp_password !== '',
           },
-        }),
+        }
+      : {}),
     mailHint:
       settings.mailProvider === 'none'
         ? 'This site sends no email. Password resets, moderation notices and contact messages are still recorded; they are simply not sent.'

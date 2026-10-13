@@ -796,6 +796,7 @@ async function intakeSite(): Promise<IntakeSite> {
         ...(taking.address === undefined ? {} : { address: taking.address }),
         logger: { warn: () => {} },
       });
+      await notices.settled();
       await mail.settled();
       return outcome;
     },

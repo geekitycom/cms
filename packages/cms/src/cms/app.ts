@@ -25,7 +25,7 @@ import {
   redirectBy,
 } from '../web/index.ts';
 import { DEV_MODE } from '../settings/dev-mode.ts';
-import { drawnInDevMode } from '../web/render.ts';
+import { drawnWith } from '../web/render.ts';
 import { serverError } from './server-error.ts';
 import type { Booted } from './boot.ts';
 import type { Services } from './services.ts';
@@ -91,8 +91,10 @@ export function createApp(
       leavingWriteGate(supervision, () => writes.leave(c)),
     );
     const devMode = await settings.get(DEV_MODE.on);
+    const mailConfigured = await services.mail.configured();
     c.set('devMode', devMode);
-    await (devMode ? drawnInDevMode(next) : next());
+    c.set('mailConfigured', mailConfigured);
+    await drawnWith({ devMode, mailConfigured }, next);
   });
 
   app.use(

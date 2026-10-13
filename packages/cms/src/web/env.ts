@@ -57,6 +57,8 @@ export interface GeekityEnv {
     maintenance: MaintenanceSwitch;
     settings: SettingsRegistry;
     devMode: boolean;
+    /** Whether the site can send mail, read once per request (see `MailService.configured`). */
+    mailConfigured: boolean;
     store: RequestIndex;
     /** Users and sessions, the part of the database that is not derived. */
     admin: AdminStore;

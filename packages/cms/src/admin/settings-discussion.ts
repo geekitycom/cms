@@ -6,20 +6,18 @@
  * because it is what decides whether either is shown.
  */
 
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 
-import {
-  readAkismetKey,
-  removeAkismetKey,
-  verifyAkismetKey,
-  writeAkismetKey,
-} from '../comments/akismet.ts';
-import type { AkismetKeyRecord } from '../comments/akismet.ts';
+import { verifyAkismetKey } from '../comments/akismet.ts';
+import { AKISMET } from '../settings/akismet.ts';
+import type { AkismetKeyStatus } from '../settings/akismet.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { flash } from './flash.ts';
+import { forgetStored, setElsewhere } from './setting-overrides.ts';
 import { SETTINGS_PATH } from './settings.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { MountSettingsOptions, SettingsPage } from './settings-page.ts';
@@ -28,9 +26,9 @@ import { ADMIN_TEMPLATES } from './templates.ts';
 /**
  * Where the Akismet key's form and its Remove button post.
  *
- * Its own endpoint, for the reason the avatar has one: the key is a credential
- * that lives in `data/akismet.json` rather than a setting that lives in
- * `content/_data/site.json` (TASK-52), so it is not a field of the Discussion
+ * Its own endpoint, for the reason the avatar has one: the key is a credential,
+ * the secret `akismet.key` setting in `data/akismet.json`, rather than a
+ * setting that lives in `content/_data/site.json` (TASK-52), so it is not a field of the Discussion
  * form, and a key Akismet will not take must not lose an edit to the closing
  * window beside it.
  */
@@ -41,6 +39,8 @@ export const AKISMET_FIELDS = { key: 'akismet_key', action: 'action' } as const;
 
 /** The {@link AKISMET_FIELDS.action} that forgets the key again. */
 export const AKISMET_REMOVE = 'remove';
+
+export const AKISMET_VERIFY = 'verify';
 
 /** The Discussion settings page. */
 export const DISCUSSION_SETTINGS: SettingsPage = {
@@ -58,7 +58,7 @@ export const DISCUSSION_SETTINGS: SettingsPage = {
     'contactMessageRetentionDays',
   ],
 
-  panels: (c) => akismetPanel(c.var.config.dataDir),
+  panels: (c) => akismetPanel(c.var.settings),
 
   endpoints: mountAkismet,
 };
@@ -83,40 +83,62 @@ function mountAkismet(app: Hono<GeekityEnv>, _options: MountSettingsOptions): vo
 
   app.post(AKISMET_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const { config } = c.var;
+    const { settings } = c.var;
+    const action = stringOrEmpty(body[AKISMET_FIELDS.action]);
 
-    if (stringOrEmpty(body[AKISMET_FIELDS.action]) === AKISMET_REMOVE) {
-      await removeAkismetKey(config.dataDir);
+    if (action === AKISMET_REMOVE) {
+      await forgetStored(settings, AKISMET, 'admin');
       flash(c, 'notice', 'The Akismet key is gone. Nothing is sent to Akismet any more.');
       return c.redirect(here, 303);
     }
 
-    const key = stringOrEmpty(body[AKISMET_FIELDS.key]).trim();
-    if (key === '') {
-      flash(c, 'error', 'An Akismet key cannot be empty. Use Remove key to turn Akismet off.');
-      return c.redirect(here, 303);
+    if (action !== AKISMET_VERIFY) {
+      const key = stringOrEmpty(body[AKISMET_FIELDS.key]).trim();
+      if (key === '') {
+        flash(c, 'error', 'An Akismet key cannot be empty. Use Remove key to turn Akismet off.');
+        return c.redirect(here, 303);
+      }
+      const saved = await settings.set(
+        'akismet',
+        new Map<string, unknown>([
+          ['key', key],
+          ['status', 'unchecked'],
+          ['checked_at', ''],
+        ]),
+        'admin',
+      );
+      if (!saved.ok) {
+        flash(c, 'error', `${Object.values(saved.problems).join(' ')} Nothing was saved.`);
+        return c.redirect(here, 303);
+      }
     }
 
-    const blog = effectiveBaseUrl(config, readSiteSettings(config.contentDir));
-    const status = await verifyAkismetKey({ key, blog });
-
-    await writeAkismetKey(config.dataDir, {
-      key,
-      status,
-      checkedAt: config.now().toISOString(),
+    const status = await verifyAkismetKey({
+      settings,
+      blog: blogOf(c),
+      at: c.var.config.now(),
+      by: 'admin',
     });
-
-    flash(
-      c,
-      status === 'valid' ? 'notice' : 'error',
-      status === 'valid'
-        ? 'Akismet is connected. Comments and webmentions are checked from now on.'
-        : status === 'invalid'
-          ? 'The key is stored, but Akismet does not recognise it, so nothing it says will be believed.'
-          : 'The key is stored, but Akismet could not be reached to check it. Save it again to try.',
-    );
+    flash(c, status === 'valid' ? 'notice' : 'error', verifiedSentence(status));
     return c.redirect(here, 303);
   });
+}
+
+function blogOf(c: Context<GeekityEnv>): string {
+  return effectiveBaseUrl(c.var.config, readSiteSettings(c.var.config.contentDir));
+}
+
+function verifiedSentence(status: AkismetKeyStatus | undefined): string {
+  switch (status) {
+    case 'valid':
+      return 'Akismet is connected. Comments and webmentions are checked from now on.';
+    case 'invalid':
+      return 'The key is stored, but Akismet does not recognise it, so nothing it says will be believed.';
+    case 'unchecked':
+      return 'The key is stored, but Akismet could not be reached to check it. Save it again to try.';
+    case undefined:
+      return 'There is no Akismet key to check.';
+  }
 }
 
 /**
@@ -127,14 +149,20 @@ function mountAkismet(app: Hono<GeekityEnv>, _options: MountSettingsOptions): vo
  * last four characters are enough for somebody to recognise which key is in
  * there without being handed it.
  */
-export function akismetPanel(dataDir: string): Record<string, unknown> {
-  const stored: AkismetKeyRecord | undefined = readAkismetKey(dataDir);
+export async function akismetPanel(settings: SettingsRegistry): Promise<Record<string, unknown>> {
+  const akismet = await settings.values(AKISMET);
+  const setBy = (await setElsewhere(settings, AKISMET))['key'];
+  const forms = {
+    akismetUrl: AKISMET_PATH,
+    akismetFields: AKISMET_FIELDS,
+    akismetRemove: AKISMET_REMOVE,
+    akismetVerify: AKISMET_VERIFY,
+    akismetSetBy: setBy,
+  };
 
-  if (stored === undefined) {
+  if (akismet.key === '') {
     return {
-      akismetUrl: AKISMET_PATH,
-      akismetFields: AKISMET_FIELDS,
-      akismetRemove: AKISMET_REMOVE,
+      ...forms,
       akismetPresent: false,
       akismetState: 'none',
       akismetHint: 'Not connected: no key, so no comment is sent to Akismet.',
@@ -142,18 +170,16 @@ export function akismetPanel(dataDir: string): Record<string, unknown> {
   }
 
   return {
-    akismetUrl: AKISMET_PATH,
-    akismetFields: AKISMET_FIELDS,
-    akismetRemove: AKISMET_REMOVE,
+    ...forms,
     akismetPresent: true,
-    akismetState: stored.status,
-    akismetKeyHint: `…${stored.key.slice(-4)}`,
-    akismetCheckedAt: stored.checkedAt,
+    akismetState: akismet.status,
+    akismetKeyHint: setBy === undefined ? `…${akismet.key.slice(-4)}` : `set by ${setBy}`,
+    akismetCheckedAt: akismet.checked_at,
     akismetHint:
-      stored.status === 'valid'
+      akismet.status === 'valid'
         ? 'Connected. Every comment and every incoming webmention is checked.'
-        : stored.status === 'invalid'
+        : akismet.status === 'invalid'
           ? 'Akismet does not recognise this key, so nothing it says is believed and every comment queues as it would without one.'
-          : 'Akismet could not be reached the last time this key was checked. Save it again to try.',
+          : 'Akismet could not be reached the last time this key was checked. Check it again to try.',
   };
 }

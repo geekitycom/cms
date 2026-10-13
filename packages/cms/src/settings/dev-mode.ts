@@ -38,6 +38,7 @@ export const DEV_MODE = declareNamespace({
   storage: { kind: 'file', under: 'data', path: 'dev-mode.json', dataClass: { kept: false } },
   envPrefix: 'GEEKITY_DEV_MODE',
   legacy: presenceMeansOn,
+  writtenWhole: true,
   settings: {
     on: {
       type: boolean,

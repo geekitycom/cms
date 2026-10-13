@@ -131,6 +131,7 @@ function replyPosts(cms: Cms): Document[] {
 
 async function settled(cms: Cms): Promise<void> {
   await cms.replyContexts.settled();
+  await cms.notifications.settled();
   await cms.mail.settled();
 }
 
