@@ -4,7 +4,7 @@ title: 'Spike: what it takes to make the content and admin stores async'
 status: To Do
 assignee: []
 created_date: '2026-10-13 12:10'
-updated_date: '2026-10-13 12:10'
+updated_date: '2026-10-13 15:29'
 labels: []
 milestone: m-38
 dependencies: []
@@ -29,4 +29,5 @@ decision-52 keeps a future Aurora (Postgres) build possible. ContentStore (conte
 - [ ] #2 The record says whether the theme template engine and the plugin API can await store calls, and what breaks for published themes and plugins
 - [ ] #3 The record says how search and rebuild would work behind the interfaces on Postgres, on paper
 - [ ] #4 The record recommends a sequence of verifiable steps, or recommends not doing it until there is a real need, with reasons; follow-up tasks are filed only if it recommends going ahead
+- [ ] #5 The user has read the decision record and accepted it, or asked for changes that are made; follow-up build tasks are not started before then
 <!-- AC:END -->

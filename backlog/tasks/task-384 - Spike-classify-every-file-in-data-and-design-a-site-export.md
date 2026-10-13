@@ -4,10 +4,11 @@ title: 'Spike: classify every file in data/ and design a site export'
 status: To Do
 assignee: []
 created_date: '2026-10-13 12:10'
-updated_date: '2026-10-13 14:13'
+updated_date: '2026-10-13 15:29'
 labels: []
 milestone: m-38
-dependencies: []
+dependencies:
+  - TASK-383
 references:
   - >-
     backlog/decisions/decision-52 -
@@ -30,4 +31,5 @@ decision-52 makes a site its directory and promises an export a solo site owner 
 - [ ] #3 The record designs the export: what it contains, that credentials go in only when the person exporting asks for them, how pending work such as a queued delivery (TASK-379) is handled, and whether it is a CLI command, an admin action or both
 - [ ] #4 The record says how a site restored from an export comes up: what it rebuilds, what users must do again (such as signing in), and that its fediverse identity is kept
 - [ ] #5 Follow-up tasks are filed; nothing is built for production in this task
+- [ ] #6 The user has read the decision record and accepted it, or asked for changes that are made; follow-up build tasks are not started before then
 <!-- AC:END -->

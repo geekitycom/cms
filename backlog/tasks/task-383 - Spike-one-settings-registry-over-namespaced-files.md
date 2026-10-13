@@ -4,7 +4,7 @@ title: 'Spike: one settings registry over namespaced files'
 status: To Do
 assignee: []
 created_date: '2026-10-13 12:10'
-updated_date: '2026-10-13 14:13'
+updated_date: '2026-10-13 15:29'
 labels: []
 milestone: m-38
 dependencies: []
@@ -39,4 +39,5 @@ Settled already (decision-52), to design within:
 - [ ] #5 The record shows a custom admin page and the optional generic renderer both reading and saving through the registry, and names the test that keeps the registry from importing admin code
 - [ ] #6 The record defines the geekity settings CLI (list, get, set) and how it shows a value that config or env overrides
 - [ ] #7 Follow-up tasks are filed for building the registry with maintenance and dev mode as its first users and for moving every other setting onto it; nothing is built for production in this task
+- [ ] #8 The user has read the decision record and accepted it, or asked for changes that are made; follow-up build tasks are not started before then
 <!-- AC:END -->

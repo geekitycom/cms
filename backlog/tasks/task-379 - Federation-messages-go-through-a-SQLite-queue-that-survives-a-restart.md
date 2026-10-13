@@ -4,11 +4,12 @@ title: Federation messages go through a SQLite queue that survives a restart
 status: To Do
 assignee: []
 created_date: '2026-10-13 11:18'
-updated_date: '2026-10-13 12:10'
+updated_date: '2026-10-13 15:29'
 labels: []
 milestone: m-38
 dependencies:
   - TASK-382
+  - TASK-380
 references:
   - packages/cms/src/federation/queue.ts
   - packages/cms/src/federation/federation.ts

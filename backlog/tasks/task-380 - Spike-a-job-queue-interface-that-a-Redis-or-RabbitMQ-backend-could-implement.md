@@ -4,7 +4,7 @@ title: 'Spike: a job queue interface that a Redis or RabbitMQ backend could impl
 status: To Do
 assignee: []
 created_date: '2026-10-13 11:24'
-updated_date: '2026-10-13 12:10'
+updated_date: '2026-10-13 15:29'
 labels: []
 milestone: m-38
 dependencies: []
@@ -42,6 +42,7 @@ Questions to answer: where job status, progress and results live when the broker
 - [ ] #4 Claims about BullMQ and RabbitMQ are checked against the real thing: a throwaway adapter for each passes the same contract test as the in-process one, run against a real Redis and a real RabbitMQ (for example in Docker), with the results in the record; the adapters are not merged
 - [ ] #5 The record says whether one backend could carry both admin jobs and Fedify messages, and what that would take
 - [ ] #6 Follow-up tasks are filed for the chosen interface and its in-process implementation; nothing is implemented for production in this task
+- [ ] #7 The user has read the decision record and accepted it, or asked for changes that are made; follow-up build tasks are not started before then
 <!-- AC:END -->
 
 ## Implementation Notes
