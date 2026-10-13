@@ -4,6 +4,7 @@ title: 'Reevaluate the geekity CLI: keep, cut, or move to its own package'
 status: To Do
 assignee: []
 created_date: '2026-10-12 17:52'
+updated_date: '2026-10-13 12:10'
 labels: []
 milestone: m-37
 dependencies: []
@@ -31,3 +32,9 @@ Options to weigh, per command:
 - [ ] #3 The record says what a separate CLI package would depend on (only the public API and @geekity/cms/plugin, or more) and how it would be released
 - [ ] #4 Follow-up tasks are filed for the chosen changes; nothing is removed or moved in this task
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Discussion on 2026-10-12/13 widened this into decision-52 and milestone m-38 (M39 Foundational systems). Chosen fates so far: CLI commands all stay for now. Maintenance and dev mode get admin switches through the settings registry (TASK-383). Strip-metadata and resend get admin actions through the job queue (TASK-380). The plugin commands are already covered by Admin > Plugins.
+<!-- SECTION:NOTES:END -->
