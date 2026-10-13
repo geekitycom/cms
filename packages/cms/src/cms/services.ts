@@ -372,7 +372,7 @@ export function createServices({
   // (a salmention, TASK-320).
   const conversationWriteSubscribers: readonly ((written: ConversationWrite) => void)[] = [
     (written) => {
-      replyNotices.heard(written);
+      replyNotices.queueNoticesFor(written);
     },
     (written) => {
       webmentions.heard(written);

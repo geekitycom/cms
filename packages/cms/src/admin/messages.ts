@@ -109,7 +109,7 @@ export function mountMessagesScreen(
     const page = Math.max(1, Math.trunc(Number(c.req.query('page') ?? '1')) || 1);
 
     const counts = countContactMessagesByStatus(dataDir);
-    const timezone = c.var.site.timezone;
+    const timezone = c.var.siteAtRequestStart.timezone;
     const rows = listContactMessages(dataDir, { status })
       .slice((page - 1) * MESSAGES_PER_PAGE, page * MESSAGES_PER_PAGE)
       .map((message) => messageRow(message, timezone));

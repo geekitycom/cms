@@ -145,7 +145,7 @@ export function mountAppearanceScreen(
     // a typed one would have been refused by: a folder that is not a theme, a
     // theme that has been deleted, and a name that is a path are all one "no".
     const form = {
-      ...formFromSettings(c.var.site),
+      ...formFromSettings(c.var.siteAtRequestStart),
       theme: submitted,
     };
     const problem = settingsProblems(form, ['theme'], { themesDir: c.var.config.themesDir }).theme;
@@ -173,7 +173,7 @@ export function mountAppearanceScreen(
   /** Everything the themes template renders. */
   function screen(c: Context<GeekityEnv>): Record<string, unknown> {
     const themesDir = c.var.config.themesDir;
-    const chosen = c.var.site.theme;
+    const chosen = c.var.siteAtRequestStart.theme;
     const found = listSiteThemes(themesDir);
 
     return {

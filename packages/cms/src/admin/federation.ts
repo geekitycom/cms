@@ -107,14 +107,14 @@ export function mountFederationScreen(
   app.get(FEDERATION_PATH, (c) => {
     const admin = c.var.admin;
     const baseUrl = c.var.config.baseUrl;
-    const cited: CitedPageReader = (url) => c.var.replyContexts.read(url, c.var.site);
+    const cited: CitedPageReader = (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart);
     const post = localPosts(c.var.store, baseUrl, cited, (url) =>
       c.var.conversation.documentOf(url),
     );
     const users = listUsers(c.var.config.dataDir);
     const targets = syndicationTargetsReader(c.var.config.contentDir);
     const copies = syndicationCopies(c.var.config.contentDir);
-    const siteLanguage = c.var.site.language;
+    const siteLanguage = c.var.siteAtRequestStart.language;
 
     return render(c, ADMIN_TEMPLATES.federation, {
       section: 'federation',

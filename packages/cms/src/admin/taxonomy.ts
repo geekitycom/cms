@@ -252,7 +252,7 @@ export async function rewriteTerm(
     const saved = await saveDocument({
       contentDir,
       store,
-      timezone: c.var.site.timezone,
+      timezone: c.var.siteAtRequestStart.timezone,
       path: indexed.path,
       content: {
         ...documentContent(document),

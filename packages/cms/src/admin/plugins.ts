@@ -164,7 +164,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
         ? installedFolders(installer.pluginsDir)
         : new Map<string, unknown>();
     const check = installer.state === 'on' ? lastUpdateCheck(installer.pluginsDir) : undefined;
-    const timezone = c.var.site.timezone;
+    const timezone = c.var.siteAtRequestStart.timezone;
 
     const supervision = c.var.supervision;
     const changes =

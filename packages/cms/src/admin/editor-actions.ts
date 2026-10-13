@@ -109,7 +109,7 @@ function editorDraft(
   form: EditorForm,
 ): PluginEditorDraft {
   const { contentDir } = c.var.config;
-  const settings = c.var.site;
+  const settings = c.var.siteAtRequestStart;
   return {
     type: kind.type,
     postType:

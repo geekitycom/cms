@@ -19,7 +19,7 @@ import { clientAddress } from './throttle.ts';
 /** Register the pingback endpoint. Mounted by the public site. */
 export function mountPingbacks(app: Hono<GeekityEnv>): void {
   app.post(PINGBACK_PATH, async (c) => {
-    if (!c.var.site.webmentions_receive) {
+    if (!c.var.siteAtRequestStart.webmentions_receive) {
       return c.text('This site does not take pingbacks.', 404);
     }
 
@@ -60,7 +60,7 @@ async function answerPing(c: Context<GeekityEnv>): Promise<string | PingbackFaul
     baseUrl: config.baseUrl,
     documentAt: (pathname) => publicDocumentAt(store, pathname),
     conversation,
-    site: c.var.site,
+    site: c.var.siteAtRequestStart,
   });
   if (!checked.ok)
     return { code: PINGBACK_REQUEST_FAULTS[checked.problem], message: checked.message };

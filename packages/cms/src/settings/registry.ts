@@ -28,7 +28,7 @@ const CORE: readonly DeclaredNamespace[] = [MAINTENANCE, DEV_MODE, MAIL, AKISMET
 export interface CreateSettingsRegistryOptions {
   readonly config: ResolvedConfig;
   readonly env?: Readonly<Record<string, string | undefined>>;
-  readonly core?: readonly DeclaredNamespace[];
+  readonly coreDeclaredAbove?: readonly DeclaredNamespace[];
 }
 
 type Stored = Readonly<Record<string, unknown>>;
@@ -37,10 +37,10 @@ type Override<V> =
   { readonly value: V; readonly source: ValueSource } | { readonly problem: string };
 
 function rawIn(declaration: SettingDeclaration<unknown>, stored: Stored): unknown {
-  const { fileKey = declaration.key } = declaration;
-  if (typeof fileKey === 'string') return stored[fileKey];
-  if (fileKey.every((key) => stored[key] === undefined)) return undefined;
-  return Object.fromEntries(fileKey.map((key) => [key, stored[key]]));
+  const { fileKeys } = declaration;
+  if (fileKeys === undefined) return stored[declaration.fileKey ?? declaration.key];
+  if (fileKeys.every((key) => stored[key] === undefined)) return undefined;
+  return Object.fromEntries(fileKeys.map((key) => [key, stored[key]]));
 }
 
 function writeRaw(
@@ -48,11 +48,11 @@ function writeRaw(
   declaration: SettingDeclaration<unknown>,
   json: unknown,
 ): void {
-  const { fileKey = declaration.key } = declaration;
+  const { fileKeys } = declaration;
   const entries: [string, unknown][] =
-    typeof fileKey === 'string'
-      ? [[fileKey, json]]
-      : fileKey.map((key) => [key, isRecord(json) ? json[key] : undefined]);
+    fileKeys === undefined
+      ? [[declaration.fileKey ?? declaration.key, json]]
+      : fileKeys.map((key) => [key, isRecord(json) ? json[key] : undefined]);
   for (const [key, value] of entries) {
     if (value === undefined) delete next[key];
     else next[key] = value;
@@ -105,11 +105,11 @@ export function overridden(source: ValueSource): boolean {
 export function createSettingsRegistry({
   config,
   env = process.env,
-  core = [],
+  coreDeclaredAbove = [],
 }: CreateSettingsRegistryOptions): SettingsRegistry {
   const dirs = { contentDir: config.contentDir, dataDir: config.dataDir };
   const namespaces = new Map(
-    [...CORE, ...core].map(({ declaration }) => [declaration.namespace, declaration]),
+    [...CORE, ...coreDeclaredAbove].map(({ declaration }) => [declaration.namespace, declaration]),
   );
 
   function namespaceOf(name: string): NamespaceDeclaration {

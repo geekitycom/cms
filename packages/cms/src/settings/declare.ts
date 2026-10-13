@@ -2,14 +2,16 @@ import { SETTING_NAME } from './names.ts';
 import type {
   DeclaredNamespace,
   NamespaceDeclaration,
-  SettingDeclaration,
+  FileSpelling,
+  SettingFields,
   SettingRef,
   ValuesOf,
 } from './types.ts';
 
-type SettingInput<V> = Omit<SettingDeclaration<V>, 'key' | 'default'> & {
-  readonly default: NoInfer<V>;
-};
+type SettingInput<V> = Omit<SettingFields<V>, 'key' | 'default'> &
+  FileSpelling & {
+    readonly default: NoInfer<V>;
+  };
 
 type RefsOf<S> = { readonly [K in keyof S]: SettingRef<S[K]> };
 

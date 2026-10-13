@@ -89,7 +89,7 @@ export function mountConsentScreen(app: Hono<GeekityEnv>, options: { render: Adm
     const { config } = c.var;
     const user = signedInUser(c);
     if (user === undefined) return c.redirect(ADMIN_PREFIX, 302);
-    const settings = c.var.site;
+    const settings = c.var.siteAtRequestStart;
     const { baseUrl } = config;
 
     const parsed = parseAuthorizationRequest(

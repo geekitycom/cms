@@ -45,7 +45,7 @@ export interface CreateReplyNoticesOptions {
 /** Listens to the indexes for reply posts that answer a native comment. */
 export interface ReplyNotices {
   handle(change: DocumentChange): void;
-  heard(written: ConversationWrite): void;
+  queueNoticesFor(written: ConversationWrite): void;
   settled(): Promise<void>;
 }
 
@@ -93,7 +93,7 @@ export function createReplyNotices(options: CreateReplyNoticesOptions): ReplyNot
       tell([reply]);
     },
 
-    heard(written) {
+    queueNoticesFor(written) {
       if (written.kind !== 'comment' || !written.approved) return;
       const post = store.getBySlug(written.slug);
       if (post === undefined || admin.getComment(written.id)?.source !== 'comment') return;

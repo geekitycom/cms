@@ -55,7 +55,7 @@ export function mountPreview(app: Hono<GeekityEnv>): void {
             c.var.config,
             authorContext(listUsers(c.var.config.dataDir), document.author),
             { lead: true },
-            (url) => c.var.replyContexts.read(url, c.var.site),
+            (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart),
           ),
           editorPreview: true,
         },
@@ -71,7 +71,7 @@ function previewDocument(
 ): Document {
   const { type, body } = input;
 
-  const timezone = c.var.site.timezone;
+  const timezone = c.var.siteAtRequestStart.timezone;
   const title = stringOrEmpty(body['title']).trim();
   // The editor's field is wall-clock time in the site's zone (decision-11), so
   // the preview reads it the way the save will and shows the date the saved

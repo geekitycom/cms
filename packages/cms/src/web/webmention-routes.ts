@@ -19,7 +19,7 @@ export function mountWebmentions(app: Hono<GeekityEnv>): void {
   app.post(WEBMENTION_PATH, async (c) => {
     const { store, config, webmentions, conversation } = c.var;
 
-    if (!c.var.site.webmentions_receive) {
+    if (!c.var.siteAtRequestStart.webmentions_receive) {
       // A 404 rather than a 403: a site that does not take webmentions has no
       // endpoint, and that is what having no endpoint looks like.
       return c.text('This site does not take webmentions.', 404);
@@ -34,7 +34,7 @@ export function mountWebmentions(app: Hono<GeekityEnv>): void {
         documentAt: (pathname) => publicDocumentAt(store, pathname),
         syndicatedAt: (url) => postSyndicatedAt(url, store, syndicationCopies(config.contentDir)),
         conversation,
-        site: c.var.site,
+        site: c.var.siteAtRequestStart,
       },
     );
 

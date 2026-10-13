@@ -124,7 +124,7 @@ function mountAkismet(app: Hono<GeekityEnv>, _options: MountSettingsOptions): vo
 }
 
 function blogOf(c: Context<GeekityEnv>): string {
-  return effectiveBaseUrl(c.var.config, c.var.site);
+  return effectiveBaseUrl(c.var.config, c.var.siteAtRequestStart);
 }
 
 function verifiedSentence(status: AkismetKeyStatus | undefined): string {

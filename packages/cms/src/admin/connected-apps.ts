@@ -155,7 +155,7 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
         me: meForSignIn(`${baseUrl}/`, user, {
           baseUrl,
           users: listUsers(config.dataDir),
-          settings: c.var.site,
+          settings: c.var.siteAtRequestStart,
         }),
         name: form.name,
         scopes,
@@ -190,7 +190,7 @@ function screen(
 ): Record<string, unknown> {
   const { config } = c.var;
   const userId = c.var.session?.userId;
-  const settings = c.var.site;
+  const settings = c.var.siteAtRequestStart;
   const now = config.now().getTime();
   const connections = listTokens(config.dataDir)
     .filter((stored) => stored.userId === userId && Date.parse(lapsesAt(stored)) > now)

@@ -126,7 +126,7 @@ function mountMail(app: Hono<GeekityEnv>, _options: MountSettingsOptions): void 
     flash(
       c,
       'notice',
-      c.var.site.mail_provider === 'none'
+      c.var.siteAtRequestStart.mail_provider === 'none'
         ? 'Saved. Choose a provider above and save the settings to start sending.'
         : 'Saved. Send a test message to prove it reaches you.',
     );

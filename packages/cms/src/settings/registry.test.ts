@@ -229,7 +229,7 @@ describe('the settings registry', () => {
           description: 'A count.',
         },
         pair: {
-          fileKey: ['first', 'second'],
+          fileKeys: ['first', 'second'],
           type: {
             fromJson: (raw) =>
               isRecord(raw) && typeof raw['first'] === 'string'

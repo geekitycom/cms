@@ -125,7 +125,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
   // A relay that is told to unfollow before it has been told to follow keeps
   // the subscription.
   const subscriptions = createSerialQueue();
-  const syncs = createSerialQueue();
+  const listReadsApartFromRelays = createSerialQueue();
 
   /** A context outside any request, which is where a follow is sent from. */
   async function relayContext(): Promise<Context<FederationContextData>> {
@@ -284,7 +284,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
 
   return {
     sync() {
-      return syncs.run(async () => {
+      return listReadsApartFromRelays.run(async () => {
         const listed = await settings.get(SITE.relays);
         const known = admin.listRelays();
 
@@ -325,7 +325,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
     },
 
     async settled() {
-      await syncs.settled();
+      await listReadsApartFromRelays.settled();
       await subscriptions.settled();
     },
   };

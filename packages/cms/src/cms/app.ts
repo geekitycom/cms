@@ -96,7 +96,7 @@ export function createApp(
     const site = await settings.values(SITE);
     c.set('devMode', devMode);
     c.set('mailConfigured', mailConfigured);
-    c.set('site', site);
+    c.set('siteAtRequestStart', site);
     await drawnWith({ devMode, mailConfigured, site }, next);
   });
 

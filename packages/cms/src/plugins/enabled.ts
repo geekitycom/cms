@@ -10,14 +10,14 @@ import { isRecord } from '../util/guards.ts';
 
 export const PLUGINS_KEY = 'plugins';
 
-function siteFile(contentDir: string): Record<string, unknown> {
+function siteJsonBypassingRegistry(contentDir: string): Record<string, unknown> {
   return parseSiteJson(readFileIfPresentSync(siteDataPath(contentDir)) ?? '');
 }
 
 /** The names the site has enabled, read from the file now. */
 export function readEnabledPlugins(contentDir: string): ReadonlySet<string> {
   const enabled = new Set<string>();
-  for (const [name, entry] of Object.entries(pluginsOf(siteFile(contentDir)))) {
+  for (const [name, entry] of Object.entries(pluginsOf(siteJsonBypassingRegistry(contentDir)))) {
     if (isRecord(entry) && entry['enabled'] === true) enabled.add(name);
   }
   return enabled;
@@ -35,7 +35,7 @@ export async function setPluginEnabled(options: {
 
 /** One plugin's object under `plugins`, empty when it has none. */
 export function readPluginEntry(contentDir: string, name: string): Record<string, unknown> {
-  const entry = pluginsOf(siteFile(contentDir))[name];
+  const entry = pluginsOf(siteJsonBypassingRegistry(contentDir))[name];
   return isRecord(entry) ? entry : {};
 }
 

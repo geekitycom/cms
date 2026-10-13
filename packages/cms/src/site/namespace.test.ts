@@ -13,7 +13,7 @@ const DEMO_SITE_JSON = fileURLToPath(
   new URL('../../../../apps/demo/content/_data/site.json', import.meta.url),
 );
 
-const FILE_KEYS = [
+const STABLE_SITE_JSON_KEYS = [
   'title',
   'tagline',
   'url',
@@ -87,14 +87,13 @@ async function siteWith(
 }
 
 function fileKeysOf(declaration: SettingDeclaration<unknown>): readonly string[] {
-  const { fileKey = declaration.key } = declaration;
-  return typeof fileKey === 'string' ? [fileKey] : fileKey;
+  return declaration.fileKeys ?? [declaration.fileKey ?? declaration.key];
 }
 
 describe('the site namespace', () => {
   it('declares every key site.json holds a setting under, with a description', () => {
     const declared = SITE.declaration.settings.flatMap(fileKeysOf);
-    assert.deepEqual([...declared].sort(), [...FILE_KEYS].sort());
+    assert.deepEqual([...declared].sort(), [...STABLE_SITE_JSON_KEYS].sort());
     for (const declaration of SITE.declaration.settings) {
       assert.notEqual(declaration.description, '', `${declaration.key} is described`);
     }

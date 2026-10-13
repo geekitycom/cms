@@ -39,7 +39,7 @@ export function sitemap(c: Context<GeekityEnv>, page: number | undefined): Respo
 
 export function llmsTxt(c: Context<GeekityEnv>): Response {
   const { contentDir, baseUrl } = c.var.config;
-  if (!c.var.site.llms_txt) return notFound(c);
+  if (!c.var.siteAtRequestStart.llms_txt) return notFound(c);
   const file =
     ownLlmsTxt(contentDir) ?? generatedLlmsTxt(llmsIndex(c), baseUrl, markdownUrlFor(c, '/'));
   return llmsTxtResponse(file, conditionalHeaders(c));

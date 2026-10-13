@@ -35,7 +35,7 @@ export function mountAppActivity(app: Hono<GeekityEnv>, options: { render: Admin
 
   app.get(APP_ACTIVITY_PATH, async (c) => {
     const { config } = c.var;
-    const timezone = c.var.site.timezone;
+    const timezone = c.var.siteAtRequestStart.timezone;
     const entries = await freshEntries(config.dataDir, config.now());
     const failuresOnly = c.req.query('show') === 'failures';
     const failures = entries.filter(isFailure);
@@ -60,7 +60,7 @@ export function mountAppActivity(app: Hono<GeekityEnv>, options: { render: Admin
     const entries = await freshEntries(config.dataDir, config.now());
     const entry = entries.find((candidate) => candidate.id === c.req.param('id'));
     if (entry === undefined) return c.notFound();
-    const timezone = c.var.site.timezone;
+    const timezone = c.var.siteAtRequestStart.timezone;
     return render(c, ADMIN_TEMPLATES.appActivityEntry, {
       section: 'users',
       child: APP_ACTIVITY_CHILD,

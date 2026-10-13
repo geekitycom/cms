@@ -50,7 +50,7 @@ export function securityTxt(input: {
 export function mountWellKnown(app: Hono<GeekityEnv>): void {
   app.get(SECURITY_TXT_PATH, (c) => {
     const config = c.var.config;
-    const settings = c.var.site;
+    const settings = c.var.siteAtRequestStart;
     const body = securityTxt({
       settings,
       now: config.now(),

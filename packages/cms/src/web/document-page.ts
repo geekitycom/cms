@@ -132,7 +132,10 @@ function commentNotice(
       admin: c.var.admin,
       document,
       id: c.req.query(COMMENT_REPLY_PARAM),
-      thread: viewer === undefined ? undefined : c.var.conversation.thread(document, c.var.site),
+      thread:
+        viewer === undefined
+          ? undefined
+          : c.var.conversation.thread(document, c.var.siteAtRequestStart),
     }),
     // And the thank-you after a contact form was sent, which travels the same
     // way for the same reason (TASK-56).
@@ -161,6 +164,6 @@ function contactNotice(c: Context<GeekityEnv>): Record<string, unknown> {
  * off the next restart.
  */
 function webmentionLinks(c: Context<GeekityEnv>): string[] {
-  if (!c.var.site.webmentions_receive) return [];
+  if (!c.var.siteAtRequestStart.webmentions_receive) return [];
   return [`<${WEBMENTION_PATH}>; rel="webmention"`];
 }

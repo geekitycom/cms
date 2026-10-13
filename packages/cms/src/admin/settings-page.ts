@@ -140,12 +140,12 @@ export function mountSettingsPage(
   const { render } = options;
 
   app.get(page.path, async (c) =>
-    render(c, page.template, await settingsScreen(c, page, c.var.site)),
+    render(c, page.template, await settingsScreen(c, page, c.var.siteAtRequestStart)),
   );
 
   app.post(page.path, async (c) => {
     const body: SubmittedBody = await c.req.parseBody();
-    const stored = c.var.site;
+    const stored = c.var.siteAtRequestStart;
     const submitted = pageForm(c, page, body, stored);
 
     const problems = settingsProblems(submitted, page.fields, {

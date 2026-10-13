@@ -228,7 +228,7 @@ export function mountDocumentScreens(
       })),
       documents: rows.map((document) =>
         listRow(kind, document, c.var.store.now(), pageRole(kind, document, c), (url) =>
-          c.var.replyContexts.read(url, c.var.site),
+          c.var.replyContexts.read(url, c.var.siteAtRequestStart),
         ),
       ),
       newUrl: newEditorPath(kind),
@@ -370,7 +370,9 @@ async function saveFromForm(
   flash(
     c,
     'notice',
-    savedMessage(document, saved, store.now(), (url) => c.var.replyContexts.read(url, c.var.site)),
+    savedMessage(document, saved, store.now(), (url) =>
+      c.var.replyContexts.read(url, c.var.siteAtRequestStart),
+    ),
   );
   if (respelled.length > 0) flash(c, 'notice', respelledMessage(respelled));
   if (undescribed.length > 0) flash(c, 'warning', missingAltText(undescribed));
@@ -402,7 +404,7 @@ function savedMessage(
 
 /** The site's time zone, which is what every offset-less date in the admin means. */
 function siteTimezone(c: Context<GeekityEnv>): string {
-  return c.var.site.timezone;
+  return c.var.siteAtRequestStart.timezone;
 }
 
 /** One entry of the editor's Author select. */
@@ -548,7 +550,9 @@ async function moveDocument(
   );
   if (moved.outcome === 'refused') return backTo(c, options, moved.reason);
 
-  const label = postLabel(document, (url) => c.var.replyContexts.read(url, c.var.site));
+  const label = postLabel(document, (url) =>
+    c.var.replyContexts.read(url, c.var.siteAtRequestStart),
+  );
   const message = action === 'trash' ? `Moved to the trash: ${label}` : `Restored: ${label}`;
   flash(c, 'notice', message);
 
@@ -679,11 +683,11 @@ async function renderEditor(
     authors: authorChoices(c, form.author),
     editorActions: editorActionViews(c, kind, form),
     // What an empty Language field means.
-    siteLanguage: c.var.site.language,
+    siteLanguage: c.var.siteAtRequestStart.language,
     heading:
       document === undefined
         ? `Add ${kind.singular}`
-        : `Edit ${kind.singular}: ${postLabel(document, (url) => c.var.replyContexts.read(url, c.var.site))}`,
+        : `Edit ${kind.singular}: ${postLabel(document, (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart))}`,
     saveUrl: document === undefined ? newEditorPath(kind) : documentEditorPath(kind, document),
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
@@ -717,7 +721,7 @@ function citedPreviews(
   const cards: Record<string, { name: string; picture: CitedPicture; described: boolean }> = {};
   for (const [property, url] of cited) {
     if (url === '') continue;
-    const context = c.var.replyContexts.read(url, c.var.site);
+    const context = c.var.replyContexts.read(url, c.var.siteAtRequestStart);
     if (context?.picture === undefined) continue;
     const image = citesAnImage(context);
     cards[property] = {
@@ -814,7 +818,7 @@ function pageRole(
 ): string | undefined {
   if (kind.type !== 'page') return undefined;
 
-  const settings = c.var.site;
+  const settings = c.var.siteAtRequestStart;
   if (settings.homepage === '') return undefined;
   if (document.slug === settings.homepage) return PAGE_ROLE_LABELS.homepage;
   if (document.slug === settings.posts_page) return PAGE_ROLE_LABELS.postsPage;

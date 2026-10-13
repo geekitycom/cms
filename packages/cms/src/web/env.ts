@@ -60,7 +60,7 @@ export interface GeekityEnv {
     devMode: boolean;
     /** Whether the site can send mail, read once per request (see `MailService.configured`). */
     mailConfigured: boolean;
-    site: SiteSettings;
+    siteAtRequestStart: SiteSettings;
     store: RequestIndex;
     /** Users and sessions, the part of the database that is not derived. */
     admin: AdminStore;

@@ -184,11 +184,11 @@ function frontPage(after: Readonly<Record<string, unknown>>): string | undefined
 /**
  * The site's settings: `content/_data/site.json` (decision-9, decision-53).
  *
- * Each key keeps the spelling the file has always used through `fileKey`, so
- * themes, Eleventy builds and hand edits read the file as before. Reads are
- * tolerant, key by key: a value of the wrong type is set aside for the
- * default rather than taking the site down. The checks are what a write must
- * pass on top of parsing.
+ * Each key keeps the spelling the file has always used through `fileKey` or
+ * `fileKeys`, so themes, Eleventy builds and hand edits read the file as
+ * before. Reads are tolerant, key by key: a value of the wrong type is set
+ * aside for the default rather than taking the site down. The checks are what
+ * a write must pass on top of parsing.
  */
 export const SITE = declareNamespace({
   namespace: 'site',
@@ -473,7 +473,7 @@ export const SITE = declareNamespace({
       description: 'A picture from before every user had one. The site icon falls back to it.',
     },
     license: {
-      fileKey: ['license', 'licenseName'],
+      fileKeys: ['license', 'licenseName'],
       type: license,
       default: NO_SITE_LICENSE,
       description: 'A Creative Commons key, or the URL of custom terms. Empty reserves all rights.',
@@ -515,5 +515,5 @@ function iconProblem(icon: string, contentDir: string): string | undefined {
 }
 
 export function createSettings(options: CreateSettingsRegistryOptions): SettingsRegistry {
-  return createSettingsRegistry({ ...options, core: [SITE] });
+  return createSettingsRegistry({ ...options, coreDeclaredAbove: [SITE] });
 }

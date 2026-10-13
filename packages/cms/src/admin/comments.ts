@@ -286,7 +286,7 @@ function recordsOf(c: Context<GeekityEnv>): CommentRecords {
 /** One stored comment as the screen shows it. */
 function commentRow(c: Context<GeekityEnv>, comment: PostComment): CommentRow {
   const document = c.var.store.getBySlug(comment.slug);
-  const timezone = c.var.site.timezone;
+  const timezone = c.var.siteAtRequestStart.timezone;
 
   return {
     id: comment.id,
@@ -304,7 +304,7 @@ function commentRow(c: Context<GeekityEnv>, comment: PostComment): CommentRow {
     post:
       document === undefined
         ? comment.slug
-        : postLabel(document, (url) => c.var.replyContexts.read(url, c.var.site)),
+        : postLabel(document, (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart)),
     postUrl: comment.permalink === '' ? null : comment.permalink,
     editUrl:
       document === undefined

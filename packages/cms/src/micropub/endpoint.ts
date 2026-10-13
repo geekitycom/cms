@@ -360,7 +360,7 @@ const ACTIONS: {
 } = {
   create: async (c, { request }) => {
     const { store, config, bearer } = c.var;
-    const timezone = c.var.site.timezone;
+    const timezone = c.var.siteAtRequestStart.timezone;
     const created = createForm(request, {
       author: bearer.user.username,
       timezone,
@@ -398,7 +398,7 @@ const ACTIONS: {
     if (document instanceof Refusal) return document.answer(c);
     const { store, config, bearer } = c.var;
     const updated = updateForm(document, changes, {
-      timezone: c.var.site.timezone,
+      timezone: c.var.siteAtRequestStart.timezone,
       now: store.now(),
       baseUrl: c.var.config.baseUrl,
       targets: c.var.siteRecords.syndicationTargets(),

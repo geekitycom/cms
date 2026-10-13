@@ -46,7 +46,9 @@ function embedSubject(
   const users = siteView(c).users();
   return {
     ...found,
-    label: postLabel(found.document, (url) => c.var.replyContexts.read(url, c.var.site)),
+    label: postLabel(found.document, (url) =>
+      c.var.replyContexts.read(url, c.var.siteAtRequestStart),
+    ),
     // Who the byline names: the document's author, else the site's.
     author: authorContext(users, found.document.author) ?? siteAuthorContext(users, site.author),
     config: c.var.config,

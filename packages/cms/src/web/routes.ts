@@ -119,7 +119,7 @@ export function mountPublicSite(
         : negotiateDocument(c, home, selectFromAccept(c, DOCUMENT_REPRESENTATIONS));
     // The home page is where a tool that found the site looks for its index
     // (TASK-149): a header, so it is found without parsing the page.
-    if (c.var.site.llms_txt) {
+    if (c.var.siteAtRequestStart.llms_txt) {
       response.headers.append('link', LLMS_TXT_LINK);
     }
     return response;
@@ -151,7 +151,11 @@ export function mountPublicSite(
   app.get(SITEMAP_PATH, (c) => sitemap(c, undefined));
   app.get(SITEMAP_CHILD_ROUTE, (c) => sitemap(c, Number(c.req.param('page'))));
   app.get(ROBOTS_PATH, (c) =>
-    robotsResponse(c.var.config.baseUrl, conditionalHeaders(c), robotsPolicyOf(c.var.site)),
+    robotsResponse(
+      c.var.config.baseUrl,
+      conditionalHeaders(c),
+      robotsPolicyOf(c.var.siteAtRequestStart),
+    ),
   );
 
   // The web app manifest and the root favicon (TASK-147), fixed paths at the
@@ -195,7 +199,7 @@ export function mountPublicSite(
   // engine checks for it. Any other `.txt` path is not this route's: it falls
   // through to whatever document or 404 would have answered it.
   app.get('/:file{[A-Za-z0-9-]{8,128}\\.txt}', async (c, next) => {
-    const settings = c.var.site;
+    const settings = c.var.siteAtRequestStart;
     const key = settings.index_now_key;
     if (!settings.index_now || key === '' || c.req.path !== indexNowKeyPath(key)) {
       await next();
