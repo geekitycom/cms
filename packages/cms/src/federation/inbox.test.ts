@@ -20,7 +20,7 @@ import {
 } from '@fedify/vocab';
 
 import { writeUsers } from '../admin/__testing__/users.ts';
-import { enterDevMode, readDevModeRecord } from '../dev-mode.ts';
+import { readDevModeRecord } from '../settings/dev-mode.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
@@ -289,7 +289,7 @@ describe('a Follow', () => {
 
   it('in dev mode, stores the follower and holds the Accept (TASK-295)', async () => {
     const instance = await site();
-    enterDevMode(instance.config.dataDir, 'command', instance.config.now());
+    await instance.settings.set('dev_mode', new Map([['on', true]]), 'cli');
 
     const response = await deliver(instance, follow());
 

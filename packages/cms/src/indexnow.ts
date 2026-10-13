@@ -2,6 +2,7 @@ import type { ResolvedConfig } from './config.ts';
 import type { Document } from './content/document.ts';
 import { isMigratedArrival } from './content/migrated.ts';
 import { holdOutbound } from './dev-mode.ts';
+import type { SettingsRegistry } from './settings/types.ts';
 import type { DocumentChange } from './content/sync.ts';
 import { readSiteSettings } from './site/site-json.ts';
 import { messageOf } from './util/errors.ts';
@@ -29,10 +30,8 @@ export function defaultIndexNowBackoffMs(attempt: number): number {
 
 /** What {@link createIndexNowNotifier} needs. */
 export interface CreateIndexNowNotifierOptions {
-  config: Pick<
-    ResolvedConfig,
-    'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'now' | 'indexNow'
-  >;
+  config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir' | 'now' | 'indexNow'>;
+  settings: SettingsRegistry;
 }
 
 /**
@@ -66,7 +65,7 @@ interface Sending {
 }
 
 export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): IndexNowNotifier {
-  const { config } = options;
+  const { config, settings } = options;
   const overrides = config.indexNow;
   const send = overrides.fetch ?? ((input, init) => fetch(input, init));
   const endpoint = overrides.endpoint ?? INDEXNOW_ENDPOINT;
@@ -108,7 +107,13 @@ export function createIndexNowNotifier(options: CreateIndexNowNotifierOptions): 
 
     for (let start = 0; start < urls.length; start += MAX_URLS_PER_REQUEST) {
       const urlList = urls.slice(start, start + MAX_URLS_PER_REQUEST);
-      if (holdOutbound(config, { kind: 'indexnow', what: urlList.join(' '), to: [endpoint] })) {
+      if (
+        await holdOutbound(settings, config, {
+          kind: 'indexnow',
+          what: urlList.join(' '),
+          to: [endpoint],
+        })
+      ) {
         continue;
       }
       const failure = await post({ ...target, urlList });

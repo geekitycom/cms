@@ -7,7 +7,7 @@ import { after, describe, it } from 'node:test';
 
 import { databaseFile } from '../cache.ts';
 import { resolveConfig } from '../config.ts';
-import { readDevModeRecord } from '../dev-mode.ts';
+import { DEV_MODE, readDevModeRecord } from '../settings/dev-mode.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 
@@ -98,6 +98,7 @@ describe('createCms', () => {
     } finally {
       db.close();
     }
+    assert.equal(await cms.settings.get(DEV_MODE.on), true, 'boot latched dev mode');
     assert.deepEqual(
       readDevModeRecord(dataDir).map((entry) => entry.at),
       [PINNED],

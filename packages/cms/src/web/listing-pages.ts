@@ -2,7 +2,6 @@ import type { Context } from 'hono';
 
 import type { Document } from '../content/document.ts';
 import type { ListOptions } from '../content/store.ts';
-import { devModeOn } from '../dev-mode.ts';
 import type { GeekityEnv } from './env.ts';
 import { archiveOf } from './listing-subject.ts';
 import type { ListingRequest } from './listing-subject.ts';
@@ -87,7 +86,7 @@ function pagedResponse(
   const sendsValidators = representation !== 'html' || !c.var.config.watch;
   const fingerprint =
     options.fingerprint ??
-    listingFingerprint(href, pagination, documents, options.full ?? false, devModeOn(c.var.config));
+    listingFingerprint(href, pagination, documents, options.full ?? false, c.var.devMode);
 
   return representationResponse({
     body: options.body,

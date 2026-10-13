@@ -807,6 +807,10 @@ export const ENV_VARIABLES: readonly string[] = Object.values(ENV_SETTINGS).flat
   (each) => each.env,
 );
 
+export function configVariables(field: string): readonly string[] {
+  return Object.entries(ENV_SETTINGS).find(([key]) => key === field)?.[1].env ?? [];
+}
+
 function resolveEnvSettings(
   config: GeekityConfig,
   env: Record<string, string | undefined>,

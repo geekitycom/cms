@@ -24,12 +24,14 @@ import {
   mountWellKnown,
   redirectBy,
 } from '../web/index.ts';
+import { DEV_MODE } from '../settings/dev-mode.ts';
+import { drawnInDevMode } from '../web/render.ts';
 import { serverError } from './server-error.ts';
 import type { Booted } from './boot.ts';
 import type { Services } from './services.ts';
 
 export function createApp(
-  { resolved, plugins, store, admin }: Booted,
+  { resolved, plugins, store, admin, settings }: Booted,
   services: Services,
   supervision: Supervision | undefined,
 ): { app: Hono<GeekityEnv>; writes: WriteGate } {
@@ -63,6 +65,7 @@ export function createApp(
   app.use('*', writes.middleware);
 
   app.use('*', async (c, next) => {
+    c.set('settings', settings);
     c.set('store', store);
     c.set('admin', admin);
     c.set('config', resolved);
@@ -87,7 +90,9 @@ export function createApp(
       'supervision',
       leavingWriteGate(supervision, () => writes.leave(c)),
     );
-    await next();
+    const devMode = await settings.get(DEV_MODE.on);
+    c.set('devMode', devMode);
+    await (devMode ? drawnInDevMode(next) : next());
   });
 
   app.use(

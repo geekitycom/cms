@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { cleanupTemporaryDirs, exists, runCli, temporaryDir } from './__testing__/cli.ts';
-import { readDevModeRecord } from './dev-mode.ts';
+import { cleanupTemporaryDirs, readJson, runCli, temporaryDir } from './__testing__/cli.ts';
+import { readDevModeRecord } from './settings/dev-mode.ts';
 
 after(cleanupTemporaryDirs);
 
@@ -14,7 +14,7 @@ describe('geekity dev-mode', () => {
 
     const on = await runCli(['dev-mode', 'on'], directory);
     assert.equal(on.code, 0, on.stderr);
-    assert.ok(await exists(path.join(dataDir, 'dev-mode.json')));
+    assert.deepEqual(await readJson(path.join(dataDir, 'dev-mode.json')), { on: true });
 
     const status = await runCli(['dev-mode', 'status'], directory);
     assert.match(status.stdout, /Dev mode is on/);
@@ -22,10 +22,13 @@ describe('geekity dev-mode', () => {
     const off = await runCli(['dev-mode', 'off'], directory);
     assert.equal(off.code, 0, off.stderr);
     assert.match(off.stdout, /live/);
-    assert.ok(!(await exists(path.join(dataDir, 'dev-mode.json'))));
+    assert.deepEqual(await readJson(path.join(dataDir, 'dev-mode.json')), { on: false });
     assert.deepEqual(
-      readDevModeRecord(dataDir).map((entry) => entry.type),
-      ['on', 'off'],
+      readDevModeRecord(dataDir).map((entry) => [entry.type, 'by' in entry ? entry.by : undefined]),
+      [
+        ['on', 'command'],
+        ['off', 'command'],
+      ],
       'going live is in the record',
     );
 
@@ -43,7 +46,11 @@ describe('geekity dev-mode', () => {
 
     assert.equal(off.code, 1);
     assert.match(off.stderr, /GEEKITY_DEV_MODE/);
-    assert.ok(await exists(path.join(directory, 'data', 'dev-mode.json')), 'still on');
+    assert.deepEqual(
+      await readJson(path.join(directory, 'data', 'dev-mode.json')),
+      { on: true },
+      'still on',
+    );
   });
 
   it('refuses a missing or unknown action', async () => {

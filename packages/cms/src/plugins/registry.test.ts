@@ -329,6 +329,16 @@ describe('the plugin registry', () => {
     assert.equal(registry.problem('@a/other'), undefined);
   });
 
+  it('refuses a package that takes a core settings namespace or prefix, naming the clash', () => {
+    const registry = createPluginRegistry(
+      fromConfig(plugin('site'), plugin('@geekity/maintenance'), plugin('@geekity/plugin-ok')),
+      SITE,
+    );
+    assert.match(registry.problem('site') ?? '', /namespace site is reserved/);
+    assert.match(registry.problem('@geekity/maintenance') ?? '', /GEEKITY_MAINTENANCE__/);
+    assert.equal(registry.problem('@geekity/plugin-ok'), undefined);
+  });
+
   it('marks a plugin whose settings cannot be stored unavailable', () => {
     const declaring = (name: string, register: Plugin['register']) =>
       plugin(name, {}, { register });

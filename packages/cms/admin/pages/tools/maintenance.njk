@@ -1,0 +1,51 @@
+{% extends "layouts/shell.njk" %}
+{% import "components/fields.njk" as field %}
+{% from "components/alert.njk" import alert %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
+
+  <div class="flex max-w-2xl flex-col gap-6">
+    {% if problems.on or problems.until %}
+      {% call field.summary('Nothing was saved. Fix the fields marked below.') %}
+        {{ field.problem('maintenance-on', problems.on) }}
+        {{ field.problem('maintenance-until', problems.until) }}
+      {% endcall %}
+    {% endif %}
+
+    <p class="max-w-prose">
+      {% if on %}
+        Maintenance mode is on. Pages, feeds, sitemaps and inbox deliveries answer 503 with
+        Retry-After; the admin, <code>/healthz</code> and signed-in users are let through.
+      {% else %}
+        Maintenance mode is off, and the site is serving.
+      {% endif %}
+    </p>
+
+    {% if overriddenBy %}
+      {% call alert(color='warning', style='soft') %}
+        <span>{{ overriddenBy }}</span>
+      {% endcall %}
+    {% endif %}
+
+    {% call card(title='Maintenance mode') %}
+      <form method="post" action="{{ saveUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        {{ field.checkbox('maintenance-on', 'on', 'Take the public site down for maintenance', checked=on, error=problems.on) }}
+        {{ field.text('maintenance-until', 'until', 'Expected back', value=until, hint='Optional. An ISO 8601 time such as 2026-09-28T14:00:00Z, sent as Retry-After and shown on the maintenance page.', error=problems.until) }}
+        {% call cardActions() %}
+          {{ button('Save', type='submit', color='primary') }}
+        {% endcall %}
+      </form>
+    {% endcall %}
+
+    <p class="max-w-prose text-sm">
+      <code>geekity maintenance on</code> and <code>off</code> at the command line turn the
+      same switch, and a running site notices either within a second.
+    </p>
+  </div>
+{% endblock %}

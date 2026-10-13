@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
@@ -7,14 +8,14 @@ import { cleanupTemporaryDirs, exists, readJson, runCli, temporaryDir } from './
 after(cleanupTemporaryDirs);
 
 describe('geekity maintenance', () => {
-  it('turns maintenance on by writing data/maintenance.json, and off by removing it', async () => {
+  it('turns maintenance on and off in data/maintenance.json', async () => {
     const directory = await temporaryDir('geekity-maintenance-cli-');
     const marker = path.join(directory, 'data', 'maintenance.json');
 
     const on = await runCli(['maintenance', 'on'], directory);
     assert.equal(on.code, 0, on.stderr);
     assert.match(on.stdout, /on/i);
-    assert.ok(await exists(marker));
+    assert.deepEqual(await readJson(marker), { on: true, until: '' });
 
     const status = await runCli(['maintenance', 'status'], directory);
     assert.equal(status.code, 0, status.stderr);
@@ -22,7 +23,7 @@ describe('geekity maintenance', () => {
 
     const off = await runCli(['maintenance', 'off'], directory);
     assert.equal(off.code, 0, off.stderr);
-    assert.ok(!(await exists(marker)));
+    assert.deepEqual(await readJson(marker), { on: false, until: '' });
 
     const again = await runCli(['maintenance', 'off'], directory);
     assert.equal(again.code, 0, 'turning it off twice is not an error');
@@ -38,6 +39,7 @@ describe('geekity maintenance', () => {
 
     assert.equal(on.code, 0, on.stderr);
     assert.deepEqual(await readJson(path.join(directory, 'data', 'maintenance.json')), {
+      on: true,
       until: '2026-09-28T14:00:00.000Z',
     });
     const status = await runCli(['maintenance', 'status'], directory);
@@ -70,5 +72,31 @@ describe('geekity maintenance', () => {
     } finally {
       delete process.env['GEEKITY_MAINTENANCE'];
     }
+  });
+
+  it('refuses to turn it off while the environment forces it on, and leaves the file alone', async () => {
+    const directory = await temporaryDir('geekity-maintenance-cli-');
+    await runCli(['maintenance', 'on'], directory);
+
+    const off = await runCli(['maintenance', 'off'], directory, undefined, {
+      GEEKITY_MAINTENANCE: 'on',
+    });
+
+    assert.equal(off.code, 1);
+    assert.match(off.stderr, /GEEKITY_MAINTENANCE or the maintenance setting keeps it on/);
+    assert.deepEqual(await readJson(path.join(directory, 'data', 'maintenance.json')), {
+      on: true,
+      until: '',
+    });
+  });
+
+  it('reads a file an older CLI wrote, whose presence meant on', async () => {
+    const directory = await temporaryDir('geekity-maintenance-cli-');
+    await mkdir(path.join(directory, 'data'));
+    await writeFile(path.join(directory, 'data', 'maintenance.json'), '{}\n');
+
+    const status = await runCli(['maintenance', 'status'], directory);
+
+    assert.match(status.stdout, /Maintenance mode is on/);
   });
 });

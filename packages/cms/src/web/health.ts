@@ -47,7 +47,7 @@ export async function healthReport(c: Context<GeekityEnv>): Promise<HealthReport
   const status = database === 'ok' && content === 'ok' ? 'ok' : 'fail';
   return {
     status,
-    maintenance: c.var.maintenance() !== undefined,
+    maintenance: (await c.var.maintenance()).on,
     checks: { database, content },
   };
 }

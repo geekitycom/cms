@@ -115,8 +115,9 @@ export function createServices({
   store,
   admin,
   commentRecords,
+  settings,
 }: Booted): Services {
-  const site = { admin, store, config: resolved };
+  const site = { admin, store, config: resolved, settings };
 
   // Which theme this site renders through (decision-15). One source for the
   // whole CMS: the pages, the `/theme/` assets and the site's email all read
@@ -156,7 +157,7 @@ export function createServices({
   // read per send, so a key pasted into the settings screen sends the next
   // message and one removed stops the message after it, neither needing a
   // restart. With nothing configured, sending is a line in the log.
-  const mail = createMailService({ config: resolved, themes, ...resolved.mail });
+  const mail = createMailService({ config: resolved, settings, themes, ...resolved.mail });
 
   // The one reader of the two indexes a conversation is made of. The page, the
   // per-post comments feed, `/comments/feed/` and the `source:comments` count
@@ -281,11 +282,11 @@ export function createServices({
 
   // The notify server listens to the index for the same reason: a post edited
   // on disk changed the same feeds as one saved through the editor.
-  const notifier = createFeedNotifier({ config: resolved });
+  const notifier = createFeedNotifier({ config: resolved, settings });
 
   // IndexNow listens for the same reason, and wants the pages as well as the
   // posts: a search engine indexes both (TASK-151).
-  const indexNow = createIndexNowNotifier({ config: resolved });
+  const indexNow = createIndexNowNotifier({ config: resolved, settings });
 
   // A post whose date is in the future is held back (TASK-44), and nothing
   // watches a clock: this is what notices that one has come due and reports it
@@ -443,11 +444,7 @@ export function createServices({
     scheduler,
     learnHandles,
     siteRecords: siteRecords(resolved),
-    maintenance: createMaintenanceSwitch({
-      dataDir: resolved.dataDir,
-      forced: resolved.maintenance,
-      now: resolved.now,
-    }),
+    maintenance: createMaintenanceSwitch({ settings, now: resolved.now }),
     indieauth: createIndieAuthState(resolved.now),
     lifecycle,
   };

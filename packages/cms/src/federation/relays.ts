@@ -7,6 +7,7 @@ import type { Recipient } from '@fedify/vocab';
 import type { AdminStore, Relay } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
@@ -30,6 +31,7 @@ export interface CreateRelayServiceOptions {
   store: FederationContextData['store'];
   /** Config after defaults and environment overrides. */
   config: ResolvedConfig;
+  settings: SettingsRegistry;
   /** What the federation context carries for the inbox; nothing here calls it. */
   actorProfiles: FederationContextData['actorProfiles'];
   /** What the federation context carries for the post objects. */
@@ -115,7 +117,7 @@ export function acceptedRelays(admin: AdminStore): Relay[] {
  * and an `Undo` of that same `Follow` to leave.
  */
 export function createRelayService(options: CreateRelayServiceOptions): RelayService {
-  const { federation, admin, store, config } = options;
+  const { federation, admin, store, config, settings } = options;
   const logger = options.logger ?? console;
 
   // A relay that is told to unfollow before it has been told to follow keeps
@@ -128,6 +130,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
       admin,
       store,
       config,
+      settings,
       actorProfiles: options.actorProfiles,
       cited: options.cited,
     });
@@ -161,7 +164,7 @@ export function createRelayService(options: CreateRelayServiceOptions): RelaySer
     activity: Follow | Undo,
   ): Promise<'held' | 'sent'> {
     if (
-      holdOutbound(config, {
+      await holdOutbound(settings, config, {
         kind: 'activitypub',
         what: `${activity instanceof Follow ? 'Follow' : 'Undo'} ${activity.id?.href ?? ''}`,
         to: [relay.inboxId],

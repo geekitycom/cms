@@ -1,5 +1,6 @@
 import type { ResolvedConfig } from '../config.ts';
 import { holdOutbound } from '../dev-mode.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import { readSiteSettings } from '../site/site-json.ts';
 import { messageOf } from '../util/errors.ts';
@@ -123,8 +124,9 @@ export interface CreateMailServiceOptions {
    */
   config: Pick<
     ResolvedConfig,
-    'baseUrl' | 'contentDir' | 'dataDir' | 'devMode' | 'themesDir' | 'watch' | 'now'
+    'baseUrl' | 'contentDir' | 'dataDir' | 'themesDir' | 'watch' | 'now'
   >;
+  settings: SettingsRegistry;
   /**
    * A provider named by the site, which wins outright over the settings and
    * `data/mail.json` — the way a `commentChecker` in the config wins over the
@@ -237,7 +239,7 @@ export function createMailService(options: CreateMailServiceOptions): MailServic
   /** Try one message until it goes or the site runs out of patience. */
   async function deliver(carrier: MailProvider, message: OutgoingMail): Promise<MailResult> {
     const to = message.to.map((recipient) => recipient.address);
-    if (holdOutbound(config, { kind: 'mail', what: message.subject, to })) {
+    if (await holdOutbound(options.settings, config, { kind: 'mail', what: message.subject, to })) {
       logger.info(`Dev mode held "${message.subject}" to ${to.join(', ')}.`);
       return {
         ok: true,

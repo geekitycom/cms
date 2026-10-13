@@ -14,6 +14,7 @@ import path from 'node:path';
 
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import type { PluginSettingField } from '../plugin.ts';
+import { pluginEnvPrefix, SETTING_NAME, settingVariable } from '../settings/names.ts';
 import { isRecord } from '../util/guards.ts';
 import { readPluginEntry, updatePluginEntry } from './enabled.ts';
 
@@ -53,35 +54,17 @@ export function pluginFolderPath(dataDir: string, name: string): string {
   return path.join(dataDir, 'plugins', ...name.split('/'));
 }
 
-function upperSnake(text: string): string {
-  return text
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}
-
-/**
- * What every environment variable of a package starts with, before `__`:
- * `GEEKITY_PLUGIN_LLM` for `@geekity/plugin-llm`. It never contains `__`, so
- * no plugin variable can shadow a core one.
- */
-export function pluginEnvPrefix(name: string): string {
-  return upperSnake(name);
-}
-
 /** The environment variable that sets one setting, such as `GEEKITY_PLUGIN_LLM__API_KEY`. */
 export function pluginVariable(name: string, key: string): string {
-  return `${pluginEnvPrefix(name)}__${upperSnake(key)}`;
+  return settingVariable(pluginEnvPrefix(name), key);
 }
-
-const SETTING_KEY = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
 
 /** Why these fields cannot be stored, or `undefined` when they can. */
 export function settingFieldsProblem(fields: readonly PluginSettingField[]): string | undefined {
   const seen = new Set<string>();
   for (const field of fields) {
     const key = JSON.stringify(field.key);
-    if (!SETTING_KEY.test(field.key)) {
+    if (!SETTING_NAME.test(field.key)) {
       return `The setting ${key} is not lower case words joined by "_".`;
     }
     if (field.key === 'enabled') return `The setting ${key} is the key that enables the plugin.`;

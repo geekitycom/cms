@@ -13,6 +13,7 @@ The generated `sync` script calls it the third way.
 | `geekity resend --all`, `<slug>...`       | Send announced posts again, as they read now, to every follower and relay. See [Quote posts](federation.md#quote-posts).                                                                      |
 | `geekity maintenance on`, `off`, `status` | Take the public site down with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` sets when the site is due back.                                              |
 | `geekity dev-mode on`, `off`, `status`    | Hold everything the site sends to the outside world while you build or migrate it, or take it live. See [Dev mode](deploying.md#dev-mode).                                                    |
+| `geekity settings list`, `get`, `set`     | Print, read or change the runtime settings, such as `maintenance.on`, with where each value comes from. See [Runtime settings](settings.md#runtime-settings).                                 |
 | `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`. See [Location and camera metadata](media.md#location-and-camera-metadata).                                       |
 | `geekity user add <name>`                 | Create an admin account. Use it to give a site its first login without the setup screen.                                                                                                      |
 | `geekity plugin add <package>`, `remove`  | Install a plugin package's bundle from the npm registry into the plugins folder (`GEEKITY_PLUGINS_DIR`), or delete a disabled one. A running `geekity serve` reloads with the change.         |
@@ -25,7 +26,7 @@ this includes a plugin in the plugins folder. [Plugins and hooks](plugins.md)
 describes `geekity plugin add` and how to write a plugin.
 
 These commands take `--config <file>`: `serve`, `sync`, `rebuild`, `resend`,
-`maintenance`, `dev-mode`, `strip-metadata`, `user add`, `plugin` and every
+`maintenance`, `dev-mode`, `settings`, `strip-metadata`, `user add`, `plugin` and every
 plugin command. Without the option, they look in the working directory for
 `geekity.config.ts`, then `geekity.config.js`, then `geekity.config.mjs`. If
 none exists, they run on defaults.

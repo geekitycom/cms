@@ -508,3 +508,59 @@ page on the context as `isPostsPage`.
 If the chosen page is drafted, trashed or deleted, the slug names nothing
 published. The site goes back to its latest posts and keeps the choice.
 Publishing the page again restores the front page.
+
+## Runtime settings
+
+Some settings change how a running site behaves rather than what it says, and
+the admin's settings pages do not hold them. They are kept in one settings
+registry (decision-53). Each setting is named `namespace.key`, and each
+namespace keeps its values in one file under `data/`:
+
+| Setting             | File                    | What it does                                                                                               |
+| ------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `maintenance.on`    | `data/maintenance.json` | Answer 503 to the public site, feeds and inboxes. See [Maintenance mode](public-site.md#maintenance-mode). |
+| `maintenance.until` | `data/maintenance.json` | When the site is expected back, as an instant. Sent as `Retry-After`.                                      |
+| `dev_mode.on`       | `data/dev-mode.json`    | Hold every outbound side effect. See [Dev mode](deploying.md#dev-mode).                                    |
+
+The value in effect is the first of these that is set:
+
+1. The environment variable `GEEKITY_<NAMESPACE>__<KEY>`, such as
+   `GEEKITY_MAINTENANCE__UNTIL`. `dev_mode.on` has none.
+2. A config field that overrides the setting. `maintenance` in the config, or
+   `GEEKITY_MAINTENANCE`, overrides `maintenance.on`.
+3. The value stored in the file.
+4. The default.
+
+A setting that the environment or the config overrides cannot be changed from
+the admin or the command line. The save is refused with a sentence that names
+the source, such as
+`maintenance.on is set by GEEKITY_MAINTENANCE and cannot be changed here.`
+Remove the variable or the field and restart the site first.
+
+Tools > Maintenance and Tools > Dev mode in the admin are the switches for
+these settings. `geekity settings` reads and writes every one of them:
+
+```
+$ geekity settings list
+maintenance.on     false  default                   Answer 503 to the public site, feeds and inboxes.
+maintenance.until         default                   When the site is expected back, as an instant. Sent as Retry-After.
+dev_mode.on        false  default, not overridable  Hold every outbound side effect and record it in data/dev-mode.jsonl.
+$ geekity settings set maintenance.until 2026-10-14T09:00:00Z
+maintenance.until  2026-10-14T09:00:00.000Z  file  When the site is expected back, as an instant. Sent as Retry-After.
+$ GEEKITY_MAINTENANCE=on geekity settings get maintenance.on
+true
+overridden by env GEEKITY_MAINTENANCE; the file holds false
+$ geekity settings set maintenance.until --unset
+```
+
+`list` prints each setting with its value in effect, where that value came
+from, and what the setting does. When something overrides the file, `list`
+adds what the file holds, as in `env GEEKITY_MAINTENANCE (file: false)`.
+`list <namespace>` prints one namespace. `set` checks the value before it
+writes anything, and exits 1 with the reason when the value is not valid or an
+override is in effect. `--unset` removes the stored value so the default
+applies. A secret setting prints as `(set)` or `(not set)`, never as its value.
+A secret given to `set` stays in the shell history.
+
+`geekity maintenance` and `geekity dev-mode` are shorter ways to change the
+same settings, and they print the same sentences as before.
