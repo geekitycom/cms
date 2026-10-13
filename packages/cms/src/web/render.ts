@@ -466,7 +466,6 @@ export function drawnForSignedInReader<T>(draw: () => T): T {
 
 const devModeReader = new AsyncLocalStorage<true>();
 
-/** Run `draw` as a request made while the site is in dev mode, so its pages say `devMode`. */
 export function drawnInDevMode<T>(draw: () => T): T {
   return devModeReader.run(true, draw);
 }

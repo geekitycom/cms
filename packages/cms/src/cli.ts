@@ -470,12 +470,6 @@ async function initCommand({ args }: ParsedArgs): Promise<number> {
   return 0;
 }
 
-/**
- * `geekity maintenance on|off|status` (TASK-130), over `maintenance.*`.
- *
- * Only the file under `data/` is touched, so this works the same with the
- * site running or stopped: a running site re-reads it within a second.
- */
 async function maintenanceCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const action = args[0];
   const config = await loadResolvedConfig(configPath);
@@ -514,7 +508,6 @@ async function maintenanceCommand({ args, configPath, flags }: ParsedArgs): Prom
   throw new Error('geekity maintenance needs on, off or status.');
 }
 
-/** `geekity dev-mode on|off|status` (TASK-295), over `dev_mode.on`. */
 async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number> {
   const action = args[0];
   const config = await loadResolvedConfig(configPath);
@@ -552,7 +545,6 @@ async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number>
   throw new Error('geekity dev-mode needs on, off or status.');
 }
 
-/** `geekity settings list|get|set` (decision-53). */
 async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const [action, name, value] = args;
   const config = await loadResolvedConfig(configPath);
@@ -601,7 +593,6 @@ async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise
   );
 }
 
-/** A plugin namespace such as `@geekity/plugin-llm` has no `.`, and a key never does. */
 function settingNamed(settings: SettingsRegistry, name: string): SettingRef<unknown> {
   const dot = name.lastIndexOf('.');
   const found = settings

@@ -55,7 +55,6 @@ export interface CreateFeedNotifierOptions {
    * the notify server and the two archive bases — are read from.
    */
   config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir' | 'now'>;
-  /** Where dev mode is read, which holds what this sends (decision-35). */
   settings: SettingsRegistry;
   /** Where failures are reported. Defaults to `console`. */
   logger?: NotifyLogger | undefined;

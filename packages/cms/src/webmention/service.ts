@@ -96,7 +96,6 @@ export interface CreateWebmentionServiceOptions {
     ResolvedConfig,
     'baseUrl' | 'contentDir' | 'dataDir' | 'now' | 'commentChecker' | 'hostLookup'
   >;
-  /** Where dev mode is read, which holds what this sends (decision-35). */
   settings: SettingsRegistry;
   /** Where failures are reported. Defaults to `console`. */
   logger?: WebmentionLogger | undefined;

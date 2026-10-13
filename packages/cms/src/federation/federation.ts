@@ -60,7 +60,6 @@ export interface FederationContextData {
   readonly store: DocumentLookup & ArchiveReader & CatalogReader & TaxonomyReader & IndexClock;
   /** Config after defaults and environment overrides. */
   readonly config: ResolvedConfig;
-  /** Every runtime setting; the inbox reads dev mode from it before it answers. */
   readonly settings: SettingsRegistry;
   /** Where the inbox asks for the profile of an actor it has just heard from (TASK-184). */
   readonly actorProfiles: Pick<ActorProfileService, 'capture'>;

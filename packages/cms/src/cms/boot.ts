@@ -48,9 +48,6 @@ export function boot(
 ): Booted {
   const configured = isResolvedConfig(config) ? config : resolveConfig(config);
   const settings = createSettingsRegistry({ config: configured });
-  // A latch, not an override (decision-35): the file keeps the site in dev
-  // mode after the variable is gone. Not awaited, because boot is synchronous;
-  // every read of the file queues behind this write.
   if (configured.devMode) {
     settings.set('dev_mode', new Map([['on', true]]), 'boot').catch((error: unknown) => {
       console.error('Dev mode could not be turned on at boot:', error);

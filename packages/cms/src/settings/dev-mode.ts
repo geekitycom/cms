@@ -17,7 +17,6 @@ export interface OutboundEffect {
   readonly to: readonly string[];
 }
 
-/** Who turned dev mode on or off, in the spellings the record has always stored. */
 export type DevModeSource = 'config' | 'command' | 'admin' | 'plugin';
 
 const SOURCES: Record<ChangedBy, DevModeSource> = {
@@ -29,20 +28,13 @@ const SOURCES: Record<ChangedBy, DevModeSource> = {
 
 export type DevModeEntry =
   | { readonly type: 'on'; readonly at: string; readonly by: DevModeSource }
-  // A record written before the registry has no `by` on its `off` lines.
   | { readonly type: 'off'; readonly at: string; readonly by?: DevModeSource }
   | ({ readonly type: 'held'; readonly at: string } & OutboundEffect);
 
-/**
- * Dev mode (decision-35). `GEEKITY_DEV_MODE` and `config.devMode` are not an
- * override of `on`: boot writes it through `set`, so a lost environment
- * variable does not take a site live.
- */
 export const DEV_MODE = declareNamespace({
   namespace: 'dev_mode',
   storage: { kind: 'file', under: 'data', path: 'dev-mode.json', dataClass: { kept: false } },
   envPrefix: 'GEEKITY_DEV_MODE',
-  // Before the registry, the file being there meant on, parseable or not.
   legacy: (raw) => (isRecord(raw) && 'on' in raw ? raw : { on: true }),
   settings: {
     on: {
@@ -55,7 +47,6 @@ export const DEV_MODE = declareNamespace({
   },
 });
 
-/** Why dev mode cannot be turned off from the CLI or the admin: the next boot would turn it on. */
 export const DEV_MODE_LATCHED = 'GEEKITY_DEV_MODE or the devMode setting still asks for dev mode.';
 
 function recordGoingOnOrOff({ next, at, by, dirs }: SettingChange<boolean>): void {

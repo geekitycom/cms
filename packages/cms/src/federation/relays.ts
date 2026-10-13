@@ -31,7 +31,6 @@ export interface CreateRelayServiceOptions {
   store: FederationContextData['store'];
   /** Config after defaults and environment overrides. */
   config: ResolvedConfig;
-  /** Where dev mode is read, which holds what this sends (decision-35). */
   settings: SettingsRegistry;
   /** What the federation context carries for the inbox; nothing here calls it. */
   actorProfiles: FederationContextData['actorProfiles'];

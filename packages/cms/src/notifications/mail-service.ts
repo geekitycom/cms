@@ -126,7 +126,6 @@ export interface CreateMailServiceOptions {
     ResolvedConfig,
     'baseUrl' | 'contentDir' | 'dataDir' | 'themesDir' | 'watch' | 'now'
   >;
-  /** Where dev mode is read, which holds what this sends (decision-35). */
   settings: SettingsRegistry;
   /**
    * A provider named by the site, which wins outright over the settings and

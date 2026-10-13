@@ -67,8 +67,6 @@ globalThis.fetch = ((input: string | URL | Request) => {
   fetched.push(url);
   everFetched.add(url);
   if (url === SLOW) {
-    // The reply context and the webmention sender both ask the target, in
-    // either order, and both wait for the one answer.
     return new Promise<Response>((resolve) => {
       slowWaiting.push(resolve);
       slowAnswer = (response) => {

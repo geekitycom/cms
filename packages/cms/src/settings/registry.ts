@@ -21,7 +21,6 @@ import type {
   ValuesOf,
 } from './types.ts';
 
-/** Core namespaces, in the order `list` prints them. */
 const CORE: readonly DeclaredNamespace[] = [MAINTENANCE, DEV_MODE];
 
 export interface CreateSettingsRegistryOptions {
@@ -34,7 +33,6 @@ type Stored = Readonly<Record<string, unknown>>;
 type Override<V> =
   { readonly value: V; readonly source: ValueSource } | { readonly problem: string };
 
-/** What a source is called in a sentence: `GEEKITY_MAINTENANCE`, `maintenance in the config`. */
 export function sourceText(source: ValueSource): string {
   switch (source.tier) {
     case 'env':
@@ -48,16 +46,10 @@ export function sourceText(source: ValueSource): string {
   }
 }
 
-/** Whether something other than the file decides the value in effect. */
 export function overridden(source: ValueSource): boolean {
   return source.tier === 'env' || source.tier === 'config';
 }
 
-/**
- * The local registry: every namespace's file read on every call, nothing
- * cached. Reads and writes of one file share its lock, so a read made after a
- * `set` it did not wait for, such as boot's dev mode latch, sees the write.
- */
 export function createSettingsRegistry({
   config,
   env = process.env,
@@ -87,7 +79,6 @@ export function createSettingsRegistry({
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
-      // There but unreadable: the legacy reader decides, as for unparseable text.
       raw = undefined;
     }
     const shaped = namespace.legacy === undefined ? raw : namespace.legacy(raw);
@@ -216,8 +207,6 @@ export function createSettingsRegistry({
           }
         }
         if (Object.keys(problems).length > 0) return { problems, changed: [] };
-        // A legacy file is told from a current one by its keys, so a namespace
-        // with a legacy reader is written whole, an unset key as its default.
         if (namespace.legacy !== undefined) {
           for (const declaration of namespace.settings) {
             if (next[declaration.key] !== undefined) continue;

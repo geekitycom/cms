@@ -807,10 +807,8 @@ export const ENV_VARIABLES: readonly string[] = Object.values(ENV_SETTINGS).flat
   (each) => each.env,
 );
 
-/** The environment variables that set one config field, such as `GEEKITY_MAINTENANCE`. */
 export function configVariables(field: string): readonly string[] {
-  const each = (ENV_SETTINGS as Record<string, EnvSetting<unknown, unknown> | undefined>)[field];
-  return each?.env ?? [];
+  return Object.entries(ENV_SETTINGS).find(([key]) => key === field)?.[1].env ?? [];
 }
 
 function resolveEnvSettings(

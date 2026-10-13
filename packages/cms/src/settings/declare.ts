@@ -13,10 +13,6 @@ type RefsOf<S> = {
   readonly [K in keyof S]: S[K] extends { type: SettingType<infer V> } ? SettingRef<V> : never;
 };
 
-/**
- * A namespace's declaration and one typed ref per setting, so a caller writes
- * `settings.get(MAINTENANCE.on)` and gets a `boolean`.
- */
 export function declareNamespace<S extends Record<string, SettingInput<unknown>>>(
   input: Omit<NamespaceDeclaration, 'settings'> & { readonly settings: S },
 ): DeclaredNamespace & RefsOf<S> {

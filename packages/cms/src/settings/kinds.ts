@@ -18,7 +18,6 @@ export const boolean: SettingType<boolean> = {
   toText: (value) => String(value),
 };
 
-/** An instant as ISO 8601 text, or `''` for none. */
 export const instantOrEmpty: SettingType<string> = {
   fromJson: (raw) =>
     typeof raw === 'string' ? instant(raw) : { ok: false, problem: 'must be a time as text' },

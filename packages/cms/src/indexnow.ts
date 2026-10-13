@@ -31,7 +31,6 @@ export function defaultIndexNowBackoffMs(attempt: number): number {
 /** What {@link createIndexNowNotifier} needs. */
 export interface CreateIndexNowNotifierOptions {
   config: Pick<ResolvedConfig, 'baseUrl' | 'contentDir' | 'dataDir' | 'now' | 'indexNow'>;
-  /** Where dev mode is read, which holds what this sends (decision-35). */
   settings: SettingsRegistry;
 }
 
