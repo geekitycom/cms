@@ -1,11 +1,11 @@
 ---
 id: TASK-383
 title: 'Spike: one settings registry over namespaced files'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-13 12:10'
-updated_date: '2026-10-13 16:46'
+updated_date: '2026-10-13 17:40'
 labels: []
 milestone: m-38
 dependencies: []
@@ -43,7 +43,7 @@ Settled already (decision-52), to design within:
 - [x] #5 The record shows a custom admin page and the optional generic renderer both reading and saving through the registry, and names the test that keeps the registry from importing admin code
 - [x] #6 The record defines the geekity settings CLI (list, get, set) and how it shows a value that config or env overrides
 - [x] #7 Follow-up tasks are filed for building the registry with maintenance and dev mode as its first users and for moving every other setting onto it; nothing is built for production in this task
-- [ ] #8 The user has read the decision record and accepted it, or asked for changes that are made; follow-up build tasks are not started before then
+- [x] #8 The user has read the decision record and accepted it, or asked for changes that are made; follow-up build tasks are not started before then
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -61,4 +61,12 @@ Settled already (decision-52), to design within:
 
 <!-- SECTION:NOTES:BEGIN -->
 decision-53 (proposed) holds the design. Checks run: pluginEnvPrefix on seven package names (plugin env names keep the package-derived prefix, which departs from decision-52's wording); a throwaway migration script run twice and after a simulated crash (idempotent, file wins); a census of 98 call sites of readSiteSettings, devModeOn, holdOutbound, readMailCredentials and readAkismetKey (32 async, 39 one hop from async, 12 in sync-only chains, named in the record). Follow-ups filed under m-38: TASK-386 (wave 1, registry + maintenance + dev mode + admin switches + geekity settings), TASK-387 (wave 2 credentials, dep 386), TASK-388 (wave 3a site namespace readers, dep 386), TASK-389 (wave 3b pages save through the registry, dep 388), TASK-390 (wave 4 plugins + migration, dep 388). AC#8 waits for the user to read and accept decision-53; the task stays In Progress and no follow-up is started before then.
+
+2026-10-13: the user accepted decision-53 in chat; its status is now accepted.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Designed and recorded in decision-53, which the user accepted on 2026-10-13. Follow-up build tasks are filed under M39 (m-38) and reference it.
+<!-- SECTION:FINAL_SUMMARY:END -->

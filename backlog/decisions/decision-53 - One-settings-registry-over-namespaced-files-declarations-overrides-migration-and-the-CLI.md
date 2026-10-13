@@ -4,7 +4,7 @@ title: >-
   One settings registry over namespaced files: declarations, overrides,
   migration and the CLI
 date: '2026-10-13 16:35'
-status: proposed
+status: accepted
 ---
 ## Context
 
