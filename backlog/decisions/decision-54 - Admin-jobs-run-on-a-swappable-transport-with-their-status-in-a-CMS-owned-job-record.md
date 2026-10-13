@@ -4,7 +4,7 @@ title: >-
   Admin jobs run on a swappable transport with their status in a CMS-owned job
   record
 date: '2026-10-13 16:45'
-status: proposed
+status: accepted
 ---
 ## Context
 

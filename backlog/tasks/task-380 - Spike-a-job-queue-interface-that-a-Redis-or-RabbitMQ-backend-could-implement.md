@@ -1,11 +1,11 @@
 ---
 id: TASK-380
 title: 'Spike: a job queue interface that a Redis or RabbitMQ backend could implement'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-13 11:24'
-updated_date: '2026-10-13 16:48'
+updated_date: '2026-10-13 17:40'
 labels: []
 milestone: m-38
 dependencies: []
@@ -46,7 +46,7 @@ Questions to answer: where job status, progress and results live when the broker
 - [x] #4 Claims about BullMQ and RabbitMQ are checked against the real thing: a throwaway adapter for each passes the same contract test as the in-process one, run against a real Redis and a real RabbitMQ (for example in Docker), with the results in the record; the adapters are not merged
 - [x] #5 The record says whether one backend could carry both admin jobs and Fedify messages, and what that would take
 - [x] #6 Follow-up tasks are filed for the chosen interface and its in-process implementation; nothing is implemented for production in this task
-- [ ] #7 The user has read the decision record and accepted it, or asked for changes that are made; follow-up build tasks are not started before then
+- [x] #7 The user has read the decision record and accepted it, or asked for changes that are made; follow-up build tasks are not started before then
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -67,4 +67,12 @@ Questions to answer: where job status, progress and results live when the broker
 Scope added 2026-10-13: also check the interface on paper against Amazon SQS as a pattern a future AWS build (SQS plus Aurora, swapped in by a different Docker build) might use. No SQS adapter or test is written. Note the SQS constraints the interface must not rule out: at-least-once delivery, a 15-minute maximum delay, a 256 KB message limit, a visibility timeout instead of a lock, and no job status kept by the queue.
 
 Decision record decision-54 (status proposed) holds the interface, the mapping table, the measured results, the TASK-379 implications and the contract test (Appendix A). Measured with Docker (Redis 8.2.10, RabbitMQ 4.1.8, Node 24.18.0): the contract (C1 to C11) passed 11 of 11 on the in-process transport, a throwaway BullMQ 6.3.14 adapter and a throwaway amqplib 2.2.0 adapter in 3 runs each, and on Fedify SqliteMessageQueue 2.4.0 (3 runs) and RedisMessageQueue 2.4.0 (2 runs) unchanged. @fedify/amqp 2.4.0 failed 9 of 11 with default options (double ack, 406 unknown delivery tag) and failed C7 in 3 of 5 runs with nativeRetrial. Injected defects (no recovery, no requeue on stop, settled at once, no claim guard) each failed the cases expected. The throwaway code and containers were removed. Follow-ups filed: TASK-391 (queue and in-process implementation), TASK-392 (strip-metadata) and TASK-393 (resend), both depending on TASK-391. A note was added to TASK-379. AC #7 waits for the user to read and accept decision-54; the task stays In Progress until then.
+
+2026-10-13: the user accepted decision-54 in chat; its status is now accepted.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Designed and recorded in decision-54, which the user accepted on 2026-10-13. Follow-up build tasks are filed under M39 (m-38) and reference it.
+<!-- SECTION:FINAL_SUMMARY:END -->
