@@ -48,6 +48,7 @@ describe('Settings > Privacy (AC #2)', () => {
     const html = await (await agent.get('/admin/settings/privacy')).text();
     assert.match(html, /camera/i);
     assert.match(html, /strip-metadata/);
+    assert.match(html, /<a class="link" href="\/admin\/media#strip-metadata">Media<\/a>/);
   });
 
   it('saves the choice to site.json like every other settings page, and shows it back', async () => {

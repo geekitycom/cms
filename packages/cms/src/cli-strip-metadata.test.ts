@@ -4,6 +4,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { cleanupTemporaryDirs, runCli, temporaryDir } from './__testing__/cli.ts';
+import { stripReport } from './content/metadata/strip-job.ts';
+import { createFileRecords } from './jobs/file-records.ts';
 import {
   jpegWithMetadata,
   leakedSecrets,
@@ -80,6 +82,22 @@ describe('geekity strip-metadata', () => {
     assert.match(run.stderr, /2025\/05\/broken\.jpg: /);
     assert.match(run.stdout, /Checked 2 files: 1 stripped, 0 already clean, 1 unreadable/);
     assert.deepEqual(await read(directory, '2025/05/broken.jpg'), broken);
+  });
+
+  it('runs as a strip-metadata job, recorded in data/jobs.json', async () => {
+    const directory = await site({ '2025/05/beach.jpg': await jpegWithMetadata(6) });
+
+    const run = await runCli(['strip-metadata'], directory);
+
+    assert.equal(run.code, 0, run.stderr);
+    const job = await createFileRecords(path.join(directory, 'data', 'jobs.json')).latest(
+      'strip-metadata',
+    );
+    assert.equal(job?.state, 'finished');
+    assert.deepEqual(
+      job.state === 'finished' && stripReport(job.result)?.stripped.map((file) => file.path),
+      ['2025/05/beach.jpg'],
+    );
   });
 
   it('says so when there are no uploads', async () => {

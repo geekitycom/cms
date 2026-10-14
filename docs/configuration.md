@@ -286,7 +286,9 @@ const cms = createCms({
 Long admin actions run as jobs, outside the request that started them, so a
 proxy cannot time them out. A job is a registered name and a JSON payload of at
 most 64 KB. The admin and the CLI queue jobs on `cms.jobs`, and the admin reads
-a job's progress and result from there.
+a job's progress and result from there. The CMS registers one job of its own,
+`strip-metadata`, which the **Media** screen and `geekity strip-metadata` queue
+(see [Location and camera metadata](media.md#location-and-camera-metadata)).
 
 `geekity serve` runs one job at a time, in the server process. A job runs at
 least once:

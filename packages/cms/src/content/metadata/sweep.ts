@@ -8,34 +8,59 @@ export type SweptFile =
   | { path: string; outcome: 'clean' }
   | { path: string; outcome: 'unreadable'; problem: string };
 
-export async function stripStoredUploads(directory: string): Promise<SweptFile[]> {
-  const files = await listFiles(directory);
+export interface SweepOptions {
+  /** Checked before each file; the sweep throws once it is aborted. */
+  readonly signal?: AbortSignal;
+  progress?(done: number, total: number): Promise<void>;
+}
+
+/**
+ * Strip every upload that carries metadata. Safe to run again, or after a run
+ * cut off part way: a clean file is left alone, and a file is replaced by
+ * rename, so it is either the original or the stripped bytes. A file
+ * deleted while the sweep runs is left out.
+ */
+export async function stripStoredUploads(
+  directory: string,
+  options: SweepOptions = {},
+): Promise<SweptFile[]> {
+  const files = (await listFiles(directory)).filter((relative) =>
+    strippable(path.extname(relative)),
+  );
   const results: SweptFile[] = [];
 
-  for (const relative of files) {
-    if (!strippable(path.extname(relative))) continue;
-    const file = path.join(directory, ...relative.split('/'));
-    const bytes = new Uint8Array(await readFile(file));
-
-    let result;
-    try {
-      result = stripMetadata(path.extname(relative), bytes);
-    } catch (error) {
-      if (!(error instanceof UnreadableMetadataError)) throw error;
-      results.push({ path: relative, outcome: 'unreadable', problem: error.message });
-      continue;
-    }
-
-    if (result.bytes === bytes) {
-      results.push({ path: relative, outcome: 'clean' });
-      continue;
-    }
-
-    await replaceKeepingTimes(file, result.bytes);
-    results.push({ path: relative, outcome: 'stripped', removed: result.removed });
+  for (const [index, relative] of files.entries()) {
+    options.signal?.throwIfAborted();
+    const swept = await sweepFile(directory, relative);
+    if (swept !== undefined) results.push(swept);
+    await options.progress?.(index + 1, files.length);
   }
 
   return results;
+}
+
+async function sweepFile(directory: string, relative: string): Promise<SweptFile | undefined> {
+  const file = path.join(directory, ...relative.split('/'));
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await readFile(file));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+
+  let result;
+  try {
+    result = stripMetadata(path.extname(relative), bytes);
+  } catch (error) {
+    if (!(error instanceof UnreadableMetadataError)) throw error;
+    return { path: relative, outcome: 'unreadable', problem: error.message };
+  }
+
+  if (result.bytes === bytes) return { path: relative, outcome: 'clean' };
+
+  await replaceKeepingTimes(file, result.bytes);
+  return { path: relative, outcome: 'stripped', removed: result.removed };
 }
 
 async function listFiles(directory: string): Promise<string[]> {

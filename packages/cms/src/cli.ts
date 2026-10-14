@@ -15,9 +15,8 @@ import { databaseFile, discardDatabase } from './cache.ts';
 import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
 import type { ResolvedConfig } from './config.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './comments/migrations.ts';
-import { stripStoredUploads } from './content/metadata/sweep.ts';
+import { stripMetadataJob, stripReport } from './content/metadata/strip-job.ts';
 import { createUser, DuplicateUsernameError } from './site/users.ts';
-import { UPLOAD_DIRECTORY } from './content/uploads.ts';
 import { createCms } from './index.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
 import type { PluginCommand } from './plugin.ts';
@@ -762,29 +761,33 @@ function forcedLine(forced: boolean): string {
 }
 
 async function stripMetadataCommand({ configPath }: ParsedArgs): Promise<number> {
-  const config = await loadResolvedConfig(configPath);
-  const results = await stripStoredUploads(path.join(config.contentDir, UPLOAD_DIRECTORY));
-
-  let stripped = 0;
-  let clean = 0;
-  let unreadable = 0;
-  for (const result of results) {
-    if (result.outcome === 'stripped') {
-      stripped += 1;
-      process.stdout.write(`${result.path}: removed ${result.removed.join(', ')}\n`);
-    } else if (result.outcome === 'clean') {
-      clean += 1;
-    } else {
-      unreadable += 1;
-      process.stderr.write(`${result.path}: ${result.problem} Left as it was.\n`);
-    }
+  const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
+  const cms = createCms(config);
+  let status;
+  try {
+    status = await cms.jobs.run(await cms.jobs.enqueue(stripMetadataJob(config.contentDir), null));
+  } finally {
+    await cms.close();
   }
 
+  const report = status.state === 'finished' ? stripReport(status.result) : undefined;
+  if (report === undefined) {
+    const problem = status.state === 'failed' ? status.error : `The job ended ${status.state}.`;
+    process.stderr.write(`The sweep did not finish: ${problem}\n`);
+    return 1;
+  }
+
+  for (const file of report.stripped) {
+    process.stdout.write(`${file.path}: removed ${file.removed.join(', ')}\n`);
+  }
+  for (const file of report.unreadable) {
+    process.stderr.write(`${file.path}: ${file.problem} Left as it was.\n`);
+  }
   process.stdout.write(
-    `Checked ${count(results.length, 'file')}: ${String(stripped)} stripped, ` +
-      `${String(clean)} already clean, ${String(unreadable)} unreadable\n`,
+    `Checked ${count(report.checked, 'file')}: ${String(report.stripped.length)} stripped, ` +
+      `${String(report.clean)} already clean, ${String(report.unreadable.length)} unreadable\n`,
   );
-  return unreadable === 0 ? 0 : 1;
+  return report.unreadable.length === 0 ? 0 : 1;
 }
 
 /**

@@ -464,8 +464,8 @@ representations, the JSON-LD, oEmbed, search and `llms.txt`. The post's author
 always gets the whole location back from `q=source`, whatever the setting.
 
 The same page says that the server always removes location and camera metadata
-from uploads. It names `geekity strip-metadata` for files uploaded before that
-change.
+from uploads. For files uploaded before that change, it links to the sweep on
+the **Media** screen and names `geekity strip-metadata`.
 
 ## The front page
 

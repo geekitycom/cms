@@ -147,22 +147,37 @@ arrive. An episode's tags hold its title and artwork, not where it was
 recorded.
 
 Files uploaded before this version still carry their metadata. To strip them,
-run:
+press **Strip metadata from every upload** on the **Media** screen, or run:
 
 ```sh
 geekity strip-metadata
 ```
 
-The command:
+Both queue the same `strip-metadata` [admin job](configuration.md#admin-jobs).
+The job:
 
 - rewrites each file under `content/uploads` that has metadata to remove
-- prints what it removed
 - keeps the file's modification time, because the library sorts by it
-- skips a file it cannot read, names it, and exits `1`
+- leaves a file it cannot read unchanged and names it
+- replaces each file by renaming a stripped copy over it, so a file is never
+  half written
 
-The command is safe to run again. It leaves a clean file unchanged, and a
-second run reports every file as already clean. The derived variants under
-`data/images` never carried metadata.
+The button returns at once, and the job runs in the server. The **Media**
+screen shows the latest sweep: queued, running with the files checked out of
+the total, finished with the counts and each file it stripped, failed with the
+error, or interrupted. The page does not reload itself. Select **Check again**
+to see how far it got. While a sweep is queued or running, the screen offers no
+second one.
+
+The command runs the job in its own process and waits for it. It prints each
+file it stripped and what it removed, names each file it could not read on
+standard error, and exits `1` if there was one or if the job failed.
+
+The job is safe to run again. It leaves a clean file unchanged, and a second
+run reports every file as already clean. When the server stops or reloads
+during a sweep, the job stops before the next file and the next server
+continues it. Files it already stripped are then counted as already clean. The
+derived variants under `data/images` never carried metadata.
 
 If the site keeps `content/` in git, the old bytes remain in its history and in
 every clone and fork. Removing them means rewriting that history. One way to do

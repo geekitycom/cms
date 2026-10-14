@@ -1,0 +1,45 @@
+{# The latest run of a queued job, from `jobStatusView` in
+   src/admin/job-status.ts. `{% call jobStatus(job, …) %}result{% endcall %}`
+   emits its state as a badge and when it got there, then:
+
+     queued       that it waits for the worker, and whether a restart sent it back
+     running      a progress bar and "<verb> <done> of <total> <unit>"
+     finished     the caller's body, which draws the job's own result
+     failed       the error, in an alert
+     interrupted  that restarts or crashes cut it off and it will not run again
+
+   While it is queued or running, `refreshUrl` is offered as a link to look
+   again: the page does not reload itself. `verb` and `unit` word the
+   progress. The error and every word passed in are escaped. #}
+{% from "components/alert.njk" import alert %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import buttonLink %}
+
+{% macro jobStatus(job, refreshUrl, verb='Done', unit='items') -%}
+<div class="flex flex-col gap-3">
+  <p class="flex flex-wrap items-center gap-2">
+    {{ status(job.state, job.label) }}
+    <span class="text-sm"><time datetime="{{ job.at }}">{{ job.at | date('readable') }}</time></span>
+  </p>
+  {% if job.state == 'queued' %}
+    <p>Waiting for the worker to start it.{% if job.requeued %} A restart cut off the last try, so it is queued again as try {{ job.attempt }}.{% endif %}</p>
+  {% elif job.state == 'running' %}
+    {% if job.progress and job.progress.total %}
+      <progress class="progress progress-primary w-full max-w-md" value="{{ job.progress.done }}" max="{{ job.progress.total }}" aria-label="{{ verb }} {{ job.progress.done }} of {{ job.progress.total }} {{ unit }}"></progress>
+      <p>{{ verb }} {{ job.progress.done }} of {{ job.progress.total }} {{ unit }}.{% if job.progress.note %} {{ job.progress.note }}{% endif %}</p>
+    {% else %}
+      <progress class="progress progress-primary w-full max-w-md" aria-label="Starting"></progress>
+      <p>Starting.</p>
+    {% endif %}
+  {% elif job.state == 'finished' %}
+    {% if caller %}{{ caller() }}{% endif %}
+  {% elif job.state == 'failed' %}
+    {% call alert(color='error', style='soft') %}<span>{{ job.error }}</span>{% endcall %}
+  {% elif job.state == 'interrupted' %}
+    <p>Restarts or crashes cut it off {{ job.attempt }} times, so it is not run again on its own.</p>
+  {% endif %}
+  {% if job.active %}
+    <div>{{ buttonLink('Check again', refreshUrl, style='outline') }}</div>
+  {% endif %}
+</div>
+{%- endmacro %}
