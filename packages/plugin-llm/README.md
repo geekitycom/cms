@@ -40,11 +40,11 @@ Enable it under `/admin/plugins`. Its screen is
 
 ## Settings
 
-| Setting       | Key             | Default                        | Where it is kept                                           |
-| ------------- | --------------- | ------------------------------ | ---------------------------------------------------------- |
-| Base URL      | `base_url`      | `https://openrouter.ai/api/v1` | `content/_data/site.json`, under `@geekity/plugin-llm`     |
-| API key       | `api_key`       | none                           | `data/plugins/@geekity/plugin-llm/secrets.json`, mode 0600 |
-| Default model | `default_model` | `openrouter/auto`              | `content/_data/site.json`, under `@geekity/plugin-llm`     |
+| Setting       | Key             | Default                        | Where it is kept                                           | Variable                            |
+| ------------- | --------------- | ------------------------------ | ---------------------------------------------------------- | ----------------------------------- |
+| Base URL      | `base_url`      | `https://openrouter.ai/api/v1` | `data/plugins/@geekity/plugin-llm/settings.json`           | `GEEKITY_PLUGIN_LLM__BASE_URL`      |
+| API key       | `api_key`       | none                           | `data/plugins/@geekity/plugin-llm/secrets.json`, mode 0600 | `GEEKITY_PLUGIN_LLM__API_KEY`       |
+| Default model | `default_model` | `openrouter/auto`              | `data/plugins/@geekity/plugin-llm/settings.json`           | `GEEKITY_PLUGIN_LLM__DEFAULT_MODEL` |
 
 ### Choosing a model
 
@@ -65,9 +65,13 @@ The API key never appears on a page. The screen says whether a key is set. If
 you save with the box left blank, the stored key stays.
 
 `GEEKITY_PLUGIN_LLM__API_KEY` sets the key from the environment instead. A
-Docker site uses this variable to keep the key in `.env`. A set variable
-overrides the file. The screen then shows the key as set by the environment,
-with no box to change it.
+Docker site uses this variable to keep the key in `.env`. Each setting has a
+variable, shown in the table. A set variable overrides the file. The screen
+then shows the setting as set by the environment, with no box to change it.
+
+Earlier releases kept the base URL and the default model in
+`content/_data/site.json`. The site moves them to `settings.json` when it
+starts.
 
 ## The llm service
 
@@ -91,7 +95,7 @@ export default definePlugin({
   version: '1.0.0',
   label: 'Titles',
   description: 'Suggests a title for a post.',
-  hostApi: 1,
+  hostApi: 2,
   requires: { '@geekity/plugin-llm': '>=0.2.0 <1.0.0' },
   register(host) {
     host.get('/suggest-title', async () => {
