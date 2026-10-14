@@ -35,8 +35,13 @@ import { createSerialQueue } from '../util/queue.ts';
 import { pluginFetch } from './fetch.ts';
 import type { PluginFetchOptions } from './fetch.ts';
 import { pluginEnvPrefix, reservedNamespaceProblem } from '../settings/names.ts';
-import type { DeclaredNamespace, SettingsRegistry } from '../settings/types.ts';
-import { pluginFolderPath, pluginNamespace, settingFieldsProblem } from './settings.ts';
+import type { DeclaredNamespace, RenderedSetting, SettingsRegistry } from '../settings/types.ts';
+import {
+  pluginFolderPath,
+  pluginNamespace,
+  pluginSetting,
+  settingFieldsProblem,
+} from './settings.ts';
 
 /** A plugin as it arrived, and a description of where it came from. */
 export interface InstalledPlugin {
@@ -67,8 +72,8 @@ export interface PluginContributions {
   federation: readonly PluginFederationMiddleware[];
   screen: PluginScreen | undefined;
   commands: readonly PluginCommand[];
-  /** The settings fields it declared, empty when it has none. */
-  settings: readonly PluginSettingField[];
+  /** The settings it declared, as its screen draws them, empty when it has none. */
+  renderedSettings: readonly RenderedSetting[];
   settingsNamespace: DeclaredNamespace | undefined;
   /** Its buttons beside editor fields, in the order it declared them. */
   editorActions: readonly PluginEditorAction[];
@@ -326,7 +331,7 @@ const NOTHING_DECLARED: PluginContributions = {
   federation: [],
   screen: undefined,
   commands: [],
-  settings: [],
+  renderedSettings: [],
   settingsNamespace: undefined,
   editorActions: [],
 };
@@ -385,7 +390,7 @@ function register(
   const commands: PluginCommand[] = [];
   const editorActions: PluginEditorAction[] = [];
   let screen: PluginScreen | undefined;
-  let settings: readonly PluginSettingField[] | undefined;
+  let renderedSettings: readonly RenderedSetting[] | undefined;
   let settingsNamespace: DeclaredNamespace | undefined;
   let service: ProvidedService | undefined;
   let registering = true;
@@ -445,12 +450,24 @@ function register(
       fields: Fields,
     ): PluginSettings<Fields> {
       declaring('its settings');
-      if (settings !== undefined) throw new Error('A plugin declares its settings once.');
+      if (renderedSettings !== undefined) {
+        throw new Error('A plugin declares its settings once.');
+      }
       const problem = settingFieldsProblem(fields);
       if (problem !== undefined) throw new Error(problem);
-      const declared = pluginNamespace(name, fields);
+      const paired = fields.map((field) => ({ field, declaration: pluginSetting(field) }));
+      const declared = pluginNamespace(
+        name,
+        paired.map(({ declaration }) => declaration),
+      );
       options.settings.register(declared.declaration);
-      settings = fields;
+      renderedSettings = paired.map(({ field, declaration }) => ({
+        ref: { namespace: name, key: field.key, declaration },
+        label: field.label,
+        hint: field.hint,
+        widget: field.type,
+        options: field.type === 'select' ? field.options : undefined,
+      }));
       settingsNamespace = declared;
       return {
         // Each value is built from its field's type, which is what the mapped
@@ -469,7 +486,7 @@ function register(
         federation,
         screen,
         commands,
-        settings: settings ?? [],
+        renderedSettings: renderedSettings ?? [],
         settingsNamespace,
         editorActions,
       },

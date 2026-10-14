@@ -114,6 +114,17 @@ export interface SettingRef<V> {
   readonly declaration: SettingDeclaration<V>;
 }
 
+export type SettingWidget = 'text' | 'url' | 'select' | 'checkbox' | 'secret';
+
+/** A setting as a generic settings form draws it. */
+export interface RenderedSetting {
+  readonly ref: SettingRef<unknown>;
+  readonly label: string;
+  readonly hint?: string | undefined;
+  readonly widget: SettingWidget;
+  readonly options?: readonly { readonly value: string; readonly label: string }[] | undefined;
+}
+
 /** A namespace's declaration with one ref per setting, as `declareNamespace` returns it. */
 export interface DeclaredNamespace {
   readonly declaration: NamespaceDeclaration;

@@ -115,6 +115,53 @@ describe('a plugin command', () => {
     );
   });
 
+  it('reads the settings a boot would move out of site.json', async () => {
+    const directory = await temporaryDir('geekity-cli-plugin-settings-');
+    await fs.writeFile(
+      path.join(directory, 'geekity.config.mjs'),
+      `export default {
+  plugins: [
+    {
+      name: '@acme/plugin-greet',
+      version: '1.0.0',
+      label: 'Greet',
+      description: 'Greets.',
+      hostApi: 2,
+      register(host) {
+        const settings = host.settings([
+          { key: 'greeting', type: 'text', label: 'Greeting', default: 'Hello' },
+        ]);
+        host.command({
+          words: ['greet'],
+          usage: '',
+          summary: 'Say the greeting.',
+          async run({ write }) {
+            write('greeting: ' + (await settings.current()).greeting + '\\n');
+            return 0;
+          },
+        });
+      },
+    },
+  ],
+};
+`,
+    );
+    const siteJson = path.join(directory, 'content', '_data', 'site.json');
+    await fs.mkdir(path.dirname(siteJson), { recursive: true });
+    await fs.writeFile(
+      siteJson,
+      `${JSON.stringify({ plugins: { '@acme/plugin-greet': { enabled: true, greeting: 'Ahoy' } } })}\n`,
+    );
+
+    const run = await runCli(['greet'], directory);
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(run.stdout, /^greeting: Ahoy$/m);
+    assert.deepEqual(JSON.parse(await fs.readFile(siteJson, 'utf8')), {
+      plugins: { '@acme/plugin-greet': { enabled: true } },
+    });
+  });
+
   it('refuses an option the command does not take', async () => {
     const directory = await siteWithPlugin();
 

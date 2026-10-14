@@ -216,6 +216,11 @@ describe('plugin settings', () => {
     });
   });
 
+  it('hands a secret from its variable over as the variable holds it, spaces and all', async () => {
+    const { reader } = site({ env: { ACME_PLUGIN_LLM__API_KEY: ' sk-env ' } });
+    assert.equal((await reader.current()).api_key, ' sk-env ');
+  });
+
   it('reads GEEKITY_PLUGIN_LLM__API_KEY for @geekity/plugin-llm', async () => {
     let reader: PluginSettings<readonly PluginSettingField[]> | undefined;
     siteWith(

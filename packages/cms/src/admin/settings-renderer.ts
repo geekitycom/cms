@@ -1,16 +1,6 @@
 import { overridden, sourceText } from '../settings/registry.ts';
 import { settingVariable } from '../settings/names.ts';
-import type { SetResult, SettingRef, SettingsRegistry } from '../settings/types.ts';
-
-export type SettingWidget = 'text' | 'url' | 'select' | 'checkbox' | 'secret';
-
-export interface RenderedSetting {
-  readonly ref: SettingRef<unknown>;
-  readonly label: string;
-  readonly hint?: string | undefined;
-  readonly widget: SettingWidget;
-  readonly options?: readonly { readonly value: string; readonly label: string }[] | undefined;
-}
+import type { RenderedSetting, SetResult, SettingsRegistry } from '../settings/types.ts';
 
 export interface SettingsForm {
   readonly values: Readonly<Record<string, string>>;
@@ -81,8 +71,9 @@ export async function saveSettings(
   for (const { ref, label, widget } of fields) {
     if (overridden((await settings.resolve(ref)).source)) continue;
     const submitted = form.values[ref.key]?.trim();
+    const { type } = ref.declaration;
     if (widget === 'checkbox') {
-      changes.set(ref.key, submitted !== undefined);
+      changes.set(ref.key, type.toJson(submitted !== undefined));
       continue;
     }
     if (widget === 'secret' && form.forget.has(ref.key)) {
@@ -94,7 +85,6 @@ export async function saveSettings(
       changes.set(ref.key, undefined);
       continue;
     }
-    const { type } = ref.declaration;
     const parsed = type.fromText(submitted);
     if (parsed.ok) changes.set(ref.key, type.toJson(parsed.value));
     else problems[ref.key] = `${label} ${parsed.problem}.`;

@@ -19,48 +19,40 @@ export function migratePluginSettings({
   log,
 }: MigratePluginSettingsOptions): string[] {
   const siteJson = siteJsonPath(contentDir);
-  const moved = new Map<string, readonly string[]>();
-  for (const [name, entry] of Object.entries(pluginsOf(readSiteJson(siteJson)))) {
+  const site = readJsonRecord(siteJson);
+  const plugins = { ...pluginsOf(site) };
+  const moved: string[] = [];
+  for (const [name, entry] of Object.entries(plugins)) {
     if (!PACKAGE_NAME.test(name) || !isRecord(entry)) continue;
-    const { enabled: _enabled, ...rest } = entry;
-    if (Object.keys(rest).length === 0) continue;
+    const { enabled, ...fromSiteJson } = entry;
+    if (Object.keys(fromSiteJson).length === 0) continue;
     const file = path.join(pluginFolderPath(dataDir, name), SETTINGS_FILE);
-    const current = parseRecord(readFileIfPresentSync(file));
-    writeFileAtomicallySync(file, `${JSON.stringify({ ...rest, ...current }, null, 2)}\n`);
-    moved.set(name, Object.keys(rest));
+    writeJson(file, pluginFileWins(fromSiteJson, readJsonRecord(file)));
+    plugins[name] = enabled === undefined ? {} : { enabled };
+    moved.push(name);
   }
-  if (moved.size === 0) return [];
+  if (moved.length === 0) return [];
+  writeJson(siteJson, { ...site, [PLUGINS_KEY]: plugins });
 
-  const file = readSiteJson(siteJson);
-  const plugins = { ...pluginsOf(file) };
-  for (const [name, keys] of moved) {
-    const entry = plugins[name];
-    if (!isRecord(entry)) continue;
-    plugins[name] = Object.fromEntries(
-      Object.entries(entry).filter(([key]) => !keys.includes(key)),
-    );
-  }
-  file[PLUGINS_KEY] = plugins;
-  writeFileAtomicallySync(siteJson, `${JSON.stringify(file, null, 2)}\n`);
-
-  for (const name of moved.keys()) {
+  for (const name of moved) {
     log(
       `Moved the settings of ${name} from content/_data/site.json to data/plugins/${name}/${SETTINGS_FILE}.`,
     );
   }
-  return [...moved.keys()];
+  return moved;
 }
 
-function readSiteJson(file: string): Record<string, unknown> {
+function pluginFileWins(
+  fromSiteJson: Readonly<Record<string, unknown>>,
+  fromPluginFile: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  return { ...fromSiteJson, ...fromPluginFile };
+}
+
+function readJsonRecord(file: string): Record<string, unknown> {
   return parseSiteJson(readFileIfPresentSync(file) ?? '');
 }
 
-function parseRecord(text: string | undefined): Record<string, unknown> {
-  if (text === undefined) return {};
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return isRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
+function writeJson(file: string, value: Readonly<Record<string, unknown>>): void {
+  writeFileAtomicallySync(file, `${JSON.stringify(value, null, 2)}\n`);
 }

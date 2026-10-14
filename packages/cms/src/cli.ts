@@ -1254,12 +1254,20 @@ async function pluginCommands(config: ResolvedConfig): Promise<FoundCommand[]> {
  * version that kept its accounts in SQLite is migrated first. The comments
  * are migrated as a boot would migrate them for the same reason: a command
  * writing comments before any server has would otherwise meet ids the site
- * refuses to store.
+ * refuses to store. Plugin settings still in `site.json` move to
+ * `data/plugins/<name>/` first, so the command reads what a boot would.
  */
 async function pluginCommand(argv: readonly string[]): Promise<number> {
   const configPath = configFlag(argv);
   const config = await loadResolvedConfig(configPath);
   const words = leadingWords(argv);
+  migratePluginSettings({
+    contentDir: config.contentDir,
+    dataDir: config.dataDir,
+    log: (line) => {
+      console.log(line);
+    },
+  });
   const found = (await pluginCommands(config)).find(({ command }) =>
     command.words.every((word, index) => words[index] === word),
   );

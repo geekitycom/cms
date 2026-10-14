@@ -3,11 +3,11 @@ id: TASK-390
 title: >-
   Settings registry wave 4: plugin settings move into data/plugins/<name>/ with
   a migration safe to run twice
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-13 16:45'
-updated_date: '2026-10-14 01:03'
+updated_date: '2026-10-14 01:21'
 labels: []
 milestone: m-38
 dependencies:
@@ -33,7 +33,7 @@ decision-53 section 7 (wave 4) and section 8. A plugin's host.settings(fields) d
 - [x] #2 The migration moves every non-enabled key of plugins.<name> from site.json to data/plugins/<name>/settings.json; a test runs it twice and after a simulated crash between its two writes and the files are identical each time; plugins.<name>.enabled stays in site.json
 - [x] #3 `geekity settings migrate-plugins` runs the same migration with the site stopped and logs each plugin moved
 - [x] #4 GEEKITY_PLUGIN_LLM__API_KEY and ACME_PLUGIN_LLM__API_KEY keep working as today; a public plugin setting can also be set from its variable; the plugin screen shows a variable-set value as set by the environment with no box
-- [ ] #5 settings.current() returns a Promise; both published plugins are updated; the commit is marked breaking
+- [x] #5 settings.current() returns a Promise; both published plugins are updated; the commit is marked breaking
 - [x] #6 resolvePluginSettings, savePluginSettings, settingValues, accepts, defaultOf, EXPECTED, readSecrets and secretsPath in plugins/settings.ts are deleted; readPluginEntry and updatePluginEntry carry only enabled
 - [x] #7 admin/plugins.ts draws a plugin screen through the generic renderer over the registry, using the field label and hint for layout; a plugin screen test covers a text, url, select, checkbox and secret field
 - [x] #8 docs/plugins.md and docs/configuration.md describe data/plugins/<name>/settings.json, the migration and the environment variables for every setting; pnpm lint, typecheck and test pass
@@ -72,10 +72,12 @@ Verification: pnpm build && pnpm test && pnpm typecheck && pnpm lint && pnpm for
 
 AC #5: current() returns a Promise and both published plugins are updated. The breaking-change marker lives in the commit message, which the orchestrator writes, so #5 stays unchecked and the task stays In Progress until that commit lands.
 Not done (outside the ACs): geekity settings list/get/set builds a core-only registry, so plugin namespaces are not listed or settable from the CLI.
+
+Review fixes (2026-10-13): a plugin command now runs migratePluginSettings before it loads the plugins, so it reads migrated settings (test in cli-plugins.test.ts failed first: printed 'greeting: Hello'). The secret field type is nonEmptyText with secret: true; an env value is taken as the variable holds it, as on origin/main (test failed first: 'sk-env' for ' sk-env '); the form still trims. migratePluginSettings reads site.json once and moves each plugin in one loop, writing every plugin file before site.json once. The registry builds one raw-values record for every storage kind, fileFor matches on the key over a non-empty file list, and set carries each draft with its file. The plugin registry builds the rendered settings in register; RenderedSetting moved to settings/types.ts so plugins/ does not import admin/. The checkbox save goes through type.toJson. build, test (cms 5886), typecheck, lint and format:check pass.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Plugin settings are now a registry namespace per package, kept in data/plugins/<name>/settings.json and secrets.json, with every setting settable from <PREFIX>__<KEY>. A synchronous, idempotent migration runs at boot and as geekity settings migrate-plugins. settings.current() returns a Promise, HOST_API_VERSION is 2, and plugin screens draw through admin/settings-renderer.ts. plugins/settings.ts lost its resolver and saver. Verified with build/test/typecheck/lint/format:check (all pass) and a scratch demo boot on port 4390 with curl of Admin > Plugins and the LLM screen. AC #5 waits on the feat(cms)! commit.
+Plugin settings are now a registry namespace per package, kept in data/plugins/<name>/settings.json and secrets.json, with every setting settable from <PREFIX>__<KEY>. A synchronous, idempotent migration runs at boot, before a plugin command, and as geekity settings migrate-plugins. settings.current() returns a Promise and HOST_API_VERSION is 2, shipped as the breaking commit f046118b. Plugin screens draw through admin/settings-renderer.ts from rendered settings built in register. plugins/settings.ts lost its resolver and saver. Verified with build, test, typecheck, lint and format:check (all pass), the migration twice/crash tests, and a scratch demo boot with curl of Admin > Plugins and the LLM screen.
 <!-- SECTION:FINAL_SUMMARY:END -->

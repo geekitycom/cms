@@ -48,7 +48,7 @@ import type { AdminMenuChild } from './menu.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { saveSettings, settingsForm, settingViews } from './settings-renderer.ts';
-import type { RenderedSetting, SettingsForm } from './settings-renderer.ts';
+import type { SettingsForm } from './settings-renderer.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 export const PLUGINS_PATH = `${ADMIN_PREFIX}/plugins`;
@@ -133,7 +133,7 @@ function screenName(c: Context<GeekityEnv>): string | undefined {
 
 /** A plugin has a screen when it draws one or has settings to draw on one. */
 function hasScreen(entry: RegisteredPlugin): boolean {
-  return entry.screen !== undefined || entry.settings.length > 0;
+  return entry.screen !== undefined || entry.renderedSettings.length > 0;
 }
 
 /** Where a plugin's screen is: under Plugins, by package name. */
@@ -492,7 +492,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
       const result = await saveSettings(
         c.var.settings,
         found.plugin.name,
-        renderedSettings(found),
+        found.renderedSettings,
         form,
       );
       if (!result.ok) {
@@ -539,7 +539,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
         : await settingViews(
             c.var.settings,
             settingsNamespace.declaration.envPrefix,
-            renderedSettings(found),
+            found.renderedSettings,
             refused,
           );
     const cards =
@@ -566,23 +566,6 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     flash(c, 'error', message);
     return c.redirect(PLUGINS_PATH, 303);
   }
-}
-
-function renderedSettings(found: RegisteredPlugin): RenderedSetting[] {
-  const declared = found.settingsNamespace?.declaration.settings ?? [];
-  return found.settings.flatMap((field) => {
-    const declaration = declared.find((each) => each.key === field.key);
-    if (declaration === undefined) return [];
-    return [
-      {
-        ref: { namespace: found.plugin.name, key: field.key, declaration },
-        label: field.label,
-        hint: field.hint,
-        widget: field.type,
-        options: field.type === 'select' ? field.options : undefined,
-      },
-    ];
-  });
 }
 
 /** Why the requirements stop an enable, one sentence each, or `undefined`. */

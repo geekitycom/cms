@@ -483,7 +483,7 @@ describe('plugin settings on its screen (TASK-283, TASK-390)', () => {
     assert.ok(html.includes('The model is small.'), 'an async render is awaited');
   });
 
-  it('saves public values to settings.json and the secret to secrets.json, never drawing it', async () => {
+  it('saves public values to settings.json and the trimmed secret to secrets.json, never drawing it', async () => {
     const { agent, contentDir, dataDir } = await site([configured()], [CONFIGURED]);
     const logged: string[] = [];
     for (const method of ['log', 'info', 'warn', 'error'] as const) {
@@ -494,7 +494,7 @@ describe('plugin settings on its screen (TASK-283, TASK-390)', () => {
     try {
       const response = await save(agent, {
         'setting.base_url': 'http://127.0.0.1:9/v1',
-        'setting.api_key': SECRET,
+        'setting.api_key': ` ${SECRET} `,
         'setting.model': 'big',
         'setting.tone': 'warm',
         'setting.verbose': '1',

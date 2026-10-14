@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import type { PluginSettingField } from '../plugin.ts';
-import { boolean, oneOf, text } from '../settings/kinds.ts';
+import { boolean, nonEmptyText, oneOf, text } from '../settings/kinds.ts';
 import { pluginEnvPrefix, SETTING_NAME } from '../settings/names.ts';
 import type { DeclaredNamespace, SettingDeclaration, SettingType } from '../settings/types.ts';
 
@@ -39,7 +39,7 @@ export function settingFieldsProblem(fields: readonly PluginSettingField[]): str
 
 export function pluginNamespace(
   name: string,
-  fields: readonly PluginSettingField[],
+  settings: readonly SettingDeclaration<unknown>[],
 ): DeclaredNamespace {
   return {
     declaration: {
@@ -52,12 +52,12 @@ export function pluginNamespace(
         secretFile: SECRETS_FILE,
       },
       envPrefix: pluginEnvPrefix(name),
-      settings: fields.map(settingOf),
+      settings,
     },
   };
 }
 
-function settingOf(field: PluginSettingField): SettingDeclaration<unknown> {
+export function pluginSetting(field: PluginSettingField): SettingDeclaration<unknown> {
   const described = { key: field.key, description: field.hint ?? field.label };
   switch (field.type) {
     case 'text':
@@ -73,7 +73,7 @@ function settingOf(field: PluginSettingField): SettingDeclaration<unknown> {
     case 'checkbox':
       return { ...described, type: boolean, default: field.default ?? false };
     case 'secret':
-      return { ...described, type: secretText, default: undefined, secret: true };
+      return { ...described, type: nonEmptyText, default: undefined, secret: true };
   }
 }
 
@@ -85,16 +85,6 @@ const webUrl: SettingType<string> = {
   fromText: (value) => webUrl.fromJson(value.trim()),
   toJson: (value) => value,
   toText: (value) => value,
-};
-
-const secretText: SettingType<string | undefined> = {
-  fromJson: (raw) =>
-    typeof raw === 'string' && raw !== ''
-      ? { ok: true, value: raw }
-      : { ok: false, problem: 'must be text that is not empty' },
-  fromText: (value) => secretText.fromJson(value.trim()),
-  toJson: (value) => value,
-  toText: (value) => value ?? '',
 };
 
 function isWebUrl(value: string): boolean {
