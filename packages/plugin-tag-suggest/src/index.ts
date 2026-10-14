@@ -259,7 +259,7 @@ export default definePlugin({
   description:
     'Suggests tags for a post in the editor, from the language model the LLM plugin connects to, ' +
     'ranked by how many people follow each tag on tags.pub, when the author asks.',
-  hostApi: 1,
+  hostApi: 2,
   requires: { [LLM]: '>=0.2.0 <1.0.0' },
   register(host) {
     const settings = host.settings(SETTINGS);
@@ -272,7 +272,7 @@ export default definePlugin({
           host.use(LLM),
           {
             fetch: (url, init) => host.fetch(url, init),
-            server: settings.current().tags_server,
+            server: (await settings.current()).tags_server,
             userAgent: `Geekity-Tag-Suggest/${VERSION} (+${(await host.siteInfo()).baseUrl})`,
             data: host.data,
             timeoutMs: LOOKUP_TIMEOUT_MS,

@@ -24,7 +24,7 @@ function files(version) {
   version: '${version}',
   label: 'Hello from the smoke registry',
   description: 'Installed by geekity plugin add in the Docker smoke test.',
-  hostApi: 1,
+  hostApi: 2,
   requires: {},
   register() {},
 };
@@ -32,7 +32,7 @@ function files(version) {
     'dist/bundle/plugin.json': JSON.stringify({
       name: NAME,
       version,
-      hostApi: 1,
+      hostApi: 2,
       peerDependencies,
     }),
   };

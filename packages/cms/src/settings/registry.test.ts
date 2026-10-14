@@ -8,7 +8,7 @@ import { resolveConfig } from '../config.ts';
 import type { GeekityConfig } from '../config.ts';
 import { declareNamespace } from './declare.ts';
 import { DEV_MODE, readDevModeRecord } from './dev-mode.ts';
-import { boolean, port } from './kinds.ts';
+import { boolean, optionalText, port, text } from './kinds.ts';
 import { MAINTENANCE } from './maintenance.ts';
 import { CORE_NAMESPACES, coreEnvPrefix, pluginEnvPrefix } from './names.ts';
 import { createSettingsRegistry } from './registry.ts';
@@ -460,6 +460,68 @@ describe('registering a plugin namespace', () => {
     await registry.set('@acme/plugin-llm', changes({ api_key: true }), 'admin');
     const { mode } = await stat(path.join(dataDir, 'plugins/@acme/plugin-llm/settings.json'));
     assert.equal(mode & 0o777, 0o600);
+  });
+
+  const folderNamespace = (namespace: string): NamespaceDeclaration =>
+    declareNamespace({
+      namespace,
+      storage: {
+        kind: 'folder',
+        under: 'data',
+        path: `plugins/${namespace}`,
+        publicFile: 'settings.json',
+        secretFile: 'secrets.json',
+      },
+      envPrefix: pluginEnvPrefix(namespace),
+      settings: {
+        model: { type: text, default: 'small', description: 'The model.' },
+        api_key: { type: optionalText, default: '', description: 'A key.', secret: true },
+      },
+    }).declaration;
+
+  it('keeps a folder namespace in two files, the secret one at mode 0600, each read for its own settings', async () => {
+    const { registry, dataDir } = await site();
+    const declared = folderNamespace('@acme/plugin-llm');
+    registry.register(declared);
+    const [model, apiKey] = declared.settings.map((declaration) => ({
+      namespace: '@acme/plugin-llm',
+      key: declaration.key,
+      declaration,
+    }));
+    assert.ok(model !== undefined && apiKey !== undefined);
+
+    await registry.set('@acme/plugin-llm', changes({ model: 'big' }), 'admin');
+    assert.deepEqual(await fileOf(dataDir, 'plugins/@acme/plugin-llm/settings.json'), {
+      model: 'big',
+    });
+    await assert.rejects(
+      stat(path.join(dataDir, 'plugins/@acme/plugin-llm/secrets.json')),
+      'a public write leaves the secret file alone',
+    );
+
+    await registry.set('@acme/plugin-llm', changes({ api_key: 'sk-1' }), 'admin');
+    const secrets = path.join(dataDir, 'plugins/@acme/plugin-llm/secrets.json');
+    assert.deepEqual(await fileOf(dataDir, 'plugins/@acme/plugin-llm/secrets.json'), {
+      api_key: 'sk-1',
+    });
+    assert.equal((await stat(secrets)).mode & 0o777, 0o600);
+    assert.equal((await stat(secrets.replace('secrets', 'settings'))).mode & 0o777, 0o644);
+
+    await writeFile(
+      path.join(dataDir, 'plugins/@acme/plugin-llm/settings.json'),
+      JSON.stringify({ model: 'big', api_key: 'put in the wrong file' }),
+    );
+    assert.equal(await registry.get(apiKey), 'sk-1');
+    assert.equal((await registry.resolve(model)).source.tier, 'file');
+  });
+
+  it('refuses a namespace whose environment prefix a registered one already has', async () => {
+    const { registry } = await site();
+    registry.register(pluginNamespace('@a/b-c'));
+    assert.throws(
+      () => registry.register(pluginNamespace('@a-b/c')),
+      /would start A_B_C__, as those of @a\/b-c do/,
+    );
   });
 
   it('never gives core a namespace a @geekity/plugin- package could clash with', () => {

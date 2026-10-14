@@ -1,9 +1,3 @@
-/**
- * The enabled set: the `plugins` key of `content/_data/site.json`, an object
- * keyed by package name (decision-33). Each value is an object of its own, so
- * a plugin's public settings can sit beside `enabled` and survive a disable.
- */
-
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { parseSiteJson, siteJsonPath } from '../site/namespace.ts';
 import { isRecord } from '../util/guards.ts';
@@ -30,35 +24,24 @@ export async function setPluginEnabled(options: {
   enabled: boolean;
 }): Promise<void> {
   const { contentDir, name, enabled } = options;
-  await updatePluginEntry(contentDir, name, (entry) => ({ ...entry, enabled }));
+  await updatePluginEntry(contentDir, name, enabled);
 }
 
-/** One plugin's object under `plugins`, empty when it has none. */
-export function readPluginEntry(contentDir: string, name: string): Record<string, unknown> {
-  const entry = pluginsOf(siteJsonBypassingRegistry(contentDir))[name];
-  return isRecord(entry) ? entry : {};
-}
-
-/**
- * Rewrite one plugin's object under `plugins`, keeping every other key in the
- * file. The only writer of the `plugins` key: enabling and settings both go
- * through it.
- */
-export async function updatePluginEntry(
+async function updatePluginEntry(
   contentDir: string,
   name: string,
-  change: (entry: Record<string, unknown>) => Record<string, unknown>,
+  enabled: boolean,
 ): Promise<void> {
   await updateFileAtomically(siteJsonPath(contentDir), (current) => {
     const file = parseSiteJson(current ?? '');
     const plugins = pluginsOf(file);
     const entry = plugins[name];
-    file[PLUGINS_KEY] = { ...plugins, [name]: change(isRecord(entry) ? entry : {}) };
+    file[PLUGINS_KEY] = { ...plugins, [name]: { ...(isRecord(entry) ? entry : {}), enabled } };
     return `${JSON.stringify(file, null, 2)}\n`;
   });
 }
 
-function pluginsOf(file: Record<string, unknown>): Record<string, unknown> {
+export function pluginsOf(file: Record<string, unknown>): Record<string, unknown> {
   const plugins = file[PLUGINS_KEY];
   return isRecord(plugins) ? plugins : {};
 }

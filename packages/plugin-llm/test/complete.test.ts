@@ -361,16 +361,16 @@ describe('failures', () => {
 describe('connectionFrom', () => {
   const site = { baseUrl: 'https://example.test/', title: 'Example' };
   const settings = (base_url: string) => ({
-    current: () => ({ base_url, api_key: KEY, default_model: 'acme/default' }),
+    current: () => Promise.resolve({ base_url, api_key: KEY, default_model: 'acme/default' }),
   });
 
-  it('treats only openrouter.ai as OpenRouter', () => {
-    assert.deepEqual(connectionFrom(settings(DEFAULT_BASE_URL), site).openRouter, {
+  it('treats only openrouter.ai as OpenRouter', async () => {
+    assert.deepEqual((await connectionFrom(settings(DEFAULT_BASE_URL), site)).openRouter, {
       siteUrl: 'https://example.test/',
       siteTitle: 'Example',
     });
     for (const other of ['https://api.openai.com/v1', 'http://localhost:11434/v1']) {
-      assert.equal(connectionFrom(settings(other), site).openRouter, undefined);
+      assert.equal((await connectionFrom(settings(other), site)).openRouter, undefined);
     }
   });
 });

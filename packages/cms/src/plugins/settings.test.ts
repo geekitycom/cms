@@ -1,20 +1,17 @@
-/**
- * Plugin settings (decision-33, TASK-283): where each value is read from and
- * written to, and what a plugin is handed. Public values sit under the
- * plugin's key in `site.json`, secrets in its `secrets.json` at mode 0600, and
- * an environment variable named by the package wins over the file.
- */
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { resolveConfig } from '../config.ts';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
-import type { PluginSettings } from '../plugin.ts';
+import type { Plugin, PluginSettingField, PluginSettings } from '../plugin.ts';
+import { pluginEnvPrefix, settingVariable } from '../settings/names.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
+import { createSettings } from '../site/namespace.ts';
 import { createPluginRegistry } from './registry.ts';
-import { pluginEnvPrefix } from '../settings/names.ts';
-import { pluginVariable, resolvePluginSettings, savePluginSettings } from './settings.ts';
+import type { PluginRegistry } from './registry.ts';
 
 const ROOT = mkdtempSync(path.join(tmpdir(), 'geekity-plugin-settings-'));
 after(() => rmSync(ROOT, { recursive: true, force: true }));
@@ -39,10 +36,31 @@ const FIELDS = [
 
 let sites = 0;
 
-/** A fresh site with this plugin installed, and the reader its register got. */
-function site(
-  options: { siteJson?: unknown; secrets?: unknown; env?: Record<string, string> } = {},
-) {
+function withSettings(
+  name: string,
+  fields: readonly PluginSettingField[],
+  registered: (settings: PluginSettings<readonly PluginSettingField[]>) => void = () => {},
+): Plugin {
+  return definePlugin({
+    name,
+    version: '1.0.0',
+    label: name,
+    description: 'Has settings.',
+    hostApi: HOST_API_VERSION,
+    register(host) {
+      registered(host.settings(fields));
+    },
+  });
+}
+
+function siteWith(
+  plugins: readonly Plugin[],
+  options: {
+    siteJson?: unknown;
+    files?: Record<string, unknown>;
+    env?: Record<string, string>;
+  } = {},
+): { settings: SettingsRegistry; registry: PluginRegistry; folder: string } {
   sites += 1;
   const contentDir = path.join(ROOT, `content-${String(sites)}`);
   const dataDir = path.join(ROOT, `data-${String(sites)}`);
@@ -51,66 +69,82 @@ function site(
     writeFileSync(path.join(contentDir, '_data', 'site.json'), JSON.stringify(options.siteJson));
   }
   const folder = path.join(dataDir, 'plugins', '@acme', 'plugin-llm');
-  if (options.secrets !== undefined) {
+  for (const [file, contents] of Object.entries(options.files ?? {})) {
     mkdirSync(folder, { recursive: true });
-    writeFileSync(path.join(folder, 'secrets.json'), JSON.stringify(options.secrets));
+    writeFileSync(path.join(folder, file), JSON.stringify(contents));
   }
   const env = options.env ?? {};
-  let reader: PluginSettings<typeof FIELDS> | undefined;
-  createPluginRegistry(
-    [
-      {
-        source: 'test',
-        plugin: definePlugin({
-          name: NAME,
-          version: '1.0.0',
-          label: 'LLM',
-          description: 'Talks to a model.',
-          hostApi: HOST_API_VERSION,
-          register(host) {
-            reader = host.settings(FIELDS);
-          },
-        }),
-      },
-    ],
+  const settings = createSettings({
+    config: resolveConfig({ contentDir, dataDir }, { env, cwd: ROOT }),
+    env,
+  });
+  const registry = createPluginRegistry(
+    plugins.map((plugin) => ({ source: 'test', plugin })),
     {
       dataDir,
       contentDir,
-      env,
+      settings,
       siteInfo: () => Promise.resolve({ baseUrl: 'https://example.test/', title: 'Example' }),
       allowPrivateAddress: false,
       lookup: () => Promise.reject(new Error('a test resolves no names')),
     },
   );
+  return { settings, registry, folder };
+}
+
+function site(options: Parameters<typeof siteWith>[1] = {}) {
+  let reader: PluginSettings<typeof FIELDS> | undefined;
+  const built = siteWith(
+    [
+      withSettings(NAME, FIELDS, (settings) => {
+        reader = settings as unknown as PluginSettings<typeof FIELDS>;
+      }),
+    ],
+    options,
+  );
   assert.ok(reader !== undefined);
-  const settings = reader;
-  const where = { contentDir, dataDir, env, name: NAME, fields: FIELDS };
-  return {
-    settings,
-    where,
-    siteJson: () =>
-      JSON.parse(readFileSync(path.join(contentDir, '_data', 'site.json'), 'utf8')) as Record<
-        string,
-        unknown
-      >,
-    secretsFile: path.join(folder, 'secrets.json'),
-  };
+  return { ...built, reader };
 }
 
 describe('plugin environment variables', () => {
   it('upper-case the package name and the key, each run of other characters one underscore', () => {
     assert.equal(pluginEnvPrefix('@geekity/plugin-llm'), 'GEEKITY_PLUGIN_LLM');
-    assert.equal(pluginVariable('@geekity/plugin-llm', 'api_key'), 'GEEKITY_PLUGIN_LLM__API_KEY');
-    assert.equal(pluginVariable('@acme/plugin-llm', 'api_key'), 'ACME_PLUGIN_LLM__API_KEY');
+    assert.equal(
+      settingVariable(pluginEnvPrefix('@geekity/plugin-llm'), 'api_key'),
+      'GEEKITY_PLUGIN_LLM__API_KEY',
+    );
+    assert.equal(
+      settingVariable(pluginEnvPrefix('@acme/plugin-llm'), 'api_key'),
+      'ACME_PLUGIN_LLM__API_KEY',
+    );
     assert.equal(pluginEnvPrefix('@a/b-c'), pluginEnvPrefix('@a-b/c'));
     assert.equal(pluginEnvPrefix('my__odd..plugin'), 'MY_ODD_PLUGIN');
   });
 });
 
 describe('plugin settings', () => {
-  it('hands the plugin typed values, each field its default when nothing is stored', () => {
+  it('registers a namespace named by the package, with one setting per field', () => {
     const { settings } = site();
-    const values = settings.current();
+    assert.deepEqual(
+      settings
+        .list()
+        .filter((ref) => ref.namespace === NAME)
+        .map((ref) => [ref.key, ref.declaration.secret === true]),
+      [
+        ['base_url', false],
+        ['api_key', true],
+        ['model', false],
+        ['tone', false],
+        ['verbose', false],
+      ],
+    );
+  });
+
+  it('hands the plugin typed values through a Promise, each field its default when nothing is stored', async () => {
+    const { reader } = site();
+    const pending = reader.current();
+    assert.ok(pending instanceof Promise);
+    const values = await pending;
     const baseUrl: string = values.base_url;
     const apiKey: string | undefined = values.api_key;
     const tone: 'plain' | 'warm' = values.tone;
@@ -127,16 +161,15 @@ describe('plugin settings', () => {
     );
   });
 
-  it('reads public values from site.json and secrets from secrets.json, per call', () => {
-    const { settings, secretsFile, where } = site({
-      siteJson: {
-        plugins: {
-          [NAME]: { enabled: true, base_url: 'http://127.0.0.1:9/v1', tone: 'warm', verbose: true },
-        },
+  it('reads public values from settings.json and secrets from secrets.json, per call, never from site.json', async () => {
+    const { reader, folder } = site({
+      siteJson: { plugins: { [NAME]: { enabled: true, model: 'from-site-json' } } },
+      files: {
+        'settings.json': { base_url: 'http://127.0.0.1:9/v1', tone: 'warm', verbose: true },
+        'secrets.json': { api_key: 'sk-file' },
       },
-      secrets: { api_key: 'sk-file' },
     });
-    assert.deepEqual(settings.current(), {
+    assert.deepEqual(await reader.current(), {
       base_url: 'http://127.0.0.1:9/v1',
       api_key: 'sk-file',
       model: 'small',
@@ -144,108 +177,105 @@ describe('plugin settings', () => {
       verbose: true,
     });
 
-    writeFileSync(secretsFile, JSON.stringify({ api_key: 'sk-changed' }));
-    assert.equal(settings.current().api_key, 'sk-changed', 'read again on the next call');
-    assert.equal(
-      resolvePluginSettings(where).find((entry) => entry.field.key === 'api_key')?.source,
-      'file',
-    );
+    writeFileSync(path.join(folder, 'secrets.json'), JSON.stringify({ api_key: 'sk-changed' }));
+    assert.equal((await reader.current()).api_key, 'sk-changed', 'read again on the next call');
   });
 
-  it('falls back to the default for an invalid stored value and says why', () => {
-    const { settings, where } = site({
-      siteJson: { plugins: { [NAME]: { base_url: 'not a url', tone: 'shouty', verbose: 'yes' } } },
+  it('falls back to the default for an invalid stored value and says why, naming the file', async () => {
+    const { reader, settings } = site({
+      files: { 'settings.json': { base_url: 'not a url', tone: 'shouty', verbose: 'yes' } },
     });
-    const values = settings.current();
+    const values = await reader.current();
     assert.equal(values.base_url, 'https://llm.example/v1');
     assert.equal(values.tone, 'plain');
     assert.equal(values.verbose, false);
 
-    const resolved = new Map(resolvePluginSettings(where).map((entry) => [entry.field.key, entry]));
-    for (const key of ['base_url', 'tone', 'verbose']) {
-      assert.match(resolved.get(key)?.problem ?? '', /default/, `${key} says the default is used`);
+    for (const ref of settings.list().filter((each) => each.namespace === NAME)) {
+      const { problem } = await settings.resolve(ref);
+      if (['base_url', 'tone', 'verbose'].includes(ref.key)) {
+        assert.match(problem ?? '', /in plugins\/@acme\/plugin-llm\/settings\.json/, ref.key);
+      } else {
+        assert.equal(problem, undefined, `${ref.key} is missing, which is no problem`);
+      }
     }
-    assert.equal(resolved.get('model')?.problem, undefined, 'a missing value is no problem');
   });
 
-  it('lets an environment variable win over the file for a secret', () => {
-    const { settings, where } = site({
-      secrets: { api_key: 'sk-file' },
-      env: { ACME_PLUGIN_LLM__API_KEY: 'sk-env' },
+  it('lets the variable named by the package win over the file, for a secret and a public setting', async () => {
+    const { reader, settings } = site({
+      files: { 'settings.json': { model: 'big' }, 'secrets.json': { api_key: 'sk-file' } },
+      env: { ACME_PLUGIN_LLM__API_KEY: 'sk-env', ACME_PLUGIN_LLM__MODEL: 'from-env' },
     });
-    assert.equal(settings.current().api_key, 'sk-env');
-    const key = resolvePluginSettings(where).find((entry) => entry.field.key === 'api_key');
-    assert.equal(key?.source, 'environment');
-    assert.equal(key.variable, 'ACME_PLUGIN_LLM__API_KEY');
+    const values = await reader.current();
+    assert.equal(values.api_key, 'sk-env');
+    assert.equal(values.model, 'from-env');
+    const model = settings.list().find((ref) => ref.namespace === NAME && ref.key === 'model');
+    assert.ok(model !== undefined);
+    assert.deepEqual((await settings.resolve(model)).source, {
+      tier: 'env',
+      variable: 'ACME_PLUGIN_LLM__MODEL',
+    });
+  });
+
+  it('hands a secret from its variable over as the variable holds it, spaces and all', async () => {
+    const { reader } = site({ env: { ACME_PLUGIN_LLM__API_KEY: ' sk-env ' } });
+    assert.equal((await reader.current()).api_key, ' sk-env ');
+  });
+
+  it('reads GEEKITY_PLUGIN_LLM__API_KEY for @geekity/plugin-llm', async () => {
+    let reader: PluginSettings<readonly PluginSettingField[]> | undefined;
+    siteWith(
+      [
+        withSettings(
+          '@geekity/plugin-llm',
+          [{ type: 'secret', key: 'api_key', label: 'Key' }],
+          (s) => {
+            reader = s;
+          },
+        ),
+      ],
+      { env: { GEEKITY_PLUGIN_LLM__API_KEY: 'sk-geekity' } },
+    );
+    assert.ok(reader !== undefined);
+    assert.deepEqual(await reader.current(), { api_key: 'sk-geekity' });
   });
 });
 
-describe('saving plugin settings', () => {
-  it('writes public values under plugins[<name>], keeping every key it does not model', async () => {
-    const { where, siteJson, settings } = site({
-      siteJson: { title: 'Kept', plugins: { [NAME]: { enabled: true, note: 'by hand' } } },
-    });
-    const result = await savePluginSettings({
-      ...where,
-      values: { base_url: 'https://openrouter.example/api/v1', model: 'big', tone: 'warm' },
-      forget: new Set(),
-    });
-    assert.deepEqual(result.problems, {});
-
-    const file = siteJson();
-    assert.equal(file['title'], 'Kept');
-    assert.deepEqual((file['plugins'] as Record<string, unknown>)[NAME], {
-      enabled: true,
-      note: 'by hand',
-      base_url: 'https://openrouter.example/api/v1',
-      model: 'big',
-      tone: 'warm',
-      verbose: false,
-    });
-    assert.equal(settings.current().model, 'big');
+describe('a plugin whose settings namespace cannot be registered', () => {
+  it('does not load a plugin named by a reserved namespace or prefix, and registers no namespace for it', () => {
+    let registered = 0;
+    const count = () => {
+      registered += 1;
+    };
+    const fields = [{ type: 'text', key: 'note', label: 'Note' }] as const;
+    const { registry, settings } = siteWith([
+      withSettings('site', fields, count),
+      withSettings('@geekity/maintenance', fields, count),
+    ]);
+    assert.equal(registered, 0, 'neither register ran');
+    assert.match(registry.problem('site') ?? '', /namespace site is reserved for core/);
+    assert.match(
+      registry.problem('@geekity/maintenance') ?? '',
+      /GEEKITY_MAINTENANCE__, as core's maintenance settings do/,
+    );
+    assert.deepEqual(
+      settings.list().filter((ref) => ref.key === 'note'),
+      [],
+    );
   });
 
-  it('writes a secret to secrets.json at mode 0600 and never to site.json', async () => {
-    const { where, siteJson, secretsFile, settings } = site({ siteJson: {} });
-    await savePluginSettings({
-      ...where,
-      values: { api_key: 'sk-secret-123' },
-      forget: new Set(),
-    });
-    assert.deepEqual(JSON.parse(readFileSync(secretsFile, 'utf8')), { api_key: 'sk-secret-123' });
-    assert.equal(statSync(secretsFile).mode & 0o777, 0o600);
-    assert.doesNotMatch(JSON.stringify(siteJson()), /sk-secret-123/);
-    assert.equal(settings.current().api_key, 'sk-secret-123');
-  });
-
-  it('keeps the stored secret when the box is left blank, and forgets it when asked', async () => {
-    const { where, settings } = site({ secrets: { api_key: 'sk-kept' } });
-    await savePluginSettings({ ...where, values: { api_key: '', model: 'm' }, forget: new Set() });
-    assert.equal(settings.current().api_key, 'sk-kept');
-
-    await savePluginSettings({ ...where, values: {}, forget: new Set(['api_key']) });
-    assert.equal(settings.current().api_key, undefined);
-  });
-
-  it('refuses an invalid value, naming the field, and writes nothing', async () => {
-    const { where, settings } = site({ siteJson: {} });
-    const result = await savePluginSettings({
-      ...where,
-      values: { base_url: 'ftp://nope', tone: 'shouty', model: 'changed' },
-      forget: new Set(),
-    });
-    assert.match(result.problems['base_url'] ?? '', /URL/);
-    assert.match(result.problems['tone'] ?? '', /Tone/);
-    assert.equal(settings.current().model, 'small', 'nothing was written');
-  });
-
-  it('leaves a secret the environment sets alone', async () => {
-    const { where, secretsFile } = site({ env: { ACME_PLUGIN_LLM__API_KEY: 'sk-env' } });
-    await savePluginSettings({
-      ...where,
-      values: { api_key: 'sk-typed' },
-      forget: new Set(['api_key']),
-    });
-    assert.throws(() => readFileSync(secretsFile), /ENOENT/);
+  it('loads neither of two packages whose variables would share a prefix', () => {
+    let registered = 0;
+    const fields = [{ type: 'text', key: 'note', label: 'Note' }] as const;
+    const { registry, settings } = siteWith([
+      withSettings('@a/b-c', fields, () => (registered += 1)),
+      withSettings('@a-b/c', fields, () => (registered += 1)),
+    ]);
+    assert.equal(registered, 0);
+    assert.match(registry.problem('@a/b-c') ?? '', /would start A_B_C__, as those of @a-b\/c/);
+    assert.match(registry.problem('@a-b/c') ?? '', /would start A_B_C__, as those of @a\/b-c/);
+    assert.deepEqual(
+      settings.list().filter((ref) => ref.key === 'note'),
+      [],
+    );
   });
 });

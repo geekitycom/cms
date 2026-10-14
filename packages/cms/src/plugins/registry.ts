@@ -35,13 +35,13 @@ import { createSerialQueue } from '../util/queue.ts';
 import { pluginFetch } from './fetch.ts';
 import type { PluginFetchOptions } from './fetch.ts';
 import { pluginEnvPrefix, reservedNamespaceProblem } from '../settings/names.ts';
+import type { DeclaredNamespace, RenderedSetting, SettingsRegistry } from '../settings/types.ts';
 import {
   pluginFolderPath,
-  resolvePluginSettings,
+  pluginNamespace,
+  pluginSetting,
   settingFieldsProblem,
-  settingValues,
 } from './settings.ts';
-import type { PluginSettingsPlace } from './settings.ts';
 
 /** A plugin as it arrived, and a description of where it came from. */
 export interface InstalledPlugin {
@@ -72,20 +72,17 @@ export interface PluginContributions {
   federation: readonly PluginFederationMiddleware[];
   screen: PluginScreen | undefined;
   commands: readonly PluginCommand[];
-  /** The settings fields it declared, empty when it has none. */
-  settings: readonly PluginSettingField[];
+  /** The settings it declared, as its screen draws them, empty when it has none. */
+  renderedSettings: readonly RenderedSetting[];
+  settingsNamespace: DeclaredNamespace | undefined;
   /** Its buttons beside editor fields, in the order it declared them. */
   editorActions: readonly PluginEditorAction[];
 }
 
-/**
- * What plugins read through the registry: the site's folders, its
- * environment, its base URL and title, and which addresses they may fetch.
- */
 export interface PluginRegistryOptions extends PluginFetchOptions {
   dataDir: string;
   contentDir: string;
-  env: Readonly<Record<string, string | undefined>>;
+  settings: SettingsRegistry;
   siteInfo(): Promise<PluginSiteInfo>;
 }
 
@@ -93,8 +90,6 @@ export interface PluginRegistryOptions extends PluginFetchOptions {
 export interface RegisteredPlugin extends InstalledPlugin, PluginContributions {
   /** Why it cannot run, or `undefined` when it can be enabled. */
   problem: string | undefined;
-  /** Where its settings are read from and written to. */
-  settingsPlace: PluginSettingsPlace;
 }
 
 /**
@@ -189,11 +184,13 @@ export function createPluginRegistry(
     return services.get(dependency) as PluginService<Dependency>;
   };
 
+  const sharedPrefixes = prefixCollisions(installed.map((entry) => entry.plugin.name));
   for (const entry of installed) {
+    const refused = entry.problem ?? namingProblem(entry.plugin.name, sharedPrefixes);
     const { problem, declared, service } =
-      entry.problem === undefined
+      refused === undefined
         ? register(entry.plugin, options, serviceFor)
-        : { problem: entry.problem, declared: NOTHING_DECLARED, service: undefined };
+        : { problem: refused, declared: NOTHING_DECLARED, service: undefined };
     own.set(entry.plugin.name, problem);
     contributions.set(entry.plugin.name, declared);
     if (service !== undefined) services.set(entry.plugin.name, service.value);
@@ -201,7 +198,6 @@ export function createPluginRegistry(
   registered = true;
 
   const cyclic = cyclicNames(installed.map((entry) => entry.plugin));
-  const sharedPrefixes = prefixCollisions(installed.map((entry) => entry.plugin.name));
   const problems = new Map<string, string | undefined>();
 
   function problem(name: string): string | undefined {
@@ -214,12 +210,6 @@ export function createPluginRegistry(
   function resolveProblem(name: string): string | undefined {
     const entry = bySource.get(name);
     if (entry === undefined) return 'It is not installed.';
-    const reserved = reservedNamespaceProblem(name, pluginEnvPrefix(name));
-    if (reserved !== undefined) return `${reserved} Rename the package.`;
-    const shared = sharedPrefixes.get(name);
-    if (shared !== undefined) {
-      return `Its environment variables would start ${pluginEnvPrefix(name)}__, as those of ${shared.join(' and ')} would, so none of them loads. Rename one package.`;
-    }
     const intrinsic = own.get(name);
     if (intrinsic !== undefined) return intrinsic;
     const cycle = cyclic.get(name);
@@ -245,12 +235,7 @@ export function createPluginRegistry(
 
   const plugins: RegisteredPlugin[] = installed.map((entry) => {
     const declared = contributions.get(entry.plugin.name) ?? NOTHING_DECLARED;
-    return {
-      ...entry,
-      ...declared,
-      problem: problem(entry.plugin.name),
-      settingsPlace: { ...options, name: entry.plugin.name, fields: declared.settings },
-    };
+    return { ...entry, ...declared, problem: problem(entry.plugin.name) };
   });
 
   const order = dependencyOrder(plugins.filter((entry) => entry.problem === undefined));
@@ -346,9 +331,21 @@ const NOTHING_DECLARED: PluginContributions = {
   federation: [],
   screen: undefined,
   commands: [],
-  settings: [],
+  renderedSettings: [],
+  settingsNamespace: undefined,
   editorActions: [],
 };
+
+function namingProblem(
+  name: string,
+  sharedPrefixes: ReadonlyMap<string, readonly string[]>,
+): string | undefined {
+  const reserved = reservedNamespaceProblem(name, pluginEnvPrefix(name));
+  if (reserved !== undefined) return `${reserved} Rename the package.`;
+  const shared = sharedPrefixes.get(name);
+  if (shared === undefined) return undefined;
+  return `Its environment variables would start ${pluginEnvPrefix(name)}__, as those of ${shared.join(' and ')} would, so none of them loads. Rename one package.`;
+}
 
 /** What a plugin handed to `host.provide`, boxed so that providing `undefined` still counts. */
 interface ProvidedService {
@@ -393,7 +390,8 @@ function register(
   const commands: PluginCommand[] = [];
   const editorActions: PluginEditorAction[] = [];
   let screen: PluginScreen | undefined;
-  let settings: readonly PluginSettingField[] | undefined;
+  let renderedSettings: readonly RenderedSetting[] | undefined;
+  let settingsNamespace: DeclaredNamespace | undefined;
   let service: ProvidedService | undefined;
   let registering = true;
 
@@ -452,15 +450,29 @@ function register(
       fields: Fields,
     ): PluginSettings<Fields> {
       declaring('its settings');
-      if (settings !== undefined) throw new Error('A plugin declares its settings once.');
+      if (renderedSettings !== undefined) {
+        throw new Error('A plugin declares its settings once.');
+      }
       const problem = settingFieldsProblem(fields);
       if (problem !== undefined) throw new Error(problem);
-      settings = fields;
-      const place = { ...options, name, fields };
+      const paired = fields.map((field) => ({ field, declaration: pluginSetting(field) }));
+      const declared = pluginNamespace(
+        name,
+        paired.map(({ declaration }) => declaration),
+      );
+      options.settings.register(declared.declaration);
+      renderedSettings = paired.map(({ field, declaration }) => ({
+        ref: { namespace: name, key: field.key, declaration },
+        label: field.label,
+        hint: field.hint,
+        widget: field.type,
+        options: field.type === 'select' ? field.options : undefined,
+      }));
+      settingsNamespace = declared;
       return {
         // Each value is built from its field's type, which is what the mapped
         // type says, but TypeScript cannot follow a map over the fields.
-        current: () => settingValues(resolvePluginSettings(place)) as PluginSettingValues<Fields>,
+        current: () => options.settings.values(declared) as Promise<PluginSettingValues<Fields>>,
       };
     },
   };
@@ -469,10 +481,19 @@ function register(
     plugin.register(host);
     return {
       problem: undefined,
-      declared: { routes, federation, screen, commands, settings: settings ?? [], editorActions },
+      declared: {
+        routes,
+        federation,
+        screen,
+        commands,
+        renderedSettings: renderedSettings ?? [],
+        settingsNamespace,
+        editorActions,
+      },
       service,
     };
   } catch (error) {
+    if (settingsNamespace !== undefined) options.settings.unregister(name);
     return {
       problem: `Its register failed: ${messageOf(error)}`,
       declared: NOTHING_DECLARED,

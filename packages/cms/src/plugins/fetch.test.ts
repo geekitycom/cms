@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
 
+import { pluginRegistryOptions } from '../__testing__/plugin-registry-options.ts';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { PluginHost } from '../plugin.ts';
 import { createPluginRegistry } from './registry.ts';
@@ -72,10 +73,7 @@ function hostFor(allowPrivateAddress: boolean): PluginHost {
       },
     ],
     {
-      dataDir: DATA_DIR,
-      contentDir: path.join(DATA_DIR, 'content'),
-      env: {},
-      siteInfo: () => Promise.resolve({ baseUrl: 'https://example.test/', title: 'Example' }),
+      ...pluginRegistryOptions(DATA_DIR),
       allowPrivateAddress,
       lookup: (hostname) =>
         Promise.resolve(hostname === 'public.example' ? ['93.184.216.34'] : ['10.0.0.8']),

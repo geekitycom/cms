@@ -33,6 +33,7 @@ import {
 } from './plugins/install.ts';
 import { describeUpgrade, upgradePlugins } from './plugins/upgrade.ts';
 import type { UpgradeReport } from './plugins/upgrade.ts';
+import { migratePluginSettings } from './plugins/migrate-settings.ts';
 import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
 import { askToReload } from './supervisor/control.ts';
 import { superviseCluster } from './supervisor/primary.ts';
@@ -149,6 +150,7 @@ const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
       'settings list [<namespace>] [--config <file>]',
       'settings get <namespace.key> [--config <file>]',
       'settings set <namespace.key> (<value> | --unset) [--config <file>]',
+      'settings migrate-plugins [--config <file>]',
     ],
     help: [
       [
@@ -166,6 +168,15 @@ const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
           'Store one value, or remove it with --unset so the default',
           'applies. A setting the environment or the config overrides',
           'is refused. A secret set here is left in the shell history.',
+        ],
+      ],
+      [
+        'settings migrate-plugins',
+        [
+          "Move each plugin's settings out of content/_data/site.json",
+          'into data/plugins/<name>/settings.json, keeping enabled',
+          'where it is. A server does this when it starts; run it',
+          'with the site stopped to do it first. Safe to run twice.',
         ],
       ],
     ],
@@ -551,6 +562,18 @@ async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise
   const config = await loadResolvedConfig(configPath);
   const settings = createSettings({ config });
 
+  if (action === 'migrate-plugins' && name === undefined) {
+    const moved = migratePluginSettings({
+      contentDir: config.contentDir,
+      dataDir: config.dataDir,
+      log: (line) => process.stdout.write(`${line}\n`),
+    });
+    if (moved.length === 0) {
+      process.stdout.write('No plugin settings are left in content/_data/site.json.\n');
+    }
+    return 0;
+  }
+
   if (action === 'list') {
     const refs = settings.list().filter((ref) => name === undefined || ref.namespace === name);
     if (refs.length === 0) throw new Error(`There is no settings namespace ${String(name)}.`);
@@ -590,7 +613,7 @@ async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise
   }
 
   throw new Error(
-    'geekity settings needs list [<namespace>], get <namespace.key>, or set <namespace.key> with a value or --unset.',
+    'geekity settings needs list [<namespace>], get <namespace.key>, set <namespace.key> with a value or --unset, or migrate-plugins.',
   );
 }
 
@@ -1231,12 +1254,20 @@ async function pluginCommands(config: ResolvedConfig): Promise<FoundCommand[]> {
  * version that kept its accounts in SQLite is migrated first. The comments
  * are migrated as a boot would migrate them for the same reason: a command
  * writing comments before any server has would otherwise meet ids the site
- * refuses to store.
+ * refuses to store. Plugin settings still in `site.json` move to
+ * `data/plugins/<name>/` first, so the command reads what a boot would.
  */
 async function pluginCommand(argv: readonly string[]): Promise<number> {
   const configPath = configFlag(argv);
   const config = await loadResolvedConfig(configPath);
   const words = leadingWords(argv);
+  migratePluginSettings({
+    contentDir: config.contentDir,
+    dataDir: config.dataDir,
+    log: (line) => {
+      console.log(line);
+    },
+  });
   const found = (await pluginCommands(config)).find(({ command }) =>
     command.words.every((word, index) => words[index] === word),
   );

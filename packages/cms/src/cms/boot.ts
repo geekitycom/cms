@@ -26,6 +26,7 @@ import {
   rebuildFederationIndexes,
 } from '../federation/index.ts';
 import type { InstalledPlugin, PluginRegistry } from '../plugins/registry.ts';
+import { migratePluginSettings } from '../plugins/migrate-settings.ts';
 import { sitePluginRegistry } from '../plugins/site.ts';
 import { latchDevModeOn } from '../settings/dev-mode.ts';
 import { createSettings, SITE } from '../site/namespace.ts';
@@ -58,6 +59,14 @@ export function boot(
   // once, and the table goes (decision-9). A site that has already been
   // through it does nothing but check.
   migrateSettingsToFile(adminDb, configured.contentDir);
+
+  migratePluginSettings({
+    contentDir: configured.contentDir,
+    dataDir: configured.dataDir,
+    log: (line) => {
+      console.log(line);
+    },
+  });
 
   const resolved = withCommentChecker(configured, settings);
   let plugins: PluginRegistry;

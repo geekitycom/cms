@@ -30,7 +30,7 @@ function bundle(name: string): string {
   version: '1.0.0',
   label: ${JSON.stringify(name)},
   description: 'From a folder.',
-  hostApi: 1,
+  hostApi: 2,
   requires: {},
   register() {},
 };
@@ -163,7 +163,7 @@ describe('importPluginFolders', () => {
       JSON.stringify({
         name: '@acme/plugin-beta',
         version: '1.0.0',
-        hostApi: 1,
+        hostApi: 2,
         peerDependencies: peers,
       }),
     );

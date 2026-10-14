@@ -14,19 +14,12 @@ import semver from 'semver';
 
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { Plugin, PluginFederationMiddleware, PluginHost } from '../plugin.ts';
+import { pluginRegistryOptions } from '../__testing__/plugin-registry-options.ts';
 import { createPluginRegistry, DuplicatePluginError } from './registry.ts';
 import type { InstalledPlugin } from './registry.ts';
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), 'geekity-registry-'));
 after(() => rmSync(DATA_DIR, { recursive: true, force: true }));
-const SITE = {
-  dataDir: DATA_DIR,
-  contentDir: path.join(DATA_DIR, 'content'),
-  env: {},
-  siteInfo: () => Promise.resolve({ baseUrl: 'https://example.test/', title: 'Example' }),
-  allowPrivateAddress: false,
-  lookup: () => Promise.reject(new Error('a test resolves no names')),
-};
 
 /** A plugin with nothing to say beyond its name and what it requires. */
 function plugin(name: string, requires: Record<string, string> = {}, extra: Partial<Plugin> = {}) {
@@ -59,7 +52,7 @@ describe('the plugin registry', () => {
             { plugin: plugin('@acme/plugin-a'), source: 'site config, plugins[0]' },
             { plugin: plugin('@acme/plugin-a'), source: 'site config, plugins[2]' },
           ],
-          SITE,
+          pluginRegistryOptions(DATA_DIR),
         ),
       (error: unknown) =>
         error instanceof DuplicatePluginError &&
@@ -70,14 +63,17 @@ describe('the plugin registry', () => {
   });
 
   it('marks a plugin whose name is not a package name unavailable', () => {
-    const registry = createPluginRegistry(fromConfig(plugin('Not A Package')), SITE);
+    const registry = createPluginRegistry(
+      fromConfig(plugin('Not A Package')),
+      pluginRegistryOptions(DATA_DIR),
+    );
     assert.match(registry.problem('Not A Package') ?? '', /not an npm package name/);
   });
 
   it('marks a plugin with a missing dependency unavailable, naming it and its range', () => {
     const registry = createPluginRegistry(
       fromConfig(plugin('@acme/plugin-a', { '@acme/plugin-missing': '^2.0.0' })),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.equal(
       registry.problem('@acme/plugin-a'),
@@ -93,7 +89,7 @@ describe('the plugin registry', () => {
         plugin('@acme/plugin-c', { '@acme/plugin-a': '*' }),
         plugin('@acme/plugin-d'),
       ),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.match(registry.problem('@acme/plugin-a') ?? '', /dependency cycle/);
     assert.match(registry.problem('@acme/plugin-b') ?? '', /dependency cycle/);
@@ -111,7 +107,7 @@ describe('the plugin registry', () => {
         plugin('@acme/plugin-older', {}, { hostApi: HOST_API_VERSION - 1 }),
         plugin('@acme/plugin-current'),
       ),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.equal(
       registry.problem('@acme/plugin-newer'),
@@ -135,7 +131,7 @@ describe('the plugin registry', () => {
         },
         ...fromConfig(plugin('@acme/plugin-fine')),
       ],
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.equal(registry.problem('@acme/plugin-broken'), 'Its index.js failed to load: boom');
     assert.equal(registered, false);
@@ -163,7 +159,7 @@ describe('the plugin registry', () => {
           { '@acme/plugin-llm': '^1.0.0' },
         ),
       ],
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.match(
       registry.problem('@acme/plugin-new-core') ?? '',
@@ -195,7 +191,7 @@ describe('the plugin registry', () => {
         folder('@acme/plugin-older', older),
         folder('@acme/plugin-newer', newer),
       ],
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.equal(registry.problem('@acme/plugin-same'), undefined);
     assert.equal(registry.problem('@acme/plugin-older'), undefined);
@@ -219,7 +215,7 @@ describe('the plugin registry', () => {
         ),
         plugin('@acme/plugin-b'),
       ),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.equal(registry.problem('@acme/plugin-a'), 'Its register failed: no thanks');
     assert.equal(registry.problem('@acme/plugin-b'), undefined);
@@ -237,7 +233,10 @@ describe('the plugin registry', () => {
           },
         },
       );
-    createPluginRegistry(fromConfig(record('@acme/plugin-b'), record('@acme/plugin-a')), SITE);
+    createPluginRegistry(
+      fromConfig(record('@acme/plugin-b'), record('@acme/plugin-a')),
+      pluginRegistryOptions(DATA_DIR),
+    );
     assert.deepEqual(seen, [
       ['@acme/plugin-b', HOST_API_VERSION],
       ['@acme/plugin-a', HOST_API_VERSION],
@@ -258,7 +257,7 @@ describe('the plugin registry', () => {
           },
         ),
       ),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.deepEqual(keys, [
       'apiVersion',
@@ -301,7 +300,7 @@ describe('the plugin registry', () => {
           },
         ),
       ),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.match(
       registry.problem('@acme/plugin-shouting') ?? '',
@@ -316,7 +315,7 @@ describe('the plugin registry', () => {
   it('refuses two packages whose names make one variable prefix, naming both', () => {
     const registry = createPluginRegistry(
       fromConfig(plugin('@a/b-c'), plugin('@a-b/c'), plugin('@a/other')),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     for (const [name, other] of [
       ['@a/b-c', '@a-b/c'],
@@ -332,7 +331,7 @@ describe('the plugin registry', () => {
   it('refuses a package that takes a core settings namespace or prefix, naming the clash', () => {
     const registry = createPluginRegistry(
       fromConfig(plugin('site'), plugin('@geekity/maintenance'), plugin('@geekity/plugin-ok')),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.match(registry.problem('site') ?? '', /namespace site is reserved/);
     assert.match(registry.problem('@geekity/maintenance') ?? '', /GEEKITY_MAINTENANCE__/);
@@ -357,7 +356,7 @@ describe('the plugin registry', () => {
           host.settings([{ type: 'checkbox', key: 'enabled', label: 'On' }]);
         }),
       ),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.match(registry.problem('@acme/plugin-camel') ?? '', /"baseUrl"/);
     assert.match(registry.problem('@acme/plugin-twice') ?? '', /"model".*twice/);
@@ -368,7 +367,7 @@ describe('the plugin registry', () => {
     let folder: PluginHost['data'] | undefined;
     createPluginRegistry(
       fromConfig(plugin('@acme/plugin-files', {}, { register: (host) => (folder = host.data) })),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.ok(folder !== undefined);
     assert.equal(folder.path, path.join(DATA_DIR, 'plugins', '@acme', 'plugin-files'));
@@ -386,7 +385,7 @@ describe('the plugin registry', () => {
     let folder: PluginHost['data'] | undefined;
     createPluginRegistry(
       fromConfig(plugin('@acme/plugin-files', {}, { register: (host) => (folder = host.data) })),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     for (const name of ['../escape.json', 'nested/file.json', '.hidden', '']) {
       assert.throws(() => folder?.read(name), /file name/, name);
@@ -410,7 +409,7 @@ describe('the plugin registry', () => {
           },
         ),
       ),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     const found = registry.find('@acme/plugin-a');
     assert.deepEqual(found?.federation, [middleware]);
@@ -434,7 +433,7 @@ describe('the plugin registry', () => {
         ),
         plugin('@acme/plugin-late', {}, { register: (host) => (late = host) }),
       ),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.match(registry.problem('@acme/plugin-two-screens') ?? '', /one screen/);
     assert.equal(registry.find('@acme/plugin-two-screens')?.screen, undefined);
@@ -444,7 +443,7 @@ describe('the plugin registry', () => {
   it('counts a plugin active only when it and everything it requires is enabled', () => {
     const registry = createPluginRegistry(
       fromConfig(plugin('@acme/plugin-a', { '@acme/plugin-b': '*' }), plugin('@acme/plugin-b')),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.deepEqual([...registry.active(new Set(['@acme/plugin-a']))], []);
     assert.deepEqual([...registry.active(new Set(['@acme/plugin-a', '@acme/plugin-b']))].sort(), [
@@ -471,7 +470,7 @@ describe('the plugin registry', () => {
         tracked('@acme/plugin-b', { '@acme/plugin-a': '*' }),
         tracked('@acme/plugin-a'),
       ),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     const all = new Set(['@acme/plugin-a', '@acme/plugin-b', '@acme/plugin-c']);
 
@@ -520,7 +519,7 @@ describe('the plugin registry', () => {
         ),
         plugin('@acme/plugin-b', {}, { register: () => calls.push('register b') }),
       ),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.deepEqual(calls, ['register a', 'register b']);
   });
@@ -532,7 +531,7 @@ describe('the plugin registry', () => {
         plugin('@acme/plugin-b'),
         plugin('@acme/plugin-c', { '@acme/plugin-b': '*' }),
       ),
-      SITE,
+      pluginRegistryOptions(DATA_DIR),
     );
     assert.deepEqual(registry.requirements('@acme/plugin-c', new Set()), [
       { name: '@acme/plugin-b', range: '*', state: 'disabled' },

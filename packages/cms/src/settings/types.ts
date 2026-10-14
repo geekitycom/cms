@@ -76,14 +76,24 @@ export interface SettingFields<V> {
   onChange?(change: SettingChange<V>): Promise<void> | void;
 }
 
+export type NamespaceStorage =
+  | {
+      readonly kind: 'file';
+      readonly under: 'content' | 'data';
+      readonly path: string;
+      readonly dataClass: DataClass;
+    }
+  | {
+      readonly kind: 'folder';
+      readonly under: 'data';
+      readonly path: string;
+      readonly publicFile: string;
+      readonly secretFile: string;
+    };
+
 export interface NamespaceDeclaration {
   readonly namespace: string;
-  readonly storage: {
-    readonly kind: 'file';
-    readonly under: 'content' | 'data';
-    readonly path: string;
-    readonly dataClass: DataClass;
-  };
+  readonly storage: NamespaceStorage;
   readonly settings: readonly SettingDeclaration<unknown>[];
   /**
    * A file written before this namespace had its shape. Runs on a file that is
@@ -102,6 +112,17 @@ export interface SettingRef<V> {
   readonly namespace: string;
   readonly key: string;
   readonly declaration: SettingDeclaration<V>;
+}
+
+export type SettingWidget = 'text' | 'url' | 'select' | 'checkbox' | 'secret';
+
+/** A setting as a generic settings form draws it. */
+export interface RenderedSetting {
+  readonly ref: SettingRef<unknown>;
+  readonly label: string;
+  readonly hint?: string | undefined;
+  readonly widget: SettingWidget;
+  readonly options?: readonly { readonly value: string; readonly label: string }[] | undefined;
 }
 
 /** A namespace's declaration with one ref per setting, as `declareNamespace` returns it. */

@@ -15,6 +15,46 @@ function lineOf(stdout: string, setting: string): string {
 }
 
 describe('geekity settings', () => {
+  it('moves plugin settings out of site.json with migrate-plugins, logging each plugin moved', async () => {
+    const directory = await temporaryDir('geekity-settings-cli-');
+    await mkdir(path.join(directory, 'content', '_data'), { recursive: true });
+    const siteJson = path.join(directory, 'content', '_data', 'site.json');
+    await writeFile(
+      siteJson,
+      JSON.stringify({
+        title: 'Kept',
+        plugins: {
+          '@geekity/plugin-llm': { enabled: true, default_model: 'openai/gpt-4o-mini' },
+          '@acme/plugin-off': { enabled: false },
+        },
+      }),
+    );
+
+    const moved = await runCli(['settings', 'migrate-plugins'], directory);
+    assert.equal(moved.code, 0, moved.stderr);
+    assert.equal(
+      moved.stdout,
+      'Moved the settings of @geekity/plugin-llm from content/_data/site.json to data/plugins/@geekity/plugin-llm/settings.json.\n',
+    );
+    assert.deepEqual(await readJson(siteJson), {
+      title: 'Kept',
+      plugins: {
+        '@geekity/plugin-llm': { enabled: true },
+        '@acme/plugin-off': { enabled: false },
+      },
+    });
+    assert.deepEqual(
+      await readJson(
+        path.join(directory, 'data', 'plugins', '@geekity', 'plugin-llm', 'settings.json'),
+      ),
+      { default_model: 'openai/gpt-4o-mini' },
+    );
+
+    const again = await runCli(['settings', 'migrate-plugins'], directory);
+    assert.equal(again.code, 0, again.stderr);
+    assert.equal(again.stdout, 'No plugin settings are left in content/_data/site.json.\n');
+  });
+
   it('lists every core setting with its value, source and description', async () => {
     const directory = await temporaryDir('geekity-settings-cli-');
 

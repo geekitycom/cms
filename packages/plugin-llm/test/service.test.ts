@@ -41,7 +41,7 @@ const consumer = definePlugin({
   version: '1.0.0',
   label: 'Titles',
   description: 'Suggests a title.',
-  hostApi: 1,
+  hostApi: 2,
   requires: { '@geekity/plugin-llm': '^0.0.0' },
   register(host) {
     host.get('/suggest-title', async () => {

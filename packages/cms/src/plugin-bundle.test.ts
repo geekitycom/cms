@@ -38,7 +38,7 @@ const PACKAGE_JSON = {
   name: NAME,
   version: '1.2.3',
   type: 'module',
-  geekity: { plugin: true, hostApi: 1, requires: { [BASE]: '>=0.3.0 <1.0.0' } },
+  geekity: { plugin: true, hostApi: 2, requires: { [BASE]: '>=0.3.0 <1.0.0' } },
   peerDependencies: { '@geekity/cms': 'workspace:^', [BASE]: 'workspace:>=0.3.0 <1.0.0' },
 };
 
@@ -49,7 +49,7 @@ export default {
   version: '1.2.3',
   label: shout('echo'),
   description: 'Echoes.',
-  hostApi: 1,
+  hostApi: 2,
   requires: { '${BASE}': '>=0.3.0 <1.0.0' },
   register() {},
 };
@@ -123,7 +123,7 @@ describe('the plugin bundle build', () => {
       {
         name: NAME,
         version: '1.2.3',
-        hostApi: 1,
+        hostApi: 2,
         peerDependencies: { '@geekity/cms': `>=${CORE_VERSION} <1.0.0`, [BASE]: '>=0.3.0 <1.0.0' },
       },
     );

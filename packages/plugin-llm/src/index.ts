@@ -69,11 +69,11 @@ export const LLM_SETTINGS = [
 ] as const;
 
 /** The connection the settings and the site describe now. */
-export function connectionFrom(
+export async function connectionFrom(
   settings: PluginSettings<typeof LLM_SETTINGS>,
   site: PluginSiteInfo,
-): LlmConnection {
-  const values = settings.current();
+): Promise<LlmConnection> {
+  const values = await settings.current();
   const onOpenRouter =
     URL.canParse(values.base_url) && new URL(values.base_url).hostname === OPENROUTER_HOST;
   return {
@@ -173,8 +173,8 @@ function llmScreen(
 ): PluginScreen {
   return {
     title: 'LLM',
-    render() {
-      const now = settings.current();
+    async render() {
+      const now = await settings.current();
       return [
         {
           title: 'Connection',
@@ -226,14 +226,14 @@ export default definePlugin({
   description:
     'Connects the site to a language model through the OpenAI chat-completions API, ' +
     'OpenRouter by default, for other plugins to use.',
-  hostApi: 1,
+  hostApi: 2,
   register(host) {
     const settings = host.settings(LLM_SETTINGS);
     const catalog = modelCatalog();
 
     async function call(request: LlmRequest): Promise<ModelCall> {
       const made = await callModel(
-        connectionFrom(settings, await host.siteInfo()),
+        await connectionFrom(settings, await host.siteInfo()),
         request,
         catalog,
       );

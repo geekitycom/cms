@@ -54,7 +54,7 @@ function plugin(name: string, version: string, requires: Record<string, string> 
     name,
     version,
     publishConfig: { access: 'public' },
-    geekity: { plugin: true, hostApi: 1, requires },
+    geekity: { plugin: true, hostApi: 2, requires },
     peerDependencies: { [CORE]: 'workspace:^', ...requires },
     devDependencies: { [CORE]: 'workspace:*' },
   };

@@ -49,7 +49,7 @@ export default definePlugin({
     'Answers the inbox and collection paths the WordPress ActivityPub plugin published, ' +
     'for a site that moved here from it, until every follower has refetched the actor, ' +
     'and sends its old /wp-content/uploads/ media URLs to the copies under /uploads/.',
-  hostApi: 1,
+  hostApi: 2,
   register(host) {
     const records = wordPressRecords(host.data);
     host.federation(wordPressFederation(records));
