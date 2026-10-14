@@ -435,10 +435,10 @@ When it finishes, it prints what is left to do: the settings to set again in
 the environment or config, the credentials to type in again, and the config
 plugins to check.
 
-| Exit code | What to do                                                                                                                                                                                                                        |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`       | Nothing. The site is restored and every plugin is installed.                                                                                                                                                                      |
-| `1`       | Read standard error. If the import was refused, nothing changed. Fix what it names and run it again. If a plugin could not be installed, the site is restored. Run the `geekity plugin add <name>@<version>` that the line names. |
+| Exit code | What to do                                                                                                                                                                                                                                                                          |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`       | Nothing. The site is restored and every plugin is installed.                                                                                                                                                                                                                        |
+| `1`       | Read standard error. If the import was refused, nothing changed. Fix what it names and run it again. If a plugin could not be installed, the site is restored. Run the `geekity plugin add <name>@<version>` that the line names. If a plugin will not run, upgrade `@geekity/cms`. |
 
 A failed plugin keeps its enabled state, so once `geekity plugin add` installs
 it, it runs as it did on the old site. Do not run the import again for a

@@ -1,5 +1,5 @@
 import { pipeline } from 'node:stream/promises';
-import { createGunzip, gunzipSync } from 'node:zlib';
+import { createGunzip } from 'node:zlib';
 
 /**
  * A ustar archive, written one entry at a time, and read whole or as a stream. A name that
@@ -127,43 +127,6 @@ function typeOf(flag: string): TarEntryType {
   return 'other';
 }
 
-export function readTar(gzipped: Buffer): TarEntry[] {
-  const archive = gunzipSync(gzipped);
-  const entries: TarEntry[] = [];
-  let pax = new Map<string, string>();
-  let longName: string | undefined;
-  let offset = 0;
-  while (offset + BLOCK <= archive.length) {
-    const block = archive.subarray(offset, offset + BLOCK);
-    if (block.every((byte) => byte === 0)) break;
-    const flag = String.fromCharCode(block[156] ?? 0);
-    const size = Number(pax.get('size') ?? Number.parseInt(field(block, 124, 12).trim() || '0', 8));
-    const body = archive.subarray(offset + BLOCK, offset + BLOCK + size);
-    offset += BLOCK + Math.ceil(size / BLOCK) * BLOCK;
-
-    if (flag === 'x') {
-      pax = paxValues(body.toString('utf8'));
-      continue;
-    }
-    if (flag === 'L') {
-      longName = body.toString('utf8').replace(/\0.*$/s, '');
-      continue;
-    }
-    const prefix = field(block, 345, 155);
-    const name =
-      pax.get('path') ?? longName ?? (prefix === '' ? '' : `${prefix}/`) + field(block, 0, 100);
-    entries.push({
-      name,
-      type: typeOf(flag),
-      mode: Number.parseInt(field(block, 100, 8).trim() || '0', 8),
-      body: Buffer.from(body),
-    });
-    pax = new Map();
-    longName = undefined;
-  }
-  return entries;
-}
-
 const EXTENDED_HEADER_LIMIT = 1024 * 1024;
 
 function cutShort(): Error {
@@ -268,4 +231,19 @@ export async function* readTarStream(
   } finally {
     gunzip.destroy();
   }
+}
+
+export async function readTar(gzipped: Buffer): Promise<TarEntry[]> {
+  const entries: TarEntry[] = [];
+  for await (const entry of readTarStream([gzipped])) {
+    const pieces: Buffer[] = [];
+    for await (const piece of entry.body) pieces.push(piece);
+    entries.push({
+      name: entry.name,
+      type: entry.type,
+      mode: entry.mode,
+      body: Buffer.concat(pieces),
+    });
+  }
+  return entries;
 }

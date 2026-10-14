@@ -280,6 +280,30 @@ describe('geekity import', () => {
     assert.ok(await exists(path.join(dataDir, 'geekity.db')));
   });
 
+  it('says a plugin that needs a newer core is installed but will not run, with no retry', async () => {
+    const { archive, site, pluginsDir } = await setup(withEnabledPlugins(), { plugins: PLUGINS });
+    const npm = await registry([
+      {
+        name: PLUGIN_A,
+        version: '1.0.0',
+        files: pluginFiles({ name: PLUGIN_A, version: '1.0.0', core: '>=999.0.0' }),
+      },
+      release(PLUGIN_B, '1.0.0'),
+    ]);
+
+    const run = await geekity(site, ['import', archive], {
+      GEEKITY_PLUGINS_DIR: pluginsDir,
+      npm_config_registry: npm.url,
+    });
+    assert.equal(run.code, 1, run.stdout);
+    assert.equal(await installedVersion(pluginsDir, PLUGIN_A), '1.0.0');
+    assert.match(
+      run.stderr,
+      /@acme\/plugin-a 1\.0\.0 is installed but will not run until @geekity\/cms is upgraded: it needs @geekity\/cms >=999\.0\.0/,
+    );
+    assert.doesNotMatch(run.stderr, /was not installed|Retry with/);
+  });
+
   it('restores the data and rebuilds when the registry cannot be reached, and exits 1', async () => {
     const { archive, site, pluginsDir, dataDir } = await setup(withEnabledPlugins(), {
       plugins: PLUGINS,

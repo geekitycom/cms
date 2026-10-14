@@ -11,7 +11,7 @@ import {
   planSiteExport,
   writeSiteExport,
 } from './site-export.ts';
-import type { ExportProgress, SiteExportSource } from './site-export.ts';
+import type { ExportProgress, NotCarried, SiteExportSource } from './site-export.ts';
 
 /** No password and no secret: `jobs.json` is exported. */
 export type SiteExportPayload = { readonly withCredentials: boolean };
@@ -23,6 +23,7 @@ export type SiteExportResult = {
   readonly credentials: boolean;
   readonly credentialsLeftOut: readonly string[];
   readonly undeclared: readonly string[];
+  readonly notCarried: readonly NotCarried[];
   readonly deliveries: number;
 };
 
@@ -87,6 +88,7 @@ export function siteExportJob(
         credentials: manifest.credentials,
         credentialsLeftOut: manifest.credentialsLeftOut,
         undeclared: manifest.undeclared,
+        notCarried: manifest.notCarried,
         deliveries: manifest.pending.deliveries,
       };
     },

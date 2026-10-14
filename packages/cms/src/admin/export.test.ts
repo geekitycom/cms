@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readdir, writeFile } from 'node:fs/promises';
+import { readdir, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
@@ -174,7 +174,7 @@ describe('Tools > Export', () => {
       'attachment; filename="geekity-blog.example-20261014T150405Z.tar.gz"',
     );
     assert.equal(download.headers.get('cache-control'), 'no-store');
-    const entries = readTar(Buffer.from(await download.arrayBuffer()));
+    const entries = await readTar(Buffer.from(await download.arrayBuffer()));
     assert.equal(entries[0]?.name, 'manifest.json');
     assert.ok(entries.some((entry) => entry.name === 'data/users.json'));
 
@@ -184,12 +184,24 @@ describe('Tools > Export', () => {
     assert.doesNotMatch(await stranger.text(), /manifest\.json/);
   });
 
+  it('names the files the finished export left out: undeclared data and content it cannot carry', async () => {
+    const s = await site();
+    const { contentDir, dataDir } = s.cms.config;
+    await writeFile(path.join(dataDir, 'surprise.json'), '{}');
+    await symlink(path.join(contentDir, '_data'), path.join(contentDir, 'linked'));
+    await exportOnce(s);
+
+    const html = section(await (await s.agent.get(EXPORT_URL)).text());
+    assert.match(html, /<code[^>]*>data\/surprise\.json<\/code>/);
+    assert.match(html, /<code[^>]*>content\/linked<\/code>[^<]*a symbolic link/);
+  });
+
   it('archives jobs.json without the export job, so an import runs no export (TASK-413)', async () => {
     const s = await site();
     await exportOnce(s);
     const download = await s.agent.get(DOWNLOAD_URL);
     const archive = Buffer.from(await download.arrayBuffer());
-    const jobs = readTar(archive).find((entry) => entry.name === 'data/jobs.json');
+    const jobs = (await readTar(archive)).find((entry) => entry.name === 'data/jobs.json');
     assert.ok(jobs, 'the archive holds jobs.json');
     const names = (JSON.parse(jobs.body.toString('utf8')) as { name: string }[]).map(
       (job) => job.name,

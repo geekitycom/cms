@@ -10,11 +10,14 @@ import {
   rename,
   rm,
   stat,
+  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
+
+import { gunzipSync, gzipSync } from 'node:zlib';
 
 import { manifestFiles, siteArchive, siteFiles } from '../__testing__/site-archive.ts';
 import type { ArchivedEntry } from '../__testing__/site-archive.ts';
@@ -254,6 +257,60 @@ describe('site import', () => {
       await readFile(path.join(targets.dataDir, 'users.json'), 'utf8'),
       '{"users":[],"nextId":1}\n',
     );
+  });
+
+  it('reads a folder holding a link or an empty folder as occupied, and without replace changes nothing', async () => {
+    const linked = await setup(siteArchive(siteFiles()));
+    await mkdir(linked.targets.dataDir, { recursive: true });
+    await symlink(linked.file, path.join(linked.targets.dataDir, 'archive-link'));
+    await assert.rejects(
+      importFiles(linked.file, linked.targets, linked.settings),
+      /occupied: .*data/,
+    );
+    assert.deepEqual(await readdir(linked.targets.dataDir), ['archive-link']);
+
+    const folders = await setup(siteArchive(siteFiles()));
+    await mkdir(path.join(folders.targets.contentDir, 'posts'), { recursive: true });
+    await assert.rejects(
+      importFiles(folders.file, folders.targets, folders.settings),
+      /occupied: .*content/,
+    );
+    assert.deepEqual(await readdir(folders.targets.contentDir), ['posts']);
+  });
+
+  it('imports an archive from data/exports/ and leaves that folder and its scratch in place', async () => {
+    const { file, targets, settings } = await setup(siteArchive(siteFiles()));
+    const exports = path.join(targets.dataDir, 'exports');
+    await mkdir(exports, { recursive: true });
+    const held = path.join(exports, 'geekity-blog.example-20261014T150000Z.tar.gz');
+    await rename(file, held);
+    await writeFile(path.join(targets.dataDir, 'users.json.1a-2.tmp'), '');
+
+    await importFiles(held, targets, settings);
+
+    assert.deepEqual(await readdir(exports), [path.basename(held)]);
+    assert.deepEqual((await readdir(targets.dataDir)).sort(), [
+      'exports',
+      'notification-secret',
+      'users.json',
+      'users.json.1a-2.tmp',
+    ]);
+  });
+
+  it('refuses an entry whose header size differs from the manifest before reading its body', async () => {
+    const body = 'x'.repeat(4096);
+    const entries = [...siteFiles(), { name: 'data/comment-salt', body }];
+    const files = manifestFiles(entries).map((each) =>
+      each.path === 'data/comment-salt' ? { ...each, size: 3 } : each,
+    );
+    const tar = gunzipSync(siteArchive(entries, { files }));
+    const cut = gzipSync(tar.subarray(0, tar.length - 1024 - body.length));
+    const { file, targets, settings } = await setup(cut);
+    await assert.rejects(
+      importFiles(file, targets, settings),
+      /data\/comment-salt is 4096 bytes, and the manifest gives 3/,
+    );
+    assert.equal(existsSync(path.dirname(targets.dataDir)), false, 'nothing was left behind');
   });
 
   it('a second run after one killed mid-unpack, or between placing the two folders, ends the same', async () => {

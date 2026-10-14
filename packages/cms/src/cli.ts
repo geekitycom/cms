@@ -26,9 +26,9 @@ import {
   importNotes,
   installArchivedPlugins,
   placeSiteImport,
+  pluginFailureLine,
   readSiteManifest,
   restoreEnabledPlugins,
-  retryCommand,
   stageSiteImport,
 } from './export/site-import.ts';
 import { CONFIG_FILENAMES, loadConfig, loadResolvedConfig } from './config-loader.ts';
@@ -1142,12 +1142,7 @@ async function importCommand({ args, configPath, flags }: ParsedArgs): Promise<n
       .map((note) => `${note}\n`)
       .join(''),
   );
-  for (const failed of failures) {
-    process.stderr.write(
-      `${failed.name} ${failed.version} was not installed: ${failed.reason} ` +
-        `Its enabled state is kept. Retry with: ${retryCommand(failed)}\n`,
-    );
-  }
+  for (const failed of failures) process.stderr.write(`${pluginFailureLine(failed)}\n`);
   return failures.length > 0 ? 1 : 0;
 }
 

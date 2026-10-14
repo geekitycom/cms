@@ -83,7 +83,7 @@ export async function addPlugin(
   const integrityProblem = checkIntegrity(tarball, release);
   if (integrityProblem !== undefined) throw new Error(`${label} was refused: ${integrityProblem}`);
 
-  const files = bundleFiles(unpackTarball(tarball));
+  const files = bundleFiles(await unpackTarball(tarball));
   if (!files.has(PLUGIN_ENTRY) || !files.has(PLUGIN_MANIFEST)) {
     throw new Error(
       `${label} has no plugin bundle (${BUNDLE_PREFIX}${PLUGIN_ENTRY} and ${BUNDLE_PREFIX}${PLUGIN_MANIFEST}). A plugin that is not bundled can only be installed with npm, by a site with its own server.`,
@@ -261,9 +261,9 @@ function checkIntegrity(tarball: Buffer, release: Release): string | undefined {
  * The regular files in a gzipped tar, by path with the archive's top folder
  * (`package/` in an npm tarball) removed. Links and devices are skipped.
  */
-export function unpackTarball(gzipped: Buffer): Map<string, Buffer> {
+export async function unpackTarball(gzipped: Buffer): Promise<Map<string, Buffer>> {
   const files = new Map<string, Buffer>();
-  for (const entry of readTar(gzipped)) {
+  for (const entry of await readTar(gzipped)) {
     if (entry.type !== 'file') continue;
     const relative = entry.name.split('/').slice(1).join('/');
     if (relative !== '') files.set(relative, entry.body);

@@ -564,8 +564,10 @@ does not reload by itself: select **Check again**. While an export is queued
 or running, the screen does not offer a second one.
 
 When the job finishes, the screen shows the number of files, the size, whether
-credentials are included, which credentials were left out, and any file under
-`data/` that was left out because no declaration covers it. **Download** sends
+credentials are included, which credentials were left out, any file under
+`data/` that was left out because no declaration covers it, and any entry
+under `content/` that was left out because it is not a regular file, such as
+a symbolic link. **Download** sends
 the archive with `Content-Disposition: attachment`. The download URL,
 `/admin/tools/export/download`, is behind the admin sign-in like every other
 admin URL.

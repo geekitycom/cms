@@ -74,10 +74,10 @@ export interface PendingWork {
   readonly jobs: { readonly queued: number; readonly running: number };
 }
 
-export interface NotCarried {
+export type NotCarried = {
   readonly path: string;
   readonly why: string;
-}
+};
 
 export interface ExportManifest {
   readonly format: typeof EXPORT_FORMAT;

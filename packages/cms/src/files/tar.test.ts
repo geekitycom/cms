@@ -29,10 +29,10 @@ function archive(files: readonly { name: string; mode: number; body: string }[])
 }
 
 describe('the tar codec', () => {
-  it('reads back each file with its name, mode and bytes', () => {
+  it('reads back each file with its name, mode and bytes', async () => {
     const long = `content/uploads/${'a-rather-long-folder-name/'.repeat(8)}photo.jpg`;
     const accented = 'content/posts/café-crème.md';
-    const entries = readTar(
+    const entries = await readTar(
       archive([
         { name: 'manifest.json', mode: 0o644, body: '{}' },
         { name: 'data/users.json', mode: 0o600, body: '[]' },
@@ -112,6 +112,22 @@ describe('the tar codec', () => {
     }
     assert.deepEqual(names, ['a', 'b']);
     assert.equal(mtime?.toISOString(), '2026-10-14T15:00:00.000Z');
+  });
+
+  it('refuses a whole archive whose PAX size is not a number, instead of returning the entries before it', async () => {
+    const mtime = new Date('2026-10-14T15:00:00Z');
+    const oversized = tarHeader({ name: 'second', mode: 0o644, size: 8 ** 11, mtime });
+    const record = Buffer.from(`size=${String(8 ** 11)}`);
+    oversized.set(Buffer.from('size=abcdefghij'), oversized.indexOf(record));
+    const tar = Buffer.concat([
+      gunzipSync(archive([{ name: 'first', mode: 0o644, body: 'one' }])).subarray(
+        0,
+        -TAR_END.length,
+      ),
+      oversized,
+      TAR_END,
+    ]);
+    await assert.rejects(async () => readTar(gzipSync(tar)), /size that is not a whole number/);
   });
 
   it('refuses an archive cut short inside a body', async () => {

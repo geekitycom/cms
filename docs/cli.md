@@ -181,8 +181,8 @@ written at mode `0600`.
 The archive holds these entries, in this order:
 
 1. `manifest.json`.
-2. `content/`, apart from scratch files: the `.tmp` files of writes in
-   progress, lock files and the watcher's `.geekity-watch-*` probe.
+2. `content/`, apart from scratch files: the `<file>.<pid>-<n>.tmp` files of
+   writes in progress and the watcher's `.geekity-watch-*` probe.
    `--without-content` leaves `content/` out.
 3. Each file under `data/` whose class is `kept`, such as `users.json`, the
    actor keys in `keys/`, `notification-secret` and the comment emails.
@@ -282,8 +282,10 @@ The command does these steps in this order:
    its control socket.
 2. It reads `manifest.json`, the first entry. It refuses an archive whose
    `format` is newer than this version reads.
-3. It refuses when `content/` or `data/` already holds a file that is not
-   scratch. With `--replace`, it continues, and step 6 moves what those
+3. It refuses when `content/` or `data/` already holds anything that is not
+   scratch: a file, a symbolic link or other special entry, or a folder, even
+   an empty one. A `lost+found` folder, `data/exports/` and the import's own
+   names do not count. With `--replace`, it continues, and step 6 moves what those
    folders hold aside. With an archive made `--without-content`, only `data/`
    is checked and replaced.
 4. It unpacks the archive into a `.geekity-importing/` folder inside
@@ -307,8 +309,9 @@ The command does these steps in this order:
    every entry that `content/` or `data/` holds into
    `.geekity-before-import-<yyyymmdd>T<hhmmss>Z/` inside the same folder.
    A `lost+found` folder stays where it is, and the import does not read it.
-   Without `--replace`, it deletes only scratch files, such as a stale
-   `.tmp` file. Every move stays inside the folder, so `content/` and `data/`
+   `data/exports/` stays where it is too, so an archive written there by
+   Tools > Export is never moved or deleted. Without `--replace`, it deletes
+   nothing: the folders hold only scratch files, which stay. Every move stays inside the folder, so `content/` and `data/`
    themselves are never renamed or removed. This is why the import works
    when they are mount points, as on Docker.
 7. With `--dev-mode`, it turns dev mode on. Use this for a staging copy of a
@@ -340,14 +343,15 @@ with the reason and the command to retry, such as
 `geekity plugin add @geekity/plugin-llm@1.2.0`.
 
 A plugin whose recorded version needs a newer `@geekity/cms` than the one
-running the import is installed, but it does not run. The import reports it
-as failed in the same way, with the range the plugin needs. Running the retry
-command does not help: upgrade `@geekity/cms` on the new host first.
+running the import is installed, but it does not run. Its line on standard
+error says so and names the range the plugin needs, with no retry command,
+because adding the plugin again does not help: upgrade `@geekity/cms` on the
+new host.
 
-| Exit code | Meaning                                                                                                  |
-| --------- | -------------------------------------------------------------------------------------------------------- |
-| `0`       | The site is restored and every `folder` plugin is installed.                                             |
-| `1`       | The import was refused and nothing changed, or the site is restored but a plugin could not be installed. |
+| Exit code | Meaning                                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `0`       | The site is restored and every `folder` plugin is installed.                                                             |
+| `1`       | The import was refused and nothing changed, or the site is restored but a plugin could not be installed or will not run. |
 
 An import that was stopped part way leaves a `.geekity-importing/` folder, a
 `.geekity-import` marker file, or a `.geekity-before-import-*` folder that is

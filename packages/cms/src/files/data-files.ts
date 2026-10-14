@@ -108,15 +108,21 @@ const PENDING: DataClass = { kind: 'pending' };
 const SCRATCH: DataClass = { kind: 'scratch' };
 
 export const TEMPORARY_FILES = declareDataFile({
-  pattern: '**/*.tmp',
+  pattern: '**/*.*-*.tmp',
   dataClass: SCRATCH,
   lost: 'Nothing. An atomic write that crashed can leave one behind.',
 });
 
 export const LOCK_FILES = declareDataFile({
-  pattern: '**/*.lock*',
+  pattern: '**/*.lock',
   dataClass: SCRATCH,
   lost: 'Nothing. A stale lock is taken over.',
+});
+
+export const LOCK_TAKEOVER_FILES = declareDataFile({
+  pattern: '**/*.lock.takeover',
+  dataClass: SCRATCH,
+  lost: 'Nothing. A waiter holds it while it removes a stale lock.',
 });
 
 export const IMPORT_MARKER = declareDataFile({
@@ -278,6 +284,7 @@ export const QUEUE_LOG = declareDataFile({
 export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   TEMPORARY_FILES,
   LOCK_FILES,
+  LOCK_TAKEOVER_FILES,
   IMPORT_MARKER,
   IMPORT_STAGING,
   IMPORT_ASIDE,
@@ -314,7 +321,6 @@ export const WATCH_PROBE = declareDataFile({
 
 export const CONTENT_SCRATCH_FILES: readonly DataFileDeclaration[] = [
   TEMPORARY_FILES,
-  LOCK_FILES,
   IMPORT_MARKER,
   IMPORT_STAGING,
   IMPORT_ASIDE,

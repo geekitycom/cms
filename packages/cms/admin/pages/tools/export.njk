@@ -48,6 +48,12 @@
                   {% for file in result.undeclared %}<li><code class="break-all">{{ file }}</code></li>{% endfor %}
                 </ul>
               {% endif %}
+              {% if result.notCarried.length %}
+                <p>Left out because an export holds only regular files:</p>
+                <ul class="list-disc pl-6">
+                  {% for entry in result.notCarried %}<li><code class="break-all">{{ entry.path }}</code>, {{ entry.why }}</li>{% endfor %}
+                </ul>
+              {% endif %}
               {% if archive %}
                 <p>
                   <code class="break-all">{{ archive.name }}</code> is deleted at

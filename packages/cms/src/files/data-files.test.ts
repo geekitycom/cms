@@ -14,6 +14,7 @@ import {
   IMAGES,
   JOBS,
   LOCK_FILES,
+  LOCK_TAKEOVER_FILES,
   TEMPORARY_FILES,
   USERS,
   classifyFiles,
@@ -116,6 +117,19 @@ describe('the core declarations', () => {
 });
 
 describe('the scratch patterns', () => {
+  it('leave content whose name only looks like a lock or a temporary file', () => {
+    for (const relative of [
+      'posts/the.locket.md',
+      'uploads/padlock.lock',
+      'uploads/notes.lockbox',
+      'uploads/backup.tmp',
+    ]) {
+      assert.equal(dataFileFor(CONTENT_SCRATCH_FILES, relative), undefined, relative);
+    }
+    assert.equal(classOf('plugins/acme/the.locket.json'), undefined);
+    assert.equal(classOf('plugins/acme/notes.tmp'), undefined);
+  });
+
   it('match the temporary name an atomic write uses, under any folder', async () => {
     const dir = await dataDir();
     for (const file of [dataPath(dir, USERS), dataPath(dir, IMAGES, 'a', 'b.webp')]) {
@@ -130,7 +144,8 @@ describe('the scratch patterns', () => {
     const held = await withLockFile(lock, () => readdir(dir));
     const names = [...held, path.basename(guardFileFor(lock))];
     assert.deepEqual(names, ['jobs.json.lock', 'jobs.json.lock.takeover']);
-    for (const name of names) assert.equal(dataFileFor(CORE_DATA_FILES, name), LOCK_FILES, name);
+    assert.equal(dataFileFor(CORE_DATA_FILES, names[0] ?? ''), LOCK_FILES);
+    assert.equal(dataFileFor(CORE_DATA_FILES, names[1] ?? ''), LOCK_TAKEOVER_FILES);
   });
 });
 

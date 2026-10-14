@@ -168,7 +168,7 @@ async function exported(options: Partial<SiteExportOptions> = {}): Promise<Expor
   });
   const out = path.join(root, 'site.tar.gz');
   await writeSiteExport(plan, { out, now: NOW });
-  const entries = readTar(await readFile(out));
+  const entries = await readTar(await readFile(out));
   const manifest = JSON.parse(entries[0]?.body.toString('utf8') ?? '{}') as ExportManifest;
   return { manifest, entries, names: entries.map((entry) => entry.name), out };
 }
@@ -224,7 +224,7 @@ describe('a site export', () => {
     const plan = await planSiteExport(source, { withCredentials: false, withContent: true });
     const out = path.join(root, 'site.tar.gz');
     const manifest = await writeSiteExport(plan, { out, now: NOW });
-    const names = readTar(await readFile(out)).map((entry) => entry.name);
+    const names = (await readTar(await readFile(out))).map((entry) => entry.name);
 
     assert.deepEqual(manifest.notCarried, [
       { path: 'content/media', why: 'a symbolic link' },
@@ -266,7 +266,7 @@ describe('a site export', () => {
       const plan = await planSiteExport(source, { withCredentials: false, withContent: true });
       const out = path.join(root, 'site.tar.gz');
       const manifest = await writeSiteExport(plan, { out, now: NOW });
-      const names = readTar(await readFile(out)).map((entry) => entry.name);
+      const names = (await readTar(await readFile(out))).map((entry) => entry.name);
 
       assert.deepEqual(
         names.filter((name) => name.includes('lost+found')),

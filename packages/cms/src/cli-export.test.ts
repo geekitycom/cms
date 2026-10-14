@@ -76,7 +76,7 @@ describe('geekity export', () => {
 
     const archive = path.join(directory, 'site.tar.gz');
     assert.equal((await fs.stat(archive)).mode & 0o777, 0o600);
-    const names = readTar(await fs.readFile(archive)).map((entry) => entry.name);
+    const names = (await readTar(await fs.readFile(archive))).map((entry) => entry.name);
     assert.equal(names[0], 'manifest.json');
     assert.ok(names.includes('data/users.json'));
     assert.ok(!names.some((name) => name.includes('queue.sqlite')));
@@ -98,7 +98,7 @@ describe('geekity export', () => {
       run.stderr,
       /^Left out content\/posts\/alias\.md: it is a symbolic link, and an export holds only regular files\.$/m,
     );
-    const names = readTar(await fs.readFile(path.join(directory, 'site.tar.gz'))).map(
+    const names = (await readTar(await fs.readFile(path.join(directory, 'site.tar.gz')))).map(
       (entry) => entry.name,
     );
     assert.ok(!names.includes('content/posts/alias.md'));
@@ -113,7 +113,7 @@ describe('geekity export', () => {
     const written = (await fs.readdir(directory)).filter((name) => name.endsWith('.tar.gz'));
     assert.equal(written.length, 1);
     assert.match(written[0] ?? '', /^geekity-blog\.example-\d{8}T\d{6}Z\.tar\.gz$/);
-    const names = readTar(await fs.readFile(path.join(directory, written[0] ?? ''))).map(
+    const names = (await readTar(await fs.readFile(path.join(directory, written[0] ?? '')))).map(
       (entry) => entry.name,
     );
     assert.ok(names.includes('data/mail.json'));
@@ -152,7 +152,7 @@ describe('geekity export', () => {
 
       assert.equal(run.code, 0, run.stderr);
       assert.deepEqual(afterwards, before);
-      const names = readTar(await fs.readFile(path.join(directory, 'site.tar.gz'))).map(
+      const names = (await readTar(await fs.readFile(path.join(directory, 'site.tar.gz')))).map(
         (entry) => entry.name,
       );
       assert.ok(names.includes('content/posts/2026-01-01-one.md'));

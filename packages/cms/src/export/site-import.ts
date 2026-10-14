@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream, existsSync, readFileSync } from 'node:fs';
+import {
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  readdirSync,
+  readFileSync,
+} from 'node:fs';
 import { chmod, mkdir, readdir, readFile, rename, rm, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -9,11 +15,12 @@ import semver from 'semver';
 import {
   CONTENT_SCRATCH_FILES,
   CORE_DATA_FILES,
+  EXPORTS,
   IMPORT_ASIDE,
   IMPORT_MARKER,
   IMPORT_STAGING,
   LOST_AND_FOUND,
-  classifyFiles,
+  classifyEntries,
   dataFileFor,
   dataFileMatches,
   dataPath,
@@ -27,6 +34,7 @@ import { addPlugin, CORE_PACKAGE, parsePackageSpec } from '../plugins/install.ts
 import { PACKAGE_NAME } from '../plugins/registry.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import { messageOf } from '../util/errors.ts';
+import { isNotFound } from '../util/files.ts';
 import { isRecord } from '../util/guards.ts';
 import { EXPORT_FORMAT, MANIFEST_NAME } from './site-export.ts';
 import type {
@@ -256,6 +264,15 @@ function dataRelative(archived: string): string | undefined {
   return archived.startsWith('data/') ? archived.slice('data/'.length) : undefined;
 }
 
+function scratchFolder(declarations: readonly DataFileDeclaration[], name: string): boolean {
+  return declarations.some(
+    (declaration) =>
+      declaration.dataClass.kind === 'scratch' &&
+      declaration.pattern.endsWith('/**') &&
+      dataFileMatches(declaration, name),
+  );
+}
+
 function targetState(
   dir: string,
   declarations: readonly DataFileDeclaration[],
@@ -266,11 +283,25 @@ function targetState(
   } catch {
     // No marker: the folder is not an import of this archive.
   }
-  return classifyFiles(dir, declarations).some(
-    (file) => file.declaration?.dataClass.kind !== 'scratch',
-  )
+  const { files, others } = classifyEntries(dir, declarations);
+  const strayFolder = topFolders(dir).some(
+    (name) => name !== LOST_AND_FOUND && !scratchFolder(declarations, name),
+  );
+  return strayFolder ||
+    [...files, ...others].some((entry) => entry.declaration?.dataClass.kind !== 'scratch')
     ? 'occupied'
     : 'empty';
+}
+
+function topFolders(dir: string): string[] {
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+  } catch (error) {
+    if (isNotFound(error)) return [];
+    throw error;
+  }
 }
 
 export function checkImportTargets(
@@ -313,11 +344,9 @@ async function writeEntry(
   target: { readonly file: string; readonly dirMode: number | undefined } | undefined,
 ) {
   const hash = createHash('sha256');
-  let size = 0;
   const hashed = async function* () {
     for await (const piece of entry.body) {
       hash.update(piece);
-      size += piece.length;
       yield piece;
     }
   };
@@ -330,7 +359,7 @@ async function writeEntry(
     await chmod(target.file, mode);
     await utimes(target.file, entry.mtime, entry.mtime);
   }
-  return { size, sha256: hash.digest('hex') };
+  return { sha256: hash.digest('hex') };
 }
 
 function skipReason(declarations: readonly DataFileDeclaration[], relative: string) {
@@ -385,6 +414,11 @@ async function unpack(
     seen.add(entry.name);
     const why = root === 'data' ? skipReason(declarations, relative) : undefined;
     if (why !== undefined) skipped.push({ path: entry.name, why });
+    if (entry.size !== listed.size) {
+      throw new Error(
+        `${entry.name} is ${String(entry.size)} bytes, and the manifest gives ${String(listed.size)}. The archive is damaged or was changed; nothing was imported.`,
+      );
+    }
     const base = root === 'content' ? roots.content : roots.data;
     if (base === undefined)
       throw notAnExport(`it holds ${entry.name}, and says it has no content.`);
@@ -397,9 +431,9 @@ async function unpack(
           }
         : undefined,
     );
-    if (written.size !== listed.size || written.sha256 !== listed.sha256) {
+    if (written.sha256 !== listed.sha256) {
       throw new Error(
-        `${entry.name} does not match the size and sha256 its manifest gives. The archive is damaged or was changed; nothing was imported.`,
+        `${entry.name} does not match the sha256 its manifest gives. The archive is damaged or was changed; nothing was imported.`,
       );
     }
   }
@@ -484,19 +518,23 @@ export async function placeSiteImport(
   for (const { dir, state } of staged.states) {
     const from = dir === staged.targets.contentDir ? staged.content : staged.data;
     if (from === undefined) continue;
-    const held = (await readdir(dir)).filter((name) => !leftInPlace(name));
     const aside =
       (await asideInProgress(dir, marker)) ??
       (state === 'occupied' ? await startAside(dir, options.stamp, marker) : undefined);
-    if (aside === undefined) {
-      for (const name of held) await rm(path.join(dir, name), { recursive: true, force: true });
-    } else {
-      for (const name of held) await move(path.join(dir, name), path.join(aside, name));
+    if (aside !== undefined) {
+      const kept = dir === staged.targets.dataDir ? [EXPORTS] : [];
+      for (const name of await readdir(dir)) {
+        if (leftInPlace(name) || kept.some((declaration) => dataFileMatches(declaration, name))) {
+          continue;
+        }
+        await move(path.join(dir, name), path.join(aside, name));
+      }
       await rm(markerFile(aside));
       moved.push(aside);
     }
     await writeFile(markerFile(dir), marker, { mode: 0o600 });
     for (const name of await readdir(from)) {
+      await rm(path.join(dir, name), { recursive: true, force: true });
       await move(path.join(from, name), path.join(dir, name));
     }
     await rm(from, { recursive: true, force: true });
@@ -509,14 +547,29 @@ export async function finishSiteImport(targets: ImportTargets): Promise<void> {
   await rm(markerFile(targets.dataDir), { force: true });
 }
 
-export interface PluginFailure {
-  readonly name: string;
-  readonly version: string;
-  readonly reason: string;
-}
+export type PluginFailure =
+  | {
+      readonly kind: 'not-installed';
+      readonly name: string;
+      readonly version: string;
+      readonly reason: string;
+    }
+  | {
+      readonly kind: 'needs-newer-core';
+      readonly name: string;
+      readonly version: string;
+      readonly needs: string;
+      readonly core: string;
+    };
 
-export function retryCommand(plugin: Pick<ManifestPlugin, 'name' | 'version'>): string {
-  return `geekity plugin add ${plugin.name}@${plugin.version}`;
+export function pluginFailureLine(failure: PluginFailure): string {
+  const { name, version } = failure;
+  switch (failure.kind) {
+    case 'not-installed':
+      return `${name} ${version} was not installed: ${failure.reason} Its enabled state is kept. Retry with: geekity plugin add ${name}@${version}`;
+    case 'needs-newer-core':
+      return `${name} ${version} is installed but will not run until ${CORE_PACKAGE} is upgraded: it needs ${CORE_PACKAGE} ${failure.needs}, and this core is ${failure.core}. Its enabled state is kept.`;
+  }
 }
 
 export async function installArchivedPlugins(
@@ -528,26 +581,33 @@ export async function installArchivedPlugins(
   },
 ): Promise<PluginFailure[]> {
   const failures: PluginFailure[] = [];
-  for (const plugin of manifest.plugins) {
-    if (plugin.source !== 'folder') continue;
-    const fail = (reason: string) => failures.push({ ...plugin, reason });
+  for (const { name, version, source } of manifest.plugins) {
+    if (source !== 'folder') continue;
+    const notInstalled = (reason: string) =>
+      failures.push({ kind: 'not-installed', name, version, reason });
     if (options.pluginsDir === undefined) {
-      fail('No plugins folder is set: set GEEKITY_PLUGINS_DIR, or pluginsDir in the config.');
+      notInstalled(
+        'No plugins folder is set: set GEEKITY_PLUGINS_DIR, or pluginsDir in the config.',
+      );
       continue;
     }
     try {
-      const { manifest: installed } = await addPlugin(
-        parsePackageSpec(`${plugin.name}@${plugin.version}`),
-        { pluginsDir: options.pluginsDir, registry: options.registry },
-      );
-      const core = installed.peerDependencies[CORE_PACKAGE];
-      if (core !== undefined && !semver.satisfies(options.coreVersion, core)) {
-        fail(
-          `It needs ${CORE_PACKAGE} ${core}, and this core is ${options.coreVersion}, so it is installed but will not run. Upgrade ${CORE_PACKAGE} first.`,
-        );
+      const { manifest: installed } = await addPlugin(parsePackageSpec(`${name}@${version}`), {
+        pluginsDir: options.pluginsDir,
+        registry: options.registry,
+      });
+      const needs = installed.peerDependencies[CORE_PACKAGE];
+      if (needs !== undefined && !semver.satisfies(options.coreVersion, needs)) {
+        failures.push({
+          kind: 'needs-newer-core',
+          name,
+          version,
+          needs,
+          core: options.coreVersion,
+        });
       }
     } catch (error) {
-      fail(messageOf(error));
+      notInstalled(messageOf(error));
     }
   }
   return failures;
