@@ -282,6 +282,13 @@ title as the settings have it at that moment. It reads the settings, so it
 returns a promise; call it when the plugin handles a request, a command or a
 job rather than once in `register`.
 
+**Federation middleware.** A federation middleware is handed a
+`PluginFederationContext` for each request. Its `outbox(username)` and
+`followers(username)` return promises of the collection, or of `undefined`
+for a user the site does not have. Await them before reading `totalItems`,
+`firstCursor`, `lastCursor` or a page. In host API version 1 they returned the
+collection directly.
+
 **The host API version and the peer range.** `HOST_API_VERSION` in
 `@geekity/cms/plugin` is the version of the host API this core provides. A
 plugin that targets another version is unavailable, with the reason on the
