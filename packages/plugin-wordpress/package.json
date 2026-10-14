@@ -26,7 +26,7 @@
   },
   "geekity": {
     "plugin": true,
-    "hostApi": 1,
+    "hostApi": 2,
     "requires": {}
   },
   "scripts": {
