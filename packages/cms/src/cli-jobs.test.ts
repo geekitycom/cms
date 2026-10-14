@@ -5,8 +5,9 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { watch } from 'node:fs';
+import { existsSync, watch } from 'node:fs';
 import fs from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
@@ -14,13 +15,14 @@ import { cleanupTemporaryDirs, PACKAGE_ROOT, temporaryDir } from './__testing__/
 import { nextEvent } from './__testing__/wait.ts';
 import { createFileRecords } from './jobs/file-records.ts';
 import type { JobStatus } from './jobs/types.ts';
-import { askToReload } from './supervisor/control.ts';
+import { askToReload, controlSocketPath } from './supervisor/control.ts';
 
 after(cleanupTemporaryDirs);
 
 const CLI = path.join(PACKAGE_ROOT, 'src', 'cli.ts');
 const TSX = import.meta.resolve('tsx');
 const CONFIG = path.join(import.meta.dirname, 'jobs', '__fixtures__', 'serve-config.ts');
+const CLAIM = path.join(import.meta.dirname, 'jobs', '__fixtures__', 'claim-process.ts');
 const PROCESS_EVENT_TIMEOUT_MS = 90_000;
 const JOB = 'wait-for-release';
 
@@ -138,6 +140,32 @@ function serve(site: Site): { child: ChildProcess; exited: Promise<number | null
 
 const pidOf = (line: string) => Number(line.split(' ').at(-1));
 
+/** A CLI process running the site's queued job by id, as `geekity strip-metadata` does. */
+function runInCli(site: Site): { child: ChildProcess; output: Promise<string> } {
+  const child = spawn(
+    process.execPath,
+    ['--import', TSX, CLAIM, path.join(site.dataDir, 'jobs.json'), site.jobId],
+    {
+      env: { ...process.env, GEEKITY_TEST_JOB_DIR: site.directory },
+      stdio: ['ignore', 'pipe', 'ignore'],
+    },
+  );
+  running.push(child);
+  let printed = '';
+  child.stdout?.setEncoding('utf8').on('data', (chunk: string) => (printed += chunk));
+  const output = new Promise<string>((resolve) => child.once('close', () => resolve(printed)));
+  return { child, output };
+}
+
+/** Ask the server to reload once its control socket is there, which is once it has booted. */
+async function reloadWhenUp(site: Site): Promise<void> {
+  const socket = controlSocketPath(site.dataDir);
+  await whenChanged('the control socket', tmpdir(), () =>
+    Promise.resolve(existsSync(socket) ? true : undefined),
+  );
+  assert.deepEqual(await askToReload(site.dataDir), { ok: true });
+}
+
 describe('admin jobs under geekity serve', () => {
   it('hands a running job back on a reload, and the next worker runs it to the end (AC #5)', async () => {
     const jobs = await site();
@@ -173,6 +201,48 @@ describe('admin jobs under geekity serve', () => {
       (await jobs.runs()).map((line) => line.split(' ').slice(0, 2).join(' ')),
       ['start 1', 'start 2', 'done 2'],
     );
+
+    server.child.kill('SIGTERM');
+    assert.equal(await server.exited, 0);
+  });
+
+  it('leaves a job a live CLI process runs alone when the server starts and reloads (TASK-398 AC #1)', async () => {
+    const jobs = await site();
+    const cli = runInCli(jobs);
+    const claimer = cli.child.pid;
+    await jobs.logged(new RegExp(`^start 1 ${String(claimer)}$`));
+
+    const server = serve(jobs);
+    await reloadWhenUp(jobs);
+    const during = await createFileRecords(path.join(jobs.dataDir, 'jobs.json')).get(jobs.jobId);
+    assert.equal(during?.state, 'running');
+    assert.equal(during.attempt, 1);
+    assert.equal(during.state === 'running' && during.claimer?.pid, claimer);
+
+    await jobs.release();
+    assert.equal(await cli.output, 'finished 1');
+    assert.deepEqual(await jobs.runs(), [
+      `start 1 ${String(claimer)}`,
+      `done 1 ${String(claimer)}`,
+    ]);
+
+    server.child.kill('SIGTERM');
+    assert.equal(await server.exited, 0);
+  });
+
+  it('runs a job whose CLI process was killed again as the next attempt (TASK-398 AC #2)', async () => {
+    const jobs = await site();
+    const cli = runInCli(jobs);
+    await jobs.logged(new RegExp(`^start 1 ${String(cli.child.pid)}$`));
+    cli.child.kill('SIGKILL');
+    await cli.output;
+
+    const server = serve(jobs);
+    const second = pidOf(await jobs.logged(/^start 2 /));
+    assert.notEqual(second, cli.child.pid);
+    await jobs.release();
+    const done = await jobs.recorded((status) => status.state === 'finished');
+    assert.equal(done.attempt, 2);
 
     server.child.kill('SIGTERM');
     assert.equal(await server.exited, 0);

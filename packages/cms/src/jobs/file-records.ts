@@ -1,16 +1,11 @@
-import { mkdir, open, readFile, stat, unlink } from 'node:fs/promises';
-import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
+import { readFile } from 'node:fs/promises';
 
 import { withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
+import { withLockFile } from './lock-file.ts';
 import type { JobRecords, JobStateName, JobStatus } from './types.ts';
 
 /** How many finished, failed or interrupted jobs of one name are kept. Queued and running ones always are. */
 export const KEPT_PER_NAME = 5;
-
-/** A lock file older than this was left by a process that died holding it. */
-const STALE_LOCK_MS = 10_000;
-const LOCK_RETRY_MS = 5;
 
 const TERMINAL: ReadonlySet<JobStateName> = new Set(['finished', 'failed', 'interrupted']);
 
@@ -118,56 +113,4 @@ function isJobStatus(value: unknown): value is JobStatus {
     typeof job.state === 'string' &&
     ['queued', 'running', 'finished', 'failed', 'interrupted'].includes(job.state)
   );
-}
-
-/**
- * Hold a lock file for the length of a task, so a second process waits. A
- * lock file whose process has gone, or that has outlived any honest write,
- * is taken over.
- */
-async function withLockFile<T>(lockFile: string, task: () => Promise<T>): Promise<T> {
-  await mkdir(path.dirname(lockFile), { recursive: true });
-  for (;;) {
-    try {
-      const handle = await open(lockFile, 'wx');
-      try {
-        await handle.writeFile(String(process.pid));
-      } finally {
-        await handle.close();
-      }
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      if (await isStale(lockFile)) {
-        await unlink(lockFile).catch(() => undefined);
-        continue;
-      }
-      await delay(LOCK_RETRY_MS);
-    }
-  }
-  try {
-    return await task();
-  } finally {
-    await unlink(lockFile).catch(() => undefined);
-  }
-}
-
-async function isStale(lockFile: string): Promise<boolean> {
-  try {
-    const [owner, info] = await Promise.all([readFile(lockFile, 'utf8'), stat(lockFile)]);
-    if (Date.now() - info.mtimeMs > STALE_LOCK_MS) return true;
-    const pid = Number(owner);
-    return Number.isInteger(pid) && pid > 0 && !isAlive(pid);
-  } catch {
-    return false;
-  }
-}
-
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
 }

@@ -12,12 +12,24 @@ export interface Progress {
   readonly note?: string;
 }
 
+/**
+ * The process that claimed a running job: its host, its id, and when it
+ * started as the operating system reports it, which tells it apart from a
+ * later process given the same id.
+ */
+export interface Claimer {
+  readonly host: string;
+  readonly pid: number;
+  readonly since?: string;
+}
+
 export type JobState =
   | { readonly state: 'queued'; readonly attempt: number; readonly interruptedAt?: string }
   | {
       readonly state: 'running';
       readonly attempt: number;
       readonly owner: string;
+      readonly claimer?: Claimer;
       readonly startedAt: string;
       readonly progress?: Progress;
     }

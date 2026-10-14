@@ -308,6 +308,24 @@ least once:
 A CLI command queues its job and runs it in its own process. It never takes
 over jobs that the server is running.
 
+When the server starts, and after each reload, it looks at every job recorded
+as running and decides whether that job was cut off. A job counts as cut off,
+and runs again as the next attempt, unless the process that claimed it is
+still running it. The claiming process is still running it when all of these
+hold:
+
+- The record names the process (`claimer`). Records written before the CMS
+  recorded one do not.
+- The process ran on the same host as the server.
+- It is not the server process itself.
+- A process with that id is alive, and it started at the time the record
+  gives. A process id that the system gave to a new process after the
+  claimer died does not count.
+
+So a job that `geekity strip-metadata` or `geekity resend` is running is left
+to that command when the server starts or reloads beside it. If the command
+is killed, the server runs the job again the next time it starts.
+
 ### Where job records are stored
 
 Job records are in `data/jobs.json`, a JSON list with the oldest job first.
@@ -317,8 +335,10 @@ Each record holds:
 - `queuedAt`: when it was queued.
 - `state`: `queued`, `running`, `finished`, `failed` or `interrupted`.
 - `attempt`: which run this is, starting at 1.
-- For a running job: `owner`, the server process that runs it, `startedAt`
-  and the last `progress` (`done`, and optionally `total` and `note`).
+- For a running job: `owner`, the queue that runs it, `claimer`, the process
+  that runs it (`host`, `pid`, and `since`, when the process started),
+  `startedAt` and the last `progress` (`done`, and optionally `total` and
+  `note`).
 - For a finished job: `finishedAt` and the handler's `result`.
 - For a failed job: `finishedAt` and the `error` message.
 - For an interrupted job, and for a job queued again after a crash:
@@ -328,7 +348,9 @@ Every queued and running job is kept, and the newest five finished, failed or
 interrupted jobs of each name. Older ones are removed when the file is next
 written. The site writes the file by renaming a finished copy over it, and
 holds `data/jobs.json.lock` while it does, so the server and a CLI command can
-write it at the same time. `geekity rebuild` does not touch the file. If you
+write it at the same time. A lock whose process has died, or that is over ten
+seconds old, is taken over. Only one waiting process takes it over: it holds
+`data/jobs.json.lock.takeover` while it removes the old lock. `geekity rebuild` does not touch the file. If you
 delete it, queued jobs and the history are lost, and nothing else.
 
 ### Swapping the transport and the record store
@@ -354,5 +376,7 @@ export default defineConfig({
 
 A record store implements `JobRecords`. Each of its transitions must be a
 compare-and-set on the job's state and attempt, because that is what stops two
-workers from running one job. `jobs.definitions` registers jobs beside the
+workers from running one job. It stores the state it is given as it is,
+`claimer` included, because start-up recovery reads `claimer` to tell a job
+another process is running from one that was cut off. `jobs.definitions` registers jobs beside the
 CMS's own.

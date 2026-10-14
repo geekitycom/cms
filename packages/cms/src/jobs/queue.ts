@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Clock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
+import { isClaimerAlive, thisProcess } from './processes.ts';
 import { JobLostError } from './types.ts';
 import type {
   JobDefinition,
@@ -52,6 +53,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
   async function recover(): Promise<void> {
     for (const record of await records.list(['running'])) {
       if (record.state !== 'running' || record.owner === owner) continue;
+      if (record.claimer !== undefined && isClaimerAlive(record.claimer)) continue;
       const expected = { state: 'running' as const, attempt: record.attempt };
       await records.transition(
         record.id,
@@ -80,10 +82,14 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
         error: `No handler is registered for ${record.name}.`,
       });
     }
-    const startedAt = now();
-    if (!(await records.transition(id, queued, { state: 'running', attempt, owner, startedAt }))) {
-      return false;
-    }
+    const claim = {
+      state: 'running' as const,
+      attempt,
+      owner,
+      claimer: thisProcess(),
+      startedAt: now(),
+    };
+    if (!(await records.transition(id, queued, claim))) return false;
 
     inFlight += 1;
     const running = { state: 'running' as const, attempt };
@@ -92,12 +98,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
         signal,
         attempt,
         async progress(progress) {
-          const kept = await records.transition(id, running, {
-            ...running,
-            owner,
-            startedAt,
-            progress,
-          });
+          const kept = await records.transition(id, running, { ...claim, progress });
           if (!kept) throw new JobLostError(id);
         },
       });

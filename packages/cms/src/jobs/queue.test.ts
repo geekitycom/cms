@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
@@ -8,7 +8,7 @@ import { systemClock } from '../util/clock.ts';
 import { createFileRecords } from './file-records.ts';
 import { createInProcessTransport } from './in-process.ts';
 import { createJobQueue, MAX_PAYLOAD_BYTES } from './queue.ts';
-import type { JobDefinition, JobQueue, Json } from './types.ts';
+import type { Claimer, JobDefinition, JobQueue, Json } from './types.ts';
 
 const directories: string[] = [];
 after(async () => {
@@ -118,5 +118,59 @@ describe('a job queue', () => {
     assert.equal(untouched?.state, 'running');
     assert.equal(untouched.state === 'running' && untouched.owner, 'the server');
     assert.equal(untouched.attempt, 1);
+  });
+});
+
+describe('start-up recovery', () => {
+  async function recoveredAttempt(claimer: Claimer): Promise<number | undefined> {
+    const file = await recordsFile();
+    const records = createFileRecords(file);
+    const id = await queueOn(file).enqueue(count, { to: 1 });
+    assert.ok(
+      await records.transition(
+        id,
+        { state: 'queued', attempt: 1 },
+        {
+          state: 'running',
+          attempt: 1,
+          owner: 'another worker',
+          claimer,
+          startedAt: '2026-10-14T00:00:00.000Z',
+        },
+      ),
+    );
+    const server = queueOn(file);
+    await server.start();
+    const attempt = (await records.get(id))?.attempt;
+    await server.close();
+    return attempt;
+  }
+
+  it('recovers a job whose claiming process id now names a process that started since', async () => {
+    const attempt = await recoveredAttempt({
+      host: hostname(),
+      pid: process.ppid,
+      since: 'not when that process started',
+    });
+    assert.equal(attempt, 2);
+  });
+
+  it('recovers a job claimed on another host, whose process it cannot see', async () => {
+    assert.equal(await recoveredAttempt({ host: `not-${hostname()}`, pid: process.ppid }), 2);
+  });
+
+  it('recovers a job that names no claiming process', async () => {
+    const file = await recordsFile();
+    const records = createFileRecords(file);
+    const id = await queueOn(file).enqueue(count, { to: 1 });
+    await records.transition(
+      id,
+      { state: 'queued', attempt: 1 },
+      { state: 'running', attempt: 1, owner: 'old', startedAt: '2026-10-14T00:00:00.000Z' },
+    );
+    const server = queueOn(file);
+    await server.start();
+    assert.equal((await records.get(id))?.attempt, 2);
+    await server.close();
   });
 });
