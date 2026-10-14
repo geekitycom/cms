@@ -328,12 +328,16 @@ describe('geekity import', () => {
 
     const replaced = await geekity(site, ['import', archive, '--replace']);
     assert.equal(replaced.code, 0, replaced.stderr);
-    const aside = (await fs.readdir(site)).filter((name) => name.startsWith('data.before-import-'));
+    const aside = (await fs.readdir(dataDir)).filter((name) =>
+      name.startsWith('.geekity-before-import-'),
+    );
     assert.equal(aside.length, 1);
+    assert.match(replaced.stdout, /Moved what was there into .*\.geekity-before-import-/);
     assert.equal(
-      await fs.readFile(path.join(site, aside[0] ?? '', 'users.json'), 'utf8'),
+      await fs.readFile(path.join(dataDir, aside[0] ?? '', 'users.json'), 'utf8'),
       'the old site',
     );
+    assert.deepEqual(await fs.readdir(site), ['content', 'data']);
   });
 
   it('refuses a different base URL unless --new-base-url', async () => {

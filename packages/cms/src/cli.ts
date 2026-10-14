@@ -21,7 +21,7 @@ import {
 } from './export/site-export.ts';
 import {
   checkImportTargets,
-  discardStaging,
+  discardStagedImport,
   finishSiteImport,
   importNotes,
   installArchivedPlugins,
@@ -391,8 +391,8 @@ const OPTIONS_HELP = `Options:
                    With export: leave content/ out.
   --list           With export: print each file data/ may hold, its class
                    and what is lost without it, and write nothing.
-  --replace        With import: move content/ and data/ aside to
-                   <dir>.before-import-<time> when they already hold a site.
+  --replace        With import: move what content/ and data/ hold into
+                   <dir>/.geekity-before-import-<time> when they hold a site.
   --dev-mode       With import: turn dev mode on, for a staging copy of a
                    live site.
   --new-base-url   With import: accept a base URL in effect that differs
@@ -1097,7 +1097,7 @@ async function importCommand({ args, configPath, flags }: ParsedArgs): Promise<n
   if (occupied.length > 0 && flags['replace'] !== true) {
     process.stderr.write(
       `${occupied.map((target) => target.dir).join(' and ')} already ${occupied.length === 1 ? 'holds' : 'hold'} a site. ` +
-        'Import into empty folders, or give --replace to move them to <dir>.before-import-<time> first.\n',
+        'Import into empty folders, or give --replace to move what they hold into <dir>/.geekity-before-import-<time> first.\n',
     );
     return 1;
   }
@@ -1107,7 +1107,7 @@ async function importCommand({ args, configPath, flags }: ParsedArgs): Promise<n
     Object.freeze({ ...unsettled, contentDir: staged.content ?? contentDir }),
   );
   if (inEffect.baseUrl !== manifest.baseUrl && flags['new-base-url'] !== true) {
-    await discardStaging(targets);
+    await discardStagedImport(staged);
     process.stderr.write(
       `The base URL in effect is ${inEffect.baseUrl}, and the archive was exported from ${manifest.baseUrl}. ` +
         'Actor ids are built from the base URL, so followers would not follow the site to a new address. ' +
@@ -1121,7 +1121,7 @@ async function importCommand({ args, configPath, flags }: ParsedArgs): Promise<n
   }
 
   for (const aside of await placeSiteImport(staged, { stamp: compactTime(unsettled.now()) })) {
-    process.stdout.write(`Moved the folder that was there to ${aside}.\n`);
+    process.stdout.write(`Moved what was there into ${aside}.\n`);
   }
   process.stdout.write(
     `Restored ${count(manifest.files.length - staged.skipped.length, 'file')} from ${archive}.\n`,

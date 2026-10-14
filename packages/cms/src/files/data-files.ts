@@ -131,6 +131,18 @@ export const IMPORT_MARKER = declareDataFile({
   lost: 'Nothing. geekity import leaves it until an import is finished, so a second run knows the folder is its own.',
 });
 
+export const IMPORT_STAGING = declareDataFile({
+  pattern: '.geekity-importing/**',
+  dataClass: SCRATCH,
+  lost: 'Nothing. geekity import unpacks an archive here and moves it into place; a stopped import leaves it for the next run to remove.',
+});
+
+export const IMPORT_ASIDE = declareDataFile({
+  pattern: '.geekity-before-import-*/**',
+  dataClass: SCRATCH,
+  lost: 'What the folder held before geekity import --replace. Delete it once the imported site is checked.',
+});
+
 export const EXPORTS = declareDataFile({
   pattern: 'exports/**',
   dataClass: SCRATCH,
@@ -278,6 +290,8 @@ export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   TEMPORARY_FILES,
   LOCK_FILES,
   IMPORT_MARKER,
+  IMPORT_STAGING,
+  IMPORT_ASIDE,
   EXPORTS,
   ACTOR_KEYS,
   USERS,
@@ -314,6 +328,8 @@ export const CONTENT_SCRATCH_FILES: readonly DataFileDeclaration[] = [
   TEMPORARY_FILES,
   LOCK_FILES,
   IMPORT_MARKER,
+  IMPORT_STAGING,
+  IMPORT_ASIDE,
   WATCH_PROBE,
 ];
 

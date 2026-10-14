@@ -127,8 +127,8 @@ Options:
                    With export: leave content/ out.
   --list           With export: print each file data/ may hold, its class
                    and what is lost without it, and write nothing.
-  --replace        With import: move content/ and data/ aside to
-                   <dir>.before-import-<time> when they already hold a site.
+  --replace        With import: move what content/ and data/ hold into
+                   <dir>/.geekity-before-import-<time> when they hold a site.
   --dev-mode       With import: turn dev mode on, for a staging copy of a
                    live site.
   --new-base-url   With import: accept a base URL in effect that differs

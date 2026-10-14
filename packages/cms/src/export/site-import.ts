@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream, existsSync, readFileSync } from 'node:fs';
-import { chmod, mkdir, rename, rm, utimes, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readdir, readFile, rename, rm, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 
@@ -9,9 +9,13 @@ import semver from 'semver';
 import {
   CONTENT_SCRATCH_FILES,
   CORE_DATA_FILES,
+  IMPORT_ASIDE,
   IMPORT_MARKER,
+  IMPORT_STAGING,
   classifyFiles,
   dataFileFor,
+  dataFileMatches,
+  dataPath,
 } from '../files/data-files.ts';
 import type { DataFileDeclaration } from '../files/data-files.ts';
 import { readTarStream } from '../files/tar.ts';
@@ -33,13 +37,18 @@ import type {
 
 /**
  * `geekity import` (decision-55, section 5): an archive `geekity export` wrote,
- * checked entry by entry and unpacked into `<dir>.importing` beside `content/`
- * and `data/`, then renamed into place.
+ * checked entry by entry and unpacked into `.geekity-importing/` inside
+ * `content/` and `data/`, then moved into place entry by entry.
+ *
+ * Nothing is made, renamed or removed beside a target, and the target itself
+ * is never renamed or removed, because on Docker each one is a mount point.
+ * Every move stays inside one target, so on one filesystem.
  *
  * The archive is untrusted. Only regular files under `content/` and `data/`
  * that the manifest lists, with the size and sha256 it gives, are written.
- * Each staging folder holds a marker naming the manifest's hash until the
- * import is finished, so a run that was killed is finished by the next one.
+ * From the first staged entry moved in until the import is finished, the
+ * target holds a marker naming the manifest's hash, and a folder moved aside
+ * holds it while it fills, so a run that was killed is finished by the next.
  */
 
 export interface ImportTargets {
@@ -76,6 +85,8 @@ export interface StagedImport {
   readonly states: readonly ImportTarget[];
   /** Archived files under `data/` that this site does not keep, left out. */
   readonly skipped: readonly { readonly path: string; readonly why: string }[];
+  /** The folders staging made because they were not there, a target among them. */
+  readonly created: readonly string[];
 }
 
 /** A manifest larger than this is not one `geekity export` wrote. */
@@ -86,12 +97,19 @@ const SHA256 = /^[0-9a-f]{64}$/;
 /** An archive carries no folders, so the ones under `data/` are made private, as `data/keys` is. */
 const PRIVATE_FOLDER_MODE = 0o700;
 
-export function stagingDir(dir: string): string {
-  return `${dir}.importing`;
+function stagingDir(dir: string): string {
+  return dataPath(dir, IMPORT_STAGING);
 }
 
 function markerFile(dir: string): string {
-  return path.join(dir, IMPORT_MARKER.pattern);
+  return dataPath(dir, IMPORT_MARKER);
+}
+
+/** Whether a name at the top of a target is the import's own: its marker, staging or a folder moved aside. */
+function importOwned(name: string): boolean {
+  return [IMPORT_MARKER, IMPORT_STAGING, IMPORT_ASIDE].some((declaration) =>
+    dataFileMatches(declaration, name),
+  );
 }
 
 function notAnExport(why: string): Error {
@@ -307,6 +325,7 @@ function placeOf(name: string): { readonly root: 'content' | 'data'; readonly re
   if (root !== 'content' && root !== 'data') return refuse();
   if (rest.length === 0) refuse();
   if (rest.some((segment) => segment === '' || segment === '.' || segment === '..')) refuse();
+  if (importOwned(rest[0] ?? '')) refuse();
   return { root, relative: rest.join('/') };
 }
 
@@ -413,16 +432,23 @@ async function unpack(
   return skipped;
 }
 
-/** Remove the staging folders a run left beside the targets. */
-export async function discardStaging(targets: ImportTargets): Promise<void> {
+/** Remove the staging folders inside the targets, and the folders staging made. */
+async function discardStaging(targets: ImportTargets, created: readonly string[]): Promise<void> {
   await rm(stagingDir(targets.contentDir), { recursive: true, force: true });
   await rm(stagingDir(targets.dataDir), { recursive: true, force: true });
+  for (const dir of created) await rm(dir, { recursive: true, force: true });
+}
+
+/** Give up a staged import: the targets are left as they were before it was staged. */
+export async function discardStagedImport(staged: StagedImport): Promise<void> {
+  await discardStaging(staged.targets, staged.created);
 }
 
 /**
- * Unpack the archive into `<dir>.importing` beside each folder it restores,
- * checking every entry. Staging folders a killed run left are removed first;
- * on any refusal the new ones are removed too, and the targets are untouched.
+ * Unpack the archive into `.geekity-importing/` inside each folder it
+ * restores, checking every entry. Staging folders a killed run left are
+ * removed first; on any refusal the new ones are removed too, and nothing
+ * else in the targets is touched.
  */
 export async function stageSiteImport(options: {
   readonly archive: string;
@@ -431,14 +457,15 @@ export async function stageSiteImport(options: {
   readonly settings: SettingsRegistry;
 }): Promise<StagedImport> {
   const { archive, archived, targets, settings } = options;
-  await discardStaging(targets);
+  await discardStaging(targets, []);
   const content = archived.manifest.content ? stagingDir(targets.contentDir) : undefined;
   const data = stagingDir(targets.dataDir);
+  const created: string[] = [];
   try {
     for (const dir of [content, data]) {
       if (dir === undefined) continue;
-      await mkdir(dir, { recursive: true });
-      await writeFile(markerFile(dir), archived.marker, { mode: 0o600 });
+      const made = await mkdir(dir, { recursive: true });
+      if (made !== undefined && made !== dir) created.push(made);
     }
     const skipped = await unpack(
       archive,
@@ -447,51 +474,71 @@ export async function stageSiteImport(options: {
       importDeclarations(archived, settings),
     );
     const states = checkImportTargets(archived, targets, settings);
-    return { archived, targets, content, data, states, skipped };
+    return { archived, targets, content, data, states, skipped, created };
   } catch (error) {
-    await discardStaging(targets);
+    await discardStaging(targets, created);
     throw error;
   }
 }
 
-/** `<dir>.before-import-<stamp>`, with a number after it when that is taken. */
-function asideName(dir: string, stamp: string): string {
-  const base = `${dir}.before-import-${stamp}`;
-  let name = base;
-  for (let n = 2; existsSync(name); n += 1) name = `${base}-${String(n)}`;
-  return name;
+/** A new `.geekity-before-import-<stamp>` inside `dir`, holding the marker until everything is in it. */
+async function startAside(dir: string, stamp: string, marker: string): Promise<string> {
+  let aside = dataPath(dir, IMPORT_ASIDE, `.geekity-before-import-${stamp}`);
+  for (let n = 2; existsSync(aside); n += 1) {
+    aside = dataPath(dir, IMPORT_ASIDE, `.geekity-before-import-${stamp}-${String(n)}`);
+  }
+  await mkdir(aside, { mode: PRIVATE_FOLDER_MODE });
+  await writeFile(markerFile(aside), marker, { mode: 0o600 });
+  return aside;
+}
+
+/** The folder a killed run of this archive was moving `dir`'s contents into, if any. */
+async function asideInProgress(dir: string, marker: string): Promise<string | undefined> {
+  for (const name of await readdir(dir)) {
+    if (!dataFileMatches(IMPORT_ASIDE, name)) continue;
+    const aside = dataPath(dir, IMPORT_ASIDE, name);
+    const held = await readFile(markerFile(aside), 'utf8').catch(() => undefined);
+    if (held === marker) return aside;
+  }
+  return undefined;
 }
 
 /**
- * Rename each staging folder into place. A folder holding files that are not
- * scratch is renamed to `<dir>.before-import-<stamp>`, and nothing is deleted
- * but scratch and an unfinished import of this same archive. Answers the
- * folders moved aside.
+ * Move each staging folder's entries into its target. What an occupied target
+ * held is moved into `.geekity-before-import-<stamp>` inside it, and nothing
+ * is deleted but scratch and an unfinished import of this same archive. A run
+ * killed part way through is finished by the next, which moves the rest of
+ * the old contents into the same folder. Answers the folders moved aside.
  */
 export async function placeSiteImport(
   staged: StagedImport,
-  options: { readonly stamp: string },
+  options: {
+    readonly stamp: string;
+    readonly rename?: (from: string, to: string) => Promise<void>;
+  },
 ): Promise<string[]> {
+  const move = options.rename ?? rename;
+  const { marker } = staged.archived;
   const moved: string[] = [];
   for (const { dir, state } of staged.states) {
     const from = dir === staged.targets.contentDir ? staged.content : staged.data;
     if (from === undefined) continue;
-    switch (state) {
-      case 'occupied': {
-        const aside = asideName(dir, options.stamp);
-        await rename(dir, aside);
-        moved.push(aside);
-        break;
-      }
-      case 'unfinished':
-      case 'empty':
-        await rm(dir, { recursive: true, force: true });
-        break;
-      default:
-        state satisfies never;
+    const held = (await readdir(dir)).filter((name) => !importOwned(name));
+    const aside =
+      (await asideInProgress(dir, marker)) ??
+      (state === 'occupied' ? await startAside(dir, options.stamp, marker) : undefined);
+    if (aside === undefined) {
+      for (const name of held) await rm(path.join(dir, name), { recursive: true, force: true });
+    } else {
+      for (const name of held) await move(path.join(dir, name), path.join(aside, name));
+      await rm(markerFile(aside));
+      moved.push(aside);
     }
-    await mkdir(path.dirname(dir), { recursive: true });
-    await rename(from, dir);
+    await writeFile(markerFile(dir), marker, { mode: 0o600 });
+    for (const name of await readdir(from)) {
+      await move(path.join(from, name), path.join(dir, name));
+    }
+    await rm(from, { recursive: true, force: true });
   }
   return moved;
 }

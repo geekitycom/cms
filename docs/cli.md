@@ -259,16 +259,17 @@ The command does these steps in this order:
 2. It reads `manifest.json`, the first entry. It refuses an archive whose
    `format` is newer than this version reads.
 3. It refuses when `content/` or `data/` already holds a file that is not
-   scratch. With `--replace`, it renames each of those folders to
-   `<dir>.before-import-<yyyymmdd>T<hhmmss>Z` instead. Nothing is deleted.
-   With an archive made `--without-content`, only `data/` is checked and
-   replaced.
-4. It unpacks the archive into `content.importing` and `data.importing`
-   beside the folders. It treats the archive as untrusted: it refuses a link,
-   a folder entry, a device, an absolute path, a `..` segment, a name outside
-   `content/` and `data/`, a file the manifest does not list, and a file whose
-   size or SHA-256 differs from the manifest. On a refusal it removes the
-   staging folders and leaves the site's folders as they were. A file in
+   scratch. With `--replace`, it continues, and step 6 moves what those
+   folders hold aside. With an archive made `--without-content`, only `data/`
+   is checked and replaced.
+4. It unpacks the archive into a `.geekity-importing/` folder inside
+   `content/` and inside `data/`. It treats the archive as untrusted: it
+   refuses a link, a folder entry, a device, an absolute path, a `..`
+   segment, a name outside `content/` and `data/`, a name that the import
+   uses itself (`.geekity-import`, `.geekity-importing` and
+   `.geekity-before-import-*`), a file the manifest does not list, and a file
+   whose size or SHA-256 differs from the manifest. On a refusal it removes
+   the staging folders and leaves the site's files as they were. A file in
    `data/` whose class on this site is not `kept` or `credential`, such as a
    `geekity.db` added by hand, is left out and named on standard error.
 5. It compares the base URL in effect with the archive's `baseUrl`. The base
@@ -277,7 +278,13 @@ The command does these steps in this order:
    actor ids are built from the base URL and followers would not follow the
    site to a new address. `--new-base-url` imports the site at the base URL in
    effect.
-6. It renames the staging folders into place.
+6. It moves the staged files into place. With `--replace`, it first moves
+   every entry that `content/` or `data/` holds into
+   `.geekity-before-import-<yyyymmdd>T<hhmmss>Z/` inside the same folder.
+   Without `--replace`, it deletes only scratch files, such as a stale
+   `.tmp` file. Every move stays inside the folder, so `content/` and `data/`
+   themselves are never renamed or removed. This is why the import works
+   when they are mount points, as on Docker.
 7. With `--dev-mode`, it turns dev mode on. Use this for a staging copy of a
    live site. Without it, the site keeps the dev mode it was exported in,
    because `data/dev-mode.json` is in the archive.
@@ -311,11 +318,54 @@ retry, such as `geekity plugin add @geekity/plugin-llm@1.2.0`.
 | `0`       | The site is restored and every `folder` plugin is installed.                                             |
 | `1`       | The import was refused and nothing changed, or the site is restored but a plugin could not be installed. |
 
-An import that was stopped part way leaves `content.importing` and
-`data.importing`, or a folder already renamed into place that holds a
-`.geekity-import` marker. Run the same import again: it removes what the
-stopped run left and finishes with the same result. The marker is removed
-when an import finishes.
+An import that was stopped part way leaves a `.geekity-importing/` folder, a
+`.geekity-import` marker file, or a `.geekity-before-import-*` folder that is
+not yet complete, inside `content/` or `data/`. Run the same import again,
+with the same flags: it removes the staging folder, moves any entries still
+left into the same `.geekity-before-import-*` folder, and finishes with the
+same result as an import that was not stopped. The marker is removed when an
+import finishes.
+
+### Getting the old site back
+
+`--replace` deletes nothing. What `content/` held is in
+`content/.geekity-before-import-<yyyymmdd>T<hhmmss>Z/`, and what `data/` held
+is in `data/.geekity-before-import-<yyyymmdd>T<hhmmss>Z/`. The command prints
+both paths. The site ignores these folders: the content scan skips folders
+whose name starts with a dot, and `geekity export` leaves them out. To go
+back, stop the site, delete everything else in the folder, and move the
+entries of the `.geekity-before-import-*` folder up one level. When the
+imported site works, delete the folders to free the space. They hold the old
+site's keys and personal data.
+
+### Importing on Docker
+
+The image mounts `content/` and `data/` at `/site/content` and `/site/data`.
+Run the import in a one-off container of the same service, with the site
+stopped, and mount the archive into it read-only. Do not put the archive in
+`data/` or `content/`, because the import moves or deletes what those folders
+hold. From the stack directory:
+
+```sh
+docker compose stop geekity
+docker compose run --rm -v ./geekity-blog.example-20261014T150405Z.tar.gz:/tmp/site.tar.gz:ro \
+  geekity geekity import /tmp/site.tar.gz
+docker compose start geekity
+```
+
+The one-off container reads the same `.env`, so the base URL check uses
+`GEEKITY_BASE_URL`. A stack that has already started once has the starter
+site in `content/`, so give `--replace`, and the starter site is moved to
+`content/.geekity-before-import-*/`. The plugins are installed into
+`/site/plugins`, so the container needs to reach the npm registry.
+
+To make the archive on the old Docker host, write it inside the container and
+copy it out:
+
+```sh
+docker compose exec geekity geekity export --out /tmp/site.tar.gz
+docker compose cp geekity:/tmp/site.tar.gz ./site.tar.gz
+```
 
 ## Creating an admin from the command line
 

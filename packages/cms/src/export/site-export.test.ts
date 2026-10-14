@@ -62,6 +62,8 @@ async function site() {
   await put(contentDir, 'uploads/2026/10/cat.jpg', 'jpeg bytes');
   await put(contentDir, 'posts/hello.md.1a2b-3.tmp', 'half a write');
   await put(contentDir, '.geekity-watch-0f3e/probe', '');
+  await put(contentDir, '.geekity-importing/posts/staged.md', 'staged');
+  await put(contentDir, '.geekity-before-import-20261014T150000Z/posts/old.md', 'old');
 
   await put(dataDir, 'users.json', '[{"username":"ada"}]', 0o600);
   await put(dataDir, 'keys/ada.Ed25519.jwk', '{"kty":"OKP"}', 0o600);
@@ -78,6 +80,8 @@ async function site() {
   await put(dataDir, 'indieauth-activity.json', '[]');
   await put(dataDir, 'jobs.json.lock', '');
   await put(dataDir, 'users.json.1a2b-3.tmp', '');
+  await put(dataDir, '.geekity-importing/users.json', 'staged', 0o600);
+  await put(dataDir, '.geekity-before-import-20261014T150000Z/users.json', 'old', 0o600);
   await put(dataDir, 'exports/geekity-blog.example-20261013T000000Z.tar.gz', 'old');
   await put(dataDir, 'surprise.json', '{}');
   await put(
