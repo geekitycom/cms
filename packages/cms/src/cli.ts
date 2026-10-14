@@ -16,6 +16,7 @@ import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
 import type { ResolvedConfig } from './config.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './comments/migrations.ts';
 import { stripMetadataJob, stripReport } from './content/metadata/strip-job.ts';
+import { resendJob, resendReport } from './federation/resend-job.ts';
 import { createUser, DuplicateUsernameError } from './site/users.ts';
 import { createCms } from './index.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
@@ -830,8 +831,9 @@ async function syncCommand({ configPath }: ParsedArgs): Promise<number> {
  * Mastodon keeps the copy of a post it first fetched, so a property added
  * later — the quote policy (TASK-125) is the one that made this a command —
  * reaches a post already out only through an `Update`. This is the resend
- * button on the federation screen, for every post at once. Delivery runs with
- * no queue, so each activity has been posted before the process exits.
+ * button on the federation screen, for every post at once, and it runs the
+ * same resend job (TASK-393). Delivery runs with no queue, so each activity
+ * has been posted before the process exits.
  */
 async function resendCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const all = flags['all'] === true;
@@ -849,31 +851,38 @@ async function resendCommand({ args, configPath, flags }: ParsedArgs): Promise<n
     })),
   );
 
+  let status;
   try {
     await cms.sync();
-    const slugs = all ? cms.store.listFederated().map((document) => document.slug) : args;
-    let failed = 0;
-    for (const slug of slugs) {
-      const report = await cms.delivery.resend(slug);
-      if (report === undefined) {
-        process.stderr.write(`${slug}: nothing to resend, no announced post has that slug.\n`);
-        failed += 1;
-        continue;
-      }
-      if (report.held) {
-        process.stdout.write(`${slug}: ${report.activityType} held by dev mode, nothing sent\n`);
-        continue;
-      }
-      const reached = report.deliveries.filter((delivery) => delivery.status === 'sent').length;
-      process.stdout.write(
-        `${slug}: ${report.activityType} to ${String(reached)} of ` +
-          `${String(report.deliveries.length)} inboxes\n`,
-      );
-    }
-    return failed === 0 ? 0 : 1;
+    status = await cms.jobs.run(
+      await cms.jobs.enqueue(resendJob(cms), { slugs: all ? 'all' : args, webmentions: false }),
+    );
   } finally {
     await cms.close();
   }
+
+  const report = status.state === 'finished' ? resendReport(status.result) : undefined;
+  if (report === undefined) {
+    const problem = status.state === 'failed' ? status.error : `The job ended ${status.state}.`;
+    process.stderr.write(`The resend did not finish: ${problem}\n`);
+    return 1;
+  }
+
+  let failed = 0;
+  for (const { slug, activity } of report.posts) {
+    if (activity === null) {
+      process.stderr.write(`${slug}: nothing to resend, no announced post has that slug.\n`);
+      failed += 1;
+    } else if (activity.held) {
+      process.stdout.write(`${slug}: ${activity.activityType} held by dev mode, nothing sent\n`);
+    } else {
+      process.stdout.write(
+        `${slug}: ${activity.activityType} to ${String(activity.reached)} of ` +
+          `${String(activity.inboxes)} inboxes\n`,
+      );
+    }
+  }
+  return failed === 0 ? 0 : 1;
 }
 
 /**

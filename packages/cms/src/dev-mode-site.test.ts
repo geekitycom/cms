@@ -3,10 +3,10 @@ import { after, before, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signedIn, FIRST_ADMIN } from './admin/__testing__/harness.ts';
 import type { Browser } from './admin/__testing__/harness.ts';
-import { resendMessage } from './admin/federation.ts';
 import { readDevModeRecord } from './settings/dev-mode.ts';
 import type { DevModeEntry } from './settings/dev-mode.ts';
 import { addFollower } from './federation/records.ts';
+import { resendJob, resendReport } from './federation/resend-job.ts';
 import type { Cms } from './index.ts';
 import { createMemoryMailProvider } from './mail/memory.ts';
 import type { MemoryMailProvider } from './mail/memory.ts';
@@ -174,10 +174,17 @@ describe('a site in dev mode', () => {
     await cms.scheduler.run();
     await settle(cms);
 
-    const resent = await cms.delivery.resend('hello-world');
-    assert.equal(resent?.held, true);
-    assert.match(resendMessage(resent), /dev mode held the Update/i);
-    await cms.webmentions.send('hello-world');
+    const resent = await cms.jobs.run(
+      await cms.jobs.enqueue(resendJob(cms), { slugs: ['hello-world'], webmentions: true }),
+    );
+    assert.equal(resent.state, 'finished');
+    const [post] = resendReport(resent.result)?.posts ?? [];
+    assert.equal(post?.activity?.activityType, 'Update');
+    assert.equal(
+      post.activity.held,
+      true,
+      'the job result says dev mode held the resend (TASK-393 AC #5)',
+    );
     await cms.relays.retry(RELAY_INBOX);
     await cms.notifyFeeds([`${BASE_URL}/feed/`]);
     await cms.mail.send({ to: 'ada@example.com', template: 'test', subject: 'Hello' });

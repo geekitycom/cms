@@ -26,8 +26,8 @@ The sender records one outcome per link:
 - `none`, for a page that takes no webmentions
 - `failed`
 
-`/admin/federation` shows the outcomes per post. The Resend button there sends
-them again from the file as it reads now.
+`/admin/federation` shows the outcomes per post. The Resend button there queues
+a job that sends them again from the file as it reads when the job runs.
 
 **Only public addresses are fetched.** This covers the target page the sender
 reads for an endpoint, the endpoint it posts to, and the source the receiver
@@ -227,5 +227,5 @@ post down when it finds the link gone. Drafting or trashing the post has the
 same effect.
 
 The posts table on `/admin/federation` lists each selected target with the
-result of its last webmention and a link to its copy. **Resend** sends to the
-targets again.
+result of its last webmention and a link to its copy. **Resend** queues a job
+that sends to the targets again.

@@ -36,6 +36,7 @@ import type {
 import { createSettlingQueue } from '../federation/queue.ts';
 import { settleImageVariants } from '../images/variants.ts';
 import { stripMetadataJob } from '../content/metadata/strip-job.ts';
+import { resendJob } from '../federation/resend-job.ts';
 import { createFileRecords } from '../jobs/file-records.ts';
 import { createInProcessTransport } from '../jobs/in-process.ts';
 import { createJobQueue } from '../jobs/queue.ts';
@@ -351,7 +352,11 @@ export function createServices({
   const jobs = createJobQueue({
     transport: resolved.jobs.transport ?? createInProcessTransport(),
     records: resolved.jobs.records ?? createFileRecords(path.join(resolved.dataDir, 'jobs.json')),
-    jobs: [stripMetadataJob(resolved.contentDir), ...(resolved.jobs.definitions ?? [])],
+    jobs: [
+      stripMetadataJob(resolved.contentDir),
+      resendJob({ store, delivery, webmentions }),
+      ...(resolved.jobs.definitions ?? []),
+    ],
     now: resolved.now,
   });
 

@@ -91,8 +91,8 @@ export {
   RELAY_RETRY_PATH,
   RELAY_STATE_LABELS,
   relayRow,
+  RESEND_ALL_PATH,
   RESEND_PATH,
-  resendMessage,
 } from './federation.ts';
 export type {
   ActorSummary,

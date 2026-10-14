@@ -8,6 +8,7 @@ import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, FIRST_ADMIN, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
 import { seedActorKeys } from '../federation/__testing__/keys.ts';
+import { RESEND_JOB } from '../federation/resend-job.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
@@ -779,6 +780,9 @@ describe('syndication on the federation screen (TASK-155 AC #9)', () => {
       slug: 'hello-world',
     });
     assert.equal(resend.status, 303);
+    const queued = await cms.jobs.latest(RESEND_JOB);
+    assert.ok(queued);
+    assert.equal((await cms.jobs.run(queued.id)).state, 'finished');
     assert.deepEqual(
       sent.map((one) => one.target).sort(),
       [FRIENDLY, NEWS].sort(),
