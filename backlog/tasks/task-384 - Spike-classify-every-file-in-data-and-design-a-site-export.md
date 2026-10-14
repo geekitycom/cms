@@ -1,10 +1,11 @@
 ---
 id: TASK-384
 title: 'Spike: classify every file in data/ and design a site export'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-10-13 12:10'
-updated_date: '2026-10-13 15:29'
+updated_date: '2026-10-14 14:34'
 labels: []
 milestone: m-38
 dependencies:
@@ -33,3 +34,27 @@ decision-52 makes a site its directory and promises an export a solo site owner 
 - [ ] #5 Follow-up tasks are filed; nothing is built for production in this task
 - [ ] #6 The user has read the decision record and accepted it, or asked for changes that are made; follow-up build tasks are not started before then
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Read decision-52/53/54 and the task.
+2. Find every data/ and content/ write site in packages/cms/src and packages/plugin-*/src: path constants, dataDir joins, write calls, plugin host.data files.
+3. Confirm the list with a recorded test run (throwaway fs write hook in the session scratchpad, run under NODE_OPTIONS for the cms and plugin test suites).
+4. Give each file a class and say what is lost; check how a rebuilt database behaves (scheduler first run, relays.sync).
+5. Design the class model, the declaration table and its enforcement, the export, the import and the interaction with geekity rebuild.
+6. Write the findings, the design, the proposed tasks and the open questions into decision-55 (status proposed).
+7. Leave TASK-384 In Progress until the user accepts decision-55; the user files the proposed tasks.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Findings and design are in backlog/decisions/decision-55 (status proposed).
+
+Evidence: a throwaway --require hook wrapped node:fs writes and logged paths under any dir holding geekity.db or _data/site.json. Ran pnpm test in packages/cms (6010 pass) and the four plugins (207 pass): 19,831 writes, which collapse to exactly the files in decision-55's table plus test fixtures. A one-line regex scan found 26 dataDir join sites in src and missed the multi-line join in settings/registry.ts, so the boundary test must use the TypeScript AST. Scripts lived in the session scratchpad; nothing was added to packages/.
+
+Key findings: DataClass.secret conflates 'mode 0600' with 'exported only when asked' (actor keys, notification-secret, comment-salt, users.json are secrets that must be exported), so the record proposes a tagged union kept | credential | rebuildable | pending | scratch. plugin-wordpress actors.json is identity (WP-compat actor numbers). dev-mode.json should be kept, which changes decision-53. The scheduler's first-run rule means an imported site does not re-announce its archive; relays.sync re-follows relays at boot.
+
+Proposed: tar.gz export (departs from decision-52's zip) with a manifest, credentials only on request, Fedify queue never exported (drain first), jobs.json exported and recovered; geekity import CLI-only with the site stopped, ending in the rebuild path; Tools > Export as a decision-54 job. Eight follow-up tasks are listed in the record for the user to file. Waiting for the user to accept decision-55 (AC #5 and #6).
+<!-- SECTION:NOTES:END -->
