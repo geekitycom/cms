@@ -11,7 +11,7 @@ import { createCms } from './index.ts';
 import type { Cms } from './index.ts';
 import { definePlugin, HOST_API_VERSION } from './plugin.ts';
 import { DEFAULT_SITE_SETTINGS } from './site/settings.ts';
-import { writeSiteJson } from './site/site-json.ts';
+import { writeSiteSettings } from './__testing__/site-settings.ts';
 
 const temporaryDirs: string[] = [];
 const started: Cms[] = [];
@@ -70,7 +70,7 @@ async function serving(): Promise<{
   const dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-drain-data-'));
   temporaryDirs.push(contentDir, dataDir);
 
-  await writeSiteJson({ contentDir, settings: { ...DEFAULT_SITE_SETTINGS, timezone: 'UTC' } });
+  await writeSiteSettings({ contentDir, settings: { ...DEFAULT_SITE_SETTINGS, timezone: 'UTC' } });
   const siteJson = path.join(contentDir, '_data', 'site.json');
   const site = JSON.parse(await readFile(siteJson, 'utf8')) as Record<string, unknown>;
   await writeFile(siteJson, JSON.stringify({ ...site, plugins: { [PLUGIN]: { enabled: true } } }));

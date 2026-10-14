@@ -333,6 +333,9 @@ export function createServices({
   relays.sync().catch((thrown: unknown) => {
     console.warn(`The relays could not be read: ${messageOf(thrown)}`);
   });
+  settings.watch(SITE.relays, async () => {
+    await relays.sync();
+  });
 
   const changeSubscribers: readonly ContentEventListener[] = [
     // A watched change waits for its burst to settle, as a scan does: a git

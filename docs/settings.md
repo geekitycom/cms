@@ -26,14 +26,25 @@ user's followers.
 
 ## `site.json` is the source
 
-`content/_data/site.json` is the source of truth for a site's settings. Every
-settings page reads the file, validates the submitted values and writes the
-file back. No other store holds a setting, and `data/geekity.db` holds none.
+`content/_data/site.json` is the source of truth for a site's settings. It is
+the `site` namespace of the settings registry (see
+[Runtime settings](#runtime-settings)): each setting has a name such as
+`site.title` or `site.posts_per_page`, and the file keeps its own key for it,
+such as `title` or `postsPerPage`. No other store holds a setting, and
+`data/geekity.db` holds none.
 
-Each page saves only its own fields. It re-reads the file inside the write and
-applies its fields to that copy, so when two people save two different pages at
-the same moment, both saves land. Each page validates only the fields it shows.
-A refused save returns to the page it came from and writes nothing.
+Every settings page, the Navigation, Taxonomy and Connected apps screens, and
+Appearance > Themes save through the registry. Each saves only its own
+settings. The registry re-reads the file inside the write and applies the
+change to that copy, so when two people save two different pages at the same
+moment, both saves land. Each page validates only the fields it shows. A
+refused save returns to the page it came from with status 400 and writes
+nothing.
+
+A setting that an environment variable or the config overrides is shown on its
+page as the value in effect. The page lists each such setting and what sets
+it, and a save neither checks nor writes it, so the override never reaches the
+file.
 
 The write is atomic and serialised:
 
@@ -60,8 +71,10 @@ The file holds these keys:
 - `contactEmail`, `securityContacts`, `securityPolicy`, `securityLanguages`
 - `relays`, `menus` and `taxonomyRedirects`
 
-A save keeps every other key already in the file, including `feedSize` and
-anything a site added. A missing key takes its default. A key of the wrong type
+A save writes every one of these keys, so the file always holds the whole set
+of values in effect for a theme or an Eleventy build to read. It keeps every
+other key already in the file, including `feedSize` and anything a site added,
+and drops the retired `navigation` and `soloAuthor` keys. A missing key takes its default. A key of the wrong type
 also takes its default, so a hand-edited `site.json` cannot take the site down.
 
 A missing `notifyServer` means `https://rpc.rsscloud.io`. An empty
@@ -191,6 +204,10 @@ site. `https://tags.pub/user/_____relay_____/inbox` is one example.
 - `/admin/federation` shows the state of each subscription and offers a Retry
   for one that is still waiting.
 - Removing a line unfollows the relay.
+
+The running site follows and unfollows when `site.relays` changes. A change
+made with `geekity settings set site.relays` runs in another process, so the
+site acts on it when it next starts.
 
 See [Relays][relays].
 
@@ -562,6 +579,13 @@ the source, such as
 `maintenance.on is set by GEEKITY_MAINTENANCE and cannot be changed here.`
 Remove the variable or the field and restart the site first.
 
+The site's own settings are the `site` namespace, kept in
+`content/_data/site.json` and described in
+[`site.json` is the source](#sitejson-is-the-source). Their variables are
+`GEEKITY_SITE__<KEY>`, such as `GEEKITY_SITE__TAGLINE`. `site.base_url` is also
+overridden by `GEEKITY_BASE_URL` and the config's `baseUrl` (see
+[The base URL setting](#the-base-url-setting)).
+
 Tools > Maintenance and Tools > Dev mode in the admin are the switches for
 the first three settings. The Email and Discussion settings pages save the
 `mail` and `akismet` settings.
@@ -581,6 +605,24 @@ true
 overridden by env GEEKITY_MAINTENANCE; the file holds false
 $ geekity settings set maintenance.until --unset
 ```
+
+`geekity settings list site` prints the `site` namespace alone, and `get` and
+`set` take its settings like any other:
+
+```
+$ geekity settings get site.title
+Geekity Demo
+$ geekity settings set site.posts_per_page 5
+site.posts_per_page  5  file  How many posts a listing page holds.
+$ GEEKITY_SITE__TAGLINE=Hello geekity settings set site.tagline Goodbye
+site.tagline is set by GEEKITY_SITE__TAGLINE and cannot be changed here.
+```
+
+In `list site` the value column is as wide as the longest value, which for
+`site.menus` is every menu as JSON. `get` reads one setting more easily.
+
+Turning `site.index_now` on, from the admin or the command line, also stores a
+new `site.index_now_key` when the site has none.
 
 `list` prints each setting with its value in effect, where that value came
 from, and what the setting does. When something overrides the file, `list`

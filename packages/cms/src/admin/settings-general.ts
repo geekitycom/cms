@@ -12,10 +12,10 @@ import { userForAuthor } from '../content/authors.ts';
 import { iconSetting, siteIcons } from '../images/icons.ts';
 import { effectiveBaseUrl } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
-import { SETTINGS_FIELDS } from '../site/settings-form.ts';
 import { listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { CREATIVE_COMMONS_LICENSES } from '../content/license.ts';
+import { SETTINGS_FIELDS } from './settings-fields.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -68,19 +68,10 @@ export const GENERAL_SETTINGS: SettingsPage = {
     })),
   }),
 
-  // A field the form rendered read-only is not submitted, so an overridden base
-  // URL keeps the value it had rather than being cleared by a save.
-  //
   // The author is whoever the submitted username is, and nobody when it is
   // not a user, so the file only ever holds a username or no author at all.
-  reads: ({ c, body, current }) => ({
+  reads: ({ c, body }) => ({
     author: siteAuthorUsername(c.var.config, stringOrEmpty(body[SETTINGS_FIELDS.author])),
-    base_url:
-      c.var.config.baseUrlSource === 'default'
-        ? stringOrEmpty(body[SETTINGS_FIELDS.base_url])
-        : current.base_url === ''
-          ? c.var.config.baseUrl
-          : current.base_url,
   }),
 };
 

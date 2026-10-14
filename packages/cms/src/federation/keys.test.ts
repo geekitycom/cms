@@ -11,7 +11,7 @@ import { writeUsers } from '../admin/__testing__/users.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { ACTOR_KEY_ALGORITHMS, actorKeyFile, actorKeysDir, loadActorKeyPairs } from './keys.ts';
 
 /**
@@ -223,7 +223,7 @@ describe('the actor’s keys across boots', () => {
     const contentDir = dirs.contentDir ?? (await dataDir());
     const dir = dirs.dataDir ?? (await dataDir());
 
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir,
       settings: { ...DEFAULT_SITE_SETTINGS, base_url: BASE_URL },
     });

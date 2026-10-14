@@ -11,7 +11,7 @@ import type { LocationSharing } from '../content/location.ts';
 import { LOCATIONS_FILE } from '../content/locations.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
-import { updateSiteSettings } from '../site/site-json.ts';
+import { changeSiteSettings } from '../__testing__/site-settings.ts';
 import { findUser } from '../site/users.ts';
 import { feedPathUnder } from '../web/feed-source.ts';
 import { OEMBED_PATH } from '../web/oembed.ts';
@@ -34,7 +34,7 @@ interface Site {
 async function site(sharing: LocationSharing = 'none'): Promise<Site> {
   const contentDir = await box.dir('geekity-micropub-location-content-');
   if (sharing !== 'none') {
-    await updateSiteSettings({ contentDir, change: (s) => ({ ...s, location_sharing: sharing }) });
+    await changeSiteSettings(contentDir, { location_sharing: sharing });
   }
   const cms = await box.open({
     contentDir,

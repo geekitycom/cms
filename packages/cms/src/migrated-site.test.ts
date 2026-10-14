@@ -14,7 +14,7 @@ import type { Browser } from './admin/__testing__/harness.ts';
 import { addFollower } from './federation/records.ts';
 import type { Cms } from './index.ts';
 import { DEFAULT_SITE_SETTINGS } from './site/settings.ts';
-import { writeSiteJson } from './site/site-json.ts';
+import { writeSiteSettings } from './__testing__/site-settings.ts';
 import { nextEvent } from './__testing__/wait.ts';
 
 const BASE_URL = 'https://blog.example';
@@ -117,7 +117,7 @@ async function site(
   for (const [relative, source] of Object.entries(options.files ?? {})) {
     await writeDocument(contentDir, relative, source);
   }
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

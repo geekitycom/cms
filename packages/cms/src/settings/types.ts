@@ -37,7 +37,11 @@ export interface SettingChange<V> {
   readonly at: Date;
   readonly by: ChangedBy;
   readonly dirs: SettingsDirs;
+  /** The registry the change was made through, for a hook that sets another setting. */
+  readonly settings: SettingsRegistry;
 }
+
+export type ChangeListener<V> = (change: SettingChange<V>) => Promise<void> | void;
 
 /** A field of the resolved config that, when it holds a value, wins over the file. */
 export interface ConfigOverride<V> {
@@ -89,6 +93,10 @@ export interface NamespaceDeclaration {
    * next write stores the new shape.
    */
   legacy?(raw: unknown): unknown;
+  /**
+   * Every write stores every declared key as the value it reads, or its
+   * default: the file always holds the whole namespace in its own shape.
+   */
   readonly writtenWhole?: boolean;
   /** `GEEKITY_<NS>` for core. A plugin gives `pluginEnvPrefix(name)`. */
   readonly envPrefix: string;
@@ -146,6 +154,12 @@ export interface SettingsRegistry {
    * setting whose value changed.
    */
   set(namespace: string, changes: ReadonlyMap<string, unknown>, by: ChangedBy): Promise<SetResult>;
+  /**
+   * Run a listener after each `set` that changes this setting, after the
+   * declaration's own hook: for a hook that needs something only the running
+   * site has. Errors are logged, not thrown. Returns the call that stops it.
+   */
+  watch<V>(setting: SettingRef<V>, listener: ChangeListener<V>): () => void;
   /** Every declared setting, core first, for the CLI's `list`. */
   list(): readonly SettingRef<unknown>[];
   /** Register a plugin's namespace. Refuses a reserved or clashing namespace. */

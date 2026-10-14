@@ -4,27 +4,29 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { sandbox } from '../admin/__testing__/harness.ts';
-import { DEFAULT_SITE_SETTINGS } from './settings.ts';
-import type { SiteSettings } from './settings.ts';
+import { settingsOver } from '../__testing__/settings.ts';
+import { storedValues } from '../settings/registry.ts';
+import { SITE, siteJsonPath } from '../site/namespace.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import type { SiteSettings } from '../site/settings.ts';
+import { sandbox } from './__testing__/harness.ts';
 import {
   formFromSettings,
+  SETTINGS_FIELD_NAMES,
   SETTINGS_FIELDS,
-  settingsFromForm,
   settingsProblems,
-} from './settings-form.ts';
-import type { CarriedSettings, SettingsForm } from './settings-form.ts';
-import {
-  settingsFromSiteJson,
-  siteDataPath,
-  siteJsonFor,
-  updateSiteSettings,
-} from './site-json.ts';
+  siteChanges,
+  submittedSettings,
+} from './settings-fields.ts';
+import type { SettingsForm } from './settings-fields.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
 
-const GOLDEN = path.join(path.dirname(fileURLToPath(import.meta.url)), 'settings-golden.json');
+const GOLDEN = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'settings-fields-golden.json',
+);
 
 const EVERY_KEY: Record<string, unknown> = {
   feedSize: 20,
@@ -186,43 +188,26 @@ const EVERY_FIELD: SettingsForm = {
   location_sharing: 'exact',
 };
 
-const CARRIED: Required<CarriedSettings> = {
-  menus: { main: [{ label: 'Home', url: '/' }] },
-  taxonomy_redirects: [{ taxonomy: 'tag', from: 'old', to: 'new' }],
-  index_now_key: 'abcdef0123456789',
-  clients_without_pkce: ['https://app.example/'],
-  avatar: '/uploads/2026/09/me.png',
-};
-
-const FORM_CASES: Record<string, { form: SettingsForm; carried: CarriedSettings }> = {
-  defaults: { form: DEFAULT_FORM, carried: {} },
-  'every field': { form: EVERY_FIELD, carried: CARRIED },
+const FORM_CASES: Record<string, SettingsForm> = {
+  defaults: DEFAULT_FORM,
+  'every field': EVERY_FIELD,
   'a creative commons license, with stale custom fields': {
-    form: {
-      ...DEFAULT_FORM,
-      license: ' cc-by ',
-      license_url: 'https://x.example/',
-      license_name: 'X',
-    },
-    carried: {},
+    ...DEFAULT_FORM,
+    license: ' cc-by ',
+    license_url: 'https://x.example/',
+    license_name: 'X',
   },
-  'a posts page without a homepage': {
-    form: { ...DEFAULT_FORM, homepage: ' ', posts_page: 'blog' },
-    carried: {},
-  },
+  'a posts page without a homepage': { ...DEFAULT_FORM, homepage: ' ', posts_page: 'blog' },
   'choices nobody offered': {
-    form: {
-      ...DEFAULT_FORM,
-      license: 'mine',
-      feed_update_period: 'fortnightly',
-      ai_crawlers: 'deny',
-      content_signal_search: 'maybe',
-      mail_provider: 'pigeon',
-      location_sharing: 'everywhere',
-      notify_server: '',
-      base_url: 'not a url',
-    },
-    carried: { index_now_key: '' },
+    ...DEFAULT_FORM,
+    license: 'mine',
+    feed_update_period: 'fortnightly',
+    ai_crawlers: 'deny',
+    content_signal_search: 'maybe',
+    mail_provider: 'pigeon',
+    location_sharing: 'everywhere',
+    notify_server: '',
+    base_url: 'not a url',
   },
 };
 
@@ -277,17 +262,31 @@ function sorted(object: object): Record<string, unknown> {
   return Object.fromEntries(Object.entries(object).sort(([a], [b]) => a.localeCompare(b)));
 }
 
-function text(file: Record<string, unknown>): string {
-  return `${JSON.stringify(file, null, 2)}\n`;
-}
-
-async function rewritten(source: string): Promise<string> {
+async function siteOf(source: string): Promise<{ contentDir: string; file: string }> {
   const contentDir = await box.dir('geekity-settings-golden-');
-  const file = siteDataPath(contentDir);
+  const file = siteJsonPath(contentDir);
   await mkdir(path.dirname(file), { recursive: true });
   if (source !== '') await writeFile(file, source, 'utf8');
-  await updateSiteSettings({ contentDir, change: (current) => current });
+  return { contentDir, file };
+}
+
+/** The file after a save that changes nothing, which still writes every declared key. */
+async function rewritten(source: string): Promise<string> {
+  const { contentDir, file } = await siteOf(source);
+  await settingsOver({ contentDir, dataDir: contentDir }).set('site', new Map(), 'admin');
   return await readFile(file, 'utf8');
+}
+
+/** What a save of every field writes over a file, or what it refuses. */
+async function saved(form: SettingsForm, source: string): Promise<unknown> {
+  const { contentDir, file } = await siteOf(source);
+  const changes = siteChanges(submittedSettings(form, SETTINGS_FIELD_NAMES));
+  const result = await settingsOver({ contentDir, dataDir: contentDir }).set(
+    'site',
+    changes,
+    'admin',
+  );
+  return result.ok ? await readFile(file, 'utf8') : sorted(result.problems);
 }
 
 function parsed(source: string): Record<string, unknown> {
@@ -305,7 +304,7 @@ describe('the settings, pinned', () => {
   it('read, show and write every representative file and form as before (AC #4)', async () => {
     const files: Record<string, unknown> = {};
     for (const [name, source] of Object.entries(SITE_JSON_CASES)) {
-      const settings = settingsFromSiteJson(parsed(source));
+      const settings = storedValues(SITE, parsed(source));
       files[name] = {
         settings: sorted(settings),
         form: sorted(formFromSettings(settings)),
@@ -314,12 +313,11 @@ describe('the settings, pinned', () => {
     }
 
     const forms: Record<string, unknown> = {};
-    for (const [name, { form, carried }] of Object.entries(FORM_CASES)) {
-      const settings = settingsFromForm(form, carried);
+    for (const [name, form] of Object.entries(FORM_CASES)) {
       forms[name] = {
-        settings: sorted(settings),
-        fresh: text(siteJsonFor(settings)),
-        overEveryKey: text(siteJsonFor(settings, parsed(SITE_JSON_CASES['every key'] ?? ''))),
+        settings: sorted(submittedSettings(form, SETTINGS_FIELD_NAMES)),
+        fresh: await saved(form, ''),
+        overEveryKey: await saved(form, SITE_JSON_CASES['every key'] ?? ''),
       };
     }
 
@@ -341,25 +339,31 @@ describe('the settings, pinned', () => {
   });
 });
 
-describe('every setting', () => {
-  it('survives form to site.json to form (AC #2)', () => {
+describe('every setting a page carries', () => {
+  it('survives form to site.json to form (AC #2)', async () => {
     assert.deepEqual(
       Object.keys(EVERY_FIELD).sort(),
       Object.keys(SETTINGS_FIELDS).sort(),
       'the form sets every field',
     );
 
-    const saved = settingsFromForm(EVERY_FIELD, CARRIED);
-    const file = parsed(text(siteJsonFor(saved)));
-    const read = settingsFromSiteJson(file);
+    const submitted = submittedSettings(EVERY_FIELD, SETTINGS_FIELD_NAMES);
+    const { contentDir } = await siteOf('');
+    const settings = settingsOver({ contentDir, dataDir: contentDir });
+    const { theme: _theme, icon: _icon, ...checkable } = submitted;
+    assert.deepEqual(await settings.set('site', siteChanges(checkable), 'admin'), { ok: true });
+    const read = await settings.values(SITE);
 
-    assert.deepEqual(read, saved);
-    for (const key of Object.keys(DEFAULT_SITE_SETTINGS) as (keyof SiteSettings)[]) {
-      assert.notDeepEqual(read[key], DEFAULT_SITE_SETTINGS[key], `${key} carried a value`);
+    for (const [key, value] of Object.entries(checkable)) {
+      assert.deepEqual(read[key as keyof SiteSettings], value, key);
+      assert.notDeepEqual(value, DEFAULT_SITE_SETTINGS[key as keyof SiteSettings], `${key} set`);
     }
 
-    const shown = formFromSettings(read);
-    assert.deepEqual(settingsFromForm(shown, CARRIED), read);
-    assert.deepEqual(formFromSettings(settingsFromForm(shown, CARRIED)), shown);
+    const shown = formFromSettings({ ...read, theme: 'midnight', icon: EVERY_FIELD.icon });
+    assert.deepEqual(submittedSettings(shown, SETTINGS_FIELD_NAMES), {
+      ...checkable,
+      theme: 'midnight',
+      icon: EVERY_FIELD.icon,
+    });
   });
 });

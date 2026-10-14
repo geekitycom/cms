@@ -7,7 +7,7 @@ import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import type { OutgoingMail } from '../mail/provider.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { createUser, verifyUserPassword } from '../site/users.ts';
 import { browser, csrfField, FIRST_ADMIN, sandbox, signIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
@@ -34,7 +34,7 @@ async function site(
   const contentDir = await box.dir('geekity-recovery-content-');
   const dataDir = await box.dir('geekity-recovery-data-');
 
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', base_url: 'https://blog.example' },
   });
@@ -61,7 +61,7 @@ async function site(
 async function siteWithoutMail(): Promise<Cms> {
   const contentDir = await box.dir('geekity-recovery-nomail-content-');
   const dataDir = await box.dir('geekity-recovery-nomail-data-');
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', base_url: 'https://blog.example' },
   });
@@ -389,7 +389,7 @@ describe('a site that sends no email (AC #5)', () => {
 
   it('turns recovery on the moment a credential is saved, with no restart', async () => {
     const cms = await siteWithoutMail();
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir: cms.config.contentDir,
       settings: {
         ...DEFAULT_SITE_SETTINGS,

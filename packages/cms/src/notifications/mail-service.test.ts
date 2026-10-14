@@ -6,7 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MailProvider, OutgoingMail } from '../mail/provider.ts';
 import { createMailService } from './mail-service.ts';
@@ -51,7 +51,7 @@ async function site(
   const dataDir = await dir('geekity-mail-data-');
   const themesDir = await dir('geekity-mail-themes-');
   await mkdir(path.join(contentDir, '_data'), { recursive: true });
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', ...options.settings },
   });
@@ -202,7 +202,7 @@ describe('sending a templated message', () => {
     );
 
     const contentDir = await dir('geekity-mail-content-');
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir,
       settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', theme: 'fixture' },
     });

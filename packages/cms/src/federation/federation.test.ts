@@ -10,7 +10,7 @@ import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import type { UserProfile } from '../site/users.ts';
 import { seedActorKeys } from './__testing__/keys.ts';
 import { FOLLOWERS_PAGE_SIZE, followersPage } from './followers.ts';
@@ -57,7 +57,7 @@ async function site(
   const dataDir = await temporaryDir('geekity-fed-data-');
   const contentDir = await temporaryDir('geekity-fed-content-');
 
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

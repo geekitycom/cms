@@ -7,7 +7,7 @@ import { after, describe, it } from 'node:test';
 import { resolveNothing } from '../admin/__testing__/harness.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { createUser, listUsers, setUserProfile } from '../site/users.ts';
 import { child, childrenNamed, parseXml } from './__testing__/xml.ts';
 import type { XmlElement } from './__testing__/xml.ts';
@@ -64,7 +64,7 @@ async function site(
 /** Point the site's feeds at another notify server, or at none. */
 async function setNotifyServer(cms: Cms, notifyServer: string): Promise<void> {
   const contentDir = cms.config.contentDir;
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: { ...(await siteSettingsIn(contentDir)), notify_server: notifyServer },
   });
@@ -2054,7 +2054,7 @@ describe('the update cadence an RSS feed declares', () => {
   /** Change the cadence the settings hold. */
   async function setCadence(cms: Cms, period: string, frequency: number): Promise<void> {
     const contentDir = cms.config.contentDir;
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir,
       settings: {
         ...(await siteSettingsIn(contentDir)),
@@ -2323,7 +2323,7 @@ describe('the license a feed declares (TASK-206)', () => {
       'posts/2026-09-01-hello.md': posts['posts/2026-09-01-hello.md'],
     });
     const before = (await cms.app.request('/feed/atom/')).headers.get('etag');
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir,
       settings: {
         ...(await siteSettingsIn(contentDir)),

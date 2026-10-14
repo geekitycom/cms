@@ -15,7 +15,7 @@ import type { Browser } from '../admin/__testing__/harness.ts';
 import { postTypeOf } from '../content/post-type.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { findUser } from '../site/users.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
@@ -42,7 +42,7 @@ async function site(timezone = 'UTC'): Promise<Site> {
     baseUrl: BASE,
     now: () => NOW,
   });
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: { ...(await siteSettingsIn(contentDir)), timezone },
   });

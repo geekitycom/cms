@@ -11,7 +11,7 @@ import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { createUser } from '../site/users.ts';
 import { CONTACT_ANCHOR, CONTACT_FIELDS, CONTACT_NOTICE_PARAM, CONTACT_POST_PATH } from './form.ts';
 import { listContactMessages } from './records.ts';
@@ -138,7 +138,7 @@ function mailing(provider: MemoryMailProvider): GeekityConfig {
 
 /** Set the site's contact address, the way the settings screen does. */
 async function writeContactEmail(contentDir: string, contactEmail: string): Promise<void> {
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: { ...(await siteSettingsIn(contentDir)), contact_email: contactEmail },
   });

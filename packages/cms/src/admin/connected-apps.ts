@@ -15,7 +15,7 @@ import { formatInTimezone } from './formatting.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 import { CONNECTED_APPS_CHILD, CONNECTED_APPS_PATH } from './users.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { updateSiteSettings } from '../site/site-json.ts';
+import { editSiteSetting } from './site-setting-edit.ts';
 import { findUserById, listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { clientIdentifier, sameClient } from '../util/client-id.ts';
@@ -82,15 +82,11 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
     };
     if (clientIdentifier(value) === undefined) return refuse(NOT_A_CLIENT_ID);
     let listed = false;
-    await updateSiteSettings({
-      contentDir: c.var.config.contentDir,
-      change: (current) => {
-        listed = current.clients_without_pkce.some((id) => sameClient(id, value));
-        return listed
-          ? current
-          : { ...current, clients_without_pkce: [...current.clients_without_pkce, value] };
-      },
+    const saved = await editSiteSetting(c.var.settings, 'clients_without_pkce', (current) => {
+      listed = current.some((id) => sameClient(id, value));
+      return listed ? current : [...current, value];
     });
+    if (!saved.ok) return refuse(Object.values(saved.problems).join(' '));
     if (listed) return refuse(`${value} is already on the list.`);
     flash(c, 'notice', `${value} may now sign in without PKCE.`);
     return c.redirect(CONNECTED_APPS_PATH, 303);
@@ -99,15 +95,13 @@ export function mountConnectedApps(app: Hono<GeekityEnv>, options: { render: Adm
   app.post(REMOVE_CLIENT_WITHOUT_PKCE_PATH, async (c) => {
     const value = stringOrEmpty((await c.req.parseBody())[CLIENT_FIELD]);
     let removed = false;
-    await updateSiteSettings({
-      contentDir: c.var.config.contentDir,
-      change: (current) => {
-        const kept = current.clients_without_pkce.filter((id) => id !== value);
-        removed = kept.length < current.clients_without_pkce.length;
-        return { ...current, clients_without_pkce: kept };
-      },
+    const saved = await editSiteSetting(c.var.settings, 'clients_without_pkce', (current) => {
+      const kept = current.filter((id) => id !== value);
+      removed = kept.length < current.length;
+      return kept;
     });
-    if (removed) flash(c, 'notice', `${value} must use PKCE again.`);
+    if (!saved.ok) flash(c, 'error', Object.values(saved.problems).join(' '));
+    else if (removed) flash(c, 'notice', `${value} must use PKCE again.`);
     else flash(c, 'warning', 'That app was already off the list.');
     return c.redirect(CONNECTED_APPS_PATH, 303);
   });

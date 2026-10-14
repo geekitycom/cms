@@ -10,7 +10,7 @@ import type { Cms } from './index.ts';
 import { INDEXNOW_ENDPOINT } from './indexnow.ts';
 import { saveUrlOf } from './admin/__testing__/editor-form.ts';
 import { DEFAULT_SITE_SETTINGS } from './site/settings.ts';
-import { writeSiteJson } from './site/site-json.ts';
+import { writeSiteSettings } from './__testing__/site-settings.ts';
 
 /**
  * IndexNow (TASK-151): a site that turns it on serves a key at `/{key}.txt`
@@ -76,7 +76,7 @@ async function site(
   }
 
   const baseUrl = options.baseUrl ?? BASE_URL;
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

@@ -10,7 +10,7 @@ import { seedActorKeys } from './federation/__testing__/keys.ts';
 import { createCms } from './index.ts';
 import type { Cms } from './index.ts';
 import { DEFAULT_SITE_SETTINGS } from './site/settings.ts';
-import { writeSiteJson } from './site/site-json.ts';
+import { writeSiteSettings } from './__testing__/site-settings.ts';
 
 /** The site under test. */
 const BASE_URL = 'https://blog.example';
@@ -109,7 +109,7 @@ async function site(
     await writeFile(file, source, 'utf8');
   }
 
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

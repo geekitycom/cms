@@ -10,7 +10,7 @@ import type { CommentVerdict } from '../forms/checker.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { PINGBACK_MAX_BYTES, PINGBACK_PATH } from './pingback.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
@@ -112,7 +112,7 @@ async function site(
     await writeFile(file, body, 'utf8');
   }
 
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

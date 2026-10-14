@@ -15,7 +15,7 @@ import { writeUsers } from '../admin/__testing__/users.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { listUsers } from '../site/users.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
@@ -315,7 +315,7 @@ async function site(
     await writeDocument(contentDir, relative, source);
   }
 
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { frontPageOf, frontPageProblems, requiredWholeDays } from './setting-rows.ts';
-import { DEFAULT_SITE_SETTINGS } from './settings.ts';
-import { formFromSettings } from './settings-form.ts';
+import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
+import {
+  formFromSettings,
+  frontPageOf,
+  frontPageProblems,
+  requiredWholeDays,
+} from './settings-fields.ts';
 
 const FORM = formFromSettings(DEFAULT_SITE_SETTINGS);
 

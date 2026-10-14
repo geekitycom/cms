@@ -85,7 +85,7 @@ import { addFollower, readFollowers, readInboxLog } from '../src/federation/reco
 import { createCms } from '../src/index.ts';
 import type { Cms } from '../src/index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../src/site/settings.ts';
-import { writeSiteJson } from '../src/site/site-json.ts';
+import { writeSiteSettings } from '../src/__testing__/site-settings.ts';
 import { listUsers, setUserActorId } from '../src/site/users.ts';
 
 /** The package root, so the fixture is found however the script was invoked. */
@@ -154,7 +154,7 @@ async function main(): Promise<void> {
     // handle and its type from the very first request. `baseUrl` has to match
     // the port the server is about to bind: it is what every ActivityStreams
     // id in this run is built from.
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir,
       settings: {
         ...DEFAULT_SITE_SETTINGS,

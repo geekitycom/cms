@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
@@ -104,7 +104,7 @@ describe('the recorded archive renames', () => {
     const cms = await box.site();
     const agent = await signedIn(cms);
 
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir: cms.config.contentDir,
       settings: {
         ...(await siteSettingsIn(cms.config.contentDir)),

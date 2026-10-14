@@ -6,11 +6,10 @@ import { parseIconSetting } from '../images/icons.ts';
 import { sourceFile } from '../images/paths.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import { isFileSync } from '../util/files.ts';
-import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from './feed-settings.ts';
-import { generateIndexNowKey } from './indexnow-key.ts';
+import { DEFAULT_FEED_CADENCE, isUpdatePeriod, UPDATE_PERIODS } from '../site/feed-settings.ts';
 import { isLicenseUrl } from '../content/license.ts';
 import { canonicalLocale } from '../content/locale.ts';
-import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from './robots.ts';
+import { AI_CRAWLER_POLICIES, robotsRuleLines, robotsRuleProblem } from '../site/robots.ts';
 import { taxonomyBaseProblems } from '../content/taxonomy.ts';
 import { PACKAGED_THEME, readTheme, themeNameProblem } from '../theme/themes.ts';
 import {
@@ -30,18 +29,19 @@ import {
   relayLines,
   relayList,
   securityContactList,
-} from './setting-values.ts';
-import { DEFAULT_SITE_SETTINGS } from './settings.ts';
-import type { SiteLicense, SiteSettings } from './settings.ts';
+} from '../site/setting-values.ts';
+import { isDeepStrictEqual } from 'node:util';
 
-export type CarriedField =
+import { DEFAULT_SITE_SETTINGS, SITE } from '../site/settings.ts';
+import type { SiteLicense, SiteSettings } from '../site/settings.ts';
+
+/** The settings another screen writes, or nothing does: no settings page carries them. */
+type OffTheForm =
   'taxonomy_redirects' | 'menus' | 'index_now_key' | 'clients_without_pkce' | 'avatar';
 
-type FormKey = Exclude<keyof SiteSettings, CarriedField>;
+type FormKey = Exclude<keyof SiteSettings, OffTheForm>;
 
 export type SettingsField = FormKey | 'license_url' | 'license_name';
-
-export type CarriedSettings = Partial<Pick<SiteSettings, CarriedField>>;
 
 /** A submitted settings form, before it is known to be valid. */
 export type SettingsForm = Record<SettingsField, string>;
@@ -58,26 +58,22 @@ export interface OnDiskCheck {
   readonly problem: (value: string, dir: string) => string | undefined;
 }
 
-export interface SettingRow<V> {
-  readonly submitted: (form: SettingsForm, onFile: CarriedSettings) => V;
-}
-
-export interface FieldRow<V> {
+interface FieldRow<V> {
   readonly field: string;
   readonly shown: (value: V) => string;
   readonly check: (form: SettingsForm) => string | undefined;
   readonly onDisk?: OnDiskCheck;
 }
 
-export type FormSettingRow<V> = SettingRow<V> & FieldRow<V>;
+interface FormSettingRow<V> extends FieldRow<V> {
+  readonly submitted: (form: SettingsForm) => V;
+}
 
-export type FieldValue<F extends SettingsField> = F extends keyof SiteSettings
+type FieldValue<F extends SettingsField> = F extends keyof SiteSettings
   ? SiteSettings[F]
   : SiteLicense;
 
-type SettingRows = { readonly [K in FormKey]: FormSettingRow<SiteSettings[K]> } & {
-  readonly [K in CarriedField]: SettingRow<SiteSettings[K]>;
-};
+type SettingRows = { readonly [K in FormKey]: FormSettingRow<SiteSettings[K]> };
 
 const checkbox = (value: boolean): string => (value ? '1' : '');
 const ticked = (value: string): boolean => value !== '';
@@ -494,13 +490,6 @@ const SETTING_ROWS: SettingRows = {
     `Location sharing is one of ${LOCATION_SHARING.join(', ')}.`,
   ),
 
-  menus: { submitted: (_form, onFile) => onFile.menus ?? DEFAULT_SITE_SETTINGS.menus },
-
-  taxonomy_redirects: {
-    submitted: (_form, onFile) =>
-      onFile.taxonomy_redirects ?? DEFAULT_SITE_SETTINGS.taxonomy_redirects,
-  },
-
   ...frontPageRows(),
 
   theme: {
@@ -525,8 +514,6 @@ const SETTING_ROWS: SettingRows = {
     onDisk: ICON_UPLOADED,
   },
 
-  avatar: { submitted: (_form, onFile) => onFile.avatar ?? DEFAULT_SITE_SETTINGS.avatar },
-
   license: {
     field: 'license',
     submitted: (form) => {
@@ -539,20 +526,6 @@ const SETTING_ROWS: SettingRows = {
     shown: (value) => value.choice,
     check: (form) =>
       isLicenseChoice(form.license.trim()) ? undefined : 'Choose a license from the list.',
-  },
-
-  index_now_key: {
-    submitted: (form, onFile) =>
-      onFile.index_now_key !== undefined && onFile.index_now_key !== ''
-        ? onFile.index_now_key
-        : ticked(form.index_now)
-          ? generateIndexNowKey()
-          : '',
-  },
-
-  clients_without_pkce: {
-    submitted: (_form, onFile) =>
-      onFile.clients_without_pkce ?? DEFAULT_SITE_SETTINGS.clients_without_pkce,
   },
 };
 
@@ -577,22 +550,103 @@ const LICENSE_FIELD_ROWS: {
   },
 };
 
-export const ROWS: { readonly [K in keyof SiteSettings]: SettingRow<SiteSettings[K]> } =
-  SETTING_ROWS;
-
-export const FORM_ROWS: { readonly [F in SettingsField]: FieldRow<FieldValue<F>> } = {
+const FORM_ROWS: { readonly [F in SettingsField]: FieldRow<FieldValue<F>> } = {
   ...SETTING_ROWS,
   ...LICENSE_FIELD_ROWS,
 };
 
-export const SETTING_KEYS = Object.keys(SETTING_ROWS) as readonly (keyof SiteSettings)[];
+export const SETTINGS_FIELD_NAMES = Object.keys(FORM_ROWS) as readonly SettingsField[];
 
-function isFormKey(key: keyof SiteSettings): key is FormKey {
-  return 'field' in SETTING_ROWS[key];
+/** One message per field that is wrong. An empty object is a valid form. */
+export type SettingsProblems = Partial<Record<SettingsField, string>>;
+
+function perField<V>(value: (name: SettingsField) => V): Record<SettingsField, V> {
+  return Object.fromEntries(SETTINGS_FIELD_NAMES.map((name) => [name, value(name)])) as Record<
+    SettingsField,
+    V
+  >;
 }
 
-export const SETTINGS_FIELD_NAMES: readonly SettingsField[] = [
-  ...SETTING_KEYS.filter(isFormKey),
-  'license_url',
-  'license_name',
-];
+/** The form field each setting is submitted under. */
+export const SETTINGS_FIELDS: Readonly<Record<SettingsField, string>> = perField(
+  (name) => FORM_ROWS[name].field,
+);
+
+/** The setting a form field is part of: the custom license's URL and name are the license's. */
+export function settingOf(field: SettingsField): FormKey {
+  return field === 'license_url' || field === 'license_name' ? 'license' : field;
+}
+
+/**
+ * What is wrong with a submitted settings form, one message per field.
+ *
+ * `fields` is what a page carries: it validates its own fields and says
+ * nothing about the rest, so a page cannot refuse a save over a field it does
+ * not show and gives no way to fix. `context` names the directories the
+ * on-disk checks read, and an on-disk check runs only when its directory is
+ * named.
+ */
+export function settingsProblems(
+  form: SettingsForm,
+  fields: readonly SettingsField[] = SETTINGS_FIELD_NAMES,
+  context: SettingsContext = {},
+): SettingsProblems {
+  const problems: SettingsProblems = {};
+
+  for (const name of fields) {
+    const problem = FORM_ROWS[name].check(form) ?? onDiskProblem(name, form, context);
+    if (problem !== undefined) problems[name] = problem;
+  }
+
+  return problems;
+}
+
+function onDiskProblem(
+  name: SettingsField,
+  form: SettingsForm,
+  context: SettingsContext,
+): string | undefined {
+  const onDisk = FORM_ROWS[name].onDisk;
+  if (onDisk === undefined) return undefined;
+  const dir = context[onDisk.dir];
+  return dir === undefined ? undefined : onDisk.problem(form[name].trim(), dir);
+}
+
+/**
+ * The settings these fields carry, as a validated form submits them. Only
+ * call it on a form {@link settingsProblems} found nothing wrong with.
+ */
+export function submittedSettings(
+  form: SettingsForm,
+  fields: readonly SettingsField[],
+): Partial<SiteSettings> {
+  const keys = [...new Set(fields.map(settingOf))];
+  return Object.fromEntries(keys.map((key) => [key, SETTING_ROWS[key].submitted(form)]));
+}
+
+/**
+ * Settings as the changes `settings.set('site', …)` takes: each in the form
+ * the file stores it, and a default as `undefined`, so the default applies.
+ */
+export function siteChanges(settings: Partial<SiteSettings>): Map<string, unknown> {
+  const changes = new Map<string, unknown>();
+  for (const declaration of SITE.declaration.settings) {
+    if (!(declaration.key in settings)) continue;
+    const value = (settings as Readonly<Record<string, unknown>>)[declaration.key];
+    changes.set(
+      declaration.key,
+      isDeepStrictEqual(value, declaration.default) ? undefined : declaration.type.toJson(value),
+    );
+  }
+  return changes;
+}
+
+function shownSetting<F extends SettingsField>(settings: SiteSettings, name: F): string {
+  const value = settings[settingOf(name)] as FieldValue<F>;
+  return FORM_ROWS[name].shown(value);
+}
+
+/** The settings as the form shows them. */
+export function formFromSettings(settings: SiteSettings): SettingsForm {
+  return perField((name) => shownSetting(settings, name));
+}

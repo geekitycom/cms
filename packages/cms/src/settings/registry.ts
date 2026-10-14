@@ -12,6 +12,7 @@ import { MAIL } from './mail.ts';
 import { MAINTENANCE } from './maintenance.ts';
 import { CORE_NAMESPACES, reservedNamespaceProblem, settingVariable } from './names.ts';
 import type {
+  ChangeListener,
   DeclaredNamespace,
   NamespaceDeclaration,
   Resolved,
@@ -111,6 +112,7 @@ export function createSettingsRegistry({
   const namespaces = new Map(
     [...CORE, ...coreDeclaredAbove].map(({ declaration }) => [declaration.namespace, declaration]),
   );
+  const watchers = new Map<string, Set<ChangeListener<unknown>>>();
 
   function namespaceOf(name: string): NamespaceDeclaration {
     const found = namespaces.get(name);
@@ -183,14 +185,14 @@ export function createSettingsRegistry({
         };
   }
 
-  function writeEveryKeySoNeverReadAsLegacy(
+  function writeEveryKey(
     namespace: NamespaceDeclaration,
     next: Record<string, unknown>,
     stored: Stored,
     changes: ReadonlyMap<string, unknown>,
   ): void {
     for (const declaration of namespace.settings) {
-      if (rawIn(declaration, next) !== undefined) continue;
+      if (changes.get(declaration.key) !== undefined) continue;
       const kept = changes.has(declaration.key)
         ? undefined
         : storedValue(namespace, declaration, stored).value;
@@ -243,7 +245,25 @@ export function createSettingsRegistry({
     return read(namespace, (stored) => resolveIn(namespace, ref.declaration, stored));
   }
 
-  return {
+  async function told(
+    name: string,
+    declaration: SettingDeclaration<unknown>,
+    change: SettingChange<unknown>,
+  ): Promise<void> {
+    const listeners: ChangeListener<unknown>[] = [
+      (each) => declaration.onChange?.(each),
+      ...(watchers.get(`${name}.${declaration.key}`) ?? []),
+    ];
+    for (const listener of listeners) {
+      try {
+        await listener(change);
+      } catch (error) {
+        console.error(`The change hook of ${name}.${declaration.key} failed:`, error);
+      }
+    }
+  }
+
+  const registry: SettingsRegistry = {
     resolve,
 
     async get(ref) {
@@ -306,7 +326,7 @@ export function createSettingsRegistry({
         }
         if (Object.keys(problems).length > 0) return { problems, changed: [] };
         if (namespace.writtenWhole === true) {
-          writeEveryKeySoNeverReadAsLegacy(namespace, next, stored, changes);
+          writeEveryKey(namespace, next, stored, changes);
         }
         const { dataClass } = namespace.storage;
         writeFileAtomicallySync(
@@ -320,14 +340,20 @@ export function createSettingsRegistry({
 
       const at = config.now();
       for (const [declaration, previous, next] of outcome.changed) {
-        const change: SettingChange<unknown> = { previous, next, at, by, dirs };
-        try {
-          await declaration.onChange?.(change);
-        } catch (error) {
-          console.error(`The change hook of ${name}.${declaration.key} failed:`, error);
-        }
+        await told(name, declaration, { previous, next, at, by, dirs, settings: registry });
       }
       return { ok: true };
+    },
+
+    watch<V>(setting: SettingRef<V>, listener: ChangeListener<V>) {
+      const id = `${setting.namespace}.${setting.key}`;
+      const listeners = watchers.get(id) ?? new Set<ChangeListener<unknown>>();
+      watchers.set(id, listeners);
+      const each = listener as ChangeListener<unknown>;
+      listeners.add(each);
+      return () => {
+        listeners.delete(each);
+      };
     },
 
     list() {
@@ -355,4 +381,5 @@ export function createSettingsRegistry({
       namespaces.delete(name);
     },
   };
+  return registry;
 }

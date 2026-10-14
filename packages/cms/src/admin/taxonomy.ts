@@ -20,7 +20,7 @@ import { saveDocument } from '../content/save.ts';
 import type { TermUsage } from '../content/store.ts';
 import { documentContent } from '../content/writer.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { updateSiteSettings } from '../site/site-json.ts';
+import { editSiteSetting } from './site-setting-edit.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import {
   forgetTerm,
@@ -316,23 +316,20 @@ function skipped(report: TermRewriteReport): string {
 }
 
 /**
- * Rewrite the recorded archive renames in `content/_data/site.json`.
- *
- * Through the same write path the settings screen uses, so the read of the
- * file and the write of it are one step: a rename recorded while somebody is
- * saving the settings form cannot lose either change.
+ * Rewrite the recorded archive renames, `site.taxonomy_redirects`. Through the
+ * registry, so a rename recorded while somebody saves a settings page cannot
+ * lose either change.
  */
 async function recordRedirects(
   c: Context<GeekityEnv>,
   change: (existing: readonly TaxonomyRedirect[]) => TaxonomyRedirect[],
 ): Promise<void> {
-  await updateSiteSettings({
-    contentDir: c.var.config.contentDir,
-    change: (settings) => ({
-      ...settings,
-      taxonomy_redirects: change(settings.taxonomy_redirects),
-    }),
-  });
+  const recorded = await editSiteSetting(c.var.settings, 'taxonomy_redirects', change);
+  if (!recorded.ok) {
+    console.error(
+      `The archive redirects were not recorded: ${Object.values(recorded.problems).join(' ')}`,
+    );
+  }
 }
 
 /** Everything the taxonomy template renders. */

@@ -238,22 +238,24 @@ describe('the base URL', () => {
     assert.match(html, /<code>https:\/\/deployed\.example<\/code>/);
     assert.match(html, /name="base_url"[^>]*disabled/, 'and the field is not editable');
 
-    // The browser sends nothing for a disabled field; the save keeps the
-    // stored value rather than clearing it.
+    // The browser sends nothing for a disabled field, and a forged one is not
+    // read: the save writes the other fields and leaves the file's url as it
+    // was, which here is none, rather than writing the configured one into it.
     const token = csrfField(html);
     assert.ok(token !== undefined);
     const saved = await agent.post('/admin/settings', {
       csrf_token: token,
       ...SETTINGS_PAGE_FORMS.general,
-      base_url: '',
+      base_url: 'https://forged.example',
       title: 'Still saved',
     });
     assert.equal(saved.status, 303);
-    assert.equal(
-      (await siteSettingsIn(cms.config.contentDir)).base_url,
-      'https://deployed.example',
-    );
+    const stored = await siteSettingsIn(cms.config.contentDir);
+    assert.equal(stored.title, 'Still saved');
+    assert.equal(stored.base_url, '', 'the file holds no url');
     assert.equal(cms.config.baseUrl, 'https://deployed.example');
+    const after = await (await agent.get('/admin/settings')).text();
+    assert.match(after, /<code>https:\/\/deployed\.example<\/code>/);
   });
 });
 

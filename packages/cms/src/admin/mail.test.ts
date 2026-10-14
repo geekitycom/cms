@@ -9,7 +9,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { startTestSmtpServer } from '../mail/__testing__/smtp-server.ts';
 import type { TestSmtpServer } from '../mail/__testing__/smtp-server.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import {
@@ -97,7 +97,7 @@ async function admin(
 ): Promise<{ cms: Cms; agent: Browser; contentDir: string; dataDir: string }> {
   const contentDir = await box.dir('geekity-mail-admin-content-');
   const dataDir = await box.dir('geekity-mail-admin-data-');
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

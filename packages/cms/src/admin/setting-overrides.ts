@@ -9,9 +9,11 @@ import type {
 export async function setElsewhere(
   settings: SettingsRegistry,
   { declaration }: DeclaredNamespace,
+  among?: readonly string[],
 ): Promise<Readonly<Record<string, string>>> {
   const found: Record<string, string> = {};
   for (const each of declaration.settings) {
+    if (among !== undefined && !among.includes(each.key)) continue;
     const { source } = await settings.resolve({
       namespace: declaration.namespace,
       key: each.key,

@@ -25,7 +25,7 @@ import { readFileIfPresentSync } from '../files/atomic.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { followersFile, inboxFile, readFollowers, readInboxLog } from './records.ts';
 
@@ -168,7 +168,7 @@ async function site(
   // minting an actor key whose value no test in this file reads.
   seedActorKeys(dataDir, LOCAL_USER);
 
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

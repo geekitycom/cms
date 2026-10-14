@@ -6,7 +6,9 @@
  * site used to federate under are a user's profile, edited on the users
  * screen; what is left here is the one setting that is an instruction as well
  * as a value — a line added is a `Follow` to send and a line removed is an
- * `Undo` — so a save of this page reconciles them.
+ * `Undo` — so a change to `site.relays`, from this page or anything else the
+ * running site sets it through, reconciles them (the watch in
+ * `cms/services.ts`).
  *
  * It is a settings page filed under Federation rather than under Settings
  * (TASK-109). The admin used to have two menu entries called Federation,
@@ -18,7 +20,6 @@
  * as they were when the URL was `/admin/settings/federation`.
  */
 
-import type { RelaySyncReport } from '../federation/relays.ts';
 import { FEDERATION_SETTINGS_PATH } from './federation.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';
@@ -36,12 +37,6 @@ export const FEDERATION_SETTINGS: SettingsPage = {
   template: ADMIN_TEMPLATES.federationSettings,
   fields: ['relays'],
 
-  saved: async (c) => {
-    // The reconciliation reads the settings that were just written, so it has
-    // to come after the save rather than be derived from the form.
-    return toldRelays(await c.var.relays.sync());
-  },
-
   endpoints: (app) => {
     // Where this page was until TASK-109. A bookmark points at it, and so do
     // the older editions of the README, so it moves somebody along rather than
@@ -49,32 +44,3 @@ export const FEDERATION_SETTINGS: SettingsPage = {
     app.get(settingsPagePath('federation'), (c) => c.redirect(FEDERATION_SETTINGS_PATH, 301));
   },
 };
-
-/**
- * The sentence a flash adds about the relays a save subscribed to or left.
- *
- * A relay does not answer at once — FEP-ae0c allows a human to approve the
- * subscription days later — so the message says a follow was sent rather than
- * that the site is now on the relay, and points at the screen that will say.
- */
-function toldRelays(report: RelaySyncReport): string {
-  const parts: string[] = [];
-  if (report.followed.length > 0) {
-    parts.push(
-      report.followed.length === 1
-        ? 'A follow has been sent to one new relay'
-        : `Follows have been sent to ${String(report.followed.length)} new relays`,
-    );
-  }
-  if (report.unfollowed.length > 0) {
-    parts.push(
-      report.unfollowed.length === 1
-        ? 'one relay has been unfollowed'
-        : `${String(report.unfollowed.length)} relays have been unfollowed`,
-    );
-  }
-  if (parts.length === 0) return '';
-
-  const sentence = parts.join(', and ');
-  return ` ${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}; the Followers screen says where each stands.`;
-}
