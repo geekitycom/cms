@@ -183,9 +183,9 @@
 
     <form class="mt-4 max-w-2xl" method="post" action="{{ withoutPkce.addUrl }}">
       <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-      {{ field.text('without-pkce-client', withoutPkce.field, 'App&rsquo;s client_id', withoutPkce.value,
+      {{ field.text('without-pkce-client', withoutPkce.field, labelHtml='App&rsquo;s client_id', value=withoutPkce.value,
            error=withoutPkce.problem, inputmode='url', spellcheck='false', required=true,
-           hint='The URL the app names itself by when it signs in, as App activity shows it, such as <code>https://ia.net/writer</code>.') }}
+           hintHtml='The URL the app names itself by when it signs in, as App activity shows it, such as <code>https://ia.net/writer</code>.') }}
       <div class="mt-4">{{ button('Allow without PKCE', type='submit', color='primary') }}</div>
     </form>
   </section>

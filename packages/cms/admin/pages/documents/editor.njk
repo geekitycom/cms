@@ -114,7 +114,7 @@
       {% call card() %}
         {% set titleHint %}{% if kind.type == "post" %}Leave it empty to write a note: the post is then its words, and takes its slug from the first of them.{% endif %}{% endset %}
         {#- A post may go without one, and is then a note; a page is always named. -#}
-        {{ field.text('editor-title', 'title', 'Title', value=form.title, required=(kind.type == "page"), autofocus=true, error=(error if errorField == 'editor-title' else ''), hint=titleHint) }}
+        {{ field.text('editor-title', 'title', 'Title', value=form.title, required=(kind.type == "page"), autofocus=true, error=(error if errorField == 'editor-title' else ''), hintHtml=titleHint) }}
         {{ pluginActions('editor-title', editorActions['editor-title']) }}
 
         {{ field.textarea('editor-body', 'body', 'Body', value=form.body, rows=24) }}
@@ -165,7 +165,7 @@
             {{ button('Use my location', id='editor-location-here', style='soft', hidden=true) }}
           </div>
           <p id="editor-location-status" class="label block whitespace-normal text-xs" role="status"></p>
-          {{ field.text('editor-location-geo', locationFields.geo, 'Coordinates', value=form.location.geo, placeholder='48.85837, 2.29448', autocomplete='off', spellcheck='false', error=(error if errorField == 'editor-location-geo' else ''), hint='Latitude, longitude, as decimal degrees. A <code>geo:</code> URI works too.', hintId='editor-location-geo-hint') }}
+          {{ field.text('editor-location-geo', locationFields.geo, 'Coordinates', value=form.location.geo, placeholder='48.85837, 2.29448', autocomplete='off', spellcheck='false', error=(error if errorField == 'editor-location-geo' else ''), hintHtml='Latitude, longitude, as decimal degrees. A <code>geo:</code> URI works too.', hintId='editor-location-geo-hint') }}
           {{ field.text('editor-location-accuracy', locationFields.accuracy, 'Accuracy', value=form.location.accuracy, inputmode='numeric', autocomplete='off', error=(error if errorField == 'editor-location-accuracy' else ''), hint='Metres. Leave it empty if you do not know.', hintId='editor-location-accuracy-hint') }}
           {{ field.text('editor-location-name', locationFields.name, 'Place', value=form.location.name) }}
           {{ field.text('editor-location-locality', locationFields.locality, 'Locality', value=form.location.locality) }}
@@ -242,7 +242,7 @@
           {# The file holds a UTC instant; this field is that instant as the
              site's own clock reads it, so the zone has to be on the screen. #}
           {% set dateHint %}Wall-clock time in {{ dateZone }}. Stored as UTC.{% endset %}
-          {{ field.text('editor-date', 'date', 'Date', value=form.date, error=(error if errorField == 'editor-date' else ''), hint=dateHint) }}
+          {{ field.text('editor-date', 'date', 'Date', value=form.date, error=(error if errorField == 'editor-date' else ''), hintHtml=dateHint) }}
         {% endif %}
 
         {% set visibilityHint %}
@@ -255,7 +255,7 @@
           keeps its page and still goes to your followers, but is left off the home page, archives,
           feeds, the sitemap, search and llms.txt, and asks search engines not to index it.
         {% endset %}
-        {% call field.select('editor-visibility', 'visibility', 'Visibility', hint=visibilityHint, hintId='editor-visibility-hint') %}
+        {% call field.select('editor-visibility', 'visibility', 'Visibility', hintHtml=visibilityHint, hintId='editor-visibility-hint') %}
           {% if form.visibility.unrecognized is defined %}
             <option value="{{ form.visibility.unrecognized }}" selected>{{ form.visibility.unrecognized }} (not recognized)</option>
           {% endif %}
@@ -266,7 +266,7 @@
         {% if kind.type == "post" %}
           {# TASK-207: shown at the top of the author's fediverse profile, from
              the featured collection their actor links. #}
-          {{ field.checkbox('editor-pinned', 'pinned', 'Pinned', checked=form.pinned, error=(error if errorField == 'editor-pinned' else ''), hint='Writes <code>pinned:</code> and the moment you pinned it into the front matter. Pinned posts show first on your fediverse profile, newest pin first, up to five.') }}
+          {{ field.checkbox('editor-pinned', 'pinned', 'Pinned', checked=form.pinned, error=(error if errorField == 'editor-pinned' else ''), hintHtml='Writes <code>pinned:</code> and the moment you pinned it into the front matter. Pinned posts show first on your fediverse profile, newest pin first, up to five.') }}
         {% endif %}
 
         {# Who the front matter says wrote this (TASK-67). A select of the site's
@@ -297,7 +297,7 @@
       {% call collapse('Address', open.address, fields=true) %}
         {{ field.text('editor-slug', 'slug', 'Slug', value=form.slug, error=(error if errorField == 'editor-slug' else '')) }}
         {% set permalinkHint %}Leave it empty to let the {{ kind.singular }} take the URL its slug implies.{% endset %}
-        {{ field.text('editor-permalink', 'permalink', 'Permalink', value=form.permalink, hint=permalinkHint) }}
+        {{ field.text('editor-permalink', 'permalink', 'Permalink', value=form.permalink, hintHtml=permalinkHint) }}
       {% endcall %}
 
       {% if kind.type == "post" %}
@@ -337,7 +337,7 @@
 
         {% call collapse('Event', open.event, fields=true) %}
           {% set eventTimeHint %}Wall-clock time in {{ dateZone }}. Stored as UTC.{% endset %}
-          {{ field.text('editor-event-start', eventFields.start, 'Starts', value=form.event.start, placeholder='2026-10-10 09:00', autocomplete='off', error=(error if errorField == 'editor-event-start' else ''), hint=eventTimeHint, hintId='editor-event-time-hint') }}
+          {{ field.text('editor-event-start', eventFields.start, 'Starts', value=form.event.start, placeholder='2026-10-10 09:00', autocomplete='off', error=(error if errorField == 'editor-event-start' else ''), hintHtml=eventTimeHint, hintId='editor-event-time-hint') }}
           {{ field.text('editor-event-end', eventFields.end, 'Ends', value=form.event.end, placeholder='2026-10-10 17:00', autocomplete='off', error=(error if errorField == 'editor-event-end' else ''), hintId='editor-event-time-hint') }}
           {{ field.text('editor-event-location', eventFields.location, 'Where', value=form.event.location, error=(error if errorField == 'editor-event-location' else ''), hint='The place, or the address to join an online event at.', hintId='editor-event-location-hint') }}
           <p class="label block whitespace-normal text-xs">A post with a start is an event, named by its Title and described by its Body. Empty every box to make it a post again.</p>
@@ -369,7 +369,7 @@
             language than the site's says so, for screen readers, translation
             and fediverse language filters. -#}
         {% set langHint %}A language tag, such as fr or pt-BR. Leave it empty for the site’s language, {{ siteLanguage }}.{% endset %}
-        {{ field.text('editor-lang', 'lang', 'Language', value=form.lang, autocomplete='off', spellcheck='false', error=(error if errorField == 'editor-lang' else ''), hint=langHint, hintId='editor-lang-hint') }}
+        {{ field.text('editor-lang', 'lang', 'Language', value=form.lang, autocomplete='off', spellcheck='false', error=(error if errorField == 'editor-lang' else ''), hintHtml=langHint, hintId='editor-lang-hint') }}
       {% endcall %}
 
       {% if kind.type == "post" and syndicationTargets.length %}
@@ -390,7 +390,7 @@
       {% call collapse('Display and discussion', open.display, fields=true) %}
         {# What this document says about comments, if anything. Three answers
            rather than two: the site's own rules, always open, always closed. #}
-        {% call field.select('editor-comments', 'comments', 'Comments', hint='Writes <code>comments: true</code> or <code>comments: false</code> into the front matter, which beats the site’s switch and its closing window in both directions. Fediverse replies are shown either way.') %}
+        {% call field.select('editor-comments', 'comments', 'Comments', hintHtml='Writes <code>comments: true</code> or <code>comments: false</code> into the front matter, which beats the site’s switch and its closing window in both directions. Fediverse replies are shown either way.') %}
           <option value="{{ commentSettings.site }}"{% if form.comments == commentSettings.site %} selected{% endif %}>Follow the site settings</option>
           <option value="{{ commentSettings.open }}"{% if form.comments == commentSettings.open %} selected{% endif %}>Open</option>
           <option value="{{ commentSettings.closed }}"{% if form.comments == commentSettings.closed %} selected{% endif %}>Closed</option>
@@ -400,7 +400,7 @@
           {# doc-2's eleventyExcludeFromCollections: still published and still at
              its URL, but out of every collection a template lists from. #}
           {% set excludeHint %}Keeps the {{ kind.singular }} out of listings that gather content, without unpublishing it.{% endset %}
-          {{ field.checkbox('editor-exclude', 'exclude', 'Hide from collections', checked=form.exclude, hint=excludeHint) }}
+          {{ field.checkbox('editor-exclude', 'exclude', 'Hide from collections', checked=form.exclude, hintHtml=excludeHint) }}
         {% endif %}
 
         {% if kind.contactable %}
@@ -408,7 +408,7 @@
              message goes is the contact address on the Settings screen; it is
              never on this page or in its HTML. #}
           {% set contactHint %}Writes <code>contact: true</code> into the front matter and puts a name, email, subject and message form under this {{ kind.singular }}. Messages arrive on the Messages screen and are emailed to the contact address on Settings.{% endset %}
-          {{ field.checkbox('editor-contact', 'contact', 'Contact form', checked=form.contact, hint=contactHint) }}
+          {{ field.checkbox('editor-contact', 'contact', 'Contact form', checked=form.contact, hintHtml=contactHint) }}
         {% endif %}
       {% endcall %}
     </div>

@@ -13,11 +13,11 @@
 {% block settingsFields %}
   {% set tagBaseHint %}The tag archives live at <code>/{{ form.tag_base }}/{tag}/</code>. One path segment, no slashes.{% endset %}
   {{ field.text('settings-tag-base', fields.tag_base, 'Tag base', form.tag_base,
-       error=problems.tag_base, hint=tagBaseHint, required=true, autofocus=true) }}
+       error=problems.tag_base, hintHtml=tagBaseHint, required=true, autofocus=true) }}
 
   {% set categoryBaseHint %}The category archives live at <code>/{{ form.category_base }}/{name}/</code>.{% endset %}
   {{ field.text('settings-category-base', fields.category_base, 'Category base', form.category_base,
-       error=problems.category_base, hint=categoryBaseHint, required=true) }}
+       error=problems.category_base, hintHtml=categoryBaseHint, required=true) }}
 {% endblock %}
 
 {% block settingsPanels %}

@@ -30,8 +30,8 @@
     {{ field.text('add-username', fields.username, 'Username', addForm.username,
          error=addProblems.username, required=true) }}
 
-    {{ field.text('add-email', fields.email, 'Email <span class="font-normal">(optional)</span>',
-         addForm.email, type='email', autocomplete='email', error=addProblems.email) }}
+    {{ field.text('add-email', fields.email, labelHtml='Email <span class="font-normal">(optional)</span>',
+         value=addForm.email, type='email', autocomplete='email', error=addProblems.email) }}
 
     {{ field.password('add-password', fields.password, 'Password',
          error=addProblems.password, autocomplete='new-password') }}

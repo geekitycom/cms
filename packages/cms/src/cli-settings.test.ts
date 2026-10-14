@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { writeFile, mkdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
@@ -12,6 +12,70 @@ function lineOf(stdout: string, setting: string): string {
   const line = stdout.split('\n').find((each) => each.startsWith(`${setting} `));
   assert.ok(line !== undefined, `${setting} is listed in:\n${stdout}`);
   return line.replace(/\s+/g, ' ').trim();
+}
+
+async function siteWithPluginSettings(): Promise<string> {
+  const directory = await temporaryDir('geekity-settings-cli-plugins-');
+  await mkdir(path.join(directory, 'content', '_data'), { recursive: true });
+  await writeFile(
+    path.join(directory, 'content', '_data', 'site.json'),
+    JSON.stringify({
+      plugins: {
+        '@acme/plugin-llm': { enabled: true },
+        '@acme/plugin-off': { enabled: false },
+        '@acme/plugin-broken': { enabled: true },
+        '@acme/plugin-needs': { enabled: true },
+      },
+    }),
+  );
+  await writeFile(
+    path.join(directory, 'geekity.config.mjs'),
+    `const plugin = (name, register) => ({
+  name,
+  version: '1.0.0',
+  label: name,
+  description: 'A plugin.',
+  hostApi: 2,
+  register,
+});
+export default {
+  plugins: [
+    plugin('@acme/plugin-llm', (host) => {
+      host.settings([
+        { key: 'default_model', type: 'text', label: 'Default model', default: 'small' },
+        {
+          key: 'tone',
+          type: 'select',
+          label: 'Tone',
+          hint: 'How replies sound.',
+          options: [
+            { value: 'plain', label: 'Plain' },
+            { value: 'warm', label: 'Warm' },
+          ],
+          default: 'plain',
+        },
+        { key: 'base_url', type: 'url', label: 'Base URL', default: 'https://api.example/v1' },
+        { key: 'api_key', type: 'secret', label: 'API key' },
+      ]);
+    }),
+    plugin('@acme/plugin-off', (host) => {
+      host.settings([{ key: 'colour', type: 'text', label: 'Colour', default: 'blue' }]);
+    }),
+    plugin('@acme/plugin-broken', () => {
+      throw new Error('The broken plugin broke.');
+    }),
+    plugin('@acme/plugin-base', () => {}),
+    {
+      ...plugin('@acme/plugin-needs', (host) => {
+        host.settings([{ key: 'shade', type: 'text', label: 'Shade', default: 'dark' }]);
+      }),
+      requires: { '@acme/plugin-base': '^1.0.0' },
+    },
+  ],
+};
+`,
+  );
+  return directory;
 }
 
 describe('geekity settings', () => {
@@ -193,5 +257,190 @@ describe('geekity settings', () => {
     assert.match(unknown.stderr, /There is no setting maintenance\.sideways/);
 
     assert.equal((await runCli(['settings'], directory)).code, 1);
+  });
+
+  it("lists each enabled plugin's settings after the core ones, never printing a secret", async () => {
+    const directory = await siteWithPluginSettings();
+    const env = { ACME_PLUGIN_LLM__API_KEY: 'sk-env-held-secret' };
+
+    const listed = await runCli(['settings', 'list'], directory, undefined, env);
+
+    assert.equal(listed.code, 0, listed.stderr);
+    const names = listed.stdout.split('\n').map((line) => line.split(' ')[0]);
+    assert.ok(names.indexOf('dev_mode.on') < names.indexOf('@acme/plugin-llm.default_model'));
+    assert.equal(
+      lineOf(listed.stdout, '@acme/plugin-llm.default_model'),
+      '@acme/plugin-llm.default_model small default Default model',
+    );
+    assert.equal(
+      lineOf(listed.stdout, '@acme/plugin-llm.tone'),
+      '@acme/plugin-llm.tone plain default How replies sound.',
+    );
+    assert.match(
+      lineOf(listed.stdout, '@acme/plugin-llm.api_key'),
+      /^@acme\/plugin-llm\.api_key \(set\) env ACME_PLUGIN_LLM__API_KEY /,
+    );
+    assert.doesNotMatch(listed.stdout, /sk-env-held-secret/);
+    assert.doesNotMatch(listed.stdout, /plugin-off|plugin-broken/);
+  });
+
+  it('names a plugin that is not enabled, or that fails to load, in a warning and lists the core settings', async () => {
+    const directory = await siteWithPluginSettings();
+
+    const listed = await runCli(['settings', 'list'], directory);
+
+    assert.equal(listed.code, 0, listed.stderr);
+    assert.match(listed.stderr, /@acme\/plugin-off is installed but not enabled/);
+    assert.match(listed.stderr, /@acme\/plugin-broken did not load: .*The broken plugin broke\./);
+    assert.match(lineOf(listed.stdout, 'maintenance.on'), /^maintenance\.on false default /);
+
+    const off = await runCli(['settings', 'get', '@acme/plugin-off.colour'], directory);
+    assert.equal(off.code, 1);
+    assert.match(off.stderr, /There is no setting @acme\/plugin-off\.colour/);
+  });
+
+  it("gets and sets a plugin setting in the plugin's files, refusing a bad value and an overridden setting", async () => {
+    const directory = await siteWithPluginSettings();
+    const folder = path.join(directory, 'data', 'plugins', '@acme', 'plugin-llm');
+
+    const set = await runCli(['settings', 'set', '@acme/plugin-llm.tone', 'warm'], directory);
+    assert.equal(set.code, 0, set.stderr);
+    assert.match(
+      lineOf(set.stdout, '@acme/plugin-llm.tone'),
+      /^@acme\/plugin-llm\.tone warm file /,
+    );
+    assert.deepEqual(await readJson(path.join(folder, 'settings.json')), { tone: 'warm' });
+
+    const got = await runCli(['settings', 'get', '@acme/plugin-llm.tone'], directory);
+    assert.equal(got.code, 0, got.stderr);
+    assert.equal(got.stdout, 'warm\n');
+
+    const secret = await runCli(
+      ['settings', 'set', '@acme/plugin-llm.api_key', 'sk-typed'],
+      directory,
+    );
+    assert.equal(secret.code, 0, secret.stderr);
+    assert.doesNotMatch(secret.stdout, /sk-typed/);
+    assert.deepEqual(await readJson(path.join(folder, 'secrets.json')), { api_key: 'sk-typed' });
+    assert.deepEqual(await readJson(path.join(folder, 'settings.json')), { tone: 'warm' });
+
+    const refused = await runCli(['settings', 'set', '@acme/plugin-llm.tone', 'loud'], directory);
+    assert.equal(refused.code, 1);
+    assert.match(refused.stderr, /@acme\/plugin-llm\.tone /);
+    assert.deepEqual(await readJson(path.join(folder, 'settings.json')), { tone: 'warm' });
+
+    const env = { ACME_PLUGIN_LLM__DEFAULT_MODEL: 'large' };
+    const overridden = await runCli(
+      ['settings', 'set', '@acme/plugin-llm.default_model', 'medium'],
+      directory,
+      undefined,
+      env,
+    );
+    assert.equal(overridden.code, 1);
+    assert.match(
+      overridden.stderr,
+      /@acme\/plugin-llm\.default_model is set by ACME_PLUGIN_LLM__DEFAULT_MODEL and cannot be changed here/,
+    );
+    assert.deepEqual(await readJson(path.join(folder, 'settings.json')), { tone: 'warm' });
+  });
+
+  it('reads a plugin setting still in site.json, moving it first as a boot would', async () => {
+    const directory = await siteWithPluginSettings();
+    const siteJson = path.join(directory, 'content', '_data', 'site.json');
+    await writeFile(
+      siteJson,
+      JSON.stringify({ plugins: { '@acme/plugin-llm': { enabled: true, tone: 'warm' } } }),
+    );
+
+    const got = await runCli(['settings', 'get', '@acme/plugin-llm.tone'], directory);
+
+    assert.equal(got.code, 0, got.stderr);
+    assert.equal(got.stdout, 'warm\n');
+  });
+
+  it('warns that its settings are not listed only for a plugin that declares settings', async () => {
+    const directory = await siteWithPluginSettings();
+
+    const listed = await runCli(['settings', 'list'], directory);
+
+    const lines = listed.stderr.split('\n');
+    const broken = lines.find((line) => line.startsWith('@acme/plugin-broken '));
+    const off = lines.find((line) => line.startsWith('@acme/plugin-off '));
+    assert.ok(broken !== undefined && off !== undefined, listed.stderr);
+    assert.doesNotMatch(broken, /Its settings are not listed/);
+    assert.match(off, /Its settings are not listed\.$/);
+    assert.doesNotMatch(listed.stderr, /@acme\/plugin-base/);
+  });
+
+  it('lists only the settings of a plugin that runs, warning about one enabled but not running', async () => {
+    const directory = await siteWithPluginSettings();
+
+    const listed = await runCli(['settings', 'list'], directory);
+
+    assert.equal(listed.code, 0, listed.stderr);
+    assert.match(
+      listed.stderr,
+      /@acme\/plugin-needs is enabled but not running.* Its settings are not listed\./,
+    );
+    assert.doesNotMatch(listed.stdout, /plugin-needs/);
+    assert.match(lineOf(listed.stdout, '@acme/plugin-llm.tone'), /^@acme\/plugin-llm\.tone /);
+
+    const got = await runCli(['settings', 'get', '@acme/plugin-needs.shade'], directory);
+    assert.equal(got.code, 1);
+    assert.match(got.stderr, /There is no setting @acme\/plugin-needs\.shade/);
+  });
+
+  it('refuses an unknown verb or a get with no name before touching site.json', async () => {
+    const directory = await siteWithPluginSettings();
+    const siteJson = path.join(directory, 'content', '_data', 'site.json');
+    const held = JSON.stringify({
+      plugins: { '@acme/plugin-llm': { enabled: true, tone: 'warm' } },
+    });
+    await writeFile(siteJson, held);
+
+    for (const args of [['settings', 'bogus'], ['settings', 'get'], ['settings']]) {
+      const refused = await runCli(args, directory);
+      assert.equal(refused.code, 1, args.join(' '));
+      assert.match(refused.stderr, /geekity settings needs list/);
+      assert.doesNotMatch(refused.stderr, /Moved the settings/);
+    }
+    assert.equal(await readFile(siteJson, 'utf8'), held);
+    assert.ok(!(await exists(path.join(directory, 'data', 'plugins'))));
+  });
+
+  it('keeps the core settings working when the plugin set-up is broken', async () => {
+    const directory = await temporaryDir('geekity-settings-cli-duplicate-');
+    await writeFile(
+      path.join(directory, 'geekity.config.mjs'),
+      `const plugin = {
+  name: '@acme/plugin-twice',
+  version: '1.0.0',
+  label: 'Twice',
+  description: 'A plugin.',
+  hostApi: 2,
+  register() {},
+};
+export default { plugins: [plugin, plugin] };
+`,
+    );
+
+    const listed = await runCli(['settings', 'list'], directory);
+    assert.equal(listed.code, 0, listed.stderr);
+    assert.match(
+      listed.stderr,
+      /^Plugin settings are not listed: Two plugins are named @acme\/plugin-twice/m,
+    );
+    assert.match(lineOf(listed.stdout, 'maintenance.on'), /^maintenance\.on false default /);
+
+    const set = await runCli(['settings', 'set', 'maintenance.on', 'true'], directory);
+    assert.equal(set.code, 0, set.stderr);
+    assert.deepEqual(await readJson(path.join(directory, 'data', 'maintenance.json')), {
+      on: true,
+      until: '',
+    });
+
+    const got = await runCli(['settings', 'get', 'maintenance.on'], directory);
+    assert.equal(got.code, 0, got.stderr);
+    assert.equal(got.stdout, 'true\n');
   });
 });

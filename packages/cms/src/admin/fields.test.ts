@@ -333,31 +333,70 @@ describe(`the error summary`, () => {
   });
 });
 
-describe(`a label or a hint written by the template,`, () => {
-  it('keeps the markup the admin writes into both', () => {
-    const html =
-      render(`{{ field.text('f', 'n', 'Email <span class="opacity-70">(optional)</span>', '',
-         hint='A path such as <code>/uploads/me.jpg</code>.') }}`);
+describe('a label or a hint (TASK-397)', () => {
+  for (const { what, body } of CALLS) {
+    it(`${what} writes a plain label and hint as text`, () => {
+      const html = render(callWith(body, `, hint=hint`).replace(`'A label'`, 'label'), {
+        label: '<script>alert(1)</script> & co',
+        hint: '<script>alert(2)</script> & co',
+      });
 
-    assert.match(
-      html,
-      /<label\b[^>]*\bfor="f"[^>]*>Email <span class="opacity-70">\(optional\)<\/span><\/label>/,
-    );
-    assert.ok(
-      html.includes(`<p class="${HINT}">A path such as <code>/uploads/me.jpg</code>.</p>`),
-      html,
-    );
-  });
+      assert.doesNotMatch(html, /<script>/, `${what} does not write a label or hint as markup`);
+      assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt; &amp; co'), html);
+      assert.ok(html.includes('&lt;script&gt;alert(2)&lt;/script&gt; &amp; co'), html);
+    });
 
-  it('escapes what a captured hint interpolates', () => {
+    it(`${what} escapes a label and hint even when they are marked safe`, () => {
+      const html = render(
+        callWith(body, `, hint=hint | safe`).replace(`'A label'`, 'label | safe'),
+        { label: '<b>label</b>', hint: '<i>hint</i>' },
+      );
+
+      assert.doesNotMatch(html, /<b>|<i>/, `${what} writes neither as markup`);
+      assert.ok(html.includes('&lt;b&gt;label&lt;/b&gt;'), html);
+      assert.ok(html.includes('&lt;i&gt;hint&lt;/i&gt;'), html);
+    });
+
+    it(`${what} writes labelHtml and hintHtml as the markup they hold`, () => {
+      const html = render(
+        callWith(
+          body,
+          `, labelHtml='Email <span class="opacity-70">(optional)</span>', hintHtml='A path such as <code>/uploads/me.jpg</code>.'`,
+        ).replace(`'A label', `, ''),
+      );
+
+      assert.ok(html.includes('Email <span class="opacity-70">(optional)</span>'), html);
+      assert.ok(
+        html.includes(`<p class="${HINT}">A path such as <code>/uploads/me.jpg</code>.</p>`),
+        html,
+      );
+    });
+
+    it(`${what} writes no hint paragraph for an empty hint or hintHtml`, () => {
+      const html = render(callWith(body, `, hint='', hintHtml=''`));
+
+      assert.doesNotMatch(html, new RegExp(HINT));
+    });
+  }
+
+  it('keeps the markup of a captured hintHtml, and escapes what it interpolates', () => {
     const html = render(
       `{% set hint %}The archives live at <code>/{{ base }}/</code>.{% endset %}
-       {{ field.text('f', 'n', 'Tag base', '', hint=hint) }}`,
+       {{ field.text('f', 'n', 'Tag base', '', hintHtml=hint) }}`,
       { base: '<b>' },
     );
 
     assert.match(html, /<code>\/&lt;b&gt;\/<\/code>/);
     assert.doesNotMatch(html, /<b>/);
+  });
+
+  it('writes no hint for a captured hintHtml that came out empty', () => {
+    const html = render(
+      `{% set hint %}{% if note %}{{ note }}{% endif %}{% endset %}
+       {{ field.text('f', 'n', 'Tag base', '', hintHtml=hint) }}`,
+    );
+
+    assert.doesNotMatch(html, new RegExp(HINT));
   });
 });
 

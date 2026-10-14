@@ -93,8 +93,7 @@
             {% call collapse('Reply') %}
               <form method="post" action="{{ replyUrl }}">
                 {{ rowFields(row, fields, status, csrfToken) }}
-                {% set replyLabel %}Reply to {{ row.author }}{% endset %}
-                {{ field.textarea('reply-' + loop.index, fields.body, replyLabel, rows='4', required=true,
+                {{ field.textarea('reply-' + loop.index, fields.body, 'Reply to ' ~ row.author, rows='4', required=true,
                      hint='Markdown. It is saved as a reply post of yours and shown under this one.') }}
                 {{ field.checkbox('reply-listed-' + loop.index, fields.listed, 'Include in posts and feeds',
                      hint='Left unticked, the reply is Unlisted: its own page, and no listing or feed.') }}

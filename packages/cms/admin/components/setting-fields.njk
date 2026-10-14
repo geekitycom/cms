@@ -3,35 +3,34 @@
 
 {% macro settingFields(settings, secretsFile) %}
   {% for setting in settings %}
-    {% set label = setting.label | escape %}
     {% set error = setting.error or setting.stored %}
     {% if setting.setBy %}
       <div class="fieldset">
-        <p class="fieldset-legend">{{ label }}{% if setting.widget == 'secret' %} {{ status('connected', 'Set') }}{% endif %}</p>
+        <p class="fieldset-legend">{{ setting.label }}{% if setting.widget == 'secret' %} {{ status('connected', 'Set') }}{% endif %}</p>
         {% if setting.widget != 'secret' %}<p><code>{{ setting.value if setting.widget != 'checkbox' else ('on' if setting.checked else 'off') }}</code></p>{% endif %}
         <p class="label block whitespace-normal">{% if setting.hint %}{{ setting.hint }} {% endif %}Set by {% if setting.setBy == setting.variable %}the environment variable {% endif %}<code>{{ setting.setBy }}</code>. Change it there.</p>
       </div>
     {% elif setting.widget == 'secret' %}
       {% set hint %}{% if setting.hint %}{{ setting.hint }} {% endif %}{% if setting.storedSet %}Set in <code>{{ secretsFile }}</code>. Leave the box blank to keep it.{% if setting.variable %} The environment variable <code>{{ setting.variable }}</code> would win over it.{% endif %}{% else %}Not set.{% if setting.variable %} Or set the environment variable <code>{{ setting.variable }}</code>.{% endif %}{% endif %}{% endset %}
-      {{ field.password(setting.id, setting.name,
-           label ~ ' ' ~ (status('connected', 'Set') if setting.storedSet else status('missing', 'Not set')),
-           hint=hint, error=error, autocomplete='off', spellcheck='false',
+      {% set label %}{{ setting.label }} {{ status('connected', 'Set') if setting.storedSet else status('missing', 'Not set') }}{% endset %}
+      {{ field.password(setting.id, setting.name, labelHtml=label,
+           hintHtml=hint, error=error, autocomplete='off', spellcheck='false',
            placeholder=('Leave blank to keep it' if setting.storedSet else '')) }}
       {% if setting.storedSet %}
-        {{ field.checkbox(setting.id ~ '-forget', setting.forgetName, 'Forget the stored ' ~ label) }}
+        {{ field.checkbox(setting.id ~ '-forget', setting.forgetName, 'Forget the stored ' ~ setting.label) }}
       {% endif %}
     {% else %}
       {% set hint %}{% if setting.hint %}{{ setting.hint }} {% endif %}{% if setting.variable %}The environment variable <code>{{ setting.variable }}</code> would win over this.{% endif %}{% endset %}
       {% if setting.widget == 'checkbox' %}
-        {{ field.checkbox(setting.id, setting.name, label, checked=setting.checked, hint=hint, error=error) }}
+        {{ field.checkbox(setting.id, setting.name, setting.label, checked=setting.checked, hintHtml=hint, error=error) }}
       {% elif setting.widget == 'select' %}
-        {% call field.select(setting.id, setting.name, label, hint=hint, error=error) %}
+        {% call field.select(setting.id, setting.name, setting.label, hintHtml=hint, error=error) %}
           {% for option in setting.options %}
             <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
           {% endfor %}
         {% endcall %}
       {% else %}
-        {{ field.text(setting.id, setting.name, label, setting.value, hint=hint, error=error,
+        {{ field.text(setting.id, setting.name, setting.label, setting.value, hintHtml=hint, error=error,
              inputmode=('url' if setting.widget == 'url' else ''), spellcheck='false') }}
       {% endif %}
     {% endif %}

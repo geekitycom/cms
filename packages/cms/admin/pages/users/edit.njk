@@ -58,7 +58,7 @@
       {% endif %}
     {% endset %}
     {{ field.text('user-email', fields.email, 'Email address', account.email,
-         type='email', autocomplete='email', hint=emailHint) }}
+         type='email', autocomplete='email', hintHtml=emailHint) }}
 
     <div class="mt-2">{{ button('Save email address', type='submit', color='primary') }}</div>
   </form>
@@ -96,7 +96,7 @@
 
     {% set avatarHint %}A path such as <code>/uploads/2026/09/me.jpg</code>, or a full URL.{% endset %}
     {{ field.text('profile-avatar', fields.avatar, 'Avatar', account.profile.avatar,
-         hint=avatarHint) }}
+         hintHtml=avatarHint) }}
 
     {{ field.text('profile-job-title', fields.jobTitle, 'Job title', account.profile.jobTitle,
          hint='What they do, printed beside the name on the archive.') }}
@@ -125,7 +125,7 @@
       Geekity needs it.
     {% endset %}
     {{ field.textarea('profile-links', fields.links, 'Links', account.profile.links, rows='4',
-         hint=linksHint, error=profileProblems.links) }}
+         hintHtml=linksHint, error=profileProblems.links) }}
 
     <div class="mt-2">{{ button('Save profile', type='submit', color='primary') }}</div>
   </form>

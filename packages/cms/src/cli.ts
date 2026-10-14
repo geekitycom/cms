@@ -34,6 +34,8 @@ import {
 import { describeUpgrade, upgradePlugins } from './plugins/upgrade.ts';
 import type { UpgradeReport } from './plugins/upgrade.ts';
 import { migratePluginSettings } from './plugins/migrate-settings.ts';
+import { readEnabledPlugins } from './plugins/enabled.ts';
+import type { PluginRegistry, RegisteredPlugin } from './plugins/registry.ts';
 import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
 import { askToReload } from './supervisor/control.ts';
 import { superviseCluster } from './supervisor/primary.ts';
@@ -159,6 +161,8 @@ const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
           'Print every runtime setting: its value in effect, where',
           'that value came from (env, config, file or default) and',
           'what it does. A secret prints as (set) or (not set).',
+          "Each running plugin's settings follow the core ones, as",
+          '@geekity/plugin-llm.default_model.',
         ],
       ],
       ['settings get', ['Print one value in effect, and what overrides it, if', 'anything.']],
@@ -560,7 +564,6 @@ async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number>
 async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const [action, name, value] = args;
   const config = await loadResolvedConfig(configPath);
-  const settings = createSettings({ config });
 
   if (action === 'migrate-plugins' && name === undefined) {
     const moved = migratePluginSettings({
@@ -574,7 +577,16 @@ async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise
     return 0;
   }
 
-  if (action === 'list') {
+  const request = settingsRequest(action, name, value, flags['unset'] === true);
+  if (request === undefined) {
+    throw new Error(
+      'geekity settings needs list [<namespace>], get <namespace.key>, set <namespace.key> with a value or --unset, or migrate-plugins.',
+    );
+  }
+
+  const settings = await settingsWithRunningPlugins(config);
+
+  if (request.action === 'list') {
     const refs = settings.list().filter((ref) => name === undefined || ref.namespace === name);
     if (refs.length === 0) throw new Error(`There is no settings namespace ${String(name)}.`);
     const rows = await Promise.all(refs.map((ref) => settingRow(settings, ref)));
@@ -582,8 +594,9 @@ async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise
     return 0;
   }
 
-  if (action === 'get' && name !== undefined) {
-    const ref = settingNamed(settings, name);
+  const ref = settingNamed(settings, request.name);
+
+  if (request.action === 'get') {
     const resolved = await settings.resolve(ref);
     const lines = [shown(ref, resolved.value)];
     if (overridden(resolved.source)) {
@@ -594,27 +607,70 @@ async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise
     return 0;
   }
 
-  if (
-    action === 'set' &&
-    name !== undefined &&
-    (value !== undefined) !== (flags['unset'] === true)
-  ) {
-    const ref = settingNamed(settings, name);
-    const { type } = ref.declaration;
-    let stored: unknown;
-    if (value !== undefined) {
-      const parsed = type.fromText(value);
-      if (!parsed.ok) throw new Error(`${name} ${parsed.problem}.`);
-      stored = type.toJson(parsed.value);
-    }
-    await setOrThrow(settings, ref.namespace, { [ref.key]: stored });
-    process.stdout.write(table([await settingRow(settings, ref)]));
-    return 0;
+  const { type } = ref.declaration;
+  let stored: unknown;
+  if (request.value !== undefined) {
+    const parsed = type.fromText(request.value);
+    if (!parsed.ok) throw new Error(`${request.name} ${parsed.problem}.`);
+    stored = type.toJson(parsed.value);
   }
+  await setOrThrow(settings, ref.namespace, { [ref.key]: stored });
+  process.stdout.write(table([await settingRow(settings, ref)]));
+  return 0;
+}
 
-  throw new Error(
-    'geekity settings needs list [<namespace>], get <namespace.key>, set <namespace.key> with a value or --unset, or migrate-plugins.',
-  );
+type SettingsRequest =
+  | { action: 'list' }
+  | { action: 'get'; name: string }
+  | { action: 'set'; name: string; value: string | undefined };
+
+function settingsRequest(
+  action: string | undefined,
+  name: string | undefined,
+  value: string | undefined,
+  unset: boolean,
+): SettingsRequest | undefined {
+  if (action === 'list') return { action };
+  if (name === undefined) return undefined;
+  if (action === 'get') return { action, name };
+  if (action === 'set' && (value !== undefined) !== unset) return { action, name, value };
+  return undefined;
+}
+
+async function settingsWithRunningPlugins(config: ResolvedConfig): Promise<SettingsRegistry> {
+  migratePluginSettings({
+    contentDir: config.contentDir,
+    dataDir: config.dataDir,
+    log: (line) => process.stderr.write(`${line}\n`),
+  });
+  const settings = createSettings({ config });
+  let registry: PluginRegistry;
+  try {
+    registry = await loadSitePlugins(config, settings);
+  } catch (error) {
+    process.stderr.write(`Plugin settings are not listed: ${messageOf(error)}\n`);
+    return settings;
+  }
+  const enabled = readEnabledPlugins(config.contentDir);
+  const running = registry.active(enabled);
+  for (const entry of registry.plugins) {
+    const { name } = entry.plugin;
+    const declared = entry.settingsNamespace !== undefined;
+    const unremarkable = !declared && !enabled.has(name) && entry.problem === undefined;
+    if (running.has(name) || unremarkable) continue;
+    const unlisted = declared ? ' Its settings are not listed.' : '';
+    process.stderr.write(`${name} ${whyNotRunning(entry, enabled)}${unlisted}\n`);
+    if (declared) settings.unregister(name);
+  }
+  return settings;
+}
+
+function whyNotRunning(entry: RegisteredPlugin, enabled: ReadonlySet<string>): string {
+  if (entry.problem !== undefined) return `did not load: ${entry.problem}`;
+  if (enabled.has(entry.plugin.name)) {
+    return 'is enabled but not running, because a plugin it requires is not running.';
+  }
+  return 'is installed but not enabled.';
 }
 
 function settingNamed(settings: SettingsRegistry, name: string): SettingRef<unknown> {
@@ -1227,6 +1283,14 @@ function configFlag(argv: readonly string[]): string | undefined {
   return undefined;
 }
 
+async function loadSitePlugins(
+  config: ResolvedConfig,
+  settings: SettingsRegistry,
+): Promise<PluginRegistry> {
+  const folderPlugins = await importPluginFolders(scanPluginFolders(config.pluginsDir));
+  return sitePluginRegistry(config, folderPlugins, settings);
+}
+
 /** A command a plugin added, and the plugin it came from. */
 interface FoundCommand {
   plugin: string;
@@ -1238,9 +1302,8 @@ interface FoundCommand {
  * plugins folder, longest words first.
  */
 async function pluginCommands(config: ResolvedConfig): Promise<FoundCommand[]> {
-  const folderPlugins = await importPluginFolders(scanPluginFolders(config.pluginsDir));
-  return sitePluginRegistry(config, folderPlugins, createSettings({ config }))
-    .plugins.filter((entry) => entry.problem === undefined)
+  return (await loadSitePlugins(config, createSettings({ config }))).plugins
+    .filter((entry) => entry.problem === undefined)
     .flatMap((entry) => entry.commands.map((command) => ({ plugin: entry.plugin.name, command })))
     .sort((a, b) => b.command.words.length - a.command.words.length);
 }
