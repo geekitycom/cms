@@ -1,8 +1,8 @@
 ---
 id: decision-56
-title: How far an async content and admin store would reach
+title: Stores stay synchronous until a Postgres build is real
 date: '2026-10-14 14:21'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -20,14 +20,9 @@ The code was measured on branch `m39-async-stores-spike` at 9053eef1 on 2026-10-
 
 ### How it was measured
 
-Three throwaway tools ran against the worktree. They are in `_local/async-stores-spike/`, which the global gitignore excludes, so they are not in the diff. Proposed task 2 below would keep the first one in the repository.
+Three throwaway tools ran against the spike's worktree and were not kept. The numbers below stand on their own; to measure again, write the walk again from the description here.
 
-1. **The reach walk**, `reach.ts`. It loads `packages/cms/tsconfig.json` (src, test and scripts) into the TypeScript language service and takes every member of both store types. It finds every reference to each member with `findReferences`, then walks upward through the callers. A call inside an `async` function only needs an `await`, and the walk stops there. A call inside a sync function makes that function return a promise, so the walk follows that function's callers in turn. The walk follows named functions, object-literal members through the interface they implement, variables that alias a function, and callbacks passed to a function in this package, through the parameter that receives them. A callback passed to `map`, `filter` or another array method changes the function that calls the method. The walk stops at code outside the package (Hono, Fedify, `node:test`) and records whether that code accepts a promise. Values it cannot follow are reported, so the totals are a lower bound. In src the walk could not follow 16 values: 6 escape as values with no caller found, 5 are functions returned from other functions, 3 are listener arrays and 2 are destructured. A run takes about 8 seconds:
-
-   ```sh
-   node --stack-size=8000 _local/async-stores-spike/reach.ts packages/cms          # summary
-   node --stack-size=8000 _local/async-stores-spike/reach.ts packages/cms --list   # every function and site
-   ```
+1. **The reach walk**, `reach.ts`. It loads `packages/cms/tsconfig.json` (src, test and scripts) into the TypeScript language service and takes every member of both store types. It finds every reference to each member with `findReferences`, then walks upward through the callers. A call inside an `async` function only needs an `await`, and the walk stops there. A call inside a sync function makes that function return a promise, so the walk follows that function's callers in turn. The walk follows named functions, object-literal members through the interface they implement, variables that alias a function, and callbacks passed to a function in this package, through the parameter that receives them. A callback passed to `map`, `filter` or another array method changes the function that calls the method. The walk stops at code outside the package (Hono, Fedify, `node:test`) and records whether that code accepts a promise. Values it cannot follow are reported, so the totals are a lower bound. In src the walk could not follow 16 values: 6 escape as values with no caller found, 5 are functions returned from other functions, 3 are listener arrays and 2 are destructured.
 
 2. **The prototype flip**, `flip.ts`. It rewrites every store method signature in `content/store.ts` and the ten `store/*.ts` interfaces to return `Promise<…>`. Then `tsc --noEmit -p packages/cms/tsconfig.json` and `eslint` (with `recommendedTypeChecked`, so `no-floating-promises` and `no-misused-promises` run) are run, and the tree is reverted with `git checkout -- packages/cms/src/content/store.ts packages/cms/src/store`. The flip was run three times: content store only, admin store only, and both. The baseline `tsc` run had 0 errors.
 
@@ -55,7 +50,7 @@ Direct src call sites by area: web 66, admin 59, federation 53, content 26, comm
 | Files that change | 99 (of 403) | 114 (of 356) |
 | SQLite implementation files (rewritten, not awaited) | 23 | n/a |
 
-**By layer**, for src. A file is placed in a layer by name. The rule is in `reach.ts` `layer()`. Routes means admin/, every `*routes.ts`, the listing, document, embed, request, session and micropub handlers. Template context means `web/render.ts`, `context.ts`, `page-sources.ts`, `conversation.ts`, `archive.ts`, `site-view.ts`, `listing-subject.ts`, `paths.ts`, `markdown-representation.ts`, the feed item builders, `theme/` and `content/post-type.ts`. Plugin API means `plugin.ts`, `plugins/` and `web/plugin-*`. Services means everything else.
+**By layer**, for src. A file is placed in a layer by name. Routes means admin/, every `*routes.ts`, the listing, document, embed, request, session and micropub handlers. Template context means `web/render.ts`, `context.ts`, `page-sources.ts`, `conversation.ts`, `archive.ts`, `site-view.ts`, `listing-subject.ts`, `paths.ts`, `markdown-representation.ts`, the feed item builders, `theme/` and `content/post-type.ts`. Plugin API means `plugin.ts`, `plugins/` and `web/plugin-*`. Services means everything else.
 
 | Layer | Direct call sites | Functions that turn async | Files |
 | --- | --- | --- | --- |
@@ -137,12 +132,18 @@ The options compared:
 | A. Full async now | Everything measured above. Every feature from then on writes async store code. Breaks plugins and embedders in the next major | Only the adapters | Pays the whole cost early for a build nobody has planned |
 | B. Async interface with a sync fast path (or `T \| Promise<T>`) | Two code paths and two sets of tests | Every caller still has to await for the Postgres path, so it costs as much as A | Rejected. There is no speed to win back, and the duplication is permanent |
 | C. Prefetch before render | Not an option on its own. It is how A should handle the template layer | Saves most of the 91 template-context functions, keeps every theme working and keeps the renderer's templates sync | Adopted as the shape for the render path whenever A happens |
-| D. Wait until a Postgres build is real | Near zero | Measured above. It grows slowly with new call sites, and `reach.ts` re-measures it | **Chosen** |
+| D. Wait until a Postgres build is real | Near zero | Measured above. It grows slowly with new call sites | **Chosen** |
 
-Two things would be cheaper to settle before a Postgres build than during one. Neither is required.
+One thing is cheaper to settle now than during a Postgres build: **the plugin federation context.** It is the only plugin-facing contract the change breaks. The next `@geekity/cms` release is already a major, so moving `outbox` and `followers` to promises now costs about 8 lines in `plugin-wordpress` and saves a second plugin break later. This is the accepted follow-up below.
 
-- **The plugin federation context.** It is the only plugin-facing contract the change breaks. The next `@geekity/cms` release is already a major, so moving `outbox` and `followers` to promises now costs about 8 lines in `plugin-wordpress` and saves a second plugin break later. This is proposed task 1. If the major ships without it, drop the task.
-- **The measurement.** Keeping `reach.ts` in the repository lets anyone measure the reach again, which AC #1 asks for. This is proposed task 2.
+### Resolved questions
+
+Answered by the user on 2026-10-14.
+
+1. **Make the plugin federation outbox and followers async now?** Yes, in the pending major. It is the follow-up task below.
+2. **Keep the measurement scripts in the repository?** No. They were throwaway, and the numbers in this record stand on their own.
+3. **Is a Postgres build planned?** No. The farm idea in decision-52 does not require PostgreSQL either, so waiting stands.
+4. **Retitle the record?** Yes, to state its conclusion.
 
 ### When a Postgres build is real
 
@@ -153,19 +154,19 @@ If that day comes, build in this order. Each step ends with green `tsc`, `eslint
 3. **`AdminStore` async, one sub-store at a time,** starting with sessions because the admin middleware reads them on every request. 62 methods, 615 `tsc` errors in 73 files today. Audit check-then-act sequences as each sub-store moves.
 4. **`ContentStore` writers, the schedule and the catalog,** which are called from services and admin routes.
 5. **The public render path, with prefetching.** Route loaders await the store, the renderer awaits its context sources, Nunjucks stays synchronous, `newestPosts(count)` is served from a prefetched list up to a cap, and the cited pages for `postLabel` are prefetched per listing. Verified by the theme tests and the Eleventy example rendering the same.
-6. **The plugin federation context,** unless proposed task 1 already did it.
+6. **The plugin federation context,** if the follow-up below has not already shipped it.
 7. **Postgres adapters behind a contract test** that runs against both backends, as decision-54 ran its queue contract against six transports.
 
 ## Consequences
 
-- The stores stay synchronous. New code may keep calling them synchronously. The reach grows with each new sync call site, and `reach.ts` reports by how much.
+- The stores stay synchronous. New code may keep calling them synchronously. The reach grows with each new sync call site.
 - No guard is added against new sync store calls. A ratchet on the count would get in the way of ordinary feature work for a build with no plan. The one rule worth keeping in reviews is the template contract: a new store-backed value for themes should be prefetched into the context, not offered as a function the template calls. `newestPosts` stays the only exception.
 - `sqlite-boundary.test.ts` still stops new `node:sqlite` imports outside the stores (decision-52).
-- TASK-385's AC #5 waits for the user to accept or amend this record.
+- `PluginFederationContext.outbox` and `.followers` become async in the pending major, so plugins break once for this and not again later.
 
 ## Proposed tasks
 
-Both are optional. File them only if the user wants them, since this record recommends waiting.
+Accepted. Filed as TASK-410.
 
 1. **Make the plugin federation outbox and followers async**
    - Description: `PluginFederationContext.outbox(username)` and `.followers(username)` (packages/cms/src/plugin.ts) return their collection synchronously because `totalItems` comes from `countByAuthor` and `countFollowers`. They are the only plugin API members that an async store would break (decision-56). Change them to return promises in the major release already pending, so a later Postgres build does not break plugins a second time.
@@ -174,11 +175,3 @@ Both are optional. File them only if the user wants them, since this record reco
      - `@geekity/plugin-wordpress` `src/federation.ts` awaits them in its Fedify counter and cursor callbacks, and its federation tests pass.
      - docs/plugins.md and the changelog say the two members now return promises, and the release notes list it as a breaking change for plugins.
      - `pnpm typecheck`, `pnpm lint` and `pnpm test` pass.
-
-2. **Keep the async-store reach measurement in the repository**
-   - Description: decision-56's counts came from a language-service walk (`reach.ts`) that is now git-ignored under `_local/`. Commit it as a development script so the reach of an async `ContentStore` and `AdminStore` can be measured again before anyone starts a Postgres build. It is not run in CI.
-   - Acceptance criteria:
-     - The script lives under `scripts/` at the repository root (not `packages/`) and runs with `node scripts/<name>.ts packages/cms`. It prints the direct call sites, the functions that turn async, the files that change, each by area and by layer, and the places the walk stopped.
-     - Run at the commit it lands on, it reproduces the counts in decision-56, or the record is updated with the new numbers and the commit they were taken at.
-     - `pnpm lint` passes with the script included.
-     - decision-56 names the script's path in place of `_local/async-stores-spike/reach.ts`.
