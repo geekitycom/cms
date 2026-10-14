@@ -29,7 +29,7 @@ import {
 } from '../plugins/manage.ts';
 import type { ManageOptions, ManageResult } from '../plugins/manage.ts';
 import { describeUpgrade } from '../plugins/upgrade.ts';
-import { findUserById, verifyUserPassword } from '../site/users.ts';
+import { confirmedUser } from './confirm-password.ts';
 import type { Supervision } from '../supervisor/supervision.ts';
 import { PACKAGE_NAME } from '../plugins/registry.ts';
 import type {
@@ -404,14 +404,6 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
       return c.redirect(PLUGINS_PATH, 303);
     }
     return await reloaded(c, supervision);
-  }
-
-  function confirmedUser(c: Context<GeekityEnv>, password: string): string | undefined {
-    const userId = c.var.session?.userId;
-    if (userId == null || password === '') return undefined;
-    const user = findUserById(c.var.config.dataDir, userId);
-    if (user === undefined) return undefined;
-    return verifyUserPassword(c.var.config.dataDir, user.username, password)?.username;
   }
 
   app.post(PLUGINS_RELOAD_PATH, async (c) => {

@@ -56,6 +56,7 @@ import { clientAddress, createLoginThrottle, describeWait, loginKeys } from '../
 import { mountToolsScreen } from './tools.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { DEV_MODE_PATH, mountDevModeScreen } from './dev-mode.ts';
+import { mountExportScreen } from './export.ts';
 import { mountMaintenanceScreen } from './maintenance.ts';
 import { mountPersonalDataScreen } from './personal-data.ts';
 import { mountEditorActions } from './editor-actions.ts';
@@ -398,6 +399,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   mountPersonalDataScreen(app, { render });
   mountMaintenanceScreen(app, { render });
   mountDevModeScreen(app, { render });
+  mountExportScreen(app, { render });
 
   // The site's own settings, which are content/_data/site.json itself: the
   // screen reads that file and writes it back (decision-9).

@@ -234,6 +234,10 @@ A file in `data/` that no declaration covers is left out, and the command
 names it on standard error. This is usually a file that a plugin or a script
 wrote without a declaration.
 
+The admin writes the same archive from
+[Tools > Export](admin.md#tools--export), as a background job, and offers it
+as a download. Import has no admin screen: run `geekity import`.
+
 ## Importing a site
 
 `geekity import <file>` restores a site from an archive that `geekity export`

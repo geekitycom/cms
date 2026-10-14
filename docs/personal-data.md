@@ -23,6 +23,7 @@ unless a retention period sets a limit.
 | Plugins added, updated and removed on Admin > Plugins: the username, when, the package and its versions                | `data/plugin-changes.json`, mode `0600`                       | The last 200 changes.                                                                                                                                 |
 | Deliveries, inbox activities and retries waiting to be handled, with the actors and inboxes they name                  | `data/queue.sqlite`, mode `0600`                              | Until a server handles it. Fedify waits at most 12 hours between two attempts.                                                                        |
 | An index of all of the above, and sessions, reset tokens and spent link tokens                                         | `data/geekity.db`                                             | A cache of the files. Sessions and tokens are pruned when they expire.                                                                                |
+| A site export written on Tools > Export: everything above that the site keeps                                          | `data/exports/`                                               | Deleted 24 hours after it was written, or when the next export finishes.                                                                              |
 | Client addresses in the rate limits                                                                                    | Memory                                                        | Until the window passes or the site restarts.                                                                                                         |
 | Where and when a photo or video was taken, and the camera or phone (EXIF, XMP, IPTC, a video's `©xyz`)                 | Removed from `content/uploads/` on upload                     | Never stored. Older uploads keep it until the sweep on the Media screen or `geekity strip-metadata`; git history keeps the old bytes until rewritten. |
 | Where the author wrote a post or checked in: coordinates, accuracy, and the place's name, locality, region and country | `data/locations.json`, mode `0600`, keyed by permalink        | Kept until the author clears it. Published only as far as **Settings > Privacy** allows, nothing by default.                                          |
@@ -94,6 +95,8 @@ A sweep runs when the site starts serving and every six hours after that.
 - Rewrites each comment file and message inside the lock that every other
   writer takes.
 - Puts each changed comment back into the index in the same step.
+
+The sweep also deletes a site export in `data/exports/` that is 24 hours old.
 
 A second sweep finds nothing to remove and writes nothing.
 

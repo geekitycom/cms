@@ -13,6 +13,7 @@ import type { NotificationTimers } from '../notifications/digest.ts';
 import { retentionPolicyOf } from '../site/settings.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import { SITE } from '../site/namespace.ts';
+import { expireExports } from '../files/export-archives.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { outlived } from '../site/retention-policy.ts';
@@ -42,6 +43,8 @@ export interface RetentionReport {
   readonly messagesDeleted: number;
   /** Contact messages that lost their address hash. */
   readonly messagesRedacted: number;
+  /** Site exports in `data/exports/` deleted 24 hours after they were written. */
+  readonly exportsDeleted: number;
 }
 
 /**
@@ -130,7 +133,12 @@ export interface RetentionService {
   settled(): Promise<void>;
 }
 
-const NOTHING: RetentionReport = { comments: 0, messagesDeleted: 0, messagesRedacted: 0 };
+const NOTHING: RetentionReport = {
+  comments: 0,
+  messagesDeleted: 0,
+  messagesRedacted: 0,
+  exportsDeleted: 0,
+};
 
 /** Build the retention sweep for one site. */
 export function createRetentionService(options: CreateRetentionServiceOptions): RetentionService {
@@ -175,7 +183,9 @@ export function createRetentionService(options: CreateRetentionServiceOptions): 
       }
     }
 
-    return { comments, messagesDeleted, messagesRedacted };
+    const exportsDeleted = await expireExports(config.dataDir, now);
+
+    return { comments, messagesDeleted, messagesRedacted, exportsDeleted };
   }
 
   return {
