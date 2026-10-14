@@ -26,7 +26,7 @@ import type { KvStore } from '@fedify/fedify';
  * value reshaped, or a behavior a plugin relies on changed. Adding a method, an
  * optional field or a new extension point keeps the number.
  */
-export const HOST_API_VERSION = 1;
+export const HOST_API_VERSION = 2;
 
 /**
  * The site federation's key-value store, as Fedify defines it. A plugin that
@@ -339,7 +339,9 @@ export interface PluginScreenAction {
 export interface PluginScreen {
   /** Its heading and its label in the menu. */
   readonly title: string;
-  render(context: PluginScreenContext): readonly PluginScreenCard[];
+  render(
+    context: PluginScreenContext,
+  ): readonly PluginScreenCard[] | Promise<readonly PluginScreenCard[]>;
   /** Buttons core draws under the settings, each run when pressed. */
   readonly actions?: readonly PluginScreenAction[] | undefined;
 }
@@ -348,8 +350,8 @@ export interface PluginScreen {
 interface PluginSettingBase {
   /**
    * Lower case words joined by `_`, such as `api_key`. It is the key in
-   * `site.json` or `secrets.json`, and upper-cased it ends the field's
-   * environment variable.
+   * `settings.json` or `secrets.json` in the plugin's data folder, and
+   * upper-cased it ends the field's environment variable.
    */
   readonly key: string;
   readonly label: string;
@@ -419,7 +421,7 @@ export interface PluginSettings<Fields extends readonly PluginSettingField[]> {
    * The values now, read from the files and the environment on every call. A
    * stored value the field does not accept is replaced by the field's default.
    */
-  current(): PluginSettingValues<Fields>;
+  current(): Promise<PluginSettingValues<Fields>>;
 }
 
 /** One option a command takes. */
@@ -627,10 +629,10 @@ export interface PluginHost<
   screen(screen: PluginScreen): void;
   /**
    * Declare the plugin's settings, which core draws as a form on its screen.
-   * At most once per plugin. Public values are kept under the plugin's key in
-   * `content/_data/site.json`; secrets in `secrets.json` in its data folder,
-   * or in the environment variable named by the package name, `__` and the
-   * key, upper-cased with every run of other characters as one `_`.
+   * At most once per plugin. Public values are kept in `settings.json` in its
+   * data folder and secrets in `secrets.json` beside it. Any of them can be
+   * set instead by the environment variable named by the package name, `__`
+   * and the key, upper-cased with every run of other characters as one `_`.
    */
   settings<const Fields extends readonly PluginSettingField[]>(
     fields: Fields,

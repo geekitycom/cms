@@ -124,7 +124,7 @@ export function pluginFiles(options: {
   requires?: Record<string, string>;
   core?: string;
 }): Record<string, string> {
-  const { name, version, hostApi = 1, requires = {}, core = '>=0.0.0' } = options;
+  const { name, version, hostApi = 2, requires = {}, core = '>=0.0.0' } = options;
   const peerDependencies = { '@geekity/cms': core, ...requires };
   return {
     'package.json': JSON.stringify({ name, version, peerDependencies }),

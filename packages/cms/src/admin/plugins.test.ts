@@ -370,9 +370,10 @@ describe('a plugin screen (TASK-282)', () => {
   });
 });
 
-describe('plugin settings on its screen (TASK-283)', () => {
+describe('plugin settings on its screen (TASK-283, TASK-390)', () => {
   const CONFIGURED = '@test/plugin-configured';
-  const VARIABLE = 'TEST_PLUGIN_CONFIGURED__API_KEY';
+  const PREFIX = 'TEST_PLUGIN_CONFIGURED';
+  const VARIABLE = `${PREFIX}__API_KEY`;
   const screenPath = `${PLUGINS_PATH}/${CONFIGURED}`;
   const SECRET = 'sk-very-secret-4242';
 
@@ -386,7 +387,13 @@ describe('plugin settings on its screen (TASK-283)', () => {
       hostApi: HOST_API_VERSION,
       register(host) {
         const settings = host.settings([
-          { type: 'url', key: 'base_url', label: 'Base URL', default: 'https://llm.example/v1' },
+          {
+            type: 'url',
+            key: 'base_url',
+            label: 'Base URL',
+            default: 'https://llm.example/v1',
+            hint: 'Where the API is.',
+          },
           { type: 'secret', key: 'api_key', label: 'API key' },
           { type: 'text', key: 'model', label: 'Default model', default: 'small' },
           {
@@ -399,26 +406,35 @@ describe('plugin settings on its screen (TASK-283)', () => {
               { value: 'warm', label: 'Warm' },
             ],
           },
-          { type: 'checkbox', key: 'verbose', label: 'Verbose' },
+          { type: 'checkbox', key: 'verbose', label: 'Verbose', hint: 'Say more.' },
         ]);
         host.screen({
           title: 'Configured',
-          render: () => [],
+          render: async () => [
+            {
+              title: 'Now',
+              blocks: [{ paragraph: [`The model is ${(await settings.current()).model}.`] }],
+            },
+          ],
           actions: [
             {
               id: 'test',
               label: 'Test it',
-              run: () => {
-                const { api_key: key, model } = settings.current();
+              run: async () => {
+                const { api_key: key, model, verbose } = await settings.current();
                 return key === undefined
                   ? { ok: false, message: 'No key <set>.' }
-                  : { ok: true, message: `Answered by ${model}.` };
+                  : { ok: true, message: `Answered by ${model}${verbose ? ', verbosely' : ''}.` };
               },
             },
           ],
         });
       },
     });
+  }
+
+  function pluginFile(dataDir: string, file: string): string {
+    return path.join(dataDir, 'plugins', '@test', 'plugin-configured', file);
   }
 
   async function page(agent: Browser): Promise<string> {
@@ -441,21 +457,33 @@ describe('plugin settings on its screen (TASK-283)', () => {
     return flashes(await page(agent)).map((entry) => entry.message);
   }
 
-  it('draws every field with its value, and each secret as not set with its variable', async () => {
+  it('draws a text, url, select, checkbox and secret field with its label, hint and value', async () => {
     const { agent } = await site([configured()], [CONFIGURED]);
     const html = await page(agent);
     for (const label of ['Base URL', 'API key', 'Default model', 'Tone', 'Verbose']) {
       assert.ok(html.includes(label), `the form has ${label}`);
     }
-    assert.match(html, /value="https:\/\/llm\.example\/v1"/);
+    assert.ok(html.includes('Where the API is.'), 'the url hint');
+    assert.ok(html.includes('Say more.'), 'the checkbox hint');
+    assert.match(
+      html,
+      /name="setting\.base_url"[^>]*value="https:\/\/llm\.example\/v1"|value="https:\/\/llm\.example\/v1"[^>]*name="setting\.base_url"/,
+    );
     assert.match(html, /value="small"/);
     assert.match(html, /<option value="plain" selected>/);
+    assert.match(html, /name="setting\.verbose" type="checkbox"/);
+    assert.doesNotMatch(html, /name="setting\.verbose"[^>]*checked/);
     assert.match(html, /Not set/);
     assert.ok(html.includes(`<code>${VARIABLE}</code>`), 'the variable name is printed');
+    assert.ok(
+      html.includes(`<code>${PREFIX}__MODEL</code>`),
+      'a public setting names its variable too',
+    );
     assert.match(html, /type="password"[^>]*value=""/);
+    assert.ok(html.includes('The model is small.'), 'an async render is awaited');
   });
 
-  it('saves public values to site.json and the secret to secrets.json, never drawing it', async () => {
+  it('saves public values to settings.json and the secret to secrets.json, never drawing it', async () => {
     const { agent, contentDir, dataDir } = await site([configured()], [CONFIGURED]);
     const logged: string[] = [];
     for (const method of ['log', 'info', 'warn', 'error'] as const) {
@@ -483,24 +511,31 @@ describe('plugin settings on its screen (TASK-283)', () => {
         html,
         /Set in <code>data\/plugins\/@test\/plugin-configured\/secrets\.json<\/code>/,
       );
-      assert.deepEqual(await act(agent, 'test'), ['Answered by big.']);
+      assert.match(html, /name="setting\.verbose"[^>]*checked/);
+      assert.deepEqual(await act(agent, 'test'), ['Answered by big, verbosely.']);
 
       const file = await siteJson(contentDir);
       assert.ok(!JSON.stringify(file).includes(SECRET), 'nor in site.json');
       assert.deepEqual((file['plugins'] as Record<string, unknown>)[CONFIGURED], {
         enabled: true,
+      });
+      assert.deepEqual(JSON.parse(await readFile(pluginFile(dataDir, 'settings.json'), 'utf8')), {
         base_url: 'http://127.0.0.1:9/v1',
         model: 'big',
         tone: 'warm',
         verbose: true,
       });
-      const secrets = path.join(dataDir, 'plugins', '@test', 'plugin-configured', 'secrets.json');
+      const secrets = pluginFile(dataDir, 'secrets.json');
       assert.deepEqual(JSON.parse(await readFile(secrets, 'utf8')), { api_key: SECRET });
       assert.equal((await stat(secrets)).mode & 0o777, 0o600);
 
-      assert.equal((await save(agent, { 'setting.api_key': '' })).status, 303);
+      assert.equal((await save(agent, { 'setting.api_key': '', 'setting.model': '' })).status, 303);
       assert.deepEqual(JSON.parse(await readFile(secrets, 'utf8')), { api_key: SECRET });
-      assert.deepEqual(await act(agent, 'test'), ['Answered by big.'], 'blank keeps the secret');
+      assert.deepEqual(
+        await act(agent, 'test'),
+        ['Answered by small.'],
+        'a blank box keeps the secret, empties a text field to its default and unticks the box',
+      );
     } finally {
       mock.restoreAll();
     }
@@ -516,28 +551,34 @@ describe('plugin settings on its screen (TASK-283)', () => {
   });
 
   it('refuses an invalid value, naming the field, and keeps what was typed', async () => {
-    const { agent, contentDir } = await site([configured()], [CONFIGURED]);
+    const { agent, dataDir } = await site([configured()], [CONFIGURED]);
     const response = await save(agent, {
       'setting.base_url': 'ftp://nope',
+      'setting.tone': 'shouty',
       'setting.model': 'typed',
     });
     assert.equal(response.status, 400);
     const html = await response.text();
     assert.match(html, /Base URL must be an http:\/\/ or https:\/\/ URL\./);
+    assert.match(html, /Tone must be one of plain, warm/);
     assert.match(html, /value="typed"/);
-    const entry = ((await siteJson(contentDir))['plugins'] as Record<string, unknown>)[CONFIGURED];
-    assert.deepEqual(entry, { enabled: true });
+    await assert.rejects(stat(pluginFile(dataDir, 'settings.json')), 'nothing was written');
   });
 
-  it('says when a stored value is invalid and the default is in use', async () => {
-    const { agent, contentDir } = await site([configured()], [CONFIGURED]);
-    const file = await siteJson(contentDir);
-    file['plugins'] = { [CONFIGURED]: { enabled: true, base_url: 'nope', tone: 'shouty' } };
-    await writeFile(path.join(contentDir, '_data', 'site.json'), JSON.stringify(file));
+  it('says when a stored value is invalid and set aside', async () => {
+    const { agent, dataDir } = await site([configured()], [CONFIGURED]);
+    await mkdir(path.dirname(pluginFile(dataDir, 'settings.json')), { recursive: true });
+    await writeFile(
+      pluginFile(dataDir, 'settings.json'),
+      JSON.stringify({ base_url: 'nope', tone: 'shouty' }),
+    );
     const html = await page(agent);
     assert.equal(
-      [...html.matchAll(/The value in site\.json is not [^<]*, so the default is in use\./g)]
-        .length,
+      [
+        ...html.matchAll(
+          /in plugins\/@test\/plugin-configured\/settings\.json must be [^<]*, so it is set aside\./g,
+        ),
+      ].length,
       2,
     );
     assert.match(html, /value="https:\/\/llm\.example\/v1"/);
@@ -553,13 +594,97 @@ describe('plugin settings on its screen (TASK-283)', () => {
       assert.ok(!html.includes('sk-from-env'));
 
       await save(agent, { 'setting.api_key': 'sk-typed', 'forget.api_key': '1' });
-      await assert.rejects(
-        stat(path.join(dataDir, 'plugins', '@test', 'plugin-configured', 'secrets.json')),
-      );
+      await assert.rejects(stat(pluginFile(dataDir, 'secrets.json')));
       assert.deepEqual(await act(agent, 'test'), ['Answered by small.']);
     } finally {
       delete process.env[VARIABLE];
     }
+  });
+
+  it('shows a public setting the environment sets with its value and no box, and a save leaves it', async () => {
+    const variables = { [`${PREFIX}__MODEL`]: 'model-from-env', [`${PREFIX}__VERBOSE`]: 'on' };
+    Object.assign(process.env, variables);
+    try {
+      const { agent, dataDir } = await site([configured()], [CONFIGURED]);
+      const html = await page(agent);
+      for (const variable of Object.keys(variables)) {
+        assert.ok(html.includes(`Set by the environment variable <code>${variable}</code>`));
+      }
+      assert.ok(html.includes('<code>model-from-env</code>'), 'the value in effect is shown');
+      assert.doesNotMatch(html, /name="setting\.model"/);
+      assert.doesNotMatch(html, /name="setting\.verbose"/);
+
+      assert.equal(
+        (await save(agent, { 'setting.model': 'typed', 'setting.api_key': SECRET })).status,
+        303,
+      );
+      await assert.rejects(
+        stat(pluginFile(dataDir, 'settings.json')),
+        'neither overridden setting is written',
+      );
+      assert.deepEqual(JSON.parse(await readFile(pluginFile(dataDir, 'secrets.json'), 'utf8')), {
+        api_key: SECRET,
+      });
+      assert.deepEqual(await act(agent, 'test'), ['Answered by model-from-env, verbosely.']);
+    } finally {
+      for (const variable of Object.keys(variables)) delete process.env[variable];
+    }
+  });
+
+  it('moves settings kept in site.json to the plugin folder at boot, keeping enabled', async () => {
+    const contentDir = await box.dir('geekity-plugins-content-');
+    const dataDir = await box.dir('geekity-plugins-data-');
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({
+        title: 'A Site',
+        plugins: { [CONFIGURED]: { enabled: true, model: 'from-site-json', tone: 'warm' } },
+      }),
+    );
+    const logged: string[] = [];
+    mock.method(console, 'log', (...args: unknown[]) => {
+      logged.push(args.map(String).join(' '));
+    });
+    let cms: Cms;
+    try {
+      cms = await box.open({ contentDir, dataDir, plugins: [configured()] });
+    } finally {
+      mock.restoreAll();
+    }
+    assert.ok(logged.some((line) => line.includes(`Moved the settings of ${CONFIGURED}`)));
+    assert.deepEqual(
+      ((await siteJson(contentDir))['plugins'] as Record<string, unknown>)[CONFIGURED],
+      { enabled: true },
+    );
+    const html = await page(await signedIn(cms));
+    assert.match(html, /value="from-site-json"/);
+    assert.match(html, /<option value="warm" selected>/);
+  });
+
+  it('does not load a plugin whose name is a core settings namespace, naming why on Admin > Plugins', async () => {
+    let registered = false;
+    const reserved = definePlugin({
+      name: 'site',
+      version: '1.0.0',
+      label: 'Site',
+      description: 'Takes a core name.',
+      hostApi: HOST_API_VERSION,
+      register(host) {
+        registered = true;
+        host.settings([{ type: 'text', key: 'title', label: 'Title' }]);
+      },
+    });
+    const { agent, cms } = await site([reserved], ['site']);
+    assert.equal(registered, false);
+    const html = row(await screen(agent), 'site');
+    assert.ok(html.includes('The settings namespace site is reserved for core settings.'));
+    assert.ok(html.includes('Unavailable'));
+    assert.deepEqual(
+      cms.settings.list().filter((ref) => ref.namespace === 'site' && ref.key === 'title').length,
+      1,
+      'only core declares site.title',
+    );
   });
 
   it('names both packages whose variables would share a prefix, on the Plugins screen', async () => {

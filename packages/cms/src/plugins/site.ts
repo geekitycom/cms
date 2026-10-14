@@ -28,7 +28,7 @@ import type { InstalledPlugin, PluginRegistry } from './registry.ts';
 export function sitePluginRegistry(
   config: ResolvedConfig,
   folderPlugins: readonly InstalledPlugin[],
-  settings: Pick<SettingsRegistry, 'get'>,
+  settings: SettingsRegistry,
 ): PluginRegistry {
   return createPluginRegistry(
     [
@@ -41,7 +41,7 @@ export function sitePluginRegistry(
     {
       dataDir: config.dataDir,
       contentDir: config.contentDir,
-      env: process.env,
+      settings,
       allowPrivateAddress: config.federation.allowPrivateAddress ?? false,
       lookup: config.hostLookup,
       siteInfo: async () => ({

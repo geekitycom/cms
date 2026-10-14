@@ -184,7 +184,7 @@ export const check: Plugin = definePlugin({
   version: '0.0.0',
   label: 'Check',
   description: 'Type checks against the published declarations.',
-  hostApi: 1,
+  hostApi: 2,
   requires: {},
   register(host: PluginHost) {
     host.get('/check/', ({ params }) => new Response(String(Object.keys(params).length)));

@@ -10,7 +10,7 @@ export default definePlugin({
   version: '0.1.0',
   label: 'Hello',
   description: 'Answers /plugin-hello/ with a greeting from a plugin.',
-  hostApi: 1,
+  hostApi: 2,
   requires: { '@geekity-demo/plugin-greetings': '^0.1.0' },
   register(host) {
     host.get(

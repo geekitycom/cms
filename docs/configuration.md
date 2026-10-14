@@ -50,7 +50,7 @@ directory. Absolute directories are used as given.
 | `federation`       | `{}`                                                 | —                            | Federation stores and guards. See [Federation](federation.md).                                                                                                                                                                                                                                                           |
 | `commentChecker`   | Akismet                                              | —                            | The site's own spam checker. It takes precedence over the `akismet.key` setting. See [Akismet](comments.md#akismet).                                                                                                                                                                                                     |
 | `mail`             | `{}`                                                 | —                            | Mail provider, retries, backoff and logger. See [Email](email.md).                                                                                                                                                                                                                                                       |
-| `plugins`          | `[]`                                                 | —                            | The installed plugins. The `plugins` key of `site.json`, set under Admin > Plugins, picks which ones run. Each secret setting of a plugin takes an environment variable. See [Plugin secrets](#plugin-secrets).                                                                                                          |
+| `plugins`          | `[]`                                                 | —                            | The installed plugins. The `plugins` key of `site.json`, set under Admin > Plugins, picks which ones run. Each setting of a plugin takes an environment variable. See [Plugin settings](#plugin-settings).                                                                                                               |
 
 An environment variable takes precedence over the config file, and the config
 file over the default. A host can override any field without editing the site.
@@ -121,26 +121,54 @@ sets a value, the site uses the stored setting instead of the
 `http://localhost:<port>` fallback.
 [The base URL setting](settings.md#the-base-url-setting) has the full rule.
 
-## Plugin secrets
+## Plugin settings
 
-A plugin's secret settings, such as an API key, can also come from the
-environment. A Docker site uses this to keep a key in `.env`. To build the
-variable name, take the plugin's package name, then `__`, then the setting's
-key. Upper-case each part, and replace every run of other characters,
-underscores included, with one `_`:
+A plugin's settings are kept in its folder under `data/plugins/`:
 
-| Package               | Setting   | Variable                      |
-| --------------------- | --------- | ----------------------------- |
-| `@geekity/plugin-llm` | `api_key` | `GEEKITY_PLUGIN_LLM__API_KEY` |
-| `@acme/plugin-llm`    | `api_key` | `ACME_PLUGIN_LLM__API_KEY`    |
+- `data/plugins/<package name>/settings.json` holds the public settings.
+- `data/plugins/<package name>/secrets.json` holds the secrets, such as an API
+  key, at mode `0600`.
 
-A set variable takes precedence over the value stored in
-`data/plugins/<package name>/secrets.json`. The plugin's screen then shows the
-setting as set by the environment, with no box to change it. The screen prints
-the exact variable name for each secret. Only plugin variables contain `__`, so
-a plugin variable cannot shadow a core one. If two installed packages have
-names that convert to the same prefix, such as `@a/b-c` and `@a-b/c`, neither
-loads, and Admin > Plugins names both.
+Any plugin setting, public or secret, can also come from the environment. A
+Docker site uses this to keep a key in `.env`. To build the variable name,
+take the plugin's package name, then `__`, then the setting's key. Upper-case
+each part, and replace every run of other characters, underscores included,
+with one `_`:
+
+| Package               | Setting         | Variable                            |
+| --------------------- | --------------- | ----------------------------------- |
+| `@geekity/plugin-llm` | `api_key`       | `GEEKITY_PLUGIN_LLM__API_KEY`       |
+| `@geekity/plugin-llm` | `default_model` | `GEEKITY_PLUGIN_LLM__DEFAULT_MODEL` |
+| `@acme/plugin-llm`    | `api_key`       | `ACME_PLUGIN_LLM__API_KEY`          |
+
+A set variable takes precedence over the value stored in the file. The
+plugin's screen then shows the setting as set by the environment, with no box
+to change it, and a save leaves it alone. The screen prints the exact variable
+name for each setting.
+
+A plugin cannot load if its package name is a core settings namespace, such as
+`site`, or if its variables would start the way core's do, such as
+`@geekity/maintenance`. If two installed packages have names that convert to
+the same prefix, such as `@a/b-c` and `@a-b/c`, neither loads. Admin > Plugins
+names the reason in each case.
+
+### Moving plugin settings out of site.json
+
+Before this layout, public plugin settings were kept in
+`content/_data/site.json`, beside `enabled` under `plugins.<package name>`.
+When the site starts, it moves every key except `enabled` to the plugin's
+`settings.json` and logs each plugin it moved. A value that is already in
+`settings.json` is kept. `enabled` stays in `site.json`. A site under git sees
+the change in `site.json` the first time it starts on the new version.
+
+To move the settings with the site stopped, run:
+
+```sh
+geekity settings migrate-plugins
+```
+
+It prints one line for each plugin it moved. Running it again, or after an
+interrupted run, moves nothing more and leaves the same files.
 
 ## Using the package from an entry file
 

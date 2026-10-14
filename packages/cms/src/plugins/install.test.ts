@@ -6,7 +6,7 @@ import { ADD_WITH_COMMAND, requirementNotes } from './install.ts';
 const LLM = '@geekity/plugin-llm';
 
 function manifest(peerDependencies: Record<string, string>) {
-  return { name: '@geekity/plugin-post-summary', version: '0.2.1', hostApi: 1, peerDependencies };
+  return { name: '@geekity/plugin-post-summary', version: '0.2.1', hostApi: 2, peerDependencies };
 }
 
 describe('requirementNotes', () => {

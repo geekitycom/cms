@@ -115,7 +115,7 @@ async function installPlugin(pluginsDir: string, folder: string, name = folder):
   version: '1.0.0',
   label: ${JSON.stringify(`Label of ${folder}`)},
   description: 'From the plugins folder.',
-  hostApi: 1,
+  hostApi: 2,
   requires: {},
   register() {},
 };
@@ -353,7 +353,7 @@ describe('geekity serve, supervised', () => {
       JSON.stringify({
         name: '@test/plugin-later',
         version: '1.0.0',
-        hostApi: 1,
+        hostApi: 2,
         peerDependencies: { '@geekity/cms': '>=99.0.0', '@test/plugin-first': '^2.0.0' },
       }),
     );

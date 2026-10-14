@@ -20,6 +20,7 @@ Usage:
   geekity settings list [<namespace>] [--config <file>]
   geekity settings get <namespace.key> [--config <file>]
   geekity settings set <namespace.key> (<value> | --unset) [--config <file>]
+  geekity settings migrate-plugins [--config <file>]
   geekity strip-metadata [--config <file>]
   geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
   geekity plugin (add <package>[@version] | remove <package>) [--config <file>]
@@ -56,6 +57,11 @@ Commands:
   settings set     Store one value, or remove it with --unset so the default
                    applies. A setting the environment or the config overrides
                    is refused. A secret set here is left in the shell history.
+  settings migrate-plugins
+                   Move each plugin's settings out of content/_data/site.json
+                   into data/plugins/<name>/settings.json, keeping enabled
+                   where it is. A server does this when it starts; run it
+                   with the site stopped to do it first. Safe to run twice.
   strip-metadata   Remove location and camera metadata (EXIF, XMP, IPTC, a
                    video's location) from files already in content/uploads.
                    New uploads are stripped as they arrive; this is for the
@@ -126,7 +132,7 @@ const PLUGIN_CONFIG = `export default {
       version: '1.0.0',
       label: 'Echo',
       description: 'Echoes.',
-      hostApi: 1,
+      hostApi: 2,
       register(host) {
         host.command({
           words: ['echo', 'loud'],

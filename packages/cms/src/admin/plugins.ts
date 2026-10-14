@@ -38,8 +38,7 @@ import type {
   Requirement,
   RequirementState,
 } from '../plugins/registry.ts';
-import { resolvePluginSettings, savePluginSettings, SECRETS_FILE } from '../plugins/settings.ts';
-import type { ResolvedSetting } from '../plugins/settings.ts';
+import { SECRETS_FILE, SETTINGS_FILE } from '../plugins/settings.ts';
 import { pluginSite } from '../plugins/site.ts';
 import { messageOf } from '../util/errors.ts';
 import { stringOrEmpty } from '../util/forms.ts';
@@ -48,6 +47,8 @@ import { formatInTimezone } from './formatting.ts';
 import type { AdminMenuChild } from './menu.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
+import { saveSettings, settingsForm, settingViews } from './settings-renderer.ts';
+import type { RenderedSetting, SettingsForm } from './settings-renderer.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 export const PLUGINS_PATH = `${ADMIN_PREFIX}/plugins`;
@@ -81,11 +82,9 @@ const PLUGIN_FIELD = 'plugin';
 /** The query the new worker's screen is reached with after a reload. */
 const RELOADED_QUERY = 'reloaded';
 
-/** The form fields of a plugin's screen: which button, each box, each forget switch. */
+/** The form field naming which button of a plugin's screen was pressed. */
 const ACTION_FIELD = 'action';
 const SAVE_ACTION = 'save';
-const SETTING_PREFIX = 'setting.';
-const FORGET_PREFIX = 'forget.';
 
 type PluginState = 'enabled' | 'blocked' | 'disabled' | 'unavailable';
 
@@ -489,17 +488,16 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     const body = await c.req.parseBody();
     const pressed = body[ACTION_FIELD];
 
-    if (pressed === SAVE_ACTION && found.settings.length > 0) {
-      const values: Record<string, string> = {};
-      const forget = new Set<string>();
-      for (const [field, value] of Object.entries(body)) {
-        if (typeof value !== 'string') continue;
-        if (field.startsWith(SETTING_PREFIX)) values[field.slice(SETTING_PREFIX.length)] = value;
-        if (field.startsWith(FORGET_PREFIX)) forget.add(field.slice(FORGET_PREFIX.length));
-      }
-      const { problems } = await savePluginSettings({ ...found.settingsPlace, values, forget });
-      if (Object.keys(problems).length > 0) {
-        return drawScreen(c, found, { problems, submitted: values }, 400);
+    if (pressed === SAVE_ACTION && found.settingsNamespace !== undefined) {
+      const form = settingsForm(body);
+      const result = await saveSettings(
+        c.var.settings,
+        found.plugin.name,
+        renderedSettings(found),
+        form,
+      );
+      if (!result.ok) {
+        return drawScreen(c, found, { problems: result.problems, submitted: form }, 400);
       }
       flash(c, 'notice', 'Settings saved.');
       return c.redirect(back, 303);
@@ -529,30 +527,38 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
       : undefined;
   }
 
-  function drawScreen(
+  async function drawScreen(
     c: Context<GeekityEnv>,
     found: RegisteredPlugin,
-    refused: { problems?: Record<string, string>; submitted?: Record<string, string> },
+    refused: { problems?: Readonly<Record<string, string>>; submitted?: SettingsForm },
     status: 200 | 400 = 200,
-  ): Response {
-    const { plugin, screen } = found;
-    const problems = refused.problems ?? {};
-    const settings = resolvePluginSettings(found.settingsPlace).map((entry) =>
-      settingView(entry, refused.submitted, problems[entry.field.key]),
-    );
+  ): Promise<Response> {
+    const { plugin, screen, settingsNamespace } = found;
+    const settings =
+      settingsNamespace === undefined
+        ? []
+        : await settingViews(
+            c.var.settings,
+            settingsNamespace.declaration.envPrefix,
+            renderedSettings(found),
+            refused,
+          );
+    const cards =
+      (await screen?.render({ site: pluginSite({ admin: c.var.admin, config: c.var.config }) })) ??
+      [];
     c.status(status);
     return render(c, ADMIN_TEMPLATES.pluginScreen, {
       section: PLUGINS_SECTION,
       child: plugin.name,
       title: screen?.title ?? plugin.label,
-      cards:
-        screen?.render({ site: pluginSite({ admin: c.var.admin, config: c.var.config }) }) ?? [],
+      cards,
       postUrl: pluginScreenPath(plugin.name),
       actionField: ACTION_FIELD,
       saveAction: SAVE_ACTION,
       actions: screen?.actions ?? [],
       settings,
       problems: settings.filter((entry) => entry.error !== undefined),
+      settingsFile: `data/plugins/${plugin.name}/${SETTINGS_FILE}`,
       secretsFile: `data/plugins/${plugin.name}/${SECRETS_FILE}`,
     });
   }
@@ -563,41 +569,22 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
   }
 }
 
-/**
- * One field as the form draws it. A secret carries where it is set and never
- * its value; a refused form shows what was typed in the public boxes.
- */
-function settingView(
-  entry: ResolvedSetting,
-  submitted: Record<string, string> | undefined,
-  error: string | undefined,
-) {
-  const { field } = entry;
-  const shown =
-    submitted === undefined
-      ? entry.value
-      : field.type === 'checkbox'
-        ? submitted[field.key] !== undefined
-        : (submitted[field.key] ?? '');
-  return {
-    key: field.key,
-    type: field.type,
-    id: `plugin-setting-${field.key}`,
-    name: `${SETTING_PREFIX}${field.key}`,
-    forgetName: `${FORGET_PREFIX}${field.key}`,
-    label: field.label,
-    hint: field.hint,
-    value: field.type !== 'secret' && typeof shown === 'string' ? shown : '',
-    checked: shown === true,
-    options:
-      field.type === 'select'
-        ? field.options.map((option) => ({ ...option, selected: option.value === shown }))
-        : [],
-    error,
-    stored: entry.problem,
-    source: entry.source,
-    variable: entry.variable,
-  };
+/** A plugin's settings fields, each with the setting it declared, for the generic form. */
+function renderedSettings(found: RegisteredPlugin): RenderedSetting[] {
+  const declared = found.settingsNamespace?.declaration.settings ?? [];
+  return found.settings.flatMap((field) => {
+    const declaration = declared.find((each) => each.key === field.key);
+    if (declaration === undefined) return [];
+    return [
+      {
+        ref: { namespace: found.plugin.name, key: field.key, declaration },
+        label: field.label,
+        hint: field.hint,
+        widget: field.type,
+        options: field.type === 'select' ? field.options : undefined,
+      },
+    ];
+  });
 }
 
 /** Why the requirements stop an enable, one sentence each, or `undefined`. */

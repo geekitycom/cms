@@ -26,7 +26,7 @@ async function siteWithPlugin(): Promise<string> {
       version: '1.0.0',
       label: 'Echo',
       description: 'Echoes.',
-      hostApi: 1,
+      hostApi: 2,
       register(host) {
         host.command({
           words: ['echo', 'loud'],
@@ -153,7 +153,7 @@ describe('a plugin command', () => {
   version: '1.0.0',
   label: 'Hello',
   description: 'Greets.',
-  hostApi: 1,
+  hostApi: 2,
   register(host) {
     host.command({
       words: ['hello'],

@@ -122,8 +122,8 @@ on a site with a plugins folder:
   one shows **Update to** that version on its row.
 - **Update all** brings every folder plugin up to date, the same way as
   `plugin upgrade`.
-- **Remove** deletes the plugin's folder. Its settings and its folder under
-  `data/plugins/` stay. Only a disabled plugin has Remove. Disable a plugin
+- **Remove** deletes the plugin's folder. Its folder under `data/plugins/`,
+  which holds its settings, stays. Only a disabled plugin has Remove. Disable a plugin
   first, as in WordPress.
 
 Each change asks for your password. An update or a removal first shows what it
@@ -170,7 +170,7 @@ export default definePlugin({
   version: '0.1.0',
   label: 'Hello',
   description: 'Says hello.',
-  hostApi: 1,
+  hostApi: 2,
   requires: {},
   register(host) {
     host.get('/hello', () => new Response('hello'));
@@ -206,7 +206,7 @@ with a range:
   "files": ["dist"],
   "geekity": {
     "plugin": true,
-    "hostApi": 1,
+    "hostApi": 2,
     "requires": { "@geekity/plugin-llm": ">=0.2.0 <1.0.0" }
   },
   "peerDependencies": {
@@ -227,13 +227,36 @@ and enabled. Pass plain data across a service, never an object built by a
 library. Each bundle carries its own copy of its dependencies.
 
 **Settings and secrets.** `host.settings([...])` declares fields of type
-`text`, `url`, `select`, `checkbox` and `secret`. The plugin's admin screen
-shows them as a form. Public values are stored in `site.json` under the
-package's name. A `secret` is stored in
+`text`, `url`, `select`, `checkbox` and `secret`, each with a `label` and an
+optional `hint`. They become a settings namespace named by the package name.
+The plugin's admin screen draws them as a form. Public values are stored in
+`data/plugins/<package name>/settings.json`. A `secret` is stored in
 `data/plugins/<package name>/secrets.json`, mode `0600`. An environment
-variable overrides it, as
-[Plugin secrets](configuration.md#plugin-secrets) describes.
+variable overrides any of them, as
+[Plugin settings](configuration.md#plugin-settings) describes.
 `host.data` reads and writes other files in that folder.
+
+`settings.current()` returns a promise of the values in effect. It reads the
+files and the environment on each call, so call it when the plugin handles a
+request, a command or a job:
+
+```ts
+const settings = host.settings([
+  {
+    type: 'text',
+    key: 'default_model',
+    label: 'Default model',
+    default: 'small',
+  },
+  { type: 'secret', key: 'api_key', label: 'API key' },
+]);
+host.get(
+  '/model',
+  async () => new Response((await settings.current()).default_model),
+);
+```
+
+A screen's `render` may also return a promise, so it can await the settings.
 
 **Site info.** `await host.siteInfo()` resolves to the site's base URL and its
 title as the settings have it at that moment. It reads the settings, so it

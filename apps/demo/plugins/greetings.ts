@@ -10,6 +10,6 @@ export default definePlugin({
   version: '0.1.0',
   label: 'Greetings',
   description: 'The example plugin Hello requires. It adds nothing by itself.',
-  hostApi: 1,
+  hostApi: 2,
   register() {},
 });

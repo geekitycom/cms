@@ -8,7 +8,7 @@
  *
  * `plugin.json` is written from the `geekity` field of package.json:
  *
- *   "geekity": { "plugin": true, "hostApi": 1, "requires": { "@geekity/plugin-llm": ">=0.2.0 <1.0.0" } }
+ *   "geekity": { "plugin": true, "hostApi": 2, "requires": { "@geekity/plugin-llm": ">=0.2.0 <1.0.0" } }
  *
  * It carries the package's name and version, the host API version, and the
  * ranges of `@geekity/cms` and of each required plugin, which the registry

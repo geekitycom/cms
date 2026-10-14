@@ -34,6 +34,20 @@ export interface CreateSettingsRegistryOptions {
 
 type Stored = Readonly<Record<string, unknown>>;
 
+interface NamespaceFile {
+  readonly file: string;
+  /** Where it is under its directory, as a problem names it. */
+  readonly shown: string;
+  readonly secret: boolean;
+  readonly settings: readonly SettingDeclaration<unknown>[];
+}
+
+interface Snapshot {
+  /** Each declared setting's raw value, read from the file it is kept in. */
+  readonly view: Stored;
+  readonly records: ReadonlyMap<NamespaceFile, Stored>;
+}
+
 type Override<V> =
   { readonly value: V; readonly source: ValueSource } | { readonly problem: string };
 
@@ -120,15 +134,61 @@ export function createSettingsRegistry({
     return found;
   }
 
-  function fileOf(namespace: NamespaceDeclaration): string {
-    const { under, path: relative } = namespace.storage;
-    return path.join(under === 'content' ? dirs.contentDir : dirs.dataDir, relative);
+  function filesOf(namespace: NamespaceDeclaration): readonly NamespaceFile[] {
+    const { storage } = namespace;
+    if (storage.kind === 'file') {
+      const { dataClass } = storage;
+      return [
+        {
+          file: path.join(
+            storage.under === 'content' ? dirs.contentDir : dirs.dataDir,
+            storage.path,
+          ),
+          shown: storage.path,
+          secret: dataClass.kept && dataClass.secret,
+          settings: namespace.settings,
+        },
+      ];
+    }
+    return [false, true].map((secret) => {
+      const name = secret ? storage.secretFile : storage.publicFile;
+      return {
+        file: path.join(dirs.dataDir, storage.path, name),
+        shown: path.posix.join(storage.path, name),
+        secret,
+        settings: namespace.settings.filter((each) => (each.secret === true) === secret),
+      };
+    });
   }
 
-  function readStored(namespace: NamespaceDeclaration): Stored {
+  function fileFor(
+    files: readonly NamespaceFile[],
+    declaration: SettingDeclaration<unknown>,
+  ): NamespaceFile {
+    const found = files.find((each) => each.settings.includes(declaration));
+    if (found === undefined) throw new Error(`${declaration.key} is in none of its files.`);
+    return found;
+  }
+
+  function readSnapshot(
+    namespace: NamespaceDeclaration,
+    files: readonly NamespaceFile[] = filesOf(namespace),
+  ): Snapshot {
+    const records = new Map(files.map((each) => [each, readRecord(namespace, each.file)]));
+    if (files.length === 1) return { view: records.get(files[0] as NamespaceFile) ?? {}, records };
+    const view: Record<string, unknown> = {};
+    for (const [each, record] of records) {
+      for (const declaration of each.settings) {
+        writeRaw(view, declaration, rawIn(declaration, record));
+      }
+    }
+    return { view, records };
+  }
+
+  function readRecord(namespace: NamespaceDeclaration, file: string): Stored {
     let raw: unknown;
     try {
-      const text = readFileSync(fileOf(namespace), 'utf8');
+      const text = readFileSync(file, 'utf8');
       try {
         raw = JSON.parse(text);
       } catch {
@@ -177,21 +237,22 @@ export function createSettingsRegistry({
     const raw = rawIn(declaration, stored);
     if (raw === undefined) return { value: undefined, problem: undefined };
     const parsed = declaration.type.fromJson(raw);
-    return parsed.ok
-      ? { value: parsed.value, problem: undefined }
-      : {
-          value: undefined,
-          problem: `${namespace.namespace}.${declaration.key} in ${namespace.storage.path} ${parsed.problem}`,
-        };
+    if (parsed.ok) return { value: parsed.value, problem: undefined };
+    const { shown } = fileFor(filesOf(namespace), declaration as SettingDeclaration<unknown>);
+    return {
+      value: undefined,
+      problem: `${namespace.namespace}.${declaration.key} in ${shown} ${parsed.problem}`,
+    };
   }
 
   function writeEveryKey(
     namespace: NamespaceDeclaration,
+    settings: readonly SettingDeclaration<unknown>[],
     next: Record<string, unknown>,
     stored: Stored,
     changes: ReadonlyMap<string, unknown>,
   ): void {
-    for (const declaration of namespace.settings) {
+    for (const declaration of settings) {
       if (changes.get(declaration.key) !== undefined) continue;
       const kept = changes.has(declaration.key)
         ? undefined
@@ -236,8 +297,17 @@ export function createSettingsRegistry({
       : { value: fromFile.value, source: { tier: 'file' }, stored: fromFile.value, problem };
   }
 
+  function locked<T>(namespace: NamespaceDeclaration, task: () => T): Promise<T> {
+    return filesOf(namespace).reduceRight<() => Promise<T>>(
+      (inner, { file }) =>
+        () =>
+          withFileLock(file, inner),
+      () => Promise.resolve(task()),
+    )();
+  }
+
   function read<T>(namespace: NamespaceDeclaration, use: (stored: Stored) => T): Promise<T> {
-    return withFileLock(fileOf(namespace), () => use(readStored(namespace)));
+    return locked(namespace, () => use(readSnapshot(namespace).view));
   }
 
   function resolve<V>(ref: SettingRef<V>): Promise<Resolved<V>> {
@@ -283,10 +353,11 @@ export function createSettingsRegistry({
 
     async set(name, changes, by) {
       const namespace = namespaceOf(name);
-      const file = fileOf(namespace);
-      const outcome = await withFileLock(file, () => {
-        const stored = readStored(namespace);
-        const next: Record<string, unknown> = { ...stored };
+      const files = filesOf(namespace);
+      const outcome = await locked(namespace, () => {
+        const { view: stored, records } = readSnapshot(namespace, files);
+        const nexts = new Map(files.map((each) => [each, { ...records.get(each) }]));
+        const touched = new Set<NamespaceFile>(namespace.writtenWhole === true ? files : []);
         const problems: Record<string, string> = {};
         const changed: [SettingDeclaration<unknown>, unknown, unknown][] = [];
         const accepted = new Map<string, unknown>();
@@ -311,8 +382,10 @@ export function createSettingsRegistry({
             continue;
           }
           accepted.set(key, parsed.value);
+          const target = fileFor(files, declaration);
+          touched.add(target);
           writeRaw(
-            next,
+            nexts.get(target) ?? {},
             declaration,
             given === undefined ? undefined : declaration.type.toJson(parsed.value),
           );
@@ -325,15 +398,17 @@ export function createSettingsRegistry({
           Object.assign(problems, checkProblems(namespace, stored, accepted));
         }
         if (Object.keys(problems).length > 0) return { problems, changed: [] };
-        if (namespace.writtenWhole === true) {
-          writeEveryKey(namespace, next, stored, changes);
+        for (const each of touched) {
+          const next = nexts.get(each) ?? {};
+          if (namespace.writtenWhole === true) {
+            writeEveryKey(namespace, each.settings, next, stored, changes);
+          }
+          writeFileAtomicallySync(
+            each.file,
+            `${JSON.stringify(next, null, 2)}\n`,
+            each.secret ? { mode: 0o600 } : {},
+          );
         }
-        const { dataClass } = namespace.storage;
-        writeFileAtomicallySync(
-          file,
-          `${JSON.stringify(next, null, 2)}\n`,
-          dataClass.kept && dataClass.secret ? { mode: 0o600 } : {},
-        );
         return { problems: undefined, changed };
       });
       if (outcome.problems !== undefined) return { ok: false, problems: outcome.problems };
@@ -367,11 +442,17 @@ export function createSettingsRegistry({
     },
 
     register(namespace) {
+      const sharing = [...namespaces.values()].find(
+        (each) => each.envPrefix === namespace.envPrefix,
+      );
       const problem =
         reservedNamespaceProblem(namespace.namespace, namespace.envPrefix) ??
         (namespaces.has(namespace.namespace)
           ? `The settings namespace ${namespace.namespace} is already registered.`
-          : undefined);
+          : undefined) ??
+        (sharing === undefined
+          ? undefined
+          : `Its environment variables would start ${namespace.envPrefix}__, as those of ${sharing.namespace} do.`);
       if (problem !== undefined) throw new Error(problem);
       namespaces.set(namespace.namespace, namespace);
     },

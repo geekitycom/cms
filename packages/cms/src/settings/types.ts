@@ -76,14 +76,30 @@ export interface SettingFields<V> {
   onChange?(change: SettingChange<V>): Promise<void> | void;
 }
 
+/**
+ * Where a namespace's values are. A core namespace names one file. A plugin
+ * names a folder holding a public file and a secret file, because its
+ * settings are of two classes: each setting is kept in the file its `secret`
+ * picks.
+ */
+export type NamespaceStorage =
+  | {
+      readonly kind: 'file';
+      readonly under: 'content' | 'data';
+      readonly path: string;
+      readonly dataClass: DataClass;
+    }
+  | {
+      readonly kind: 'folder';
+      readonly under: 'data';
+      readonly path: string;
+      readonly publicFile: string;
+      readonly secretFile: string;
+    };
+
 export interface NamespaceDeclaration {
   readonly namespace: string;
-  readonly storage: {
-    readonly kind: 'file';
-    readonly under: 'content' | 'data';
-    readonly path: string;
-    readonly dataClass: DataClass;
-  };
+  readonly storage: NamespaceStorage;
   readonly settings: readonly SettingDeclaration<unknown>[];
   /**
    * A file written before this namespace had its shape. Runs on a file that is

@@ -11,6 +11,7 @@ import { after, describe, it } from 'node:test';
 
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { Plugin, PluginHost } from '../plugin.ts';
+import { pluginRegistryOptions } from '../__testing__/plugin-registry-options.ts';
 import { createPluginRegistry } from './registry.ts';
 
 interface Clock {
@@ -25,19 +26,11 @@ declare module '../plugin.ts' {
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), 'geekity-services-'));
 after(() => rmSync(DATA_DIR, { recursive: true, force: true }));
-const SITE = {
-  dataDir: DATA_DIR,
-  contentDir: path.join(DATA_DIR, 'content'),
-  env: {},
-  siteInfo: () => Promise.resolve({ baseUrl: 'https://example.test/', title: 'Example' }),
-  allowPrivateAddress: false,
-  lookup: () => Promise.reject(new Error('a test resolves no names')),
-};
 
 function registry(...plugins: Plugin[]) {
   return createPluginRegistry(
     plugins.map((plugin, index) => ({ plugin, source: `plugins[${String(index)}]` })),
-    SITE,
+    pluginRegistryOptions(DATA_DIR),
   );
 }
 
