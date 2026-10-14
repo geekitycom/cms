@@ -1,11 +1,11 @@
 ---
 id: TASK-410
 title: The plugin federation outbox and followers return promises
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-14 16:26'
-updated_date: '2026-10-14 16:42'
+updated_date: '2026-10-14 16:45'
 labels: []
 milestone: m-38
 dependencies: []
@@ -31,7 +31,7 @@ PluginFederationContext.outbox(username) and .followers(username) (packages/cms/
 <!-- AC:BEGIN -->
 - [x] #1 outbox and followers on PluginFederationContext return Promise<PluginCollection<…> | undefined>, and web/plugin-federation.ts implements them that way
 - [x] #2 @geekity/plugin-wordpress src/federation.ts awaits them in its Fedify counter and cursor callbacks, and its federation tests pass
-- [ ] #3 docs/plugins.md says the two members return promises, and the change lands as a breaking change for plugins
+- [x] #3 docs/plugins.md says the two members return promises, and the change lands as a breaking change for plugins
 - [x] #4 pnpm typecheck, pnpm lint and pnpm test pass
 <!-- AC:END -->
 
@@ -56,3 +56,9 @@ Test first: plugin-federation.test.ts asserted instanceof Promise and failed ('t
 Validation: pnpm build, typecheck, lint, format:check, test all pass (cms 6019, plugin-wordpress 106, plugin-llm 48, post-summary 22, tag-suggest 31, demo 32; 0 fail). pnpm --filter @geekity/plugin-wordpress fed:smoke passed offline (loopback), including the outbox/followers/following collections under the old path.
 AC#3: docs/plugins.md updated; the breaking-change part lands with the commit (feat(cms)! with a BREAKING CHANGE footer), so it stays unchecked until committed.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+PluginFederationContext.outbox and .followers return promises (packages/cms/src/plugin.ts, web/plugin-federation.ts); the WordPress plugin awaits them in its Fedify counter and cursor callbacks; docs/plugins.md says so. Landed as the breaking commit 02eeafcb (feat(cms)! with a BREAKING CHANGE footer). HOST_API_VERSION stays 2 because 2 is unreleased. Checks pass, and the WordPress fed:smoke passed offline.
+<!-- SECTION:FINAL_SUMMARY:END -->
