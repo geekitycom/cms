@@ -622,12 +622,6 @@ async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise
   );
 }
 
-/**
- * The registry with the settings of each enabled plugin after the core ones.
- * The site's plugins are loaded as for a plugin command, so their `register`
- * runs; a plugin installed but not enabled, or one that did not load, is
- * named on standard error and left out.
- */
 async function settingsWithEnabledPlugins(config: ResolvedConfig): Promise<SettingsRegistry> {
   migratePluginSettings({
     contentDir: config.contentDir,
@@ -1259,7 +1253,6 @@ function configFlag(argv: readonly string[]): string | undefined {
   return undefined;
 }
 
-/** The site's plugins, from its config and its plugins folder, registered on `settings`. */
 async function loadSitePlugins(
   config: ResolvedConfig,
   settings: SettingsRegistry,

@@ -14,7 +14,6 @@ function lineOf(stdout: string, setting: string): string {
   return line.replace(/\s+/g, ' ').trim();
 }
 
-/** A site with an enabled plugin that has settings, a disabled one, and one whose register fails. */
 async function siteWithPluginSettings(): Promise<string> {
   const directory = await temporaryDir('geekity-settings-cli-plugins-');
   await mkdir(path.join(directory, 'content', '_data'), { recursive: true });

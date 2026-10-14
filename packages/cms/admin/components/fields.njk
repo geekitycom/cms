@@ -34,14 +34,7 @@
    `hintId` gives the hint an id and names it in the control's
    `aria-describedby`, after the error where there is one, so a screen reader
    reads the explanation with the box rather than leaving it to be found. A
-   textarea given no `name` only shows something and posts nothing.
-
-   `label`, `hint` and `error` are escaped, so a plugin's label or a stored
-   value can be passed straight in. A label or hint that carries `<code>`,
-   `<em>` or a link is marked as markup by its caller with `| safe`, on the
-   literal or on the `{% set … %}…{% endset %}` capture that builds it; the
-   capture escapes what it interpolates, so only the template's own tags
-   survive. #}
+   textarea given no `name` only shows something and posts nothing. #}
 
 {% from "components/alert.njk" import alert %}
 
