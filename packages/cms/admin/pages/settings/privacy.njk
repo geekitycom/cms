@@ -17,7 +17,7 @@
     rewritten.
   {% endset %}
   {% call field.select('settings-location-sharing', fields.location_sharing, 'Location on posts',
-       error=problems.location_sharing, hint=locationHint | safe, autofocus=true) %}
+       error=problems.location_sharing, hintHtml=locationHint, autofocus=true) %}
     {% for option in [
          ['none', 'Keep it, publish nothing'],
          ['place', 'Publish the place only: its name, locality, region and country'],

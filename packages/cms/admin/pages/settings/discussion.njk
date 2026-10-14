@@ -32,7 +32,7 @@
     a remote server sends those, and nothing here can stop it.
   {% endset %}
   {{ field.checkbox('settings-comments', fields.comments, 'Take comments on this site',
-       checked=form.comments, hint=commentsHint | safe) }}
+       checked=form.comments, hintHtml=commentsHint) }}
 
   {% set closeHint %}
     Days after a post's date that it stops taking comments; <code>0</code>
@@ -42,7 +42,7 @@
   {% endset %}
   {{ field.text('settings-comments-close', fields.comments_close_after_days, 'Close comments after',
        form.comments_close_after_days, type='number', min='0', step='1',
-       error=problems.comments_close_after_days, hint=closeHint | safe) }}
+       error=problems.comments_close_after_days, hintHtml=closeHint) }}
 
   <h2 class="mt-6 text-lg font-semibold">Webmentions</h2>
 
@@ -52,7 +52,7 @@
     The Resend button on the federation screen sends them again.
   {% endset %}
   {{ field.checkbox('settings-webmentions-send', fields.webmentions_send,
-       'Tell the pages a post links to', checked=form.webmentions_send, hint=sendHint | safe) }}
+       'Tell the pages a post links to', checked=form.webmentions_send, hintHtml=sendHint) }}
 
   {% set receiveHint %}
     Every post advertises an endpoint, and a page that links to one and says
@@ -61,7 +61,7 @@
     stays where it is.
   {% endset %}
   {{ field.checkbox('settings-webmentions-receive', fields.webmentions_receive,
-       'Accept webmentions sent here', checked=form.webmentions_receive, hint=receiveHint | safe) }}
+       'Accept webmentions sent here', checked=form.webmentions_receive, hintHtml=receiveHint) }}
 
   <h2 class="mt-6 text-lg font-semibold">Keeping personal data</h2>
 
@@ -84,7 +84,7 @@
   {% endset %}
   {{ field.text('settings-comment-email-retention', fields.comment_email_retention_days,
        'Keep commenter emails for', form.comment_email_retention_days, type='number', min='0',
-       step='1', error=problems.comment_email_retention_days, hint=emailHint | safe) }}
+       step='1', error=problems.comment_email_retention_days, hintHtml=emailHint) }}
 
   {% set hashHint %}
     {{ retention(form.address_hash_retention_days) }}
@@ -94,7 +94,7 @@
   {% endset %}
   {{ field.text('settings-address-hash-retention', fields.address_hash_retention_days,
        'Keep address hashes for', form.address_hash_retention_days, type='number', min='0',
-       step='1', error=problems.address_hash_retention_days, hint=hashHint | safe) }}
+       step='1', error=problems.address_hash_retention_days, hintHtml=hashHint) }}
 
   {% set contactHint %}
     {{ retention(form.contact_message_retention_days) }}
@@ -103,7 +103,7 @@
   {% endset %}
   {{ field.text('settings-contact-message-retention', fields.contact_message_retention_days,
        'Keep contact messages for', form.contact_message_retention_days, type='number', min='0',
-       step='1', error=problems.contact_message_retention_days, hint=contactHint | safe) }}
+       step='1', error=problems.contact_message_retention_days, hintHtml=contactHint) }}
 {% endblock %}
 
 {% block settingsPanels %}

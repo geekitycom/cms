@@ -682,6 +682,15 @@ describe('plugin settings on its screen (TASK-283, TASK-390)', () => {
         ),
         'the forget box names the field as text',
       );
+      assert.match(
+        html,
+        /&lt;script&gt;alert\(&quot;key&quot;\)&lt;\/script&gt; &amp; co <span class="badge badge-sm[^"]*">Set<\/span><\/label>/,
+        'the secret label passed as labelHtml keeps its badge as markup',
+      );
+      assert.ok(
+        html.includes('Set in <code>'),
+        'the secret hint passed as hintHtml keeps its markup',
+      );
     } finally {
       delete process.env['TEST_PLUGIN_HOSTILE__FIXED'];
     }

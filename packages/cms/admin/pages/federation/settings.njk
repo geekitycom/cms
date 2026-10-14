@@ -19,5 +19,5 @@
     Followers screen says where each subscription stands.
   {% endset %}
   {{ field.textarea('settings-relays', fields.relays, 'Relays', form.relays,
-       error=problems.relays, hint=relaysHint | safe, rows='3', spellcheck='false', autofocus=true) }}
+       error=problems.relays, hintHtml=relaysHint, rows='3', spellcheck='false', autofocus=true) }}
 {% endblock %}

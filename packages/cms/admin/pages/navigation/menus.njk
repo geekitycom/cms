@@ -49,7 +49,7 @@
           types you want on it.
         {% endset %}
         {{ field.textarea('menu-' + menu.name, fields.items, 'Items', menu.items,
-             error=menu.problem, hint=itemsHint | safe, rows='5', spellcheck='false') }}
+             error=menu.problem, hintHtml=itemsHint, rows='5', spellcheck='false') }}
         <div class="mt-2">{{ button('Save menu', type='submit', color='primary') }}</div>
       </form>
 
@@ -134,7 +134,7 @@
           theme that will use it.
         {% endset %}
         {{ field.text('menu-name', fields.name, 'Name', newName,
-             error=nameProblem, hint=nameHint | safe, spellcheck='false', required=true) }}
+             error=nameProblem, hintHtml=nameHint, spellcheck='false', required=true) }}
         <div class="mt-2">{{ button('Add menu', type='submit', color='primary') }}</div>
       </form>
     {% endcall %}
