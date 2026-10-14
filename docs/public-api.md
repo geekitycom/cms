@@ -246,6 +246,14 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `RetentionService`      | type | The sweep, on a timer once the site serves.                                                                                       |
 | `SiteFederation`        | type | A CMS federation object, with the context data its dispatchers expect.                                                            |
 
+## Data files
+
+| Export                | Kind     | What it is                                                                                                                              |
+| --------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `dataFileFor`         | function | The first declaration in a list, such as `cms.dataFiles()`, that covers a path under `data/`, or `undefined` when none does.            |
+| `DataClass`           | type     | What a file under `data/` is to the site, and so what an export does with it: kept, credential, rebuildable, pending or scratch.        |
+| `DataFileDeclaration` | type     | A pattern under `data/`, its class, and what is lost if its files are lost. `cms.dataFiles()` returns every one in effect for the site. |
+
 ## Plugins
 
 | Export                       | Kind | What it is                                                                                                                  |

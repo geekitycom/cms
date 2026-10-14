@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { sandbox } from '../admin/__testing__/harness.ts';
 import { dataFileFor } from '../files/data-files.ts';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import { pluginRegistryOptions } from '../__testing__/plugin-registry-options.ts';
@@ -83,5 +84,39 @@ describe('siteDataFiles', () => {
     assert.equal(classOf('plugins/@gone/plugin-removed/secrets.json'), 'credential');
     assert.equal(classOf('plugins/@acme/plugin-broken/cache.json'), 'kept');
     assert.equal(classOf('plugins/plugin-unscoped/notes.json'), 'kept');
+  });
+});
+
+describe('Cms.dataFiles', () => {
+  const box = sandbox();
+  after(() => box.cleanup());
+
+  it("is the booted site's declarations: core, settings and each loaded plugin's", async () => {
+    const cms = await box.site({
+      plugins: [
+        definePlugin({
+          name: '@acme/plugin-kept',
+          version: '1.0.0',
+          label: 'Kept',
+          description: 'Keeps a file.',
+          hostApi: HOST_API_VERSION,
+          data: { 'records.json': 'kept' },
+          register(host) {
+            host.settings([{ type: 'secret', key: 'api_key', label: 'API key' }]);
+          },
+        }),
+      ],
+    });
+    const left = path.join(cms.config.dataDir, 'plugins', '@gone', 'plugin-left');
+    mkdirSync(left, { recursive: true });
+    writeFileSync(path.join(left, 'notes.json'), '{}');
+    const classOf = (relative: string) => dataFileFor(cms.dataFiles(), relative)?.dataClass.kind;
+
+    assert.equal(classOf('queue.sqlite'), 'pending');
+    assert.equal(classOf('akismet.json'), 'credential');
+    assert.equal(classOf('plugins/@acme/plugin-kept/records.json'), 'kept');
+    assert.equal(classOf('plugins/@acme/plugin-kept/secrets.json'), 'credential');
+    assert.equal(classOf('plugins/@acme/plugin-kept/stray.json'), undefined);
+    assert.equal(classOf('plugins/@gone/plugin-left/notes.json'), 'kept');
   });
 });

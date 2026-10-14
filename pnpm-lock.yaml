@@ -427,6 +427,15 @@ importers:
       '@geekity/cms':
         specifier: workspace:*
         version: link:../cms
+      '@geekity/plugin-llm':
+        specifier: workspace:*
+        version: link:../plugin-llm
+      '@geekity/plugin-post-summary':
+        specifier: workspace:*
+        version: link:../plugin-post-summary
+      '@geekity/plugin-tag-suggest':
+        specifier: workspace:*
+        version: link:../plugin-tag-suggest
       '@hono/node-server':
         specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
