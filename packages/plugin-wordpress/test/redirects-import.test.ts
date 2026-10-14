@@ -9,6 +9,7 @@ import type { Cms } from '@geekity/cms';
 import type { PluginCommandContext, PluginSite } from '@geekity/cms/plugin';
 import { pluginDataFolder } from '@geekity/cms/testing';
 
+import wordpress from '../src/index.ts';
 import { importWordPressContent } from '../src/content-import.ts';
 import type { ReportRow } from '../src/content-import.ts';
 import { attachments } from '../src/media-import.ts';
@@ -39,7 +40,7 @@ function unused(): never {
 
 interface Site {
   readonly contentDir: string;
-  readonly dataDir: string;
+  readonly pluginFolder: string;
   run(items: readonly TestItem[]): Promise<readonly ReportRow[]>;
   serve(): Cms;
   text(relative: string): Promise<string>;
@@ -53,7 +54,7 @@ async function site(): Promise<Site> {
   await fs.mkdir(path.join(uploadsDir, '2024', '03'), { recursive: true });
   await fs.writeFile(path.join(uploadsDir, '2024', '03', 'photo.png'), PNG);
   writeSite(contentDir, { baseUrl: SITE, author: 'ada', enabled: false });
-  const data = pluginDataFolder(path.join(root, 'data'), '@geekity/plugin-wordpress');
+  const data = pluginDataFolder(path.join(root, 'data'), wordpress);
   const pluginSite: PluginSite = {
     baseUrl: SITE,
     contentDir,
@@ -71,7 +72,7 @@ async function site(): Promise<Site> {
   };
   return {
     contentDir,
-    dataDir: data.path,
+    pluginFolder: path.join(root, 'data', 'plugins', ...wordpress.name.split('/')),
     run: async (items) => {
       const context: PluginCommandContext = {
         args: [],
@@ -179,7 +180,7 @@ describe('the static front page', () => {
     await where.run(FRONT);
     const older = { '/?p=238': '/home-page/', '/?page_id=238': '/home-page/' };
     await fs.writeFile(path.join(where.contentDir, REDIRECTS), `${JSON.stringify(older)}\n`);
-    const recordPath = path.join(where.dataDir, 'import.json');
+    const recordPath = path.join(where.pluginFolder, 'import.json');
     const record = JSON.parse(await fs.readFile(recordPath, 'utf8')) as {
       entries: Record<string, Record<string, string>>;
     };

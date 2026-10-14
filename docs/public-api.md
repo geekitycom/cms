@@ -258,7 +258,8 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `PluginCommand`              | type | A command on the `geekity` command line.                                                                                    |
 | `PluginCommandContext`       | type | What a command's run is handed.                                                                                             |
 | `PluginCommandOption`        | type | One option a command takes.                                                                                                 |
-| `PluginDataFolder`           | type | The plugin's private folder, `data/plugins/<package name>/`.                                                                |
+| `PluginDataClass`            | type | The class of a file a plugin keeps in its folder: `kept`, `rebuildable` or `credential`.                                    |
+| `PluginDataFolder`           | type | The plugin's private folder, `data/plugins/<package name>/`, holding the files its `data` declares.                         |
 | `PluginFederationContext`    | type | What a federation middleware is handed for one request.                                                                     |
 | `PluginFederationMiddleware` | type | Answers a request in the federation mount, or hands it on with `next`, which resolves to what the rest of the site answers. |
 | `PluginFollower`             | type | A follower, as a user's `followers.json` holds one.                                                                         |

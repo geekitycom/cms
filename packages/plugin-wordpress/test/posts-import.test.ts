@@ -9,6 +9,7 @@ import type { PluginCommandContext, PluginSite } from '@geekity/cms/plugin';
 import { documentContent, pluginDataFolder } from '@geekity/cms/testing';
 import { load } from 'js-yaml';
 
+import wordpress from '../src/index.ts';
 import { importWordPressContent } from '../src/content-import.ts';
 import type { ReportRow } from '../src/content-import.ts';
 import { postsAndPages } from '../src/posts-import.ts';
@@ -48,7 +49,7 @@ async function site(siteJson: Record<string, unknown> = { title: 'Blog' }): Prom
     path.join(contentDir, '_data', 'site.json'),
     `${JSON.stringify(siteJson, null, 2)}\n`,
   );
-  const data = pluginDataFolder(path.join(root, 'data'), '@geekity/plugin-wordpress');
+  const data = pluginDataFolder(path.join(root, 'data'), wordpress);
   const pluginSite: PluginSite = {
     baseUrl: 'https://new.example',
     contentDir,

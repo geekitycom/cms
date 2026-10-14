@@ -27,6 +27,10 @@ after(async () => {
 });
 
 describe('the bundled plugin', () => {
+  it('keeps no file of its own in its data folder', () => {
+    assert.equal(bundled.data, undefined);
+  });
+
   it('suggests a title through the llm service', async () => {
     assert.equal(bundled.name, '@geekity/plugin-post-summary');
     const { admin } = await summarySite([llm, bundled], {

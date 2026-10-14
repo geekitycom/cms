@@ -107,6 +107,14 @@ async function deliver(cms: Cms, activity: { toJsonLd(): Promise<unknown> }): Pr
 }
 
 describe('the bundled plugin', () => {
+  it('declares the files it keeps in its data folder, with their classes', () => {
+    assert.deepEqual(bundled.data, {
+      'actors.json': 'kept',
+      'import.json': 'kept',
+      'requests.json': 'kept',
+    });
+  });
+
   it('serves the canonical actor and handles a Follow and its Undo', async () => {
     const cms = await site();
 

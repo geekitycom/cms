@@ -201,6 +201,7 @@ export type {
   PluginCommand,
   PluginCommandContext,
   PluginCommandOption,
+  PluginDataClass,
   PluginDataFolder,
   PluginFederationContext,
   PluginFederationMiddleware,

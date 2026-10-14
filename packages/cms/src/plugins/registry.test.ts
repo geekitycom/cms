@@ -5,7 +5,7 @@
  * about HTTP; `screen.test.ts` covers what the admin shows of it.
  */
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -366,30 +366,114 @@ describe('the plugin registry', () => {
   it('gives each plugin a private data folder under data/plugins/<package name>/', async () => {
     let folder: PluginHost['data'] | undefined;
     createPluginRegistry(
-      fromConfig(plugin('@acme/plugin-files', {}, { register: (host) => (folder = host.data) })),
+      fromConfig(
+        plugin(
+          '@acme/plugin-files',
+          {},
+          { data: { 'state.json': 'kept' }, register: (host) => (folder = host.data) },
+        ),
+      ),
       pluginRegistryOptions(DATA_DIR),
     );
     assert.ok(folder !== undefined);
-    assert.equal(folder.path, path.join(DATA_DIR, 'plugins', '@acme', 'plugin-files'));
     assert.equal(folder.read('state.json'), undefined, 'nothing is there before a write');
 
     await Promise.all([
       folder.update('state.json', (current) => `${current ?? ''}a`),
       folder.update('state.json', (current) => `${current ?? ''}b`),
     ]);
-    assert.equal(readFileSync(path.join(folder.path, 'state.json'), 'utf8'), 'ab');
+    const written = path.join(DATA_DIR, 'plugins', '@acme', 'plugin-files', 'state.json');
+    assert.equal(readFileSync(written, 'utf8'), 'ab');
     assert.equal(folder.read('state.json'), 'ab', 'two updates at once lose neither');
   });
 
-  it('keeps a plugin inside its data folder', () => {
+  it('refuses a file the plugin does not declare in its data, naming the file and the field', async () => {
     let folder: PluginHost['data'] | undefined;
     createPluginRegistry(
-      fromConfig(plugin('@acme/plugin-files', {}, { register: (host) => (folder = host.data) })),
+      fromConfig(
+        plugin(
+          '@acme/plugin-strict',
+          {},
+          { data: { 'state.json': 'kept' }, register: (host) => (folder = host.data) },
+        ),
+      ),
       pluginRegistryOptions(DATA_DIR),
     );
-    for (const name of ['../escape.json', 'nested/file.json', '.hidden', '']) {
-      assert.throws(() => folder?.read(name), /file name/, name);
+    assert.ok(folder !== undefined);
+    const undeclared = /"notes\.json".*`data`/;
+    assert.throws(() => folder?.read('notes.json'), undeclared);
+    await assert.rejects(
+      folder.update('notes.json', () => 'x'),
+      undeclared,
+    );
+    for (const name of ['../escape.json', 'nested/file.json', '.hidden', '', 'settings.json']) {
+      assert.throws(() => folder?.read(name), /`data`/, name);
     }
+  });
+
+  it('writes a file declared as a credential at mode 0600', async () => {
+    let folder: PluginHost['data'] | undefined;
+    createPluginRegistry(
+      fromConfig(
+        plugin(
+          '@acme/plugin-token',
+          {},
+          {
+            data: { 'token.json': 'credential', 'cache.json': 'rebuildable' },
+            register: (host) => (folder = host.data),
+          },
+        ),
+      ),
+      pluginRegistryOptions(DATA_DIR),
+    );
+    assert.ok(folder !== undefined);
+    await folder.update('token.json', () => '{}');
+    await folder.update('cache.json', () => '{}');
+    const under = path.join(DATA_DIR, 'plugins', '@acme', 'plugin-token');
+    assert.equal(statSync(path.join(under, 'token.json')).mode & 0o777, 0o600);
+    assert.notEqual(statSync(path.join(under, 'cache.json')).mode & 0o777, 0o600);
+  });
+
+  it('declares each data file under the plugin folder with its class', () => {
+    const registry = createPluginRegistry(
+      fromConfig(
+        plugin('@acme/plugin-files', {}, { data: { 'a.json': 'kept', 'b.json': 'rebuildable' } }),
+      ),
+      pluginRegistryOptions(DATA_DIR),
+    );
+    assert.deepEqual(
+      registry
+        .find('@acme/plugin-files')
+        ?.dataFiles.map(({ pattern, dataClass }) => [pattern, dataClass.kind]),
+      [
+        ['plugins/@acme/plugin-files/a.json', 'kept'],
+        ['plugins/@acme/plugin-files/b.json', 'rebuildable'],
+      ],
+    );
+  });
+
+  it('marks a plugin whose data declares a bad name or class unavailable', () => {
+    const declaring = (name: string, data: Record<string, string>) =>
+      plugin(name, {}, { data } as Partial<Plugin>);
+    const registry = createPluginRegistry(
+      fromConfig(
+        declaring('@acme/plugin-escape', { '../escape.json': 'kept' }),
+        declaring('@acme/plugin-nested', { 'nested/file.json': 'kept' }),
+        declaring('@acme/plugin-settings', { 'settings.json': 'kept' }),
+        declaring('@acme/plugin-secrets', { 'secrets.json': 'credential' }),
+        declaring('@acme/plugin-scratch', { 'lock.json': 'scratch' }),
+      ),
+      pluginRegistryOptions(DATA_DIR),
+    );
+    assert.match(registry.problem('@acme/plugin-escape') ?? '', /"\.\.\/escape\.json".*file name/);
+    assert.match(registry.problem('@acme/plugin-nested') ?? '', /"nested\/file\.json".*file name/);
+    assert.match(registry.problem('@acme/plugin-settings') ?? '', /"settings\.json".*settings/);
+    assert.match(registry.problem('@acme/plugin-secrets') ?? '', /"secrets\.json".*settings/);
+    assert.match(
+      registry.problem('@acme/plugin-scratch') ?? '',
+      /"lock\.json".*"scratch".*kept, rebuildable or credential/,
+    );
+    assert.deepEqual(registry.find('@acme/plugin-escape')?.dataFiles, []);
   });
 
   it('collects the federation middleware, the screen and the commands a plugin declares', () => {

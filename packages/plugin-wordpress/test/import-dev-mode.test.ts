@@ -9,6 +9,7 @@ import { createCms, createMemoryMailProvider, resolveConfig } from '@geekity/cms
 import type { Cms } from '@geekity/cms';
 import { pluginDataFolder, pluginSite } from '@geekity/cms/testing';
 
+import wordpress from '../src/index.ts';
 import { commentsAndReactions } from '../src/comments-import.ts';
 import { importWordPressContent } from '../src/content-import.ts';
 import { postsAndPages } from '../src/posts-import.ts';
@@ -186,7 +187,7 @@ describe('the WordPress import into a running site in dev mode (TASK-291 #8)', (
           ]),
         ),
         context: { args: [], options: {}, cwd: contentDir, site, write: () => undefined },
-        data: pluginDataFolder(dataDir, '@geekity/plugin-wordpress'),
+        data: pluginDataFolder(dataDir, wordpress),
         importers: [postsAndPages, commentsAndReactions],
       });
       await imported;

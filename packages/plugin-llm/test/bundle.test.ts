@@ -26,6 +26,10 @@ after(async () => {
 });
 
 describe('the bundled plugin', () => {
+  it('declares the files it keeps in its data folder, with their classes', () => {
+    assert.deepEqual(bundled.data, { 'last-call.json': 'rebuildable' });
+  });
+
   it('saves its settings and tests the connection', async () => {
     assert.equal(bundled.name, '@geekity/plugin-llm');
     const { admin } = await llmSite(bundled);

@@ -1,7 +1,4 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
 import type { PluginDataFolder } from '@geekity/cms/plugin';
@@ -15,7 +12,6 @@ import type { FakeTagsPub } from './tags-pub.ts';
  * test does not wait the plugin's five seconds.
  */
 
-const folder = mkdtempSync(path.join(tmpdir(), 'geekity-tags-followers-'));
 let tagsPub: FakeTagsPub;
 
 before(async () => {
@@ -23,11 +19,9 @@ before(async () => {
 });
 after(async () => {
   await tagsPub.close();
-  rmSync(folder, { recursive: true, force: true });
 });
 
 const data: PluginDataFolder = {
-  path: folder,
   read: () => undefined,
   update: () => Promise.reject(new Error('a failed lookup writes nothing')),
 };

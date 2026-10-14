@@ -7,6 +7,7 @@ import { after, describe, it } from 'node:test';
 import type { PluginCommandContext, PluginDataFolder, PluginSite } from '@geekity/cms/plugin';
 import { pluginDataFolder } from '@geekity/cms/testing';
 
+import wordpress from '../src/index.ts';
 import { importWordPressContent } from '../src/content-import.ts';
 import type { ReportRow, WordPressImporter } from '../src/content-import.ts';
 import { NotAWordPressExportError, parseWordPressExport } from '../src/wxr.ts';
@@ -85,7 +86,7 @@ async function site(): Promise<Site> {
   const root = await temporaryDir('geekity-wxr-');
   const contentDir = path.join(root, 'content');
   await fs.mkdir(contentDir);
-  const data = pluginDataFolder(path.join(root, 'data'), '@geekity/plugin-wordpress');
+  const data = pluginDataFolder(path.join(root, 'data'), wordpress);
   const context: PluginCommandContext = {
     args: [],
     options: {},

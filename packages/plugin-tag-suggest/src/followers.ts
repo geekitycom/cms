@@ -10,7 +10,7 @@ import type { PluginDataFolder, PluginFetchInit } from '@geekity/cms/plugin';
 import { withoutTrailingSlash } from '@geekity/cms/plugin';
 
 /** The file in the plugin's data folder that keeps the counts. */
-const CACHE_FILE = 'followers.json';
+export const FOLLOWERS_FILE = 'followers.json';
 
 /** How long a count is kept before tags.pub is asked again. */
 const CACHE_MS = 24 * 60 * 60 * 1000;
@@ -120,7 +120,7 @@ function isFresh(entry: Cached, now: number): boolean {
 
 function readCache(data: PluginDataFolder): Cache {
   try {
-    return parseCache(data.read(CACHE_FILE));
+    return parseCache(data.read(FOLLOWERS_FILE));
   } catch {
     return {};
   }
@@ -151,7 +151,7 @@ async function remember(
   now: number,
 ): Promise<void> {
   const at = new Date(now).toISOString();
-  await data.update(CACHE_FILE, (current) => {
+  await data.update(FOLLOWERS_FILE, (current) => {
     const next: Record<string, Cached> = Object.fromEntries(
       Object.entries(parseCache(current)).filter(([, entry]) => isFresh(entry, now)),
     );
