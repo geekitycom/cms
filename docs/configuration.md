@@ -48,6 +48,7 @@ directory. Absolute directories are used as given.
 | `onDocumentChange` | none                                                 | —                            | Hook run for every change to the index. See [Hooks](plugins.md#hooks).                                                                                                                                                                                                                                                   |
 | `onPublish`        | none                                                 | —                            | Hook run when a document becomes visible. See [Hooks](plugins.md#hooks).                                                                                                                                                                                                                                                 |
 | `federation`       | `{}`                                                 | —                            | Federation stores and guards. See [Federation](federation.md).                                                                                                                                                                                                                                                           |
+| `jobs`             | `{}`                                                 | —                            | The admin job queue's transport and record store, and jobs the site adds. See [Admin jobs](#admin-jobs).                                                                                                                                                                                                                 |
 | `commentChecker`   | Akismet                                              | —                            | The site's own spam checker. It takes precedence over the `akismet.key` setting. See [Akismet](comments.md#akismet).                                                                                                                                                                                                     |
 | `mail`             | `{}`                                                 | —                            | Mail provider, retries, backoff and logger. See [Email](email.md).                                                                                                                                                                                                                                                       |
 | `plugins`          | `[]`                                                 | —                            | The installed plugins. The `plugins` key of `site.json`, set under Admin > Plugins, picks which ones run. Each setting of a plugin takes an environment variable. See [Plugin settings](#plugin-settings).                                                                                                               |
@@ -279,3 +280,73 @@ const cms = createCms({
   accessLogWriter: (line) => lines.push(line),
 });
 ```
+
+## Admin jobs
+
+Long admin actions run as jobs, outside the request that started them, so a
+proxy cannot time them out. A job is a registered name and a JSON payload of at
+most 64 KB. The admin and the CLI queue jobs on `cms.jobs`, and the admin reads
+a job's progress and result from there.
+
+`geekity serve` runs one job at a time, in the server process. A job runs at
+least once:
+
+- When the server drains for a reload or closes, the running job is told to
+  stop. It goes back to the queue with the same attempt number, and the next
+  server runs it.
+- When the server process dies during a job, the next server runs the job
+  again as the next attempt. After three attempts the job is marked
+  `interrupted` and does not run again.
+- A failed job is not retried. Queue it again to run it again.
+
+A CLI command queues its job and runs it in its own process. It never takes
+over jobs that the server is running.
+
+### Where job records are stored
+
+Job records are in `data/jobs.json`, a JSON list with the oldest job first.
+Each record holds:
+
+- `id`, `name` and `payload`: the job and what it was queued with.
+- `queuedAt`: when it was queued.
+- `state`: `queued`, `running`, `finished`, `failed` or `interrupted`.
+- `attempt`: which run this is, starting at 1.
+- For a running job: `owner`, the server process that runs it, `startedAt`
+  and the last `progress` (`done`, and optionally `total` and `note`).
+- For a finished job: `finishedAt` and the handler's `result`.
+- For a failed job: `finishedAt` and the `error` message.
+- For an interrupted job, and for a job queued again after a crash:
+  `interruptedAt`.
+
+Every queued and running job is kept, and the newest five finished, failed or
+interrupted jobs of each name. Older ones are removed when the file is next
+written. The site writes the file by renaming a finished copy over it, and
+holds `data/jobs.json.lock` while it does, so the server and a CLI command can
+write it at the same time. `geekity rebuild` does not touch the file. If you
+delete it, queued jobs and the history are lost, and nothing else.
+
+### Swapping the transport and the record store
+
+`jobs.transport` carries each job's id to the server, and `jobs.records`
+stores the records. Both have defaults: an in-process transport and
+`data/jobs.json`. Any Fedify `MessageQueue` works as a transport. Give it a
+queue of its own, not the one `federation.queue` uses:
+
+```ts
+import { DatabaseSync } from 'node:sqlite';
+import { SqliteMessageQueue } from '@fedify/sqlite';
+import { defineConfig } from '@geekity/cms';
+
+export default defineConfig({
+  jobs: {
+    transport: new SqliteMessageQueue(new DatabaseSync('data/queue.sqlite'), {
+      tableName: 'geekity_job',
+    }),
+  },
+});
+```
+
+A record store implements `JobRecords`. Each of its transitions must be a
+compare-and-set on the job's state and attempt, because that is what stops two
+workers from running one job. `jobs.definitions` registers jobs beside the
+CMS's own.

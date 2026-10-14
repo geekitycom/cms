@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { MemoryKvStore } from '@fedify/fedify';
 import type { KvStore } from '@fedify/fedify';
 
@@ -33,6 +35,10 @@ import type {
 } from '../federation/index.ts';
 import { createSettlingQueue } from '../federation/queue.ts';
 import { settleImageVariants } from '../images/variants.ts';
+import { createFileRecords } from '../jobs/file-records.ts';
+import { createInProcessTransport } from '../jobs/in-process.ts';
+import { createJobQueue } from '../jobs/queue.ts';
+import type { JobQueue } from '../jobs/types.ts';
 import { createIndexNowNotifier } from '../indexnow.ts';
 import type { IndexNowNotifier } from '../indexnow.ts';
 import { activityLogSettled } from '../web/indieauth-activity-log.ts';
@@ -110,6 +116,7 @@ export interface Services {
   readonly siteRecords: SiteRecords;
   readonly maintenance: MaintenanceSwitch;
   readonly indieauth: IndieAuthState;
+  readonly jobs: JobQueue;
   readonly lifecycle: readonly Service[];
 }
 
@@ -340,6 +347,13 @@ export function createServices({
     await relays.sync();
   });
 
+  const jobs = createJobQueue({
+    transport: resolved.jobs.transport ?? createInProcessTransport(),
+    records: resolved.jobs.records ?? createFileRecords(path.join(resolved.dataDir, 'jobs.json')),
+    jobs: resolved.jobs.definitions ?? [],
+    now: resolved.now,
+  });
+
   const changeSubscribers: readonly ContentEventListener[] = [
     // A watched change waits for its burst to settle, as a scan does: a git
     // pull that moves a post and adds another at its old URL must not hand the
@@ -403,6 +417,15 @@ export function createServices({
         scheduler.stop();
       },
       settled: () => scheduler.settled(),
+    },
+    // After the scan, so a job reads an index that is up to date. Settled
+    // before delivery, so what a job queued there is waited for after it.
+    {
+      start: () => jobs.start(),
+      stop: () => {
+        jobs.stop();
+      },
+      settled: () => jobs.close(),
     },
     { settled: () => delivery.settled() },
     { settled: () => relays.settled() },
@@ -473,6 +496,7 @@ export function createServices({
     siteRecords: siteRecords(resolved),
     maintenance: createMaintenanceSwitch({ settings, now: resolved.now }),
     indieauth: createIndieAuthState(resolved.now),
+    jobs,
     lifecycle,
   };
 }

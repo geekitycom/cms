@@ -4,6 +4,7 @@ export type {
   FederationOverrides,
   GeekityConfig,
   IndexNowOverrides,
+  JobOverrides,
   MailOverrides,
   ResolveConfigContext,
   ResolvedConfig,
@@ -176,6 +177,18 @@ export type {
 } from './federation/index.ts';
 export type { HostLookup, ReplyContext, ReplyContextService } from './webmention/index.ts';
 export type { AvatarAnswer, AvatarService } from './avatars/index.ts';
+export type {
+  JobContext,
+  JobDefinition,
+  JobQueue,
+  JobRecords,
+  JobState,
+  JobStateName,
+  JobStatus,
+  Json,
+  MessageTransport,
+  Progress,
+} from './jobs/types.ts';
 export type { RetentionReport, RetentionService } from './privacy/retention.ts';
 export type {
   JsonLdDocument,

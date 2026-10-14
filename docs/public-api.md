@@ -42,6 +42,7 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `GeekityConfig`        | type     | What a site writes in `geekity.config.ts`.                                                                                                                                                    |
 | `GeekityEnv`           | type     | The Hono environment of `cms.app`: what a route handler reads from `c.var`.                                                                                                                   |
 | `IndexNowOverrides`    | type     | The IndexNow pieces a site may swap.                                                                                                                                                          |
+| `JobOverrides`         | type     | The admin job queue's transport and record store, which a site may swap through its config, and the jobs it adds.                                                                             |
 | `MailOverrides`        | type     | The mail pieces a site may swap.                                                                                                                                                              |
 | `ResolveConfigContext` | type     | Ambient inputs `resolveConfig` reads, injectable so the resolution is testable.                                                                                                               |
 | `ResolvedConfig`       | type     | A `GeekityConfig` with every field filled in and every path absolute, frozen.                                                                                                                 |
@@ -223,8 +224,18 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `FeedNotifier`          | type | Tells the site's notify server which feeds have changed.                                                                          |
 | `HostLookup`            | type | The addresses a host name resolves to.                                                                                            |
 | `IndexNowNotifier`      | type | Tells the IndexNow engines which URLs changed.                                                                                    |
+| `JobContext`            | type | What a job's handler is handed: the stop signal, the attempt and `progress()`.                                                    |
+| `JobDefinition`         | type | One kind of admin job: a name, a payload parser and a handler.                                                                    |
+| `JobQueue`              | type | `cms.jobs`: queues admin jobs, runs them out of the request and reports their status.                                             |
+| `JobRecords`            | type | Where job status lives. Every transition is a compare-and-set on state and attempt.                                               |
+| `JobState`              | type | A job's state: queued, running, finished, failed or interrupted, with what goes with each.                                        |
+| `JobStateName`          | type | The name of a `JobState`.                                                                                                         |
+| `JobStatus`             | type | One job's record: its id, name, payload and state.                                                                                |
+| `Json`                  | type | A JSON value, as a job's payload and result are.                                                                                  |
+| `MessageTransport`      | type | What carries a job's id to a worker. Any Fedify `MessageQueue` is one.                                                            |
 | `NotifyPing`            | type | What one ping came to.                                                                                                            |
 | `NotifyReport`          | type | What a round of pings came to, one entry per feed.                                                                                |
+| `Progress`              | type | How far a running job has got.                                                                                                    |
 | `RelayService`          | type | The site's half of the Mastodon relay protocol (FEP-ae0c).                                                                        |
 | `RelaySyncReport`       | type | What one call to `RelayService.sync` did.                                                                                         |
 | `ReplyContext`          | type | What a reply shows of the post it answers.                                                                                        |
