@@ -249,6 +249,11 @@ is not followed, so the files it points to are not exported through it. To
 export what a link points to, replace the link with a copy of the file or
 folder before you export.
 
+| Exit code | Meaning                                                                                       |
+| --------- | --------------------------------------------------------------------------------------------- |
+| `0`       | The archive is written. Files named on standard error as left out are not in it.              |
+| `1`       | The archive could not be written, for example because the config or a file could not be read. |
+
 The admin writes the same archive from
 [Tools > Export](admin.md#tools--export), as a background job, and offers it
 as a download. Import has no admin screen: run `geekity import`.
@@ -327,12 +332,17 @@ The export already left out the plugin's rebuildable files.
 
 When a plugin cannot be installed, the import goes on. The reason can be that
 the registry cannot be reached, the recorded version is no longer published,
-the integrity check fails, the version needs a newer `@geekity/cms`, or no
-plugins folder is set. The data is still restored, the database is rebuilt
-and every other plugin is installed. The failed plugin keeps its enabled
-state. The command never installs another version. At the end it prints one
-line per failed plugin on standard error, with the reason and the command to
-retry, such as `geekity plugin add @geekity/plugin-llm@1.2.0`.
+the integrity check fails, or no plugins folder is set. The data is still
+restored, the database is rebuilt and every other plugin is installed. The
+failed plugin keeps its enabled state. The command never installs another
+version. At the end it prints one line per failed plugin on standard error,
+with the reason and the command to retry, such as
+`geekity plugin add @geekity/plugin-llm@1.2.0`.
+
+A plugin whose recorded version needs a newer `@geekity/cms` than the one
+running the import is installed, but it does not run. The import reports it
+as failed in the same way, with the range the plugin needs. Running the retry
+command does not help: upgrade `@geekity/cms` on the new host first.
 
 | Exit code | Meaning                                                                                                  |
 | --------- | -------------------------------------------------------------------------------------------------------- |

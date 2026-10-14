@@ -21,9 +21,9 @@ CMS is and how to start a site.
 
 - [The public site](public-site.md). Routes, redirects, health and maintenance, content negotiation, sitemap, llms.txt, IndexNow and compression.
 - [Security](security.md). Login and session hardening, password recovery, security headers and security.txt.
-- [Deploying](deploying.md). Run the Docker image behind a proxy, back it up, upgrade it, and hold it in dev mode.
+- [Deploying](deploying.md). Run the Docker image behind a proxy, back it up, upgrade it, hold it in dev mode, and [move it to another host](deploying.md#back-up-and-move-a-site).
 - [Email](email.md). How the site sends mail, through Brevo or SMTP, and what it sends.
-- [Personal data](personal-data.md). Every piece of personal data the site keeps, how long, and how to erase it.
+- [Personal data](personal-data.md). Every piece of personal data the site keeps, its class, how long, how to erase it, and what an export holds.
 
 ## Federate and converse
 
