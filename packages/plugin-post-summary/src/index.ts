@@ -227,7 +227,7 @@ export default definePlugin({
   description:
     'Suggests a title and a description for a post in the editor, from the language model ' +
     'the LLM plugin connects to, when the author asks.',
-  hostApi: 1,
+  hostApi: 2,
   requires: { [LLM]: '>=0.2.0 <1.0.0' },
   register(host) {
     host.editorAction({
