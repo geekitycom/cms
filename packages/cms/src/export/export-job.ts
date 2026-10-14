@@ -5,7 +5,12 @@ import { jobName } from '../jobs/types.ts';
 import type { JobDefinition } from '../jobs/types.ts';
 import type { Clock } from '../util/clock.ts';
 import { clearUnfinishedExports, keepOnlyExport } from '../files/export-archives.ts';
-import { exportFileName, planSiteExport, writeSiteExport } from './site-export.ts';
+import {
+  SITE_EXPORT_JOB_NAME,
+  exportFileName,
+  planSiteExport,
+  writeSiteExport,
+} from './site-export.ts';
 import type { ExportProgress, SiteExportSource } from './site-export.ts';
 
 /** No password and no secret: `jobs.json` is exported. */
@@ -22,7 +27,7 @@ export type SiteExportResult = {
   readonly deliveries: number;
 };
 
-export const SITE_EXPORT_JOB = jobName<SiteExportPayload, SiteExportResult>('site.export');
+export const SITE_EXPORT_JOB = jobName<SiteExportPayload, SiteExportResult>(SITE_EXPORT_JOB_NAME);
 
 const PROGRESS_STEPS = 100;
 

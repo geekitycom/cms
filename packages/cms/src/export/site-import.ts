@@ -12,6 +12,7 @@ import {
   IMPORT_ASIDE,
   IMPORT_MARKER,
   IMPORT_STAGING,
+  LOST_AND_FOUND,
   classifyFiles,
   dataFileFor,
   dataFileMatches,
@@ -105,10 +106,16 @@ function markerFile(dir: string): string {
   return dataPath(dir, IMPORT_MARKER);
 }
 
-/** Whether a name at the top of a target is the import's own: its marker, staging or a folder moved aside. */
-function importOwned(name: string): boolean {
-  return [IMPORT_MARKER, IMPORT_STAGING, IMPORT_ASIDE].some((declaration) =>
-    dataFileMatches(declaration, name),
+/**
+ * Whether a name at the top of a target stays where it is: the import's own
+ * marker, staging or a folder moved aside, or the filesystem's lost+found.
+ */
+function leftInPlace(name: string): boolean {
+  return (
+    name === LOST_AND_FOUND ||
+    [IMPORT_MARKER, IMPORT_STAGING, IMPORT_ASIDE].some((declaration) =>
+      dataFileMatches(declaration, name),
+    )
   );
 }
 
@@ -330,7 +337,7 @@ function placeOf(name: string): { readonly root: 'content' | 'data'; readonly re
   if (root !== 'content' && root !== 'data') return refuse();
   if (rest.length === 0) refuse();
   if (rest.some((segment) => segment === '' || segment === '.' || segment === '..')) refuse();
-  if (importOwned(rest[0] ?? '')) refuse();
+  if (leftInPlace(rest[0] ?? '')) refuse();
   return { root, relative: rest.join('/') };
 }
 
@@ -528,7 +535,7 @@ export async function placeSiteImport(
   for (const { dir, state } of staged.states) {
     const from = dir === staged.targets.contentDir ? staged.content : staged.data;
     if (from === undefined) continue;
-    const held = (await readdir(dir)).filter((name) => !importOwned(name));
+    const held = (await readdir(dir)).filter((name) => !leftInPlace(name));
     const aside =
       (await asideInProgress(dir, marker)) ??
       (state === 'occupied' ? await startAside(dir, options.stamp, marker) : undefined);

@@ -342,6 +342,13 @@ export interface ClassifiedFile {
   readonly declaration: DataFileDeclaration | undefined;
 }
 
+/**
+ * The folder `fsck` keeps at the root of an ext filesystem, owned by root. A
+ * `content/` or `data/` that is a mount point holds one. It is the
+ * filesystem's, not the site's: nothing walks it, exports it or moves it.
+ */
+export const LOST_AND_FOUND = 'lost+found';
+
 /** What an entry that is neither a regular file nor a folder is. */
 export type OtherEntryKind = 'a symbolic link' | 'a socket' | 'a FIFO' | 'a device';
 
@@ -370,7 +377,7 @@ function byRelative(a: ClassifiedFile, b: ClassifiedFile): number {
 /**
  * Every entry under `dir` that is not a folder, with the declaration that
  * covers it. A link is listed and not followed, so a linked folder is not
- * walked. A folder that is not there, or is removed during the walk, holds
+ * walked, and neither is {@link LOST_AND_FOUND} at the top. A folder that is not there, or is removed during the walk, holds
  * nothing.
  */
 export function classifyEntries(
@@ -390,7 +397,7 @@ export function classifyEntries(
     for (const entry of entries) {
       const absolute = path.join(folder, entry.name);
       if (entry.isDirectory()) {
-        walk(absolute);
+        if (folder !== dir || entry.name !== LOST_AND_FOUND) walk(absolute);
         continue;
       }
       const relative = path.relative(dir, absolute).split(path.sep).join('/');

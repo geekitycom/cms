@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
-import { readdir } from 'node:fs/promises';
+import { readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import { SqliteMessageQueue } from '@fedify/sqlite';
 
+import { cleanupTemporaryDirs, exists, runCli, temporaryDir } from '../__testing__/cli.ts';
 import { SITE_EXPORT_JOB } from '../export/export-job.ts';
 import { CORE_DATA_FILES, dataFileFor } from '../files/data-files.ts';
 import { readTar } from '../files/tar.ts';
+import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { createFileRecords } from '../jobs/file-records.ts';
 import type { JobState } from '../jobs/types.ts';
@@ -19,6 +21,7 @@ import { flashes } from './__testing__/flash.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
+after(cleanupTemporaryDirs);
 
 const EXPORT_URL = '/admin/tools/export';
 const DOWNLOAD_URL = '/admin/tools/export/download';
@@ -179,6 +182,38 @@ describe('Tools > Export', () => {
     assert.notEqual(stranger.status, 200);
     assert.equal(stranger.headers.get('content-disposition'), null);
     assert.doesNotMatch(await stranger.text(), /manifest\.json/);
+  });
+
+  it('archives jobs.json without the export job, so an import runs no export (TASK-413)', async () => {
+    const s = await site();
+    await exportOnce(s);
+    const download = await s.agent.get(DOWNLOAD_URL);
+    const archive = Buffer.from(await download.arrayBuffer());
+    const jobs = readTar(archive).find((entry) => entry.name === 'data/jobs.json');
+    assert.ok(jobs, 'the archive holds jobs.json');
+    const names = (JSON.parse(jobs.body.toString('utf8')) as { name: string }[]).map(
+      (job) => job.name,
+    );
+    assert.ok(!names.includes(SITE_EXPORT_JOB.name), names.join(', '));
+
+    const target = await temporaryDir('geekity-export-import-');
+    await writeFile(path.join(target, 'site.tar.gz'), archive);
+    const imported = await runCli(['import', 'site.tar.gz'], target, undefined, {
+      GEEKITY_BASE_URL: 'https://blog.example',
+    });
+    assert.equal(imported.code, 0, imported.stderr);
+    const restored = createCms({
+      contentDir: path.join(target, 'content'),
+      dataDir: path.join(target, 'data'),
+      baseUrl: 'https://blog.example',
+      watch: false,
+    });
+    try {
+      assert.equal(await restored.jobs.latest(SITE_EXPORT_JOB.name), undefined);
+      assert.equal(await exists(path.join(target, 'data', 'exports')), false);
+    } finally {
+      await restored.close();
+    }
   });
 
   it('answers 404 for a download when there is no archive', async () => {

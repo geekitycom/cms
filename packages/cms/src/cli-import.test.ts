@@ -340,6 +340,58 @@ describe('geekity import', () => {
     assert.deepEqual(await fs.readdir(site), ['content', 'data']);
   });
 
+  it('leaves lost+found where it is with --replace, unread, and restores the site', async () => {
+    const { archive, site, contentDir, dataDir } = await setup(siteFiles());
+    const lostFolders = [path.join(contentDir, 'lost+found'), path.join(dataDir, 'lost+found')];
+    for (const [dir, file] of [
+      [contentDir, 'posts/old.md'],
+      [dataDir, 'users.json'],
+    ] as const) {
+      await fs.mkdir(path.dirname(path.join(dir, file)), { recursive: true });
+      await fs.writeFile(path.join(dir, file), 'the old site');
+    }
+    for (const folder of lostFolders) {
+      await fs.mkdir(folder);
+      await fs.writeFile(path.join(folder, '#1234'), 'a block fsck found');
+      await fs.chmod(folder, 0o000);
+    }
+    try {
+      const run = await geekity(site, ['import', archive, '--replace']);
+      assert.equal(run.code, 0, run.stderr);
+
+      for (const dir of [contentDir, dataDir]) {
+        const folder = path.join(dir, 'lost+found');
+        assert.equal((await fs.stat(folder)).mode & 0o777, 0o000, folder);
+        const aside = (await fs.readdir(dir)).find((name) =>
+          name.startsWith('.geekity-before-import-'),
+        );
+        assert.ok(aside !== undefined, `${dir} has a folder moved aside`);
+        assert.ok(!(await fs.readdir(path.join(dir, aside))).includes('lost+found'));
+      }
+      assert.equal(
+        await fs.readFile(path.join(dataDir, 'users.json'), 'utf8'),
+        '{"users":[],"nextId":1}\n',
+      );
+      assert.ok(await exists(path.join(contentDir, 'posts', '2026-01-01-one.md')));
+    } finally {
+      for (const folder of lostFolders) await fs.chmod(folder, 0o700);
+    }
+    for (const folder of lostFolders) {
+      assert.deepEqual(await fs.readdir(folder), ['#1234']);
+    }
+  });
+
+  it('refuses an archive that holds a lost+found folder', async () => {
+    const { archive, site, dataDir } = await setup([
+      ...siteFiles(),
+      { name: 'data/lost+found/#1234', body: 'from another disk' },
+    ]);
+    const run = await geekity(site, ['import', archive]);
+    assert.equal(run.code, 1);
+    assert.match(run.stderr, /lost\+found/);
+    assert.equal(await exists(path.join(dataDir, 'users.json')), false);
+  });
+
   it('refuses a different base URL unless --new-base-url', async () => {
     const { archive, site, dataDir } = await setup(siteFiles());
     const env = { GEEKITY_BASE_URL: 'https://new.example' };

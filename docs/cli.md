@@ -187,6 +187,13 @@ The archive holds these entries, in this order:
 3. Each file under `data/` whose class is `kept`, such as `users.json`, the
    actor keys in `keys/`, `notification-secret` and the comment emails.
 
+`data/jobs.json` is in the archive without its `site.export` jobs. An admin
+export is itself a `site.export` job, and on the imported site start-up
+recovery would run it again. The other jobs are kept as they are.
+
+A `lost+found` folder at the top of `content/` or `data/` is not read and is
+not in the archive. The filesystem makes it when the folder is a mount point.
+
 Each file keeps its mode, so a `0600` file in `data/` is `0600` in the
 archive. A `rebuildable`, `pending` or `scratch` file is never in the archive.
 For example, `geekity.db`, the image variants and `queue.sqlite` are not
@@ -201,22 +208,22 @@ they are never exported.
 
 `manifest.json` records:
 
-| Field                | What it holds                                                                                                                      |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `format`             | The archive format, `1`.                                                                                                           |
-| `cms`                | The `@geekity/cms` version that wrote it.                                                                                          |
-| `exportedAt`         | When it was written.                                                                                                               |
-| `baseUrl`            | The base URL in effect.                                                                                                            |
-| `content`            | Whether `content/` is in the archive.                                                                                              |
-| `credentials`        | Whether credential files are in the archive.                                                                                       |
-| `devMode`            | Whether the site was in dev mode.                                                                                                  |
-| `files`              | Each file after the manifest: its path in the archive, its class (`kept` or `credential`), its size and its SHA-256.               |
-| `undeclared`         | Files under `data/` that no declaration covers. They are not in the archive.                                                       |
-| `notCarried`         | Each entry under `content/` that is not a regular file, such as a symbolic link, with `why`, what it is. It is not in the archive. |
-| `credentialsLeftOut` | The settings namespaces and plugins whose credential files held something and were left out.                                       |
-| `plugins`            | Each installed plugin: its name, version, `source` (`folder` for the plugins folder, `config` for the site config) and `enabled`.  |
-| `overrides`          | Each setting that the environment or the config overrides, with the variable or config field. The value is not recorded.           |
-| `pending`            | `deliveries`, the number of messages waiting in `data/queue.sqlite`, and the number of `queued` and `running` jobs in `jobs.json`. |
+| Field                | What it holds                                                                                                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `format`             | The archive format, `1`.                                                                                                                                          |
+| `cms`                | The `@geekity/cms` version that wrote it.                                                                                                                         |
+| `exportedAt`         | When it was written.                                                                                                                                              |
+| `baseUrl`            | The base URL in effect.                                                                                                                                           |
+| `content`            | Whether `content/` is in the archive.                                                                                                                             |
+| `credentials`        | Whether credential files are in the archive.                                                                                                                      |
+| `devMode`            | Whether the site was in dev mode.                                                                                                                                 |
+| `files`              | Each file after the manifest: its path in the archive, its class (`kept` or `credential`), its size and its SHA-256.                                              |
+| `undeclared`         | Files under `data/` that no declaration covers. They are not in the archive.                                                                                      |
+| `notCarried`         | Each entry under `content/` that is not a regular file, such as a symbolic link, with `why`, what it is. It is not in the archive.                                |
+| `credentialsLeftOut` | The settings namespaces and plugins whose credential files held something and were left out.                                                                      |
+| `plugins`            | Each installed plugin: its name, version, `source` (`folder` for the plugins folder, `config` for the site config) and `enabled`.                                 |
+| `overrides`          | Each setting that the environment or the config overrides, with the variable or config field. The value is not recorded.                                          |
+| `pending`            | `deliveries`, the number of messages waiting in `data/queue.sqlite`, and the number of `queued` and `running` jobs in `jobs.json`, apart from `site.export` jobs. |
 
 No plugin code is in the archive.
 
@@ -279,7 +286,8 @@ The command does these steps in this order:
    refuses a link, a folder entry, a device, an absolute path, a `..`
    segment, a name outside `content/` and `data/`, a name that the import
    uses itself (`.geekity-import`, `.geekity-importing` and
-   `.geekity-before-import-*`), a file the manifest does not list, and a file
+   `.geekity-before-import-*`), a `lost+found` folder, a file the manifest
+   does not list, and a file
    whose size or SHA-256 differs from the manifest. On a refusal it removes
    the staging folders and leaves the site's files as they were. A file in
    `data/` whose class on this site is not `kept` or `credential`, such as a
@@ -293,6 +301,7 @@ The command does these steps in this order:
 6. It moves the staged files into place. With `--replace`, it first moves
    every entry that `content/` or `data/` holds into
    `.geekity-before-import-<yyyymmdd>T<hhmmss>Z/` inside the same folder.
+   A `lost+found` folder stays where it is, and the import does not read it.
    Without `--replace`, it deletes only scratch files, such as a stale
    `.tmp` file. Every move stays inside the folder, so `content/` and `data/`
    themselves are never renamed or removed. This is why the import works

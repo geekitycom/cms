@@ -107,6 +107,16 @@ async function site() {
         state: 'queued',
         attempt: 1,
       },
+      {
+        id: '2',
+        name: 'site.export',
+        payload: { withCredentials: false },
+        queuedAt: NOW.toISOString(),
+        state: 'running',
+        attempt: 1,
+        owner: 'this-process',
+        startedAt: NOW.toISOString(),
+      },
     ]),
   );
 
@@ -224,6 +234,49 @@ describe('a site export', () => {
     ]);
     for (const { path: name } of manifest.notCarried) {
       assert.ok(!names.some((each) => each === name || each.startsWith(`${name}/`)), name);
+    }
+  });
+
+  it('holds jobs.json without any site.export job, with the size and sha256 of what it holds', async () => {
+    const { manifest, entries } = await exported();
+    const jobs = entries.find((entry) => entry.name === 'data/jobs.json');
+    const body = jobs?.body ?? Buffer.alloc(0);
+    assert.deepEqual(
+      (JSON.parse(body.toString('utf8')) as { name: string }[]).map((job) => job.name),
+      ['strip-metadata'],
+    );
+    assert.deepEqual(
+      manifest.files.find((file) => file.path === 'data/jobs.json'),
+      {
+        path: 'data/jobs.json',
+        class: 'kept',
+        size: body.length,
+        sha256: createHash('sha256').update(body).digest('hex'),
+      },
+    );
+  });
+
+  it('neither reads nor carries a lost+found folder at the top of content/ or data/', async () => {
+    const { root, contentDir, dataDir, source } = await site();
+    const lostFolders = [path.join(contentDir, 'lost+found'), path.join(dataDir, 'lost+found')];
+    for (const folder of lostFolders) {
+      await put(folder, '#1234', 'a block fsck found');
+      await chmod(folder, 0o000);
+    }
+    try {
+      const plan = await planSiteExport(source, { withCredentials: false, withContent: true });
+      const out = path.join(root, 'site.tar.gz');
+      const manifest = await writeSiteExport(plan, { out, now: NOW });
+      const names = readTar(await readFile(out)).map((entry) => entry.name);
+
+      assert.deepEqual(
+        names.filter((name) => name.includes('lost+found')),
+        [],
+      );
+      assert.ok(!manifest.undeclared.some((name) => name.includes('lost+found')));
+      assert.deepEqual(manifest.notCarried, []);
+    } finally {
+      for (const folder of lostFolders) await chmod(folder, 0o700);
     }
   });
 

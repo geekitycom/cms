@@ -22,6 +22,7 @@ import { DEV_MODE } from '../settings/dev-mode.ts';
 import { overridden, sourceLabel } from '../settings/registry.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import { countWaitingMessages } from '../store/queue-database.ts';
+import { isRecord } from '../util/guards.ts';
 
 /**
  * `geekity export` and the admin's export job (decision-55, section 4): a
@@ -36,6 +37,9 @@ import { countWaitingMessages } from '../store/queue-database.ts';
 export const EXPORT_FORMAT = 1;
 
 export const MANIFEST_NAME = 'manifest.json';
+
+/** The admin's export job. An archive carries none, or an import would run it again. */
+export const SITE_EXPORT_JOB_NAME = 'site.export';
 
 /** The site a running server or a command has booted. */
 export interface SiteExportSource {
@@ -112,6 +116,8 @@ interface PlannedFile {
   readonly path: string;
   readonly absolute: string;
   readonly class: ExportedClass;
+  /** What the archive holds in place of the file's bytes, when it is not those bytes. */
+  readonly rewrite?: (bytes: Buffer) => Buffer;
 }
 
 /** What an export will hold, worked out before any byte is written. */
@@ -139,9 +145,24 @@ export interface WriteSiteExportOptions {
   readonly progress?: (progress: ExportProgress) => void | Promise<void>;
 }
 
+/** `jobs.json` without the export jobs. Bytes that are not a list of records are kept as they are. */
+function withoutExportJobs(bytes: Buffer): Buffer {
+  let jobs: unknown;
+  try {
+    jobs = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    return bytes;
+  }
+  if (!Array.isArray(jobs)) return bytes;
+  const kept = jobs.filter((job) => !isRecord(job) || job['name'] !== SITE_EXPORT_JOB_NAME);
+  return kept.length === jobs.length ? bytes : Buffer.from(`${JSON.stringify(kept, null, 2)}\n`);
+}
+
 /** The work a move has to wait for: deliveries in the queue, and jobs not yet done. */
 export async function pendingWork(dataDir: string): Promise<PendingWork> {
-  const jobs = await createFileRecords(dataPath(dataDir, JOBS)).list(['queued', 'running']);
+  const jobs = (
+    await createFileRecords(dataPath(dataDir, JOBS)).list(['queued', 'running'])
+  ).filter((job) => job.name !== SITE_EXPORT_JOB_NAME);
   return {
     deliveries: countWaitingMessages(dataDir),
     jobs: {
@@ -238,7 +259,12 @@ export async function planSiteExport(
         undeclared.push(archived);
         break;
       case 'kept':
-        files.push({ path: archived, absolute: file.absolute, class: 'kept' });
+        files.push({
+          path: archived,
+          absolute: file.absolute,
+          class: 'kept',
+          ...(file.declaration === JOBS ? { rewrite: withoutExportJobs } : {}),
+        });
         break;
       case 'credential':
         if (options.withCredentials) {
@@ -299,22 +325,31 @@ async function* tarEntries(
     }
     if (handle !== undefined) {
       try {
-        const { size, mode, mtime } = await handle.stat();
-        yield tarHeader({ name: file.path, mode, size, mtime });
+        const { mode, mtime, size: onDisk } = await handle.stat();
         const hash = createHash('sha256');
-        let read = 0;
-        if (size > 0) {
-          const stream = handle.createReadStream({ start: 0, end: size - 1, autoClose: false });
-          for await (const chunk of stream as AsyncIterable<Buffer>) {
-            hash.update(chunk);
-            read += chunk.length;
-            yield chunk;
+        let size = onDisk;
+        if (file.rewrite !== undefined) {
+          const bytes = file.rewrite(await handle.readFile());
+          size = bytes.length;
+          yield tarHeader({ name: file.path, mode, size, mtime });
+          hash.update(bytes);
+          yield bytes;
+        } else {
+          yield tarHeader({ name: file.path, mode, size, mtime });
+          let read = 0;
+          if (size > 0) {
+            const stream = handle.createReadStream({ start: 0, end: size - 1, autoClose: false });
+            for await (const chunk of stream as AsyncIterable<Buffer>) {
+              hash.update(chunk);
+              read += chunk.length;
+              yield chunk;
+            }
           }
-        }
-        if (read !== size) {
-          throw new Error(
-            `${file.path} was cut short while it was read. A writer changed it in place; export again.`,
-          );
+          if (read !== size) {
+            throw new Error(
+              `${file.path} was cut short while it was read. A writer changed it in place; export again.`,
+            );
+          }
         }
         yield tarPadding(size);
         recorded.push({ path: file.path, class: file.class, size, sha256: hash.digest('hex') });
