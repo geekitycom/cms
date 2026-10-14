@@ -161,6 +161,9 @@ The job:
 - leaves a file it cannot read unchanged and names it
 - replaces each file by renaming a stripped copy over it, so a file is never
   half written
+- deletes any `.geekity-strip` copy that an earlier sweep left behind when it
+  was killed between writing the copy and renaming it. The **Media** screen
+  never lists these copies.
 
 The button returns at once, and the job runs in the server. The **Media**
 screen shows the latest sweep: queued, running with the files checked out of

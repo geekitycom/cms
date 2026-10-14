@@ -6,6 +6,7 @@ import { UPLOAD_MEDIA_TYPES } from '../content/media.ts';
 import type { UploadKind } from '../content/media.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';
 import { readAltTexts, writeAltText } from '../content/alt-text.ts';
+import { STRIP_TEMPORARY_SUFFIX } from '../content/metadata/sweep.ts';
 import type { AltText } from '../content/alt-text.ts';
 import { CITED_PICTURE_DIRECTORY } from '../webmention/cited-picture.ts';
 import { uploadMarkdown } from './uploads.ts';
@@ -70,6 +71,7 @@ export async function listUploads(contentDir: string): Promise<MediaFile[]> {
     // Hidden files are the operating system's business, not the site's:
     // .DS_Store is not something anybody uploaded or wants to link to.
     if (entry.name.startsWith('.')) continue;
+    if (entry.name.endsWith(STRIP_TEMPORARY_SUFFIX)) continue;
 
     const file = path.join(entry.parentPath, entry.name);
     const relative = path.relative(root, file).split(path.sep).join('/');

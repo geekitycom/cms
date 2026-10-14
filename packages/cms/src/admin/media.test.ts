@@ -383,6 +383,19 @@ describe('the media screen', () => {
     assert.match(after.html, /\/uploads\/2026\/09\/by-hand\.png/);
   });
 
+  it('does not list a temporary file a cut-off metadata sweep left behind', async () => {
+    const cms = await siteWith([
+      { at: '2026/09/kept.png' },
+      { at: '2026/09/kept.png.geekity-strip' },
+    ]);
+    const agent = await signedIn(cms);
+
+    const { html } = await screen(agent);
+
+    assert.match(html, /\/uploads\/2026\/09\/kept\.png/);
+    assert.doesNotMatch(html, /geekity-strip/);
+  });
+
   it('works with JavaScript switched off (AC #6)', async () => {
     const cms = await siteWith([{ at: '2026/01/photo.png' }]);
     const agent = await signedIn(cms);

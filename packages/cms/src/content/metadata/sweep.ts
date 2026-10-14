@@ -1,7 +1,10 @@
-import { readdir, readFile, rename, stat, utimes, writeFile } from 'node:fs/promises';
+import { readdir, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { stripMetadata, strippable, UnreadableMetadataError } from './index.ts';
+
+/** What a stripped file is written as before it is renamed over the original. */
+export const STRIP_TEMPORARY_SUFFIX = '.geekity-strip';
 
 export type SweptFile =
   | { path: string; outcome: 'stripped'; removed: readonly string[] }
@@ -18,15 +21,18 @@ export interface SweepOptions {
  * Strip every upload that carries metadata. Safe to run again, or after a run
  * cut off part way: a clean file is left alone, and a file is replaced by
  * rename, so it is either the original or the stripped bytes. A file
- * deleted while the sweep runs is left out.
+ * deleted while the sweep runs is left out. Temporary files a sweep killed
+ * between the write and the rename left behind are removed first.
  */
 export async function stripStoredUploads(
   directory: string,
   options: SweepOptions = {},
 ): Promise<SweptFile[]> {
-  const files = (await listFiles(directory)).filter((relative) =>
-    strippable(path.extname(relative)),
-  );
+  const listed = await listFiles(directory);
+  for (const relative of listed.filter((each) => each.endsWith(STRIP_TEMPORARY_SUFFIX))) {
+    await rm(path.join(directory, ...relative.split('/')), { force: true });
+  }
+  const files = listed.filter((relative) => strippable(path.extname(relative)));
   const results: SweptFile[] = [];
 
   for (const [index, relative] of files.entries()) {
@@ -80,7 +86,7 @@ async function listFiles(directory: string): Promise<string[]> {
 
 async function replaceKeepingTimes(file: string, bytes: Uint8Array): Promise<void> {
   const { atime, mtime } = await stat(file);
-  const temporary = `${file}.geekity-strip`;
+  const temporary = `${file}${STRIP_TEMPORARY_SUFFIX}`;
   await writeFile(temporary, bytes);
   await utimes(temporary, atime, mtime);
   await rename(temporary, file);

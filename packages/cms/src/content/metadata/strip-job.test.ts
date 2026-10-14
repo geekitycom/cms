@@ -150,6 +150,24 @@ describe('the strip-metadata job', () => {
     );
   });
 
+  it('removes every temporary file a cut-off sweep left behind', async () => {
+    const sweep = await site({
+      '2025/05/clean.jpg': await jpegWithMetadata(4),
+      '2025/05/b.png': await pngWithMetadata(),
+    });
+    await sweepOnce(sweep);
+    const stripped = await sweep.uploads();
+    const uploads = path.join(sweep.contentDir, 'uploads');
+    const leftovers = ['2025/05/clean.jpg', '2025/05/b.png', '2025/05/gone.jpg', 'notes.txt'];
+    for (const relative of leftovers) {
+      await writeFile(path.join(uploads, `${relative}.geekity-strip`), 'half a file');
+    }
+
+    await sweepOnce(sweep);
+
+    assert.deepEqual(await sweep.uploads(), stripped);
+  });
+
   it('leaves every upload the same when it runs twice (AC #3)', async () => {
     const sweep = await site(await photos());
 
