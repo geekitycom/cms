@@ -34,6 +34,8 @@ import {
 import { describeUpgrade, upgradePlugins } from './plugins/upgrade.ts';
 import type { UpgradeReport } from './plugins/upgrade.ts';
 import { migratePluginSettings } from './plugins/migrate-settings.ts';
+import { readEnabledPlugins } from './plugins/enabled.ts';
+import type { PluginRegistry } from './plugins/registry.ts';
 import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
 import { askToReload } from './supervisor/control.ts';
 import { superviseCluster } from './supervisor/primary.ts';
@@ -159,6 +161,8 @@ const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
           'Print every runtime setting: its value in effect, where',
           'that value came from (env, config, file or default) and',
           'what it does. A secret prints as (set) or (not set).',
+          "Each enabled plugin's settings follow the core ones, as",
+          '@geekity/plugin-llm.default_model.',
         ],
       ],
       ['settings get', ['Print one value in effect, and what overrides it, if', 'anything.']],
@@ -560,7 +564,6 @@ async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number>
 async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const [action, name, value] = args;
   const config = await loadResolvedConfig(configPath);
-  const settings = createSettings({ config });
 
   if (action === 'migrate-plugins' && name === undefined) {
     const moved = migratePluginSettings({
@@ -573,6 +576,8 @@ async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise
     }
     return 0;
   }
+
+  const settings = await settingsWithEnabledPlugins(config);
 
   if (action === 'list') {
     const refs = settings.list().filter((ref) => name === undefined || ref.namespace === name);
@@ -615,6 +620,33 @@ async function settingsCommand({ args, configPath, flags }: ParsedArgs): Promise
   throw new Error(
     'geekity settings needs list [<namespace>], get <namespace.key>, set <namespace.key> with a value or --unset, or migrate-plugins.',
   );
+}
+
+/**
+ * The registry with the settings of each enabled plugin after the core ones.
+ * The site's plugins are loaded as for a plugin command, so their `register`
+ * runs; a plugin installed but not enabled, or one that did not load, is
+ * named on standard error and left out.
+ */
+async function settingsWithEnabledPlugins(config: ResolvedConfig): Promise<SettingsRegistry> {
+  migratePluginSettings({
+    contentDir: config.contentDir,
+    dataDir: config.dataDir,
+    log: (line) => process.stderr.write(`${line}\n`),
+  });
+  const settings = createSettings({ config });
+  const enabled = readEnabledPlugins(config.contentDir);
+  for (const entry of (await loadSitePlugins(config, settings)).plugins) {
+    const { name } = entry.plugin;
+    const declared = entry.settingsNamespace !== undefined;
+    let why: string | undefined;
+    if (entry.problem !== undefined) why = `did not load: ${entry.problem}`;
+    else if (declared && !enabled.has(name)) why = 'is installed but not enabled.';
+    if (why === undefined) continue;
+    process.stderr.write(`${name} ${why} Its settings are not listed.\n`);
+    if (declared) settings.unregister(name);
+  }
+  return settings;
 }
 
 function settingNamed(settings: SettingsRegistry, name: string): SettingRef<unknown> {
@@ -1227,6 +1259,15 @@ function configFlag(argv: readonly string[]): string | undefined {
   return undefined;
 }
 
+/** The site's plugins, from its config and its plugins folder, registered on `settings`. */
+async function loadSitePlugins(
+  config: ResolvedConfig,
+  settings: SettingsRegistry,
+): Promise<PluginRegistry> {
+  const folderPlugins = await importPluginFolders(scanPluginFolders(config.pluginsDir));
+  return sitePluginRegistry(config, folderPlugins, settings);
+}
+
 /** A command a plugin added, and the plugin it came from. */
 interface FoundCommand {
   plugin: string;
@@ -1238,9 +1279,8 @@ interface FoundCommand {
  * plugins folder, longest words first.
  */
 async function pluginCommands(config: ResolvedConfig): Promise<FoundCommand[]> {
-  const folderPlugins = await importPluginFolders(scanPluginFolders(config.pluginsDir));
-  return sitePluginRegistry(config, folderPlugins, createSettings({ config }))
-    .plugins.filter((entry) => entry.problem === undefined)
+  return (await loadSitePlugins(config, createSettings({ config }))).plugins
+    .filter((entry) => entry.problem === undefined)
     .flatMap((entry) => entry.commands.map((command) => ({ plugin: entry.plugin.name, command })))
     .sort((a, b) => b.command.words.length - a.command.words.length);
 }
