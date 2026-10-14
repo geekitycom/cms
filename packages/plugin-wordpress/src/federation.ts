@@ -122,7 +122,7 @@ function build(
   federation
     .setOutboxDispatcher(WORDPRESS_OUTBOX_PATH, async (context, identifier, cursor) => {
       const username = usernameOfWordPressNumber(context, identifier);
-      const outbox = username === undefined ? undefined : context.data.outbox(username);
+      const outbox = username === undefined ? undefined : await context.data.outbox(username);
       if (outbox === undefined) return null;
       const page = await outbox.page(cursor);
       return {
@@ -133,23 +133,29 @@ function build(
         prevCursor: page.prevCursor,
       };
     })
-    .setCounter((context, identifier) => {
+    .setCounter(async (context, identifier) => {
       const username = usernameOfWordPressNumber(context, identifier);
-      return username === undefined ? null : (context.data.outbox(username)?.totalItems ?? null);
+      return username === undefined
+        ? null
+        : ((await context.data.outbox(username))?.totalItems ?? null);
     })
-    .setFirstCursor((context, identifier) => {
+    .setFirstCursor(async (context, identifier) => {
       const username = usernameOfWordPressNumber(context, identifier);
-      return username === undefined ? null : (context.data.outbox(username)?.firstCursor ?? null);
+      return username === undefined
+        ? null
+        : ((await context.data.outbox(username))?.firstCursor ?? null);
     })
-    .setLastCursor((context, identifier) => {
+    .setLastCursor(async (context, identifier) => {
       const username = usernameOfWordPressNumber(context, identifier);
-      return username === undefined ? null : (context.data.outbox(username)?.lastCursor ?? null);
+      return username === undefined
+        ? null
+        : ((await context.data.outbox(username))?.lastCursor ?? null);
     });
 
   federation
     .setFollowersDispatcher(WORDPRESS_FOLLOWERS_PATH, async (context, identifier, cursor) => {
       const username = usernameOfWordPressNumber(context, identifier);
-      const followers = username === undefined ? undefined : context.data.followers(username);
+      const followers = username === undefined ? undefined : await context.data.followers(username);
       if (followers === undefined) return null;
       const page = await followers.page(cursor);
       return {
@@ -164,19 +170,23 @@ function build(
         prevCursor: page.prevCursor,
       };
     })
-    .setCounter((context, identifier) => {
-      const username = usernameOfWordPressNumber(context, identifier);
-      return username === undefined ? null : (context.data.followers(username)?.totalItems ?? null);
-    })
-    .setFirstCursor((context, identifier) => {
+    .setCounter(async (context, identifier) => {
       const username = usernameOfWordPressNumber(context, identifier);
       return username === undefined
         ? null
-        : (context.data.followers(username)?.firstCursor ?? null);
+        : ((await context.data.followers(username))?.totalItems ?? null);
     })
-    .setLastCursor((context, identifier) => {
+    .setFirstCursor(async (context, identifier) => {
       const username = usernameOfWordPressNumber(context, identifier);
-      return username === undefined ? null : (context.data.followers(username)?.lastCursor ?? null);
+      return username === undefined
+        ? null
+        : ((await context.data.followers(username))?.firstCursor ?? null);
+    })
+    .setLastCursor(async (context, identifier) => {
+      const username = usernameOfWordPressNumber(context, identifier);
+      return username === undefined
+        ? null
+        : ((await context.data.followers(username))?.lastCursor ?? null);
     });
 
   federation.setFollowingDispatcher(WORDPRESS_FOLLOWING_PATH, (context, identifier) =>

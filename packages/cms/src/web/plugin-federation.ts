@@ -94,10 +94,10 @@ function federationContext(
 
     outbox(username) {
       const user = userNamed(username);
-      if (user === undefined) return undefined;
+      if (user === undefined) return Promise.resolve(undefined);
       const names = authorNames(listUsers(config.dataDir), user);
       const totalItems = c.var.store.countByAuthor(names);
-      return {
+      return Promise.resolve({
         totalItems,
         firstCursor: '0',
         lastCursor: lastOutboxCursor(totalItems),
@@ -116,13 +116,13 @@ function federationContext(
             prevCursor: page.prevCursor ?? null,
           };
         },
-      };
+      });
     },
 
     followers(username) {
-      if (userNamed(username) === undefined) return undefined;
+      if (userNamed(username) === undefined) return Promise.resolve(undefined);
       const totalItems = c.var.admin.countFollowers(username);
-      return {
+      return Promise.resolve({
         totalItems,
         firstCursor: '0',
         lastCursor: lastFollowersCursor(totalItems),
@@ -138,7 +138,7 @@ function federationContext(
             prevCursor: page.prevCursor ?? null,
           });
         },
-      };
+      });
     },
 
     async receive(activity, recipient) {
