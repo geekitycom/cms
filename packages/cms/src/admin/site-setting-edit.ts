@@ -6,11 +6,6 @@ import { siteChanges } from './settings-fields.ts';
 
 const edits = createSerialQueue();
 
-/**
- * Change one site setting from the value it holds now: a menu added to the
- * menus, a redirect to the redirects. The read and the `set` run on one queue,
- * so two such edits in this process cannot each overwrite the other's.
- */
 export function editSiteSetting<K extends keyof SiteSettings>(
   settings: SettingsRegistry,
   key: K,

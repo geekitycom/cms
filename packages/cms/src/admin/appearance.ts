@@ -5,11 +5,7 @@
  * The theme is a setting in `content/_data/site.json` like every other, and it
  * is deliberately on no settings page. A settings page is a form of fields
  * somebody types into; this is a list of what a directory holds, and what you
- * do to a row is press it. So the screen is mounted the way the media library
- * is — its own module, its own template, one POST behind the same CSRF guard —
- * and it reaches the setting through the same `settings.set` and the
- * same field check the settings pages use, so the two doors cannot come to
- * disagree about what a valid theme is.
+ * do to a row is press it.
  *
  * The listing is a walk of the themes directory on every request, for the
  * reason the media screen walks `content/uploads/`: the directory is the truth
@@ -162,8 +158,6 @@ export function mountAppearanceScreen(
       return c.redirect(THEMES_PATH, 303);
     }
 
-    // One key, through the registry like every settings save, so a save of
-    // something else made while the list was open is not undone by it.
     const saved = await c.var.settings.set('site', siteChanges({ theme: submitted }), 'admin');
     if (!saved.ok) {
       flash(c, 'error', `Nothing was changed. ${Object.values(saved.problems).join(' ')}`);

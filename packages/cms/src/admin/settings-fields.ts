@@ -35,7 +35,6 @@ import { isDeepStrictEqual } from 'node:util';
 import { DEFAULT_SITE_SETTINGS, SITE } from '../site/settings.ts';
 import type { SiteLicense, SiteSettings } from '../site/settings.ts';
 
-/** The settings another screen writes, or nothing does: no settings page carries them. */
 type OffTheForm =
   'taxonomy_redirects' | 'menus' | 'index_now_key' | 'clients_without_pkce' | 'avatar';
 
@@ -43,7 +42,6 @@ type FormKey = Exclude<keyof SiteSettings, OffTheForm>;
 
 export type SettingsField = FormKey | 'license_url' | 'license_name';
 
-/** A submitted settings form, before it is known to be valid. */
 export type SettingsForm = Record<SettingsField, string>;
 
 export interface SettingsDirs {
@@ -113,7 +111,6 @@ function text(
   };
 }
 
-/** A checkbox, which submits nothing at all when it is clear. */
 function flag(key: FlagField, field: string): FormSettingRow<boolean> {
   return {
     field,
@@ -182,7 +179,6 @@ const isCustomLicense = (form: SettingsForm): boolean => form.license.trim() ===
 
 const PAGE_SLUG_PATTERN = /^[A-Za-z0-9._~-]{1,200}$/;
 
-/** What is wrong with one page pick, or `undefined`. Empty is a value. */
 function slugProblem(value: string, what: string): string | undefined {
   const slug = value.trim();
   return slug === '' || PAGE_SLUG_PATTERN.test(slug)
@@ -306,10 +302,6 @@ const SETTING_ROWS: SettingRows = {
         : 'That is not a language tag, such as en, en-GB or pt-BR.',
   }),
 
-  // The two archive bases are checked as a pair, because two of the rules —
-  // that they differ, and that neither takes a path the site already answers
-  // on — are about the pair rather than either one. They are on one page for
-  // exactly that reason.
   tag_base: text('tag_base', 'tag_base', {
     check: (form) => taxonomyBaseProblems({ tag: form.tag_base, category: form.category_base }).tag,
   }),
@@ -321,9 +313,6 @@ const SETTING_ROWS: SettingRows = {
 
   comments: flag('comments', 'comments'),
 
-  // The empty string is refused rather than read as zero, which is what
-  // `Number('')` would make it: a cleared field is a mistake, and "never close
-  // comments" should have to be typed.
   comments_close_after_days: {
     field: 'comments_close_after_days',
     submitted: (form) => Number(form.comments_close_after_days),
@@ -356,9 +345,6 @@ const SETTING_ROWS: SettingRows = {
 
   webmentions_receive: flag('webmentions_receive', 'webmentions_receive'),
 
-  // Empty is a value here — it is how a site turns real-time notification off
-  // — so only a non-empty one has to be a URL. http as well as https, because
-  // a notify server on a private network or a loopback port is a real one.
   notify_server: {
     ...text('notify_server', 'notify_server'),
     submitted: (form) => normalizeBaseUrl(form.notify_server) ?? '',
@@ -442,8 +428,6 @@ const SETTING_ROWS: SettingRows = {
     ),
   }),
 
-  // These three are printed line by line into security.txt, so a hand edit
-  // with a line break in it must not become a field nobody set.
   security_contacts: list('security_contacts', 'security_contacts', securityContactList, (form) => {
     const bad = relayLines(form.security_contacts).find(
       (line) => normalizeSecurityContact(line) === undefined,
@@ -557,7 +541,6 @@ const FORM_ROWS: { readonly [F in SettingsField]: FieldRow<FieldValue<F>> } = {
 
 export const SETTINGS_FIELD_NAMES = Object.keys(FORM_ROWS) as readonly SettingsField[];
 
-/** One message per field that is wrong. An empty object is a valid form. */
 export type SettingsProblems = Partial<Record<SettingsField, string>>;
 
 function perField<V>(value: (name: SettingsField) => V): Record<SettingsField, V> {
@@ -567,25 +550,14 @@ function perField<V>(value: (name: SettingsField) => V): Record<SettingsField, V
   >;
 }
 
-/** The form field each setting is submitted under. */
 export const SETTINGS_FIELDS: Readonly<Record<SettingsField, string>> = perField(
   (name) => FORM_ROWS[name].field,
 );
 
-/** The setting a form field is part of: the custom license's URL and name are the license's. */
 export function settingOf(field: SettingsField): FormKey {
   return field === 'license_url' || field === 'license_name' ? 'license' : field;
 }
 
-/**
- * What is wrong with a submitted settings form, one message per field.
- *
- * `fields` is what a page carries: it validates its own fields and says
- * nothing about the rest, so a page cannot refuse a save over a field it does
- * not show and gives no way to fix. `context` names the directories the
- * on-disk checks read, and an on-disk check runs only when its directory is
- * named.
- */
 export function settingsProblems(
   form: SettingsForm,
   fields: readonly SettingsField[] = SETTINGS_FIELD_NAMES,
@@ -612,10 +584,6 @@ function onDiskProblem(
   return dir === undefined ? undefined : onDisk.problem(form[name].trim(), dir);
 }
 
-/**
- * The settings these fields carry, as a validated form submits them. Only
- * call it on a form {@link settingsProblems} found nothing wrong with.
- */
 export function submittedSettings(
   form: SettingsForm,
   fields: readonly SettingsField[],
@@ -624,10 +592,6 @@ export function submittedSettings(
   return Object.fromEntries(keys.map((key) => [key, SETTING_ROWS[key].submitted(form)]));
 }
 
-/**
- * Settings as the changes `settings.set('site', …)` takes: each in the form
- * the file stores it, and a default as `undefined`, so the default applies.
- */
 export function siteChanges(settings: Partial<SiteSettings>): Map<string, unknown> {
   const changes = new Map<string, unknown>();
   for (const declaration of SITE.declaration.settings) {
@@ -646,7 +610,6 @@ function shownSetting<F extends SettingsField>(settings: SiteSettings, name: F):
   return FORM_ROWS[name].shown(value);
 }
 
-/** The settings as the form shows them. */
 export function formFromSettings(settings: SiteSettings): SettingsForm {
   return perField((name) => shownSetting(settings, name));
 }

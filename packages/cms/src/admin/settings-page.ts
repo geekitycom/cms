@@ -8,14 +8,6 @@
  * into a screen you can read and a form you can save. A page module describes
  * itself and writes its own template; nothing about how a page is wired lives
  * in the page.
- *
- * The save is the part worth reading twice. A page writes only the settings
- * it carries, through `settings.set('site', …)`, which re-reads
- * `content/_data/site.json` inside its atomic update (decision-9, decision-53).
- * So two people saving two different pages at the same moment both land, and
- * a setting neither page shows is not even in the picture. A setting the
- * environment or the config overrides is shown as it is in effect, and a save
- * neither checks nor writes it.
  */
 
 import type { Context, Hono } from 'hono';
@@ -87,7 +79,6 @@ export interface SettingsPage {
     c: Context<GeekityEnv>,
     settings: SiteSettings,
   ) => Promise<Record<string, unknown>> | Record<string, unknown>;
-  /** The fields this page does not read straight off the body, because the page decides them. */
   reads?: (options: { c: Context<GeekityEnv>; body: SubmittedBody }) => Partial<SettingsForm>;
   /**
    * The page's own endpoints: a credential, a test message. Each is its own
@@ -110,11 +101,6 @@ export function settingsPagePath(child: string): string {
 /**
  * Register one settings page: the screen, the save, and whatever endpoints of
  * its own it has.
- *
- * The page shows the request's snapshot of the `site` settings and saves its
- * own through `settings.set`. A form the page's own validator, or the
- * registry, has anything to say about is a 400 that writes nothing at all and
- * comes back with the problems on the fields that have them.
  */
 export function mountSettingsPage(
   app: Hono<GeekityEnv>,
@@ -201,7 +187,6 @@ function shownOn(c: Context<GeekityEnv>, page: SettingsPage, settings: SiteSetti
   return page.shown === undefined ? settings : page.shown(c.var.config, settings);
 }
 
-/** The settings this page carries that the environment or the config sets, with what sets each. */
 async function setElsewhereOn(
   c: Context<GeekityEnv>,
   page: SettingsPage,
@@ -209,12 +194,6 @@ async function setElsewhereOn(
   return await setElsewhere(c.var.settings, SITE, page.fields.map(settingOf));
 }
 
-/**
- * The form as this save means it: the page's editable fields as submitted,
- * and everything else as the page shows it. A clear checkbox submits nothing
- * at all, which reads as unticked because only these fields are read off the
- * body.
- */
 function pageForm(
   c: Context<GeekityEnv>,
   page: SettingsPage,

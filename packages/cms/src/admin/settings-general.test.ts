@@ -238,9 +238,6 @@ describe('the base URL', () => {
     assert.match(html, /<code>https:\/\/deployed\.example<\/code>/);
     assert.match(html, /name="base_url"[^>]*disabled/, 'and the field is not editable');
 
-    // The browser sends nothing for a disabled field, and a forged one is not
-    // read: the save writes the other fields and leaves the file's url as it
-    // was, which here is none, rather than writing the configured one into it.
     const token = csrfField(html);
     assert.ok(token !== undefined);
     const saved = await agent.post('/admin/settings', {

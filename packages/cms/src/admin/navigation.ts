@@ -394,7 +394,6 @@ function count(howMany: number, singular: string): string {
   return `${String(howMany)} ${howMany === 1 ? singular : `${singular}s`}`;
 }
 
-/** A save the registry refused, which is an override in effect: the flash says what sets it. */
 function refused(c: Context<GeekityEnv>, problems: Readonly<Record<string, string>>): Response {
   flash(c, 'error', `Nothing was saved. ${Object.values(problems).join(' ')}`);
   return c.redirect(NAVIGATION_PATH, 303);

@@ -1,15 +1,6 @@
 /**
  * Federation: which relays the site subscribes to.
  *
- * There is nothing else on this page any more. decision-14 replaced the site
- * actor with one actor per user, so the handle, the type and the picture a
- * site used to federate under are a user's profile, edited on the users
- * screen; what is left here is the one setting that is an instruction as well
- * as a value — a line added is a `Follow` to send and a line removed is an
- * `Undo` — so a change to `site.relays`, from this page or anything else the
- * running site sets it through, reconciles them (the watch in
- * `cms/services.ts`).
- *
  * It is a settings page filed under Federation rather than under Settings
  * (TASK-109). The admin used to have two menu entries called Federation,
  * neither saying the other existed, and a person looking for the relays had no

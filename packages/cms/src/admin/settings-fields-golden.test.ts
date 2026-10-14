@@ -270,14 +270,12 @@ async function siteOf(source: string): Promise<{ contentDir: string; file: strin
   return { contentDir, file };
 }
 
-/** The file after a save that changes nothing, which still writes every declared key. */
 async function rewritten(source: string): Promise<string> {
   const { contentDir, file } = await siteOf(source);
   await settingsOver({ contentDir, dataDir: contentDir }).set('site', new Map(), 'admin');
   return await readFile(file, 'utf8');
 }
 
-/** What a save of every field writes over a file, or what it refuses. */
 async function saved(form: SettingsForm, source: string): Promise<unknown> {
   const { contentDir, file } = await siteOf(source);
   const changes = siteChanges(submittedSettings(form, SETTINGS_FIELD_NAMES));

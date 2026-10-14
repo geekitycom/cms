@@ -47,11 +47,6 @@ import {
 } from './setting-values.ts';
 import type { ContentSignalChoice, LicenseChoice } from './settings.ts';
 
-/**
- * How long a post takes comments for, in days, before this is decided
- * otherwise. WordPress's own default, and the age at which a post stops being
- * a conversation and starts being a spam target.
- */
 export const DEFAULT_COMMENTS_CLOSE_AFTER_DAYS = 14;
 
 /**
@@ -285,8 +280,6 @@ export const SITE = declareNamespace({
       default: DEFAULT_COMMENTS_CLOSE_AFTER_DAYS,
       description: 'How many days after its date a post stops taking comments. 0 never closes one.',
     },
-    // Forever, so a site that upgrades loses nothing it never chose to lose.
-    // `geekity init` writes the recommended periods for a new site.
     comment_email_retention_days: {
       fileKey: 'commentEmailRetentionDays',
       type: wholeNumber(0),
@@ -543,7 +536,6 @@ export function createSettings(options: CreateSettingsRegistryOptions): Settings
   return createSettingsRegistry({ ...options, coreDeclaredAbove: [SITE] });
 }
 
-/** Where one site's `content/_data/site.json` is. */
 export function siteJsonPath(contentDir: string): string {
   return path.join(contentDir, SITE.declaration.storage.path);
 }

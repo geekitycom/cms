@@ -315,11 +315,6 @@ function skipped(report: TermRewriteReport): string {
   return ` ${String(report.skipped.length)} could not be read and were left alone: ${report.skipped.join(', ')}.`;
 }
 
-/**
- * Rewrite the recorded archive renames, `site.taxonomy_redirects`. Through the
- * registry, so a rename recorded while somebody saves a settings page cannot
- * lose either change.
- */
 async function recordRedirects(
   c: Context<GeekityEnv>,
   change: (existing: readonly TaxonomyRedirect[]) => TaxonomyRedirect[],
