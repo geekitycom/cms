@@ -50,10 +50,17 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
   let inFlight = 0;
   let idle: (() => void)[] = [];
 
-  async function recover(): Promise<void> {
+  /**
+   * Take back what a dead or discarded worker left: a running job whose
+   * claiming process is gone goes back to queued as the next attempt, and,
+   * while nothing runs here, every queued job is sent to the transport again,
+   * since its message may have died with another process. A duplicate message
+   * is dropped by the claim. A started queue does this on start, before
+   * answering {@link JobQueue.latest}, and each time it goes idle.
+   */
+  async function reconcile(): Promise<void> {
     for (const record of await records.list(['running'])) {
-      if (record.state !== 'running' || record.owner === owner) continue;
-      if (record.claimer !== undefined && isClaimerAlive(record.claimer)) continue;
+      if (record.state !== 'running' || record.owner === owner || !isCutOff(record)) continue;
       const expected = { state: 'running' as const, attempt: record.attempt };
       await records.transition(
         record.id,
@@ -63,6 +70,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
           : { state: 'queued', attempt: record.attempt + 1, interruptedAt: now() },
       );
     }
+    if (inFlight > 0) return;
     for (const record of await records.list(['queued'])) await transport.enqueue({ id: record.id });
   }
 
@@ -127,6 +135,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
         const waiting = idle;
         idle = [];
         for (const wake of waiting) wake();
+        if (started && !signal.aborted) void reconcile().catch(() => undefined);
       }
     }
     return true;
@@ -159,7 +168,10 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
 
     status: (id) => records.get(id),
 
-    latest: (name) => records.latest(name),
+    async latest(name) {
+      if (started) await reconcile();
+      return records.latest(name);
+    },
 
     async run(id) {
       await claimAndRun(id, stopping.signal);
@@ -177,7 +189,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
       if (stopping.signal.aborted) stopping = new AbortController();
       started = true;
       const { signal } = stopping;
-      await recover();
+      await reconcile();
       listening = transport.listen((message) => deliver(message, signal), { signal });
     },
 
@@ -197,6 +209,17 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
     },
   };
   return queue;
+}
+
+/**
+ * A running job whose claiming process is gone, or is not named, as another
+ * process sees it: recovery runs it again. A queued job, or a running one that
+ * is not cut off, is active.
+ */
+export function isCutOff(status: JobStatus): boolean {
+  return (
+    status.state === 'running' && (status.claimer === undefined || !isClaimerAlive(status.claimer))
+  );
 }
 
 function isFinal(status: JobStatus): boolean {

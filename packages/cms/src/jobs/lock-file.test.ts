@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile as execFileCallback } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -77,5 +78,30 @@ describe('the records lock file', () => {
       assert.equal(line.split(' ')[0], index % 2 === 0 ? 'enter' : 'leave', 'held at once');
       if (index % 2 === 1) assert.equal(line.split(' ')[1], lines[index - 1]?.split(' ')[1]);
     });
+  });
+
+  it('leaves the lock of a waiter that took it over when the holder that ran past the stale age unlocks', async () => {
+    const lock = await staleLock();
+    await rm(lock);
+    let waiterInside: () => void = () => undefined;
+    const inside = new Promise<void>((resolve) => (waiterInside = resolve));
+    let releaseWaiter: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => (releaseWaiter = resolve));
+    let waiter: Promise<void> | undefined;
+
+    await withLockFile(lock, async () => {
+      const long = new Date(0);
+      await utimes(lock, long, long);
+      waiter = withLockFile(lock, async () => {
+        waiterInside();
+        await released;
+      });
+      await inside;
+    });
+
+    assert.ok(existsSync(lock), 'the late holder removed the lock the waiter now holds');
+    releaseWaiter();
+    await waiter;
+    assert.deepEqual(await readdir(path.dirname(lock)), []);
   });
 });

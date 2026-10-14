@@ -79,7 +79,11 @@ export interface JobQueue {
   /** Record a job as queued and send it to the transport. Refuses a name with no registered definition. */
   enqueue<P extends Json>(job: JobDefinition<P, Json>, payload: P): Promise<string>;
   status(id: string): Promise<JobStatus | undefined>;
-  /** The newest job of this name, whatever its state. */
+  /**
+   * The newest job of this name, whatever its state. A started queue first
+   * takes back the jobs a dead or discarded worker left, so a cut-off job
+   * reads as queued again rather than as running.
+   */
   latest(name: string): Promise<JobStatus | undefined>;
   /**
    * Run one queued job in this process and resolve with its final status,

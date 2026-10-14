@@ -4,6 +4,7 @@ import { hostname, tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { nextEvent } from '../__testing__/wait.ts';
 import { systemClock } from '../util/clock.ts';
 import { createFileRecords } from './file-records.ts';
 import { createInProcessTransport } from './in-process.ts';
@@ -172,5 +173,49 @@ describe('start-up recovery', () => {
     await server.start();
     assert.equal((await records.get(id))?.attempt, 2);
     await server.close();
+  });
+});
+
+describe('a started queue', () => {
+  it('runs a queued job whose message no transport here carries once it has nothing running', async () => {
+    const file = await recordsFile();
+    let release: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let held: () => void = () => undefined;
+    const holding = nextEvent('the server running its first job', (done) => {
+      held = done;
+    });
+    const hold: JobDefinition<null, null> = {
+      name: 'hold',
+      parse: () => null,
+      async run() {
+        held();
+        await released;
+        return null;
+      },
+    };
+    let counted: (attempt: number) => void = () => undefined;
+    const counting = nextEvent<number>('the job the CLI left queued running', (done) => {
+      counted = done;
+    });
+    const tally: JobDefinition<null, null> = {
+      name: 'tally',
+      parse: () => null,
+      run(_payload, context) {
+        counted(context.attempt);
+        return Promise.resolve(null);
+      },
+    };
+
+    const server = queueOn(file, [hold, tally]);
+    await server.start();
+    await server.enqueue(hold, null);
+    await holding;
+
+    const left = await queueOn(file, [hold, tally]).enqueue(tally, null);
+    release();
+    assert.equal(await counting, 1);
+    await server.close();
+    assert.equal((await createFileRecords(file).get(left))?.state, 'finished');
   });
 });

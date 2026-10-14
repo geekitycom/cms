@@ -68,14 +68,16 @@ function whenChanged<T>(
   );
 }
 
-async function site(): Promise<Site> {
+async function site(
+  options: { plugins?: Record<string, { enabled: boolean }> } = {},
+): Promise<Site> {
   const directory = await fs.realpath(await temporaryDir('geekity-jobs-serve-'));
   const dataDir = path.join(directory, 'data');
   await fs.mkdir(path.join(directory, 'content', '_data'), { recursive: true });
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(
     path.join(directory, 'content', '_data', 'site.json'),
-    JSON.stringify({ title: 'Jobs' }),
+    JSON.stringify({ title: 'Jobs', ...(options.plugins ? { plugins: options.plugins } : {}) }),
   );
   await fs.writeFile(
     path.join(directory, 'geekity.config.ts'),
@@ -240,6 +242,29 @@ describe('admin jobs under geekity serve', () => {
     const server = serve(jobs);
     const second = pidOf(await jobs.logged(/^start 2 /));
     assert.notEqual(second, cli.child.pid);
+    await jobs.release();
+    const done = await jobs.recorded((status) => status.state === 'finished');
+    assert.equal(done.attempt, 2);
+
+    server.child.kill('SIGTERM');
+    assert.equal(await server.exited, 0);
+  });
+
+  it('runs a job the new worker of a failed reload had claimed in the resumed worker, as the next attempt (TASK-400 AC #2)', async () => {
+    const jobs = await site({ plugins: { '@test/plugin-fail-boot': { enabled: true } } });
+    const server = serve(jobs);
+
+    const old = pidOf(await jobs.logged(/^start 1 /));
+    await fs.writeFile(path.join(jobs.directory, 'fail-boot'), '');
+    assert.deepEqual(await askToReload(jobs.dataDir), {
+      ok: false,
+      error: 'The test failed this boot.',
+    });
+    const discarded = pidOf(await jobs.logged(/^start 1 /, 2));
+    assert.notEqual(discarded, old);
+
+    const resumed = pidOf(await jobs.logged(/^start 2 /));
+    assert.equal(resumed, old, 'the resumed worker ran it');
     await jobs.release();
     const done = await jobs.recorded((status) => status.state === 'finished');
     assert.equal(done.attempt, 2);

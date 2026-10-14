@@ -82,6 +82,17 @@ type State =
       readonly next: WorkerHandle;
       readonly deadline: Cancel;
     }
+  /**
+   * The new worker did not boot and is being killed. The old one resumes once
+   * it has exited, so that the old one's job recovery finds a job the new one
+   * claimed cut off rather than still running.
+   */
+  | {
+      readonly phase: 'abandoning';
+      readonly old: WorkerHandle;
+      readonly next: WorkerHandle;
+      readonly error: string;
+    }
   /** No worker; one is forked when the backoff runs out. */
   | { readonly phase: 'waiting'; readonly timer: Cancel }
   | { readonly phase: 'stopping' };
@@ -142,12 +153,16 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     if (queued.length > 0) beginReload(worker);
   }
 
-  /** The new worker did not boot: the old one carries on, and is told why. */
+  /** The new worker did not boot: the old one carries on once the new one has gone, and is told why. */
   function keepOld(old: WorkerHandle, next: WorkerHandle, error: string): void {
     if (state.phase === 'replacing') state.deadline.cancel();
+    if (live.has(next)) {
+      next.kill();
+      state = { phase: 'abandoning', old, next, error };
+      return;
+    }
     options.log(`Reload failed, so the running server carries on: ${error}`);
     old.send({ type: 'resume', error });
-    if (live.has(next)) next.kill();
     failed = reloading;
     compared = undefined;
     settle({ ok: false, error });
@@ -298,6 +313,16 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
           } else if (state.old === worker) {
             state.deadline.cancel();
             state = { phase: 'booting', worker: state.next };
+          }
+          return;
+
+        case 'abandoning':
+          if (state.next === worker) {
+            keepOld(state.old, worker, state.error);
+          } else if (state.old === worker) {
+            const failure = state.error;
+            respawnLater('The server exited while a failed reload was undone');
+            settle({ ok: false, error: failure });
           }
           return;
 

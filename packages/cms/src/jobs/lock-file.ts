@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, open, readFile, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -14,37 +15,59 @@ const LOCK_RETRY_MS = 5;
  * is taken over, by one waiter only: it is removed under a guard file that
  * only one waiter can create, after checking again that it is still stale,
  * so a waiter that read the old lock never removes the one that replaced it.
+ * A holder that ran past the stale age may have lost its lock that way, so it
+ * unlocks under the same guard and only when the lock is still its own.
  */
 export async function withLockFile<T>(lockFile: string, task: () => Promise<T>): Promise<T> {
   await mkdir(path.dirname(lockFile), { recursive: true });
+  const token = `${String(process.pid)} ${randomUUID()}`;
   for (;;) {
-    if (await create(lockFile)) break;
+    if (await create(lockFile, token)) break;
     if (await isStale(lockFile)) await takeOver(lockFile);
     else await delay(LOCK_RETRY_MS);
   }
   try {
     return await task();
   } finally {
-    await unlink(lockFile).catch(() => undefined);
+    while (!(await underGuard(lockFile, () => unlock(lockFile, token)))) {
+      await delay(LOCK_RETRY_MS);
+    }
   }
+}
+
+async function unlock(lockFile: string, token: string): Promise<void> {
+  const holder = await readFile(lockFile, 'utf8').catch(() => undefined);
+  if (holder === token) await unlink(lockFile).catch(() => undefined);
 }
 
 async function takeOver(lockFile: string): Promise<void> {
+  const tookGuard = await underGuard(lockFile, async () => {
+    if (await isStale(lockFile)) await unlink(lockFile).catch(() => undefined);
+  });
+  if (!tookGuard) await delay(LOCK_RETRY_MS);
+}
+
+/**
+ * Run a check-and-remove of the lock file holding its guard file, which only
+ * one process creates at a time. False, with nothing run, when another holds
+ * the guard; a guard left by a process that died is removed for the next try.
+ */
+async function underGuard(lockFile: string, task: () => Promise<void>): Promise<boolean> {
   const guard = `${lockFile}.takeover`;
-  if (!(await create(guard))) {
+  if (!(await create(guard, String(process.pid)))) {
     if (await isStale(guard)) await unlink(guard).catch(() => undefined);
-    else await delay(LOCK_RETRY_MS);
-    return;
+    return false;
   }
   try {
-    if (await isStale(lockFile)) await unlink(lockFile).catch(() => undefined);
+    await task();
   } finally {
     await unlink(guard).catch(() => undefined);
   }
+  return true;
 }
 
-/** Create a file holding this process's id, unless it exists. */
-async function create(file: string): Promise<boolean> {
+/** Create a file holding `contents`, which starts with this process's id, unless it exists. */
+async function create(file: string, contents: string): Promise<boolean> {
   let handle;
   try {
     handle = await open(file, 'wx');
@@ -53,7 +76,7 @@ async function create(file: string): Promise<boolean> {
     throw error;
   }
   try {
-    await handle.writeFile(String(process.pid));
+    await handle.writeFile(contents);
   } finally {
     await handle.close();
   }
@@ -64,7 +87,7 @@ async function isStale(lockFile: string): Promise<boolean> {
   try {
     const [owner, info] = await Promise.all([readFile(lockFile, 'utf8'), stat(lockFile)]);
     if (Date.now() - info.mtimeMs > STALE_LOCK_MS) return true;
-    const pid = Number(owner);
+    const pid = Number(owner.split(' ')[0]);
     return Number.isInteger(pid) && pid > 0 && !isAlive(pid);
   } catch {
     return false;

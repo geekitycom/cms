@@ -1,9 +1,11 @@
 /**
  * The config of the site cli-jobs.test.ts serves: one job that logs each run
  * to `$GEEKITY_TEST_JOB_DIR/runs.log` and waits until `release` appears
- * there, or until its signal is aborted.
+ * there, or until its signal is aborted. With `fail-boot` in that directory,
+ * a server that boots then fails to: once it has started the job, it says so
+ * to the supervisor and hangs, as a worker does between saying it and exiting.
  */
-import { appendFileSync, existsSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -31,4 +33,25 @@ const waitForRelease: JobDefinition<null, string> = {
   },
 };
 
-export default { jobs: { definitions: [waitForRelease] } };
+const startedHere = () =>
+  existsSync(path.join(directory, 'runs.log')) &&
+  readFileSync(path.join(directory, 'runs.log'), 'utf8')
+    .split('\n')
+    .some((line) => line.startsWith('start ') && line.endsWith(` ${String(process.pid)}`));
+
+const failBoot = {
+  name: '@test/plugin-fail-boot',
+  version: '1.0.0',
+  label: 'Fail boot',
+  description: 'Fails a server boot after the server has started the job.',
+  hostApi: 2,
+  register: () => undefined,
+  async start() {
+    if (!existsSync(path.join(directory, 'fail-boot'))) return;
+    while (!startedHere()) await delay(20);
+    process.send?.({ type: 'boot-failed', error: 'The test failed this boot.' });
+    await new Promise<never>(() => undefined);
+  },
+};
+
+export default { jobs: { definitions: [waitForRelease] }, plugins: [failBoot] };

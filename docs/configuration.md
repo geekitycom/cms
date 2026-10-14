@@ -308,8 +308,15 @@ least once:
 A CLI command queues its job and runs it in its own process. It never takes
 over jobs that the server is running.
 
-When the server starts, and after each reload, it looks at every job recorded
-as running and decides whether that job was cut off. A job counts as cut off,
+The server looks for cut-off jobs when it starts, after each reload, when a
+failed reload is undone, each time it finishes a job and has nothing else
+running, and each time the admin reads a job's status, which the **Media** and
+federation screens do when they show the latest job and before they queue a new
+one. So a job cut off while the server runs is picked up without a restart,
+once the admin looks at it or the server finishes its current job.
+
+Each time, it looks at every job recorded as running and decides whether that
+job was cut off. A job counts as cut off,
 and runs again as the next attempt, unless the process that claimed it is
 still running it. The claiming process is still running it when all of these
 hold:
@@ -324,7 +331,18 @@ hold:
 
 So a job that `geekity strip-metadata` or `geekity resend` is running is left
 to that command when the server starts or reloads beside it. If the command
-is killed, the server runs the job again the next time it starts.
+is killed, the server runs the job again as the next attempt the next time it
+looks, and the admin can then queue that job again once the attempt ends.
+
+When it looks and has no job running, the server also sends every queued job
+to its transport again. A job queued by a process that died before running it,
+or handed back by a new server that failed to boot during a reload, then runs.
+A queued job whose message is still on its way is not run twice: the first
+worker to claim it runs it, and the second message finds it already claimed.
+
+When a reload fails, the supervisor stops the new server and waits for it to
+exit before the old server carries on, so a job the new server had started
+counts as cut off, and the old server runs it again as the next attempt.
 
 ### Where job records are stored
 
@@ -350,7 +368,11 @@ written. The site writes the file by renaming a finished copy over it, and
 holds `data/jobs.json.lock` while it does, so the server and a CLI command can
 write it at the same time. A lock whose process has died, or that is over ten
 seconds old, is taken over. Only one waiting process takes it over: it holds
-`data/jobs.json.lock.takeover` while it removes the old lock. `geekity rebuild` does not touch the file. If you
+`data/jobs.json.lock.takeover` while it removes the old lock. A process
+releasing the lock also holds the takeover file, and removes the lock only if
+it is still its own, so a process that held the lock past ten seconds never
+removes the lock of the process that took it over. `geekity rebuild` does not
+touch the file. If you
 delete it, queued jobs and the history are lost, and nothing else.
 
 ### Swapping the transport and the record store
