@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync } from 'node:fs';
-import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { DATABASE, dataPath } from './files/data-files.ts';
 import type { Clock } from './util/clock.ts';
 import { messageOf } from './util/errors.ts';
 
@@ -17,9 +17,6 @@ import { messageOf } from './util/errors.ts';
  * it, and what happens when the file that is there cannot be used.
  */
 
-/** File name of the derived database inside a site's data directory. */
-export const DATABASE_FILE = 'geekity.db';
-
 /**
  * The suffixes SQLite hangs off the database in WAL mode.
  *
@@ -31,7 +28,7 @@ export const DATABASE_SUFFIXES: readonly string[] = ['', '-wal', '-shm'];
 
 /** Where the database lives under `dataDir`. */
 export function databaseFile(dataDir: string): string {
-  return path.join(dataDir, DATABASE_FILE);
+  return dataPath(dataDir, DATABASE);
 }
 
 /** Every file the database is spread across, whether or not it is there. */

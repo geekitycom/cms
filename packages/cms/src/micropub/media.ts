@@ -1,5 +1,4 @@
 import { existsSync, statSync } from 'node:fs';
-import path from 'node:path';
 
 import type { Context, Hono } from 'hono';
 
@@ -13,9 +12,7 @@ import { resolveUpload } from '../media/library.ts';
 import { refusedUpload, storeUpload, UPLOAD_FIELD } from '../media/uploads.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { requireSiteToken } from './endpoint.ts';
-
-/** Each user's most recent upload, relative to `dataDir`. */
-export const LAST_UPLOADS_FILE = 'micropub-media.json';
+import { MICROPUB_MEDIA, dataPath } from '../files/data-files.ts';
 
 interface LastUpload {
   url: string;
@@ -27,7 +24,7 @@ interface LastUploadsFile {
 }
 
 function lastUploadsFile(dataDir: string): string {
-  return path.join(dataDir, LAST_UPLOADS_FILE);
+  return dataPath(dataDir, MICROPUB_MEDIA);
 }
 
 /**

@@ -12,6 +12,7 @@ import { migrateUsersToFile } from './admin/legacy-migrations.ts';
 import { adminStoreOwning, openAdminDatabase } from './store/admin-store.ts';
 import type { AdminStore } from './store/admin-store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
+import { dataPath } from './files/data-files.ts';
 import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
 import type { ResolvedConfig } from './config.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './comments/migrations.ts';
@@ -44,7 +45,7 @@ import { askToReload, isServing } from './supervisor/control.ts';
 import { superviseCluster } from './supervisor/primary.ts';
 import { processChannel, superviseWorker } from './supervisor/worker.ts';
 import { DEV_MODE, DEV_MODE_LATCHED } from './settings/dev-mode.ts';
-import { MAINTENANCE } from './settings/maintenance.ts';
+import { MAINTENANCE, MAINTENANCE_FILE } from './settings/maintenance.ts';
 import { overridden } from './settings/registry.ts';
 import { createSettings } from './site/namespace.ts';
 import type { SettingRef, SettingsRegistry, ValueSource } from './settings/types.ts';
@@ -497,7 +498,7 @@ async function maintenanceCommand({ args, configPath, flags }: ParsedArgs): Prom
   if (action === 'on') {
     const until = untilFlag(text(flags, 'until'));
     await setOrThrow(settings, 'maintenance', { on: true, until: until?.toISOString() ?? '' });
-    const file = path.join(config.dataDir, MAINTENANCE.declaration.storage.path);
+    const file = dataPath(config.dataDir, MAINTENANCE_FILE);
     process.stdout.write(`Maintenance mode is on (${file}).${untilLine(until)}\n`);
     return 0;
   }

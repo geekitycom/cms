@@ -1,6 +1,5 @@
-import path from 'node:path';
-
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
+import { COMMENT_OPTOUTS, dataPath } from '../files/data-files.ts';
 
 /**
  * The addresses this site has been told to stop writing to.
@@ -26,15 +25,12 @@ import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts'
  * nothing has to go back and rewrite comment files somebody may have in git.
  */
 
-/** The file, relative to `dataDir`. */
-export const COMMENT_OPTOUTS_FILE = 'comment-optouts.json';
-
 /** Nobody but the site's own user reads it. */
 export const COMMENT_OPTOUTS_FILE_MODE = 0o600;
 
 /** Where the list lives for a given data directory. */
 export function commentOptOutsFile(dataDir: string): string {
-  return path.join(dataDir, COMMENT_OPTOUTS_FILE);
+  return dataPath(dataDir, COMMENT_OPTOUTS);
 }
 
 /**

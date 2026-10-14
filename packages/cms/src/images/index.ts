@@ -9,7 +9,6 @@ export {
   imageMediaType,
   removeImageVariants,
   variantUrl,
-  IMAGE_DIRECTORY,
   IMAGE_RECORD_NAME,
 } from './variants.ts';
 export { VARIANT_ASSET_PREFIX } from '../content/uploads.ts';

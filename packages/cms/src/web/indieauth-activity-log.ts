@@ -21,7 +21,6 @@
  * a write that fails is a warning on the console, never a different answer.
  */
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
 
 import type { Context, MiddlewareHandler } from 'hono';
 
@@ -31,9 +30,7 @@ import { findUserById } from '../site/users.ts';
 import { messageOf } from '../util/errors.ts';
 import { isRecord } from '../util/guards.ts';
 import type { Bearer } from './indieauth-bearer.ts';
-
-/** The log, relative to `dataDir`. */
-export const ACTIVITY_LOG_FILE = 'indieauth-activity.json';
+import { INDIEAUTH_ACTIVITY, dataPath } from '../files/data-files.ts';
 
 /** Readable and writable by the site's own user only, like the tokens beside it. */
 export const ACTIVITY_LOG_MODE = 0o600;
@@ -148,7 +145,7 @@ export function isFresh(entry: ActivityEntry, now: Date): boolean {
 }
 
 function logFile(dataDir: string): string {
-  return path.join(dataDir, ACTIVITY_LOG_FILE);
+  return dataPath(dataDir, INDIEAUTH_ACTIVITY);
 }
 
 function parseLog(text: string | undefined): ActivityEntry[] {

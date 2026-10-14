@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
 import { UPLOAD_DIRECTORY } from '../content/uploads.ts';
+import { IMAGES, dataPath } from '../files/data-files.ts';
 import { findAsset } from '../files/static-files.ts';
 import { assetVersion, ASSET_VERSION_PARAM } from '../theme/assets.ts';
 
@@ -14,18 +15,18 @@ import { assetVersion, ASSET_VERSION_PARAM } from '../theme/assets.ts';
  * other.
  */
 
-/** The directory under `dataDir` that holds every derived image. */
-export const IMAGE_DIRECTORY = 'images';
-
 /** The part of the config the derived images are derived according to. */
 export type ImageConfig = Pick<
   ResolvedConfig,
   'contentDir' | 'dataDir' | 'imageOptimization' | 'imageWidths' | 'imageFormats'
 >;
 
-/** The derived directory for one upload. */
-export function derivedDir(config: ImageConfig, source: string): string {
-  return path.join(config.dataDir, IMAGE_DIRECTORY, ...source.split('/'));
+/** The derived directory for one upload, or `undefined` when the source is not one. */
+export function derivedDir(config: ImageConfig, source: string): string | undefined {
+  const file = sourceFile(config, source);
+  if (file === undefined) return undefined;
+  const relative = path.relative(path.resolve(config.contentDir, UPLOAD_DIRECTORY), file);
+  return dataPath(config.dataDir, IMAGES, ...relative.split(path.sep));
 }
 
 /**

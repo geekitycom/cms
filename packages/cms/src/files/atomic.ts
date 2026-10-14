@@ -259,7 +259,7 @@ let sequence = 0;
  * one site apart and the counter keeps two writes in one process apart, so a
  * failed write's leftovers can never be mistaken for another's.
  */
-function temporaryName(file: string): string {
+export function temporaryName(file: string): string {
   sequence += 1;
   return `${file}.${process.pid.toString(36)}-${sequence.toString(36)}.tmp`;
 }

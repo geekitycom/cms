@@ -1,13 +1,12 @@
 import { chmodSync, closeSync, mkdirSync, openSync } from 'node:fs';
-import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-const QUEUE_FILE = 'queue.sqlite';
+import { QUEUE, dataPath } from '../files/data-files.ts';
 
 const BUSY_TIMEOUT_MS = 5000;
 
 export function queueFile(dataDir: string): string {
-  return path.join(dataDir, QUEUE_FILE);
+  return dataPath(dataDir, QUEUE);
 }
 
 /**

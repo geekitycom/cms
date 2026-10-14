@@ -5,8 +5,9 @@ import { after, describe, it } from 'node:test';
 
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
-import { LOCATIONS_FILE, postLocations } from '../content/locations.ts';
+import { postLocations } from '../content/locations.ts';
 import type { Cms } from '../index.ts';
+import { LOCATIONS, dataPath } from '../files/data-files.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -117,7 +118,7 @@ describe('the editor’s location fields', () => {
 
     assert.equal(postLocations(cms.config.dataDir).read(document.permalink), undefined);
     assert.deepEqual(
-      JSON.parse(await readFile(path.join(cms.config.dataDir, LOCATIONS_FILE), 'utf8')),
+      JSON.parse(await readFile(dataPath(cms.config.dataDir, LOCATIONS), 'utf8')),
       {},
     );
   });

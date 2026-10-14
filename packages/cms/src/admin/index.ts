@@ -21,7 +21,6 @@ export {
   setUserActorId,
   ConflictingActorIdError,
   UnknownUserError,
-  USERS_FILE,
   USERS_FILE_MODE,
   usersFile,
   verifyUserPassword,

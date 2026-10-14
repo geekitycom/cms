@@ -226,6 +226,7 @@ export async function deriveSiteIcon(
   try {
     const encoded = await drawIcon(file, shape);
     const directory = derivedDir(config, source);
+    if (directory === undefined) return false;
     await mkdir(directory, { recursive: true });
     await writeFileAtomically(path.join(directory, name), encoded);
     return true;

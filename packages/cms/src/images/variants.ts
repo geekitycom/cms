@@ -6,10 +6,11 @@ import sharp from 'sharp';
 import type { Sharp } from 'sharp';
 
 import { writeFileAtomically } from '../files/atomic.ts';
+import { IMAGES, dataPath } from '../files/data-files.ts';
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
 import { deriveSiteIcon, isDerivedIcon } from './icons.ts';
-import { derivedDir, sourceFile, sourceVersion, versioned, IMAGE_DIRECTORY } from './paths.ts';
+import { derivedDir, sourceFile, sourceVersion, versioned } from './paths.ts';
 import { VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
 import type { ImageConfig } from './paths.ts';
 
@@ -27,7 +28,6 @@ import type { ImageConfig } from './paths.ts';
  * both kinds of derived file share the directory and the URL prefix.
  */
 
-export { IMAGE_DIRECTORY } from './paths.ts';
 export type { ImageConfig } from './paths.ts';
 
 /** The sidecar that records what was derived, beside the files it describes. */
@@ -157,6 +157,7 @@ export function generateImageVariants(
   source: string,
 ): Promise<ImageRecord | undefined> {
   const directory = derivedDir(config, source);
+  if (directory === undefined) return Promise.resolve(undefined);
   const running = generating.get(directory);
   if (running !== undefined) return running;
 
@@ -176,7 +177,7 @@ export function generateImageVariants(
  * the generation already logged it.
  */
 export async function settleImageVariants(config: Pick<ImageConfig, 'dataDir'>): Promise<void> {
-  const root = path.join(config.dataDir, IMAGE_DIRECTORY) + path.sep;
+  const root = dataPath(config.dataDir, IMAGES) + path.sep;
   for (;;) {
     const running = [...generating]
       .filter(([directory]) => directory.startsWith(root))
@@ -321,6 +322,7 @@ function formatted(pipeline: Sharp, format: string): Sharp {
  */
 export function describeImage(config: ImageConfig, source: string): DescribedImage | undefined {
   const directory = derivedDir(config, source);
+  if (directory === undefined) return undefined;
 
   let record = records.get(directory);
   if (record === undefined) {
@@ -396,9 +398,8 @@ function readRecord(file: string, source: string): ImageRecord | undefined {
  * finish would leave the site worse than it found it.
  */
 export async function removeImageVariants(config: ImageConfig, source: string): Promise<void> {
-  if (sourceFile(config, source) === undefined) return;
-
   const directory = derivedDir(config, source);
+  if (directory === undefined) return;
   records.delete(directory);
   await rm(directory, { recursive: true, force: true });
 }
@@ -417,7 +418,7 @@ export async function findImageVariant(
   config: ImageConfig,
   relative: string,
 ): Promise<StaticAsset | undefined> {
-  const root = path.join(config.dataDir, IMAGE_DIRECTORY);
+  const root = dataPath(config.dataDir, IMAGES);
 
   const found = findAsset(relative, [root]);
   if (found !== undefined) return found;

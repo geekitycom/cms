@@ -115,6 +115,18 @@ the same directory reads all of it, and everything in it is public.
 [Personal data](personal-data.md) lists the files that hold readers' data, and
 how long each is kept.
 
+Each file under `data/` has a declared class (decision-55). Core files are
+declared in `packages/cms/src/files/data-files.ts`, and each settings namespace
+declares its own file.
+
+| Class       | Files                                                                                                                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| kept        | The site cannot be rebuilt without it: every file in the table above apart from those below, `dev-mode.json` and `dev-mode.jsonl`.                                                          |
+| credential  | Typed in again from another service: `mail.json`, `akismet.json` and each plugin's `secrets.json`.                                                                                          |
+| rebuildable | Made again, fetched again or reset to a default: `geekity.db`, `images/`, `avatars/`, `maintenance.json`, `notification-digests.json`, `indieauth-activity.json` and `micropub-media.json`. |
+| pending     | Work not done yet, tied to this host: `queue.sqlite` with its `-wal` and `-shm`.                                                                                                            |
+| scratch     | Left by a write or a lock in flight: `*.tmp` and `*.lock` files.                                                                                                                            |
+
 You may delete three things under `data/` while the site is stopped. Do not
 delete anything else in either directory.
 

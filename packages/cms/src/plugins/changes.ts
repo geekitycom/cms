@@ -4,11 +4,9 @@
  * from anything else, so it is a file (decision-9).
  */
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
 
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
-
-export const PLUGIN_CHANGES_FILE = 'plugin-changes.json';
+import { PLUGIN_CHANGES, dataPath } from '../files/data-files.ts';
 
 /** How many changes are kept, newest first. */
 const PLUGIN_CHANGES_LIMIT = 200;
@@ -33,7 +31,7 @@ export type PluginChangeEntry = PluginChange & {
 };
 
 function changesFile(dataDir: string): string {
-  return path.join(dataDir, PLUGIN_CHANGES_FILE);
+  return dataPath(dataDir, PLUGIN_CHANGES);
 }
 
 function parse(text: string | undefined): PluginChangeEntry[] {

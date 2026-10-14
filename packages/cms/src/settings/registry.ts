@@ -5,6 +5,8 @@ import { isDeepStrictEqual } from 'node:util';
 import { configVariables } from '../config.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
+import { dataPath, declareDataFile } from '../files/data-files.ts';
+import type { DataClass, DataFileDeclaration } from '../files/data-files.ts';
 import { isRecord } from '../util/guards.ts';
 import { AKISMET } from './akismet.ts';
 import { DEV_MODE } from './dev-mode.ts';
@@ -15,6 +17,7 @@ import type {
   ChangeListener,
   DeclaredNamespace,
   NamespaceDeclaration,
+  NamespaceStorage,
   Resolved,
   SettingChange,
   SettingDeclaration,
@@ -39,7 +42,7 @@ type NonEmpty<T> = readonly [T, ...T[]];
 interface NamespaceFile {
   readonly file: string;
   readonly relativePath: string;
-  readonly secret: boolean;
+  readonly writtenPrivately: boolean;
   readonly settings: readonly SettingDeclaration<unknown>[];
 }
 
@@ -135,6 +138,56 @@ export function overridden(source: ValueSource): boolean {
   return source.tier === 'env' || source.tier === 'config';
 }
 
+/** Whether a namespace file is written at mode 0600: a credential is. */
+function writtenPrivately(dataClass: DataClass): boolean {
+  switch (dataClass.kind) {
+    case 'credential':
+      return true;
+    case 'kept':
+    case 'rebuildable':
+    case 'pending':
+    case 'scratch':
+      return false;
+  }
+}
+
+const FOLDER_FILES: NonEmpty<{
+  readonly secret: boolean;
+  readonly dataClass: DataClass;
+  readonly lost: string;
+}> = [
+  { secret: false, dataClass: { kind: 'kept' }, lost: "The plugin's public settings." },
+  { secret: true, dataClass: { kind: 'credential' }, lost: "The plugin's API keys." },
+];
+
+interface DeclaredFile {
+  readonly declaration: DataFileDeclaration;
+  readonly settings: readonly SettingDeclaration<unknown>[];
+}
+
+function folderFiles(
+  namespace: NamespaceDeclaration,
+  storage: Extract<NamespaceStorage, { kind: 'folder' }>,
+): NonEmpty<DeclaredFile> {
+  return mapNonEmpty(FOLDER_FILES, ({ secret, dataClass, lost }) => ({
+    declaration: declareDataFile({
+      pattern: path.posix.join(storage.path, secret ? storage.secretFile : storage.publicFile),
+      dataClass,
+      lost,
+    }),
+    settings: namespace.settings.filter((each) => (each.secret === true) === secret),
+  }));
+}
+
+/** The files a namespace keeps under `data/`, each with the settings it holds. */
+function dataFilesOf(namespace: NamespaceDeclaration): readonly DeclaredFile[] {
+  const { storage } = namespace;
+  if (storage.kind === 'folder') return folderFiles(namespace, storage);
+  return storage.under === 'data'
+    ? [{ declaration: storage.file, settings: namespace.settings }]
+    : [];
+}
+
 export function createSettingsRegistry({
   config,
   env = process.env,
@@ -152,31 +205,29 @@ export function createSettingsRegistry({
     return found;
   }
 
+  function inData({ declaration, settings }: DeclaredFile): NamespaceFile {
+    return {
+      file: dataPath(dirs.dataDir, declaration),
+      relativePath: declaration.pattern,
+      writtenPrivately: writtenPrivately(declaration.dataClass),
+      settings,
+    };
+  }
+
   function filesOf(namespace: NamespaceDeclaration): NonEmpty<NamespaceFile> {
     const { storage } = namespace;
-    if (storage.kind === 'file') {
-      const { dataClass } = storage;
-      return [
-        {
-          file: path.join(
-            storage.under === 'content' ? dirs.contentDir : dirs.dataDir,
-            storage.path,
-          ),
-          relativePath: storage.path,
-          secret: dataClass.kept && dataClass.secret,
-          settings: namespace.settings,
-        },
-      ];
+    if (storage.kind === 'folder') return mapNonEmpty(folderFiles(namespace, storage), inData);
+    if (storage.under === 'data') {
+      return [inData({ declaration: storage.file, settings: namespace.settings })];
     }
-    return mapNonEmpty([false, true], (secret) => {
-      const name = secret ? storage.secretFile : storage.publicFile;
-      return {
-        file: path.join(dirs.dataDir, storage.path, name),
-        relativePath: path.posix.join(storage.path, name),
-        secret,
-        settings: namespace.settings.filter((each) => (each.secret === true) === secret),
-      };
-    });
+    return [
+      {
+        file: path.join(dirs.contentDir, storage.path),
+        relativePath: storage.path,
+        writtenPrivately: false,
+        settings: namespace.settings,
+      },
+    ];
   }
 
   function readSnapshot(namespace: NamespaceDeclaration): Snapshot {
@@ -416,7 +467,7 @@ export function createSettingsRegistry({
           writeFileAtomicallySync(
             draft.file,
             `${JSON.stringify(draft.next, null, 2)}\n`,
-            draft.secret ? { mode: 0o600 } : {},
+            draft.writtenPrivately ? { mode: 0o600 } : {},
           );
         }
         return { problems: undefined, changed };
@@ -439,6 +490,12 @@ export function createSettingsRegistry({
       return () => {
         listeners.delete(each);
       };
+    },
+
+    dataFiles() {
+      return [...namespaces.values()].flatMap((namespace) =>
+        dataFilesOf(namespace).map(({ declaration }) => declaration),
+      );
     },
 
     list() {

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
-import path from 'node:path';
 
 import { readFileIfPresentSync, writeFileAtomicallySync } from '../files/atomic.ts';
+import { COMMENT_SALT, dataPath } from '../files/data-files.ts';
 
 /**
  * What every form on the public site defends itself with.
@@ -89,15 +89,6 @@ export function formTimingRefusal(loaded: string, now: Date): FormTimingRefusal 
 }
 
 /**
- * Where the salt that hides submitters' addresses lives, under `dataDir`.
- *
- * Named after comments because comments minted it first and a site that has
- * one must go on using it: a new salt would make every hash already in a
- * comment file incomparable with every hash written after it.
- */
-export const ADDRESS_SALT_FILE = 'comment-salt';
-
-/**
  * A submitter's address as the hash a stored record keeps, or `null` when the
  * site could not tell where the request came from.
  *
@@ -122,7 +113,7 @@ export function hashClientAddress(dataDir: string, address: string | undefined):
 
 /** The site's address salt, minted on first use. */
 function addressSalt(dataDir: string): string {
-  const file = path.join(dataDir, ADDRESS_SALT_FILE);
+  const file = dataPath(dataDir, COMMENT_SALT);
   const held = readFileIfPresentSync(file)?.trim();
   if (held !== undefined && held !== '') return held;
 

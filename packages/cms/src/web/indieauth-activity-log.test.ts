@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
-import path from 'node:path';
 import { after, describe, it, mock } from 'node:test';
 
 import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
@@ -18,7 +17,6 @@ import type { Cms } from '../index.ts';
 import { findUser } from '../site/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import {
-  ACTIVITY_LOG_FILE,
   ACTIVITY_LOG_LIMIT,
   ACTIVITY_LOG_MAX_AGE_MS,
   readActivityLog,
@@ -26,6 +24,7 @@ import {
 import type { ActivityEntry } from './indieauth-activity-log.ts';
 import type { Scope } from '../indieauth/request.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
+import { INDIEAUTH_ACTIVITY, dataPath } from '../files/data-files.ts';
 
 const box = sandbox();
 
@@ -445,7 +444,7 @@ describe('what the log never keeps', () => {
       ],
       'every request was logged',
     );
-    const raw = await readFile(path.join(dataDir, ACTIVITY_LOG_FILE), 'utf8');
+    const raw = await readFile(dataPath(dataDir, INDIEAUTH_ACTIVITY), 'utf8');
     const secrets = {
       'authorization code': code,
       code_verifier: VERIFIER,
@@ -471,7 +470,7 @@ describe('the stored log', () => {
       headers: { authorization: `Bearer ${await token([])}` },
     });
     await readActivityLog(dataDir);
-    const { mode } = await stat(path.join(dataDir, ACTIVITY_LOG_FILE));
+    const { mode } = await stat(dataPath(dataDir, INDIEAUTH_ACTIVITY));
     assert.equal(mode & 0o777, 0o600);
   });
 
@@ -515,7 +514,7 @@ describe('the stored log', () => {
     await readActivityLog(dataDir);
 
     // A directory where the file should be: every write fails.
-    const file = path.join(dataDir, ACTIVITY_LOG_FILE);
+    const file = dataPath(dataDir, INDIEAUTH_ACTIVITY);
     await rm(file);
     await mkdir(file);
     const warn = mock.method(console, 'warn', () => undefined);

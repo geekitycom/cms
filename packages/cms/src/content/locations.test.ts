@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { LOCATIONS_FILE, postLocations } from './locations.ts';
+import { postLocations } from './locations.ts';
 import { postLocation } from './location.ts';
 import type { LocationParts, PostLocation } from './location.ts';
+import { LOCATIONS, dataPath } from '../files/data-files.ts';
 function located(parts: LocationParts): PostLocation {
   const location = postLocation(parts);
   assert.ok(location !== undefined, 'the parts name a location');
@@ -35,7 +36,7 @@ describe('the post locations file (decision-29)', () => {
 
     await locations.set('/2026/10/a-note/', PARIS);
 
-    const file = path.join(dir, LOCATIONS_FILE);
+    const file = dataPath(dir, LOCATIONS);
     assert.equal((await stat(file)).mode & 0o777, 0o600);
     assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { '/2026/10/a-note/': PARIS });
     assert.deepEqual(locations.read('/2026/10/a-note/'), PARIS);
@@ -51,7 +52,7 @@ describe('the post locations file (decision-29)', () => {
     await locations.set('/a/', undefined);
 
     assert.equal(locations.read('/a/'), undefined);
-    assert.deepEqual(JSON.parse(await readFile(path.join(dir, LOCATIONS_FILE), 'utf8')), {
+    assert.deepEqual(JSON.parse(await readFile(dataPath(dir, LOCATIONS), 'utf8')), {
       '/b/': { name: 'Home' },
     });
   });
@@ -74,7 +75,7 @@ describe('the post locations file (decision-29)', () => {
     const dir = await dataDir();
     const locations = postLocations(dir);
     await locations.set('/a/', PARIS);
-    const file = path.join(dir, LOCATIONS_FILE);
+    const file = dataPath(dir, LOCATIONS);
     const lastWritten = new Date('2026-01-01T00:00:00Z');
     await utimes(file, lastWritten, lastWritten);
     const before = await stat(file);
@@ -89,7 +90,7 @@ describe('the post locations file (decision-29)', () => {
     const dir = await dataDir();
     const locations = postLocations(dir);
     await locations.set('/a/', PARIS);
-    const file = path.join(dir, LOCATIONS_FILE);
+    const file = dataPath(dir, LOCATIONS);
     const { writeFile } = await import('node:fs/promises');
     await writeFile(
       file,

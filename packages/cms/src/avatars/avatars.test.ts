@@ -15,10 +15,10 @@ import { after, afterEach, before, describe, it } from 'node:test';
 import sharp from 'sharp';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
+import { AVATARS, dataPath } from '../files/data-files.ts';
 import type { Cms } from '../index.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import {
-  AVATAR_DIRECTORY,
   AVATAR_MAX_AGE_MS,
   AVATAR_MAX_BYTES,
   AVATAR_SIZE,
@@ -358,7 +358,7 @@ describe('refreshing (AC #3)', () => {
     await cms.avatars.sweep();
     requested.length = 0;
 
-    const directory = path.join(dataDir, AVATAR_DIRECTORY);
+    const directory = dataPath(dataDir, AVATARS);
     const adaFile = cachedFileFor(ADA_ICON);
     const old = new Date(Date.now() - AVATAR_MAX_AGE_MS - 60_000);
     await utimes(path.join(directory, adaFile), old, old);
@@ -381,7 +381,7 @@ describe('the cache (AC #4)', () => {
     web[ADA_ICON] = image(await picture(64, 64, 'png'), 'image/png');
     await cms.avatars.sweep();
 
-    await rm(path.join(dataDir, AVATAR_DIRECTORY), { recursive: true, force: true });
+    await rm(dataPath(dataDir, AVATARS), { recursive: true, force: true });
     const response = await cms.app.request(avatarHref(ADA_ICON));
 
     assert.equal(response.headers.get('content-type'), 'image/webp');
@@ -398,7 +398,7 @@ describe('the cache (AC #4)', () => {
     cms.admin.deleteFollower('ada', 'https://remote.example/users/ada');
     await cms.avatars.sweep();
 
-    const left = await readdir(path.join(dataDir, AVATAR_DIRECTORY));
+    const left = await readdir(dataPath(dataDir, AVATARS));
     assert.ok(!left.includes(adaFile), 'the unfollowed liker’s picture is gone');
     assert.equal(left.filter((name) => name.endsWith('.webp')).length, 1, 'Grace’s stays');
     assert.equal((await cms.app.request(avatarHref(ADA_ICON))).status, 404);

@@ -6,6 +6,8 @@ import { after, describe, it } from 'node:test';
 
 import { resolveConfig } from '../config.ts';
 import type { GeekityConfig } from '../config.ts';
+import { declareDataFile } from '../files/data-files.ts';
+import type { DataClass } from '../files/data-files.ts';
 import { declareNamespace } from './declare.ts';
 import { DEV_MODE, readDevModeRecord } from './dev-mode.ts';
 import { boolean, optionalText, port, text } from './kinds.ts';
@@ -34,6 +36,9 @@ async function site(
   );
   return { registry: createSettingsRegistry({ config: resolved, env }), dataDir };
 }
+
+const testFile = (pattern: string, kind: DataClass['kind']) =>
+  declareDataFile({ pattern, dataClass: { kind }, lost: 'A test file.' });
 
 const changes = (entries: Record<string, unknown>) => new Map(Object.entries(entries));
 
@@ -216,8 +221,7 @@ describe('the settings registry', () => {
       storage: {
         kind: 'file',
         under: 'data',
-        path: 'plain.json',
-        dataClass: { kept: true, secret: false },
+        file: testFile('plain.json', 'kept'),
       },
       envPrefix: 'PLAIN',
       settings: { on: { type: boolean, default: false, description: 'A switch.' } },
@@ -238,8 +242,7 @@ describe('the settings registry', () => {
       storage: {
         kind: 'file',
         under: 'data',
-        path: 'spelled.json',
-        dataClass: { kept: true, secret: false },
+        file: testFile('spelled.json', 'kept'),
       },
       envPrefix: 'SPELLED',
       settings: {
@@ -323,7 +326,7 @@ describe('the settings registry', () => {
     const { registry, dataDir } = await site();
     const failing = declareNamespace({
       namespace: 'failing',
-      storage: { kind: 'file', under: 'data', path: 'failing.json', dataClass: { kept: false } },
+      storage: { kind: 'file', under: 'data', file: testFile('failing.json', 'rebuildable') },
       envPrefix: 'FAILING',
       settings: {
         on: {
@@ -355,7 +358,7 @@ describe('the settings registry', () => {
     const { registry, dataDir } = await site();
     const paired = declareNamespace({
       namespace: 'paired',
-      storage: { kind: 'file', under: 'data', path: 'paired.json', dataClass: { kept: false } },
+      storage: { kind: 'file', under: 'data', file: testFile('paired.json', 'rebuildable') },
       envPrefix: 'PAIRED',
       settings: {
         on: {
@@ -398,8 +401,7 @@ describe('registering a plugin namespace', () => {
       storage: {
         kind: 'file',
         under: 'data',
-        path: `plugins/${namespace}/settings.json`,
-        dataClass: { kept: true, secret: true },
+        file: testFile(`plugins/${namespace}/settings.json`, 'credential'),
       },
       envPrefix,
       settings: {
@@ -513,6 +515,35 @@ describe('registering a plugin namespace', () => {
     );
     assert.equal(await registry.get(apiKey), 'sk-1');
     assert.equal((await registry.resolve(model)).source.tier, 'file');
+  });
+
+  it('declares every file its namespaces keep under data, with its class and what is lost', async () => {
+    const { registry } = await site();
+    registry.register(folderNamespace('@acme/plugin-llm'));
+
+    const files = registry.dataFiles();
+
+    assert.deepEqual(
+      files.map(({ pattern, dataClass }) => [pattern, dataClass.kind]),
+      [
+        ['maintenance.json', 'rebuildable'],
+        ['dev-mode.json', 'kept'],
+        ['mail.json', 'credential'],
+        ['akismet.json', 'credential'],
+        ['plugins/@acme/plugin-llm/settings.json', 'kept'],
+        ['plugins/@acme/plugin-llm/secrets.json', 'credential'],
+      ],
+    );
+    for (const file of files) assert.match(file.lost, /^[A-Z].*\.$/, file.pattern);
+  });
+
+  it('writes a namespace that is not a credential at the usual mode', async () => {
+    const { registry, dataDir } = await site();
+    await registry.set('maintenance', changes({ on: true }), 'cli');
+    await registry.set('dev_mode', changes({ on: true }), 'cli');
+    for (const name of ['maintenance.json', 'dev-mode.json']) {
+      assert.equal((await stat(path.join(dataDir, name))).mode & 0o777, 0o644, name);
+    }
   });
 
   it('refuses a namespace whose environment prefix a registered one already has', async () => {

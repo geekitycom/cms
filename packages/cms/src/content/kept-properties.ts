@@ -1,12 +1,11 @@
+import { KEPT_PROPERTIES } from '../files/data-files.ts';
 import { permalinkFile } from './permalink-file.ts';
 import type { PermalinkFile } from './permalink-file.ts';
-
-export const KEPT_PROPERTIES_FILE = 'kept-properties.json';
 
 export type KeptProperties = Readonly<Record<string, readonly unknown[]>>;
 
 export function keptProperties(dataDir: string): PermalinkFile<KeptProperties> {
-  return permalinkFile(dataDir, KEPT_PROPERTIES_FILE, keptOf);
+  return permalinkFile(dataDir, KEPT_PROPERTIES, keptOf);
 }
 
 function keptOf(value: unknown): KeptProperties | undefined {

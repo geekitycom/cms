@@ -9,8 +9,8 @@ import sharp from 'sharp';
 import { browser, csrfField, sandbox, setUpFirstAdmin } from './admin/__testing__/harness.ts';
 import type { Browser } from './admin/__testing__/harness.ts';
 import { databaseFile, databaseFiles, UnusableDatabaseError } from './cache.ts';
-import { IMAGE_DIRECTORY } from './images/index.ts';
 import type { Cms } from './index.ts';
+import { IMAGES, dataPath } from './files/data-files.ts';
 
 /**
  * The milestone test for decision-9: a site whose database is deleted comes
@@ -375,7 +375,7 @@ describe('a site whose database and derived images are deleted', () => {
 
     // Everything decision-9 says a site may delete at rest.
     for (const file of databaseFiles(dirs.dataDir)) await rm(file, { force: true });
-    await rm(path.join(dirs.dataDir, IMAGE_DIRECTORY), { recursive: true, force: true });
+    await rm(dataPath(dirs.dataDir, IMAGES), { recursive: true, force: true });
     assert.deepEqual(
       (await readdir(dirs.dataDir)).sort(),
       ['keys', 'queue.sqlite', 'users.json'],
@@ -395,7 +395,7 @@ describe('a site whose database and derived images are deleted', () => {
     // request above, and which is what makes the bytes compared here the
     // bytes of a file rebuilt from `content/uploads/` rather than a survivor.
     assert.ok(
-      (await readdir(path.join(dirs.dataDir, IMAGE_DIRECTORY, ...UPLOAD.split('/')))).length > 0,
+      (await readdir(dataPath(dirs.dataDir, IMAGES, ...UPLOAD.split('/')))).length > 0,
       'the derived directory was written again',
     );
   });

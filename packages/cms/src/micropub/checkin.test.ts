@@ -5,15 +5,14 @@ import { after, describe, it } from 'node:test';
 
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { KEPT_PROPERTIES_FILE } from '../content/kept-properties.ts';
 import type { LocationSharing } from '../content/location.ts';
-import { LOCATIONS_FILE } from '../content/locations.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
 import { changeSiteSettings } from '../__testing__/site-settings.ts';
 import { findUser } from '../site/users.ts';
 import { feedPathUnder } from '../web/feed-source.ts';
 import { OEMBED_PATH } from '../web/oembed.ts';
+import { KEPT_PROPERTIES, LOCATIONS, dataPath } from '../files/data-files.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -93,9 +92,10 @@ async function source(cms: Cms, token: string, url: string): Promise<Record<stri
 }
 
 async function storedLocations(cms: Cms): Promise<Record<string, unknown>> {
-  return JSON.parse(
-    await readFile(path.join(cms.config.dataDir, LOCATIONS_FILE), 'utf8'),
-  ) as Record<string, unknown>;
+  return JSON.parse(await readFile(dataPath(cms.config.dataDir, LOCATIONS), 'utf8')) as Record<
+    string,
+    unknown
+  >;
 }
 
 async function filesUnder(root: string): Promise<[string, string][]> {
@@ -173,9 +173,9 @@ describe('micropub.rocks test 204 (AC #1)', () => {
 
     assert.match(await text(cms, permalink), /Lunch meeting/);
     assert.deepEqual(await storedLocations(cms), { [permalink]: GORDITOS });
-    assert.equal((await stat(path.join(cms.config.dataDir, LOCATIONS_FILE))).mode & 0o777, 0o600);
+    assert.equal((await stat(dataPath(cms.config.dataDir, LOCATIONS))).mode & 0o777, 0o600);
     await assert.rejects(
-      stat(path.join(cms.config.dataDir, KEPT_PROPERTIES_FILE)),
+      stat(dataPath(cms.config.dataDir, KEPT_PROPERTIES)),
       'a mapped checkin is not kept as a property the site does not understand',
     );
   });

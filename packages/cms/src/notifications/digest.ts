@@ -1,5 +1,3 @@
-import path from 'node:path';
-
 import { MODERATION_ACTIONS } from '../comments/moderate.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import type { AdminStore, PostComment } from '../store/admin-store.ts';
@@ -19,6 +17,7 @@ import {
   notificationMode,
   notificationRecipients,
 } from '../site/notification-preferences.ts';
+import { NOTIFICATION_DIGESTS, dataPath } from '../files/data-files.ts';
 
 /**
  * One message a window instead of one message a comment.
@@ -55,9 +54,6 @@ import {
 /** The message a batched user gets: everything still waiting, in one. */
 export const COMMENT_DIGEST_TEMPLATE = 'comment-digest';
 
-/** The file, relative to `dataDir`. */
-export const DIGEST_TIMES_FILE = 'notification-digests.json';
-
 /** Nobody but the site's own user reads it. */
 export const DIGEST_TIMES_FILE_MODE = 0o600;
 
@@ -84,7 +80,7 @@ export const DIGEST_MAX_ITEMS = 100;
 
 /** Where the digest times live for a given data directory. */
 export function digestTimesFile(dataDir: string): string {
-  return path.join(dataDir, DIGEST_TIMES_FILE);
+  return dataPath(dataDir, NOTIFICATION_DIGESTS);
 }
 
 /**
