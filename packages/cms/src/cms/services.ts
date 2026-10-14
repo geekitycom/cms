@@ -240,7 +240,7 @@ export function createServices({
   const federation = createSiteFederation({
     baseUrl: resolved.baseUrl,
     ...resolved.federation,
-    queue: federationQueue?.queue ?? null,
+    queue: federationQueue ?? null,
     kv: federationKv,
     federationOptions: { manuallyStartQueue: true },
   });
@@ -436,16 +436,16 @@ export function createServices({
     {
       start: async () => {
         if (federationQueue === undefined) return;
-        federationQueue.queue.resume();
+        if (federationQueue.kind === 'pausing') federationQueue.resume();
         federation.startQueue(await federationData()).catch((error: unknown) => {
           console.error(`The federation queue stopped: ${messageOf(error)}`);
         });
       },
       stop: () => {
-        federationQueue?.queue.pause();
+        if (federationQueue?.kind === 'pausing') federationQueue.pause();
       },
       settled: async () => {
-        await federationQueue?.queue.settled();
+        await federationQueue?.settled();
       },
       release: () => {
         federationQueue?.close();

@@ -102,10 +102,10 @@ goes to and the private key it is signed with. An inbox activity waiting to be
 handled holds what the peer sent. You can delete the file while the site is
 stopped. The waiting deliveries and retries are lost, and nothing else.
 
-A queue passed as `federation.queue` replaces this one. A durable queue is
-handled the same way. An `InProcessMessageQueue` is never paused: a server
-that stops sends everything it queued before it exits, and loses its scheduled
-retries.
+A queue passed as `federation.queue` replaces this one, and is never paused,
+durable or not. A server that stops sends everything it queued for now before
+it exits. What happens to its scheduled retries depends on the queue: an
+`InProcessMessageQueue` loses them.
 
 ## Delivery
 

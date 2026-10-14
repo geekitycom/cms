@@ -1,7 +1,13 @@
 import { createRequire } from 'node:module';
 
-import { createFederation, InProcessMessageQueue, MemoryKvStore } from '@fedify/fedify';
-import type { Context, Federation, FederationOptions, PageItems } from '@fedify/fedify';
+import { createFederation, MemoryKvStore } from '@fedify/fedify';
+import type {
+  Context,
+  Federation,
+  FederationOptions,
+  MessageQueue,
+  PageItems,
+} from '@fedify/fedify';
 import { Create, type Object as APObject, QuoteAuthorization } from '@fedify/vocab';
 
 import type { AdminStore } from '../store/admin-store.ts';
@@ -86,6 +92,7 @@ export interface CreateSiteFederationOptions extends FederationOverrides {
    * Only its origin is used; see {@link federationOrigin}.
    */
   baseUrl: string;
+  queue: MessageQueue | null;
   /** Anything else Fedify takes, for a site that needs to reach past this factory. */
   federationOptions?: Partial<FederationOptions<FederationContextData>> | undefined;
 }
@@ -102,11 +109,10 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
   const federation = createFederation<FederationContextData>({
     kv: options.kv ?? new MemoryKvStore(),
     origin: federationOrigin(options.baseUrl),
-    // `null` is not the same as absent: it asks for no queue at all, so an
-    // activity is handled and delivered inside the request that carried it.
-    // Leaving the key off entirely is how Fedify is told that, which is why
-    // this is a spread rather than a value.
-    ...(options.queue === null ? {} : { queue: options.queue ?? new InProcessMessageQueue() }),
+    // `null` asks for no queue at all, so an activity is handled and delivered
+    // inside the request that carried it. Fedify is told that by leaving the
+    // key off, which is why this is a spread rather than a value.
+    ...(options.queue === null ? {} : { queue: options.queue }),
     ...(options.allowPrivateAddress === undefined
       ? {}
       : { allowPrivateAddress: options.allowPrivateAddress }),

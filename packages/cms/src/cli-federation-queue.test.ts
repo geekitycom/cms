@@ -13,8 +13,10 @@ import { SqliteMessageQueue } from '@fedify/sqlite';
 import { Create, Note } from '@fedify/vocab';
 
 import { cleanupTemporaryDirs, PACKAGE_ROOT, temporaryDir } from './__testing__/cli.ts';
+import { queuedMessages } from './__testing__/federation-queue.ts';
 import { nextEvent } from './__testing__/wait.ts';
 import { FEDERATION_QUEUE_TABLE } from './federation/queue.ts';
+import { queueFile } from './store/queue-database.ts';
 import { askToReload, isServing } from './supervisor/control.ts';
 
 after(cleanupTemporaryDirs);
@@ -85,7 +87,7 @@ async function heldPeer(): Promise<Peer> {
 }
 
 async function queueDeliveries(dataDir: string, inbox: string): Promise<string[]> {
-  const db = new DatabaseSync(path.join(dataDir, 'queue.sqlite'));
+  const db = new DatabaseSync(queueFile(dataDir));
   const queue = new SqliteMessageQueue(db, { tableName: FEDERATION_QUEUE_TABLE });
   const federation = createFederation<void>({
     kv: new MemoryKvStore(),
@@ -190,9 +192,6 @@ describe('the federation queue under geekity serve (TASK-379)', () => {
       [...ids].sort(),
       'every message was delivered, and none twice',
     );
-    const db = new DatabaseSync(path.join(dataDir, 'queue.sqlite'));
-    const left = db.prepare(`SELECT COUNT(*) AS count FROM ${FEDERATION_QUEUE_TABLE}`).get();
-    db.close();
-    assert.equal(Number(left?.['count']), 0);
+    assert.equal(queuedMessages(dataDir).length, 0);
   });
 });

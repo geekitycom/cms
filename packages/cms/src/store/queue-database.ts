@@ -2,7 +2,7 @@ import { chmodSync, closeSync, mkdirSync, openSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-export const QUEUE_FILE = 'queue.sqlite';
+const QUEUE_FILE = 'queue.sqlite';
 
 const BUSY_TIMEOUT_MS = 5000;
 
