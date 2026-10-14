@@ -3,11 +3,11 @@ id: TASK-388
 title: >-
   Settings registry wave 3a: the site namespace is declared and every reader
   moves to the registry
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-13 16:45'
-updated_date: '2026-10-13 22:30'
+updated_date: '2026-10-14 10:34'
 labels: []
 milestone: m-38
 dependencies:
@@ -33,7 +33,7 @@ decision-53 section 7 (wave 3) moves content/_data/site.json onto the registry a
 - [x] #2 Every non-test caller of readSiteSettings and readSiteJson reads through the registry; both functions are deleted
 - [x] #3 The Renderer API stays synchronous and receives the site values as an input from its async caller; no file under web/render.ts or web/page-sources.ts reads the registry
 - [x] #4 host.siteInfo() returns Promise<PluginSiteInfo>; both published plugins that call it are updated in the same PR; the change is marked breaking in the commit
-- [ ] #5 settleConfig runs inside the async serve() and createCms stays synchronous; cms/boot.ts no longer reads site.json synchronously
+- [x] #5 settleConfig runs inside the async serve() and createCms stays synchronous; cms/boot.ts no longer reads site.json synchronously
 - [x] #6 keys the namespace does not declare (feedSize, anything a site added) survive a write unchanged, shown by a test
 - [x] #7 pnpm lint, typecheck and test pass
 <!-- AC:END -->
@@ -75,4 +75,6 @@ AC #4 is left for the commit: the code and both plugins are done; the commit tha
 AC #4: host.siteInfo() returns Promise<PluginSiteInfo>; plugin-llm and plugin-tag-suggest are updated in 0a836a6d and f95571a1; the core commit 5e8ac717 carries the BREAKING CHANGE footer. AC #5 is left unchecked on purpose: settleConfig is an exported async step that loadResolvedConfig and the test harness run before createCms, not a step inside serve(), because sync, resend and rebuild never call serve(). createCms stays synchronous and boot reads no site.json. Waiting on the user to accept the departure or ask for a change.
 
 Deslop flagged two behaviour shifts against main; both were checked and kept (5ccb99ef). (1) webmention/reply-contexts.ts handle no longer filters held targets out of 'after', because held became async. Main and the branch differ only when the citing post is trashed: main's forget then deleted a held target's entry, while a non-held target is never forgotten on either. Measured with a throwaway test running main's file beside the branch's; the branch now treats held and non-held targets alike, and a kept entry is not read while held. (2) notify.ts handle awaits notify() inside the gathering queue because notify() now awaits server() before queueing the ping; the fire-and-forget shape failed 'says nothing while a post is scheduled, and everything when it comes due' (settled() returned before the ping was queued). With 300 ms pings and two changes 10 ms apart, the second ping went out at 329 ms in both shapes; only gathering waits.
+
+2026-10-14: the user accepted the departure on AC #5. settleConfig is an exported async step that loadResolvedConfig and the test harness run before createCms. It does not run inside serve(), because sync, resend and rebuild need the settled base URL and never call serve(). createCms stays synchronous, and boot reads no site.json.
 <!-- SECTION:NOTES:END -->
