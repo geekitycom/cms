@@ -48,7 +48,6 @@ export const MEDIA_DELETE_PATH = `${MEDIA_PATH}/delete`;
 /** Where a row's alt-text form posts. */
 export const MEDIA_ALT_PATH = `${MEDIA_PATH}/alt`;
 
-/** Where the button that queues the metadata sweep posts. */
 export const MEDIA_STRIP_METADATA_PATH = `${MEDIA_PATH}/strip-metadata`;
 
 /** How many files one page of the library shows. */

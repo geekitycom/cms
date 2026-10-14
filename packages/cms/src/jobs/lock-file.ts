@@ -5,7 +5,6 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { isAlive } from './processes.ts';
 
-/** A lock file older than this was left by a process that died holding it. */
 const STALE_LOCK_MS = 10_000;
 const LOCK_RETRY_MS = 5;
 
@@ -47,11 +46,6 @@ async function takeOver(lockFile: string): Promise<void> {
   if (!tookGuard) await delay(LOCK_RETRY_MS);
 }
 
-/**
- * Run a check-and-remove of the lock file holding its guard file, which only
- * one process creates at a time. False, with nothing run, when another holds
- * the guard; a guard left by a process that died is removed for the next try.
- */
 async function underGuard(lockFile: string, task: () => Promise<void>): Promise<boolean> {
   const guard = `${lockFile}.takeover`;
   if (!(await create(guard, String(process.pid)))) {
@@ -66,7 +60,6 @@ async function underGuard(lockFile: string, task: () => Promise<void>): Promise<
   return true;
 }
 
-/** Create a file holding `contents`, which starts with this process's id, unless it exists. */
 async function create(file: string, contents: string): Promise<boolean> {
   let handle;
   try {

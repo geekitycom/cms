@@ -4,7 +4,6 @@ import { withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { withLockFile } from './lock-file.ts';
 import type { JobRecords, JobStateName, JobStatus } from './types.ts';
 
-/** How many finished, failed or interrupted jobs of one name are kept. Queued and running ones always are. */
 export const KEPT_PER_NAME = 5;
 
 const TERMINAL: ReadonlySet<JobStateName> = new Set(['finished', 'failed', 'interrupted']);

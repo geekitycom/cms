@@ -15,17 +15,14 @@ import type {
 
 export const DEFAULT_MAX_ATTEMPTS = 3;
 
-/** The largest payload a job carries, as JSON text. */
 export const MAX_PAYLOAD_BYTES = 64 * 1024;
 
-/** How often a CLI process looks at a job another process claimed first. */
 const FOREIGN_JOB_POLL_MS = 100;
 
 export interface JobQueueOptions {
   readonly transport: MessageTransport;
   readonly records: JobRecords;
   readonly jobs: readonly JobDefinition[];
-  /** Who this worker is in a running record. One per process. */
   readonly owner?: string;
   readonly maxAttempts?: number;
   readonly now: Clock;
@@ -74,7 +71,6 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
     for (const record of await records.list(['queued'])) await transport.enqueue({ id: record.id });
   }
 
-  /** Claim a queued job and run it here. False when it was not this worker's to run. */
   async function claimAndRun(id: string, signal: AbortSignal): Promise<boolean> {
     if (signal.aborted) return false;
     const record = await records.get(id);
@@ -220,11 +216,6 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
   return queue;
 }
 
-/**
- * A running job whose claiming process is gone, or is not named, as another
- * process sees it: recovery runs it again. A queued job, or a running one that
- * is not cut off, is active.
- */
 export function isCutOff(status: JobStatus): boolean {
   return (
     status.state === 'running' && (status.claimer === undefined || !isClaimerAlive(status.claimer))

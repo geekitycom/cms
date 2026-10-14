@@ -31,7 +31,6 @@ async function mediaScreen(agent: Browser): Promise<string> {
   return (await agent.get('/admin/media')).text();
 }
 
-/** The sweep's part of the media screen. */
 function sweepSection(html: string): string {
   const match = /<section[^>]*id="strip-metadata"[\s\S]*?<\/section>/.exec(html);
   assert.ok(match, 'the media screen has a strip-metadata section');
@@ -43,7 +42,6 @@ async function queueSweep(agent: Browser): Promise<Response> {
   return agent.post('/admin/media/strip-metadata', { csrf_token: token ?? '' });
 }
 
-/** Record a sweep in a given state, as a worker elsewhere would have left it. */
 async function recordSweep(cms: Cms, state: JobState): Promise<void> {
   await createFileRecords(path.join(cms.config.dataDir, 'jobs.json')).create({
     id: `sweep-${state.state}`,

@@ -119,7 +119,6 @@ export interface GeekityEnv {
      * away from any request.
      */
     delivery: DeliveryService;
-    /** The admin job queue (decision-54): what a screen queues a long action on and reads its status from. */
     jobs: JobQueue;
     /**
      * The site's relay subscriptions (FEP-ae0c), so a save of the settings can

@@ -3,7 +3,6 @@ import path from 'node:path';
 
 import { stripMetadata, strippable, UnreadableMetadataError } from './index.ts';
 
-/** What a stripped file is written as before it is renamed over the original. */
 export const STRIP_TEMPORARY_SUFFIX = '.geekity-strip';
 
 export type SweptFile =
@@ -12,7 +11,6 @@ export type SweptFile =
   | { path: string; outcome: 'unreadable'; problem: string };
 
 export interface SweepOptions {
-  /** Checked before each file; the sweep throws once it is aborted. */
   readonly signal?: AbortSignal;
   progress?(done: number, total: number): Promise<void>;
 }

@@ -6,7 +6,6 @@ import type { Claimer } from './types.ts';
 
 let self: Claimer | undefined;
 
-/** This process, as a running job record names it. */
 export function thisProcess(): Claimer {
   if (self === undefined) {
     const since = startOf(process.pid);
@@ -28,7 +27,6 @@ export function isClaimerAlive(claimer: Claimer): boolean {
   return claimer.since === undefined || startOf(claimer.pid) === claimer.since;
 }
 
-/** Whether a process with this id runs on this host. */
 export function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -38,7 +36,6 @@ export function isAlive(pid: number): boolean {
   }
 }
 
-/** When a process started, in the operating system's own terms: `/proc` on Linux, `ps` elsewhere. */
 function startOf(pid: number): string | undefined {
   try {
     if (process.platform === 'linux') {

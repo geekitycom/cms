@@ -73,7 +73,6 @@ export function listenForControl(options: {
   };
 }
 
-/** Whether a `geekity serve` for this data folder answers on its control socket. */
 export function isServing(dataDir: string): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = net.connect(controlSocketPath(dataDir));

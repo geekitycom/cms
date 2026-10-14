@@ -1,9 +1,3 @@
-/**
- * A process taking the records lock, for lock-file.test.ts. It logs when it
- * enters and leaves the lock, `times` times over.
- *
- *   lock-process.ts <lock file> <log file> <times>
- */
 import { appendFileSync } from 'node:fs';
 
 import { withLockFile } from '../lock-file.ts';

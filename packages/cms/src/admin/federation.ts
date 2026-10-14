@@ -55,7 +55,6 @@ export const FEDERATION_SETTINGS_PATH = `${FEDERATION_PATH}/settings`;
 /** Where a post's Resend button posts. */
 export const RESEND_PATH = `${FEDERATION_PATH}/resend`;
 
-/** Where the button that resends every announced post posts. */
 export const RESEND_ALL_PATH = `${FEDERATION_PATH}/resend-all`;
 
 /** Where a relay's Retry button posts. */
@@ -222,7 +221,6 @@ export function mountFederationScreen(
     return queueResend(c, { slugs: [slug], webmentions: true }, `a resend of ${slug}`);
   });
 
-  /** Queue a resend of every announced post, as `geekity resend --all` runs it. */
   app.post(RESEND_ALL_PATH, (c) =>
     queueResend(c, { slugs: 'all', webmentions: false }, 'a resend of every announced post'),
   );

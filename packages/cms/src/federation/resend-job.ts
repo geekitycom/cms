@@ -4,14 +4,11 @@ import type { DeliveryService } from './delivery.ts';
 
 export const RESEND_JOB = 'resend';
 
-/** Which posts to send again: named slugs, or every announced post as the job runs. */
 export type ResendPayload = {
   readonly slugs: readonly string[] | 'all';
-  /** Whether each post's webmentions go out again with it, as the per-post button does. */
   readonly webmentions: boolean;
 };
 
-/** What one post's activity came to. `held` means dev mode sent nothing. */
 export type ResendActivity = {
   readonly activityType: string;
   readonly held: boolean;
@@ -28,14 +25,12 @@ export type ResendWebmentions = {
   readonly failed: number;
 };
 
-/** One slug's outcome. Both halves `null` means it had nothing to resend. */
 export type ResendPost = {
   readonly slug: string;
   readonly activity: ResendActivity | null;
   readonly webmentions: ResendWebmentions | null;
 };
 
-/** A resend job's result: one entry per slug, in the order they were sent. */
 export type ResendReport = { readonly posts: readonly ResendPost[] };
 
 export interface ResendJobServices {
@@ -44,12 +39,7 @@ export interface ResendJobServices {
   readonly webmentions: Pick<WebmentionService, 'send'>;
 }
 
-/**
- * Resending announced posts as a job (TASK-393): the federation screen's
- * buttons and `geekity resend` queue it. It stops before the next post once
- * its signal is aborted. Running it again sends another `Update`, which
- * receivers treat as the same post.
- */
+/** Running it again sends another `Update`, which receivers treat as the same post. */
 export function resendJob(services: ResendJobServices): JobDefinition<ResendPayload, ResendReport> {
   return {
     name: RESEND_JOB,

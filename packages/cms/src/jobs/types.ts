@@ -1,8 +1,3 @@
-/**
- * Admin jobs (decision-54): a registered name and a JSON payload, run out of
- * the request that queued them, with their status kept in a job record.
- */
-
 export type Json =
   null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
 

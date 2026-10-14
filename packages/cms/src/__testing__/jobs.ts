@@ -8,10 +8,6 @@ import { createFileRecords } from '../jobs/file-records.ts';
 import type { JobStatus } from '../jobs/types.ts';
 import { controlSocketPath } from '../supervisor/control.ts';
 
-/**
- * Record a job in a site's `data/jobs.json` the way another process left it:
- * queued, or running in this test process, which a CLI child sees as alive.
- */
 export async function recordJob(
   dataDir: string,
   name: string,
@@ -40,7 +36,6 @@ export async function recordJob(
   return { ...queued, ...running };
 }
 
-/** Answer on a data folder's control socket, as a running `geekity serve` does. */
 export async function serverAnswering(dataDir: string): Promise<{ close(): Promise<void> }> {
   const server = net.createServer((socket) => socket.end());
   await new Promise<void>((resolve, reject) => {

@@ -484,14 +484,12 @@ describe('per-post delivery status', () => {
   });
 });
 
-/** The Resend section of the federation screen, whitespace collapsed. */
 function resendSection(html: string): string {
   const match = /<section[^>]*id="resend"[\s\S]*?<\/section>/.exec(html);
   assert.ok(match, 'the federation screen has a resend section');
   return match[0].replace(/\s+/g, ' ');
 }
 
-/** Record a resend in a given state, as a worker elsewhere would have left it. */
 async function recordResend(cms: Cms, state: JobState): Promise<void> {
   await createFileRecords(path.join(cms.config.dataDir, 'jobs.json')).create({
     id: `resend-${state.state}`,

@@ -20,7 +20,6 @@ after(async () => {
   );
 });
 
-/** The id of a process that has exited. */
 async function deadPid(): Promise<number> {
   const child = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' });
   await new Promise((resolve) => child.once('close', resolve));

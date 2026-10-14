@@ -48,7 +48,6 @@ function report(slug: string, statuses: readonly DeliveryStatus[], held = false)
   };
 }
 
-/** A site whose announced posts answer resend with the reports given, and record each call. */
 function services(
   reports: Record<string, DeliveryReport>,
   links: Record<string, WebmentionReport> = {},

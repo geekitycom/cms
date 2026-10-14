@@ -1,10 +1,3 @@
-/**
- * A CLI process running one job beside `geekity serve`, for cli-jobs.test.ts:
- * it runs the job of serve-config.ts by id, as `geekity strip-metadata` runs
- * its own, and prints the state and attempt it ended at.
- *
- *   claim-process.ts <jobs.json> <job id>
- */
 import { systemClock } from '../../util/clock.ts';
 import { createFileRecords } from '../file-records.ts';
 import { createInProcessTransport } from '../in-process.ts';

@@ -1,10 +1,3 @@
-/**
- * The config of the site cli-jobs.test.ts serves: one job that logs each run
- * to `$GEEKITY_TEST_JOB_DIR/runs.log` and waits until `release` appears
- * there, or until its signal is aborted. With `fail-boot` in that directory,
- * a server that boots then fails to: once it has started the job, it says so
- * to the supervisor and hangs, as a worker does between saying it and exiting.
- */
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';

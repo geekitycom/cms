@@ -1,9 +1,3 @@
-/**
- * A second process writing the job records file, for file-records.test.ts.
- *
- *   records-process.ts <jobs.json> create <prefix> <count>
- *   records-process.ts <jobs.json> run <prefix> <count> <log file>
- */
 import { appendFileSync } from 'node:fs';
 
 import { systemClock } from '../../util/clock.ts';

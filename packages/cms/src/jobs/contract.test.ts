@@ -1,8 +1,3 @@
-/**
- * The job queue contract from decision-54's Appendix A, run against every
- * transport this package can be configured with: the in-process one and
- * Fedify's `SqliteMessageQueue` as it ships.
- */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -33,7 +28,6 @@ async function scratch(prefix: string): Promise<string> {
   return directory;
 }
 
-/** One process's view of the backend: a transport, a way to kill it without a goodbye, and the messages it handed out. */
 interface ProcessTransport {
   readonly transport: MessageTransport;
   crash(): void;
@@ -43,7 +37,6 @@ interface ProcessTransport {
 
 interface Backend {
   readonly name: string;
-  /** Whether a message enqueued by one process is still there for the next. */
   readonly durable: boolean;
   namespace(): Promise<{ connect(): ProcessTransport }>;
 }
@@ -121,7 +114,6 @@ const sqlite: Backend = {
   },
 };
 
-/** Records that say when they change, so a test waits on a change rather than on time. */
 function observed(records: JobRecords): JobRecords & { watch(listener: () => void): () => void } {
   const listeners = new Set<() => void>();
   const changed = () => {

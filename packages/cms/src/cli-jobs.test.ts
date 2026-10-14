@@ -1,7 +1,3 @@
-/**
- * Admin jobs under `geekity serve` (TASK-391): a reload hands a running job
- * to the next worker, and a worker killed mid-job leaves it to run again.
- */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
@@ -35,15 +31,12 @@ interface Site {
   readonly directory: string;
   readonly dataDir: string;
   readonly jobId: string;
-  /** Resolve with the `times`th line of the runs log that matches. */
   logged(line: RegExp, times?: number): Promise<string>;
-  /** Resolve with the job's record once it passes the check. */
   recorded(check: (status: JobStatus) => boolean): Promise<JobStatus>;
   runs(): Promise<string[]>;
   release(): Promise<void>;
 }
 
-/** Resolve once `read` gives a value, reading again each time something in the directory changes. */
 function whenChanged<T>(
   what: string,
   directory: string,
@@ -142,7 +135,6 @@ function serve(site: Site): { child: ChildProcess; exited: Promise<number | null
 
 const pidOf = (line: string) => Number(line.split(' ').at(-1));
 
-/** A CLI process running the site's queued job by id, as `geekity strip-metadata` does. */
 function runInCli(site: Site): { child: ChildProcess; output: Promise<string> } {
   const child = spawn(
     process.execPath,
@@ -159,7 +151,6 @@ function runInCli(site: Site): { child: ChildProcess; output: Promise<string> } 
   return { child, output };
 }
 
-/** Ask the server to reload once its control socket is there, which is once it has booted. */
 async function reloadWhenUp(site: Site): Promise<void> {
   const socket = controlSocketPath(site.dataDir);
   await whenChanged('the control socket', tmpdir(), () =>

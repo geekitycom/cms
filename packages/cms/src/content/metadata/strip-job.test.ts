@@ -26,7 +26,6 @@ const MODIFIED = new Date('2025-05-01T00:00:00Z');
 interface Site {
   readonly contentDir: string;
   readonly jobsFile: string;
-  /** Each upload as its hash, its modification time and any secret it still leaks. */
   uploads(): Promise<Record<string, string>>;
 }
 
@@ -87,7 +86,6 @@ async function sweepOnce(sweep: Site) {
   return queue.run(id);
 }
 
-/** A worker that stops its queue once the sweep has reported `afterFiles` files. */
 function stoppingWorker(
   sweep: Site,
   afterFiles: number,

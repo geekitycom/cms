@@ -16,7 +16,6 @@ export const UPLOAD_ASSET_PREFIX = '/uploads/';
 /** The content subdirectory {@link UPLOAD_ASSET_PREFIX} is served from. */
 export const UPLOAD_DIRECTORY = 'uploads';
 
-/** One file under `content/uploads/`, or `undefined`, as for a metadata sweep's temporary file. */
 export function findUpload(relative: string, contentDir: string): StaticAsset | undefined {
   if (relative.toLowerCase().endsWith(STRIP_TEMPORARY_SUFFIX)) return undefined;
   return findAsset(relative, [path.join(contentDir, UPLOAD_DIRECTORY)]);

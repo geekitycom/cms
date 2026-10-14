@@ -153,7 +153,6 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     if (queued.length > 0) beginReload(worker);
   }
 
-  /** The new worker did not boot: the old one carries on once the new one has gone, and is told why. */
   function keepOld(old: WorkerHandle, next: WorkerHandle, error: string): void {
     if (state.phase === 'replacing') state.deadline.cancel();
     if (live.has(next)) {
