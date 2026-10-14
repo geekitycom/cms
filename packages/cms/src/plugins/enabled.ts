@@ -1,9 +1,3 @@
-/**
- * The enabled set: the `plugins` key of `content/_data/site.json`, an object
- * keyed by package name (decision-33), each value an object holding
- * `enabled`. A plugin's settings are kept in its data folder (decision-53).
- */
-
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { parseSiteJson, siteJsonPath } from '../site/namespace.ts';
 import { isRecord } from '../util/guards.ts';
@@ -33,7 +27,6 @@ export async function setPluginEnabled(options: {
   await updatePluginEntry(contentDir, name, enabled);
 }
 
-/** Write one plugin's `enabled` under `plugins`, keeping every other key in the file. */
 async function updatePluginEntry(
   contentDir: string,
   name: string,

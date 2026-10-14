@@ -69,16 +69,11 @@ export interface PluginContributions {
   commands: readonly PluginCommand[];
   /** The settings fields it declared, empty when it has none. */
   settings: readonly PluginSettingField[];
-  /** The namespace those fields registered, `undefined` when it has none. */
   settingsNamespace: DeclaredNamespace | undefined;
   /** Its buttons beside editor fields, in the order it declared them. */
   editorActions: readonly PluginEditorAction[];
 }
 
-/**
- * What plugins read through the registry: the site's folders, its settings,
- * its base URL and title, and which addresses they may fetch.
- */
 export interface PluginRegistryOptions extends PluginFetchOptions {
   dataDir: string;
   contentDir: string;
@@ -336,10 +331,6 @@ const NOTHING_DECLARED: PluginContributions = {
   editorActions: [],
 };
 
-/**
- * Why a plugin's name keeps it from loading: its settings namespace or its
- * environment variables would be core's, or another installed plugin's.
- */
 function namingProblem(
   name: string,
   sharedPrefixes: ReadonlyMap<string, readonly string[]>,

@@ -60,8 +60,6 @@ export function boot(
   // through it does nothing but check.
   migrateSettingsToFile(adminDb, configured.contentDir);
 
-  // Plugin settings once kept beside `enabled` in site.json move to each
-  // plugin's data folder before any plugin registers (decision-53).
   migratePluginSettings({
     contentDir: configured.contentDir,
     dataDir: configured.dataDir,

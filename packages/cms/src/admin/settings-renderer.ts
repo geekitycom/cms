@@ -1,10 +1,3 @@
-/**
- * The optional generic settings form (decision-53 section 9): a list of
- * settings with a label, a hint and a widget, drawn from what the registry
- * resolves and saved through `set`. A setting the environment or the config
- * sets is drawn with what sets it and no box, and a save leaves it alone.
- */
-
 import { overridden, sourceText } from '../settings/registry.ts';
 import { settingVariable } from '../settings/names.ts';
 import type { SetResult, SettingRef, SettingsRegistry } from '../settings/types.ts';
@@ -19,7 +12,6 @@ export interface RenderedSetting {
   readonly options?: readonly { readonly value: string; readonly label: string }[] | undefined;
 }
 
-/** A form as submitted: each box by key, and the secrets to forget. */
 export interface SettingsForm {
   readonly values: Readonly<Record<string, string>>;
   readonly forget: ReadonlySet<string>;
@@ -39,10 +31,6 @@ export function settingsForm(body: Readonly<Record<string, unknown>>): SettingsF
   return { values, forget };
 }
 
-/**
- * Each setting as the form draws it. A secret carries whether it is set and
- * never its value; a refused form shows what was typed.
- */
 export async function settingViews(
   settings: SettingsRegistry,
   envPrefix: string,
@@ -82,12 +70,6 @@ export async function settingViews(
   );
 }
 
-/**
- * Save a submitted form. A value that does not parse refuses the whole save,
- * named by its label, and nothing is written. An empty box removes the key,
- * so the default applies; an empty secret box keeps the stored secret; a
- * setting something else sets is not written.
- */
 export async function saveSettings(
   settings: SettingsRegistry,
   namespace: string,

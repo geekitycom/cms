@@ -1,9 +1,3 @@
-{# The generic settings form's fields (admin/settings-renderer.ts), one per
-   setting, each from the view `settingViews` builds. A label or hint is
-   escaped before the field macros, which print theirs as markup, because a
-   plugin wrote them. A setting the environment or the config sets has no box:
-   it says what sets it and, unless it is a secret, the value in effect. A
-   secret is never printed. #}
 {% import "components/fields.njk" as field %}
 {% from "components/badge.njk" import status %}
 

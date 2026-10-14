@@ -36,14 +36,12 @@ type Stored = Readonly<Record<string, unknown>>;
 
 interface NamespaceFile {
   readonly file: string;
-  /** Where it is under its directory, as a problem names it. */
   readonly shown: string;
   readonly secret: boolean;
   readonly settings: readonly SettingDeclaration<unknown>[];
 }
 
 interface Snapshot {
-  /** Each declared setting's raw value, read from the file it is kept in. */
   readonly view: Stored;
   readonly records: ReadonlyMap<NamespaceFile, Stored>;
 }

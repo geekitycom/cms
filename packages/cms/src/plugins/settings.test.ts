@@ -1,8 +1,3 @@
-/**
- * Plugin settings (decision-53, wave 4): a plugin's fields are a namespace on
- * the settings registry, kept in `data/plugins/<name>/settings.json` and
- * `secrets.json`, and every one of them can be set from the environment.
- */
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -58,7 +53,6 @@ function withSettings(
   });
 }
 
-/** A fresh site with these plugins installed, over one settings registry. */
 function siteWith(
   plugins: readonly Plugin[],
   options: {

@@ -4,7 +4,6 @@ import { resolveConfig } from '../config.ts';
 import type { PluginRegistryOptions } from '../plugins/registry.ts';
 import { createSettings } from '../site/namespace.ts';
 
-/** What a plugin registry under test reads, over a settings registry of its own. */
 export function pluginRegistryOptions(
   dataDir: string,
   env: Readonly<Record<string, string>> = {},

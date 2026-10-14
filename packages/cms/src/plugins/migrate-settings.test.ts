@@ -1,9 +1,3 @@
-/**
- * The plugin settings migration (decision-53 section 8): every key of
- * `plugins.<name>` in `site.json` but `enabled` moves to
- * `data/plugins/<name>/settings.json`, and running it again, or after a crash
- * between its two writes, ends on the same files.
- */
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

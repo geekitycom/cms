@@ -1,11 +1,3 @@
-/**
- * A plugin's settings (decision-53, wave 4): the fields it declares become a
- * namespace on the settings registry, named by its package name. Public
- * values are kept in `data/plugins/<name>/settings.json`, secrets in
- * `secrets.json` beside it at mode 0600, and each setting's environment
- * variable is the package name, `__` and the key, upper-cased.
- */
-
 import path from 'node:path';
 
 import type { PluginSettingField } from '../plugin.ts';
@@ -45,7 +37,6 @@ export function settingFieldsProblem(fields: readonly PluginSettingField[]): str
   return undefined;
 }
 
-/** The namespace a plugin's fields declare on the settings registry. */
 export function pluginNamespace(
   name: string,
   fields: readonly PluginSettingField[],

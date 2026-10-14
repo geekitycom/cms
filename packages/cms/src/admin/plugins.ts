@@ -82,7 +82,6 @@ const PLUGIN_FIELD = 'plugin';
 /** The query the new worker's screen is reached with after a reload. */
 const RELOADED_QUERY = 'reloaded';
 
-/** The form field naming which button of a plugin's screen was pressed. */
 const ACTION_FIELD = 'action';
 const SAVE_ACTION = 'save';
 
@@ -569,7 +568,6 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
   }
 }
 
-/** A plugin's settings fields, each with the setting it declared, for the generic form. */
 function renderedSettings(found: RegisteredPlugin): RenderedSetting[] {
   const declared = found.settingsNamespace?.declaration.settings ?? [];
   return found.settings.flatMap((field) => {

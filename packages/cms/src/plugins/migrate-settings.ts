@@ -1,14 +1,3 @@
-/**
- * The move of plugin settings out of `content/_data/site.json` (decision-53
- * section 8). Every key of `plugins.<name>` except `enabled` goes to
- * `data/plugins/<name>/settings.json`, where the settings registry reads it.
- *
- * The plugin file is written first and wins over what `site.json` still
- * holds, so a run cut short between the two writes, or a second run, ends on
- * the same two files. It runs for every name under `plugins`, installed or
- * not, so a disabled or removed plugin's values are not lost.
- */
-
 import path from 'node:path';
 
 import { readFileIfPresentSync, writeFileAtomicallySync } from '../files/atomic.ts';
@@ -21,11 +10,9 @@ import { pluginFolderPath, SETTINGS_FILE } from './settings.ts';
 export interface MigratePluginSettingsOptions {
   readonly contentDir: string;
   readonly dataDir: string;
-  /** Told one line per plugin whose settings moved. */
   readonly log: (line: string) => void;
 }
 
-/** Move the settings and return the names of the plugins whose settings moved. */
 export function migratePluginSettings({
   contentDir,
   dataDir,

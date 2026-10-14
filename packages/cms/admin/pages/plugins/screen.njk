@@ -1,9 +1,6 @@
 {# /admin/plugins/<package name>: a plugin's own screen (decision-33). The
    plugin hands over cards of paragraphs and tables as data and this draws
-   them, so a plugin writes no markup and everything it says is escaped.
-
-   A plugin with settings gets a form here too (TASK-283), drawn by the
-   generic settings form over the plugin's settings namespace (TASK-390). #}
+   them, so a plugin writes no markup and everything it says is escaped. #}
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
 {% from "components/setting-fields.njk" import settingFields %}
