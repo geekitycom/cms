@@ -86,6 +86,12 @@ export interface JobQueue {
    */
   latest(name: string): Promise<JobStatus | undefined>;
   /**
+   * The newest job of this name while it waits or runs: queued, or running
+   * in this worker or in a process that is still alive. A job a gone process
+   * left running is not active; a started queue runs it again.
+   */
+  active(name: string): Promise<JobStatus | undefined>;
+  /**
    * Run one queued job in this process and resolve with its final status,
    * with no transport and no start-up recovery: what a CLI command does
    * beside a server that may be running. A job another process claimed first

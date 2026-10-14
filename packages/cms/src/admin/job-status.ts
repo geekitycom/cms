@@ -72,7 +72,6 @@ export async function enqueueUnlessActive<P extends Json>(
   job: JobDefinition<P, Json>,
   payload: P,
 ): Promise<string | undefined> {
-  const latest = await jobs.latest(job.name);
-  if (latest?.state === 'queued' || latest?.state === 'running') return undefined;
+  if ((await jobs.active(job.name)) !== undefined) return undefined;
   return jobs.enqueue(job, payload);
 }

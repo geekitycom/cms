@@ -44,6 +44,37 @@ Scanned 12: 2 created, 1 updated, 0 removed, 9 unchanged, 0 failed
 it in `failed`. The command then exits `1`, so a deploy step can detect the
 failure. Every other file in the directory is still indexed.
 
+## When the job is already running
+
+`strip-metadata` and `resend` run the same job that a button on the admin
+queues. Before a command starts its job, it looks in `data/jobs.json` for a job
+of the same name. The command starts nothing and exits `1` when it finds one of
+these:
+
+- A job that a running process is still running, from the admin or from
+  another command.
+- A job that is queued while a `geekity serve` for the same data folder
+  answers on its control socket. That server runs the queued job.
+
+The command prints the reason on stderr:
+
+```sh
+$ geekity strip-metadata
+A strip-metadata job is already running, so this one did not start. Run the command again once it finishes.
+```
+
+Run the command again when the job is finished. The Media screen and the
+federation screen show the job's progress.
+
+The command runs its own job in these cases:
+
+- The process that was running the job has stopped. A server runs that job
+  again when it next looks for jobs that a stopped process left. Both jobs are
+  safe to run twice.
+- A job is queued, but no server answers. A command that stopped before it
+  started its job can leave a queued job. The next server to start runs that
+  job.
+
 ## How `geekity serve` runs
 
 A site that adds no code of its own can skip the entry file and run the bin:

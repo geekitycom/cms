@@ -9,6 +9,7 @@ import { writeUsers } from './admin/__testing__/users.ts';
 import { RESEND_JOB } from './federation/resend-job.ts';
 import { createFileRecords } from './jobs/file-records.ts';
 import { cleanupTemporaryDirs, runCli, siteWithContent } from './__testing__/cli.ts';
+import { recordJob } from './__testing__/jobs.ts';
 
 after(cleanupTemporaryDirs);
 
@@ -166,6 +167,27 @@ describe('geekity resend (TASK-125 AC #6)', () => {
       assert.equal(run.code, 0, run.stderr);
       assert.equal(run.stdout, 'hello: Update held by dev mode, nothing sent\n');
       assert.equal(follower.received.length, 0, 'nothing reached the follower');
+    } finally {
+      follower.close();
+    }
+  });
+
+  it('refuses, sends nothing and exits 1 while a live process runs a resend job (TASK-401)', async () => {
+    const follower = await inbox();
+    try {
+      const directory = await site(follower.url);
+      const job = await recordJob(path.join(directory, 'data'), RESEND_JOB, 'running');
+
+      const run = await runCli(['resend', '--all'], directory);
+
+      assert.equal(run.code, 1);
+      assert.equal(run.stdout, '');
+      assert.match(run.stderr, /A resend job is already running/);
+      assert.equal(follower.received.length, 0);
+      const latest = await createFileRecords(path.join(directory, 'data', 'jobs.json')).latest(
+        RESEND_JOB,
+      );
+      assert.equal(latest?.id, job.id, 'no second job was queued');
     } finally {
       follower.close();
     }

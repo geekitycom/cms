@@ -20,6 +20,7 @@ import { resendJob, resendReport } from './federation/resend-job.ts';
 import { createUser, DuplicateUsernameError } from './site/users.ts';
 import { createCms } from './index.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
+import type { JobQueue } from './jobs/types.ts';
 import type { PluginCommand } from './plugin.ts';
 import { importPluginFolders, scanPluginFolders } from './plugins/folder.ts';
 import {
@@ -37,7 +38,7 @@ import { migratePluginSettings } from './plugins/migrate-settings.ts';
 import { readEnabledPlugins } from './plugins/enabled.ts';
 import type { PluginRegistry, RegisteredPlugin } from './plugins/registry.ts';
 import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
-import { askToReload } from './supervisor/control.ts';
+import { askToReload, isServing } from './supervisor/control.ts';
 import { superviseCluster } from './supervisor/primary.ts';
 import { processChannel, superviseWorker } from './supervisor/worker.ts';
 import { DEV_MODE, DEV_MODE_LATCHED } from './settings/dev-mode.ts';
@@ -761,12 +762,31 @@ function forcedLine(forced: boolean): string {
     : '';
 }
 
+/**
+ * Whether a job of this name already waits or runs, said on stderr if so. A
+ * queued job counts only while a server is up to run it: one a command left
+ * queued when it died runs when a server next starts, and is no reason to
+ * refuse while none is.
+ */
+async function alreadyActive(jobs: JobQueue, name: string, dataDir: string): Promise<boolean> {
+  const active = await jobs.active(name);
+  if (active === undefined) return false;
+  if (active.state === 'queued' && !(await isServing(dataDir))) return false;
+  process.stderr.write(
+    `A ${name} job is already ${active.state}, so this one did not start. ` +
+      `Run the command again once it finishes.\n`,
+  );
+  return true;
+}
+
 async function stripMetadataCommand({ configPath }: ParsedArgs): Promise<number> {
   const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
   const cms = createCms(config);
+  const job = stripMetadataJob(config.contentDir);
   let status;
   try {
-    status = await cms.jobs.run(await cms.jobs.enqueue(stripMetadataJob(config.contentDir), null));
+    if (await alreadyActive(cms.jobs, job.name, config.dataDir)) return 1;
+    status = await cms.jobs.run(await cms.jobs.enqueue(job, null));
   } finally {
     await cms.close();
   }
@@ -843,19 +863,20 @@ async function resendCommand({ args, configPath, flags }: ParsedArgs): Promise<n
     );
   }
 
-  const cms = createCms(
-    await loadResolvedConfig(configPath, (config) => ({
-      ...config,
-      watch: false,
-      federation: { ...config.federation, queue: null },
-    })),
-  );
+  const config = await loadResolvedConfig(configPath, (loaded) => ({
+    ...loaded,
+    watch: false,
+    federation: { ...loaded.federation, queue: null },
+  }));
+  const cms = createCms(config);
+  const job = resendJob(cms);
 
   let status;
   try {
+    if (await alreadyActive(cms.jobs, job.name, config.dataDir)) return 1;
     await cms.sync();
     status = await cms.jobs.run(
-      await cms.jobs.enqueue(resendJob(cms), { slugs: all ? 'all' : args, webmentions: false }),
+      await cms.jobs.enqueue(job, { slugs: all ? 'all' : args, webmentions: false }),
     );
   } finally {
     await cms.close();

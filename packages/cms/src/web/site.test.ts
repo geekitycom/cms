@@ -1156,6 +1156,18 @@ describe('uploads', () => {
 
     assert.equal((await cms.app.request('/uploads/2026/09/nope.png')).status, 404);
   });
+
+  it('404s a temporary file a metadata sweep left beside an upload (TASK-401)', async () => {
+    const { cms } = await site({
+      'uploads/2026/09/beach.jpg': 'stripped',
+      'uploads/2026/09/beach.jpg.geekity-strip': 'half written',
+    });
+
+    assert.equal((await cms.app.request('/uploads/2026/09/beach.jpg')).status, 200);
+    for (const name of ['beach.jpg.geekity-strip', 'beach.jpg.GEEKITY-STRIP']) {
+      assert.equal((await cms.app.request(`/uploads/2026/09/${name}`)).status, 404, name);
+    }
+  });
 });
 
 describe('overriding one template', () => {

@@ -219,3 +219,73 @@ describe('a started queue', () => {
     assert.equal((await createFileRecords(file).get(left))?.state, 'finished');
   });
 });
+
+describe('the active job of a name', () => {
+  async function claimedBy(claimer: Claimer): Promise<{ file: string; id: string }> {
+    const file = await recordsFile();
+    const id = await queueOn(file).enqueue(count, { to: 1 });
+    assert.ok(
+      await createFileRecords(file).transition(
+        id,
+        { state: 'queued', attempt: 1 },
+        {
+          state: 'running',
+          attempt: 1,
+          owner: 'another worker',
+          claimer,
+          startedAt: '2026-10-14T00:00:00.000Z',
+        },
+      ),
+    );
+    return { file, id };
+  }
+
+  it('is a queued job', async () => {
+    const file = await recordsFile();
+    const id = await queueOn(file).enqueue(count, { to: 1 });
+    assert.equal((await queueOn(file).active('count'))?.id, id);
+  });
+
+  it('is a job a live process is running', async () => {
+    const { file, id } = await claimedBy({ host: hostname(), pid: process.ppid });
+    assert.equal((await queueOn(file).active('count'))?.id, id);
+  });
+
+  it('is not a job whose claiming process is gone, as a queue that is not started sees it', async () => {
+    const { file } = await claimedBy({ host: `not-${hostname()}`, pid: process.ppid });
+    assert.equal(await queueOn(file).active('count'), undefined);
+  });
+
+  it('is not a finished job', async () => {
+    const file = await recordsFile();
+    const queue = queueOn(file);
+    await queue.run(await queue.enqueue(count, { to: 1 }));
+    assert.equal(await queue.active('count'), undefined);
+  });
+
+  it('is a job this queue is running itself', async () => {
+    const file = await recordsFile();
+    let release: () => void = () => undefined;
+    let started: () => void = () => undefined;
+    const hold: JobDefinition = {
+      name: 'hold',
+      parse: (payload: Json) => payload,
+      run: () => {
+        started();
+        return new Promise((resolve) => {
+          release = () => resolve(null);
+        });
+      },
+    };
+    const queue = queueOn(file, [hold]);
+    const id = await queue.enqueue(hold, null);
+    const begun = nextEvent<void>('the held job starting', (done) => {
+      started = () => done();
+    });
+    const running = queue.run(id);
+    await begun;
+    assert.equal((await queue.active('hold'))?.state, 'running');
+    release();
+    await running;
+  });
+});

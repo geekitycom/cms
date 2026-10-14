@@ -173,6 +173,15 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
       return records.latest(name);
     },
 
+    async active(name) {
+      const latest = await queue.latest(name);
+      if (latest?.state === 'queued') return latest;
+      if (latest?.state === 'running' && (latest.owner === owner || !isCutOff(latest))) {
+        return latest;
+      }
+      return undefined;
+    },
+
     async run(id) {
       await claimAndRun(id, stopping.signal);
       for (;;) {
