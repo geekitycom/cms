@@ -227,17 +227,22 @@ hello-world: Update to 3 of 3 inboxes
 another-post: Update to 3 of 3 inboxes
 ```
 
-`geekity resend <slug>...` does the same for named posts. Each resend does what
-the Resend button on the federation screen does:
+`geekity resend <slug>...` does the same for named posts. Both run the same
+`resend` [admin job](configuration.md#admin-jobs) as the federation screen.
+Each resend sends:
 
 - an `Update` for a post that is still published
 - a `Delete` for a post that was withdrawn
 - a `Create` for a published post that was never announced
 
-`--all` reaches only posts that were announced. The command delivers with no
-queue, so every activity is posted before it exits. It exits non-zero when a
-named slug has nothing to resend. It works while the server runs, because both
-read the same files and database.
+`--all` reaches only posts that were announced. The command runs the job in its
+own process and waits for it. It delivers with no queue, so every activity is
+posted before it exits. In dev mode it prints
+`hello-world: Update held by dev mode, nothing sent` for each post. It names
+each slug with nothing to resend on standard error, and exits `1` if there was
+one or if the job failed. It works while the server runs, because both read the
+same files and database. The command does not send webmentions. The Resend
+button on a post's row does.
 
 [FEP-044f]: https://codeberg.org/fediverse/fep/src/branch/main/fep/044f/fep-044f.md
 
@@ -505,9 +510,25 @@ step. It is not part of the cutover. Not every follower's software supports a
   activity, when that was sent, and how many recipients it reached, is queued
   for, or failed for.
 
-Each post row has a Resend button. It calls `cms.delivery.resend` from a form.
-It builds the post again from its file, sends it to every current follower and
-every accepted relay, and shows the result.
+Each post row has a Resend button, and the Resend panel above the rows has
+**Resend every announced post**. Both queue the `resend`
+[admin job](configuration.md#admin-jobs) and return at once. The job calls
+`cms.delivery.resend` for each post, so it builds each post again from its file
+when it runs and sends it to every current follower and every accepted relay.
+The button on a row also sends that post's webmentions again. The panel button
+does what `geekity resend --all` does.
+
+The Resend panel shows the latest resend job: queued, running with the posts
+sent out of the total, finished, failed with the error, or interrupted. A
+finished job lists each post with how many inboxes it reached out of how many,
+how many are queued or failed, and its webmentions when it sent them. It names
+the posts dev mode held and the slugs with nothing to resend. The page does not
+reload itself. Select **Check again** to see how far it got. While a resend is
+queued or running, the screen queues no second one and says so.
+
+When the server stops or reloads during a resend, the job stops before the next
+post and the next server runs it again from the first post. A post sent twice
+reaches its followers as a second `Update`, which they treat as the same post.
 
 The files decide which posts are listed. A post is listed when it carries an
 `activitypub.published`, including posts in the trash. These are the posts

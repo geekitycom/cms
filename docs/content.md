@@ -93,22 +93,23 @@ the same directory reads all of it, and everything in it is public.
 
 `data/` is private. It is gitignored. Copy it somewhere safe.
 
-| Path                             | What it holds                                                                                                                                     |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data/users.json`                | Usernames and argon2id password hashes. Mode `0600`.                                                                                              |
-| `data/keys/`                     | Each user's actor key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                                        |
-| `data/locations.json`            | Where each post was written, keyed by permalink. It is never in `content/`, so a public repository never holds it (decision-29). Mode `0600`.     |
-| `data/kept-properties.json`      | The Micropub properties a post was sent that the site does not understand, such as an `itinerary`, keyed by permalink (decision-27). Mode `0600`. |
-| `data/comment-salt`              | The salt that hides commenters' IP addresses in the published comment files. Mode `0600`.                                                         |
-| `data/comments/{slug}.json`      | The emails of that post's commenters, and whether each asked to hear about replies, keyed by comment id. Mode `0600`.                             |
-| `data/akismet.json`              | The Akismet key, and the last `verify-key` result for it. Mode `0600`.                                                                            |
-| `data/mail.json`                 | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                                   |
-| `data/notification-secret`       | The secret that signs the one-click links in a notification. Mode `0600`. Losing it breaks every link already sent, and nothing else.             |
-| `data/comment-optouts.json`      | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                                             |
-| `data/indieauth-tokens.json`     | A SHA-256 hash of each IndieAuth access and refresh token, with its user, app, scopes and expiry (decision-24). Mode `0600`.                      |
-| `data/notification-digests.json` | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early, and nothing else.                                           |
-| `data/plugins/<package name>/`   | Each plugin's private folder. Its secret settings are in `secrets.json`, mode `0600`. The plugin decides what else goes there.                    |
-| `data/plugin-changes.json`       | Who added, updated and removed which plugin on Admin > Plugins, and when. Mode `0600`.                                                            |
+| Path                             | What it holds                                                                                                                                       |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data/users.json`                | Usernames and argon2id password hashes. Mode `0600`.                                                                                                |
+| `data/keys/`                     | Each user's actor key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                                          |
+| `data/locations.json`            | Where each post was written, keyed by permalink. It is never in `content/`, so a public repository never holds it (decision-29). Mode `0600`.       |
+| `data/kept-properties.json`      | The Micropub properties a post was sent that the site does not understand, such as an `itinerary`, keyed by permalink (decision-27). Mode `0600`.   |
+| `data/comment-salt`              | The salt that hides commenters' IP addresses in the published comment files. Mode `0600`.                                                           |
+| `data/comments/{slug}.json`      | The emails of that post's commenters, and whether each asked to hear about replies, keyed by comment id. Mode `0600`.                               |
+| `data/akismet.json`              | The Akismet key, and the last `verify-key` result for it. Mode `0600`.                                                                              |
+| `data/mail.json`                 | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                                     |
+| `data/notification-secret`       | The secret that signs the one-click links in a notification. Mode `0600`. Losing it breaks every link already sent, and nothing else.               |
+| `data/comment-optouts.json`      | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                                               |
+| `data/indieauth-tokens.json`     | A SHA-256 hash of each IndieAuth access and refresh token, with its user, app, scopes and expiry (decision-24). Mode `0600`.                        |
+| `data/notification-digests.json` | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early, and nothing else.                                             |
+| `data/plugins/<package name>/`   | Each plugin's private folder. Its secret settings are in `secrets.json`, mode `0600`. The plugin decides what else goes there.                      |
+| `data/plugin-changes.json`       | Who added, updated and removed which plugin on Admin > Plugins, and when. Mode `0600`.                                                              |
+| `data/jobs.json`                 | The admin jobs: each one's state, progress and result, with the newest five ended jobs of each name. See [Admin jobs](configuration.md#admin-jobs). |
 
 [Personal data](personal-data.md) lists the files that hold readers' data, and
 how long each is kept.

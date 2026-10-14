@@ -24,6 +24,7 @@ import type {
 } from '../federation/index.ts';
 import { refuseWritesUnder } from '../files/atomic.ts';
 import type { IndexNowNotifier } from '../indexnow.ts';
+import type { JobQueue } from '../jobs/types.ts';
 import type { MailService, CommentDigest, CommentNotifier } from '../notifications/index.ts';
 import type { FeedNotifier, NotifyReport } from '../notify.ts';
 import type { InstalledPlugin } from '../plugins/registry.ts';
@@ -83,6 +84,13 @@ export interface Cms {
    * resend a post, or to wait for the deliveries in flight.
    */
   readonly delivery: DeliveryService;
+  /**
+   * The admin job queue (decision-54): long actions queued by the admin or
+   * the CLI and run out of the request, with their status in
+   * `data/jobs.json`. Started by {@link Cms.serve}; a CLI command that is not
+   * serving queues a job and runs it here with `jobs.run(id)`.
+   */
+  readonly jobs: JobQueue;
   /**
    * The site's relay subscriptions (FEP-ae0c): what follows a relay when one
    * is added to the settings, what an `Accept` marks accepted, and what every
@@ -319,6 +327,7 @@ export function createCms(
     settings: booted.settings,
     federation: services.federation,
     delivery: services.delivery,
+    jobs: services.jobs,
     relays: services.relays,
     webmentions: services.webmentions,
     replyContexts: services.replyContexts,

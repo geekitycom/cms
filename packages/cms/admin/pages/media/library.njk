@@ -1,6 +1,7 @@
-{# /admin/media: everything under content/uploads, what links to it, and the
-   two things that can be done to it. The directory is walked on every request,
-   so a file copied in by hand is here without a restart.
+{# /admin/media: everything under content/uploads, what links to it, the
+   things that can be done to it, and the latest metadata sweep (TASK-392).
+   The directory is walked on every request, so a file copied in by hand is
+   here without a restart.
 
    Everything works with JavaScript switched off. The URL and the Markdown are
    readonly fields, which select and copy like any other text; copy.js adds a
@@ -10,6 +11,7 @@
 {% from "components/button.njk" import button, buttonLink %}
 {% from "components/card.njk" import card, cardActions %}
 {% from "components/copy.njk" import copyField %}
+{% from "components/job-status.njk" import jobStatus %}
 {% from "components/pagination.njk" import pagination %}
 {% from "components/table.njk" import table %}
 
@@ -59,6 +61,53 @@
     </div>
     <div class="mt-2">{{ button('Upload', type='submit', color='primary') }}</div>
   </form>
+
+  <section id="strip-metadata" class="mb-8 max-w-2xl" aria-labelledby="strip-metadata-heading">
+    {% call card() %}
+      <h2 id="strip-metadata-heading" class="card-title">Location and camera metadata</h2>
+      <p class="max-w-prose">
+        Location and camera metadata is removed from pictures and videos as they are
+        uploaded. Files uploaded before that keep theirs until this sweep runs over
+        <code>content/uploads/</code>. It runs in the background, leaves a clean file
+        as it is, and keeps each file's modification time.
+      </p>
+      {% if sweep %}
+        {% call jobStatus(sweep, listUrl + '#strip-metadata', verb='Checked', unit='files') %}
+          {% if sweepReport %}
+            <p>
+              Checked {{ sweepReport.checked }} {% if sweepReport.checked == 1 %}file{% else %}files{% endif %}:
+              {{ sweepReport.stripped.length }} stripped, {{ sweepReport.clean }} already clean,
+              {{ sweepReport.unreadable.length }} unreadable.
+            </p>
+            {% if sweepReport.stripped.length %}
+              <h3 class="font-semibold">Stripped</h3>
+              <ul class="list-disc pl-6">
+                {% for file in sweepReport.stripped %}
+                  <li><code class="break-all">{{ file.path }}</code>: removed {{ file.removed | join(', ') }}</li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+            {% if sweepReport.unreadable.length %}
+              <h3 class="font-semibold">Left as they were</h3>
+              <ul class="list-disc pl-6">
+                {% for file in sweepReport.unreadable %}
+                  <li><code class="break-all">{{ file.path }}</code>: {{ file.problem }}</li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          {% endif %}
+        {% endcall %}
+      {% endif %}
+      {% if not sweep or not sweep.active %}
+        <form method="post" action="{{ stripMetadataUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          {% call cardActions() %}
+            {{ button('Run the sweep again' if sweep else 'Strip metadata from every upload', type='submit', color='primary') }}
+          {% endcall %}
+        </form>
+      {% endif %}
+    {% endcall %}
+  </section>
 
   {% if total == 0 %}
     <p>Nothing has been uploaded yet.</p>

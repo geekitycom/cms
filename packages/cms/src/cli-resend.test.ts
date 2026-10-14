@@ -6,7 +6,10 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { writeUsers } from './admin/__testing__/users.ts';
+import { RESEND_JOB } from './federation/resend-job.ts';
+import { createFileRecords } from './jobs/file-records.ts';
 import { cleanupTemporaryDirs, runCli, siteWithContent } from './__testing__/cli.ts';
+import { recordJob } from './__testing__/jobs.ts';
 
 after(cleanupTemporaryDirs);
 
@@ -58,7 +61,7 @@ async function inbox(): Promise<{
   return { url: `http://127.0.0.1:${String(port)}/inbox`, received, close: () => server.close() };
 }
 
-async function site(inboxUrl: string): Promise<string> {
+async function site(inboxUrl: string, { devMode = false } = {}): Promise<string> {
   const directory = await siteWithContent('geekity-resend-', FILES);
   writeUsers(path.join(directory, 'data'), [{ username: 'ada', profile: { displayName: 'Ada' } }]);
   const followers = path.join(directory, 'content', '_data', 'federation', 'ada', 'followers.json');
@@ -75,7 +78,7 @@ async function site(inboxUrl: string): Promise<string> {
   );
   await fs.writeFile(
     path.join(directory, 'geekity.config.js'),
-    "export default { baseUrl: 'https://blog.example', federation: { allowPrivateAddress: true } };\n",
+    `export default { baseUrl: 'https://blog.example', devMode: ${String(devMode)}, federation: { allowPrivateAddress: true } };\n`,
   );
   return directory;
 }
@@ -114,6 +117,77 @@ describe('geekity resend (TASK-125 AC #6)', () => {
       assert.equal(run.code, 0, run.stderr);
       assert.equal(follower.received.length, 1);
       assert.equal(follower.received[0]!['type'], 'Update');
+    } finally {
+      follower.close();
+    }
+  });
+
+  it('runs as a resend job and prints each post it reached (TASK-393 AC #6)', async () => {
+    const follower = await inbox();
+    try {
+      const directory = await site(follower.url);
+
+      const run = await runCli(['resend', 'hello'], directory);
+
+      assert.equal(run.code, 0, run.stderr);
+      assert.equal(run.stdout, 'hello: Update to 1 of 1 inboxes\n');
+      const job = await createFileRecords(path.join(directory, 'data', 'jobs.json')).latest(
+        RESEND_JOB.name,
+      );
+      assert.equal(job?.state, 'finished', 'the resend ran as a job');
+      assert.deepEqual(job.payload, { slugs: ['hello'], webmentions: false });
+    } finally {
+      follower.close();
+    }
+  });
+
+  it('names a slug with nothing to resend and exits 1, after sending the rest (TASK-393 AC #6)', async () => {
+    const follower = await inbox();
+    try {
+      const directory = await site(follower.url);
+
+      const run = await runCli(['resend', 'missing', 'hello'], directory);
+
+      assert.equal(run.code, 1);
+      assert.equal(run.stderr, 'missing: nothing to resend, no announced post has that slug.\n');
+      assert.equal(run.stdout, 'hello: Update to 1 of 1 inboxes\n');
+      assert.equal(follower.received.length, 1);
+    } finally {
+      follower.close();
+    }
+  });
+
+  it('holds every resend in dev mode and says so (TASK-393 AC #5)', async () => {
+    const follower = await inbox();
+    try {
+      const directory = await site(follower.url, { devMode: true });
+
+      const run = await runCli(['resend', '--all'], directory);
+
+      assert.equal(run.code, 0, run.stderr);
+      assert.equal(run.stdout, 'hello: Update held by dev mode, nothing sent\n');
+      assert.equal(follower.received.length, 0, 'nothing reached the follower');
+    } finally {
+      follower.close();
+    }
+  });
+
+  it('refuses, sends nothing and exits 1 while a live process runs a resend job (TASK-401)', async () => {
+    const follower = await inbox();
+    try {
+      const directory = await site(follower.url);
+      const job = await recordJob(path.join(directory, 'data'), RESEND_JOB.name, 'running');
+
+      const run = await runCli(['resend', '--all'], directory);
+
+      assert.equal(run.code, 1);
+      assert.equal(run.stdout, '');
+      assert.match(run.stderr, /A resend job is already running/);
+      assert.equal(follower.received.length, 0);
+      const latest = await createFileRecords(path.join(directory, 'data', 'jobs.json')).latest(
+        RESEND_JOB.name,
+      );
+      assert.equal(latest?.id, job.id, 'no second job was queued');
     } finally {
       follower.close();
     }

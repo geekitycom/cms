@@ -1,6 +1,8 @@
 /**
  * The media screen: what is under `content/uploads/`, what links to it, and
- * the two things that can be done to it — add one, and take one away.
+ * the things that can be done to it — add one, describe one, take one away,
+ * and queue the sweep that strips metadata from the ones uploaded before
+ * uploads were stripped on arrival.
  */
 
 import type { Context, Hono } from 'hono';
@@ -11,6 +13,8 @@ import type { CatalogReader } from '../content/store.ts';
 import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { writeAltText } from '../content/alt-text.ts';
+import { STRIP_METADATA_JOB } from '../content/metadata/strip-job.ts';
+import { finishedResult } from '../jobs/types.ts';
 import type { AltText } from '../content/alt-text.ts';
 import { removeImageVariants } from '../images/variants.ts';
 import { deleteUpload, listUploads, mentionsUpload, resolveUpload } from '../media/library.ts';
@@ -22,6 +26,7 @@ import { pageCount } from '../web/pagination.ts';
 import { documentEditorPath, PAGE_SCREENS, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
+import { jobStatusView, queueJobFromForm } from './job-status.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
@@ -39,6 +44,8 @@ export const MEDIA_DELETE_PATH = `${MEDIA_PATH}/delete`;
 
 /** Where a row's alt-text form posts. */
 export const MEDIA_ALT_PATH = `${MEDIA_PATH}/alt`;
+
+export const MEDIA_STRIP_METADATA_PATH = `${MEDIA_PATH}/strip-metadata`;
 
 /** How many files one page of the library shows. */
 export const MEDIA_PER_PAGE = 24;
@@ -155,6 +162,14 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
     return c.redirect(mediaPageUrl(pageNumber(stringOrEmpty(body[MEDIA_FIELDS.page]).trim())), 303);
   });
 
+  app.post(MEDIA_STRIP_METADATA_PATH, (c) =>
+    queueJobFromForm(c, STRIP_METADATA_JOB, null, {
+      panel: `${MEDIA_PATH}#strip-metadata`,
+      queued: 'Queued the sweep. It runs in the background; its progress is below.',
+      busy: 'A sweep is already queued or running. Nothing new was queued.',
+    }),
+  );
+
   app.post(MEDIA_DELETE_PATH, async (c) => {
     const body = await c.req.parseBody();
     const relative = stringOrEmpty(body[MEDIA_FIELDS.path]).trim();
@@ -203,6 +218,7 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
     extra: Record<string, unknown> = {},
   ): Promise<Record<string, unknown>> {
     const files = await listUploads(c.var.config.contentDir);
+    const latestSweep = await c.var.jobs.latest(STRIP_METADATA_JOB.name);
     const page = pageNumber(c.req.query('page'));
     const start = (page - 1) * MEDIA_PER_PAGE;
 
@@ -214,6 +230,9 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
       uploadUrl: MEDIA_UPLOAD_PATH,
       deleteUrl: MEDIA_DELETE_PATH,
       altUrl: MEDIA_ALT_PATH,
+      stripMetadataUrl: MEDIA_STRIP_METADATA_PATH,
+      sweep: jobStatusView(latestSweep),
+      sweepReport: finishedResult(STRIP_METADATA_JOB, latestSweep),
       fields: MEDIA_FIELDS,
       accepts: c.var.config.uploadTypes.join(','),
       maxBytes: c.var.config.uploadMaxBytes,

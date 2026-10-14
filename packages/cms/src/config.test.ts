@@ -725,6 +725,7 @@ describe('what the environment and config may say', () => {
       now: systemClock,
       watchDebounce: defaultWatchDebounce,
       federation: {},
+      jobs: {},
       hostLookup: systemHostLookup,
       plugins: [],
       pluginsDir: undefined,

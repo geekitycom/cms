@@ -73,6 +73,17 @@ export function listenForControl(options: {
   };
 }
 
+export function isServing(dataDir: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect(controlSocketPath(dataDir));
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.on('error', () => resolve(false));
+  });
+}
+
 export function askToReload(dataDir: string): Promise<ReloadOutcome | undefined> {
   return new Promise((resolve) => {
     const socket = net.connect(controlSocketPath(dataDir));

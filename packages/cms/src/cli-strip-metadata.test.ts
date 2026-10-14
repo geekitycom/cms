@@ -4,6 +4,10 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { cleanupTemporaryDirs, runCli, temporaryDir } from './__testing__/cli.ts';
+import { STRIP_METADATA_JOB } from './content/metadata/strip-job.ts';
+import { finishedResult } from './jobs/types.ts';
+import { createFileRecords } from './jobs/file-records.ts';
+import { recordJob, serverAnswering } from './__testing__/jobs.ts';
 import {
   jpegWithMetadata,
   leakedSecrets,
@@ -82,6 +86,22 @@ describe('geekity strip-metadata', () => {
     assert.deepEqual(await read(directory, '2025/05/broken.jpg'), broken);
   });
 
+  it('runs as a strip-metadata job, recorded in data/jobs.json', async () => {
+    const directory = await site({ '2025/05/beach.jpg': await jpegWithMetadata(6) });
+
+    const run = await runCli(['strip-metadata'], directory);
+
+    assert.equal(run.code, 0, run.stderr);
+    const job = await createFileRecords(path.join(directory, 'data', 'jobs.json')).latest(
+      'strip-metadata',
+    );
+    assert.equal(job?.state, 'finished');
+    assert.deepEqual(
+      finishedResult(STRIP_METADATA_JOB, job)?.stripped.map((file) => file.path),
+      ['2025/05/beach.jpg'],
+    );
+  });
+
   it('says so when there are no uploads', async () => {
     const directory = await temporaryDir('geekity-strip-');
 
@@ -89,5 +109,56 @@ describe('geekity strip-metadata', () => {
 
     assert.equal(run.code, 0, run.stderr);
     assert.match(run.stdout, /Checked 0 files/);
+  });
+
+  describe('while a strip-metadata job is already active (TASK-401)', () => {
+    async function withJob(state: 'queued' | 'running') {
+      const directory = await fs.realpath(
+        await site({ '2025/05/beach.jpg': await jpegWithMetadata(6) }),
+      );
+      const dataDir = path.join(directory, 'data');
+      const job = await recordJob(dataDir, STRIP_METADATA_JOB.name, state);
+      const original = await read(directory, '2025/05/beach.jpg');
+      const latest = () =>
+        createFileRecords(path.join(dataDir, 'jobs.json')).latest(STRIP_METADATA_JOB.name);
+      return { directory, dataDir, job, original, latest };
+    }
+
+    it('refuses, runs nothing and exits 1 when a live process runs one', async () => {
+      const { directory, job, original, latest } = await withJob('running');
+
+      const run = await runCli(['strip-metadata'], directory);
+
+      assert.equal(run.code, 1);
+      assert.equal(run.stdout, '');
+      assert.match(run.stderr, /A strip-metadata job is already running/);
+      assert.deepEqual(await read(directory, '2025/05/beach.jpg'), original);
+      assert.equal((await latest())?.id, job.id, 'no second job was queued');
+    });
+
+    it('refuses when one is queued and a server answers to run it', async () => {
+      const { directory, dataDir, job, original, latest } = await withJob('queued');
+      const server = await serverAnswering(dataDir);
+      try {
+        const run = await runCli(['strip-metadata'], directory);
+
+        assert.equal(run.code, 1);
+        assert.match(run.stderr, /A strip-metadata job is already queued/);
+        assert.deepEqual(await read(directory, '2025/05/beach.jpg'), original);
+        assert.equal((await latest())?.id, job.id);
+      } finally {
+        await server.close();
+      }
+    });
+
+    it('runs its own sweep past a queued job no server is up to run', async () => {
+      const { directory, job, latest } = await withJob('queued');
+
+      const run = await runCli(['strip-metadata'], directory);
+
+      assert.equal(run.code, 0, run.stderr);
+      assert.match(run.stdout, /Checked 1 file: 1 stripped/);
+      assert.notEqual((await latest())?.id, job.id);
+    });
   });
 });

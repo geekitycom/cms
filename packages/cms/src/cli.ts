@@ -15,11 +15,14 @@ import { databaseFile, discardDatabase } from './cache.ts';
 import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
 import type { ResolvedConfig } from './config.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './comments/migrations.ts';
-import { stripStoredUploads } from './content/metadata/sweep.ts';
+import { STRIP_METADATA_JOB } from './content/metadata/strip-job.ts';
+import { RESEND_JOB } from './federation/resend-job.ts';
 import { createUser, DuplicateUsernameError } from './site/users.ts';
-import { UPLOAD_DIRECTORY } from './content/uploads.ts';
 import { createCms } from './index.ts';
+import type { Cms } from './index.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
+import { finishedResult } from './jobs/types.ts';
+import type { JobName, Json } from './jobs/types.ts';
 import type { PluginCommand } from './plugin.ts';
 import { importPluginFolders, scanPluginFolders } from './plugins/folder.ts';
 import {
@@ -37,7 +40,7 @@ import { migratePluginSettings } from './plugins/migrate-settings.ts';
 import { readEnabledPlugins } from './plugins/enabled.ts';
 import type { PluginRegistry, RegisteredPlugin } from './plugins/registry.ts';
 import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
-import { askToReload } from './supervisor/control.ts';
+import { askToReload, isServing } from './supervisor/control.ts';
 import { superviseCluster } from './supervisor/primary.ts';
 import { processChannel, superviseWorker } from './supervisor/worker.ts';
 import { DEV_MODE, DEV_MODE_LATCHED } from './settings/dev-mode.ts';
@@ -761,30 +764,63 @@ function forcedLine(forced: boolean): string {
     : '';
 }
 
-async function stripMetadataCommand({ configPath }: ParsedArgs): Promise<number> {
-  const config = await loadResolvedConfig(configPath);
-  const results = await stripStoredUploads(path.join(config.contentDir, UPLOAD_DIRECTORY));
-
-  let stripped = 0;
-  let clean = 0;
-  let unreadable = 0;
-  for (const result of results) {
-    if (result.outcome === 'stripped') {
-      stripped += 1;
-      process.stdout.write(`${result.path}: removed ${result.removed.join(', ')}\n`);
-    } else if (result.outcome === 'clean') {
-      clean += 1;
-    } else {
-      unreadable += 1;
-      process.stderr.write(`${result.path}: ${result.problem} Left as it was.\n`);
+/**
+ * Run one job in this process and return its result, or say on standard
+ * error why there is none. A job of the same name that is already active
+ * stops it before it is queued. A queued job counts only while a server is up
+ * to run it: one a command left queued when it died runs when a server next
+ * starts, and is no reason to refuse while none is.
+ */
+async function runJobHere<P extends Json, R extends Json>(
+  config: ResolvedConfig,
+  job: JobName<P, R>,
+  payload: NoInfer<P>,
+  what: string,
+  prepare?: (cms: Cms) => Promise<unknown>,
+): Promise<R | undefined> {
+  const cms = createCms(config);
+  let status;
+  try {
+    await prepare?.(cms);
+    const enqueued = await cms.jobs.enqueueUnlessActive(job, payload, {
+      countQueued: await isServing(config.dataDir),
+    });
+    if (!enqueued.queued) {
+      process.stderr.write(
+        `A ${job.name} job is already ${enqueued.active.state}, so this one did not start. ` +
+          `Run the command again once it finishes.\n`,
+      );
+      return undefined;
     }
+    status = await cms.jobs.run(enqueued.id);
+  } finally {
+    await cms.close();
   }
 
+  const result = finishedResult(job, status);
+  if (result === undefined) {
+    const problem = status.state === 'failed' ? status.error : `The job ended ${status.state}.`;
+    process.stderr.write(`The ${what} did not finish: ${problem}\n`);
+  }
+  return result;
+}
+
+async function stripMetadataCommand({ configPath }: ParsedArgs): Promise<number> {
+  const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
+  const report = await runJobHere(config, STRIP_METADATA_JOB, null, 'sweep');
+  if (report === undefined) return 1;
+
+  for (const file of report.stripped) {
+    process.stdout.write(`${file.path}: removed ${file.removed.join(', ')}\n`);
+  }
+  for (const file of report.unreadable) {
+    process.stderr.write(`${file.path}: ${file.problem} Left as it was.\n`);
+  }
   process.stdout.write(
-    `Checked ${count(results.length, 'file')}: ${String(stripped)} stripped, ` +
-      `${String(clean)} already clean, ${String(unreadable)} unreadable\n`,
+    `Checked ${count(report.checked, 'file')}: ${String(report.stripped.length)} stripped, ` +
+      `${String(report.clean)} already clean, ${String(report.unreadable.length)} unreadable\n`,
   );
-  return unreadable === 0 ? 0 : 1;
+  return report.unreadable.length === 0 ? 0 : 1;
 }
 
 /**
@@ -827,8 +863,9 @@ async function syncCommand({ configPath }: ParsedArgs): Promise<number> {
  * Mastodon keeps the copy of a post it first fetched, so a property added
  * later — the quote policy (TASK-125) is the one that made this a command —
  * reaches a post already out only through an `Update`. This is the resend
- * button on the federation screen, for every post at once. Delivery runs with
- * no queue, so each activity has been posted before the process exits.
+ * button on the federation screen, for every post at once, and it runs the
+ * same resend job (TASK-393). Delivery runs with no queue, so each activity
+ * has been posted before the process exits.
  */
 async function resendCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const all = flags['all'] === true;
@@ -838,39 +875,38 @@ async function resendCommand({ args, configPath, flags }: ParsedArgs): Promise<n
     );
   }
 
-  const cms = createCms(
-    await loadResolvedConfig(configPath, (config) => ({
-      ...config,
-      watch: false,
-      federation: { ...config.federation, queue: null },
-    })),
+  const config = await loadResolvedConfig(configPath, (loaded) => ({
+    ...loaded,
+    watch: false,
+    federation: { ...loaded.federation, queue: null },
+  }));
+  const report = await runJobHere(
+    config,
+    RESEND_JOB,
+    { slugs: all ? 'all' : args, webmentions: false },
+    'resend',
+    (cms) => cms.sync(),
   );
+  if (report === undefined) return 1;
 
-  try {
-    await cms.sync();
-    const slugs = all ? cms.store.listFederated().map((document) => document.slug) : args;
-    let failed = 0;
-    for (const slug of slugs) {
-      const report = await cms.delivery.resend(slug);
-      if (report === undefined) {
-        process.stderr.write(`${slug}: nothing to resend, no announced post has that slug.\n`);
-        failed += 1;
-        continue;
-      }
-      if (report.held) {
-        process.stdout.write(`${slug}: ${report.activityType} held by dev mode, nothing sent\n`);
-        continue;
-      }
-      const reached = report.deliveries.filter((delivery) => delivery.status === 'sent').length;
+  let failed = 0;
+  for (const post of report.posts) {
+    const activity = post.resent ? post.activity : null;
+    if (activity === null) {
+      process.stderr.write(`${post.slug}: nothing to resend, no announced post has that slug.\n`);
+      failed += 1;
+    } else if (activity.heldByDevMode) {
       process.stdout.write(
-        `${slug}: ${report.activityType} to ${String(reached)} of ` +
-          `${String(report.deliveries.length)} inboxes\n`,
+        `${post.slug}: ${activity.activityType} held by dev mode, nothing sent\n`,
+      );
+    } else {
+      process.stdout.write(
+        `${post.slug}: ${activity.activityType} to ${String(activity.reached)} of ` +
+          `${String(activity.inboxes)} inboxes\n`,
       );
     }
-    return failed === 0 ? 0 : 1;
-  } finally {
-    await cms.close();
   }
+  return failed === 0 ? 0 : 1;
 }
 
 /**

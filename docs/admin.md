@@ -48,7 +48,8 @@ override any public template. It must not be able to shadow the login form.
 | `/admin/users/delete`                            | `POST` only. Deletes the user the form names.                                                 |
 | `/admin/federation`                              | The actors, their followers, the inbox log, and per-post delivery.                            |
 | `/admin/federation/settings`                     | Federation > Settings: the relays the site subscribes to.                                     |
-| `/admin/federation/resend`                       | `POST` only. Sends one post to the followers again, as its file now reads.                    |
+| `/admin/federation/resend`                       | `POST` only. Queues a resend of one post and its webmentions, as its file reads then.         |
+| `/admin/federation/resend-all`                   | `POST` only. Queues a resend of every announced post, as `geekity resend --all` does.         |
 | `/admin/setup`                                   | First run: creates the first admin. Closed once a user exists.                                |
 | `/admin/login`                                   | Username and password.                                                                        |
 | `/admin/logout`                                  | `POST` only. Deletes the session row and sends `Clear-Site-Data`.                             |

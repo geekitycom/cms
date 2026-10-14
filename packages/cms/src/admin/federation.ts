@@ -10,8 +10,8 @@ import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { avatarUrl } from '../federation/actor.ts';
-import type { DeliveryReport } from '../federation/delivery.ts';
-import type { WebmentionReport } from '../webmention/service.ts';
+import { RESEND_JOB } from '../federation/resend-job.ts';
+import { finishedResult } from '../jobs/types.ts';
 import {
   selectedTargets,
   syndicationCopies,
@@ -26,6 +26,7 @@ import { postObjectId } from '../content/guids.ts';
 import { documentEditorPath, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
+import { jobStatusView, queueJobFromForm } from './job-status.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import type {
   Delivery,
@@ -53,6 +54,12 @@ export const FEDERATION_SETTINGS_PATH = `${FEDERATION_PATH}/settings`;
 
 /** Where a post's Resend button posts. */
 export const RESEND_PATH = `${FEDERATION_PATH}/resend`;
+
+export const RESEND_ALL_PATH = `${FEDERATION_PATH}/resend-all`;
+
+const RESEND_PANEL = `${FEDERATION_PATH}#resend`;
+
+const RESEND_BUSY = 'A resend is already queued or running. Nothing new was queued.';
 
 /** Where a relay's Retry button posts. */
 export const RELAY_RETRY_PATH = `${FEDERATION_PATH}/relays/retry`;
@@ -104,7 +111,9 @@ export function mountFederationScreen(
 ): void {
   const { render } = options;
 
-  app.get(FEDERATION_PATH, (c) => {
+  app.get(FEDERATION_PATH, async (c) => {
+    const latestResend = await c.var.jobs.latest(RESEND_JOB.name);
+    const report = finishedResult(RESEND_JOB, latestResend);
     const admin = c.var.admin;
     const baseUrl = c.var.config.baseUrl;
     const cited: CitedPageReader = (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart);
@@ -120,6 +129,13 @@ export function mountFederationScreen(
       section: 'federation',
       child: 'followers',
       resendUrl: RESEND_PATH,
+      resendAllUrl: RESEND_ALL_PATH,
+      resend: jobStatusView(latestResend),
+      federationUrl: FEDERATION_PATH,
+      resendResult: report && {
+        sent: report.posts.filter((post) => post.resent),
+        nothing: report.posts.flatMap((post) => (post.resent ? [] : [post.slug])),
+      },
       fields: FEDERATION_FIELDS,
       actors: users.map((user) =>
         actorSummary(user, {
@@ -191,108 +207,43 @@ export function mountFederationScreen(
   });
 
   /**
-   * Send one post as it now reads to every follower and every accepted relay.
-   *
-   * The post is named rather than an activity, which is the whole of what
-   * decision-9 changed here: the activity is built from the file when the
-   * button is pressed, so a post edited between the page load and the click
-   * goes out as it is now — which is what somebody pressing Resend is asking
-   * for — rather than as the row said it was.
+   * Queue a resend of one post: as it now reads, to every follower and every
+   * accepted relay, with its webmentions (TASK-51). The job builds the
+   * activity from the file when it runs (decision-9), so a post edited between
+   * the page load and the run goes out as it is then.
    */
   app.post(RESEND_PATH, async (c) => {
     const body = await c.req.parseBody();
     const slug = body[FEDERATION_FIELDS.slug];
-
-    const report = typeof slug === 'string' ? await c.var.delivery.resend(slug) : undefined;
-    // The webmentions go with it, because "send this post out again" is one
-    // thing to the person pressing the button and the links are as much a part
-    // of a post going out as the followers are (TASK-51). It is asked for
-    // separately because it answers for a post that has never federated at
-    // all, which `resend` says nothing about.
-    const links = typeof slug === 'string' ? await c.var.webmentions.send(slug) : undefined;
-
-    if (report === undefined && links === undefined) {
+    if (typeof slug !== 'string' || slug === '') {
       flash(c, 'error', 'There is no post to send under that name, so nothing was sent.');
-    } else {
-      const failedSomewhere =
-        (report?.deliveries.some(failed) ?? false) ||
-        (links?.sent.some((one) => one.status === 'failed') ?? false);
-      flash(c, failedSomewhere ? 'error' : 'notice', resendMessage(report, links));
+      return c.redirect(FEDERATION_PATH, 303);
     }
-
-    return c.redirect(FEDERATION_PATH, 303);
-  });
-}
-
-/** Whether one delivery is a failure, for deciding how a flash reads. */
-function failed(delivery: Delivery): boolean {
-  return delivery.status === 'failed';
-}
-
-/**
- * What a resend came to, in one line.
- *
- * The failures are counted even when there are none, because that zero is the
- * answer to the question the button was pressed to ask. The activity type is
- * named because it is not something the person choosing to resend chose: it
- * follows from the state the post is in, and a `Delete` where somebody
- * expected an `Update` is worth reading about.
- */
-export function resendMessage(
-  report: DeliveryReport | undefined,
-  links?: WebmentionReport,
-): string {
-  return [deliveryMessage(report), webmentionMessage(links)]
-    .filter((part) => part !== undefined)
-    .join(' ');
-}
-
-/** What the ActivityPub half of a resend came to. */
-function deliveryMessage(report: DeliveryReport | undefined): string | undefined {
-  if (report === undefined) return undefined;
-  if (report.held) return `Dev mode held the ${report.activityType}: nothing was sent.`;
-
-  const total = report.deliveries.length;
-  if (total === 0) {
-    return (
-      `Nobody follows the site and no relay has accepted it, ` +
-      `so the ${report.activityType} had nowhere to go.`
+    return queueJobFromForm(
+      c,
+      RESEND_JOB,
+      { slugs: [slug], webmentions: true },
+      {
+        panel: RESEND_PANEL,
+        queued: `Queued a resend of ${slug}. It runs in the background; its progress is below.`,
+        busy: RESEND_BUSY,
+      },
     );
-  }
+  });
 
-  const counts: Record<DeliveryStatus, number> = { sent: 0, queued: 0, failed: 0 };
-  for (const delivery of report.deliveries) counts[delivery.status] += 1;
-
-  const parts = [`${String(counts.sent)} sent`];
-  if (counts.queued > 0) parts.push(`${String(counts.queued)} queued`);
-  parts.push(`${String(counts.failed)} failed`);
-
-  // "Recipients" rather than "followers": a relay is one of them too, and it
-  // is not a follower.
-  const recipients = total === 1 ? '1 recipient' : `${String(total)} recipients`;
-  return `Sent ${report.activityType} to ${recipients}: ${parts.join(', ')}.`;
-}
-
-/**
- * What the webmention half came to, or nothing at all when the post links
- * nowhere outside the site.
- *
- * Silence rather than "0 webmentions", because most posts link to nothing and
- * a line about it on every resend would be noise about a thing that did not
- * happen.
- */
-function webmentionMessage(links: WebmentionReport | undefined): string | undefined {
-  if (links === undefined || links.sent.length === 0) return undefined;
-
-  const counts = { sent: 0, none: 0, failed: 0 };
-  for (const one of links.sent) counts[one.status] += 1;
-
-  const linked =
-    links.sent.length === 1 ? '1 linked page' : `${String(links.sent.length)} linked pages`;
-  const parts = [`${String(counts.sent)} told`];
-  if (counts.none > 0) parts.push(`${String(counts.none)} take none`);
-  parts.push(`${String(counts.failed)} failed`);
-  return `Webmentions to ${linked}: ${parts.join(', ')}.`;
+  app.post(RESEND_ALL_PATH, (c) =>
+    queueJobFromForm(
+      c,
+      RESEND_JOB,
+      { slugs: 'all', webmentions: false },
+      {
+        panel: RESEND_PANEL,
+        queued:
+          'Queued a resend of every announced post. It runs in the background; its progress is below.',
+        busy: RESEND_BUSY,
+      },
+    ),
+  );
 }
 
 /** One post the fediverse holds a copy of, and how it last landed. */

@@ -10,12 +10,12 @@ The generated `sync` script calls it the third way.
 | `geekity init <dir>`                      | Create a new site in `<dir>`. Refuses a directory that is not empty.                                                                                                                                               |
 | `geekity sync`                            | Rebuild the content index once and exit. Exits non-zero if any file could not be parsed.                                                                                                                           |
 | `geekity rebuild`                         | Delete `data/geekity.db` and build it again from the files.                                                                                                                                                        |
-| `geekity resend --all`, `<slug>...`       | Send announced posts again, as they read now, to every follower and relay. See [Quote posts](federation.md#quote-posts).                                                                                           |
+| `geekity resend --all`, `<slug>...`       | Send announced posts again, as they read now, to every follower and relay, as the same job the federation screen queues. See [Quote posts](federation.md#quote-posts).                                             |
 | `geekity maintenance on`, `off`, `status` | Take the public site down with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` sets when the site is due back.                                                                   |
 | `geekity dev-mode on`, `off`, `status`    | Hold everything the site sends to the outside world while you build or migrate it, or take it live. See [Dev mode](deploying.md#dev-mode).                                                                         |
 | `geekity settings list`, `get`, `set`     | Print, read or change the runtime settings, such as `maintenance.on`, and each running plugin's settings, with where each value comes from. See [Runtime settings](settings.md#runtime-settings).                  |
 | `geekity settings migrate-plugins`        | Move plugin settings out of `content/_data/site.json` into `data/plugins/<name>/settings.json`. A server does this when it starts. See [Plugin settings](configuration.md#moving-plugin-settings-out-of-sitejson). |
-| `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`. See [Location and camera metadata](media.md#location-and-camera-metadata).                                                            |
+| `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`, as the same job the Media screen queues. See [Location and camera metadata](media.md#location-and-camera-metadata).                   |
 | `geekity user add <name>`                 | Create an admin account. Use it to give a site its first login without the setup screen.                                                                                                                           |
 | `geekity plugin add <package>`, `remove`  | Install a plugin package's bundle from the npm registry into the plugins folder (`GEEKITY_PLUGINS_DIR`), or delete a disabled one. A running `geekity serve` reloads with the change.                              |
 | `geekity --help`, `-h`                    | Print this table on the terminal.                                                                                                                                                                                  |
@@ -43,6 +43,37 @@ Scanned 12: 2 created, 1 updated, 0 removed, 9 unchanged, 0 failed
 `sync` logs a file that does not parse, leaves it out of the index and counts
 it in `failed`. The command then exits `1`, so a deploy step can detect the
 failure. Every other file in the directory is still indexed.
+
+## When the job is already running
+
+`strip-metadata` and `resend` run the same job that a button on the admin
+queues. Before a command starts its job, it looks in `data/jobs.json` for a job
+of the same name. The command starts nothing and exits `1` when it finds one of
+these:
+
+- A job that a running process is still running, from the admin or from
+  another command.
+- A job that is queued while a `geekity serve` for the same data folder
+  answers on its control socket. That server runs the queued job.
+
+The command prints the reason on stderr:
+
+```sh
+$ geekity strip-metadata
+A strip-metadata job is already running, so this one did not start. Run the command again once it finishes.
+```
+
+Run the command again when the job is finished. The Media screen and the
+federation screen show the job's progress.
+
+The command runs its own job in these cases:
+
+- The process that was running the job has stopped. A server runs that job
+  again when it next looks for jobs that a stopped process left. Both jobs are
+  safe to run twice.
+- A job is queued, but no server answers. A command that stopped before it
+  started its job can leave a queued job. The next server to start runs that
+  job.
 
 ## How `geekity serve` runs
 

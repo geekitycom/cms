@@ -152,6 +152,19 @@ describe('the supervisor', () => {
     assert.deepEqual(h.worker(1).told, ['drain', 'resume', 'drain'], 'and can try again');
   });
 
+  it('resumes the old worker only once the new one that failed to boot has exited', () => {
+    const h = serving();
+    h.supervisor.message(h.worker(1), { type: 'reload' });
+    h.supervisor.message(h.worker(1), { type: 'drained' });
+
+    h.supervisor.message(h.worker(2), { type: 'boot-failed', error: 'Two plugins share a name.' });
+    assert.equal(h.worker(2).killed, true);
+    assert.deepEqual(h.worker(1).told, ['drain'], 'a job the new worker claimed is still its own');
+
+    h.supervisor.exited(h.worker(2), null);
+    assert.deepEqual(h.worker(1).told, ['drain', 'resume']);
+  });
+
   it('keeps the old worker when the new one exits before it is ready, saying nothing', () => {
     const h = serving();
     h.supervisor.message(h.worker(1), { type: 'reload' });
@@ -167,9 +180,10 @@ describe('the supervisor', () => {
 
     h.advance(10 * 60_000);
     assert.equal(h.worker(2).killed, true);
-    assert.deepEqual(h.worker(1).told, ['drain', 'resume']);
+    assert.deepEqual(h.worker(1).told, ['drain']);
 
     h.supervisor.exited(h.worker(2), null);
+    assert.deepEqual(h.worker(1).told, ['drain', 'resume']);
     assert.equal(h.workers.length, 2);
   });
 
@@ -338,6 +352,7 @@ describe('the supervisor watching the plugins folder', () => {
     const outcome = h.supervisor.reload();
     h.supervisor.message(h.worker(1), { type: 'drained' });
     h.supervisor.message(h.worker(2), { type: 'boot-failed', error: 'Two plugins share a name.' });
+    h.supervisor.exited(h.worker(2), null);
     assert.deepEqual(await outcome, { ok: false, error: 'Two plugins share a name.' });
 
     h.advance(PLUGIN_SETTLE_MS * 10);
@@ -436,6 +451,7 @@ describe('the supervisor watching the plugins folder', () => {
     h.advance(PLUGIN_SETTLE_MS + PLUGIN_POLL_MS * 2);
     h.supervisor.message(h.worker(1), { type: 'drained' });
     h.supervisor.message(h.worker(2), { type: 'boot-failed', error: 'Two plugins share a name.' });
+    h.supervisor.exited(h.worker(2), null);
     assert.ok(!h.lines.includes(LEFT_ALONE));
 
     h.advance(PLUGIN_POLL_MS);

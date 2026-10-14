@@ -21,6 +21,7 @@ const LAYERS: readonly Layer[] = [
   { name: 'utilities', units: ['util/', 'types/', 'init.ts'] },
   { name: 'files', units: ['files/'] },
   { name: 'caches', units: ['cache.ts'] },
+  { name: 'jobs', units: ['jobs/'] },
   { name: 'content', units: ['content/'] },
   { name: 'operational state', units: ['store/'] },
   { name: 'ports', units: ['forms/', 'mail/', 'plugin.ts'] },

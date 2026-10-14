@@ -9,6 +9,7 @@ import type { Clock } from './util/clock.ts';
 import { defaultWatchDebounce } from './content/sync.ts';
 import type { DocumentChange, WatchDebounce } from './content/sync.ts';
 import type { MailProvider, MailLogger } from './mail/provider.ts';
+import type { JobDefinition, JobRecords, MessageTransport } from './jobs/types.ts';
 import type { Plugin } from './plugin.ts';
 import { withoutTrailingSlash } from './util/url.ts';
 import { systemHostLookup } from './util/public-address.ts';
@@ -67,6 +68,23 @@ export interface FederationOverrides {
    * network. Tests that federate two make-believe hosts turn it on.
    */
   allowPrivateAddress?: boolean | undefined;
+}
+
+/**
+ * The admin job queue's two swap points (decision-54), and the jobs a site
+ * adds to the CMS's own.
+ */
+export interface JobOverrides {
+  /**
+   * What carries a job's id to the worker. Defaults to an in-process one. Any
+   * Fedify `MessageQueue`, such as `SqliteMessageQueue`, is one as it ships;
+   * give it a queue of its own, not the federation's.
+   */
+  transport?: MessageTransport | undefined;
+  /** Where job status lives. Defaults to `data/jobs.json`. */
+  records?: JobRecords | undefined;
+  /** Jobs to register beside the CMS's own. */
+  definitions?: readonly JobDefinition[] | undefined;
 }
 
 /**
@@ -397,6 +415,11 @@ export interface GeekityConfig {
    */
   federation?: FederationOverrides;
   /**
+   * The admin job queue's transport, record store and extra jobs. Every
+   * field has a default; see {@link JobOverrides}.
+   */
+  jobs?: JobOverrides;
+  /**
    * How a host name is resolved before the CMS fetches a page a reply answers
    * (TASK-123), so a name that resolves to this network is refused. Defaults
    * to the system resolver. A test names one so that nothing it does reaches
@@ -504,6 +527,8 @@ export interface ResolvedConfig {
   readonly watchDebounce: WatchDebounce;
   /** Federation stores and guards, empty when the site named none. */
   readonly federation: FederationOverrides;
+  /** Job queue overrides, empty when the site named none. */
+  readonly jobs: JobOverrides;
   /** How host names are resolved before a stranger's page is fetched. */
   readonly hostLookup: HostLookup;
   /** The installed plugins, empty when the site named none. */
@@ -643,6 +668,7 @@ export function resolveConfig(
     now: config.now ?? systemClock,
     watchDebounce: config.watchDebounce ?? defaultWatchDebounce,
     federation: config.federation ?? {},
+    jobs: config.jobs ?? {},
     hostLookup: config.hostLookup ?? systemHostLookup,
     plugins: config.plugins ?? [],
   });

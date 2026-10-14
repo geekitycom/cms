@@ -8,6 +8,10 @@ import { csrfField, FIRST_ADMIN, sandbox, signedIn, signIn } from './__testing__
 import type { Browser } from './__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { appendInboxActivity } from '../federation/records.ts';
+import { RESEND_JOB } from '../federation/resend-job.ts';
+import { createFileRecords } from '../jobs/file-records.ts';
+import type { JobState } from '../jobs/types.ts';
+import { flashes } from './__testing__/flash.ts';
 import type { FederationRecords } from '../federation/records.ts';
 
 /** The site under test. Its origin is what an ActivityStreams id is built on. */
@@ -480,8 +484,24 @@ describe('per-post delivery status', () => {
   });
 });
 
+function resendSection(html: string): string {
+  const match = /<section[^>]*id="resend"[\s\S]*?<\/section>/.exec(html);
+  assert.ok(match, 'the federation screen has a resend section');
+  return match[0].replace(/\s+/g, ' ');
+}
+
+async function recordResend(cms: Cms, state: JobState): Promise<void> {
+  await createFileRecords(path.join(cms.config.dataDir, 'jobs.json')).create({
+    id: `resend-${state.state}`,
+    name: RESEND_JOB.name,
+    payload: { slugs: 'all', webmentions: false },
+    queuedAt: '2026-10-14T09:00:00.000Z',
+    ...state,
+  });
+}
+
 describe('resending a post', () => {
-  it('sends the post as it now reads and says how it went (AC #3)', async () => {
+  it('queues the resend and answers at once, then sends the post as it now reads (AC #1)', async () => {
     const cms = await federatedSite();
     const agent = await signedIn(cms);
     follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
@@ -497,8 +517,18 @@ describe('resending a post', () => {
     });
 
     assert.equal(response.status, 303);
-    assert.equal(response.headers.get('location'), '/admin/federation');
+    assert.equal(response.headers.get('location'), '/admin/federation#resend');
+    const queued = await cms.jobs.latest(RESEND_JOB.name);
+    assert.equal(queued?.state, 'queued', 'the request did not wait for the resend');
+    assert.deepEqual(queued.payload, { slugs: ['hello-world'], webmentions: true });
+    assert.equal(deliveries.length, 1, 'nothing was sent inside the request');
 
+    const html = await federationScreen(agent);
+    assert.ok(flashes(html).some((flash) => /Queued a resend of hello-world/.test(flash.message)));
+    assert.match(resendSection(html), />Queued</);
+
+    const finished = await cms.jobs.run(queued.id);
+    assert.equal(finished.state, 'finished');
     await cms.delivery.settled();
     assert.equal(deliveries.length, 2, 'the post went out a second time');
     assert.equal(deliveries[1]?.url, REMOTE_INBOX, 'to the follower’s inbox');
@@ -506,23 +536,132 @@ describe('resending a post', () => {
     assert.notEqual(deliveries[1]?.body['id'], announced, 'under an id they have not seen');
 
     const after = await federationScreen(agent);
-    assert.match(after, /Sent Update to 1 recipient: 1 sent, 0 failed/);
-    assert.match(after, /1 sent/, 'and the row now counts the delivery');
+    assert.match(resendSection(after), /hello-world<\/code>: Update reached 1 of 1 inbox/);
   });
 
-  it('refuses a name no post answers to, without pretending it sent anything', async () => {
+  it('queues a resend of every announced post and answers at once (AC #2)', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms, { sharedInboxId: null, inboxId: REMOTE_INBOX });
+    await publishPost(agent, cms);
+
+    const { html, token } = await federationForm(agent);
+    assert.match(
+      resendSection(html),
+      /action="\/admin\/federation\/resend-all"[\s\S]*Resend every announced post<\/button>/,
+    );
+    const response = await agent.post('/admin/federation/resend-all', { csrf_token: token });
+
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin/federation#resend');
+    const queued = await cms.jobs.latest(RESEND_JOB.name);
+    assert.equal(queued?.state, 'queued');
+    assert.deepEqual(queued.payload, { slugs: 'all', webmentions: false });
+    assert.equal(deliveries.length, 1, 'nothing was sent inside the request');
+
+    const again = await agent.post('/admin/federation/resend-all', { csrf_token: token });
+    assert.equal(again.status, 303);
+    assert.equal(
+      (await cms.jobs.latest(RESEND_JOB.name))?.id,
+      queued.id,
+      'no second job was queued',
+    );
+    assert.ok(
+      flashes(await federationScreen(agent)).some((flash) =>
+        /already queued or running/.test(flash.message),
+      ),
+    );
+
+    await cms.jobs.run(queued.id);
+    await cms.delivery.settled();
+    assert.equal(deliveries.length, 2);
+    assert.match(
+      resendSection(await federationScreen(agent)),
+      /Resent 1 post\..*hello-world<\/code>: Update reached 1 of 1 inbox/,
+    );
+  });
+
+  it('shows a running resend with the posts sent out of the total (AC #3)', async () => {
+    const cms = await federatedSite();
+    await recordResend(cms, {
+      state: 'running',
+      attempt: 1,
+      owner: 'elsewhere',
+      startedAt: '2026-10-14T09:00:01.000Z',
+      progress: { done: 2, total: 5 },
+    });
+
+    const section = resendSection(await federationScreen(await signedIn(cms)));
+
+    assert.match(section, />Running</);
+    assert.match(section, /Sent 2 of 5 posts/);
+    assert.match(section, /<progress[^>]*value="2"[^>]*max="5"/);
+    assert.doesNotMatch(section, /resend-all/, 'no second resend is offered while one runs');
+  });
+
+  it('shows per post what a finished resend reached, held and could not find (AC #3)', async () => {
+    const cms = await federatedSite();
+    await recordResend(cms, {
+      state: 'finished',
+      attempt: 1,
+      finishedAt: '2026-10-14T09:00:02.000Z',
+      result: {
+        posts: [
+          {
+            slug: 'hello-world',
+            resent: true,
+            activity: {
+              activityType: 'Update',
+              heldByDevMode: false,
+              inboxes: 3,
+              reached: 2,
+              queued: 0,
+              failed: 1,
+            },
+            webmentions: { pages: 2, told: 1, none: 1, failed: 0 },
+          },
+          {
+            slug: 'quiet',
+            resent: true,
+            activity: {
+              activityType: 'Update',
+              heldByDevMode: true,
+              inboxes: 0,
+              reached: 0,
+              queued: 0,
+              failed: 0,
+            },
+            webmentions: null,
+          },
+          { slug: 'nothing-of-the-sort', resent: false },
+        ],
+      },
+    });
+
+    const section = resendSection(await federationScreen(await signedIn(cms)));
+
+    assert.match(section, />Finished</);
+    assert.match(section, /Resent 2 posts\./);
+    assert.match(
+      section,
+      /hello-world<\/code>: Update reached 2 of 3 inboxes, <span[^>]*>1 failed<\/span>\./,
+    );
+    assert.match(section, /Webmentions to 2 linked pages: 1 told, 1 take none, 0 failed/);
+    assert.match(section, /quiet<\/code>: dev mode held the Update, nothing was sent/);
+    assert.match(section, /Nothing to resend: <code[^>]*>nothing-of-the-sort<\/code>/);
+    assert.match(section, /Resend every announced post<\/button>/);
+  });
+
+  it('refuses a form that names no post, without queuing anything', async () => {
     const cms = await federatedSite();
     const agent = await signedIn(cms);
     const { token } = await federationForm(agent);
 
-    const response = await agent.post('/admin/federation/resend', {
-      csrf_token: token,
-      slug: 'nothing-of-the-sort',
-    });
+    const response = await agent.post('/admin/federation/resend', { csrf_token: token });
 
     assert.equal(response.status, 303);
     assert.match(await federationScreen(agent), /no post to send under that name/i);
-    assert.equal(deliveries.length, 0, 'and nothing was sent');
+    assert.equal(await cms.jobs.latest(RESEND_JOB.name), undefined, 'and nothing was queued');
   });
 });
 

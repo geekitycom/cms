@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
+import { STRIP_TEMPORARY_SUFFIX } from './metadata/sweep.ts';
 
 /**
  * URL prefix uploads are served under, and the content subdirectory they live
@@ -15,8 +16,8 @@ export const UPLOAD_ASSET_PREFIX = '/uploads/';
 /** The content subdirectory {@link UPLOAD_ASSET_PREFIX} is served from. */
 export const UPLOAD_DIRECTORY = 'uploads';
 
-/** One file under `content/uploads/`, or `undefined`. */
 export function findUpload(relative: string, contentDir: string): StaticAsset | undefined {
+  if (relative.toLowerCase().endsWith(STRIP_TEMPORARY_SUFFIX)) return undefined;
   return findAsset(relative, [path.join(contentDir, UPLOAD_DIRECTORY)]);
 }
 

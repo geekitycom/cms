@@ -48,6 +48,7 @@ directory. Absolute directories are used as given.
 | `onDocumentChange` | none                                                 | —                            | Hook run for every change to the index. See [Hooks](plugins.md#hooks).                                                                                                                                                                                                                                                   |
 | `onPublish`        | none                                                 | —                            | Hook run when a document becomes visible. See [Hooks](plugins.md#hooks).                                                                                                                                                                                                                                                 |
 | `federation`       | `{}`                                                 | —                            | Federation stores and guards. See [Federation](federation.md).                                                                                                                                                                                                                                                           |
+| `jobs`             | `{}`                                                 | —                            | The admin job queue's transport and record store, and jobs the site adds. See [Admin jobs](#admin-jobs).                                                                                                                                                                                                                 |
 | `commentChecker`   | Akismet                                              | —                            | The site's own spam checker. It takes precedence over the `akismet.key` setting. See [Akismet](comments.md#akismet).                                                                                                                                                                                                     |
 | `mail`             | `{}`                                                 | —                            | Mail provider, retries, backoff and logger. See [Email](email.md).                                                                                                                                                                                                                                                       |
 | `plugins`          | `[]`                                                 | —                            | The installed plugins. The `plugins` key of `site.json`, set under Admin > Plugins, picks which ones run. Each setting of a plugin takes an environment variable. See [Plugin settings](#plugin-settings).                                                                                                               |
@@ -279,3 +280,129 @@ const cms = createCms({
   accessLogWriter: (line) => lines.push(line),
 });
 ```
+
+## Admin jobs
+
+Long admin actions run as jobs, outside the request that started them, so a
+proxy cannot time them out. A job is a registered name and a JSON payload of at
+most 64 KB. The admin and the CLI queue jobs on `cms.jobs`, and the admin reads
+a job's progress and result from there. The CMS registers two jobs of its own:
+
+- `strip-metadata`, which the **Media** screen and `geekity strip-metadata`
+  queue (see
+  [Location and camera metadata](media.md#location-and-camera-metadata))
+- `resend`, which the federation screen and `geekity resend` queue (see
+  [The federation screen](federation.md#the-federation-screen))
+
+`geekity serve` runs one job at a time, in the server process. A job runs at
+least once:
+
+- When the server drains for a reload or closes, the running job is told to
+  stop. It goes back to the queue with the same attempt number, and the next
+  server runs it.
+- When the server process dies during a job, the next server runs the job
+  again as the next attempt. After three attempts the job is marked
+  `interrupted` and does not run again.
+- A failed job is not retried. Queue it again to run it again.
+
+A CLI command queues its job and runs it in its own process. It never takes
+over jobs that the server is running.
+
+The server looks for cut-off jobs when it starts, after each reload, when a
+failed reload is undone, each time it finishes a job and has nothing else
+running, and each time the admin reads a job's status, which the **Media** and
+federation screens do when they show the latest job and before they queue a new
+one. So a job cut off while the server runs is picked up without a restart,
+once the admin looks at it or the server finishes its current job.
+
+Each time, it looks at every job recorded as running and decides whether that
+job was cut off. A job counts as cut off,
+and runs again as the next attempt, unless the process that claimed it is
+still running it. The claiming process is still running it when all of these
+hold:
+
+- The record names the process (`claimer`). Records written before the CMS
+  recorded one do not.
+- The process ran on the same host as the server.
+- It is not the server process itself.
+- A process with that id is alive, and it started at the time the record
+  gives. A process id that the system gave to a new process after the
+  claimer died does not count.
+
+So a job that `geekity strip-metadata` or `geekity resend` is running is left
+to that command when the server starts or reloads beside it. If the command
+is killed, the server runs the job again as the next attempt the next time it
+looks, and the admin can then queue that job again once the attempt ends.
+
+When it looks and has no job running, the server also sends every queued job
+to its transport again. A job queued by a process that died before running it,
+or handed back by a new server that failed to boot during a reload, then runs.
+A queued job whose message is still on its way is not run twice: the first
+worker to claim it runs it, and the second message finds it already claimed.
+
+When a reload fails, the supervisor stops the new server and waits for it to
+exit before the old server carries on, so a job the new server had started
+counts as cut off, and the old server runs it again as the next attempt.
+
+### Where job records are stored
+
+Job records are in `data/jobs.json`, a JSON list with the oldest job first.
+Each record holds:
+
+- `id`, `name` and `payload`: the job and what it was queued with.
+- `queuedAt`: when it was queued.
+- `state`: `queued`, `running`, `finished`, `failed` or `interrupted`.
+- `attempt`: which run this is, starting at 1.
+- For a running job: `owner`, the queue that runs it, `claimer`, the process
+  that runs it (`host`, `pid`, and `since`, when the process started),
+  `startedAt` and the last `progress` (`done`, and optionally `total` and
+  `note`).
+- For a finished job: `finishedAt` and the handler's `result`.
+- For a failed job: `finishedAt` and the `error` message.
+- For an interrupted job, and for a job queued again after a crash:
+  `interruptedAt`.
+
+Every queued and running job is kept, and the newest five finished, failed or
+interrupted jobs of each name. Older ones are removed when the file is next
+written. The site writes the file by renaming a finished copy over it, and
+holds `data/jobs.json.lock` while it does, so the server and a CLI command can
+write it at the same time. A lock whose process has died, or that is over ten
+seconds old, is taken over. Only one waiting process takes it over: it holds
+`data/jobs.json.lock.takeover` while it removes the old lock. A process
+releasing the lock also holds the takeover file, and removes the lock only if
+it is still its own, so a process that held the lock past ten seconds never
+removes the lock of the process that took it over. `geekity rebuild` does not
+touch the file. If you
+delete it, queued jobs and the history are lost, and nothing else.
+
+### Swapping the transport and the record store
+
+`jobs.transport` carries each job's id to the server, and `jobs.records`
+stores the records. Both have defaults: an in-process transport and
+`data/jobs.json`. Any Fedify `MessageQueue` works as a transport. Give it a
+queue of its own, not the one `federation.queue` uses:
+
+```ts
+import { DatabaseSync } from 'node:sqlite';
+import { SqliteMessageQueue } from '@fedify/sqlite';
+import { defineConfig } from '@geekity/cms';
+
+export default defineConfig({
+  jobs: {
+    transport: new SqliteMessageQueue(new DatabaseSync('data/queue.sqlite'), {
+      tableName: 'geekity_job',
+    }),
+  },
+});
+```
+
+A record store implements `JobRecords`. Each of its transitions must be a
+compare-and-set on the job's state and attempt, because that is what stops two
+workers from running one job. It stores the state it is given as it is,
+`claimer` included, because start-up recovery reads `claimer` to tell a job
+another process is running from one that was cut off. `create` takes an
+optional check and must run it against the newest job of the same name in the
+same step as the write: when the check holds, it records nothing and returns
+that job. That is what stops two admin presses, or a press and a CLI command,
+from both queuing a job of one name. `jobs.definitions` registers jobs beside
+the CMS's own.

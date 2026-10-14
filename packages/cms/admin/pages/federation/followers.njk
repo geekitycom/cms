@@ -1,9 +1,11 @@
 {# /admin/federation: who this site's people are to the fediverse, who follows
-   each of them, what arrived in the inbox, and how what went out landed. #}
+   each of them, what arrived in the inbox, how what went out landed, and the
+   latest resend job (TASK-393). #}
 {% extends "layouts/shell.njk" %}
 {% from "components/badge.njk" import badge, status %}
 {% from "components/button.njk" import button %}
-{% from "components/card.njk" import card %}
+{% from "components/card.njk" import card, cardActions %}
+{% from "components/job-status.njk" import jobStatus %}
 {% from "components/table.njk" import table %}
 
 {% block title %}Federation{% endblock %}
@@ -173,6 +175,57 @@
     {% endif %}
   </section>
 
+  <section id="resend" class="mb-10 max-w-2xl" aria-labelledby="resend-heading">
+    {% call card() %}
+      <h2 id="resend-heading" class="card-title">Resend</h2>
+      <p class="max-w-prose">
+        A resend builds each post again from its file and sends it to every one of its
+        author's followers and every accepted relay: an update for a published post, a
+        withdrawal for one in the trash. It runs in the background. The Resend button on
+        a post's row below also tells every page the post links to.
+      </p>
+      {% if resend %}
+        {% call jobStatus(resend, federationUrl + '#resend', verb='Sent', unit='posts') %}
+          {% if resendResult %}
+            <p>Resent {{ resendResult.sent.length }} {% if resendResult.sent.length == 1 %}post{% else %}posts{% endif %}.</p>
+            {% if resendResult.sent.length %}
+              <ul class="list-disc pl-6">
+                {% for post in resendResult.sent %}
+                  <li>
+                  <code class="break-all">{{ post.slug }}</code>:
+                  {% if post.activity and post.activity.heldByDevMode %}
+                    dev mode held the {{ post.activity.activityType }}, nothing was sent.
+                  {% elif post.activity and post.activity.inboxes == 0 %}
+                    the {{ post.activity.activityType }} had no follower or relay to go to.
+                  {% elif post.activity %}
+                    {{ post.activity.activityType }} reached {{ post.activity.reached }} of {{ post.activity.inboxes }} {% if post.activity.inboxes == 1 %}inbox{% else %}inboxes{% endif %}{% if post.activity.queued %}, {{ post.activity.queued }} queued{% endif %}{% if post.activity.failed %}, {{ status('failed', post.activity.failed + ' failed') }}{% endif %}.
+                  {% else %}
+                    not announced to the fediverse.
+                  {% endif %}
+                  {% if post.webmentions %}
+                    Webmentions to {{ post.webmentions.pages }} linked {% if post.webmentions.pages == 1 %}page{% else %}pages{% endif %}: {{ post.webmentions.told }} told{% if post.webmentions["none"] %}, {{ post.webmentions["none"] }} take none{% endif %}, {{ post.webmentions.failed }} failed.
+                  {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+            {% if resendResult.nothing.length %}
+              <p>Nothing to resend: {% for slug in resendResult.nothing %}<code class="break-all">{{ slug }}</code>{% if not loop.last %}, {% endif %}{% endfor %}. No announced post has that slug.</p>
+            {% endif %}
+          {% endif %}
+        {% endcall %}
+      {% endif %}
+      {% if not resend or not resend.active %}
+        <form method="post" action="{{ resendAllUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          {% call cardActions() %}
+            {{ button('Resend every announced post', type='submit', color='primary') }}
+          {% endcall %}
+        </form>
+      {% endif %}
+    {% endcall %}
+  </section>
+
   <section>
     <h2 class="mb-3 text-lg font-semibold">Delivery</h2>
     {% if posts.length %}
@@ -234,10 +287,7 @@
         </tbody>
       {% endcall %}
       <p class="mt-4 max-w-prose text-sm">
-        Resending builds the post again from its file and sends it to every one
-        of its author's followers and every accepted relay the site has now, and tells every
-        page the post links to at the same time: an update for a
-        published post, a withdrawal for one in the trash. The outcomes are a
+        Resend queues a resend of that one post, described above. The outcomes are a
         cache, so a database deleted since leaves the posts listed with nothing
         recorded against them.
       </p>
