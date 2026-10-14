@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { watch } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
 
-import { exportJwk, importJwk, InProcessMessageQueue } from '@fedify/fedify';
+import { exportJwk, importJwk, InProcessMessageQueue, ParallelMessageQueue } from '@fedify/fedify';
 import type { MessageQueue } from '@fedify/fedify';
 import { CryptographicKey, Endpoints, Image, Note, Person } from '@fedify/vocab';
 
@@ -17,10 +18,13 @@ import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { listUsers } from '../site/users.ts';
+import { queuedMessages } from '../__testing__/federation-queue.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 import { addFollower } from './records.ts';
 import { SITE } from '../site/namespace.ts';
+import { readDevModeRecord } from '../settings/dev-mode.ts';
+import type { DevModeEntry } from '../settings/dev-mode.ts';
 
 /** The site under test. Fedify answers by origin, so every request uses this one. */
 const BASE_URL = 'https://blog.example';
@@ -107,6 +111,9 @@ const webfingerLookups: string[] = [];
 let restoreFetch: () => void;
 let slowPage: Promise<void> = Promise.resolve();
 let inboxes: Promise<void> = Promise.resolve();
+let rejectingEveryPost = false;
+const refused: string[] = [];
+let postsBegun = 0;
 
 before(async () => {
   const keys = await testKeyPair(REMOTE_PAIR);
@@ -146,6 +153,8 @@ before(async () => {
 // A site left running past its test can still send, and what it sends would
 // land in the next test's deliveries.
 afterEach(async () => {
+  rejectingEveryPost = false;
+  inboxes = Promise.resolve();
   for (const instance of started.splice(0)) await instance.close();
 });
 
@@ -196,7 +205,14 @@ function routeRemoteHost(): () => void {
 
     const request = new Request(input, init);
     if (request.method === 'POST') {
+      postsBegun += 1;
+      for (const arrived of arrivals) arrived();
       await inboxes;
+      if (rejectingEveryPost) {
+        refused.push(request.url);
+        for (const arrived of arrivals) arrived();
+        return new Response('Try again later.', { status: 503 });
+      }
       deliveries.push({
         url: request.url,
         signature: request.headers.get('signature-input') ?? request.headers.get('signature') ?? '',
@@ -754,9 +770,133 @@ describe('a scheduled post', () => {
   });
 });
 
-describe('a reload under geekity serve (TASK-288 AC #4)', () => {
-  it('sends a delivery queued just before the drain once, and the next worker sends it no more', async () => {
-    const { cms, dataDir, contentDir } = await site({ queued: true });
+describe('the queue in data/queue.sqlite (TASK-379)', () => {
+  function nextCms(from: Site, options: { devMode?: boolean } = {}): Cms {
+    const next = createCms({
+      dataDir: from.dataDir,
+      contentDir: from.contentDir,
+      port: 0,
+      watch: false,
+      baseUrl: BASE_URL,
+      federation: { allowPrivateAddress: true },
+      ...(options.devMode === true ? { devMode: true } : {}),
+    });
+    started.push(next);
+    return next;
+  }
+
+  function waitForRefusal(): Promise<void> {
+    return nextEvent('a refused delivery', (done) => {
+      const check = () => {
+        if (refused.length > 0) done();
+      };
+      check();
+      arrivals.add(check);
+      return () => arrivals.delete(check);
+    });
+  }
+
+  it('sends a delivery queued by a CMS that stopped before sending it once the next one starts (AC #1)', async () => {
+    const queued = await site({ queued: true });
+    const agent = await signedIn(queued.cms);
+    const response = await publishNewPost(agent);
+    assert.equal(response.status, 303, await response.text());
+    await queued.cms.delivery.settled();
+    await queued.cms.close();
+    assert.deepEqual(deliveries, [], 'a CMS that never served took nothing from the queue');
+
+    await nextCms(queued).serve();
+
+    const create = await waitForDelivery('Create');
+    assert.equal(create.url, REMOTE_SHARED_INBOX);
+  });
+
+  it('sends a retry Fedify scheduled for later after the CMS is stopped and started again (AC #1)', async () => {
+    refused.length = 0;
+    rejectingEveryPost = true;
+    const queued = await site({ queued: true });
+    await queued.cms.serve();
+    const agent = await signedIn(queued.cms);
+    await publishNewPost(agent);
+    await waitForRefusal();
+    await queued.cms.close();
+    rejectingEveryPost = false;
+    assert.deepEqual(deliveries, [], 'the first attempt was refused and the retry not yet due');
+
+    await nextCms(queued).serve();
+
+    const create = await waitForDelivery('Create');
+    assert.equal(create.url, REMOTE_SHARED_INBOX);
+    assert.ok(refused.length > 0 && refused.every((url) => url === REMOTE_SHARED_INBOX));
+  });
+
+  it('finishes the delivery in hand as the worker drains, and the next worker sends it no more (AC #3)', async () => {
+    const queued = await site({ queued: true });
+    await queued.cms.serve();
+    const agent = await signedIn(queued.cms);
+    let release = (): void => undefined;
+    inboxes = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    postsBegun = 0;
+    const response = await publishNewPost(agent);
+    assert.equal(response.status, 303, await response.text());
+    await nextEvent('the delivery in hand', (done) => {
+      const check = () => {
+        if (postsBegun > 0) done();
+      };
+      check();
+      arrivals.add(check);
+      return () => arrivals.delete(check);
+    });
+    const draining = queued.cms.drain();
+    release();
+    await draining;
+
+    assert.equal(delivered('Create').length, 1, 'the drain waited for the delivery in hand');
+
+    const next = nextCms(queued);
+    await next.serve();
+    await queued.cms.close();
+    await next.close();
+
+    assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
+    assert.equal(queuedMessages(queued.dataDir).length, 0);
+  });
+
+  it('holds a delivery left in the queue when the next CMS boots in dev mode (AC #4)', async () => {
+    const queued = await site({ queued: true });
+    const agent = await signedIn(queued.cms);
+    await publishNewPost(agent);
+    await queued.cms.delivery.settled();
+    await queued.cms.close();
+    assert.equal(queuedMessages(queued.dataDir).length, 1);
+
+    const next = nextCms(queued, { devMode: true });
+    await next.serve();
+    const held = await nextEvent<DevModeEntry>('the leftover delivery held', (done) => {
+      const check = () => {
+        const entry = readDevModeRecord(queued.dataDir).find((one) => one.type === 'held');
+        if (entry !== undefined) done(entry);
+      };
+      const watcher = watch(queued.dataDir, check);
+      check();
+      return () => watcher.close();
+    });
+    await next.close();
+
+    assert.deepEqual(deliveries, []);
+    assert.equal(held.type === 'held' && held.kind, 'activitypub');
+    assert.match(held.type === 'held' ? held.what : '', /^Create /);
+    assert.equal(queuedMessages(queued.dataDir).length, 0, 'a held delivery is dropped, not kept');
+  });
+});
+
+describe('a queue the site passes in (TASK-382)', () => {
+  it('sends a delivery queued just before the drain before the drain resolves', async () => {
+    const { cms } = await site({ queue: new InProcessMessageQueue() });
+    await cms.serve();
     const agent = await signedIn(cms);
 
     const response = await publishNewPost(agent);
@@ -764,28 +904,13 @@ describe('a reload under geekity serve (TASK-288 AC #4)', () => {
     await cms.drain();
 
     assert.equal(delivered('Create').length, 1, `saw ${JSON.stringify(deliveries)}`);
-    await cms.close();
-
-    const next = createCms({
-      dataDir,
-      contentDir,
-      port: 0,
-      watch: false,
-      baseUrl: BASE_URL,
-      federation: { allowPrivateAddress: true },
-    });
-    started.push(next);
-    await next.sync();
-    await next.scheduler.start();
-    await next.close();
-
-    assert.equal(delivered('Create').length, 1, 'the next worker did not send it again');
   });
-});
 
-describe('a queue the site passes in (TASK-382)', () => {
-  it('sends a delivery queued just before the drain before the drain resolves', async () => {
-    const { cms } = await site({ queue: new InProcessMessageQueue() });
+  it('sends what an in-memory queue wrapped in another holds before the drain resolves', async () => {
+    const { cms } = await site({
+      queue: new ParallelMessageQueue(new InProcessMessageQueue(), 2),
+    });
+    await cms.serve();
     const agent = await signedIn(cms);
 
     const response = await publishNewPost(agent);
@@ -807,6 +932,7 @@ describe('a queue the site passes in (TASK-382)', () => {
       },
     };
     const { cms } = await site({ queue });
+    await cms.serve();
     const agent = await signedIn(cms);
     await publishNewPost(agent);
     await cms.delivery.settled();

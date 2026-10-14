@@ -4,7 +4,13 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 
+import { SqliteMessageQueue } from '@fedify/sqlite';
+import { Temporal } from '@js-temporal/polyfill';
+
 import { cleanupTemporaryDirs, exists, runCli, siteWithContent } from './__testing__/cli.ts';
+import { queuedMessages } from './__testing__/federation-queue.ts';
+import { FEDERATION_QUEUE_TABLE } from './federation/queue.ts';
+import { queueFile } from './store/queue-database.ts';
 import { createCms } from './index.ts';
 
 after(cleanupTemporaryDirs);
@@ -134,6 +140,30 @@ describe('geekity rebuild', () => {
     } finally {
       await cms.close();
     }
+  });
+
+  it('leaves data/queue.sqlite and the deliveries waiting in it alone (TASK-379 AC #2)', async () => {
+    const directory = await federatedSite();
+    await runCli(['sync'], directory);
+    const file = queueFile(path.join(directory, 'data'));
+    assert.ok(await exists(file), 'the site keeps its queue in a file of its own');
+    const queue = new SqliteMessageQueue(new DatabaseSync(file), {
+      tableName: FEDERATION_QUEUE_TABLE,
+    });
+    await queue.enqueue({ type: 'outbox', id: 'waiting' });
+    await queue.enqueue(
+      { type: 'outbox', id: 'retry' },
+      { delay: Temporal.Duration.from({ hours: 1 }) as never },
+    );
+    queue[Symbol.dispose]();
+
+    const run = await runCli(['rebuild'], directory);
+
+    assert.equal(run.code, 0, run.stderr);
+    const ids = queuedMessages(path.join(directory, 'data')).map(
+      (message) => (message as { id: string }).id,
+    );
+    assert.deepEqual(ids, ['waiting', 'retry']);
   });
 
   it('exits non-zero and says so when a file will not parse', async () => {

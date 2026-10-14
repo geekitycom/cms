@@ -18,11 +18,11 @@ post's followers are that user's followers.
 Fedify's stores have defaults for a single process. Set `federation` to
 replace them when a site outgrows them:
 
-| Field                 | Default                 | Meaning                                                                                                                                        |
-| --------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kv`                  | `MemoryKvStore`         | Fedify's cache and idempotence store. Nothing that has to survive a restart lives in it.                                                       |
-| `queue`               | `InProcessMessageQueue` | The delivery and inbox queue. `null` means no queue: activities are handled and delivered inside the request that carried them, with no retry. |
-| `allowPrivateAddress` | `false`                 | Whether Fedify may fetch private and loopback addresses. Leave it off: turning it on removes an SSRF guard. It exists for tests.               |
+| Field                 | Default                                     | Meaning                                                                                                                                                                                     |
+| --------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kv`                  | `MemoryKvStore`                             | Fedify's cache and idempotence store. Nothing that has to survive a restart lives in it.                                                                                                    |
+| `queue`               | `SqliteMessageQueue` in `data/queue.sqlite` | The delivery and inbox queue. `null` means no queue: activities are handled and delivered inside the request that carried them, with no retry. See [The message queue](#the-message-queue). |
+| `allowPrivateAddress` | `false`                                     | Whether Fedify may fetch private and loopback addresses. Leave it off: turning it on removes an SSRF guard. It exists for tests.                                                            |
 
 The CMS owns the followers and the inbox log. Both are files the site
 publishes (decision-9):
@@ -73,6 +73,39 @@ identity, and every follower's cached public key would stop verifying. Fedify's
 own fallback, an actor document with no `publicKey`, is worse, because peers
 cache it. Restore the file from a backup, or delete it to request a new key on
 purpose.
+
+## The message queue
+
+Fedify queues every outgoing delivery, every inbox activity and every retry it
+schedules. By default the queue is a `SqliteMessageQueue` from
+`@fedify/sqlite`, in the table `federation_messages` of `data/queue.sqlite`
+(decision-57). The file is apart from `data/geekity.db`, so `geekity rebuild`
+does not touch it.
+
+- A delivery that waits in the queue, and a retry Fedify scheduled for later,
+  survive a restart, a crash and a reload. The server sends them when it
+  starts.
+- Only a running server takes messages from the queue. A CLI command that
+  queues a message leaves it there, and the server takes it within 5 seconds.
+- On a reload under `geekity serve`, the old server stops taking messages,
+  finishes the ones it holds, and leaves the rest for the new server. No
+  message is handled by both.
+- A delivery whose handler is running when the process dies is lost. The queue
+  removes a message when a server takes it. Resend the post from the
+  federation screen.
+- While dev mode is on, the server drops each outgoing delivery it takes from
+  the queue and records it in `data/dev-mode.jsonl` as held. A `data/` copied
+  from a live site can hold deliveries that are still waiting.
+
+The file is mode `0600`. A waiting delivery holds the activity, the inbox it
+goes to and the private key it is signed with. An inbox activity waiting to be
+handled holds what the peer sent. You can delete the file while the site is
+stopped. The waiting deliveries and retries are lost, and nothing else.
+
+A queue passed as `federation.queue` replaces this one, and is never paused,
+durable or not. A server that stops sends everything it queued for now before
+it exits. What happens to its scheduled retries depends on the queue: an
+`InProcessMessageQueue` loses them.
 
 ## Delivery
 

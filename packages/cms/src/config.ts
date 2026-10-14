@@ -52,7 +52,8 @@ export interface FederationOverrides {
    */
   kv?: KvStore | undefined;
   /**
-   * The delivery and inbox queue. Defaults to Fedify's in-process one.
+   * The delivery and inbox queue. Defaults to a `SqliteMessageQueue` in
+   * `data/queue.sqlite` (decision-57), which keeps what waits across a restart.
    *
    * `null` means no queue at all: an inbound activity is handled, and an
    * outbound one delivered, before the request that carried it is answered.

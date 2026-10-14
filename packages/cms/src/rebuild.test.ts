@@ -378,8 +378,8 @@ describe('a site whose database and derived images are deleted', () => {
     await rm(path.join(dirs.dataDir, IMAGE_DIRECTORY), { recursive: true, force: true });
     assert.deepEqual(
       (await readdir(dirs.dataDir)).sort(),
-      ['keys', 'users.json'],
-      'what is left is exactly what decision-9 says to back up',
+      ['keys', 'queue.sqlite', 'users.json'],
+      'what is left is exactly what decision-9 says to back up, and the queue decision-57 keeps',
     );
 
     const second = await box.open(dirs);
