@@ -62,10 +62,14 @@ function header(fields: {
   block.write(octal(0, 8), 116, 'ascii');
   block.write(octal(fields.size, 12), 124, 'ascii');
   block.write(octal(fields.mtime, 12), 136, 'ascii');
-  block.write(' '.repeat(8), 148, 'ascii');
   block.write(fields.type, 156, 'ascii');
   block.write('ustar\0', 257, 'ascii');
   block.write('00', 263, 'ascii');
+  return sealHeader(block);
+}
+
+export function sealHeader(block: Buffer): Buffer {
+  block.write(' '.repeat(8), 148, 'ascii');
   const sum = block.reduce((total, byte) => total + byte, 0);
   block.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 'ascii');
   return block;

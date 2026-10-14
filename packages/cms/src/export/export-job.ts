@@ -1,17 +1,18 @@
 import { mkdir } from 'node:fs/promises';
 
-import { EXPORTS, dataPath } from '../files/data-files.ts';
+import { EXPORTS, dataFolder, dataPath } from '../files/data-files.ts';
 import { jobName } from '../jobs/types.ts';
 import type { JobDefinition } from '../jobs/types.ts';
 import type { Clock } from '../util/clock.ts';
-import { clearUnfinishedExports, keepOnlyExport } from '../files/export-archives.ts';
+import { isRecord } from '../util/guards.ts';
+import { keepOnlyExport } from '../files/export-archives.ts';
 import {
   SITE_EXPORT_JOB_NAME,
   exportFileName,
   planSiteExport,
   writeSiteExport,
 } from './site-export.ts';
-import type { ExportProgress, NotCarried, SiteExportSource } from './site-export.ts';
+import type { NotCarried, SiteExportSource } from './site-export.ts';
 
 /** No password and no secret: `jobs.json` is exported. */
 export type SiteExportPayload = { readonly withCredentials: boolean };
@@ -32,15 +33,13 @@ export const SITE_EXPORT_JOB = jobName<SiteExportPayload, SiteExportResult>(SITE
 const PROGRESS_STEPS = 100;
 
 export function sizeLabel(bytes: number): string {
-  const units = ['bytes', 'KB', 'MB', 'GB', 'TB'];
+  if (bytes < 1000) return `${String(bytes)} bytes`;
   let value = bytes;
-  let unit = 0;
-  while (value >= 1000 && unit < units.length - 1) {
+  for (const unit of ['KB', 'MB', 'GB']) {
     value /= 1000;
-    unit += 1;
+    if (value < 1000) return `${String(Number(value.toFixed(1)))} ${unit}`;
   }
-  const shown = unit === 0 ? String(value) : String(Number(value.toFixed(1)));
-  return `${shown} ${units[unit] ?? 'bytes'}`;
+  return `${String(Number((value / 1000).toFixed(1)))} TB`;
 }
 
 export function siteExportJob(
@@ -51,18 +50,14 @@ export function siteExportJob(
   return {
     name: SITE_EXPORT_JOB.name,
     parse(payload) {
-      const withCredentials =
-        typeof payload === 'object' && payload !== null && !Array.isArray(payload)
-          ? (payload as { withCredentials?: unknown }).withCredentials
-          : undefined;
+      const withCredentials = isRecord(payload) ? payload['withCredentials'] : undefined;
       if (typeof withCredentials !== 'boolean') {
         throw new Error('A site export job needs withCredentials, true or false.');
       }
       return { withCredentials };
     },
     async run({ withCredentials }, context) {
-      await clearUnfinishedExports(dataDir);
-      await mkdir(dataPath(dataDir, EXPORTS), { recursive: true });
+      await mkdir(dataFolder(dataDir, EXPORTS), { recursive: true });
       const plan = await planSiteExport(source, { withCredentials, withContent: true });
       const started = now();
       const file = exportFileName(baseUrl, started);
@@ -71,7 +66,7 @@ export function siteExportJob(
         out: dataPath(dataDir, EXPORTS, file),
         now: started,
         signal: context.signal,
-        progress: (progress: ExportProgress) =>
+        progress: (progress) =>
           progress.files % step === 0 || progress.files === progress.totalFiles
             ? context.progress({
                 done: progress.files,

@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { configVariables } from '../config.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
-import { dataPath, declareDataFile } from '../files/data-files.ts';
+import { dataPath, declareDataFile, writtenPrivately } from '../files/data-files.ts';
 import type { DataClass, DataFileDeclaration } from '../files/data-files.ts';
 import { isRecord } from '../util/guards.ts';
 import { AKISMET } from './akismet.ts';
@@ -150,18 +150,6 @@ export function sourceLabel(source: ValueSource): string {
   }
 }
 
-function writtenPrivately(dataClass: DataClass): boolean {
-  switch (dataClass.kind) {
-    case 'credential':
-      return true;
-    case 'kept':
-    case 'rebuildable':
-    case 'pending':
-    case 'scratch':
-      return false;
-  }
-}
-
 const FOLDER_FILES: NonEmpty<{
   readonly secret: boolean;
   readonly dataClass: DataClass;
@@ -172,7 +160,8 @@ const FOLDER_FILES: NonEmpty<{
 ];
 
 interface DeclaredFile {
-  readonly declaration: DataFileDeclaration;
+  readonly declaration: DataFileDeclaration | undefined;
+  readonly relativePath: string;
   readonly settings: readonly SettingDeclaration<unknown>[];
 }
 
@@ -180,22 +169,26 @@ function folderFiles(
   namespace: NamespaceDeclaration,
   storage: Extract<NamespaceStorage, { kind: 'folder' }>,
 ): NonEmpty<DeclaredFile> {
-  return mapNonEmpty(FOLDER_FILES, ({ secret, dataClass, lost }) => ({
-    declaration: declareDataFile({
+  return mapNonEmpty(FOLDER_FILES, ({ secret, dataClass, lost }) => {
+    const declaration = declareDataFile({
       pattern: path.posix.join(storage.path, secret ? storage.secretFile : storage.publicFile),
       dataClass,
       lost,
-    }),
-    settings: namespace.settings.filter((each) => (each.secret === true) === secret),
-  }));
+    });
+    return {
+      declaration,
+      relativePath: declaration.pattern,
+      settings: namespace.settings.filter((each) => (each.secret === true) === secret),
+    };
+  });
 }
 
-function dataFilesOf(namespace: NamespaceDeclaration): readonly DeclaredFile[] {
-  const { storage } = namespace;
+function declaredFiles(namespace: NamespaceDeclaration): NonEmpty<DeclaredFile> {
+  const { storage, settings } = namespace;
   if (storage.kind === 'folder') return folderFiles(namespace, storage);
   return storage.under === 'data'
-    ? [{ declaration: storage.file, settings: namespace.settings }]
-    : [];
+    ? [{ declaration: storage.file, relativePath: storage.file.pattern, settings }]
+    : [{ declaration: undefined, relativePath: storage.path, settings }];
 }
 
 export function createSettingsRegistry({
@@ -215,29 +208,16 @@ export function createSettingsRegistry({
     return found;
   }
 
-  function inData({ declaration, settings }: DeclaredFile): NamespaceFile {
-    return {
-      file: dataPath(dirs.dataDir, declaration),
-      relativePath: declaration.pattern,
-      writtenPrivately: writtenPrivately(declaration.dataClass),
-      settings,
-    };
-  }
-
   function filesOf(namespace: NamespaceDeclaration): NonEmpty<NamespaceFile> {
-    const { storage } = namespace;
-    if (storage.kind === 'folder') return mapNonEmpty(folderFiles(namespace, storage), inData);
-    if (storage.under === 'data') {
-      return [inData({ declaration: storage.file, settings: namespace.settings })];
-    }
-    return [
-      {
-        file: path.join(dirs.contentDir, storage.path),
-        relativePath: storage.path,
-        writtenPrivately: false,
-        settings: namespace.settings,
-      },
-    ];
+    return mapNonEmpty(declaredFiles(namespace), ({ declaration, relativePath, settings }) => ({
+      file:
+        declaration === undefined
+          ? path.join(dirs.contentDir, relativePath)
+          : dataPath(dirs.dataDir, declaration),
+      relativePath,
+      writtenPrivately: declaration !== undefined && writtenPrivately(declaration),
+      settings,
+    }));
   }
 
   function readSnapshot(namespace: NamespaceDeclaration): Snapshot {
@@ -504,7 +484,7 @@ export function createSettingsRegistry({
 
     dataFiles() {
       return [...namespaces.values()].flatMap((namespace) =>
-        dataFilesOf(namespace).map(({ declaration }) => declaration),
+        declaredFiles(namespace).flatMap(({ declaration }) => declaration ?? []),
       );
     },
 

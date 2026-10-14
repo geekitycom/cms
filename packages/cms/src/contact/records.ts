@@ -8,7 +8,7 @@ import {
   writeFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
-import { CONTACT_MESSAGES, dataPath } from '../files/data-files.ts';
+import { CONTACT_MESSAGES, dataFolder, dataPath } from '../files/data-files.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 
 /**
@@ -37,7 +37,7 @@ import { stringOrEmpty } from '../util/forms.ts';
 
 /** The absolute path of one site's `data/contact`. */
 export function contactDirectory(dataDir: string): string {
-  return dataPath(dataDir, CONTACT_MESSAGES);
+  return dataFolder(dataDir, CONTACT_MESSAGES);
 }
 
 /**

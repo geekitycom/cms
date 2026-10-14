@@ -3,7 +3,7 @@ import { gzipSync } from 'node:zlib';
 
 import { EXPORT_FORMAT, MANIFEST_NAME } from '../export/site-export.ts';
 import type { ExportManifest, ExportedClass, ManifestFile } from '../export/site-export.ts';
-import { TAR_END, tarHeader, tarPadding } from '../files/tar.ts';
+import { TAR_END, sealHeader, tarHeader, tarPadding } from '../files/tar.ts';
 
 export interface ArchivedEntry {
   readonly name: string;
@@ -50,9 +50,7 @@ function entryBlocks(entry: ArchivedEntry): Buffer {
   if (type !== '0') {
     const block = header.subarray(header.length - 512);
     block.write(type, 156, 'ascii');
-    block.write(' '.repeat(8), 148, 'ascii');
-    const sum = block.reduce((total, byte) => total + byte, 0);
-    block.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 'ascii');
+    sealHeader(block);
   }
   return Buffer.concat([header, body, tarPadding(body.length)]);
 }

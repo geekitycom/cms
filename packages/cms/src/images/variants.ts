@@ -6,7 +6,7 @@ import sharp from 'sharp';
 import type { Sharp } from 'sharp';
 
 import { writeFileAtomically } from '../files/atomic.ts';
-import { IMAGES, dataPath } from '../files/data-files.ts';
+import { IMAGES, dataFolder } from '../files/data-files.ts';
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
 import { deriveSiteIcon, isDerivedIcon } from './icons.ts';
@@ -177,7 +177,7 @@ export function generateImageVariants(
  * the generation already logged it.
  */
 export async function settleImageVariants(config: Pick<ImageConfig, 'dataDir'>): Promise<void> {
-  const root = dataPath(config.dataDir, IMAGES) + path.sep;
+  const root = dataFolder(config.dataDir, IMAGES) + path.sep;
   for (;;) {
     const running = [...generating]
       .filter(([directory]) => directory.startsWith(root))
@@ -418,7 +418,7 @@ export async function findImageVariant(
   config: ImageConfig,
   relative: string,
 ): Promise<StaticAsset | undefined> {
-  const root = dataPath(config.dataDir, IMAGES);
+  const root = dataFolder(config.dataDir, IMAGES);
 
   const found = findAsset(relative, [root]);
   if (found !== undefined) return found;

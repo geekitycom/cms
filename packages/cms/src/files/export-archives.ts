@@ -1,8 +1,9 @@
 import { readdir, rm, stat } from 'node:fs/promises';
 
-import { EXPORTS, dataPath } from './data-files.ts';
+import { isNotFound } from '../util/files.ts';
+import { EXPORTS, dataFolder, dataPath } from './data-files.ts';
 
-export const EXPORT_LIFETIME_MS = 24 * 60 * 60 * 1000;
+const EXPORT_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 const ARCHIVE = /^geekity-.+-(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z\.tar\.gz$/;
 
@@ -28,9 +29,9 @@ function archiveOf(dataDir: string, name: string): ExportArchive | undefined {
 
 async function namesIn(dataDir: string): Promise<string[]> {
   try {
-    return await readdir(dataPath(dataDir, EXPORTS));
+    return await readdir(dataFolder(dataDir, EXPORTS));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    if (isNotFound(error)) return [];
     throw error;
   }
 }
@@ -66,16 +67,8 @@ export async function currentExport(
   try {
     return { ...newest, size: (await stat(newest.path)).size };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    if (isNotFound(error)) return undefined;
     throw error;
-  }
-}
-
-/** Only one export job runs at a time, so no other writer's temporary file is here. */
-export async function clearUnfinishedExports(dataDir: string): Promise<void> {
-  for (const name of await namesIn(dataDir)) {
-    if (!ARCHIVE.test(name))
-      await rm(dataPath(dataDir, EXPORTS, name), { recursive: true, force: true });
   }
 }
 

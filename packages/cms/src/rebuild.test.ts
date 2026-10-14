@@ -10,7 +10,7 @@ import { browser, csrfField, sandbox, setUpFirstAdmin } from './admin/__testing_
 import type { Browser } from './admin/__testing__/harness.ts';
 import { databaseFile, databaseFiles, UnusableDatabaseError } from './cache.ts';
 import type { Cms } from './index.ts';
-import { IMAGES, dataPath } from './files/data-files.ts';
+import { IMAGES, dataFolder, dataPath } from './files/data-files.ts';
 
 /**
  * The milestone test for decision-9: a site whose database is deleted comes
@@ -375,7 +375,7 @@ describe('a site whose database and derived images are deleted', () => {
 
     // Everything decision-9 says a site may delete at rest.
     for (const file of databaseFiles(dirs.dataDir)) await rm(file, { force: true });
-    await rm(dataPath(dirs.dataDir, IMAGES), { recursive: true, force: true });
+    await rm(dataFolder(dirs.dataDir, IMAGES), { recursive: true, force: true });
     assert.deepEqual(
       (await readdir(dirs.dataDir)).sort(),
       ['keys', 'queue.sqlite', 'users.json'],

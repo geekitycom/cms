@@ -8,7 +8,7 @@ import {
   updateFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
-import { ACTOR_KEYS, dataPath } from '../files/data-files.ts';
+import { ACTOR_KEYS, dataFolder, dataPath } from '../files/data-files.ts';
 import { messageOf } from '../util/errors.ts';
 
 /**
@@ -23,7 +23,7 @@ export type ActorKeyAlgorithm = (typeof ACTOR_KEY_ALGORITHMS)[number];
 
 /** Where an actor's key files live: `data/keys`, beside the disposable index. */
 export function actorKeysDir(dataDir: string): string {
-  return dataPath(dataDir, ACTOR_KEYS);
+  return dataFolder(dataDir, ACTOR_KEYS);
 }
 
 /**

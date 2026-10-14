@@ -2,10 +2,16 @@ import { readdirSync } from 'node:fs';
 import path from 'node:path';
 
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
-import { CORE_DATA_FILES, dataPath, declareDataFile } from '../files/data-files.ts';
+import {
+  CORE_DATA_FILES,
+  dataPath,
+  declareDataFile,
+  writtenPrivately,
+} from '../files/data-files.ts';
 import type { DataClass, DataFileDeclaration } from '../files/data-files.ts';
 import type { Plugin, PluginDataClass, PluginDataFolder } from '../plugin.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
+import { isNotFound } from '../util/files.ts';
 import type { PluginRegistry } from './registry.ts';
 import { pluginsFolderPath, SECRETS_FILE, SETTINGS_FILE } from './settings.ts';
 
@@ -30,7 +36,11 @@ const PLUGIN_CLASS_NAMES = 'kept, rebuildable or credential';
 
 type DeclaringPlugin = Pick<Plugin, 'name' | 'data'>;
 
-function declarePluginFile(plugin: DeclaringPlugin, file: string, kind: unknown) {
+function declarePluginFile(
+  plugin: DeclaringPlugin,
+  file: string,
+  kind: unknown,
+): DataFileDeclaration {
   const quoted = JSON.stringify(file);
   if (!DATA_FILE_NAME.test(file)) {
     throw new Error(
@@ -61,18 +71,23 @@ export function pluginDataFiles(plugin: DeclaringPlugin): DataFileDeclaration[] 
 
 /** `data/plugins/<package name>/`, holding only the files the plugin's `data` declares. */
 export function pluginDataFolder(dataDir: string, plugin: DeclaringPlugin): PluginDataFolder {
+  return declaredDataFolder(dataDir, plugin.name, pluginDataFiles(plugin));
+}
+
+export function declaredDataFolder(
+  dataDir: string,
+  name: string,
+  dataFiles: readonly DataFileDeclaration[],
+): PluginDataFolder {
   const declared = new Map(
-    Object.entries(plugin.data ?? {}).map(([file, kind]) => [
-      file,
-      declarePluginFile(plugin, file, kind),
-    ]),
+    dataFiles.map((declaration) => [path.posix.basename(declaration.pattern), declaration]),
   );
 
   function declarationOf(file: string): DataFileDeclaration {
     const declaration = declared.get(file);
     if (declaration === undefined) {
       throw new Error(
-        `${plugin.name} uses ${JSON.stringify(file)} in its folder, which its definition does not declare. Add the file to the plugin's \`data\` field with its class: ${PLUGIN_CLASS_NAMES}.`,
+        `${name} uses ${JSON.stringify(file)} in its folder, which its definition does not declare. Add the file to the plugin's \`data\` field with its class: ${PLUGIN_CLASS_NAMES}.`,
       );
     }
     return declaration;
@@ -85,7 +100,7 @@ export function pluginDataFolder(dataDir: string, plugin: DeclaringPlugin): Plug
       await updateFileAtomically(
         dataPath(dataDir, declaration),
         change,
-        declaration.dataClass.kind === 'credential' ? { mode: 0o600 } : {},
+        writtenPrivately(declaration) ? { mode: 0o600 } : {},
       );
     },
   };
@@ -97,8 +112,9 @@ function pluginFolders(dataDir: string): string[] {
       return readdirSync(folder, { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
         .map((entry) => entry.name);
-    } catch {
-      return [];
+    } catch (error) {
+      if (isNotFound(error)) return [];
+      throw error;
     }
   };
   const root = pluginsFolderPath(dataDir);
@@ -142,14 +158,14 @@ export function siteDataFiles({
   settings,
   plugins,
 }: SiteDataFilesOptions): DataFileDeclaration[] {
-  const loaded = plugins.plugins.filter((entry) => entry.loaded);
-  const loadedNames = new Set(loaded.map((entry) => entry.plugin.name));
+  const registered = plugins.plugins.filter((entry) => entry.registered);
+  const registeredNames = new Set(registered.map((entry) => entry.plugin.name));
   return [
     ...CORE_DATA_FILES,
     ...settings.dataFiles(),
-    ...loaded.flatMap((entry) => entry.dataFiles),
+    ...registered.flatMap((entry) => entry.dataFiles),
     ...pluginFolders(dataDir)
-      .filter((name) => !loadedNames.has(name))
+      .filter((name) => !registeredNames.has(name))
       .flatMap(unloadedPluginFolder),
   ];
 }

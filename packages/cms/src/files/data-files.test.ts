@@ -19,6 +19,7 @@ import {
   USERS,
   classifyFiles,
   dataFileFor,
+  dataFolder,
   dataPath,
 } from './data-files.ts';
 import type { DataClass } from './data-files.ts';
@@ -38,7 +39,8 @@ describe('dataPath', () => {
       dataPath('/site/data', ACTOR_KEYS, 'ada.ed25519.jwk'),
       path.join('/site/data', 'keys', 'ada.ed25519.jwk'),
     );
-    assert.equal(dataPath('/site/data', ACTOR_KEYS), path.join('/site/data', 'keys'));
+    assert.equal(dataFolder('/site/data', ACTOR_KEYS), path.join('/site/data', 'keys'));
+    assert.throws(() => dataPath('/site/data', ACTOR_KEYS), /keys\/\*\.jwk/);
     assert.equal(
       dataPath('/site/data', IMAGES, '2026', '10', 'cat.jpg'),
       path.join('/site/data', 'images', '2026', '10', 'cat.jpg'),
@@ -117,6 +119,13 @@ describe('the core declarations', () => {
 });
 
 describe('the scratch patterns', () => {
+  it('win over a declaration listed before them', () => {
+    assert.equal(
+      dataFileFor([IMAGES, TEMPORARY_FILES], 'images/a/b.webp.1a-2.tmp'),
+      TEMPORARY_FILES,
+    );
+  });
+
   it('leave content whose name only looks like a lock or a temporary file', () => {
     for (const relative of [
       'posts/the.locket.md',

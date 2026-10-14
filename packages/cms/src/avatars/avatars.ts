@@ -6,7 +6,7 @@ import sharp from 'sharp';
 import type { AdminStore } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { writeFileAtomically } from '../files/atomic.ts';
-import { AVATARS, dataPath } from '../files/data-files.ts';
+import { AVATARS, dataFolder, dataPath } from '../files/data-files.ts';
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
@@ -156,7 +156,7 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
   const timers = options.timers ?? systemNotificationTimers;
   const firstViewWaitMs = options.firstViewWaitMs ?? AVATAR_FIRST_VIEW_WAIT_MS;
   const logger = options.logger ?? console;
-  const directory = dataPath(config.dataDir, AVATARS);
+  const directory = dataFolder(config.dataDir, AVATARS);
   const avatarFile = (name: string): string => dataPath(config.dataDir, AVATARS, name);
 
   const inFlight = new Map<string, Promise<boolean>>();

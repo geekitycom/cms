@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { chmod, open, rename, rm, stat } from 'node:fs/promises';
+import { open, rename, rm, stat } from 'node:fs/promises';
+import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { createGzip, gzipSync } from 'node:zlib';
 
@@ -12,16 +13,18 @@ import {
   classifyFiles,
   dataPath,
 } from '../files/data-files.ts';
+import type { OtherEntryKind } from '../files/data-files.ts';
 import { TAR_END, tarHeader, tarPadding } from '../files/tar.ts';
 import { ownManifest } from '../init.ts';
 import { createFileRecords } from '../jobs/file-records.ts';
-import { siteDataFiles } from '../plugins/data.ts';
+import { pluginFolderOf, siteDataFiles } from '../plugins/data.ts';
 import { readEnabledPlugins } from '../plugins/enabled.ts';
 import type { PluginRegistry } from '../plugins/registry.ts';
 import { DEV_MODE } from '../settings/dev-mode.ts';
 import { overridden, sourceLabel } from '../settings/registry.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import { countWaitingMessages } from '../store/queue-database.ts';
+import { isNotFound } from '../util/files.ts';
 import { isRecord } from '../util/guards.ts';
 
 /**
@@ -76,7 +79,7 @@ export interface PendingWork {
 
 export type NotCarried = {
   readonly path: string;
-  readonly why: string;
+  readonly why: OtherEntryKind;
 };
 
 export interface ExportManifest {
@@ -160,11 +163,7 @@ export function exportFileName(baseUrl: string, now: Date): string {
 }
 
 function credentialOwner(relative: string): string {
-  const [first, second, third] = relative.split('/');
-  if (first === 'plugins' && second !== undefined) {
-    return second.startsWith('@') && third !== undefined ? `${second}/${third}` : second;
-  }
-  return (relative.split('/').at(-1) ?? relative).replace(/\.json$/, '');
+  return pluginFolderOf(relative) ?? path.posix.basename(relative, '.json');
 }
 
 async function overridesOf(settings: SettingsRegistry): Promise<ManifestOverride[]> {
@@ -272,10 +271,6 @@ export async function planSiteExport(
   };
 }
 
-function isMissing(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException).code === 'ENOENT';
-}
-
 async function* tarEntries(
   plan: ExportPlan,
   recorded: ManifestFile[],
@@ -284,12 +279,10 @@ async function* tarEntries(
   let bytes = 0;
   for (const [index, file] of plan.files.entries()) {
     options.signal?.throwIfAborted();
-    let handle;
-    try {
-      handle = await open(file.absolute, 'r');
-    } catch (error) {
-      if (!isMissing(error)) throw error;
-    }
+    const handle = await open(file.absolute, 'r').catch((error: unknown) => {
+      if (isNotFound(error)) return undefined;
+      throw error;
+    });
     if (handle !== undefined) {
       try {
         const { mode, mtime, size: onDisk } = await handle.stat();
@@ -356,23 +349,7 @@ export async function writeSiteExport(
       createGzip(),
       createWriteStream(body, { mode: 0o600, flags: 'wx' }),
     );
-    const { site } = plan;
-    const manifest: ExportManifest = {
-      format: site.format,
-      cms: site.cms,
-      exportedAt: now.toISOString(),
-      baseUrl: site.baseUrl,
-      content: site.content,
-      credentials: site.credentials,
-      devMode: site.devMode,
-      files,
-      undeclared: site.undeclared,
-      notCarried: site.notCarried,
-      credentialsLeftOut: site.credentialsLeftOut,
-      plugins: site.plugins,
-      overrides: site.overrides,
-      pending: site.pending,
-    };
+    const manifest: ExportManifest = { ...plan.site, exportedAt: now.toISOString(), files };
     const text = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
     const head = gzipSync(
       Buffer.concat([
@@ -388,7 +365,6 @@ export async function writeSiteExport(
       },
       createWriteStream(whole, { mode: 0o600, flags: 'wx' }),
     );
-    await chmod(whole, 0o600);
     await rename(whole, options.out);
     return manifest;
   } finally {

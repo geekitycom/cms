@@ -248,13 +248,13 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 
 ## Data files
 
-| Export                | Kind     | What it is                                                                                                                              |
-| --------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `classifyFiles`       | function | Every regular file under a folder, sorted, each with the first declaration in a list that covers it, or `undefined` when none does.     |
-| `ClassifiedFile`      | type     | One file `classifyFiles` found: its path relative to the folder, its absolute path and its declaration.                                 |
-| `dataFileFor`         | function | The first declaration in a list, such as `cms.dataFiles()`, that covers a path under `data/`, or `undefined` when none does.            |
-| `DataClass`           | type     | What a file under `data/` is to the site, and so what an export does with it: kept, credential, rebuildable, pending or scratch.        |
-| `DataFileDeclaration` | type     | A pattern under `data/`, its class, and what is lost if its files are lost. `cms.dataFiles()` returns every one in effect for the site. |
+| Export                | Kind     | What it is                                                                                                                                                          |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `classifyFiles`       | function | Every regular file under a folder, sorted, each with the declaration `dataFileFor` gives it, or `undefined` when none covers it.                                    |
+| `ClassifiedFile`      | type     | One file `classifyFiles` found: its path relative to the folder, its absolute path and its declaration.                                                             |
+| `dataFileFor`         | function | The declaration in a list, such as `cms.dataFiles()`, that covers a path under `data/`: a scratch one if any covers it, else the first. `undefined` when none does. |
+| `DataClass`           | type     | What a file under `data/` is to the site, and so what an export does with it: kept, credential, rebuildable, pending or scratch.                                    |
+| `DataFileDeclaration` | type     | A pattern under `data/`, its class, and what is lost if its files are lost. `cms.dataFiles()` returns every one in effect for the site.                             |
 
 ## Plugins
 

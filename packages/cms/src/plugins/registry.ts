@@ -30,7 +30,7 @@ import type {
 } from '../plugin.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
-import { pluginDataFiles, pluginDataFolder } from './data.ts';
+import { declaredDataFolder, pluginDataFiles } from './data.ts';
 import { pluginFetch } from './fetch.ts';
 import type { PluginFetchOptions } from './fetch.ts';
 import { pluginEnvPrefix, reservedNamespaceProblem } from '../settings/names.ts';
@@ -85,7 +85,7 @@ export interface PluginRegistryOptions extends PluginFetchOptions {
 export interface RegisteredPlugin extends InstalledPlugin, PluginContributions {
   /** Why it cannot run, or `undefined` when it can be enabled. */
   problem: string | undefined;
-  loaded: boolean;
+  registered: boolean;
 }
 
 /**
@@ -235,7 +235,7 @@ export function createPluginRegistry(
       ...entry,
       ...declared,
       problem: problem(entry.plugin.name),
-      loaded: own.get(entry.plugin.name) === undefined,
+      registered: own.get(entry.plugin.name) === undefined,
     };
   });
 
@@ -411,7 +411,7 @@ function register(
   const host: PluginHost = {
     apiVersion: HOST_API_VERSION,
     name,
-    data: pluginDataFolder(options.dataDir, plugin),
+    data: declaredDataFolder(options.dataDir, name, dataFiles),
     get(path, handler) {
       declaring('a route');
       routes.push({ path, handler });

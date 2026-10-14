@@ -21,7 +21,7 @@ import {
 } from './export/site-export.ts';
 import {
   checkImportTargets,
-  discardStagedImport,
+  discardStaging,
   finishSiteImport,
   importNotes,
   installArchivedPlugins,
@@ -1096,7 +1096,7 @@ async function importCommand({ args, configPath, flags }: ParsedArgs): Promise<n
     Object.freeze({ ...unsettled, contentDir: staged.content ?? contentDir }),
   );
   if (inEffect.baseUrl !== manifest.baseUrl && flags['new-base-url'] !== true) {
-    await discardStagedImport(staged);
+    await discardStaging(staged);
     process.stderr.write(
       `The base URL in effect is ${inEffect.baseUrl}, and the archive was exported from ${manifest.baseUrl}. ` +
         'Actor ids are built from the base URL, so followers would not follow the site to a new address. ' +

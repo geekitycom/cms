@@ -20,9 +20,11 @@ import {
   IMPORT_MARKER,
   IMPORT_STAGING,
   LOST_AND_FOUND,
+  OTHER_ENTRY_KINDS,
   classifyEntries,
   dataFileFor,
   dataFileMatches,
+  dataFolder,
   dataPath,
 } from '../files/data-files.ts';
 import type { DataFileDeclaration } from '../files/data-files.ts';
@@ -84,7 +86,7 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const PRIVATE_FOLDER_MODE = 0o700;
 
 function stagingDir(dir: string): string {
-  return dataPath(dir, IMPORT_STAGING);
+  return dataFolder(dir, IMPORT_STAGING);
 }
 
 function markerFile(dir: string): string {
@@ -196,11 +198,11 @@ export function parseManifest(text: string): ExportManifest {
     devMode: readBoolean(parsed, 'devMode'),
     files: readArray(parsed, 'files').map(parseFile),
     undeclared: readArray(parsed, 'undeclared').filter((each) => typeof each === 'string'),
-    notCarried: readArray(parsed, 'notCarried').flatMap((each) =>
-      isRecord(each) && typeof each['path'] === 'string' && typeof each['why'] === 'string'
-        ? [{ path: each['path'], why: each['why'] }]
-        : [],
-    ),
+    notCarried: readArray(parsed, 'notCarried').flatMap((each) => {
+      if (!isRecord(each) || typeof each['path'] !== 'string') return [];
+      const why = OTHER_ENTRY_KINDS.find((kind) => kind === each['why']);
+      return why === undefined ? [] : [{ path: each['path'], why }];
+    }),
     credentialsLeftOut: readArray(parsed, 'credentialsLeftOut').filter(
       (each) => typeof each === 'string',
     ),
@@ -280,8 +282,8 @@ function targetState(
 ): TargetState {
   try {
     if (readFileSync(markerFile(dir), 'utf8') === marker) return 'unfinished';
-  } catch {
-    // No marker: the folder is not an import of this archive.
+  } catch (error) {
+    if (!isNotFound(error)) throw error;
   }
   const { files, others } = classifyEntries(dir, declarations);
   const strayFolder = topFolders(dir).some(
@@ -342,7 +344,7 @@ function placeOf(name: string): { readonly root: 'content' | 'data'; readonly re
 async function writeEntry(
   entry: TarStreamEntry,
   target: { readonly file: string; readonly dirMode: number | undefined } | undefined,
-) {
+): Promise<{ readonly sha256: string }> {
   const hash = createHash('sha256');
   const hashed = async function* () {
     for await (const piece of entry.body) {
@@ -362,7 +364,10 @@ async function writeEntry(
   return { sha256: hash.digest('hex') };
 }
 
-function skipReason(declarations: readonly DataFileDeclaration[], relative: string) {
+function skipReason(
+  declarations: readonly DataFileDeclaration[],
+  relative: string,
+): string | undefined {
   const kind = dataFileFor(declarations, relative)?.dataClass.kind;
   switch (kind) {
     case 'kept':
@@ -444,14 +449,13 @@ async function unpack(
   return skipped;
 }
 
-async function discardStaging(targets: ImportTargets, created: readonly string[]): Promise<void> {
+export async function discardStaging({
+  targets,
+  created,
+}: Pick<StagedImport, 'targets' | 'created'>): Promise<void> {
   await rm(stagingDir(targets.contentDir), { recursive: true, force: true });
   await rm(stagingDir(targets.dataDir), { recursive: true, force: true });
   for (const dir of created) await rm(dir, { recursive: true, force: true });
-}
-
-export async function discardStagedImport(staged: StagedImport): Promise<void> {
-  await discardStaging(staged.targets, staged.created);
 }
 
 export async function stageSiteImport(options: {
@@ -461,7 +465,7 @@ export async function stageSiteImport(options: {
   readonly settings: SettingsRegistry;
 }): Promise<StagedImport> {
   const { archive, archived, targets, settings } = options;
-  await discardStaging(targets, []);
+  await discardStaging({ targets, created: [] });
   const content = archived.manifest.content ? stagingDir(targets.contentDir) : undefined;
   const data = stagingDir(targets.dataDir);
   const created: string[] = [];
@@ -480,15 +484,15 @@ export async function stageSiteImport(options: {
     const states = checkImportTargets(archived, targets, settings);
     return { archived, targets, content, data, states, skipped, created };
   } catch (error) {
-    await discardStaging(targets, created);
+    await discardStaging({ targets, created });
     throw error;
   }
 }
 
 async function startAside(dir: string, stamp: string, marker: string): Promise<string> {
-  let aside = dataPath(dir, IMPORT_ASIDE, `.geekity-before-import-${stamp}`);
+  let aside = dataFolder(dir, IMPORT_ASIDE, `.geekity-before-import-${stamp}`);
   for (let n = 2; existsSync(aside); n += 1) {
-    aside = dataPath(dir, IMPORT_ASIDE, `.geekity-before-import-${stamp}-${String(n)}`);
+    aside = dataFolder(dir, IMPORT_ASIDE, `.geekity-before-import-${stamp}-${String(n)}`);
   }
   await mkdir(aside, { mode: PRIVATE_FOLDER_MODE });
   await writeFile(markerFile(aside), marker, { mode: 0o600 });
@@ -498,8 +502,11 @@ async function startAside(dir: string, stamp: string, marker: string): Promise<s
 async function asideInProgress(dir: string, marker: string): Promise<string | undefined> {
   for (const name of await readdir(dir)) {
     if (!dataFileMatches(IMPORT_ASIDE, name)) continue;
-    const aside = dataPath(dir, IMPORT_ASIDE, name);
-    const held = await readFile(markerFile(aside), 'utf8').catch(() => undefined);
+    const aside = dataFolder(dir, IMPORT_ASIDE, name);
+    const held = await readFile(markerFile(aside), 'utf8').catch((error: unknown) => {
+      if (isNotFound(error)) return undefined;
+      throw error;
+    });
     if (held === marker) return aside;
   }
   return undefined;

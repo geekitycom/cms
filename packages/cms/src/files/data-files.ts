@@ -2,6 +2,8 @@ import { readdirSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
 import path from 'node:path';
 
+import { isNotFound } from '../util/files.ts';
+
 /**
  * What a file under `data/` is to the site, and so what a site export does
  * with it. Decide with an exhaustive `switch` on `kind`, so a new
@@ -65,12 +67,22 @@ export function dataFileMatches(declaration: DataFileDeclaration, relative: stri
   return segmentsMatch(segmentsOf(declaration.pattern), segmentsOf(relative));
 }
 
-/** The first declaration that covers a `/`-separated path, or `undefined` when none does. */
+/**
+ * The declaration that covers a `/`-separated path, or `undefined` when none
+ * does. A scratch declaration wins over any other, wherever it is in the list,
+ * so a temporary file inside a kept folder is scratch. Among the rest, the
+ * first that covers it wins.
+ */
 export function dataFileFor(
   declarations: readonly DataFileDeclaration[],
   relative: string,
 ): DataFileDeclaration | undefined {
-  return declarations.find((declaration) => dataFileMatches(declaration, relative));
+  const covering = declarations.filter((declaration) => dataFileMatches(declaration, relative));
+  return covering.find((declaration) => declaration.dataClass.kind === 'scratch') ?? covering[0];
+}
+
+export function writtenPrivately(declaration: DataFileDeclaration): boolean {
+  return declaration.dataClass.kind === 'credential';
 }
 
 export function declareDataFile(declaration: DataFileDeclaration): DataFileDeclaration {
@@ -92,14 +104,25 @@ export function dataPath(dataDir: string, file: DataFileDeclaration, ...parts: s
       built.push(glob);
       continue;
     }
-    if (next === parts.length) break;
     const taken = glob === ANY_DEPTH ? parts.slice(next) : parts.slice(next, next + 1);
+    if (taken.length === 0) refuse();
     if (!taken.every((part) => segmentMatches(glob === ANY_DEPTH ? '*' : glob, part))) refuse();
     built.push(...taken);
     next += taken.length;
   }
   if (next !== parts.length) refuse();
   return path.join(dataDir, ...built);
+}
+
+/** The folder that holds what `folder` declares: `keys/` for `keys/*.jwk`, `images/` for `images/**`. */
+export function dataFolder(
+  dataDir: string,
+  folder: DataFileDeclaration,
+  ...parts: string[]
+): string {
+  const segments = segmentsOf(folder.pattern);
+  if (segments.length < 2) throw new Error(`${folder.pattern} declares a file, not a folder.`);
+  return dataPath(dataDir, { ...folder, pattern: segments.slice(0, -1).join('/') }, ...parts);
 }
 
 const KEPT: DataClass = { kind: 'kept' };
@@ -331,7 +354,7 @@ export interface ClassifiedFile {
   /** Under the folder walked, `/`-separated. */
   readonly relative: string;
   readonly absolute: string;
-  /** The first declaration that covers it, or `undefined` when none does. */
+  /** The declaration {@link dataFileFor} gives it, or `undefined` when none covers it. */
   readonly declaration: DataFileDeclaration | undefined;
 }
 
@@ -342,7 +365,9 @@ export interface ClassifiedFile {
  */
 export const LOST_AND_FOUND = 'lost+found';
 
-export type OtherEntryKind = 'a symbolic link' | 'a socket' | 'a FIFO' | 'a device';
+export const OTHER_ENTRY_KINDS = ['a symbolic link', 'a socket', 'a FIFO', 'a device'] as const;
+
+export type OtherEntryKind = (typeof OTHER_ENTRY_KINDS)[number];
 
 export interface ClassifiedOther extends ClassifiedFile {
   readonly kind: OtherEntryKind;
@@ -375,7 +400,7 @@ export function classifyEntries(
     try {
       entries = readdirSync(folder, { withFileTypes: true });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      if (isNotFound(error)) return;
       throw error;
     }
     for (const entry of entries) {
