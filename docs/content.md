@@ -110,6 +110,7 @@ the same directory reads all of it, and everything in it is public.
 | `data/plugins/<package name>/`   | Each plugin's private folder. Its secret settings are in `secrets.json`, mode `0600`. The plugin decides what else goes there.                      |
 | `data/plugin-changes.json`       | Who added, updated and removed which plugin on Admin > Plugins, and when. Mode `0600`.                                                              |
 | `data/jobs.json`                 | The admin jobs: each one's state, progress and result, with the newest five ended jobs of each name. See [Admin jobs](configuration.md#admin-jobs). |
+| `data/queue.sqlite`              | Deliveries, inbox activities and retries still waiting. Mode `0600`. See [The message queue](federation.md#the-message-queue).                      |
 
 [Personal data](personal-data.md) lists the files that hold readers' data, and
 how long each is kept.

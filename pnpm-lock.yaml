@@ -235,6 +235,9 @@ importers:
       '@fedify/hono':
         specifier: ^2.4.0
         version: 2.4.0(@fedify/fedify@2.4.0)(hono@4.13.13)
+      '@fedify/sqlite':
+        specifier: ^2.4.0
+        version: 2.4.0(@fedify/fedify@2.4.0)
       '@fedify/vocab':
         specifier: ^2.4.0
         version: 2.4.0
@@ -287,9 +290,6 @@ importers:
       '@fedify/cli':
         specifier: 2.4.0
         version: 2.4.0(@jimp/custom@0.22.12)(@types/node@26.6.4)(supports-color@7.2.0)(typescript@7.0.2)
-      '@fedify/sqlite':
-        specifier: 2.4.0
-        version: 2.4.0(@fedify/fedify@2.4.0)
       '@lezer/highlight':
         specifier: ^1.2.5
         version: 1.2.5

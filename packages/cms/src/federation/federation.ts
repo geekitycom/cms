@@ -100,7 +100,7 @@ export interface CreateSiteFederationOptions extends FederationOverrides {
  *
  * It is a factory rather than a module-level singleton so the KV store and the
  * queue are arguments (decision-5), so a test can build one per data directory,
- * and so a site that outgrows the in-memory pair changes a call rather than
+ * and so a site that outgrows the defaults changes a call rather than
  * this file. The followers come out of SQLite, per user; the following
  * collection is empty, and doc-4 says it always will be.
  */

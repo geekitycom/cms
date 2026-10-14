@@ -380,7 +380,9 @@ delete it, queued jobs and the history are lost, and nothing else.
 `jobs.transport` carries each job's id to the server, and `jobs.records`
 stores the records. Both have defaults: an in-process transport and
 `data/jobs.json`. Any Fedify `MessageQueue` works as a transport. Give it a
-queue of its own, not the one `federation.queue` uses:
+queue of its own, not the one `federation.queue` uses. The federation queue is
+the table `federation_messages` in `data/queue.sqlite`, so a transport in the
+same file needs a table of its own:
 
 ```ts
 import { DatabaseSync } from 'node:sqlite';

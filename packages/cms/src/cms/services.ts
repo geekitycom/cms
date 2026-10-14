@@ -33,7 +33,7 @@ import type {
   RelayService,
   SiteFederation,
 } from '../federation/index.ts';
-import { createSettlingQueue } from '../federation/queue.ts';
+import { createFederationQueue } from '../federation/queue.ts';
 import { settleImageVariants } from '../images/variants.ts';
 import { stripMetadataJob } from '../content/metadata/strip-job.ts';
 import { resendJob } from '../federation/resend-job.ts';
@@ -236,13 +236,13 @@ export function createServices({
   });
 
   const federationKv = resolved.federation.kv ?? new MemoryKvStore();
-  const federationQueue =
-    resolved.federation.queue === null ? undefined : createSettlingQueue(resolved.federation.queue);
+  const federationQueue = createFederationQueue(resolved.federation.queue, site);
   const federation = createSiteFederation({
     baseUrl: resolved.baseUrl,
     ...resolved.federation,
-    queue: federationQueue ?? null,
+    queue: federationQueue?.queue ?? null,
     kv: federationKv,
+    federationOptions: { manuallyStartQueue: true },
   });
 
   // The names and faces of the actors who are not followers (TASK-184),
@@ -254,14 +254,12 @@ export function createServices({
   });
 
   const federated = { ...site, actorProfiles, cited: citedWith };
-  const federationContext = async () => {
+  const federationData = async () => {
     const settled = await settings.values(SITE);
-    return federation.createContext(new URL(resolved.baseUrl), {
-      ...federated,
-      site: settled,
-      cited: citedWith(settled),
-    });
+    return { ...federated, site: settled, cited: citedWith(settled) };
   };
+  const federationContext = async () =>
+    federation.createContext(new URL(resolved.baseUrl), await federationData());
 
   const learnHandles = handleLearner(federationContext);
 
@@ -436,8 +434,18 @@ export function createServices({
     { settled: () => delivery.settled() },
     { settled: () => relays.settled() },
     {
+      start: async () => {
+        if (federationQueue === undefined) return;
+        federationQueue.queue.resume();
+        federation.startQueue(await federationData()).catch((error: unknown) => {
+          console.error(`The federation queue stopped: ${messageOf(error)}`);
+        });
+      },
+      stop: () => {
+        federationQueue?.queue.pause();
+      },
       settled: async () => {
-        await federationQueue?.settled();
+        await federationQueue?.queue.settled();
       },
       release: () => {
         federationQueue?.close();
