@@ -2,7 +2,7 @@
 id: decision-55
 title: 'Every file under data/ has a declared class, and a site export follows from it'
 date: '2026-10-14 14:21'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -54,7 +54,7 @@ The class is the one this record proposes (section 1 of the Decision). "Private"
 | `avatars/<hash>` | `avatars/avatars.ts` | rebuildable | Fetched again by the avatar sweep |
 | `*.<pid>-<n>.tmp` | `files/atomic.ts` (`temporaryName`) | scratch | Nothing. A crash can leave one behind. |
 | `jobs.json.lock`, `jobs.json.lock.takeover` | `jobs/lock-file.ts` | scratch | Nothing. A stale lock is taken over. |
-| `queue.sqlite` (TASK-379, not built yet; the name is decision-54's suggestion) | Fedify `SqliteMessageQueue` | pending | Queued deliveries and Fedify's scheduled retries |
+| `queue.sqlite`, `-wal`, `-shm` (TASK-379, PR #188, decision-57; on main after this spike's commit) | `store/queue-database.ts` `openQueueDatabase`, Fedify `SqliteMessageQueue` | pending, private | Queued deliveries, inbox work and Fedify's scheduled retries. The file is mode 0600 because a waiting outbox message carries the private key it is signed with. |
 
 `@geekity/plugin-post-summary` writes nothing of its own under `data/`. Its settings live in its `settings.json`.
 
@@ -77,7 +77,7 @@ No credential is stored under `content/`. `site.json`'s `indexNowKey` is public 
 
 ### Outside `data/` and `content/`
 
-- `pluginsDir` (`/site/plugins` in the image) holds plugin bundles that `plugins/install.ts` writes. They can be installed again from npm.
+- `pluginsDir` (`/site/plugins` in the image) holds plugin bundles that `plugins/install.ts` writes. They can be installed again from npm, which is what `geekity import` does (section 5).
 - `themesDir` holds the owner's own themes. The site only reads it.
 - The config file and the environment are the deployer's.
 - The supervisor's control socket is in `tmpdir()` (`supervisor/control.ts`).
@@ -178,13 +178,16 @@ data/…             every file whose class is kept; credentials too with --with
   "devMode": false,
   "files": [{ "path": "data/users.json", "class": "kept", "size": 1234, "sha256": "…" }],
   "credentialsLeftOut": ["mail", "@geekity/plugin-llm"],
-  "plugins": [{ "name": "@geekity/plugin-llm", "version": "1.2.0", "enabled": true }],
+  "plugins": [
+    { "name": "@geekity/plugin-llm", "version": "1.2.0", "source": "folder", "enabled": true },
+    { "name": "@acme/plugin-x", "version": "0.3.1", "source": "config", "enabled": false }
+  ],
   "overrides": [{ "setting": "site.base_url", "source": "env GEEKITY_BASE_URL" }],
-  "pending": { "deliveries": null, "jobs": { "queued": 0, "running": 0 } }
+  "pending": { "deliveries": 0, "jobs": { "queued": 0, "running": 0 } }
 }
 ```
 
-`overrides` lists setting names and sources from `settings.resolve`, never values. `credentialsLeftOut` names the namespaces whose credential files held a value. `plugins` comes from the enabled set and the plugin folder. `pending.deliveries` is `null` until TASK-379 gives the queue a count (task 8).
+`overrides` lists setting names and sources from `settings.resolve`, never values. `credentialsLeftOut` names the namespaces whose credential files held a value. `plugins` lists every installed plugin with its version, whether it is enabled, and its source: `folder` for a plugin in `pluginsDir` (added with `geekity plugin add` or the admin), `config` for one the site's config names. No plugin code is in the archive. `pending.deliveries` is the number of rows waiting in `data/queue.sqlite`, read with a read-only connection.
 
 **Credentials.** These are left out unless the person asks: `--with-credentials` on the CLI, or a checkbox in the admin. Credentials set through the environment are never in a file, so they are never exported.
 
@@ -194,7 +197,7 @@ Every export holds actor keys, password hashes and personal data, whether or not
 
 **Pending work.**
 
-- Fedify's queue (`queue.sqlite`, TASK-379) is never exported. A backup restored days later would otherwise replay stale deliveries. A restore on a second host while the first still runs would send everything twice. The rows also carry retry timing for this host. Once TASK-379 lands, the manifest records how many messages were waiting, and the admin and the CLI print the count. For a move, the documented order is: wait until the count is 0, export, stop the old site. Maintenance mode does not hold outbound deliveries (decision-35), so turning it on during the wait stops new inbound work while the queue drains.
+- Fedify's queue (`data/queue.sqlite` and its WAL files, TASK-379 and decision-57) is classed `pending` and is never exported, even with `--with-credentials`. A waiting outbox message carries the private key it is signed with, which is why TASK-379 made the file mode 0600, and an export must not copy keys into rows a reader cannot see. A backup restored days later would also replay stale deliveries, a restore on a second host while the first still runs would send everything twice, and the rows carry retry timing for this host. The manifest records how many messages were waiting, and the admin and the CLI print the count before the export starts. For a move, the documented order is: wait until the count is 0, export, stop the old site. Maintenance mode does not hold outbound deliveries (decision-35), so turning it on during the wait stops new inbound work while the queue drains.
 - `jobs.json` is exported as `kept`, as decision-54 says. On the imported site, start-up recovery treats its queued and running jobs as cut off by a crash and runs them. Both jobs that exist today, strip-metadata and resend, are safe to run again.
 
 **Surface.**
@@ -212,17 +215,20 @@ Every export holds actor keys, password hashes and personal data, whether or not
 4. Unpack into `<dir>.importing` beside each target, then rename into place. A crashed import leaves only the staging directories, and a second run removes them and starts again.
 5. Compare the base URL in effect (config or environment, else the imported `site.json`) with `manifest.baseUrl`. If they differ, refuse unless `--new-base-url` is given. The refusal explains that actor ids are built from the URL, so followers would not follow the site to a new address. A `Move` is not part of this work.
 6. If `--dev-mode` is given, set `dev_mode.on` to true through the registry. This is for a staging copy of a live site. Without the flag, dev mode stays as it was exported. This is why `dev-mode.json` is `kept`.
-7. Run the rebuild. Its body is pulled out of `rebuildCommand` as `rebuildDatabase(config)`, and both commands call it, so an imported site's database is the one `geekity rebuild` makes.
-8. Print what the owner still has to do:
-   - Add each plugin from `manifest.plugins` with `geekity plugin add <name>@<version>`.
+7. Install the plugins. For each `folder` plugin in `manifest.plugins`, install `<name>@<version>` from npm through the same code `geekity plugin add` runs (`installPlugin` in plugins/manage.ts), into `pluginsDir`, against the registry `pluginRegistry` names. Then make its enabled state the manifest's. The enabled set lives in `content/_data/site.json`, so it usually arrives with `content/`; with an export made `--without-content`, import writes it with `setPluginEnabled`. A `config` plugin is not installed: it comes with the site's config and `package.json`, and import names it so the owner can check that the new host's config has it.
+8. Run the rebuild. Its body is pulled out of `rebuildCommand` as `rebuildDatabase(config)`, and both commands call it, so an imported site's database is the one `geekity rebuild` makes.
+9. Print what the owner still has to do:
    - Set each override in `manifest.overrides` again.
    - Type in again each credential in `credentialsLeftOut`.
+   - Check each `config` plugin.
    - Every user signs in again.
+
+**When a plugin cannot be installed.** The registry may be unreachable, the recorded version may have been unpublished, the integrity check may fail, the version may need a newer core, or `pluginsDir` may be unset. None of these stops the import. The data is restored first, the database is rebuilt, and every other plugin is installed. A plugin that failed keeps its enabled state in `site.json`, so a later `geekity plugin add <name>@<version>` brings it back as it was. A plugin that is enabled but not installed does not run, and the Plugins screen shows it as not installed, as today. Import never falls back to a newer version, because a different version may need a different core or read its data differently. At the end, import prints one line per failed plugin with the reason and the command to retry, and exits 1. Exit 1 means "the site is restored, but not all of it": a script notices, and running import again is not needed. Exit 0 means everything was restored and every `folder` plugin was installed.
 
 **What a restored site keeps, rebuilds and loses.**
 
 - **Kept:** the fediverse identity. The actor keys, `users.json` usernames and the base URL in `site.json` give the same actor ids and key ids. `content/_data/federation/` holds the followers, and the WordPress actor numbers are in `actors.json`. Connected IndieAuth apps keep working, because their token hashes are in `indieauth-tokens.json`. Links in mail already sent keep working (`notification-secret`). Address hashes stay comparable (`comment-salt`). Comment emails, opt-outs, contact messages, locations and kept properties are all restored.
-- **Rebuilt at first boot or soon after:** the content, followers, inbox and comment indexes (the rebuild); relay follows (`relays.sync`); image variants and icons (derived again when a page asks for them); avatars (the sweep); the caches of the LLM and tag-suggest plugins.
+- **Rebuilt at first boot or soon after:** the content, followers, inbox and comment indexes (the rebuild); relay follows (`relays.sync`); image variants and icons (derived again when a page asks for them); avatars (the sweep); the caches of the LLM and tag-suggest plugins. Folder plugins are installed from npm by the import itself.
 - **Lost:** sessions, so everyone signs in again. Password-reset links in flight. Delivery outcomes, so the Federation screen starts with no history. The sent-webmention record, so a link removed later does not notify its old target. The scheduler watermark, so a post that came due between the export and the import is not announced; `geekity resend <slug>` sends it. Pending deliveries, which the move procedure drains first. Credentials, unless they were exported.
 
 ### 6. `geekity rebuild` does not change
@@ -231,9 +237,10 @@ It still deletes only `geekity.db` and its WAL files, and builds it again. Class
 
 ### 7. Changes to earlier decisions
 
-- **decision-53:** `dev_mode`'s file moves from rebuildable to `kept`. decision-35 says a lost variable must not take a site live, and the same holds for a lost file in a restore. `maintenance` stays rebuildable. `mail`, `akismet` and plugin `secrets.json` become `credential`, and plugin `settings.json` and `site` become `kept`.
+- **decision-53:** `dev_mode`'s file moves from rebuildable to `kept`, so the archive carries `dev-mode.json` and a restored site comes back in the dev mode it was in. This changes decision-53's table in section 2 and wave 1. decision-35 says a lost variable must not take a site live, and the same holds for a lost file in a restore. `maintenance` stays rebuildable. `mail`, `akismet` and plugin `secrets.json` become `credential`, and plugin `settings.json` and `site` become `kept`.
 - **decision-52:** the export is a `.tar.gz`, not a zip.
 - **decision-54:** `data/exports/` is new scratch that a job writes. `jobs.json` stays kept.
+- **decision-57:** `data/queue.sqlite` is classed `pending` and never exported.
 
 ## Consequences
 
@@ -242,75 +249,81 @@ It still deletes only `geekity.db` and its WAL files, and builds it again. Class
 - The plugin API loses `PluginDataFolder.path` and gains a required `data` declaration for any file a plugin keeps. This is a breaking change, released with decision-53's `siteInfo()` and `current()` breaks in one major. Plugins outside this repository that keep files must add the declaration.
 - An export contains private data whatever the options. The admin asks for the password again, and the docs say to store the file as carefully as `data/`.
 - Moving a site becomes: drain the queue, export, stop, import on the new host, point DNS. docs/deploying.md gains that procedure, and docs/personal-data.md gains a column for the class of each file and says that exports contain personal data.
-- Pending deliveries are never in an export. Someone who skips the drain loses them. After TASK-379, the manifest's count shows that before it happens.
-- TASK-379 must declare `queue.sqlite` as `pending` when it adds the file. If task 3 lands first, its census test fails on the undeclared file.
+- Pending deliveries are never in an export. Someone who skips the drain loses them, and the manifest's count shows that before it happens.
+- An import needs network access to npm to come back with its folder plugins. Without it, the data is restored, the missing plugins are named, and the exit code is 1.
+- TASK-379 has landed (PR #188), so `queue.sqlite` is declared `pending` in the first task, beside the other core files. The proposal's separate task for it is folded into tasks 1, 3, 4 and 6.
 
 ## Proposed tasks
 
+The proposal's eighth task (declare the queue once TASK-379 lands) is folded into tasks 1, 3, 4 and 6, because PR #188 has put `data/queue.sqlite` on main.
+
 1. **Data classes: declare every core data file and build its path through the declaration.**
-   Replace `DataClass` with the tagged union of section 1. Add `files/data-files.ts` with one declaration per core row of the Context table, and `dataPath`. Move every `dataDir` join site onto it. Update the five settings namespaces and the folder storage. Change `dev_mode` to `kept`.
+   Replace `DataClass` with the tagged union of section 1. Add `files/data-files.ts` with one declaration per core row of the Context table, `queue.sqlite` as `pending` included, and `dataPath`. Move every `dataDir` join site onto it. Update the five settings namespaces and the folder storage. Change `dev_mode` to `kept`.
    - AC: `DataClass` is the union of section 1, and every `switch` on it is exhaustive.
-   - AC: Every core file and folder in the table has a declaration with its class and a `lost` sentence.
+   - AC: Every core file and folder in the table has a declaration with its class and a `lost` sentence. `queue.sqlite` and its WAL files are `pending`.
    - AC: `data-files-boundary.test.ts` uses the TypeScript AST, fails on a `dataDir` join outside the allowed modules, and names the file, the line and the fix. It is shown to fail on a call added on purpose before that call is removed.
    - AC: A test pins the scratch patterns to `files/atomic.ts` `temporaryName` and `jobs/lock-file.ts`.
    - AC: A test asserts that every file `discardDatabase` removes is declared `rebuildable`.
    - AC: The settings registry writes mode 0600 exactly where it does today.
 
 2. **Plugins declare their data files.**
-   Add a `data` map to the plugin definition. `PluginDataFolder.read` and `update` refuse an undeclared name, and `path` is removed. The three published plugins that keep files declare them as in the table. The change is released with decision-53's plugin breaks.
+   Add a `data` map to the plugin definition. `PluginDataFolder.read` and `update` refuse an undeclared name, and `path` is removed. The three published plugins that keep files declare them as in the table. The change is released with decision-53's plugin breaks. Depends on task 1.
    - AC: A plugin that writes an undeclared file gets an error that names the file and the `data` field.
    - AC: `@geekity/plugin-wordpress` declares `actors.json`, `import.json` and `requests.json` as kept. `@geekity/plugin-llm` declares `last-call.json` as rebuildable, and `@geekity/plugin-tag-suggest` declares `followers.json` as rebuildable.
    - AC: `siteDataFiles` returns core, settings and loaded plugin declarations. A folder whose plugin is not loaded reads as kept.
    - AC: docs/plugins.md documents `data` and the classes a plugin may use.
 
 3. **A census test that every file a site writes is declared.**
-   Boot one site with the four published plugins, drive every writer in the Context table, and walk `data/` and `content/`.
+   Boot one site with the four published plugins, drive every writer in the Context table, and walk `data/` and `content/`. Depends on tasks 1 and 2.
    - AC: The test fails on an undeclared file and names it. This is shown by a writer added on purpose and then removed.
-   - AC: The fixture reaches every row of the table that exists in the code (all but `queue.sqlite` until TASK-379).
+   - AC: The fixture reaches every row of the table, `queue.sqlite` included.
 
 4. **`geekity export`.**
-   A streaming tar.gz writer on `node:zlib`, the manifest of section 4, and the flags `--out`, `--with-credentials`, `--without-content`, `--list` and `--config`.
-   - AC: The archive holds `manifest.json` first, every `kept` file, and `content/` without scratch. It holds no `rebuildable`, `pending` or `scratch` file.
+   A streaming tar.gz writer on `node:zlib`, the manifest of section 4, and the flags `--out`, `--with-credentials`, `--without-content`, `--list` and `--config`. Depends on task 3.
+   - AC: The archive holds `manifest.json` first, every `kept` file, and `content/` without scratch. It holds no `rebuildable`, `pending` or `scratch` file; a test shows `queue.sqlite` is never in it, with or without `--with-credentials`.
    - AC: Credential files are present only with `--with-credentials`. `credentialsLeftOut` names the namespaces that were left out.
    - AC: File modes are kept: a 0600 file in `data/` is 0600 in the archive. The archive itself is written at 0600.
    - AC: The command runs while the site serves and changes no file under `data/` or `content/`.
-   - AC: `overrides` lists sources without values, and `plugins` lists name, version and enabled.
+   - AC: `overrides` lists sources without values. `plugins` lists every installed plugin with name, version, source (`folder` or `config`) and enabled.
+   - AC: `pending.deliveries` is the number of messages waiting in `queue.sqlite`, and the command prints it before it writes.
    - AC: `--list` prints each declaration, its class and what is lost.
 
-5. **`geekity import`.**
-   The steps of section 5, with `rebuildDatabase` pulled out of `rebuildCommand` and shared by both commands.
+5. **`geekity import`, with plugins installed from npm.**
+   The steps of section 5, with `rebuildDatabase` pulled out of `rebuildCommand` and shared by both commands, and folder plugins installed through the code `geekity plugin add` runs. Depends on task 4.
    - AC: An export imported into empty directories boots with the same actor ids and key ids, and a test signs an activity before and after to show it. The users, followers, comment emails and opt-outs are the same. An IndieAuth token issued before the export is still accepted. A moderation link minted before the export still verifies.
+   - AC: Each `folder` plugin in the manifest is installed at its recorded version from the registry, and its enabled state matches the manifest, including for an export made `--without-content`. A test uses a local registry.
+   - AC: When the registry cannot be reached or a recorded version is gone, the data is still restored and the database rebuilt, every other plugin is installed, each failed plugin is named with its reason and the command to retry, its enabled state is kept, no other version is installed, and the exit code is 1. With everything restored, the exit code is 0.
+   - AC: `config` plugins are named and not installed.
    - AC: Import refuses while the site runs, refuses a newer `format`, refuses entries with `..`, absolute paths or links, and refuses a file whose sha256 does not match.
    - AC: Without `--replace`, import refuses non-empty directories. With it, the old directories are renamed and nothing is deleted.
    - AC: A different base URL in effect is refused unless `--new-base-url` is given.
-   - AC: `--dev-mode` turns dev mode on. Otherwise dev mode is as exported.
+   - AC: A restored site is in the dev mode it was exported in. `--dev-mode` turns dev mode on.
    - AC: A second run after an import killed mid-unpack finishes with the same result.
-   - AC: The command prints the plugins to add, the overrides to set, the credentials to type in again, and that everyone signs in again.
+   - AC: The command prints the overrides to set, the credentials to type in again, the `config` plugins to check, and that everyone signs in again.
 
 6. **Tools > Export in the admin.**
-   A `site.export` job on the decision-54 queue, with password re-entry, the credentials checkbox, progress, and a download.
+   A `site.export` job on the decision-54 queue, with password re-entry, the credentials checkbox, progress, and a download. Depends on task 4.
    - AC: Starting an export needs the current user's password. A wrong password queues nothing.
+   - AC: The page shows the number of deliveries waiting in `queue.sqlite` before the export starts.
    - AC: The page shows the job's progress and, when it finishes, a download that only a signed-in user can fetch.
    - AC: `data/exports/` keeps only the newest archive, deletes it after 24 hours, and is declared scratch.
 
 7. **Docs: classes, export and moving a site.**
+   Depends on tasks 5 and 6.
    - AC: docs/personal-data.md gives each file's class and says that an export contains personal data.
-   - AC: docs/deploying.md gains "Back up and move a site": drain, export, stop, import, DNS. It says what users must do again and what is lost.
-   - AC: docs/cli.md documents `export` and `import`. docs/admin.md documents Tools > Export.
+   - AC: docs/deploying.md gains "Back up and move a site": drain the queue, export, stop, import, DNS. It says what import installs, what users must do again and what is lost.
+   - AC: docs/cli.md documents `export` and `import`, including the exit codes. docs/admin.md documents Tools > Export.
 
-8. **After TASK-379: the queue file is pending, and the export counts it.**
-   - AC: `queue.sqlite` is declared `pending`, and the census test covers it.
-   - AC: `manifest.pending.deliveries` is the number of waiting messages. Tools > Export and `geekity export` print it before the export starts.
-   - AC: A test shows that an export never contains the queue file.
+Order: 1, then 2, then 3, then 4, then 5 and 6, then 7. Tasks 1 to 3 change no behaviour a site can see, except the plugin API break in task 2.
 
-Order: 1, then 2 and 3, then 4, then 5 and 6, then 7. Task 8 waits for TASK-379 and task 4. Tasks 1 to 3 change no behaviour a site can see, except the plugin API break in task 2.
+## Resolved questions
 
-## Open questions for the user
+Answered by the user on 2026-10-14.
 
-1. **tar.gz or zip.** decision-52 says zip. This record proposes `.tar.gz` for file modes and no new dependency. Accept, or keep zip and add a dependency?
-2. **`dev-mode.json` is kept.** This changes decision-53's table. The alternative is that an import always comes up in dev mode, which makes every restore of a live site need a `dev-mode off`.
-3. **Plugin declarations are strict.** An undeclared file throws. The lenient option treats undeclared files as kept and logs a warning, with no API break. Strict is proposed because the break rides an existing major.
-4. **The queue is never exported.** The alternative is a SQLite backup-API snapshot of `queue.sqlite` behind a flag, for a move where the old host cannot wait for the drain.
-5. **No admin import.** Restoring from the setup screen of a fresh install is possible later. It is left out because a running site replacing its own `data/` is the hard case.
-6. **Plugin bundles are not exported**, only names and versions. An offline restore would need `pluginsDir` too.
-7. **`indieauth-activity.json` is rebuildable**, to keep 14 days of request logs out of exports. Keep it instead?
+1. **Format:** `.tar.gz`, not zip.
+2. **Dev mode:** the archive keeps `dev-mode.json`, so a restore comes back in the dev mode it was in. This changes decision-53's table (section 7).
+3. **Plugin data declarations:** strict. An undeclared file throws. The break rides the pending major.
+4. **Queue:** `data/queue.sqlite` (decision-57) is never exported.
+5. **Import:** CLI only for now.
+6. **Plugins:** no plugin code in the archive. The manifest records installed plugins, their versions and their enabled state, and `geekity import` installs folder plugins from npm itself and restores their enabled state. When a plugin cannot be installed, the data is still restored, the plugin is named, and import exits 1 (section 5). This changed the proposal, which only printed `geekity plugin add` commands.
+7. **`indieauth-activity.json`:** rebuildable, left out of exports.
