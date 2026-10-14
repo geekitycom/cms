@@ -11,7 +11,6 @@ import { createInProcessTransport } from '../jobs/in-process.ts';
 import { createJobQueue } from '../jobs/queue.ts';
 import type { JobDefinition, JobQueue } from '../jobs/types.ts';
 import { systemClock } from '../util/clock.ts';
-import { enqueueUnlessActive } from './job-status.ts';
 
 const directories: string[] = [];
 after(async () => {
@@ -71,15 +70,15 @@ describe('queueing a job from the admin', () => {
     const rerun = nextEvent<number>('the cut-off job running again', (done) => {
       ran = done;
     });
-    assert.equal(await enqueueUnlessActive(server, sweep, null), undefined);
+    assert.equal((await server.enqueueUnlessActive(sweep, null)).queued, false);
     assert.equal(await rerun, 2);
     await server.settled();
     const done = await records.get(cut);
     assert.equal(done?.state, 'finished');
     assert.equal(done.attempt, 2);
 
-    const again = await enqueueUnlessActive(server, sweep, null);
-    assert.equal(typeof again, 'string');
+    const again = await server.enqueueUnlessActive(sweep, null);
+    assert.equal(again.queued, true);
     await server.close();
   });
 });

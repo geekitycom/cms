@@ -780,7 +780,7 @@ describe('syndication on the federation screen (TASK-155 AC #9)', () => {
       slug: 'hello-world',
     });
     assert.equal(resend.status, 303);
-    const queued = await cms.jobs.latest(RESEND_JOB);
+    const queued = await cms.jobs.latest(RESEND_JOB.name);
     assert.ok(queued);
     assert.equal((await cms.jobs.run(queued.id)).state, 'finished');
     assert.deepEqual(

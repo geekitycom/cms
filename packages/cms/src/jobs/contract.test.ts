@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -121,9 +120,10 @@ function observed(records: JobRecords): JobRecords & { watch(listener: () => voi
   };
   return {
     ...records,
-    async create(status) {
-      await records.create(status);
-      changed();
+    async create(status, blocks) {
+      const blocker = await records.create(status, blocks);
+      if (blocker === undefined) changed();
+      return blocker;
     },
     async transition(id, expected, next) {
       const moved = await records.transition(id, expected, next);
@@ -243,7 +243,6 @@ function jobQueueContract(backend: Backend): void {
           transport: process.transport,
           records,
           jobs: Object.values(jobs),
-          owner: randomUUID(),
           maxAttempts: options.maxAttempts ?? 3,
           now: systemClock,
         });
@@ -422,6 +421,28 @@ function jobQueueContract(backend: Backend): void {
       assert.equal((await waitFor(id, terminal)).state, 'finished');
       await second.process.handled(backend.durable ? 2 : 1);
       assert.equal(runs.get('echo'), 1);
+      await second.queue.close();
+    });
+
+    it('C12 two queues asked at once to queue a job unless one is active queue one', async () => {
+      const { boot, jobs, records } = await world();
+      const first = await boot({ start: false });
+      const second = await boot({ start: false });
+
+      const answers = await Promise.all([
+        first.queue.enqueueUnlessActive(jobs.echo, 'a'),
+        second.queue.enqueueUnlessActive(jobs.echo, 'b'),
+      ]);
+
+      const ids = answers.flatMap((answer) => (answer.queued ? [answer.id] : []));
+      const refused = answers.flatMap((answer) => (answer.queued ? [] : [answer.active.id]));
+      assert.equal(ids.length, 1);
+      assert.deepEqual(refused, ids);
+      assert.deepEqual(
+        (await records.list(['queued'])).map((status) => status.id),
+        ids,
+      );
+      await first.queue.close();
       await second.queue.close();
     });
   });

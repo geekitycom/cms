@@ -11,7 +11,8 @@ import { createInProcessTransport } from '../../jobs/in-process.ts';
 import { createJobQueue } from '../../jobs/queue.ts';
 import type { JobQueue, JobRecords } from '../../jobs/types.ts';
 import { systemClock } from '../../util/clock.ts';
-import { stripMetadataJob, stripReport } from './strip-job.ts';
+import { finishedResult } from '../../jobs/types.ts';
+import { STRIP_METADATA_JOB, stripMetadataJob } from './strip-job.ts';
 import { stripStoredUploads } from './sweep.ts';
 
 const directories: string[] = [];
@@ -82,7 +83,7 @@ function worker(sweep: Site, records: JobRecords = createFileRecords(sweep.jobsF
 
 async function sweepOnce(sweep: Site) {
   const queue = worker(sweep);
-  const id = await queue.enqueue(stripMetadataJob(sweep.contentDir), null);
+  const id = await queue.enqueue(STRIP_METADATA_JOB, null);
   return queue.run(id);
 }
 
@@ -118,7 +119,7 @@ describe('the strip-metadata job', () => {
     const status = await sweepOnce(sweep);
 
     assert.equal(status.state, 'finished');
-    const report = stripReport(status.state === 'finished' ? status.result : null);
+    const report = finishedResult(STRIP_METADATA_JOB, status);
     assert.equal(report?.checked, 2);
     assert.equal(report.clean, 0);
     assert.deepEqual(
@@ -177,7 +178,7 @@ describe('the strip-metadata job', () => {
     for (const [relative, line] of Object.entries(once)) {
       assert.equal(line.split(' ').slice(1).join(' '), MODIFIED.toISOString(), relative);
     }
-    const report = stripReport(second.state === 'finished' ? second.result : null);
+    const report = finishedResult(STRIP_METADATA_JOB, second);
     assert.equal(report?.clean, 4);
     assert.deepEqual(report.stripped, []);
   });
@@ -189,7 +190,7 @@ describe('the strip-metadata job', () => {
 
     const cut = await site(files);
     const first = stoppingWorker(cut, 2);
-    const id = await first.queue.enqueue(stripMetadataJob(cut.contentDir), null);
+    const id = await first.queue.enqueue(STRIP_METADATA_JOB, null);
     await first.queue.start();
     await first.stopped;
     await first.queue.close();
@@ -208,7 +209,7 @@ describe('the strip-metadata job', () => {
   it('stops between files when the queue stops, and finishes in the next worker (AC #4)', async () => {
     const sweep = await site(await photos());
     const first = stoppingWorker(sweep, 1);
-    const id = await first.queue.enqueue(stripMetadataJob(sweep.contentDir), null);
+    const id = await first.queue.enqueue(STRIP_METADATA_JOB, null);
 
     await first.queue.start();
     await first.stopped;
@@ -232,7 +233,7 @@ describe('the strip-metadata job', () => {
 
     assert.equal(status.state, 'finished');
     assert.equal(status.attempt, 1);
-    const report = stripReport(status.state === 'finished' ? status.result : null);
+    const report = finishedResult(STRIP_METADATA_JOB, status);
     assert.equal(report?.checked, 4);
     assert.deepEqual(
       report.stripped.map((file) => file.path),

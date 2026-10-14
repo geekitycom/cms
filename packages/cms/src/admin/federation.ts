@@ -1,4 +1,4 @@
-import type { Context, Hono } from 'hono';
+import type { Hono } from 'hono';
 
 import type { Document } from '../content/document.ts';
 import { isTrashedPath } from '../content/store.ts';
@@ -10,8 +10,8 @@ import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { avatarUrl } from '../federation/actor.ts';
-import { RESEND_JOB, resendJob, resendReport } from '../federation/resend-job.ts';
-import type { ResendPayload } from '../federation/resend-job.ts';
+import { RESEND_JOB } from '../federation/resend-job.ts';
+import { finishedResult } from '../jobs/types.ts';
 import {
   selectedTargets,
   syndicationCopies,
@@ -26,7 +26,7 @@ import { postObjectId } from '../content/guids.ts';
 import { documentEditorPath, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { enqueueUnlessActive, jobStatusView } from './job-status.ts';
+import { jobStatusView, queueJobFromForm } from './job-status.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import type {
   Delivery,
@@ -56,6 +56,10 @@ export const FEDERATION_SETTINGS_PATH = `${FEDERATION_PATH}/settings`;
 export const RESEND_PATH = `${FEDERATION_PATH}/resend`;
 
 export const RESEND_ALL_PATH = `${FEDERATION_PATH}/resend-all`;
+
+const RESEND_PANEL = `${FEDERATION_PATH}#resend`;
+
+const RESEND_BUSY = 'A resend is already queued or running. Nothing new was queued.';
 
 /** Where a relay's Retry button posts. */
 export const RELAY_RETRY_PATH = `${FEDERATION_PATH}/relays/retry`;
@@ -108,9 +112,8 @@ export function mountFederationScreen(
   const { render } = options;
 
   app.get(FEDERATION_PATH, async (c) => {
-    const latestResend = await c.var.jobs.latest(RESEND_JOB);
-    const report =
-      latestResend?.state === 'finished' ? resendReport(latestResend.result) : undefined;
+    const latestResend = await c.var.jobs.latest(RESEND_JOB.name);
+    const report = finishedResult(RESEND_JOB, latestResend);
     const admin = c.var.admin;
     const baseUrl = c.var.config.baseUrl;
     const cited: CitedPageReader = (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart);
@@ -130,10 +133,8 @@ export function mountFederationScreen(
       resend: jobStatusView(latestResend),
       federationUrl: FEDERATION_PATH,
       resendResult: report && {
-        sent: report.posts.filter((post) => post.activity !== null || post.webmentions !== null),
-        nothing: report.posts.flatMap((post) =>
-          post.activity === null && post.webmentions === null ? [post.slug] : [],
-        ),
+        sent: report.posts.filter((post) => post.resent),
+        nothing: report.posts.flatMap((post) => (post.resent ? [] : [post.slug])),
       },
       fields: FEDERATION_FIELDS,
       actors: users.map((user) =>
@@ -218,30 +219,31 @@ export function mountFederationScreen(
       flash(c, 'error', 'There is no post to send under that name, so nothing was sent.');
       return c.redirect(FEDERATION_PATH, 303);
     }
-    return queueResend(c, { slugs: [slug], webmentions: true }, `a resend of ${slug}`);
+    return queueJobFromForm(
+      c,
+      RESEND_JOB,
+      { slugs: [slug], webmentions: true },
+      {
+        panel: RESEND_PANEL,
+        queued: `Queued a resend of ${slug}. It runs in the background; its progress is below.`,
+        busy: RESEND_BUSY,
+      },
+    );
   });
 
   app.post(RESEND_ALL_PATH, (c) =>
-    queueResend(c, { slugs: 'all', webmentions: false }, 'a resend of every announced post'),
+    queueJobFromForm(
+      c,
+      RESEND_JOB,
+      { slugs: 'all', webmentions: false },
+      {
+        panel: RESEND_PANEL,
+        queued:
+          'Queued a resend of every announced post. It runs in the background; its progress is below.',
+        busy: RESEND_BUSY,
+      },
+    ),
   );
-}
-
-async function queueResend(
-  c: Context<GeekityEnv>,
-  payload: ResendPayload,
-  what: string,
-): Promise<Response> {
-  const queued = await enqueueUnlessActive(
-    c.var.jobs,
-    resendJob({ store: c.var.store, delivery: c.var.delivery, webmentions: c.var.webmentions }),
-    payload,
-  );
-  if (queued === undefined) {
-    flash(c, 'warning', 'A resend is already queued or running. Nothing new was queued.');
-  } else {
-    flash(c, 'notice', `Queued ${what}. It runs in the background; its progress is below.`);
-  }
-  return c.redirect(`${FEDERATION_PATH}#resend`, 303);
 }
 
 /** One post the fediverse holds a copy of, and how it last landed. */

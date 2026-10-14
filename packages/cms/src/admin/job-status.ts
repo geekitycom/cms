@@ -1,18 +1,22 @@
-import type { JobDefinition, JobQueue, JobStatus, Json } from '../jobs/types.ts';
+import type { Context } from 'hono';
+
+import type { JobName, JobStateName, JobStatus, Json, Progress } from '../jobs/types.ts';
+import type { GeekityEnv } from '../web/env.ts';
+import { flash } from './flash.ts';
 
 export interface JobStatusView {
   readonly id: string;
-  readonly state: JobStatus['state'];
+  readonly state: JobStateName;
   readonly label: string;
   readonly active: boolean;
   readonly attempt: number;
   readonly at: string;
   readonly requeued: boolean;
-  readonly progress?: { readonly done: number; readonly total?: number; readonly note?: string };
+  readonly progress?: Progress;
   readonly error?: string;
 }
 
-const LABELS: Readonly<Record<JobStatus['state'], string>> = {
+const LABELS: Readonly<Record<JobStateName, string>> = {
   queued: 'Queued',
   running: 'Running',
   finished: 'Finished',
@@ -52,11 +56,18 @@ export function jobStatusView(status: JobStatus | undefined): JobStatusView | un
   }
 }
 
-export async function enqueueUnlessActive<P extends Json>(
-  jobs: JobQueue,
-  job: JobDefinition<P, Json>,
-  payload: P,
-): Promise<string | undefined> {
-  if ((await jobs.active(job.name)) !== undefined) return undefined;
-  return jobs.enqueue(job, payload);
+/**
+ * Queue a job from an admin form unless one of its name is active, say which
+ * happened, and send the browser back to the job's panel.
+ */
+export async function queueJobFromForm<P extends Json>(
+  c: Context<GeekityEnv>,
+  job: JobName<P, Json>,
+  payload: NoInfer<P>,
+  replies: { readonly panel: string; readonly queued: string; readonly busy: string },
+): Promise<Response> {
+  const enqueued = await c.var.jobs.enqueueUnlessActive(job, payload);
+  if (enqueued.queued) flash(c, 'notice', replies.queued);
+  else flash(c, 'warning', replies.busy);
+  return c.redirect(replies.panel, 303);
 }

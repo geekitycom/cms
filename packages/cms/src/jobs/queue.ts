@@ -6,6 +6,7 @@ import { isClaimerAlive, thisProcess } from './processes.ts';
 import { JobLostError } from './types.ts';
 import type {
   JobDefinition,
+  JobName,
   JobQueue,
   JobRecords,
   JobStatus,
@@ -13,7 +14,7 @@ import type {
   MessageTransport,
 } from './types.ts';
 
-export const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_MAX_ATTEMPTS = 3;
 
 export const MAX_PAYLOAD_BYTES = 64 * 1024;
 
@@ -23,7 +24,6 @@ export interface JobQueueOptions {
   readonly transport: MessageTransport;
   readonly records: JobRecords;
   readonly jobs: readonly JobDefinition[];
-  readonly owner?: string;
   readonly maxAttempts?: number;
   readonly now: Clock;
 }
@@ -36,7 +36,7 @@ export interface JobQueueOptions {
  */
 export function createJobQueue(options: JobQueueOptions): JobQueue {
   const { transport, records } = options;
-  const owner = options.owner ?? randomUUID();
+  const owner = randomUUID();
   const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const now = () => options.now().toISOString();
   const definitions = new Map<string, JobDefinition>(options.jobs.map((job) => [job.name, job]));
@@ -142,24 +142,44 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
     if (typeof id === 'string') await claimAndRun(id, signal);
   }
 
+  function newRecord(job: JobName, payload: Json): JobStatus {
+    if (!definitions.has(job.name)) throw new Error(`No handler is registered for ${job.name}.`);
+    const copy = plain(payload);
+    if (Buffer.byteLength(JSON.stringify(copy)) > MAX_PAYLOAD_BYTES) {
+      throw new Error(`A ${job.name} job's payload is over ${String(MAX_PAYLOAD_BYTES)} bytes.`);
+    }
+    return {
+      id: randomUUID(),
+      name: job.name,
+      payload: copy,
+      queuedAt: now(),
+      state: 'queued',
+      attempt: 1,
+    };
+  }
+
+  function isActive(status: JobStatus, countQueued = true): boolean {
+    if (status.state === 'queued') return countQueued;
+    return status.state === 'running' && (status.owner === owner || !isCutOff(status));
+  }
+
   const queue: JobQueue = {
     async enqueue(job, payload) {
-      if (!definitions.has(job.name)) throw new Error(`No handler is registered for ${job.name}.`);
-      const text = JSON.stringify(payload);
-      if (Buffer.byteLength(text) > MAX_PAYLOAD_BYTES) {
-        throw new Error(`A ${job.name} job's payload is over ${String(MAX_PAYLOAD_BYTES)} bytes.`);
-      }
-      const id = randomUUID();
-      await records.create({
-        id,
-        name: job.name,
-        payload: JSON.parse(text) as Json,
-        queuedAt: now(),
-        state: 'queued',
-        attempt: 1,
-      });
-      await transport.enqueue({ id });
-      return id;
+      const status = newRecord(job, payload);
+      await records.create(status);
+      await transport.enqueue({ id: status.id });
+      return status.id;
+    },
+
+    async enqueueUnlessActive(job, payload, options = {}) {
+      const status = newRecord(job, payload);
+      if (started) await reconcile();
+      const active = await records.create(status, (latest) =>
+        isActive(latest, options.countQueued),
+      );
+      if (active !== undefined) return { queued: false, active };
+      await transport.enqueue({ id: status.id });
+      return { queued: true, id: status.id };
     },
 
     status: (id) => records.get(id),
@@ -171,11 +191,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
 
     async active(name) {
       const latest = await queue.latest(name);
-      if (latest?.state === 'queued') return latest;
-      if (latest?.state === 'running' && (latest.owner === owner || !isCutOff(latest))) {
-        return latest;
-      }
-      return undefined;
+      return latest !== undefined && isActive(latest) ? latest : undefined;
     },
 
     async run(id) {
@@ -216,7 +232,7 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
   return queue;
 }
 
-export function isCutOff(status: JobStatus): boolean {
+function isCutOff(status: JobStatus): boolean {
   return (
     status.state === 'running' && (status.claimer === undefined || !isClaimerAlive(status.claimer))
   );

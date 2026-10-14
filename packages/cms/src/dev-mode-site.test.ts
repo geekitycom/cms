@@ -6,7 +6,8 @@ import type { Browser } from './admin/__testing__/harness.ts';
 import { readDevModeRecord } from './settings/dev-mode.ts';
 import type { DevModeEntry } from './settings/dev-mode.ts';
 import { addFollower } from './federation/records.ts';
-import { resendJob, resendReport } from './federation/resend-job.ts';
+import { RESEND_JOB } from './federation/resend-job.ts';
+import { finishedResult } from './jobs/types.ts';
 import type { Cms } from './index.ts';
 import { createMemoryMailProvider } from './mail/memory.ts';
 import type { MemoryMailProvider } from './mail/memory.ts';
@@ -175,13 +176,14 @@ describe('a site in dev mode', () => {
     await settle(cms);
 
     const resent = await cms.jobs.run(
-      await cms.jobs.enqueue(resendJob(cms), { slugs: ['hello-world'], webmentions: true }),
+      await cms.jobs.enqueue(RESEND_JOB, { slugs: ['hello-world'], webmentions: true }),
     );
     assert.equal(resent.state, 'finished');
-    const [post] = resendReport(resent.result)?.posts ?? [];
-    assert.equal(post?.activity?.activityType, 'Update');
+    const [post] = finishedResult(RESEND_JOB, resent)?.posts ?? [];
+    assert.ok(post?.resent);
+    assert.equal(post.activity?.activityType, 'Update');
     assert.equal(
-      post.activity.held,
+      post.activity.heldByDevMode,
       true,
       'the job result says dev mode held the resend (TASK-393 AC #5)',
     );

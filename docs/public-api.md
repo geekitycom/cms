@@ -220,12 +220,14 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `AvatarService`         | type | Fetches, shrinks, keeps and serves the avatars the site shows.                                                                    |
 | `DeliveryReport`        | type | What one activity's delivery came to, recipient by recipient.                                                                     |
 | `DeliveryService`       | type | Sends a site's posts to its followers and its relays, and remembers how that went.                                                |
+| `Enqueued`              | type | What `JobQueue.enqueueUnlessActive` did: the id it queued, or the job already active.                                             |
 | `FederationContextData` | type | What every Fedify dispatcher in the CMS is handed.                                                                                |
 | `FeedNotifier`          | type | Tells the site's notify server which feeds have changed.                                                                          |
 | `HostLookup`            | type | The addresses a host name resolves to.                                                                                            |
 | `IndexNowNotifier`      | type | Tells the IndexNow engines which URLs changed.                                                                                    |
 | `JobContext`            | type | What a job's handler is handed: the stop signal, the attempt and `progress()`.                                                    |
 | `JobDefinition`         | type | One kind of admin job: a name, a payload parser and a handler.                                                                    |
+| `JobName`               | type | A job's name, typed with its payload and result. Every `JobDefinition` is one.                                                    |
 | `JobQueue`              | type | `cms.jobs`: queues admin jobs, runs them out of the request and reports their status.                                             |
 | `JobRecords`            | type | Where job status lives. Every transition is a compare-and-set on state and attempt.                                               |
 | `JobState`              | type | A job's state: queued, running, finished, failed or interrupted, with what goes with each.                                        |

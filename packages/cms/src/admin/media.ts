@@ -13,11 +13,8 @@ import type { CatalogReader } from '../content/store.ts';
 import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { writeAltText } from '../content/alt-text.ts';
-import {
-  STRIP_METADATA_JOB,
-  stripMetadataJob,
-  stripReport,
-} from '../content/metadata/strip-job.ts';
+import { STRIP_METADATA_JOB } from '../content/metadata/strip-job.ts';
+import { finishedResult } from '../jobs/types.ts';
 import type { AltText } from '../content/alt-text.ts';
 import { removeImageVariants } from '../images/variants.ts';
 import { deleteUpload, listUploads, mentionsUpload, resolveUpload } from '../media/library.ts';
@@ -29,7 +26,7 @@ import { pageCount } from '../web/pagination.ts';
 import { documentEditorPath, PAGE_SCREENS, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
-import { enqueueUnlessActive, jobStatusView } from './job-status.ts';
+import { jobStatusView, queueJobFromForm } from './job-status.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
@@ -165,21 +162,13 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
     return c.redirect(mediaPageUrl(pageNumber(stringOrEmpty(body[MEDIA_FIELDS.page]).trim())), 303);
   });
 
-  app.post(MEDIA_STRIP_METADATA_PATH, async (c) => {
-    const queued = await enqueueUnlessActive(
-      c.var.jobs,
-      stripMetadataJob(c.var.config.contentDir),
-      null,
-    );
-    flash(
-      c,
-      queued === undefined ? 'warning' : 'notice',
-      queued === undefined
-        ? 'A sweep is already queued or running. Nothing new was queued.'
-        : 'Queued the sweep. It runs in the background; its progress is below.',
-    );
-    return c.redirect(`${MEDIA_PATH}#strip-metadata`, 303);
-  });
+  app.post(MEDIA_STRIP_METADATA_PATH, (c) =>
+    queueJobFromForm(c, STRIP_METADATA_JOB, null, {
+      panel: `${MEDIA_PATH}#strip-metadata`,
+      queued: 'Queued the sweep. It runs in the background; its progress is below.',
+      busy: 'A sweep is already queued or running. Nothing new was queued.',
+    }),
+  );
 
   app.post(MEDIA_DELETE_PATH, async (c) => {
     const body = await c.req.parseBody();
@@ -229,7 +218,7 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
     extra: Record<string, unknown> = {},
   ): Promise<Record<string, unknown>> {
     const files = await listUploads(c.var.config.contentDir);
-    const latestSweep = await c.var.jobs.latest(STRIP_METADATA_JOB);
+    const latestSweep = await c.var.jobs.latest(STRIP_METADATA_JOB.name);
     const page = pageNumber(c.req.query('page'));
     const start = (page - 1) * MEDIA_PER_PAGE;
 
@@ -243,7 +232,7 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
       altUrl: MEDIA_ALT_PATH,
       stripMetadataUrl: MEDIA_STRIP_METADATA_PATH,
       sweep: jobStatusView(latestSweep),
-      sweepReport: latestSweep?.state === 'finished' ? stripReport(latestSweep.result) : undefined,
+      sweepReport: finishedResult(STRIP_METADATA_JOB, latestSweep),
       fields: MEDIA_FIELDS,
       accepts: c.var.config.uploadTypes.join(','),
       maxBytes: c.var.config.uploadMaxBytes,

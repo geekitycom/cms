@@ -10,19 +10,23 @@ const [file = '', command = '', prefix = '', count = '', log = ''] = process.arg
 const ids = Array.from({ length: Number(count) }, (_, index) => `${prefix}-${String(index)}`);
 const records = createFileRecords(file, { keep: 1000 });
 
+const race = (id: string) =>
+  ({
+    id,
+    name: 'race',
+    payload: null,
+    queuedAt: '2026-10-14T00:00:00.000Z',
+    state: 'queued',
+    attempt: 1,
+  }) as const;
+
 switch (command) {
   case 'create':
+    await Promise.all(ids.map((id) => records.create(race(id))));
+    break;
+  case 'create-unless-queued':
     await Promise.all(
-      ids.map((id) =>
-        records.create({
-          id,
-          name: 'race',
-          payload: null,
-          queuedAt: '2026-10-14T00:00:00.000Z',
-          state: 'queued',
-          attempt: 1,
-        }),
-      ),
+      ids.map((id) => records.create(race(id), (latest) => latest.state === 'queued')),
     );
     break;
   case 'run': {

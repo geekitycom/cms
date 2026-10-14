@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 
 import { withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
 import { withLockFile } from './lock-file.ts';
+import { JOB_STATES } from './types.ts';
 import type { JobRecords, JobStateName, JobStatus } from './types.ts';
 
 export const KEPT_PER_NAME = 5;
@@ -43,11 +44,13 @@ export function createFileRecords(file: string, options: { keep?: number } = {})
   }
 
   return {
-    create(status) {
-      return change((jobs) => {
+    create(status, blocks) {
+      return change<JobStatus | undefined>((jobs) => {
         if (jobs.some((job) => job.id === status.id)) {
           throw new Error(`A job with the id ${status.id} is already recorded.`);
         }
+        const latest = jobs.findLast((job) => job.name === status.name);
+        if (latest !== undefined && blocks?.(latest) === true) return { value: latest };
         return { jobs: [...jobs, status], value: undefined };
       });
     },
@@ -71,7 +74,7 @@ export function createFileRecords(file: string, options: { keep?: number } = {})
         if (job?.state !== expected.state || job.attempt !== expected.attempt) {
           return { value: false };
         }
-        const { id: _id, name, payload, queuedAt } = job;
+        const { name, payload, queuedAt } = job;
         const moved: JobStatus = { id, name, payload, queuedAt, ...next };
         return { jobs: jobs.with(index, moved), value: true };
       });
@@ -109,7 +112,6 @@ function isJobStatus(value: unknown): value is JobStatus {
     typeof job.name === 'string' &&
     typeof job.queuedAt === 'string' &&
     typeof job.attempt === 'number' &&
-    typeof job.state === 'string' &&
-    ['queued', 'running', 'finished', 'failed', 'interrupted'].includes(job.state)
+    (JOB_STATES as readonly unknown[]).includes(job.state)
   );
 }

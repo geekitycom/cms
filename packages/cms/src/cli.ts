@@ -15,12 +15,14 @@ import { databaseFile, discardDatabase } from './cache.ts';
 import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
 import type { ResolvedConfig } from './config.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './comments/migrations.ts';
-import { stripMetadataJob, stripReport } from './content/metadata/strip-job.ts';
-import { resendJob, resendReport } from './federation/resend-job.ts';
+import { STRIP_METADATA_JOB } from './content/metadata/strip-job.ts';
+import { RESEND_JOB } from './federation/resend-job.ts';
 import { createUser, DuplicateUsernameError } from './site/users.ts';
 import { createCms } from './index.ts';
+import type { Cms } from './index.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
-import type { JobQueue } from './jobs/types.ts';
+import { finishedResult } from './jobs/types.ts';
+import type { JobName, Json } from './jobs/types.ts';
 import type { PluginCommand } from './plugin.ts';
 import { importPluginFolders, scanPluginFolders } from './plugins/folder.ts';
 import {
@@ -763,40 +765,50 @@ function forcedLine(forced: boolean): string {
 }
 
 /**
- * Whether a job of this name already waits or runs, said on stderr if so. A
- * queued job counts only while a server is up to run it: one a command left
- * queued when it died runs when a server next starts, and is no reason to
- * refuse while none is.
+ * Run one job in this process and return its result, or say on standard
+ * error why there is none. A job of the same name that is already active
+ * stops it before it is queued. A queued job counts only while a server is up
+ * to run it: one a command left queued when it died runs when a server next
+ * starts, and is no reason to refuse while none is.
  */
-async function alreadyActive(jobs: JobQueue, name: string, dataDir: string): Promise<boolean> {
-  const active = await jobs.active(name);
-  if (active === undefined) return false;
-  if (active.state === 'queued' && !(await isServing(dataDir))) return false;
-  process.stderr.write(
-    `A ${name} job is already ${active.state}, so this one did not start. ` +
-      `Run the command again once it finishes.\n`,
-  );
-  return true;
-}
-
-async function stripMetadataCommand({ configPath }: ParsedArgs): Promise<number> {
-  const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
+async function runJobHere<P extends Json, R extends Json>(
+  config: ResolvedConfig,
+  job: JobName<P, R>,
+  payload: NoInfer<P>,
+  what: string,
+  prepare?: (cms: Cms) => Promise<unknown>,
+): Promise<R | undefined> {
   const cms = createCms(config);
-  const job = stripMetadataJob(config.contentDir);
   let status;
   try {
-    if (await alreadyActive(cms.jobs, job.name, config.dataDir)) return 1;
-    status = await cms.jobs.run(await cms.jobs.enqueue(job, null));
+    await prepare?.(cms);
+    const enqueued = await cms.jobs.enqueueUnlessActive(job, payload, {
+      countQueued: await isServing(config.dataDir),
+    });
+    if (!enqueued.queued) {
+      process.stderr.write(
+        `A ${job.name} job is already ${enqueued.active.state}, so this one did not start. ` +
+          `Run the command again once it finishes.\n`,
+      );
+      return undefined;
+    }
+    status = await cms.jobs.run(enqueued.id);
   } finally {
     await cms.close();
   }
 
-  const report = status.state === 'finished' ? stripReport(status.result) : undefined;
-  if (report === undefined) {
+  const result = finishedResult(job, status);
+  if (result === undefined) {
     const problem = status.state === 'failed' ? status.error : `The job ended ${status.state}.`;
-    process.stderr.write(`The sweep did not finish: ${problem}\n`);
-    return 1;
+    process.stderr.write(`The ${what} did not finish: ${problem}\n`);
   }
+  return result;
+}
+
+async function stripMetadataCommand({ configPath }: ParsedArgs): Promise<number> {
+  const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
+  const report = await runJobHere(config, STRIP_METADATA_JOB, null, 'sweep');
+  if (report === undefined) return 1;
 
   for (const file of report.stripped) {
     process.stdout.write(`${file.path}: removed ${file.removed.join(', ')}\n`);
@@ -868,37 +880,28 @@ async function resendCommand({ args, configPath, flags }: ParsedArgs): Promise<n
     watch: false,
     federation: { ...loaded.federation, queue: null },
   }));
-  const cms = createCms(config);
-  const job = resendJob(cms);
-
-  let status;
-  try {
-    if (await alreadyActive(cms.jobs, job.name, config.dataDir)) return 1;
-    await cms.sync();
-    status = await cms.jobs.run(
-      await cms.jobs.enqueue(job, { slugs: all ? 'all' : args, webmentions: false }),
-    );
-  } finally {
-    await cms.close();
-  }
-
-  const report = status.state === 'finished' ? resendReport(status.result) : undefined;
-  if (report === undefined) {
-    const problem = status.state === 'failed' ? status.error : `The job ended ${status.state}.`;
-    process.stderr.write(`The resend did not finish: ${problem}\n`);
-    return 1;
-  }
+  const report = await runJobHere(
+    config,
+    RESEND_JOB,
+    { slugs: all ? 'all' : args, webmentions: false },
+    'resend',
+    (cms) => cms.sync(),
+  );
+  if (report === undefined) return 1;
 
   let failed = 0;
-  for (const { slug, activity } of report.posts) {
+  for (const post of report.posts) {
+    const activity = post.resent ? post.activity : null;
     if (activity === null) {
-      process.stderr.write(`${slug}: nothing to resend, no announced post has that slug.\n`);
+      process.stderr.write(`${post.slug}: nothing to resend, no announced post has that slug.\n`);
       failed += 1;
-    } else if (activity.held) {
-      process.stdout.write(`${slug}: ${activity.activityType} held by dev mode, nothing sent\n`);
+    } else if (activity.heldByDevMode) {
+      process.stdout.write(
+        `${post.slug}: ${activity.activityType} held by dev mode, nothing sent\n`,
+      );
     } else {
       process.stdout.write(
-        `${slug}: ${activity.activityType} to ${String(activity.reached)} of ` +
+        `${post.slug}: ${activity.activityType} to ${String(activity.reached)} of ` +
           `${String(activity.inboxes)} inboxes\n`,
       );
     }

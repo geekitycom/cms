@@ -493,7 +493,7 @@ function resendSection(html: string): string {
 async function recordResend(cms: Cms, state: JobState): Promise<void> {
   await createFileRecords(path.join(cms.config.dataDir, 'jobs.json')).create({
     id: `resend-${state.state}`,
-    name: RESEND_JOB,
+    name: RESEND_JOB.name,
     payload: { slugs: 'all', webmentions: false },
     queuedAt: '2026-10-14T09:00:00.000Z',
     ...state,
@@ -518,7 +518,7 @@ describe('resending a post', () => {
 
     assert.equal(response.status, 303);
     assert.equal(response.headers.get('location'), '/admin/federation#resend');
-    const queued = await cms.jobs.latest(RESEND_JOB);
+    const queued = await cms.jobs.latest(RESEND_JOB.name);
     assert.equal(queued?.state, 'queued', 'the request did not wait for the resend');
     assert.deepEqual(queued.payload, { slugs: ['hello-world'], webmentions: true });
     assert.equal(deliveries.length, 1, 'nothing was sent inside the request');
@@ -554,14 +554,18 @@ describe('resending a post', () => {
 
     assert.equal(response.status, 303);
     assert.equal(response.headers.get('location'), '/admin/federation#resend');
-    const queued = await cms.jobs.latest(RESEND_JOB);
+    const queued = await cms.jobs.latest(RESEND_JOB.name);
     assert.equal(queued?.state, 'queued');
     assert.deepEqual(queued.payload, { slugs: 'all', webmentions: false });
     assert.equal(deliveries.length, 1, 'nothing was sent inside the request');
 
     const again = await agent.post('/admin/federation/resend-all', { csrf_token: token });
     assert.equal(again.status, 303);
-    assert.equal((await cms.jobs.latest(RESEND_JOB))?.id, queued.id, 'no second job was queued');
+    assert.equal(
+      (await cms.jobs.latest(RESEND_JOB.name))?.id,
+      queued.id,
+      'no second job was queued',
+    );
     assert.ok(
       flashes(await federationScreen(agent)).some((flash) =>
         /already queued or running/.test(flash.message),
@@ -605,9 +609,10 @@ describe('resending a post', () => {
         posts: [
           {
             slug: 'hello-world',
+            resent: true,
             activity: {
               activityType: 'Update',
-              held: false,
+              heldByDevMode: false,
               inboxes: 3,
               reached: 2,
               queued: 0,
@@ -617,9 +622,10 @@ describe('resending a post', () => {
           },
           {
             slug: 'quiet',
+            resent: true,
             activity: {
               activityType: 'Update',
-              held: true,
+              heldByDevMode: true,
               inboxes: 0,
               reached: 0,
               queued: 0,
@@ -627,7 +633,7 @@ describe('resending a post', () => {
             },
             webmentions: null,
           },
-          { slug: 'nothing-of-the-sort', activity: null, webmentions: null },
+          { slug: 'nothing-of-the-sort', resent: false },
         ],
       },
     });
@@ -655,7 +661,7 @@ describe('resending a post', () => {
 
     assert.equal(response.status, 303);
     assert.match(await federationScreen(agent), /no post to send under that name/i);
-    assert.equal(await cms.jobs.latest(RESEND_JOB), undefined, 'and nothing was queued');
+    assert.equal(await cms.jobs.latest(RESEND_JOB.name), undefined, 'and nothing was queued');
   });
 });
 

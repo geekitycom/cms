@@ -45,7 +45,7 @@ async function queueSweep(agent: Browser): Promise<Response> {
 async function recordSweep(cms: Cms, state: JobState): Promise<void> {
   await createFileRecords(path.join(cms.config.dataDir, 'jobs.json')).create({
     id: `sweep-${state.state}`,
-    name: STRIP_METADATA_JOB,
+    name: STRIP_METADATA_JOB.name,
     payload: null,
     queuedAt: '2026-10-14T09:00:00.000Z',
     ...state,
@@ -70,7 +70,7 @@ describe('Media > strip metadata from earlier uploads', () => {
 
     assert.equal(response.status, 303);
     assert.equal(response.headers.get('location'), '/admin/media#strip-metadata');
-    const queued = await cms.jobs.latest(STRIP_METADATA_JOB);
+    const queued = await cms.jobs.latest(STRIP_METADATA_JOB.name);
     assert.equal(queued?.state, 'queued', 'the request did not wait for the sweep');
     const file = path.join(cms.config.contentDir, 'uploads', '2025', '05', 'beach.jpg');
     assert.notDeepEqual(leakedSecrets(await readFile(file)), [], 'nothing was stripped yet');
@@ -94,12 +94,12 @@ describe('Media > strip metadata from earlier uploads', () => {
     const cms = await siteWith({});
     const agent = await signedIn(cms);
     await queueSweep(agent);
-    const first = await cms.jobs.latest(STRIP_METADATA_JOB);
+    const first = await cms.jobs.latest(STRIP_METADATA_JOB.name);
 
     const again = await queueSweep(agent);
 
     assert.equal(again.status, 303);
-    assert.equal((await cms.jobs.latest(STRIP_METADATA_JOB))?.id, first?.id);
+    assert.equal((await cms.jobs.latest(STRIP_METADATA_JOB.name))?.id, first?.id);
     assert.ok(
       flashes(await mediaScreen(agent)).some((flash) =>
         /already queued or running/.test(flash.message),
@@ -132,7 +132,7 @@ describe('Media > strip metadata from earlier uploads', () => {
     });
     const agent = await signedIn(cms);
     await queueSweep(agent);
-    const queued = await cms.jobs.latest(STRIP_METADATA_JOB);
+    const queued = await cms.jobs.latest(STRIP_METADATA_JOB.name);
     assert.ok(queued);
     await cms.jobs.run(queued.id);
     await writeFile(
@@ -140,7 +140,7 @@ describe('Media > strip metadata from earlier uploads', () => {
       await jpegWithMetadata(3),
     );
     await queueSweep(agent);
-    const second = await cms.jobs.latest(STRIP_METADATA_JOB);
+    const second = await cms.jobs.latest(STRIP_METADATA_JOB.name);
     assert.ok(second);
     await cms.jobs.run(second.id);
 

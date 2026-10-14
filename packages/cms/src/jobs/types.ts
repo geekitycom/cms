@@ -42,7 +42,9 @@ export type JobState =
     }
   | { readonly state: 'interrupted'; readonly attempt: number; readonly interruptedAt: string };
 
-export type JobStateName = JobState['state'];
+export const JOB_STATES = ['queued', 'running', 'finished', 'failed', 'interrupted'] as const;
+
+export type JobStateName = (typeof JOB_STATES)[number];
 
 export type JobStatus = {
   readonly id: string;
@@ -59,12 +61,37 @@ export interface JobContext {
   progress(progress: Progress): Promise<void>;
 }
 
+declare const carries: unique symbol;
+
+/** A job's name, typed with the payload it is queued with and the result it finishes with. */
+export interface JobName<P extends Json = Json, R extends Json = Json> {
+  readonly name: string;
+  readonly [carries]?: { readonly payload: P; readonly result: R };
+}
+
+export function jobName<P extends Json, R extends Json>(name: string): JobName<P, R> {
+  return { name };
+}
+
+/**
+ * A finished job's result, typed by its name. The result is the job's own
+ * output, read back from the record store, so it is trusted rather than
+ * checked again.
+ */
+export function finishedResult<R extends Json>(
+  job: JobName<Json, R>,
+  status: JobStatus | undefined,
+): R | undefined {
+  return status?.state === 'finished' && status.name === job.name
+    ? (status.result as R)
+    : undefined;
+}
+
 /**
  * One kind of job. `parse` checks the payload, which crossed a boundary, and
  * `run` must be safe to run twice: execution is at least once.
  */
-export interface JobDefinition<P extends Json = Json, R extends Json = Json> {
-  readonly name: string;
+export interface JobDefinition<P extends Json = Json, R extends Json = Json> extends JobName<P, R> {
   parse(payload: Json): P;
   run(payload: P, context: JobContext): Promise<R>;
 }
@@ -72,7 +99,19 @@ export interface JobDefinition<P extends Json = Json, R extends Json = Json> {
 /** What the admin and the CLI use. */
 export interface JobQueue {
   /** Record a job as queued and send it to the transport. Refuses a name with no registered definition. */
-  enqueue<P extends Json>(job: JobDefinition<P, Json>, payload: P): Promise<string>;
+  enqueue<P extends Json>(job: JobName<P, Json>, payload: NoInfer<P>): Promise<string>;
+  /**
+   * {@link JobQueue.enqueue}, unless a job of this name is active, as
+   * {@link JobQueue.active} means it: then nothing is queued and the active
+   * job is returned. The check and the write are one step in the record
+   * store, so two callers at once queue one job. With `countQueued: false`, a
+   * queued job does not count as active.
+   */
+  enqueueUnlessActive<P extends Json>(
+    job: JobName<P, Json>,
+    payload: NoInfer<P>,
+    options?: { readonly countQueued?: boolean },
+  ): Promise<Enqueued>;
   status(id: string): Promise<JobStatus | undefined>;
   /**
    * The newest job of this name, whatever its state. A started queue first
@@ -103,6 +142,10 @@ export interface JobQueue {
   close(): Promise<void>;
 }
 
+export type Enqueued =
+  | { readonly queued: true; readonly id: string }
+  | { readonly queued: false; readonly active: JobStatus };
+
 /** Swap point 1: what carries a job's id to a worker. Any Fedify `MessageQueue` satisfies it. */
 export interface MessageTransport {
   enqueue(message: unknown): Promise<void>;
@@ -114,7 +157,15 @@ export interface MessageTransport {
 
 /** Swap point 2: where job status lives. Every transition is a compare-and-set on state and attempt. */
 export interface JobRecords {
-  create(status: JobStatus): Promise<void>;
+  /**
+   * Record a new job, unless `blocks` holds for the newest job of the same
+   * name: then record nothing and resolve with that job. The check and the
+   * write must be one step, so that two callers never both get past it.
+   */
+  create(
+    status: JobStatus,
+    blocks?: (latest: JobStatus) => boolean,
+  ): Promise<JobStatus | undefined>;
   get(id: string): Promise<JobStatus | undefined>;
   latest(name: string): Promise<JobStatus | undefined>;
   list(states: readonly JobStateName[]): Promise<JobStatus[]>;

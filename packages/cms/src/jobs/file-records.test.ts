@@ -132,6 +132,33 @@ describe('the job records file', () => {
     assert.equal(new Set(stored.map((job) => job.id)).size, 100);
   });
 
+  it('creates a job only when the newest of its name does not block it', async () => {
+    const records = createFileRecords(path.join(await scratch(), 'jobs.json'));
+    const waiting = (latest: JobStatus) => latest.state === 'queued';
+
+    assert.equal(await records.create(queued('one'), waiting), undefined);
+    assert.deepEqual(await records.create(queued('two'), waiting), queued('one'));
+    assert.equal(await records.create(queued('other', 'resend'), waiting), undefined);
+    await finish(records, 'one');
+    assert.equal(await records.create(queued('three'), waiting), undefined);
+
+    assert.deepEqual(
+      (await records.list(['queued', 'finished'])).map((job) => job.id),
+      ['one', 'other', 'three'],
+    );
+  });
+
+  it('lets one of several processes create a job its blocker refuses to the rest', async () => {
+    const file = path.join(await scratch(), 'jobs.json');
+    await inOtherProcesses(file, 4, (index) => [
+      'create-unless-queued',
+      `process-${String(index)}`,
+      '10',
+    ]);
+
+    assert.equal((await createFileRecords(file).list(['queued'])).length, 1);
+  });
+
   it('lets one process claim each job when several run the same jobs at once', async () => {
     const directory = await scratch();
     const file = path.join(directory, 'jobs.json');

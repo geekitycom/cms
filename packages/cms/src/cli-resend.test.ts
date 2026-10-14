@@ -132,7 +132,7 @@ describe('geekity resend (TASK-125 AC #6)', () => {
       assert.equal(run.code, 0, run.stderr);
       assert.equal(run.stdout, 'hello: Update to 1 of 1 inboxes\n');
       const job = await createFileRecords(path.join(directory, 'data', 'jobs.json')).latest(
-        RESEND_JOB,
+        RESEND_JOB.name,
       );
       assert.equal(job?.state, 'finished', 'the resend ran as a job');
       assert.deepEqual(job.payload, { slugs: ['hello'], webmentions: false });
@@ -176,7 +176,7 @@ describe('geekity resend (TASK-125 AC #6)', () => {
     const follower = await inbox();
     try {
       const directory = await site(follower.url);
-      const job = await recordJob(path.join(directory, 'data'), RESEND_JOB, 'running');
+      const job = await recordJob(path.join(directory, 'data'), RESEND_JOB.name, 'running');
 
       const run = await runCli(['resend', '--all'], directory);
 
@@ -185,7 +185,7 @@ describe('geekity resend (TASK-125 AC #6)', () => {
       assert.match(run.stderr, /A resend job is already running/);
       assert.equal(follower.received.length, 0);
       const latest = await createFileRecords(path.join(directory, 'data', 'jobs.json')).latest(
-        RESEND_JOB,
+        RESEND_JOB.name,
       );
       assert.equal(latest?.id, job.id, 'no second job was queued');
     } finally {

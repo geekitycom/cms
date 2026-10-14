@@ -400,5 +400,9 @@ A record store implements `JobRecords`. Each of its transitions must be a
 compare-and-set on the job's state and attempt, because that is what stops two
 workers from running one job. It stores the state it is given as it is,
 `claimer` included, because start-up recovery reads `claimer` to tell a job
-another process is running from one that was cut off. `jobs.definitions` registers jobs beside the
-CMS's own.
+another process is running from one that was cut off. `create` takes an
+optional check and must run it against the newest job of the same name in the
+same step as the write: when the check holds, it records nothing and returns
+that job. That is what stops two admin presses, or a press and a CLI command,
+from both queuing a job of one name. `jobs.definitions` registers jobs beside
+the CMS's own.

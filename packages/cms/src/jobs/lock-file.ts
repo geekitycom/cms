@@ -19,7 +19,7 @@ const LOCK_RETRY_MS = 5;
  */
 export async function withLockFile<T>(lockFile: string, task: () => Promise<T>): Promise<T> {
   await mkdir(path.dirname(lockFile), { recursive: true });
-  const token = `${String(process.pid)} ${randomUUID()}`;
+  const token = newToken();
   for (;;) {
     if (await create(lockFile, token)) break;
     if (await isStale(lockFile)) await takeOver(lockFile);
@@ -48,7 +48,7 @@ async function takeOver(lockFile: string): Promise<void> {
 
 async function underGuard(lockFile: string, task: () => Promise<void>): Promise<boolean> {
   const guard = `${lockFile}.takeover`;
-  if (!(await create(guard, String(process.pid)))) {
+  if (!(await create(guard, newToken()))) {
     if (await isStale(guard)) await unlink(guard).catch(() => undefined);
     return false;
   }
@@ -78,11 +78,19 @@ async function create(file: string, contents: string): Promise<boolean> {
 
 async function isStale(lockFile: string): Promise<boolean> {
   try {
-    const [owner, info] = await Promise.all([readFile(lockFile, 'utf8'), stat(lockFile)]);
+    const [token, info] = await Promise.all([readFile(lockFile, 'utf8'), stat(lockFile)]);
     if (Date.now() - info.mtimeMs > STALE_LOCK_MS) return true;
-    const pid = Number(owner.split(' ')[0]);
+    const pid = pidOf(token);
     return Number.isInteger(pid) && pid > 0 && !isAlive(pid);
   } catch {
     return false;
   }
+}
+
+function newToken(): string {
+  return `${String(process.pid)} ${randomUUID()}`;
+}
+
+function pidOf(token: string): number {
+  return Number(token.split(' ')[0]);
 }

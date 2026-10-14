@@ -178,8 +178,10 @@ export type {
 export type { HostLookup, ReplyContext, ReplyContextService } from './webmention/index.ts';
 export type { AvatarAnswer, AvatarService } from './avatars/index.ts';
 export type {
+  Enqueued,
   JobContext,
   JobDefinition,
+  JobName,
   JobQueue,
   JobRecords,
   JobState,

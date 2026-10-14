@@ -7,12 +7,14 @@ import { after, describe, it } from 'node:test';
 import { createFileRecords } from '../jobs/file-records.ts';
 import { createInProcessTransport } from '../jobs/in-process.ts';
 import { createJobQueue } from '../jobs/queue.ts';
+import type { Document } from '../content/document.ts';
+import { finishedResult } from '../jobs/types.ts';
 import type { JobQueue, JobRecords, JobStatus } from '../jobs/types.ts';
 import type { DeliveryStatus } from '../store/deliveries.ts';
 import { systemClock } from '../util/clock.ts';
 import type { WebmentionReport } from '../webmention/service.ts';
 import type { DeliveryReport } from './delivery.ts';
-import { RESEND_JOB, resendJob, resendReport } from './resend-job.ts';
+import { RESEND_JOB, resendJob } from './resend-job.ts';
 import type { ResendJobServices, ResendPayload } from './resend-job.ts';
 
 const directories: string[] = [];
@@ -57,7 +59,9 @@ function services(
   return {
     resent,
     mentioned,
-    store: { listFederated: () => Object.keys(reports).map((slug) => ({ slug })) },
+    store: {
+      listFederated: () => Object.keys(reports).map((slug) => ({ slug }) as Document),
+    },
     delivery: {
       resend(slug) {
         resent.push(slug);
@@ -84,13 +88,13 @@ function worker(site: ResendJobServices, records: JobRecords): JobQueue {
 
 async function resendOnce(site: ResendJobServices, payload: ResendPayload): Promise<JobStatus> {
   const queue = worker(site, createFileRecords(await jobsFile()));
-  return queue.run(await queue.enqueue(resendJob(site), payload));
+  return queue.run(await queue.enqueue(RESEND_JOB, payload));
 }
 
 function resultOf(status: JobStatus) {
   assert.equal(status.state, 'finished', status.state === 'failed' ? status.error : status.state);
-  const read = resendReport(status.result);
-  assert.ok(read, 'the result reads back as a resend report');
+  const read = finishedResult(RESEND_JOB, status);
+  assert.ok(read);
   return read;
 }
 
@@ -108,9 +112,10 @@ describe('the resend job', () => {
     assert.deepEqual(result.posts, [
       {
         slug: 'hello',
+        resent: true,
         activity: {
           activityType: 'Update',
-          held: false,
+          heldByDevMode: false,
           inboxes: 3,
           reached: 2,
           queued: 0,
@@ -118,12 +123,13 @@ describe('the resend job', () => {
         },
         webmentions: null,
       },
-      { slug: 'missing', activity: null, webmentions: null },
+      { slug: 'missing', resent: false },
       {
         slug: 'later',
+        resent: true,
         activity: {
           activityType: 'Update',
-          held: false,
+          heldByDevMode: false,
           inboxes: 2,
           reached: 1,
           queued: 1,
@@ -152,7 +158,8 @@ describe('the resend job', () => {
 
     const result = resultOf(await resendOnce(site, { slugs: ['hello'], webmentions: false }));
 
-    assert.equal(result.posts[0]?.activity?.held, true);
+    const [post] = result.posts;
+    assert.equal(post?.resent && post.activity?.heldByDevMode, true);
   });
 
   it('sends the post’s webmentions with it when asked, and counts them', async () => {
@@ -181,6 +188,7 @@ describe('the resend job', () => {
     assert.deepEqual(result.posts, [
       {
         slug: 'hello',
+        resent: true,
         activity: null,
         webmentions: { pages: 2, told: 1, none: 1, failed: 0 },
       },
@@ -216,7 +224,7 @@ describe('the resend job', () => {
         return changed;
       },
     });
-    const id = await first.enqueue(resendJob(site), { slugs: 'all', webmentions: false });
+    const id = await first.enqueue(RESEND_JOB, { slugs: 'all', webmentions: false });
 
     await first.start();
     await stopped;
@@ -233,7 +241,7 @@ describe('the resend job', () => {
 
     const result = resultOf(status);
     assert.deepEqual(
-      result.posts.map((post) => [post.slug, post.activity?.reached]),
+      result.posts.map((post) => [post.slug, post.resent && post.activity?.reached]),
       [
         ['a', 1],
         ['b', 1],
@@ -247,7 +255,7 @@ describe('the resend job', () => {
     const site = services({ a: report('a', ['sent']), b: report('b', ['sent']) });
     await createFileRecords(file).create({
       id: 'cut-off',
-      name: RESEND_JOB,
+      name: RESEND_JOB.name,
       payload: { slugs: 'all', webmentions: false },
       queuedAt: '2026-10-14T09:00:00.000Z',
       state: 'running',
@@ -267,11 +275,5 @@ describe('the resend job', () => {
       resultOf(status).posts.map((post) => post.slug),
       ['a', 'b'],
     );
-  });
-
-  it('reads back nothing from a result that is not a resend report', () => {
-    assert.equal(resendReport(null), undefined);
-    assert.equal(resendReport({ posts: [{ slug: 3 }] }), undefined);
-    assert.equal(resendReport({ checked: 1 }), undefined);
   });
 });

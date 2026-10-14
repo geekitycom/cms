@@ -193,7 +193,7 @@
                 {% for post in resendResult.sent %}
                   <li>
                   <code class="break-all">{{ post.slug }}</code>:
-                  {% if post.activity and post.activity.held %}
+                  {% if post.activity and post.activity.heldByDevMode %}
                     dev mode held the {{ post.activity.activityType }}, nothing was sent.
                   {% elif post.activity and post.activity.inboxes == 0 %}
                     the {{ post.activity.activityType }} had no follower or relay to go to.

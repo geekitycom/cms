@@ -4,7 +4,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { cleanupTemporaryDirs, runCli, temporaryDir } from './__testing__/cli.ts';
-import { STRIP_METADATA_JOB, stripReport } from './content/metadata/strip-job.ts';
+import { STRIP_METADATA_JOB } from './content/metadata/strip-job.ts';
+import { finishedResult } from './jobs/types.ts';
 import { createFileRecords } from './jobs/file-records.ts';
 import { recordJob, serverAnswering } from './__testing__/jobs.ts';
 import {
@@ -96,7 +97,7 @@ describe('geekity strip-metadata', () => {
     );
     assert.equal(job?.state, 'finished');
     assert.deepEqual(
-      job.state === 'finished' && stripReport(job.result)?.stripped.map((file) => file.path),
+      finishedResult(STRIP_METADATA_JOB, job)?.stripped.map((file) => file.path),
       ['2025/05/beach.jpg'],
     );
   });
@@ -116,10 +117,10 @@ describe('geekity strip-metadata', () => {
         await site({ '2025/05/beach.jpg': await jpegWithMetadata(6) }),
       );
       const dataDir = path.join(directory, 'data');
-      const job = await recordJob(dataDir, STRIP_METADATA_JOB, state);
+      const job = await recordJob(dataDir, STRIP_METADATA_JOB.name, state);
       const original = await read(directory, '2025/05/beach.jpg');
       const latest = () =>
-        createFileRecords(path.join(dataDir, 'jobs.json')).latest(STRIP_METADATA_JOB);
+        createFileRecords(path.join(dataDir, 'jobs.json')).latest(STRIP_METADATA_JOB.name);
       return { directory, dataDir, job, original, latest };
     }
 
