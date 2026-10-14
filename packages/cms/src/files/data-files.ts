@@ -125,6 +125,12 @@ export const LOCK_FILES = declareDataFile({
   lost: 'Nothing. A stale lock is taken over.',
 });
 
+export const IMPORT_MARKER = declareDataFile({
+  pattern: '.geekity-import',
+  dataClass: SCRATCH,
+  lost: 'Nothing. geekity import leaves it until an import is finished, so a second run knows the folder is its own.',
+});
+
 export const EXPORTS = declareDataFile({
   pattern: 'exports/**',
   dataClass: SCRATCH,
@@ -271,6 +277,7 @@ export const QUEUE_LOG = declareDataFile({
 export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   TEMPORARY_FILES,
   LOCK_FILES,
+  IMPORT_MARKER,
   EXPORTS,
   ACTOR_KEYS,
   USERS,
@@ -306,6 +313,7 @@ export const WATCH_PROBE = declareDataFile({
 export const CONTENT_SCRATCH_FILES: readonly DataFileDeclaration[] = [
   TEMPORARY_FILES,
   LOCK_FILES,
+  IMPORT_MARKER,
   WATCH_PROBE,
 ];
 

@@ -17,6 +17,7 @@ The generated `sync` script calls it the third way.
 | `geekity settings migrate-plugins`        | Move plugin settings out of `content/_data/site.json` into `data/plugins/<name>/settings.json`. A server does this when it starts. See [Plugin settings](configuration.md#moving-plugin-settings-out-of-sitejson). |
 | `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`, as the same job the Media screen queues. See [Location and camera metadata](media.md#location-and-camera-metadata).                   |
 | `geekity export`                          | Write `content/` and the files in `data/` that the site cannot rebuild to a `.tar.gz`, with a manifest. It runs while the site serves. See [Exporting a site](#exporting-a-site).                                  |
+| `geekity import <file>`                   | Restore a site from an archive that `geekity export` wrote, with the site stopped. It installs the folder plugins the archive names from the npm registry. See [Importing a site](#importing-a-site).              |
 | `geekity user add <name>`                 | Create an admin account. Use it to give a site its first login without the setup screen.                                                                                                                           |
 | `geekity plugin add <package>`, `remove`  | Install a plugin package's bundle from the npm registry into the plugins folder (`GEEKITY_PLUGINS_DIR`), or delete a disabled one. A running `geekity serve` reloads with the change.                              |
 | `geekity --help`, `-h`                    | Print this table on the terminal.                                                                                                                                                                                  |
@@ -28,7 +29,7 @@ this includes a plugin in the plugins folder. [Plugins and hooks](plugins.md)
 describes `geekity plugin add` and how to write a plugin.
 
 These commands take `--config <file>`: `serve`, `sync`, `rebuild`, `resend`,
-`maintenance`, `dev-mode`, `settings`, `strip-metadata`, `export`, `user add`, `plugin` and every
+`maintenance`, `dev-mode`, `settings`, `strip-metadata`, `export`, `import`, `user add`, `plugin` and every
 plugin command. Without the option, they look in the working directory for
 `geekity.config.ts`, then `geekity.config.js`, then `geekity.config.mjs`. If
 none exists, they run on defaults.
@@ -232,6 +233,89 @@ you move a site, wait until the number is 0.
 A file in `data/` that no declaration covers is left out, and the command
 names it on standard error. This is usually a file that a plugin or a script
 wrote without a declaration.
+
+## Importing a site
+
+`geekity import <file>` restores a site from an archive that `geekity export`
+wrote. Run it with the site stopped, from the site's directory, with the
+config and environment the site will run with:
+
+```sh
+$ geekity import geekity-blog.example-20261014T150405Z.tar.gz
+Restored 412 files from /srv/blog/geekity-blog.example-20261014T150405Z.tar.gz.
+Installed @geekity/plugin-llm 1.2.0.
+Rebuilt /srv/blog/data/geekity.db from the files.
+Scanned 120: 120 created, 0 updated, 0 removed, 0 unchanged, 0 failed
+Indexed 34 followers, 210 inbox activities and 58 comments.
+Type these credentials in again, which the export left out: mail.
+Everyone signs in again: sessions are not exported.
+```
+
+The command does these steps in this order:
+
+1. It refuses to run while the site runs. It uses the same checks as
+   `geekity rebuild`: the database is open, or a `geekity serve` answers on
+   its control socket.
+2. It reads `manifest.json`, the first entry. It refuses an archive whose
+   `format` is newer than this version reads.
+3. It refuses when `content/` or `data/` already holds a file that is not
+   scratch. With `--replace`, it renames each of those folders to
+   `<dir>.before-import-<yyyymmdd>T<hhmmss>Z` instead. Nothing is deleted.
+   With an archive made `--without-content`, only `data/` is checked and
+   replaced.
+4. It unpacks the archive into `content.importing` and `data.importing`
+   beside the folders. It treats the archive as untrusted: it refuses a link,
+   a folder entry, a device, an absolute path, a `..` segment, a name outside
+   `content/` and `data/`, a file the manifest does not list, and a file whose
+   size or SHA-256 differs from the manifest. On a refusal it removes the
+   staging folders and leaves the site's folders as they were. A file in
+   `data/` whose class on this site is not `kept` or `credential`, such as a
+   `geekity.db` added by hand, is left out and named on standard error.
+5. It compares the base URL in effect with the archive's `baseUrl`. The base
+   URL in effect is `GEEKITY_BASE_URL` or `baseUrl` in the config, else the
+   `url` in the imported `site.json`. When they differ, it refuses, because
+   actor ids are built from the base URL and followers would not follow the
+   site to a new address. `--new-base-url` imports the site at the base URL in
+   effect.
+6. It renames the staging folders into place.
+7. With `--dev-mode`, it turns dev mode on. Use this for a staging copy of a
+   live site. Without it, the site keeps the dev mode it was exported in,
+   because `data/dev-mode.json` is in the archive.
+8. It installs each `folder` plugin in the manifest from the npm registry
+   (`npm_config_registry`, or registry.npmjs.org) into the plugins folder, at
+   the version the manifest records, as `geekity plugin add` does. It then
+   makes each plugin's enabled state the manifest's. A `config` plugin is not
+   installed: it comes with the new host's config.
+9. It rebuilds `data/geekity.db`, as `geekity rebuild` does.
+10. It prints what is left to do: each setting that the environment or the
+    config set on the old site, each credential the export left out, each
+    `config` plugin to check in the new config, and that everyone signs in
+    again.
+
+The archive's plugin files under `data/plugins/<name>/` are unpacked before
+the plugins are installed, so they are classed as the files of a plugin that
+is not loaded: `secrets.json` is a credential, and every other file is kept.
+The export already left out the plugin's rebuildable files.
+
+When a plugin cannot be installed, the import goes on. The reason can be that
+the registry cannot be reached, the recorded version is no longer published,
+the integrity check fails, the version needs a newer `@geekity/cms`, or no
+plugins folder is set. The data is still restored, the database is rebuilt
+and every other plugin is installed. The failed plugin keeps its enabled
+state. The command never installs another version. At the end it prints one
+line per failed plugin on standard error, with the reason and the command to
+retry, such as `geekity plugin add @geekity/plugin-llm@1.2.0`.
+
+| Exit code | Meaning                                                                                                  |
+| --------- | -------------------------------------------------------------------------------------------------------- |
+| `0`       | The site is restored and every `folder` plugin is installed.                                             |
+| `1`       | The import was refused and nothing changed, or the site is restored but a plugin could not be installed. |
+
+An import that was stopped part way leaves `content.importing` and
+`data.importing`, or a folder already renamed into place that holds a
+`.geekity-import` marker. Run the same import again: it removes what the
+stopped run left and finishes with the same result. The marker is removed
+when an import finishes.
 
 ## Creating an admin from the command line
 

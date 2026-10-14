@@ -49,7 +49,7 @@ describe('geekity --help', () => {
     assert.doesNotMatch((await runCli(['--help'], directory)).stdout, /wordpress-actor/);
     const run = await runCli(['import', 'wordpress-actor', 'ada'], directory);
     assert.equal(run.code, 1);
-    assert.match(run.stderr, /Unknown command "import"/);
+    assert.match(run.stderr, /no plugin on this site adds "import wordpress-actor"/);
   });
 });
 

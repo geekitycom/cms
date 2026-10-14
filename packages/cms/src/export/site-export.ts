@@ -136,13 +136,17 @@ export async function pendingWork(dataDir: string): Promise<PendingWork> {
   };
 }
 
-/** `geekity-<host>-<yyyymmdd>T<hhmmss>Z.tar.gz`. */
-export function exportFileName(baseUrl: string, now: Date): string {
-  const stamp = now
+/** `<yyyymmdd>T<hhmmss>Z`, for a file name. */
+export function compactTime(now: Date): string {
+  return now
     .toISOString()
     .replace(/\.\d+Z$/, 'Z')
     .replace(/[-:]/g, '');
-  return `geekity-${new URL(baseUrl).hostname}-${stamp}.tar.gz`;
+}
+
+/** `geekity-<host>-<yyyymmdd>T<hhmmss>Z.tar.gz`. */
+export function exportFileName(baseUrl: string, now: Date): string {
+  return `geekity-${new URL(baseUrl).hostname}-${compactTime(now)}.tar.gz`;
 }
 
 /** The namespace a credential file belongs to: the plugin's name under `plugins/`, else the file's. */

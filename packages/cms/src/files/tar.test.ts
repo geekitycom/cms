@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { promisify } from 'node:util';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 
-import { readTar, TAR_END, tarHeader, tarPadding } from './tar.ts';
+import { readTar, readTarStream, TAR_END, tarHeader, tarPadding } from './tar.ts';
+import type { TarStreamEntry } from './tar.ts';
 
 const execFile = promisify(execFileCallback);
 
@@ -70,4 +71,65 @@ describe('the tar codec', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it('streams the entries of two gzip members read in small chunks, as an export holds them', async () => {
+    const big = 'x'.repeat(70_000);
+    const manifest = gunzipSync(archive([{ name: 'manifest.json', mode: 0o600, body: '{}' }]));
+    const whole = Buffer.concat([
+      gzipSync(manifest.subarray(0, -TAR_END.length)),
+      archive([
+        { name: 'data/users.json', mode: 0o600, body: '[]' },
+        { name: 'content/uploads/big.bin', mode: 0o644, body: big },
+        { name: 'content/empty.md', mode: 0o644, body: '' },
+      ]),
+    ]);
+    function* chunks(): Generator<Buffer> {
+      for (let at = 0; at < whole.length; at += 777) yield whole.subarray(at, at + 777);
+    }
+    const read: { name: string; type: string; mode: number; size: number; body: string }[] = [];
+    for await (const entry of readTarStream(chunks())) {
+      read.push({ ...pick(entry), body: await text(entry) });
+    }
+    assert.deepEqual(read, [
+      { name: 'manifest.json', type: 'file', mode: 0o600, size: 2, body: '{}' },
+      { name: 'data/users.json', type: 'file', mode: 0o600, size: 2, body: '[]' },
+      { name: 'content/uploads/big.bin', type: 'file', mode: 0o644, size: 70_000, body: big },
+      { name: 'content/empty.md', type: 'file', mode: 0o644, size: 0, body: '' },
+    ]);
+  });
+
+  it('skips a body the reader leaves unread, and keeps the modification time', async () => {
+    const names: string[] = [];
+    let mtime: Date | undefined;
+    for await (const entry of readTarStream([
+      archive([
+        { name: 'a', mode: 0o644, body: 'y'.repeat(1500) },
+        { name: 'b', mode: 0o644, body: 'b' },
+      ]),
+    ])) {
+      names.push(entry.name);
+      mtime = entry.mtime;
+    }
+    assert.deepEqual(names, ['a', 'b']);
+    assert.equal(mtime?.toISOString(), '2026-10-14T15:00:00.000Z');
+  });
+
+  it('refuses an archive cut short inside a body', async () => {
+    const tar = gunzipSync(archive([{ name: 'a', mode: 0o644, body: 'z'.repeat(2000) }]));
+    await assert.rejects(async () => {
+      for await (const entry of readTarStream([gzipSync(tar.subarray(0, 1024))])) {
+        await text(entry);
+      }
+    }, /cut short/);
+  });
 });
+
+function pick(entry: TarStreamEntry) {
+  return { name: entry.name, type: entry.type, mode: entry.mode, size: entry.size };
+}
+
+async function text(entry: TarStreamEntry): Promise<string> {
+  const pieces: Buffer[] = [];
+  for await (const piece of entry.body) pieces.push(piece);
+  return Buffer.concat(pieces).toString();
+}

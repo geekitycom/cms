@@ -115,12 +115,20 @@ function pluginFolders(dataDir: string): string[] {
   );
 }
 
+/** The plugin whose folder a `/`-separated path under `data/` is in, or `undefined`. */
+export function pluginFolderOf(relative: string): string | undefined {
+  const [first, second, third, fourth] = relative.split('/');
+  if (first !== 'plugins' || second === undefined || third === undefined) return undefined;
+  if (!second.startsWith('@')) return second;
+  return fourth === undefined ? undefined : `${second}/${third}`;
+}
+
 /**
  * The folder of a plugin that is not loaded, such as one that was removed: its
  * secrets are a credential, and the rest is kept, because a site may add the
  * plugin again.
  */
-function unloadedFolder(name: string): DataFileDeclaration[] {
+export function unloadedPluginFolder(name: string): DataFileDeclaration[] {
   return [
     declareDataFile({
       pattern: path.posix.join('plugins', name, SECRETS_FILE),
@@ -159,6 +167,6 @@ export function siteDataFiles({
     ...loaded.flatMap((entry) => entry.dataFiles),
     ...pluginFolders(dataDir)
       .filter((name) => !loadedNames.has(name))
-      .flatMap(unloadedFolder),
+      .flatMap(unloadedPluginFolder),
   ];
 }

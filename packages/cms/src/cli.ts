@@ -13,14 +13,32 @@ import { adminStoreOwning, openAdminDatabase } from './store/admin-store.ts';
 import type { AdminStore } from './store/admin-store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
 import { CONTENT_SCRATCH_FILES, dataPath } from './files/data-files.ts';
-import { exportFileName, planSiteExport, writeSiteExport } from './export/site-export.ts';
-import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
+import {
+  compactTime,
+  exportFileName,
+  planSiteExport,
+  writeSiteExport,
+} from './export/site-export.ts';
+import {
+  checkImportTargets,
+  discardStaging,
+  finishSiteImport,
+  importNotes,
+  installArchivedPlugins,
+  placeSiteImport,
+  readSiteManifest,
+  restoreEnabledPlugins,
+  retryCommand,
+  stageSiteImport,
+} from './export/site-import.ts';
+import { CONFIG_FILENAMES, loadConfig, loadResolvedConfig } from './config-loader.ts';
+import { resolveConfig } from './config.ts';
 import type { ResolvedConfig } from './config.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './comments/migrations.ts';
 import { STRIP_METADATA_JOB } from './content/metadata/strip-job.ts';
 import { RESEND_JOB } from './federation/resend-job.ts';
 import { createUser, DuplicateUsernameError } from './site/users.ts';
-import { createCms } from './index.ts';
+import { createCms, settleConfig } from './index.ts';
 import type { Cms } from './index.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
 import { finishedResult } from './jobs/types.ts';
@@ -64,6 +82,7 @@ type CoreCommand =
   | 'settings'
   | 'strip-metadata'
   | 'export'
+  | 'import'
   | 'user'
   | 'plugin';
 
@@ -71,6 +90,8 @@ export type Command = CoreCommand | 'help' | 'version';
 
 interface CommandEntry {
   synopsis: readonly string[];
+  /** Plugins add commands under this word, as `geekity import wordpress`, and one whose words match wins. */
+  sharedWithPlugins?: true;
   help: readonly (readonly [words: string, summary: readonly string[]])[];
   run(parsed: ParsedArgs): Promise<number>;
 }
@@ -229,6 +250,25 @@ const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
     ],
     run: exportCommand,
   },
+  import: {
+    synopsis: ['import <file> [--replace] [--dev-mode] [--new-base-url] [--config <file>]'],
+    help: [
+      [
+        'import',
+        [
+          'Restore a site from an archive geekity export wrote, with the',
+          'site stopped. Every file is checked against the manifest and',
+          'unpacked beside content/ and data/ before it replaces them.',
+          'Folder plugins are installed from the npm registry at the',
+          'versions the archive records, and the database is rebuilt.',
+          'It exits 1 when a plugin could not be installed, naming it',
+          'and the command to retry.',
+        ],
+      ],
+    ],
+    sharedWithPlugins: true,
+    run: importCommand,
+  },
   user: {
     synopsis: ['user add <username> [--password <pw>] [--email <address>] [--config <file>]'],
     help: [
@@ -293,6 +333,9 @@ const SWITCH_FLAGS = [
   'with-credentials',
   'without-content',
   'list',
+  'replace',
+  'dev-mode',
+  'new-base-url',
 ] as const;
 
 export interface ParsedArgs {
@@ -348,6 +391,12 @@ const OPTIONS_HELP = `Options:
                    With export: leave content/ out.
   --list           With export: print each file data/ may hold, its class
                    and what is lost without it, and write nothing.
+  --replace        With import: move content/ and data/ aside to
+                   <dir>.before-import-<time> when they already hold a site.
+  --dev-mode       With import: turn dev mode on, for a staging copy of a
+                   live site.
+  --new-base-url   With import: accept a base URL in effect that differs
+                   from the one the archive was exported from.
   -h, --help       Show this help.
   -v, --version    Show the installed version.
 
@@ -485,9 +534,12 @@ function isCommand(value: string): value is CoreCommand {
 
 /** Run one command. Resolves with the exit code the process should use. */
 async function main(argv: readonly string[]): Promise<number> {
-  const first = leadingWords(argv)[0];
-  if (first !== undefined && !isCommand(first) && !argv.some(isHelpOrVersion)) {
-    return await pluginCommand(argv);
+  const words = leadingWords(argv);
+  const first = words[0];
+  if (first !== undefined && !argv.some(isHelpOrVersion)) {
+    if (!isCommand(first) || (await pluginExtends(first, words, configFlag(argv)))) {
+      return await pluginCommand(argv);
+    }
   }
 
   const parsed = parseArgs(argv);
@@ -970,13 +1022,22 @@ async function rebuildCommand({ configPath }: ParsedArgs): Promise<number> {
     return 1;
   }
 
+  return (await rebuildDatabase(config)) > 0 ? 1 : 0;
+}
+
+/**
+ * Delete the database and build it again from the files, as a boot would,
+ * saying what it read. What `geekity rebuild` and `geekity import` both run.
+ * Answers how many files could not be parsed.
+ */
+async function rebuildDatabase(config: ResolvedConfig): Promise<number> {
   discardDatabase(config.dataDir);
 
   const cms = createCms(config);
   try {
     const result = await cms.sync();
     process.stdout.write(
-      `Rebuilt ${file} from the files.\n` +
+      `Rebuilt ${databaseFile(config.dataDir)} from the files.\n` +
         `Scanned ${String(result.scanned)}: ${String(result.created)} created, ` +
         `${String(result.updated)} updated, ${String(result.removed)} removed, ` +
         `${String(result.unchanged)} unchanged, ${String(result.failed)} failed\n` +
@@ -991,12 +1052,114 @@ async function rebuildCommand({ configPath }: ParsedArgs): Promise<number> {
           `${result.failed === 1 ? 'was' : 'were'} left out of the index; the warnings above name ` +
           `${result.failed === 1 ? 'it' : 'them'}.\n`,
       );
-      return 1;
     }
-    return 0;
+    return result.failed;
   } finally {
     await cms.close();
   }
+}
+
+/**
+ * `geekity import <file>`: a site restored from an export (decision-55,
+ * section 5), with the site stopped. Nothing is replaced until every entry
+ * has been checked and staged and the base URL agrees.
+ */
+async function importCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
+  const [file, ...extra] = args;
+  if (file === undefined) {
+    throw new Error('geekity import needs one archive: geekity import <file>.');
+  }
+  if (extra.length > 0) {
+    throw new Error(
+      `geekity import takes one archive, and no plugin on this site adds "import ${file}".`,
+    );
+  }
+  const unsettled = resolveConfig({
+    ...(await loadConfig(process.cwd(), configPath)),
+    watch: false,
+  });
+  const { contentDir, dataDir } = unsettled;
+  if (databaseInUse(dataDir) || (await isServing(dataDir))) {
+    process.stderr.write(
+      `The site is running: ${dataDir} is in use. Stop it and run geekity import again.\n`,
+    );
+    return 1;
+  }
+
+  const archive = path.resolve(file);
+  const targets = { contentDir, dataDir };
+  const settings = createSettings({ config: unsettled });
+  const archived = await readSiteManifest(archive);
+  const { manifest } = archived;
+  const occupied = checkImportTargets(archived, targets, settings).filter(
+    (target) => target.state === 'occupied',
+  );
+  if (occupied.length > 0 && flags['replace'] !== true) {
+    process.stderr.write(
+      `${occupied.map((target) => target.dir).join(' and ')} already ${occupied.length === 1 ? 'holds' : 'hold'} a site. ` +
+        'Import into empty folders, or give --replace to move them to <dir>.before-import-<time> first.\n',
+    );
+    return 1;
+  }
+
+  const staged = await stageSiteImport({ archive, archived, targets, settings });
+  const inEffect = await settleConfig(
+    Object.freeze({ ...unsettled, contentDir: staged.content ?? contentDir }),
+  );
+  if (inEffect.baseUrl !== manifest.baseUrl && flags['new-base-url'] !== true) {
+    await discardStaging(targets);
+    process.stderr.write(
+      `The base URL in effect is ${inEffect.baseUrl}, and the archive was exported from ${manifest.baseUrl}. ` +
+        'Actor ids are built from the base URL, so followers would not follow the site to a new address. ' +
+        `Set GEEKITY_BASE_URL, or baseUrl in the config, to ${manifest.baseUrl}, ` +
+        `or give --new-base-url to import it at ${inEffect.baseUrl}.\n`,
+    );
+    return 1;
+  }
+  for (const skipped of staged.skipped) {
+    process.stderr.write(`Left out ${skipped.path}: ${skipped.why}.\n`);
+  }
+
+  for (const aside of await placeSiteImport(staged, { stamp: compactTime(unsettled.now()) })) {
+    process.stdout.write(`Moved the folder that was there to ${aside}.\n`);
+  }
+  process.stdout.write(
+    `Restored ${count(manifest.files.length - staged.skipped.length, 'file')} from ${archive}.\n`,
+  );
+
+  const config = await settleConfig(unsettled);
+  if (flags['dev-mode'] === true) {
+    await setOrThrow(createSettings({ config }), 'dev_mode', { on: true });
+    process.stdout.write(
+      'Dev mode is on: nothing the site does is sent until `geekity dev-mode off`.\n',
+    );
+  }
+  const failures = await installArchivedPlugins(manifest, {
+    pluginsDir: config.pluginsDir,
+    registry: pluginRegistry(process.env),
+    coreVersion: ownManifest().version,
+  });
+  for (const plugin of manifest.plugins) {
+    if (plugin.source === 'folder' && !failures.some((failed) => failed.name === plugin.name)) {
+      process.stdout.write(`Installed ${plugin.name} ${plugin.version}.\n`);
+    }
+  }
+  await restoreEnabledPlugins(manifest, config.contentDir);
+  await rebuildDatabase(config);
+  await finishSiteImport(targets);
+
+  process.stdout.write(
+    importNotes(manifest)
+      .map((note) => `${note}\n`)
+      .join(''),
+  );
+  for (const failed of failures) {
+    process.stderr.write(
+      `${failed.name} ${failed.version} was not installed: ${failed.reason} ` +
+        `Its enabled state is kept. Retry with: ${retryCommand(failed)}\n`,
+    );
+  }
+  return failures.length > 0 ? 1 : 0;
 }
 
 /**
@@ -1432,6 +1595,17 @@ async function pluginCommands(config: ResolvedConfig): Promise<FoundCommand[]> {
     .filter((entry) => entry.problem === undefined)
     .flatMap((entry) => entry.commands.map((command) => ({ plugin: entry.plugin.name, command })))
     .sort((a, b) => b.command.words.length - a.command.words.length);
+}
+
+/** Whether a plugin adds the command these words name under a core command's word. */
+async function pluginExtends(
+  first: CoreCommand,
+  words: readonly string[],
+  configPath: string | undefined,
+): Promise<boolean> {
+  if (COMMANDS[first].sharedWithPlugins !== true || words.length < 2) return false;
+  const found = await pluginCommands(await loadResolvedConfig(configPath));
+  return found.some(({ command }) => command.words.every((word, index) => words[index] === word));
 }
 
 /**
