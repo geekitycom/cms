@@ -82,6 +82,28 @@ describe('geekity export', () => {
     assert.ok(!names.some((name) => name.includes('queue.sqlite')));
   });
 
+  it('names each entry under content/ that is not a regular file, and leaves it out', async () => {
+    const directory = await site();
+    const contentDir = path.join(directory, 'content');
+    await fs.symlink(
+      path.join(contentDir, 'posts', '2026-01-01-one.md'),
+      path.join(contentDir, 'posts', 'alias.md'),
+    );
+
+    const run = await runCli(['export', '--out', 'site.tar.gz'], directory, undefined, {
+      GEEKITY_BASE_URL: BASE,
+    });
+    assert.equal(run.code, 0, run.stderr);
+    assert.match(
+      run.stderr,
+      /^Left out content\/posts\/alias\.md: it is a symbolic link, and an export holds only regular files\.$/m,
+    );
+    const names = readTar(await fs.readFile(path.join(directory, 'site.tar.gz'))).map(
+      (entry) => entry.name,
+    );
+    assert.ok(!names.includes('content/posts/alias.md'));
+  });
+
   it('names the archive after the host and the time when --out is not given', async () => {
     const directory = await site();
     const run = await runCli(['export', '--with-credentials'], directory, undefined, {

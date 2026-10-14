@@ -37,6 +37,7 @@ export function siteManifest(overrides: Partial<ExportManifest> = {}): ExportMan
     devMode: false,
     files: [],
     undeclared: [],
+    notCarried: [],
     credentialsLeftOut: [],
     plugins: [],
     overrides: [],

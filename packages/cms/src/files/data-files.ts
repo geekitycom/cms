@@ -1,4 +1,5 @@
 import { readdirSync } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -341,28 +342,71 @@ export interface ClassifiedFile {
   readonly declaration: DataFileDeclaration | undefined;
 }
 
+/** What an entry that is neither a regular file nor a folder is. */
+export type OtherEntryKind = 'a symbolic link' | 'a socket' | 'a FIFO' | 'a device';
+
+export interface ClassifiedOther extends ClassifiedFile {
+  readonly kind: OtherEntryKind;
+}
+
+export interface ClassifiedEntries {
+  /** Every regular file, sorted by its relative path. */
+  readonly files: ClassifiedFile[];
+  /** Every entry that is neither a regular file nor a folder, sorted by its relative path. */
+  readonly others: ClassifiedOther[];
+}
+
+function kindOf(entry: Dirent): OtherEntryKind {
+  if (entry.isSymbolicLink()) return 'a symbolic link';
+  if (entry.isSocket()) return 'a socket';
+  if (entry.isFIFO()) return 'a FIFO';
+  return 'a device';
+}
+
+function byRelative(a: ClassifiedFile, b: ClassifiedFile): number {
+  return a.relative < b.relative ? -1 : a.relative > b.relative ? 1 : 0;
+}
+
 /**
- * Every regular file under `dir`, sorted by its relative path, with the
- * declaration that covers it. Links and other non-files are not walked. A
- * folder that is not there holds nothing.
+ * Every entry under `dir` that is not a folder, with the declaration that
+ * covers it. A link is listed and not followed, so a linked folder is not
+ * walked. A folder that is not there, or is removed during the walk, holds
+ * nothing.
  */
+export function classifyEntries(
+  dir: string,
+  declarations: readonly DataFileDeclaration[],
+): ClassifiedEntries {
+  const files: ClassifiedFile[] = [];
+  const others: ClassifiedOther[] = [];
+  const walk = (folder: string): void => {
+    let entries;
+    try {
+      entries = readdirSync(folder, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    for (const entry of entries) {
+      const absolute = path.join(folder, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolute);
+        continue;
+      }
+      const relative = path.relative(dir, absolute).split(path.sep).join('/');
+      const classified = { relative, absolute, declaration: dataFileFor(declarations, relative) };
+      if (entry.isFile()) files.push(classified);
+      else others.push({ ...classified, kind: kindOf(entry) });
+    }
+  };
+  walk(dir);
+  return { files: files.sort(byRelative), others: others.sort(byRelative) };
+}
+
+/** Every regular file under `dir`, sorted by its relative path, with the declaration that covers it. */
 export function classifyFiles(
   dir: string,
   declarations: readonly DataFileDeclaration[],
 ): ClassifiedFile[] {
-  let entries;
-  try {
-    entries = readdirSync(dir, { recursive: true, withFileTypes: true });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw error;
-  }
-  return entries
-    .filter((entry) => entry.isFile())
-    .map((entry) => {
-      const absolute = path.join(entry.parentPath, entry.name);
-      const relative = path.relative(dir, absolute).split(path.sep).join('/');
-      return { relative, absolute, declaration: dataFileFor(declarations, relative) };
-    })
-    .sort((a, b) => (a.relative < b.relative ? -1 : a.relative > b.relative ? 1 : 0));
+  return classifyEntries(dir, declarations).files;
 }

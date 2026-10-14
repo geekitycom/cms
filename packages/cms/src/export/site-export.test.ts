@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -186,6 +197,34 @@ describe('a site export', () => {
     const { manifest, names } = await exported();
     assert.deepEqual(manifest.undeclared, ['data/surprise.json']);
     assert.ok(!names.includes('data/surprise.json'));
+  });
+
+  it('leaves out each entry under content/ that is not a regular file, and names it with why', async () => {
+    const { root, contentDir, source } = await site();
+    await symlink(
+      path.join(contentDir, 'posts', 'hello.md'),
+      path.join(contentDir, 'posts', 'alias.md'),
+    );
+    await symlink(path.join(contentDir, 'uploads'), path.join(contentDir, 'media'));
+    execFileSync('mkfifo', [path.join(contentDir, 'pipe')]);
+    await symlink(
+      path.join(contentDir, 'posts', 'hello.md'),
+      path.join(contentDir, '.geekity-before-import-20261014T150000Z', 'posts', 'link.md'),
+    );
+
+    const plan = await planSiteExport(source, { withCredentials: false, withContent: true });
+    const out = path.join(root, 'site.tar.gz');
+    const manifest = await writeSiteExport(plan, { out, now: NOW });
+    const names = readTar(await readFile(out)).map((entry) => entry.name);
+
+    assert.deepEqual(manifest.notCarried, [
+      { path: 'content/media', why: 'a symbolic link' },
+      { path: 'content/pipe', why: 'a FIFO' },
+      { path: 'content/posts/alias.md', why: 'a symbolic link' },
+    ]);
+    for (const { path: name } of manifest.notCarried) {
+      assert.ok(!names.some((each) => each === name || each.startsWith(`${name}/`)), name);
+    }
   });
 
   it('records each file with its class, size and sha256', async () => {

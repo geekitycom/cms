@@ -212,6 +212,7 @@ they are never exported.
 | `devMode`            | Whether the site was in dev mode.                                                                                                  |
 | `files`              | Each file after the manifest: its path in the archive, its class (`kept` or `credential`), its size and its SHA-256.               |
 | `undeclared`         | Files under `data/` that no declaration covers. They are not in the archive.                                                       |
+| `notCarried`         | Each entry under `content/` that is not a regular file, such as a symbolic link, with `why`, what it is. It is not in the archive. |
 | `credentialsLeftOut` | The settings namespaces and plugins whose credential files held something and were left out.                                       |
 | `plugins`            | Each installed plugin: its name, version, `source` (`folder` for the plugins folder, `config` for the site config) and `enabled`.  |
 | `overrides`          | Each setting that the environment or the config overrides, with the variable or config field. The value is not recorded.           |
@@ -233,6 +234,13 @@ you move a site, wait until the number is 0.
 A file in `data/` that no declaration covers is left out, and the command
 names it on standard error. This is usually a file that a plugin or a script
 wrote without a declaration.
+
+The archive holds only regular files. A symbolic link under `content/` is left
+out, and so are a socket, a FIFO and a device. The command names each one on
+standard error and the manifest lists it in `notCarried`. A link to a folder
+is not followed, so the files it points to are not exported through it. To
+export what a link points to, replace the link with a copy of the file or
+folder before you export.
 
 The admin writes the same archive from
 [Tools > Export](admin.md#tools--export), as a background job, and offers it

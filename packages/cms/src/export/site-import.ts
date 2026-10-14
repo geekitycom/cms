@@ -209,6 +209,11 @@ export function parseManifest(text: string): ExportManifest {
     devMode: readBoolean(parsed, 'devMode'),
     files: readArray(parsed, 'files').map(parseFile),
     undeclared: readArray(parsed, 'undeclared').filter((each) => typeof each === 'string'),
+    notCarried: readArray(parsed, 'notCarried').flatMap((each) =>
+      isRecord(each) && typeof each['path'] === 'string' && typeof each['why'] === 'string'
+        ? [{ path: each['path'], why: each['why'] }]
+        : [],
+    ),
     credentialsLeftOut: readArray(parsed, 'credentialsLeftOut').filter(
       (each) => typeof each === 'string',
     ),

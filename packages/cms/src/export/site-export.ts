@@ -5,7 +5,13 @@ import { pipeline } from 'node:stream/promises';
 import { createGzip, gzipSync } from 'node:zlib';
 
 import type { ResolvedConfig } from '../config.ts';
-import { CONTENT_SCRATCH_FILES, JOBS, classifyFiles, dataPath } from '../files/data-files.ts';
+import {
+  CONTENT_SCRATCH_FILES,
+  JOBS,
+  classifyEntries,
+  classifyFiles,
+  dataPath,
+} from '../files/data-files.ts';
 import { TAR_END, tarHeader, tarPadding } from '../files/tar.ts';
 import { ownManifest } from '../init.ts';
 import { createFileRecords } from '../jobs/file-records.ts';
@@ -74,6 +80,13 @@ export interface PendingWork {
   readonly jobs: { readonly queued: number; readonly running: number };
 }
 
+export interface NotCarried {
+  /** In the archive's terms: `content/…`. */
+  readonly path: string;
+  /** What it is: `a symbolic link`, `a socket`, `a FIFO` or `a device`. */
+  readonly why: string;
+}
+
 export interface ExportManifest {
   readonly format: typeof EXPORT_FORMAT;
   readonly cms: string;
@@ -86,6 +99,8 @@ export interface ExportManifest {
   readonly files: readonly ManifestFile[];
   /** Files under `data/` that no declaration covers. They are not in the archive. */
   readonly undeclared: readonly string[];
+  /** Entries under `content/` that are not regular files, such as a symbolic link. They are not in the archive. */
+  readonly notCarried: readonly NotCarried[];
   /** The settings namespaces and plugins whose credential files held something and were left out. */
   readonly credentialsLeftOut: readonly string[];
   readonly plugins: readonly ManifestPlugin[];
@@ -183,7 +198,8 @@ function pluginsOf(source: SiteExportSource): ManifestPlugin[] {
 /**
  * Walk `content/` and `data/` and decide each file by its class: `kept` goes
  * in, `credential` goes in only when asked, and the rest stay out. A file
- * under `data/` that nothing declares stays out and is named.
+ * under `data/` that nothing declares stays out and is named, and so does an
+ * entry under `content/` that is not a regular file.
  */
 export async function planSiteExport(
   source: SiteExportSource,
@@ -192,12 +208,19 @@ export async function planSiteExport(
   const { contentDir, dataDir, baseUrl } = source.config;
   const files: PlannedFile[] = [];
   const undeclared: string[] = [];
+  const notCarried: NotCarried[] = [];
   const leftOut = new Set<string>();
 
   if (options.withContent) {
-    for (const file of classifyFiles(contentDir, CONTENT_SCRATCH_FILES)) {
+    const entries = classifyEntries(contentDir, CONTENT_SCRATCH_FILES);
+    for (const file of entries.files) {
       if (file.declaration === undefined) {
         files.push({ path: `content/${file.relative}`, absolute: file.absolute, class: 'kept' });
+      }
+    }
+    for (const other of entries.others) {
+      if (other.declaration === undefined) {
+        notCarried.push({ path: `content/${other.relative}`, why: other.kind });
       }
     }
   }
@@ -247,6 +270,7 @@ export async function planSiteExport(
       credentials: options.withCredentials,
       devMode: await source.settings.get(DEV_MODE.on),
       undeclared,
+      notCarried,
       credentialsLeftOut: [...leftOut].sort(),
       plugins: pluginsOf(source),
       overrides: await overridesOf(source.settings),
@@ -342,6 +366,7 @@ export async function writeSiteExport(
       devMode: site.devMode,
       files,
       undeclared: site.undeclared,
+      notCarried: site.notCarried,
       credentialsLeftOut: site.credentialsLeftOut,
       plugins: site.plugins,
       overrides: site.overrides,

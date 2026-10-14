@@ -1210,6 +1210,11 @@ async function exportCommand({ configPath, flags }: ParsedArgs): Promise<number>
   for (const file of manifest.undeclared) {
     process.stderr.write(`Left out ${file}: no declaration says what it is.\n`);
   }
+  for (const entry of manifest.notCarried) {
+    process.stderr.write(
+      `Left out ${entry.path}: it is ${entry.why}, and an export holds only regular files.\n`,
+    );
+  }
   if (manifest.credentialsLeftOut.length > 0) {
     process.stdout.write(
       `Credentials left out: ${manifest.credentialsLeftOut.join(', ')}. ` +
