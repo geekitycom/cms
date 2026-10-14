@@ -52,7 +52,7 @@ Commands:
   settings list    Print every runtime setting: its value in effect, where
                    that value came from (env, config, file or default) and
                    what it does. A secret prints as (set) or (not set).
-                   Each enabled plugin's settings follow the core ones, as
+                   Each running plugin's settings follow the core ones, as
                    @geekity/plugin-llm.default_model.
   settings get     Print one value in effect, and what overrides it, if
                    anything.

@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-14 09:07'
-updated_date: '2026-10-14 09:24'
+updated_date: '2026-10-14 09:56'
 labels: []
 milestone: m-38
 dependencies: []
@@ -52,6 +52,8 @@ setting-fields.njk: no | escape. Plugin labels go straight in; the secret label 
 Side effect: users/apps 'Token for ' ~ the token name a user typed is now escaped, where it used to print as markup.
 HTML check (AC #2): a --require hook (scratchpad, outside the repo) wrapped nunjucks Environment.render/renderString and saved every render of the whole cms suite. Baseline captured twice on the unchanged tree (6018 renders), after once. Volatile values normalised (CSRF/hex, nonces, temp paths, timestamps, UUIDs, tokens). A render counts as changed only if it differs from both baselines. Result: every page that imports fields.njk is rendered (all 26 pages, 4 to 1177 renders each); no admin page render changed except noise (ports, random ids, digest order) and the two edited test files, whose render multisets were compared with the new tests filtered out: plugins.test.ts 92/92 identical, fields.test.ts 113 identical plus the 2 old markup tests, whose | safe rewrites render byte-identical output. Every marked literal was found rendered as markup in the captures.
 Validation: pnpm build, test (cms 5893 pass, plugins 48/31/22/106 pass), typecheck, lint, format:check all exit 0.
+
+Review follow-up: fields.njk splits each macro's label and hint into plain-text label/hint, always escaped (even a value marked safe, via ~ ''), and markup labelHtml/hintHtml, printed as given, like errorHtml. The Html form wins when both are given, and an empty hint or hintHtml writes no paragraph. The macro header states the contract once. Every caller that passed '... | safe' moved to labelHtml=/hintHtml= with no | safe (55 hints, 3 labels: setting-fields' secret label, users/new email, users/apps client_id). comments/all's reply label is plain text now ('Reply to ' ~ row.author) rather than a capture. fields.test.ts covers each macro: a safe-marked label/hint is still escaped, labelHtml/hintHtml keep markup, empty hint writes nothing, a captured hintHtml escapes what it interpolates. The plugin <script> test also checks the secret label keeps its badge through labelHtml. Render check: same recipe as before (--require hook on nunjucks render/renderString, scratchpad only), baseline captured twice on the unchanged HEAD, after once, normalised and compared per test file and template as sets. No admin render changed. The six differing renders are noise: digest order, random SMTP port, PKCE challenge and port, a random password, and a media list caught at another moment on a page that does not use the macros. In fields.test.ts the only render gone is the removed old safe-marked test. plugins.test.ts renders were 44/44 identical. Every page that uses the macros was rendered (26 pages).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

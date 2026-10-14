@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-14 09:07'
-updated_date: '2026-10-14 09:36'
+updated_date: '2026-10-14 09:56'
 labels: []
 milestone: m-38
 dependencies:
@@ -54,6 +54,8 @@ Built (2026-10-14):
 - Left as is: a DuplicatePluginError (two plugins with one name) still stops the command, as it stops a boot.
 
 Verification: pnpm build && pnpm test && pnpm typecheck && pnpm lint && pnpm format:check exit 0 (cms 5897, demo 32, plugin-llm 48, post-summary 22, tag-suggest 31, wordpress 106). Real CLI on a scratch copy of apps/demo with the plugin-llm bundle in GEEKITY_PLUGINS_DIR and plugins.@geekity/plugin-llm {enabled:true, default_model} in site.json: list printed core then @geekity/plugin-llm base_url (default), api_key '(set) env GEEKITY_PLUGIN_LLM__API_KEY' and default_model (file, migrated, move logged on stderr); the env secret value appeared in neither stdout nor stderr. get printed openai/gpt-4.1-mini. set default_model wrote settings.json; set api_key wrote secrets.json at mode 0600 and printed (set). set base_url not-a-url exited 1 with 'must be an http:// or https:// URL.'; with GEEKITY_PLUGIN_LLM__BASE_URL set, set base_url exited 1 with 'is set by GEEKITY_PLUGIN_LLM__BASE_URL and cannot be changed here.' and settings.json was unchanged. With the plugin disabled, list exited 0, printed core settings, no plugin-llm lines, and warned '@geekity/plugin-llm is installed but not enabled. Its settings are not listed.'
+
+Review follow-up: settings list/get/set now check the verb and its arguments before anything else (a parsed settingsRequest), so geekity settings bogus or get with no name migrates and loads nothing. When loadSitePlugins throws (for example DuplicatePluginError) the command writes 'Plugin settings are not listed: <message>' to stderr and carries on with the core registry, so settings set maintenance.on true still works. Plugin settings are listed only for plugins in registry.active(enabled), the set the server runs; a plugin that is enabled but needs a plugin that is not running is warned about and its settings unregistered. 'Its settings are not listed.' is printed only for a plugin that declares settings. The shared loader still loads every installed plugin, as pluginCommands does, and unregisters the ones not running afterwards. Four new tests in cli-settings.test.ts failed before the fix. Help, docs/cli.md, settings.md and plugins.md say running instead of enabled.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

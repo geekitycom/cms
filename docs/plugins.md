@@ -270,9 +270,12 @@ $ geekity settings set @geekity/plugin-llm.api_key sk-...
 ```
 
 The command loads the site's plugins as a plugin command does, so each
-plugin's `register` runs. `list` prints each enabled plugin's settings after
-the core ones. A plugin that is installed but not enabled, or that did not
-load, is named in a warning on standard error, and its settings are left out.
+plugin's `register` runs. `list` prints the settings of each plugin the
+server would run after the core ones. A plugin that is installed but not
+enabled, that did not load, or that is enabled but needs a plugin that is not
+running, is named in a warning on standard error, and its settings are left
+out. If the plugins cannot be loaded at all, for example because two share a
+name, the command says so and works on the core settings.
 
 **Site info.** `await host.siteInfo()` resolves to the site's base URL and its
 title as the settings have it at that moment. It reads the settings, so it

@@ -635,11 +635,12 @@ override is in effect. `--unset` removes the stored value so the default
 applies. A secret setting prints as `(set)` or `(not set)`, never as its value.
 A secret given to `set` stays in the shell history.
 
-Each enabled plugin's settings follow the core ones, named by the package
+Each running plugin's settings follow the core ones, named by the package
 name, as in `@geekity/plugin-llm.default_model`. `set` writes them to
 `data/plugins/<name>/settings.json`, or `secrets.json` for a secret. A plugin
-that is installed but not enabled, or that did not load, is named in a warning
-and its settings are not listed. [Plugins and hooks](plugins.md) has more.
+that the server would not run, because it is not enabled, did not load or
+needs a plugin that is not running, is named in a warning and its settings are
+not listed. [Plugins and hooks](plugins.md) has more.
 
 `geekity maintenance` and `geekity dev-mode` are shorter ways to change the
 same settings, and they print the same sentences as before.
