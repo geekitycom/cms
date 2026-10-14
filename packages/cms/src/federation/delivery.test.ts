@@ -111,10 +111,8 @@ const webfingerLookups: string[] = [];
 let restoreFetch: () => void;
 let slowPage: Promise<void> = Promise.resolve();
 let inboxes: Promise<void> = Promise.resolve();
-/** Whether the remote host answers every POST with a server error. */
 let refusing = false;
 const refused: string[] = [];
-/** How many POSTs to the remote host have begun, whether or not `inboxes` still holds them. */
 let posting = 0;
 
 before(async () => {
@@ -773,7 +771,6 @@ describe('a scheduled post', () => {
 });
 
 describe('the queue in data/queue.sqlite (TASK-379)', () => {
-  /** A second CMS over the same directories, as the next process or worker would boot it. */
   function nextCms(from: Site, options: { devMode?: boolean } = {}): Cms {
     const next = createCms({
       dataDir: from.dataDir,
@@ -896,7 +893,6 @@ describe('the queue in data/queue.sqlite (TASK-379)', () => {
   });
 });
 
-/** How many messages wait in a site's federation queue. */
 function queuedCount(dataDir: string): number {
   const db = new DatabaseSync(path.join(dataDir, 'queue.sqlite'));
   try {

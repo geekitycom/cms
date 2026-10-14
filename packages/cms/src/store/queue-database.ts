@@ -2,15 +2,8 @@ import { chmodSync, closeSync, mkdirSync, openSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-/**
- * The SQLite file a site's message queues live in (TASK-379), apart from
- * `geekity.db`: that one is derived and `geekity rebuild` deletes it, and this
- * one holds messages nothing else could send again. Each queue keeps a table
- * of its own here.
- */
 export const QUEUE_FILE = 'queue.sqlite';
 
-/** How long a write waits for another process holding the file before it fails. */
 const BUSY_TIMEOUT_MS = 5000;
 
 export function queueFile(dataDir: string): string {

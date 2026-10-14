@@ -13,38 +13,17 @@ import type { SettingsRegistry } from '../settings/types.ts';
 import { openQueueDatabase } from '../store/queue-database.ts';
 import type { Clock } from '../util/clock.ts';
 
-/** Fedify's table in `data/queue.sqlite`. */
 export const FEDERATION_QUEUE_TABLE = 'federation_messages';
 
-/**
- * The queue Fedify is handed, wrapped so a worker can stop taking messages
- * and wait for the ones it holds before `geekity serve` hands over (TASK-288)
- * or the process exits.
- *
- * A durable queue, such as the SQLite file the CMS runs on by default
- * (TASK-379), keeps a message nobody has taken for the next worker. Pausing it
- * stops this worker taking messages, and settling waits only for the handlers
- * in flight.
- *
- * An in-memory queue loses whatever it still holds when the process ends, so
- * it is never paused: settling waits until every message this worker queued
- * for now has been handled. A retry scheduled for later is not waited for.
- */
 export interface SettlingQueue extends MessageQueue {
-  /** Resolve once nothing this worker must finish is still waiting or in hand. */
   settled(): Promise<void>;
-  /** Stop taking messages from a durable queue. Does nothing to an in-memory one. */
   pause(): void;
-  /** Take messages again after {@link SettlingQueue.pause}. */
   resume(): void;
-  /** Stop listening for good, so the process can exit. */
   close(): void;
 }
 
 export interface SettlingQueueOptions {
-  /** Whether the queue keeps a message nobody took across a restart. */
   readonly durable?: boolean;
-  /** Resolves `true` for a message that must be dropped rather than handled. */
   readonly hold?: (message: unknown) => Promise<boolean>;
 }
 
@@ -168,21 +147,11 @@ export function createSettlingQueue(
   };
 }
 
-/** What the CMS runs Fedify on, and what it must do when it lets go of it. */
 export interface FederationQueue {
   readonly queue: SettlingQueue;
-  /** Stop listening and release whatever the CMS opened for it. */
   close(): void;
 }
 
-/**
- * The queue Fedify runs on: the one a site passed in config, or by default a
- * `SqliteMessageQueue` in `data/queue.sqlite`. `null` is no queue at all.
- *
- * Every queue drops an outgoing delivery while dev mode is on (decision-35):
- * the hold before sending stops new ones, and this stops one a copied `data/`
- * brought along from the live site.
- */
 export function createFederationQueue(
   supplied: MessageQueue | null | undefined,
   site: { readonly settings: SettingsRegistry; readonly config: HoldConfig },
