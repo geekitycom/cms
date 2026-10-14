@@ -4,7 +4,7 @@ import path from 'node:path';
 
 /**
  * What a file under `data/` is to the site, and so what a site export does
- * with it (decision-55). Decide with an exhaustive `switch` on `kind`, so a new
+ * with it. Decide with an exhaustive `switch` on `kind`, so a new
  * member breaks every place that has to decide about it.
  */
 export type DataClass =
@@ -61,7 +61,6 @@ function segmentsMatch(globs: readonly string[], segments: readonly string[]): b
   );
 }
 
-/** Whether a `/`-separated path under the data directory is one this declaration covers. */
 export function dataFileMatches(declaration: DataFileDeclaration, relative: string): boolean {
   return segmentsMatch(segmentsOf(declaration.pattern), segmentsOf(relative));
 }
@@ -82,12 +81,6 @@ export function declareDataFile(declaration: DataFileDeclaration): DataFileDecla
   return Object.freeze({ ...declaration });
 }
 
-/**
- * The one way to build a path under `dataDir`. The pattern's literal segments
- * are taken as they are, and each wildcard segment takes the next part, which
- * has to match it; `**` takes every part left. Parts that run out stop the path
- * at the folder, which is how a caller reaches `keys/` or `images/`.
- */
 export function dataPath(dataDir: string, file: DataFileDeclaration, ...parts: string[]): string {
   const refuse = (): never => {
     throw new Error(`${parts.join('/')} is not a path ${file.pattern} declares under data/.`);
@@ -282,11 +275,6 @@ export const QUEUE_LOG = declareDataFile({
   lost: "The queue's write-ahead log, which goes with the queue.",
 });
 
-/**
- * Every file core writes under `data/`, apart from the settings registry's,
- * which the registry declares, and the plugins' folders. Scratch comes first,
- * so a temporary file inside a declared folder reads as scratch.
- */
 export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   TEMPORARY_FILES,
   LOCK_FILES,
@@ -324,7 +312,6 @@ export const WATCH_PROBE = declareDataFile({
   lost: 'Nothing. The content watcher makes it and removes it to check that it works.',
 });
 
-/** Everything under `content/` is kept, apart from these. */
 export const CONTENT_SCRATCH_FILES: readonly DataFileDeclaration[] = [
   TEMPORARY_FILES,
   LOCK_FILES,
@@ -349,7 +336,6 @@ export interface ClassifiedFile {
  */
 export const LOST_AND_FOUND = 'lost+found';
 
-/** What an entry that is neither a regular file nor a folder is. */
 export type OtherEntryKind = 'a symbolic link' | 'a socket' | 'a FIFO' | 'a device';
 
 export interface ClassifiedOther extends ClassifiedFile {
@@ -357,9 +343,7 @@ export interface ClassifiedOther extends ClassifiedFile {
 }
 
 export interface ClassifiedEntries {
-  /** Every regular file, sorted by its relative path. */
   readonly files: ClassifiedFile[];
-  /** Every entry that is neither a regular file nor a folder, sorted by its relative path. */
   readonly others: ClassifiedOther[];
 }
 
@@ -374,12 +358,6 @@ function byRelative(a: ClassifiedFile, b: ClassifiedFile): number {
   return a.relative < b.relative ? -1 : a.relative > b.relative ? 1 : 0;
 }
 
-/**
- * Every entry under `dir` that is not a folder, with the declaration that
- * covers it. A link is listed and not followed, so a linked folder is not
- * walked, and neither is {@link LOST_AND_FOUND} at the top. A folder that is not there, or is removed during the walk, holds
- * nothing.
- */
 export function classifyEntries(
   dir: string,
   declarations: readonly DataFileDeclaration[],

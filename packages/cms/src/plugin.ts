@@ -214,7 +214,8 @@ export type PluginUploadCheck =
 
 /**
  * What a file in a plugin's folder is to the site, and so what a site export
- * does with it (decision-55).
+ * does with it.
+
  *
  * - `kept`: the site cannot be rebuilt without it. Always exported.
  * - `rebuildable`: the plugin makes it again, fetches it again, or falls back

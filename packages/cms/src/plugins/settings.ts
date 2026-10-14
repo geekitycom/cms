@@ -8,7 +8,6 @@ import type { DeclaredNamespace, SettingDeclaration, SettingType } from '../sett
 export const SETTINGS_FILE = 'settings.json';
 export const SECRETS_FILE = 'secrets.json';
 
-/** `data/plugins/`, which holds a folder for each plugin. */
 export function pluginsFolderPath(dataDir: string): string {
   return path.join(dataDir, 'plugins');
 }

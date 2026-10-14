@@ -38,10 +38,8 @@ export interface TarStreamEntry {
   readonly body: AsyncIterable<Buffer>;
 }
 
-/** Two zero blocks: the end of an archive. */
 export const TAR_END: Buffer = Buffer.alloc(BLOCK * 2);
 
-/** The zero bytes that fill an entry of `size` bytes out to a block. */
 export function tarPadding(size: number): Buffer {
   return Buffer.alloc((BLOCK - (size % BLOCK)) % BLOCK);
 }
@@ -82,7 +80,6 @@ function paxRecord(key: string, value: string): string {
   return `${String(length)}${text}`;
 }
 
-/** The header blocks of one regular file, with a PAX header first when it needs one. */
 export function tarHeader(file: TarFile): Buffer {
   const mtime = Math.floor(file.mtime.getTime() / 1000);
   const fitsName = /^[\x20-\x7e]*$/.test(file.name) && file.name.length <= NAME_BYTES;
@@ -130,7 +127,6 @@ function typeOf(flag: string): TarEntryType {
   return 'other';
 }
 
-/** Every entry of a gzipped tar, in order, with PAX and GNU long names applied. */
 export function readTar(gzipped: Buffer): TarEntry[] {
   const archive = gunzipSync(gzipped);
   const entries: TarEntry[] = [];
@@ -168,14 +164,12 @@ export function readTar(gzipped: Buffer): TarEntry[] {
   return entries;
 }
 
-/** The most a PAX or GNU long-name header may hold before the archive is refused. */
 const EXTENDED_HEADER_LIMIT = 1024 * 1024;
 
 function cutShort(): Error {
   return new Error('The archive is cut short: it ends inside an entry.');
 }
 
-/** Bytes pulled off a stream as the tar reader asks for them. */
 class ByteReader {
   readonly #chunks: AsyncIterator<Buffer>;
   #held: Buffer = Buffer.alloc(0);
@@ -191,7 +185,6 @@ class ByteReader {
     return true;
   }
 
-  /** Exactly `count` bytes, or `undefined` when the stream ended cleanly before any of them. */
   async exactly(count: number): Promise<Buffer | undefined> {
     while (this.#held.length < count) {
       if (!(await this.#more())) {
@@ -204,7 +197,6 @@ class ByteReader {
     return taken;
   }
 
-  /** Up to `most` bytes, at least one. */
   async piece(most: number): Promise<Buffer> {
     if (this.#held.length === 0 && !(await this.#more())) throw cutShort();
     const taken = this.#held.subarray(0, Math.min(most, this.#held.length));
@@ -213,11 +205,6 @@ class ByteReader {
   }
 }
 
-/**
- * Every entry of a gzipped tar, in order, without holding the archive in
- * memory. Concatenated gzip members read as one stream. Each entry's body is
- * read before the next entry is asked for.
- */
 export async function* readTarStream(
   gzipped: AsyncIterable<Uint8Array> | Iterable<Uint8Array>,
 ): AsyncGenerator<TarStreamEntry> {

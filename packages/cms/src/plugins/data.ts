@@ -9,7 +9,6 @@ import type { SettingsRegistry } from '../settings/types.ts';
 import type { PluginRegistry } from './registry.ts';
 import { pluginsFolderPath, SECRETS_FILE, SETTINGS_FILE } from './settings.ts';
 
-/** A file name a plugin may use in its folder: one segment, not hidden. */
 const DATA_FILE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 
 const PLUGIN_CLASSES: Readonly<Record<PluginDataClass, { dataClass: DataClass; lost: string }>> = {
@@ -54,10 +53,6 @@ function declarePluginFile(plugin: DeclaringPlugin, file: string, kind: unknown)
   });
 }
 
-/**
- * The files a plugin's `data` declares, each under its folder. Throws, saying
- * why, on a name or class a plugin may not declare.
- */
 export function pluginDataFiles(plugin: DeclaringPlugin): DataFileDeclaration[] {
   return Object.entries(plugin.data ?? {}).map(([file, kind]) =>
     declarePluginFile(plugin, file, kind),
@@ -96,7 +91,6 @@ export function pluginDataFolder(dataDir: string, plugin: DeclaringPlugin): Plug
   };
 }
 
-/** The folder names under `data/plugins/`, `@scope/name` for a scoped package. */
 function pluginFolders(dataDir: string): string[] {
   const directoriesIn = (folder: string): string[] => {
     try {
@@ -115,7 +109,6 @@ function pluginFolders(dataDir: string): string[] {
   );
 }
 
-/** The plugin whose folder a `/`-separated path under `data/` is in, or `undefined`. */
 export function pluginFolderOf(relative: string): string | undefined {
   const [first, second, third, fourth] = relative.split('/');
   if (first !== 'plugins' || second === undefined || third === undefined) return undefined;
@@ -123,11 +116,6 @@ export function pluginFolderOf(relative: string): string | undefined {
   return fourth === undefined ? undefined : `${second}/${third}`;
 }
 
-/**
- * The folder of a plugin that is not loaded, such as one that was removed: its
- * secrets are a credential, and the rest is kept, because a site may add the
- * plugin again.
- */
 export function unloadedPluginFolder(name: string): DataFileDeclaration[] {
   return [
     declareDataFile({
@@ -149,11 +137,6 @@ export interface SiteDataFilesOptions {
   readonly plugins: PluginRegistry;
 }
 
-/**
- * Every declaration in effect for a site (decision-55): core's, the settings
- * registry's, each loaded plugin's, and each folder under `data/plugins/`
- * whose plugin is not loaded. Scratch comes first, as in `CORE_DATA_FILES`.
- */
 export function siteDataFiles({
   dataDir,
   settings,

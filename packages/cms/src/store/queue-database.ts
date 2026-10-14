@@ -24,11 +24,6 @@ export function openQueueDatabase(dataDir: string): DatabaseSync {
   return new DatabaseSync(file, { timeout: BUSY_TIMEOUT_MS });
 }
 
-/**
- * How many messages wait in the queue file, read over a read-only connection
- * so a running site's queue is not touched. No file, or a file the queue has
- * not yet set up, holds none.
- */
 export function countWaitingMessages(dataDir: string): number {
   const file = queueFile(dataDir);
   if (!existsSync(file)) return 0;

@@ -24,12 +24,6 @@ import wordpress, { importWordPressActor, wordPressRecords } from '../src/index.
 import { wxr } from './wxr.ts';
 
 /**
- * The census (decision-55, TASK-405): one site with the four published
- * plugins, every writer in decision-55's table driven through the route or
- * call a site uses, and then every file under `data/` held against the
- * declarations the site has. The boundary test sees a path built from
- * `dataDir`; this sees what was written, however its path was built.
- *
  * It lives here because core's tests may not name this plugin, and the
  * content import is not one of the plugin's exports.
  */
@@ -87,7 +81,6 @@ function write(root: string, relative: string, contents: string): void {
   writeFileSync(file, contents);
 }
 
-/** A `width` by `height` PNG of one colour, made without an image library. */
 function png(width: number, height: number): Buffer {
   const chunk = (type: string, data: Buffer): Buffer => {
     const length = Buffer.alloc(4);
@@ -112,9 +105,7 @@ function png(width: number, height: number): Buffer {
 
 interface Admin {
   get(url: string): Promise<Response>;
-  /** Post a form with a CSRF token from the admin. */
   post(url: string, fields: Record<string, string> | [string, string][]): Promise<Response>;
-  /** The CSRF token on the page at `url`. */
   token(url?: string): Promise<string>;
 }
 
@@ -253,7 +244,6 @@ async function bootSite(): Promise<Census> {
   return { cms, admin: await signIn(cms), mail, dataDir };
 }
 
-/** The `/_geekity/` link in a message that does `action`. */
 function linkFor(message: OutgoingMail | undefined, action: string): URL {
   const found = (message?.text.match(/https:\/\/blog\.example\/_geekity\/\S+/g) ?? [])
     .map((link) => new URL(link))
@@ -269,7 +259,6 @@ async function settle(cms: Cms): Promise<void> {
   await cms.mail.settled();
 }
 
-/** Press a link from a message, as its landing page's button does. */
 async function confirm(cms: Cms, link: URL): Promise<void> {
   const answer = await cms.app.request(link.pathname, {
     method: 'POST',
@@ -307,11 +296,6 @@ async function comment(
   return site.mail.sent.find((message) => message.to.some((to) => to.address === ADA.email));
 }
 
-/**
- * A comment that asks to hear of replies and a reply to it, each approved
- * from its moderation mail, and the unsubscribe link of the reply mail
- * pressed. Then ada takes an hourly digest, and one more comment is put in it.
- */
 async function discuss(site: Census): Promise<void> {
   const { cms, admin } = site;
   const grace = await comment(site, {
@@ -370,7 +354,6 @@ async function contact(cms: Cms): Promise<void> {
   assert.equal(answer.status, 303, 'the contact message was taken');
 }
 
-/** Approve an IndieAuth request as ada and redeem the code, as Quill would. */
 async function indieAuthToken(cms: Cms, admin: Admin): Promise<string> {
   const verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
   const query = new URLSearchParams({
@@ -410,7 +393,6 @@ async function indieAuthToken(cms: Cms, admin: Admin): Promise<string> {
   return token;
 }
 
-/** A note with a location, a post with a property the site does not know, and a photo. */
 async function micropub(cms: Cms, token: string): Promise<void> {
   const authorization = { authorization: `Bearer ${token}` };
   const note = await cms.app.request(
@@ -468,7 +450,6 @@ async function suggestTags(cms: Cms, admin: Admin): Promise<void> {
   assert.equal(((await answer.json()) as { ok: boolean }).ok, true, 'tags were suggested');
 }
 
-/** The actor import, a request to the old actor path, and the content import. */
 async function moveFromWordPress(cms: Cms, dataDir: string): Promise<void> {
   const data = pluginDataFolder(dataDir, wordpress);
   const site = pluginSite({ admin: cms.admin, config: cms.config });
@@ -506,7 +487,6 @@ async function moveFromWordPress(cms: Cms, dataDir: string): Promise<void> {
   assert.equal(code, 0, 'the content import ran');
 }
 
-/** The settings files of core's namespaces, written last because each changes the site. */
 async function settings(cms: Cms): Promise<void> {
   await cms.settings.set(
     'mail',
@@ -522,12 +502,6 @@ async function settings(cms: Cms): Promise<void> {
   await cms.settings.set('dev_mode', new Map([['on', true]]), 'admin');
 }
 
-/** Every file under `dir`, `/`-separated and relative to it. */
-/**
- * The declarations no file can reach: scratch, which is gone once its write
- * or lock is (data-files.test.ts pins those patterns to the code that makes
- * them), and the secrets file of a plugin with no secret setting.
- */
 function unreachable(cms: Cms, declaration: DataFileDeclaration): boolean {
   if (declaration.dataClass.kind === 'scratch') return true;
   const secrets = /^plugins\/(.+)\/secrets\.json$/.exec(declaration.pattern)?.[1];

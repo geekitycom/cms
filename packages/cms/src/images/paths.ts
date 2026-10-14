@@ -21,7 +21,6 @@ export type ImageConfig = Pick<
   'contentDir' | 'dataDir' | 'imageOptimization' | 'imageWidths' | 'imageFormats'
 >;
 
-/** The derived directory for one upload, or `undefined` when the source is not one. */
 export function derivedDir(config: ImageConfig, source: string): string | undefined {
   const file = sourceFile(config, source);
   if (file === undefined) return undefined;

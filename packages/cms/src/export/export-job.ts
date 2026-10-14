@@ -17,7 +17,6 @@ import type { ExportProgress, SiteExportSource } from './site-export.ts';
 export type SiteExportPayload = { readonly withCredentials: boolean };
 
 export type SiteExportResult = {
-  /** The archive's name in `data/exports/`. */
   readonly file: string;
   readonly files: number;
   readonly bytes: number;
@@ -43,10 +42,6 @@ export function sizeLabel(bytes: number): string {
   return `${shown} ${units[unit] ?? 'bytes'}`;
 }
 
-/**
- * Tools > Export's job: the whole site into `data/exports/`, where only the
- * archive it writes is kept. Run again, it writes a new archive.
- */
 export function siteExportJob(
   source: SiteExportSource,
   now: Clock,

@@ -1,8 +1,3 @@
-/**
- * `geekity import` (TASK-407, decision-55 section 5): an archive restored into
- * a site's folders, its folder plugins installed from a registry, which here
- * is a fake one on loopback.
- */
 import assert from 'node:assert/strict';
 import { createPrivateKey, sign, verify } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -43,14 +38,12 @@ async function registry(packages: readonly FakePackage[]): Promise<FakeRegistry>
   return started;
 }
 
-/** A registry that is not there: one started and closed again. */
 async function unreachableRegistry(): Promise<string> {
   const closed = await fakeNpmRegistry([]);
   await closed.close();
   return closed.url;
 }
 
-/** An archive on disk and an empty site beside it to import it into. */
 async function setup(entries: readonly ArchivedEntry[], manifest: Partial<ExportManifest> = {}) {
   const root = await temporaryDir('geekity-import-');
   const archive = path.join(root, 'site.tar.gz');
@@ -458,7 +451,6 @@ const ACTIVITY = Buffer.from(
   }),
 );
 
-/** The activity signed with ada's RSA key as it is on disk in `dataDir`. */
 function signActivity(dataDir: string): Buffer {
   const jwk = JSON.parse(
     readFileSync(path.join(dataDir, 'keys', 'ada.rsassa-pkcs1-v1_5.jwk'), 'utf8'),

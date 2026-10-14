@@ -71,7 +71,6 @@ export interface PluginContributions {
   settingsNamespace: DeclaredNamespace | undefined;
   /** Its buttons beside editor fields, in the order it declared them. */
   editorActions: readonly PluginEditorAction[];
-  /** The files its `data` declares, each under its folder in `data/plugins/`. */
   dataFiles: readonly DataFileDeclaration[];
 }
 
@@ -86,11 +85,6 @@ export interface PluginRegistryOptions extends PluginFetchOptions {
 export interface RegisteredPlugin extends InstalledPlugin, PluginContributions {
   /** Why it cannot run, or `undefined` when it can be enabled. */
   problem: string | undefined;
-  /**
-   * Whether its `register` ran and returned, so what it declared is in
-   * effect. A plugin that is loaded may still be unavailable, such as one
-   * whose requirement is missing.
-   */
   loaded: boolean;
 }
 

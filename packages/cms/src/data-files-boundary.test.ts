@@ -61,7 +61,6 @@ function namesDataDir(argument: ts.Expression | undefined): boolean {
   return ts.isPropertyAccessExpression(argument) && argument.name.text === 'dataDir';
 }
 
-/** Every call that joins a path onto `dataDir` in one file's text, as `file:line`. */
 function dataDirJoins(relative: string, text: string): string[] {
   const source = ts.createSourceFile(relative, text, ts.ScriptTarget.Latest, true);
   const found: string[] = [];

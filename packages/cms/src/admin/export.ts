@@ -1,10 +1,3 @@
-/**
- * Tools > Export: the site as a `.tar.gz`, written by the `site.export` job
- * and downloaded from here (decision-55, section 4). Every archive holds actor
- * keys, password hashes and personal data, so starting one asks for the
- * password again and the download sits behind the admin's session check.
- */
-
 import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
 

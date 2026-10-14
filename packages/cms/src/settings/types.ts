@@ -74,11 +74,6 @@ export interface SettingFields<V> {
   onChange?(change: SettingChange<V>): Promise<void> | void;
 }
 
-/**
- * Where a namespace is stored. A file under `content/` is kept, as everything
- * there is. A file under `data/` declares its class. A folder's public file is
- * kept and its secret file is a credential.
- */
 export type NamespaceStorage =
   | { readonly kind: 'file'; readonly under: 'content'; readonly path: string }
   | { readonly kind: 'file'; readonly under: 'data'; readonly file: DataFileDeclaration }
@@ -172,7 +167,6 @@ export interface SettingsRegistry {
   watch<V>(setting: SettingRef<V>, listener: ChangeListener<V>): () => void;
   /** Every declared setting, core first, for the CLI's `list`. */
   list(): readonly SettingRef<unknown>[];
-  /** Every file a registered namespace keeps under `data/`, with its class, core first. */
   dataFiles(): readonly DataFileDeclaration[];
   /** Register a plugin's namespace. Refuses a reserved or clashing namespace. */
   register(namespace: NamespaceDeclaration): void;

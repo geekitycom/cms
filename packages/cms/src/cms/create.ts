@@ -69,7 +69,8 @@ export interface Cms {
    */
   readonly settings: SettingsRegistry;
   /**
-   * Every declaration in effect for this site (decision-55): core's, the
+   * Every declaration in effect for this site: core's, the
+
    * settings registry's, each loaded plugin's, and one for each folder under
    * `data/plugins/` whose plugin is not loaded. A file under `dataDir` that
    * none of them covers is a file nobody declared.

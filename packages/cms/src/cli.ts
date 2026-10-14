@@ -90,7 +90,6 @@ export type Command = CoreCommand | 'help' | 'version';
 
 interface CommandEntry {
   synopsis: readonly string[];
-  /** Plugins add commands under this word, as `geekity import wordpress`, and one whose words match wins. */
   sharedWithPlugins?: true;
   help: readonly (readonly [words: string, summary: readonly string[]])[];
   run(parsed: ParsedArgs): Promise<number>;
@@ -1025,11 +1024,6 @@ async function rebuildCommand({ configPath }: ParsedArgs): Promise<number> {
   return (await rebuildDatabase(config)) > 0 ? 1 : 0;
 }
 
-/**
- * Delete the database and build it again from the files, as a boot would,
- * saying what it read. What `geekity rebuild` and `geekity import` both run.
- * Answers how many files could not be parsed.
- */
 async function rebuildDatabase(config: ResolvedConfig): Promise<number> {
   discardDatabase(config.dataDir);
 
@@ -1059,11 +1053,6 @@ async function rebuildDatabase(config: ResolvedConfig): Promise<number> {
   }
 }
 
-/**
- * `geekity import <file>`: a site restored from an export (decision-55,
- * section 5), with the site stopped. Nothing is replaced until every entry
- * has been checked and staged and the base URL agrees.
- */
 async function importCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
   const [file, ...extra] = args;
   if (file === undefined) {
@@ -1163,8 +1152,7 @@ async function importCommand({ args, configPath, flags }: ParsedArgs): Promise<n
 }
 
 /**
- * `geekity export`: the site as a `.tar.gz` (decision-55). It reads only, so
- * it runs beside a serving site: no migration runs and no database is opened
+ * It runs beside a serving site: no migration runs and no database is opened
  * but the queue, read-only, to count what waits in it.
  */
 async function exportCommand({ configPath, flags }: ParsedArgs): Promise<number> {
@@ -1602,7 +1590,6 @@ async function pluginCommands(config: ResolvedConfig): Promise<FoundCommand[]> {
     .sort((a, b) => b.command.words.length - a.command.words.length);
 }
 
-/** Whether a plugin adds the command these words name under a core command's word. */
 async function pluginExtends(
   first: CoreCommand,
   words: readonly string[],

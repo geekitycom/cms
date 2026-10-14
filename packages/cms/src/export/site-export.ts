@@ -25,10 +25,6 @@ import { countWaitingMessages } from '../store/queue-database.ts';
 import { isRecord } from '../util/guards.ts';
 
 /**
- * `geekity export` and the admin's export job (decision-55, section 4): a
- * gzipped tar of `content/` without scratch and of every `kept` file under
- * `data/`, credentials only when asked, with `manifest.json` first.
- *
  * It reads only. Every writer replaces its file by rename, so each file read
  * through one open handle is a whole file, and its hash is taken from the
  * bytes the archive holds. SQLite files are never exported.
@@ -38,10 +34,8 @@ export const EXPORT_FORMAT = 1;
 
 export const MANIFEST_NAME = 'manifest.json';
 
-/** The admin's export job. An archive carries none, or an import would run it again. */
 export const SITE_EXPORT_JOB_NAME = 'site.export';
 
-/** The site a running server or a command has booted. */
 export interface SiteExportSource {
   readonly config: Pick<ResolvedConfig, 'dataDir' | 'contentDir' | 'baseUrl' | 'plugins'>;
   readonly settings: SettingsRegistry;
@@ -56,7 +50,6 @@ export interface SiteExportOptions {
 export type ExportedClass = 'kept' | 'credential';
 
 export interface ManifestFile {
-  /** In the archive: `content/…` or `data/…`. */
   readonly path: string;
   readonly class: ExportedClass;
   readonly size: number;
@@ -66,28 +59,23 @@ export interface ManifestFile {
 export interface ManifestPlugin {
   readonly name: string;
   readonly version: string;
-  /** `folder` for one in the plugins folder, `config` for one the site's config names. */
   readonly source: 'folder' | 'config';
   readonly enabled: boolean;
 }
 
 export interface ManifestOverride {
-  /** `namespace.key`. */
   readonly setting: string;
   /** `env GEEKITY_…` or `config field`. Never the value. */
   readonly source: string;
 }
 
 export interface PendingWork {
-  /** Messages waiting in `data/queue.sqlite`, which is never exported. */
   readonly deliveries: number;
   readonly jobs: { readonly queued: number; readonly running: number };
 }
 
 export interface NotCarried {
-  /** In the archive's terms: `content/…`. */
   readonly path: string;
-  /** What it is: `a symbolic link`, `a socket`, `a FIFO` or `a device`. */
   readonly why: string;
 }
 
@@ -99,13 +87,9 @@ export interface ExportManifest {
   readonly content: boolean;
   readonly credentials: boolean;
   readonly devMode: boolean;
-  /** Every file in the archive after the manifest, in archive order. */
   readonly files: readonly ManifestFile[];
-  /** Files under `data/` that no declaration covers. They are not in the archive. */
   readonly undeclared: readonly string[];
-  /** Entries under `content/` that are not regular files, such as a symbolic link. They are not in the archive. */
   readonly notCarried: readonly NotCarried[];
-  /** The settings namespaces and plugins whose credential files held something and were left out. */
   readonly credentialsLeftOut: readonly string[];
   readonly plugins: readonly ManifestPlugin[];
   readonly overrides: readonly ManifestOverride[];
@@ -116,14 +100,11 @@ interface PlannedFile {
   readonly path: string;
   readonly absolute: string;
   readonly class: ExportedClass;
-  /** What the archive holds in place of the file's bytes, when it is not those bytes. */
   readonly rewrite?: (bytes: Buffer) => Buffer;
 }
 
-/** What an export will hold, worked out before any byte is written. */
 export interface ExportPlan {
   readonly files: readonly PlannedFile[];
-  /** The files' sizes when they were planned. */
   readonly bytes: number;
   readonly site: Omit<ExportManifest, 'exportedAt' | 'files'>;
 }
@@ -136,16 +117,12 @@ export interface ExportProgress {
 }
 
 export interface WriteSiteExportOptions {
-  /** The archive to write. It is replaced whole, at mode 0600. */
   readonly out: string;
   readonly now: Date;
-  /** Checked between files; an abort rejects with its reason and leaves no file behind. */
   readonly signal?: AbortSignal;
-  /** Called after each file. */
   readonly progress?: (progress: ExportProgress) => void | Promise<void>;
 }
 
-/** `jobs.json` without the export jobs. Bytes that are not a list of records are kept as they are. */
 function withoutExportJobs(bytes: Buffer): Buffer {
   let jobs: unknown;
   try {
@@ -158,7 +135,6 @@ function withoutExportJobs(bytes: Buffer): Buffer {
   return kept.length === jobs.length ? bytes : Buffer.from(`${JSON.stringify(kept, null, 2)}\n`);
 }
 
-/** The work a move has to wait for: deliveries in the queue, and jobs not yet done. */
 export async function pendingWork(dataDir: string): Promise<PendingWork> {
   const jobs = (
     await createFileRecords(dataPath(dataDir, JOBS)).list(['queued', 'running'])
@@ -172,7 +148,6 @@ export async function pendingWork(dataDir: string): Promise<PendingWork> {
   };
 }
 
-/** `<yyyymmdd>T<hhmmss>Z`, for a file name. */
 export function compactTime(now: Date): string {
   return now
     .toISOString()
@@ -180,12 +155,10 @@ export function compactTime(now: Date): string {
     .replace(/[-:]/g, '');
 }
 
-/** `geekity-<host>-<yyyymmdd>T<hhmmss>Z.tar.gz`. */
 export function exportFileName(baseUrl: string, now: Date): string {
   return `geekity-${new URL(baseUrl).hostname}-${compactTime(now)}.tar.gz`;
 }
 
-/** The namespace a credential file belongs to: the plugin's name under `plugins/`, else the file's. */
 function credentialOwner(relative: string): string {
   const [first, second, third] = relative.split('/');
   if (first === 'plugins' && second !== undefined) {
@@ -216,12 +189,6 @@ function pluginsOf(source: SiteExportSource): ManifestPlugin[] {
   }));
 }
 
-/**
- * Walk `content/` and `data/` and decide each file by its class: `kept` goes
- * in, `credential` goes in only when asked, and the rest stay out. A file
- * under `data/` that nothing declares stays out and is named, and so does an
- * entry under `content/` that is not a regular file.
- */
 export async function planSiteExport(
   source: SiteExportSource,
   options: SiteExportOptions,
@@ -369,12 +336,11 @@ async function* tarEntries(
 }
 
 /**
- * Write the archive the plan describes. The files go through gzip into a
- * temporary file beside `out` while they are hashed; then `manifest.json`,
- * which needs those hashes, is written as the first gzip member and the files
- * follow as the second. gzip readers and tar take the two members as one
- * stream. The finished file is renamed onto `out`.
+ * `manifest.json`, which needs the hashes of every file, is written as the
+ * first gzip member and the files follow as the second. gzip readers and tar
+ * take the two members as one stream.
  */
+
 export async function writeSiteExport(
   plan: ExportPlan,
   options: WriteSiteExportOptions,

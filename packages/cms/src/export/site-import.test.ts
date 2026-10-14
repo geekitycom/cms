@@ -69,7 +69,6 @@ async function mountPoints(targets: ImportTargets) {
   readOnly.push(parent);
 }
 
-/** A rename that fails once `allowed` renames have been made, as a kill between two would. */
 function killedAfter(allowed: number) {
   let made = 0;
   return async (from: string, to: string) => {
@@ -79,7 +78,6 @@ function killedAfter(allowed: number) {
   };
 }
 
-/** Run the import's file steps: read, check, stage, place, finish. */
 async function importFiles(
   file: string,
   targets: ImportTargets,
@@ -99,7 +97,6 @@ async function importFiles(
   return { staged, moved };
 }
 
-/** Every file under a folder, relative, with its mode and hash. */
 async function tree(dir: string): Promise<Record<string, string>> {
   const found: Record<string, string> = {};
   for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
@@ -120,7 +117,6 @@ async function refused(entries: readonly ArchivedEntry[], pattern: RegExp, manif
   assert.deepEqual(existsSync(site) ? await readdir(site) : [], [], 'nothing was left behind');
 }
 
-/** Each target's files, with the stamp of a folder moved aside left out of its name. */
 async function sites(targets: ImportTargets) {
   const unstamped = async (dir: string) =>
     Object.fromEntries(

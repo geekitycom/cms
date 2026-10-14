@@ -57,7 +57,6 @@ async function put(root: string, relative: string, contents: string, mode = 0o64
   await chmod(file, mode);
 }
 
-/** A site with a file of every class under data/, scratch under content/, and work waiting. */
 async function site() {
   const root = await mkdtemp(path.join(tmpdir(), 'geekity-export-'));
   dirs.push(root);

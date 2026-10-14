@@ -37,19 +37,9 @@ import type {
 } from './site-export.ts';
 
 /**
- * `geekity import` (decision-55, section 5): an archive `geekity export` wrote,
- * checked entry by entry and unpacked into `.geekity-importing/` inside
- * `content/` and `data/`, then moved into place entry by entry.
- *
  * Nothing is made, renamed or removed beside a target, and the target itself
  * is never renamed or removed, because on Docker each one is a mount point.
  * Every move stays inside one target, so on one filesystem.
- *
- * The archive is untrusted. Only regular files under `content/` and `data/`
- * that the manifest lists, with the size and sha256 it gives, are written.
- * From the first staged entry moved in until the import is finished, the
- * target holds a marker naming the manifest's hash, and a folder moved aside
- * holds it while it fills, so a run that was killed is finished by the next.
  */
 
 export interface ImportTargets {
@@ -59,17 +49,10 @@ export interface ImportTargets {
 
 export interface ArchivedManifest {
   readonly manifest: ExportManifest;
-  /** The sha256 of the manifest's bytes: what the staging markers hold. */
   readonly marker: string;
 }
 
-export type TargetState =
-  /** Not there, or holding scratch only. */
-  | 'empty'
-  /** Holding a file that is not scratch. */
-  | 'occupied'
-  /** Holding this archive's marker: an import of it that did not finish. */
-  | 'unfinished';
+export type TargetState = 'empty' | 'occupied' | 'unfinished';
 
 export interface ImportTarget {
   readonly dir: string;
@@ -79,23 +62,17 @@ export interface ImportTarget {
 export interface StagedImport {
   readonly archived: ArchivedManifest;
   readonly targets: ImportTargets;
-  /** The staging folder for `content/`, or `undefined` when the archive has no content. */
   readonly content: string | undefined;
   readonly data: string;
-  /** The folders the archive restores, and what each held when it was staged. */
   readonly states: readonly ImportTarget[];
-  /** Archived files under `data/` that this site does not keep, left out. */
   readonly skipped: readonly { readonly path: string; readonly why: string }[];
-  /** The folders staging made because they were not there, a target among them. */
   readonly created: readonly string[];
 }
 
-/** A manifest larger than this is not one `geekity export` wrote. */
 const MANIFEST_LIMIT = 64 * 1024 * 1024;
 
 const SHA256 = /^[0-9a-f]{64}$/;
 
-/** An archive carries no folders, so the ones under `data/` are made private, as `data/keys` is. */
 const PRIVATE_FOLDER_MODE = 0o700;
 
 function stagingDir(dir: string): string {
@@ -106,10 +83,6 @@ function markerFile(dir: string): string {
   return dataPath(dir, IMPORT_MARKER);
 }
 
-/**
- * Whether a name at the top of a target stays where it is: the import's own
- * marker, staging or a folder moved aside, or the filesystem's lost+found.
- */
 function leftInPlace(name: string): boolean {
   return (
     name === LOST_AND_FOUND ||
@@ -180,7 +153,6 @@ function parseOverride(value: unknown): ManifestOverride {
   return { setting: readString(value, 'setting'), source: readString(value, 'source') };
 }
 
-/** The manifest of an archive, checked. A newer format than this version reads is refused. */
 export function parseManifest(text: string): ExportManifest {
   let parsed: unknown;
   try {
@@ -251,7 +223,6 @@ async function manifestOf(entry: TarStreamEntry | undefined): Promise<ArchivedMa
   };
 }
 
-/** Read and check the manifest, the archive's first entry, without reading the rest. */
 export async function readSiteManifest(archive: string): Promise<ArchivedManifest> {
   for await (const entry of readTarStream(createReadStream(archive))) {
     return await manifestOf(entry);
@@ -260,11 +231,9 @@ export async function readSiteManifest(archive: string): Promise<ArchivedManifes
 }
 
 /**
- * What this site declares under `data/` before any plugin is installed: core,
- * the settings registry, and each archived plugin folder read as the folder of
- * a plugin that is not loaded. A plugin's own declarations exist only once it
- * is installed, which is after its data is in place; the export classed those
- * files with the same plugin version's declarations.
+ * A plugin's own declarations exist only once it is installed, which is after
+ * its data is in place; the export classed those files with the same plugin
+ * version's declarations.
  */
 export function importDeclarations(
   archived: ArchivedManifest,
@@ -304,7 +273,6 @@ function targetState(
     : 'empty';
 }
 
-/** The folders the archive restores, and what each holds now. */
 export function checkImportTargets(
   archived: ArchivedManifest,
   targets: ImportTargets,
@@ -324,7 +292,6 @@ export function checkImportTargets(
   return found;
 }
 
-/** `content/<path>` or `data/<path>`, checked: no absolute path, no empty, `.` or `..` segment. */
 function placeOf(name: string): { readonly root: 'content' | 'data'; readonly relative: string } {
   const segments = name.split('/');
   const [root, ...rest] = segments;
@@ -366,7 +333,6 @@ async function writeEntry(
   return { size, sha256: hash.digest('hex') };
 }
 
-/** Why a data file is not unpacked here, or `undefined` when it is. */
 function skipReason(declarations: readonly DataFileDeclaration[], relative: string) {
   const kind = dataFileFor(declarations, relative)?.dataClass.kind;
   switch (kind) {
@@ -444,24 +410,16 @@ async function unpack(
   return skipped;
 }
 
-/** Remove the staging folders inside the targets, and the folders staging made. */
 async function discardStaging(targets: ImportTargets, created: readonly string[]): Promise<void> {
   await rm(stagingDir(targets.contentDir), { recursive: true, force: true });
   await rm(stagingDir(targets.dataDir), { recursive: true, force: true });
   for (const dir of created) await rm(dir, { recursive: true, force: true });
 }
 
-/** Give up a staged import: the targets are left as they were before it was staged. */
 export async function discardStagedImport(staged: StagedImport): Promise<void> {
   await discardStaging(staged.targets, staged.created);
 }
 
-/**
- * Unpack the archive into `.geekity-importing/` inside each folder it
- * restores, checking every entry. Staging folders a killed run left are
- * removed first; on any refusal the new ones are removed too, and nothing
- * else in the targets is touched.
- */
 export async function stageSiteImport(options: {
   readonly archive: string;
   readonly archived: ArchivedManifest;
@@ -493,7 +451,6 @@ export async function stageSiteImport(options: {
   }
 }
 
-/** A new `.geekity-before-import-<stamp>` inside `dir`, holding the marker until everything is in it. */
 async function startAside(dir: string, stamp: string, marker: string): Promise<string> {
   let aside = dataPath(dir, IMPORT_ASIDE, `.geekity-before-import-${stamp}`);
   for (let n = 2; existsSync(aside); n += 1) {
@@ -504,7 +461,6 @@ async function startAside(dir: string, stamp: string, marker: string): Promise<s
   return aside;
 }
 
-/** The folder a killed run of this archive was moving `dir`'s contents into, if any. */
 async function asideInProgress(dir: string, marker: string): Promise<string | undefined> {
   for (const name of await readdir(dir)) {
     if (!dataFileMatches(IMPORT_ASIDE, name)) continue;
@@ -515,13 +471,6 @@ async function asideInProgress(dir: string, marker: string): Promise<string | un
   return undefined;
 }
 
-/**
- * Move each staging folder's entries into its target. What an occupied target
- * held is moved into `.geekity-before-import-<stamp>` inside it, and nothing
- * is deleted but scratch and an unfinished import of this same archive. A run
- * killed part way through is finished by the next, which moves the rest of
- * the old contents into the same folder. Answers the folders moved aside.
- */
 export async function placeSiteImport(
   staged: StagedImport,
   options: {
@@ -555,7 +504,6 @@ export async function placeSiteImport(
   return moved;
 }
 
-/** The import is done: take the markers away, so a later import treats the site as a site. */
 export async function finishSiteImport(targets: ImportTargets): Promise<void> {
   await rm(markerFile(targets.contentDir), { force: true });
   await rm(markerFile(targets.dataDir), { force: true });
@@ -567,16 +515,10 @@ export interface PluginFailure {
   readonly reason: string;
 }
 
-/** The command that installs one archived plugin again. */
 export function retryCommand(plugin: Pick<ManifestPlugin, 'name' | 'version'>): string {
   return `geekity plugin add ${plugin.name}@${plugin.version}`;
 }
 
-/**
- * Install each `folder` plugin at the version the manifest records, as
- * `geekity plugin add` installs one, and never another version. A plugin that
- * cannot be installed is named with the reason; the others go on.
- */
 export async function installArchivedPlugins(
   manifest: ExportManifest,
   options: {
@@ -611,11 +553,6 @@ export async function installArchivedPlugins(
   return failures;
 }
 
-/**
- * Make each archived plugin's enabled state the manifest's. With content in
- * the archive `site.json` already says so; an export made without content
- * has it written here. A plugin that failed to install keeps its state too.
- */
 export async function restoreEnabledPlugins(
   manifest: ExportManifest,
   contentDir: string,
@@ -627,7 +564,6 @@ export async function restoreEnabledPlugins(
   }
 }
 
-/** What the owner still has to do once the files are back. */
 export function importNotes(manifest: ExportManifest): string[] {
   const notes: string[] = [];
   for (const override of manifest.overrides) {

@@ -8,12 +8,10 @@ import { isAlive } from './processes.ts';
 const STALE_LOCK_MS = 10_000;
 const LOCK_RETRY_MS = 5;
 
-/** The lock file that guards one file. */
 export function lockFileFor(file: string): string {
   return `${file}.lock`;
 }
 
-/** The file only one waiter can create, to take over or release a lock. */
 export function guardFileFor(lockFile: string): string {
   return `${lockFile}.takeover`;
 }

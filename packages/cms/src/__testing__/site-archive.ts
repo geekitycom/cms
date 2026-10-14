@@ -5,12 +5,6 @@ import { EXPORT_FORMAT, MANIFEST_NAME } from '../export/site-export.ts';
 import type { ExportManifest, ExportedClass, ManifestFile } from '../export/site-export.ts';
 import { TAR_END, tarHeader, tarPadding } from '../files/tar.ts';
 
-/**
- * A site archive built by hand, as `geekity export` lays one out, so a test of
- * `geekity import` can name every byte, including the ones a damaged or
- * hostile archive would hold.
- */
-
 export interface ArchivedEntry {
   readonly name: string;
   readonly body?: string;
@@ -18,9 +12,7 @@ export interface ArchivedEntry {
   /** The tar type flag: `0` a file, `2` a link, `5` a folder. */
   readonly type?: '0' | '2' | '5';
   readonly class?: ExportedClass;
-  /** Whether the manifest lists it. Files are listed unless this says no. */
   readonly listed?: boolean;
-  /** The hash the manifest claims, when a test wants it to lie. */
   readonly sha256?: string;
 }
 
@@ -65,7 +57,6 @@ function entryBlocks(entry: ArchivedEntry): Buffer {
   return Buffer.concat([header, body, tarPadding(body.length)]);
 }
 
-/** The manifest's record of each file entry it lists. */
 export function manifestFiles(entries: readonly ArchivedEntry[]): ManifestFile[] {
   return entries
     .filter((entry) => (entry.type ?? '0') === '0' && entry.listed !== false)
@@ -80,7 +71,6 @@ export function manifestFiles(entries: readonly ArchivedEntry[]): ManifestFile[]
     });
 }
 
-/** `manifest.json` and then each entry, the manifest listing every file entry with its real hash. */
 export function siteArchive(
   entries: readonly ArchivedEntry[],
   manifest: Partial<ExportManifest> = {},
@@ -95,7 +85,6 @@ export function siteArchive(
   );
 }
 
-/** The files of a small site whose `site.json` names the archive's base URL. */
 export function siteFiles(): ArchivedEntry[] {
   return [
     {

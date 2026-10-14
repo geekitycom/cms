@@ -138,7 +138,6 @@ export function overridden(source: ValueSource): boolean {
   return source.tier === 'env' || source.tier === 'config';
 }
 
-/** Where a value came from, as the CLI and an export's manifest name it: `env GEEKITY_X`, `config field`, `file` or `default`. */
 export function sourceLabel(source: ValueSource): string {
   switch (source.tier) {
     case 'env':
@@ -151,7 +150,6 @@ export function sourceLabel(source: ValueSource): string {
   }
 }
 
-/** Whether a namespace file is written at mode 0600: a credential is. */
 function writtenPrivately(dataClass: DataClass): boolean {
   switch (dataClass.kind) {
     case 'credential':
@@ -192,7 +190,6 @@ function folderFiles(
   }));
 }
 
-/** The files a namespace keeps under `data/`, each with the settings it holds. */
 function dataFilesOf(namespace: NamespaceDeclaration): readonly DeclaredFile[] {
   const { storage } = namespace;
   if (storage.kind === 'folder') return folderFiles(namespace, storage);
