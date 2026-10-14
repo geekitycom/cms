@@ -6,8 +6,7 @@ import { readFileIfPresentSync, writeFileAtomicallySync } from '../files/atomic.
 import { relayList } from '../site/setting-values.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import { fileWith, storedValues } from '../settings/registry.ts';
-import { SITE, siteJsonPath } from '../site/namespace.ts';
-import { isRecord } from '../util/guards.ts';
+import { parseSiteJson, SITE, siteJsonPath, withoutRetiredKeys } from '../site/namespace.ts';
 import { USERS_FILE_MODE, usersFile, usersJsonText } from '../site/users.ts';
 import { DEFAULT_MENU_NAME, menuItemsFromText } from '../site/navigation.ts';
 import { taxonomyRedirectsOf } from '../content/taxonomy.ts';
@@ -160,7 +159,7 @@ export function migrateSettingsToFile(db: DatabaseSync, contentDir: string): voi
   if (rows !== undefined && rows.length > 0) {
     const stored = settingsFromRows(rows);
     const file = siteJsonPath(contentDir);
-    const existing = siteJsonIn(readFileIfPresentSync(file) ?? '');
+    const existing = withoutRetiredKeys(parseSiteJson(readFileIfPresentSync(file) ?? ''));
     const settings = fileWasEditedLast(file, rows) ? storedValues(SITE, existing) : stored;
 
     writeFileAtomicallySync(
@@ -259,15 +258,6 @@ export function migrateUsersToFile(db: DatabaseSync, dataDir: string): void {
   }
 
   dropLegacyTable(db, 'users');
-}
-
-function siteJsonIn(source: string): Record<string, unknown> {
-  try {
-    const parsed: unknown = JSON.parse(source);
-    return isRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
 }
 
 /** The old key/value rows as settings, defaults filled in. */

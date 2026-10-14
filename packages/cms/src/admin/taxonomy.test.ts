@@ -4,6 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import type { Cms } from '../index.ts';
+import { flashes } from './__testing__/flash.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { applyTermChange } from './taxonomy.ts';
@@ -333,6 +334,49 @@ describe('merging one term into another', () => {
       /tags: \[eleventy, sqlite\]/,
       'the seeded file is byte-for-byte as it was',
     );
+  });
+});
+
+describe('a redirect the settings refuse to record', () => {
+  const VARIABLE = 'GEEKITY_SITE__TAXONOMY_REDIRECTS';
+
+  async function withRedirectsHeldByTheEnvironment(run: () => Promise<void>): Promise<void> {
+    process.env[VARIABLE] = '[]';
+    try {
+      await run();
+    } finally {
+      delete process.env[VARIABLE];
+    }
+  }
+
+  it('warns after a rename that the old archive does not redirect', async () => {
+    await withRedirectsHeldByTheEnvironment(async () => {
+      const cms = await seeded(corpus());
+      const agent = await signedIn(cms);
+      const { token } = await screen(agent, '/admin/tags');
+
+      await agent.post('/admin/tags/rename', { csrf_token: token, term: 'eleventy', to: '11ty' });
+
+      const shown = flashes(await (await agent.get('/admin/tags')).text());
+      assert.ok(shown.some(({ message }) => /Renamed “eleventy” to “11ty”/.test(message)));
+      const warning = shown.find(({ kind }) => kind === 'warning');
+      assert.match(warning?.message ?? '', /redirect/);
+      assert.match(warning?.message ?? '', new RegExp(VARIABLE));
+    });
+  });
+
+  it('warns after a delete that the redirects were not updated', async () => {
+    await withRedirectsHeldByTheEnvironment(async () => {
+      const cms = await seeded(corpus());
+      const agent = await signedIn(cms);
+      const { token } = await screen(agent, '/admin/categories');
+
+      await agent.post('/admin/categories/delete', { csrf_token: token, term: 'engineering' });
+
+      const shown = flashes(await (await agent.get('/admin/categories')).text());
+      const warning = shown.find(({ kind }) => kind === 'warning');
+      assert.match(warning?.message ?? '', /redirect/);
+    });
   });
 });
 

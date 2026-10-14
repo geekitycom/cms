@@ -30,7 +30,6 @@ import {
   relayList,
   securityContactList,
 } from '../site/setting-values.ts';
-import { isDeepStrictEqual } from 'node:util';
 
 import { DEFAULT_SITE_SETTINGS, SITE } from '../site/settings.ts';
 import type { SiteLicense, SiteSettings } from '../site/settings.ts';
@@ -597,10 +596,7 @@ export function siteChanges(settings: Partial<SiteSettings>): Map<string, unknow
   for (const declaration of SITE.declaration.settings) {
     if (!(declaration.key in settings)) continue;
     const value = (settings as Readonly<Record<string, unknown>>)[declaration.key];
-    changes.set(
-      declaration.key,
-      isDeepStrictEqual(value, declaration.default) ? undefined : declaration.type.toJson(value),
-    );
+    changes.set(declaration.key, declaration.type.toJson(value));
   }
   return changes;
 }

@@ -110,7 +110,11 @@ export function mountSettingsPage(
   const { render } = options;
 
   app.get(page.path, async (c) =>
-    render(c, page.template, await settingsScreen(c, page, c.var.siteAtRequestStart)),
+    render(
+      c,
+      page.template,
+      await settingsScreen(c, page, c.var.siteAtRequestStart, await setElsewhereOn(c, page)),
+    ),
   );
 
   app.post(page.path, async (c) => {
@@ -123,7 +127,7 @@ export function mountSettingsPage(
     const refuse = async (problems: SettingsProblems): Promise<Response> => {
       c.status(400);
       return render(c, page.template, {
-        ...(await settingsScreen(c, page, site)),
+        ...(await settingsScreen(c, page, site, elsewhere)),
         form: submitted,
         problems,
         hasProblems: true,
@@ -155,9 +159,8 @@ export async function settingsScreen(
   c: Context<GeekityEnv>,
   page: SettingsPage,
   settings: SiteSettings,
+  elsewhere: Readonly<Record<string, string>>,
 ): Promise<Record<string, unknown>> {
-  const elsewhere = await setElsewhereOn(c, page);
-
   return {
     section: page.section ?? 'settings',
     child: page.child,
@@ -202,12 +205,9 @@ function pageForm(
   site: SiteSettings,
 ): SettingsForm {
   const form = formFromSettings(shownOn(c, page, site));
-  for (const name of editable) form[name] = stringOrEmpty(body[SETTINGS_FIELDS[name]]);
   const read = page.reads?.({ c, body }) ?? {};
-  for (const name of editable) {
-    const value = read[name];
-    if (value !== undefined) form[name] = value;
-  }
+  for (const name of editable)
+    form[name] = read[name] ?? stringOrEmpty(body[SETTINGS_FIELDS[name]]);
   return form;
 }
 

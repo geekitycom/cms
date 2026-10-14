@@ -30,7 +30,8 @@ import {
   termHref,
   termKey,
 } from '../content/taxonomy.ts';
-import type { Taxonomy, TaxonomyRedirect } from '../content/taxonomy.ts';
+import type { Taxonomy } from '../content/taxonomy.ts';
+import type { SetResult } from '../settings/types.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
@@ -166,7 +167,7 @@ export function mountTaxonomyScreens(
 
     // Recorded after the rewrite, so a rename that threw writes no redirect to
     // an archive that never moved.
-    await recordRedirects(c, (existing) =>
+    const recorded = await editSiteSetting(c.var.settings, 'taxonomy_redirects', (existing) =>
       recordTermRename(existing, { taxonomy: kind.taxonomy, from, to }),
     );
 
@@ -175,6 +176,7 @@ export function mountTaxonomyScreens(
       'notice',
       `${target.length > 0 ? 'Merged' : 'Renamed'} “${from}” ${target.length > 0 ? 'into' : 'to'} “${to}” in ${filesRewritten(report)}.${skipped(report)}`,
     );
+    warnUnrecorded(c, recorded, `The old archive does not redirect to “${to}”:`);
     return c.redirect(kind.basePath, 303);
   });
 
@@ -193,9 +195,12 @@ export function mountTaxonomyScreens(
 
     // Every record pointing at the term goes with it: the archive it named is
     // about to 404, and a redirect to a 404 is worse than the 404.
-    await recordRedirects(c, (existing) => forgetTerm(existing, kind.taxonomy, term));
+    const recorded = await editSiteSetting(c.var.settings, 'taxonomy_redirects', (existing) =>
+      forgetTerm(existing, kind.taxonomy, term),
+    );
 
     flash(c, 'notice', `Deleted “${term}” from ${filesRewritten(report)}.${skipped(report)}`);
+    warnUnrecorded(c, recorded, `The redirects to “${term}” were not removed:`);
     return c.redirect(kind.basePath, 303);
   });
 }
@@ -315,16 +320,9 @@ function skipped(report: TermRewriteReport): string {
   return ` ${String(report.skipped.length)} could not be read and were left alone: ${report.skipped.join(', ')}.`;
 }
 
-async function recordRedirects(
-  c: Context<GeekityEnv>,
-  change: (existing: readonly TaxonomyRedirect[]) => TaxonomyRedirect[],
-): Promise<void> {
-  const recorded = await editSiteSetting(c.var.settings, 'taxonomy_redirects', change);
-  if (!recorded.ok) {
-    console.error(
-      `The archive redirects were not recorded: ${Object.values(recorded.problems).join(' ')}`,
-    );
-  }
+function warnUnrecorded(c: Context<GeekityEnv>, recorded: SetResult, what: string): void {
+  if (recorded.ok) return;
+  flash(c, 'warning', `${what} ${Object.values(recorded.problems).join(' ')}`);
 }
 
 /** Everything the taxonomy template renders. */

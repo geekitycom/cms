@@ -7,7 +7,7 @@ import { after, describe, it } from 'node:test';
 
 import { resolveConfig } from '../config.ts';
 import type { SettingDeclaration } from '../settings/types.ts';
-import { createSettings, SITE } from './namespace.ts';
+import { createSettings, mintMissingIndexNowKey, SITE } from './namespace.ts';
 
 const DEMO_SITE_JSON = fileURLToPath(
   new URL('../../../../apps/demo/content/_data/site.json', import.meta.url),
@@ -72,6 +72,7 @@ after(async () => {
 async function siteWith(
   file: Record<string, unknown>,
   config: { baseUrl?: string } = {},
+  env: Record<string, string> = {},
 ): Promise<{ contentDir: string; file: string; settings: ReturnType<typeof createSettings> }> {
   const root = await mkdtemp(path.join(tmpdir(), 'geekity-site-namespace-'));
   dirs.push(root);
@@ -81,9 +82,9 @@ async function siteWith(
   await writeFile(siteJson, `${JSON.stringify(file, null, 2)}\n`);
   const resolved = resolveConfig(
     { contentDir, dataDir: path.join(root, 'data'), ...config },
-    { env: {} },
+    { env },
   );
-  return { contentDir, file: siteJson, settings: createSettings({ config: resolved, env: {} }) };
+  return { contentDir, file: siteJson, settings: createSettings({ config: resolved, env }) };
 }
 
 function fileKeysOf(declaration: SettingDeclaration<unknown>): readonly string[] {
@@ -196,6 +197,37 @@ describe('the site namespace', () => {
     await settings.set('site', new Map([['index_now', false]]), 'admin');
     await settings.set('site', new Map([['index_now', true]]), 'admin');
     assert.equal(await settings.get(SITE.index_now_key), minted, 'a key it has is kept');
+  });
+
+  it('mints a missing key for a site.json that has IndexNow on and no key', async () => {
+    const { settings, file } = await siteWith({ indexNow: true });
+
+    await mintMissingIndexNowKey(settings, 'boot');
+
+    const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    assert.match(String(written['indexNowKey']), /^[0-9a-f]{32}$/);
+  });
+
+  it('mints a missing key when the environment turns IndexNow on', async () => {
+    const { settings } = await siteWith({}, {}, { GEEKITY_SITE__INDEX_NOW: 'true' });
+
+    await mintMissingIndexNowKey(settings, 'boot');
+
+    assert.match(await settings.get(SITE.index_now_key), /^[0-9a-f]{32}$/);
+  });
+
+  it('mints nothing while IndexNow is off or the key is set elsewhere', async () => {
+    const off = await siteWith({ title: 'Off' });
+    await mintMissingIndexNowKey(off.settings, 'boot');
+    assert.deepEqual(JSON.parse(await readFile(off.file, 'utf8')), { title: 'Off' });
+
+    const elsewhere = await siteWith(
+      { indexNow: true },
+      {},
+      { GEEKITY_SITE__INDEX_NOW_KEY: 'from-the-environment' },
+    );
+    await mintMissingIndexNowKey(elsewhere.settings, 'boot');
+    assert.deepEqual(JSON.parse(await readFile(elsewhere.file, 'utf8')), { indexNow: true });
   });
 
   it('mints no key while IndexNow stays off', async () => {

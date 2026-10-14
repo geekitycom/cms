@@ -14,7 +14,7 @@ import type { ReplyBackfill } from '../federation/backfill.ts';
 import type { ConversationSite } from '../comments/conversation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { citedPostReader } from '../federation/cited-post.ts';
-import { SITE } from '../site/namespace.ts';
+import { mintMissingIndexNowKey, SITE } from '../site/namespace.ts';
 import { messageOf } from '../util/errors.ts';
 import { handleLearner } from '../federation/handles.ts';
 import type { HandleLearner } from '../federation/handles.ts';
@@ -304,6 +304,9 @@ export function createServices({
   // IndexNow listens for the same reason, and wants the pages as well as the
   // posts: a search engine indexes both (TASK-151).
   const indexNow = createIndexNowNotifier({ config: resolved, settings });
+  mintMissingIndexNowKey(settings, 'boot').catch((thrown: unknown) => {
+    console.error(`No IndexNow key was minted: ${messageOf(thrown)}`);
+  });
 
   // A post whose date is in the future is held back (TASK-44), and nothing
   // watches a clock: this is what notices that one has come due and reports it

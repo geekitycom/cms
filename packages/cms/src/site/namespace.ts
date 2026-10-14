@@ -23,9 +23,15 @@ import {
   text,
   wholeNumber,
 } from '../settings/kinds.ts';
-import { createSettingsRegistry } from '../settings/registry.ts';
+import { createSettingsRegistry, overridden } from '../settings/registry.ts';
 import type { CreateSettingsRegistryOptions } from '../settings/registry.ts';
-import type { SettingChange, SettingsRegistry, SettingType, ValuesOf } from '../settings/types.ts';
+import type {
+  ChangedBy,
+  SettingChange,
+  SettingsRegistry,
+  SettingType,
+  ValuesOf,
+} from '../settings/types.ts';
 import { PACKAGED_THEME, themeNameProblem } from '../theme/themes.ts';
 import { isFileSync } from '../util/files.ts';
 import { isRecord } from '../util/guards.ts';
@@ -82,7 +88,7 @@ const license: SettingType<SiteLicense> = {
   fromText: (value) => license.fromJson({ license: value }),
   toJson: (value) =>
     value.choice === ''
-      ? {}
+      ? undefined
       : value.choice === 'custom'
         ? { license: value.url, licenseName: value.name }
         : { license: value.choice },
@@ -178,15 +184,21 @@ function frontPage(after: Readonly<Record<string, unknown>>): string | undefined
 
 const RETIRED_KEYS = ['navigation', 'soloAuthor'];
 
-function withoutRetiredKeys(raw: unknown): unknown {
-  if (!isRecord(raw)) return raw;
-  const kept = { ...raw };
+export function withoutRetiredKeys(
+  file: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const kept = { ...file };
   for (const key of RETIRED_KEYS) delete kept[key];
   return kept;
 }
 
-async function mintIndexNowKey({ next, by, settings }: SettingChange<boolean>): Promise<void> {
-  if (!next || (await settings.get(SITE.index_now_key)) !== '') return;
+export async function mintMissingIndexNowKey(
+  settings: SettingsRegistry,
+  by: ChangedBy,
+): Promise<void> {
+  if (!(await settings.get(SITE.index_now))) return;
+  const key = await settings.resolve(SITE.index_now_key);
+  if (key.value !== '' || overridden(key.source)) return;
   const minted = await settings.set(
     'site',
     new Map([['index_now_key', generateIndexNowKey()]]),
@@ -195,6 +207,10 @@ async function mintIndexNowKey({ next, by, settings }: SettingChange<boolean>): 
   if (!minted.ok) {
     console.error(`No IndexNow key was minted: ${Object.values(minted.problems).join(' ')}`);
   }
+}
+
+async function mintIndexNowKey({ next, by, settings }: SettingChange<boolean>): Promise<void> {
+  if (next) await mintMissingIndexNowKey(settings, by);
 }
 
 /**
@@ -216,7 +232,7 @@ export const SITE = declareNamespace({
     dataClass: { kept: true, secret: false },
   },
   envPrefix: 'GEEKITY_SITE',
-  legacy: withoutRetiredKeys,
+  legacy: (raw) => (isRecord(raw) ? withoutRetiredKeys(raw) : raw),
   writtenWhole: true,
   settings: {
     title: {
@@ -538,4 +554,13 @@ export function createSettings(options: CreateSettingsRegistryOptions): Settings
 
 export function siteJsonPath(contentDir: string): string {
   return path.join(contentDir, SITE.declaration.storage.path);
+}
+
+export function parseSiteJson(source: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(source);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }

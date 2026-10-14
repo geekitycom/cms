@@ -1,8 +1,7 @@
 import { updateFileAtomically } from '../files/atomic.ts';
 import { fileWith } from '../settings/registry.ts';
-import { SITE, siteJsonPath } from '../site/namespace.ts';
+import { parseSiteJson, SITE, siteJsonPath, withoutRetiredKeys } from '../site/namespace.ts';
 import type { SiteSettings } from '../site/settings.ts';
-import { isRecord } from '../util/guards.ts';
 import { settingsOver } from './settings.ts';
 
 export async function siteSettingsIn(contentDir: string): Promise<SiteSettings> {
@@ -14,13 +13,7 @@ export async function writeSiteSettings(options: {
   settings: SiteSettings;
 }): Promise<void> {
   await updateFileAtomically(siteJsonPath(options.contentDir), (current) => {
-    let existing: Record<string, unknown> = {};
-    try {
-      const parsed: unknown = JSON.parse(current ?? '');
-      if (isRecord(parsed)) existing = parsed;
-    } catch {
-      existing = {};
-    }
+    const existing = withoutRetiredKeys(parseSiteJson(current ?? ''));
     return `${JSON.stringify(fileWith(SITE, options.settings, existing), null, 2)}\n`;
   });
 }

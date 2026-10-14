@@ -5,22 +5,13 @@
  */
 
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
-import { siteJsonPath } from '../site/namespace.ts';
+import { parseSiteJson, siteJsonPath } from '../site/namespace.ts';
 import { isRecord } from '../util/guards.ts';
 
 export const PLUGINS_KEY = 'plugins';
 
-function parsedSiteJson(source: string): Record<string, unknown> {
-  try {
-    const parsed: unknown = JSON.parse(source);
-    return isRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
 function siteJsonBypassingRegistry(contentDir: string): Record<string, unknown> {
-  return parsedSiteJson(readFileIfPresentSync(siteJsonPath(contentDir)) ?? '');
+  return parseSiteJson(readFileIfPresentSync(siteJsonPath(contentDir)) ?? '');
 }
 
 /** The names the site has enabled, read from the file now. */
@@ -59,7 +50,7 @@ export async function updatePluginEntry(
   change: (entry: Record<string, unknown>) => Record<string, unknown>,
 ): Promise<void> {
   await updateFileAtomically(siteJsonPath(contentDir), (current) => {
-    const file = parsedSiteJson(current ?? '');
+    const file = parseSiteJson(current ?? '');
     const plugins = pluginsOf(file);
     const entry = plugins[name];
     file[PLUGINS_KEY] = { ...plugins, [name]: change(isRecord(entry) ? entry : {}) };

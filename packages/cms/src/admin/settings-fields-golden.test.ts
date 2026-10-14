@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { settingsOver } from '../__testing__/settings.ts';
 import { storedValues } from '../settings/registry.ts';
-import { SITE, siteJsonPath } from '../site/namespace.ts';
+import { parseSiteJson, SITE, siteJsonPath } from '../site/namespace.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import { sandbox } from './__testing__/harness.ts';
@@ -287,22 +287,11 @@ async function saved(form: SettingsForm, source: string): Promise<unknown> {
   return result.ok ? await readFile(file, 'utf8') : sorted(result.problems);
 }
 
-function parsed(source: string): Record<string, unknown> {
-  try {
-    const value: unknown = JSON.parse(source);
-    return typeof value === 'object' && value !== null && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
 describe('the settings, pinned', () => {
   it('read, show and write every representative file and form as before (AC #4)', async () => {
     const files: Record<string, unknown> = {};
     for (const [name, source] of Object.entries(SITE_JSON_CASES)) {
-      const settings = storedValues(SITE, parsed(source));
+      const settings = storedValues(SITE, parseSiteJson(source));
       files[name] = {
         settings: sorted(settings),
         form: sorted(formFromSettings(settings)),

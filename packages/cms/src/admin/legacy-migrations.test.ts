@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -11,6 +11,7 @@ import {
   legacyActorKeys,
   legacySettings,
   legacyUsers,
+  migrateSettingsToFile,
 } from './legacy-migrations.ts';
 import { adminStoreOwning, openAdminDatabase } from '../store/admin-store.ts';
 import type { AdminStore } from '../store/admin-store.ts';
@@ -81,6 +82,32 @@ describe('the settings table an older version wrote', () => {
 
     dropLegacyTable(db, 'settings');
     assert.equal(legacySettings(db), undefined);
+  });
+});
+
+describe('migrating the settings rows into site.json', () => {
+  it('drops the retired navigation and soloAuthor keys from the file it writes', async () => {
+    const root = await temporaryDir();
+    const contentDir = path.join(root, 'content');
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    const siteJson = path.join(contentDir, '_data', 'site.json');
+    await writeFile(
+      siteJson,
+      JSON.stringify({ title: 'Old', navigation: [{ label: 'Home', url: '/' }], soloAuthor: true }),
+    );
+    const db = await database();
+    db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)').run(
+      'title',
+      'From the rows',
+      '2999-01-01T00:00:00.000Z',
+    );
+
+    migrateSettingsToFile(db, contentDir);
+
+    const written = JSON.parse(await readFile(siteJson, 'utf8')) as Record<string, unknown>;
+    assert.equal(written['title'], 'From the rows');
+    assert.equal(written['navigation'], undefined);
+    assert.equal(written['soloAuthor'], undefined);
   });
 });
 

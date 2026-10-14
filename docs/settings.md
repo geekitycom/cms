@@ -622,7 +622,9 @@ In `list site` the value column is as wide as the longest value, which for
 `site.menus` is every menu as JSON. `get` reads one setting more easily.
 
 Turning `site.index_now` on, from the admin or the command line, also stores a
-new `site.index_now_key` when the site has none.
+new `site.index_now_key` when the site has none. The site does the same at boot
+when IndexNow is on, from `site.json` or `GEEKITY_SITE__INDEX_NOW`, and there is
+no key. A key that the environment sets is never written to the file.
 
 `list` prints each setting with its value in effect, where that value came
 from, and what the setting does. When something overrides the file, `list`

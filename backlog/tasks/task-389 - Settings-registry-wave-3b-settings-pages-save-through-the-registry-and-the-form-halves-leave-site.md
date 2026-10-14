@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-13 16:45'
-updated_date: '2026-10-14 00:13'
+updated_date: '2026-10-14 00:33'
 labels: []
 milestone: m-38
 dependencies:
@@ -69,6 +69,14 @@ Built (2026-10-13):
 - New tests: registry hook-sets-another and watch/unwatch (failed first: 'Cannot read properties of undefined (reading set)', 'registry.watch is not a function'); site namespace whole write, tidy rewrite ('CC0' !== 'cc0' before), retired keys, IndexNow minting; admin env override shown, named and not written; General + Discussion concurrently (5 rounds); relays followed and left through cms.settings.set.
 
 Verification: pnpm build && pnpm test && pnpm typecheck && pnpm lint && pnpm format:check exit 0 (cms 5863, demo 32, plugin-llm 48, plugin-post-summary 22, plugin-tag-suggest 31, plugin-wordpress 106, all pass). Curl session on a scratch copy of the demo (geekity serve on 4389, GEEKITY_BASE_URL and GEEKITY_SITE__TAGLINE set, signed in as ada): General showed 'Tagline from env' and named site.tagline/GEEKITY_SITE__TAGLINE and site.base_url/GEEKITY_BASE_URL, base_url disabled; a General save with a forged base_url wrote the title, license and author and left tagline and url as stored, feedSize kept; Reading (index_now on minted indexNowKey, posts_per_page 3), Discussion, Permalinks, Email, Privacy and Federation each 303 with their keys in site.json; Reading with posts_per_page 0 was a 400 naming the field and site.json was byte-identical after; Navigation add + save of a sidebar menu, Connected apps add, Appearance theme, a tag rename (taxonomyRedirects recorded, old archive 301s to the new) all landed; General and Discussion posted in parallel three times and both changes were in site.json each time. geekity settings list site/get/set worked; set under GEEKITY_SITE__TAGLINE exits 1 naming it. Server stopped (pid checked by cwd). AC #4 note: the profile-key clause has no subject (see above); relays and IndexNow hooks are built and tested.
+
+Review fixes (2026-10-14, uncommitted on m39-settings-registry-wave-3b):
+- IndexNow: mintMissingIndexNowKey(settings, by) in site/namespace.ts mints when site.index_now is on and the key is empty and not overridden. The site.index_now hook and a boot step in cms/services.ts both call it, so GEEKITY_SITE__INDEX_NOW=true or a site.json with indexNow and no key gets a key at boot. docs/settings.md says so.
+- Taxonomy: a refused taxonomy_redirects write now flashes a warning beside the rename or delete notice instead of only logging.
+- writtenWhole tidy rewrite kept for every namespace (maintenance and dev-mode too); a registry test pins it for maintenance.
+- migrateSettingsToFile and the __testing__ writeSiteSettings helper drop the retired navigation and soloAuthor keys again (withoutRetiredKeys, the function SITE.legacy uses).
+- Cleanups: siteChanges sends toJson(value) with no default mapping (license.toJson of no license is now undefined so it round-trips); the golden's form-save strings changed only in key order. One parseSiteJson beside siteJsonPath replaces the copies in legacy-migrations, plugins/enabled, __testing__/site-settings and the golden test. Unused settings-fields re-exports left admin/index.ts. pageForm is one loop; setElsewhere is resolved once per request. editSiteSetting queues per registry (WeakMap).
+- Verification: pnpm build, test (cms 5872), typecheck, lint, format:check all exit 0.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

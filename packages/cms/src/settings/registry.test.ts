@@ -158,6 +158,27 @@ describe('the settings registry', () => {
     assert.equal(await registry.get(MAINTENANCE.on), false);
   });
 
+  it('rewrites each maintenance key a set does not name as the value it reads, an unreadable one as the default', async () => {
+    const { registry, dataDir } = await site();
+    const file = path.join(dataDir, 'maintenance.json');
+
+    await writeFile(file, JSON.stringify({ on: true, until: '2026-10-14T09:00:00Z' }));
+    await registry.set('maintenance', changes({ on: true }), 'cli');
+    assert.deepEqual(await fileOf(dataDir, 'maintenance.json'), {
+      on: true,
+      until: '2026-10-14T09:00:00.000Z',
+    });
+
+    await writeFile(file, JSON.stringify({ on: 'yes', until: '' }));
+    assert.equal(await registry.get(MAINTENANCE.on), false, 'an unreadable on reads as off');
+    await registry.set('maintenance', changes({ until: '2026-10-14T09:00:00Z' }), 'cli');
+    assert.deepEqual(await fileOf(dataDir, 'maintenance.json'), {
+      on: false,
+      until: '2026-10-14T09:00:00.000Z',
+    });
+    assert.equal(await registry.get(MAINTENANCE.on), false, 'and still reads as off');
+  });
+
   it('refuses a key an override is in effect for, naming the source, and writes nothing for the whole call', async () => {
     const { registry, dataDir } = await site({}, { GEEKITY_MAINTENANCE: 'true' });
 
