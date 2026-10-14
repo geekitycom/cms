@@ -182,8 +182,18 @@ describe('what a plugin’s federation reaches', () => {
     assert.equal(await context.actor('nobody'), undefined);
     assert.equal((await context.keyPairs(USER)).length, 2, 'the RSA and the Ed25519 pair');
     assert.deepEqual(await context.keyPairs('nobody'), []);
-    assert.equal(context.outbox('nobody'), undefined);
-    assert.equal(context.followers('nobody'), undefined);
+    assert.equal(await context.outbox('nobody'), undefined);
+    assert.equal(await context.followers('nobody'), undefined);
+  });
+
+  it('a count that throws rejects the promise instead of throwing', async () => {
+    const { cms, context } = await contextOf();
+    cms.admin.countFollowers = () => {
+      throw new Error('count failed');
+    };
+
+    const answer = context.followers(USER);
+    await assert.rejects(answer, /count failed/);
   });
 
   it('the shared KV store and the private-address rule', async () => {
@@ -208,12 +218,12 @@ describe('what a plugin’s federation reaches', () => {
     const accept = deliveries.find((delivery) => delivery['type'] === 'Accept');
     assert.equal(accept?.['actor'], STORED_ID, 'answered from the canonical identity');
 
-    const followers = context.followers(USER);
+    const followers = await context.followers(USER);
     assert.equal(followers?.totalItems, 1);
     assert.deepEqual((await followers?.page('0'))?.items, [
       { id: REMOTE_ACTOR, inboxId: REMOTE_INBOX, sharedInboxId: `${REMOTE_ORIGIN}/inbox` },
     ]);
-    assert.equal(context.outbox(USER)?.totalItems, 0);
+    assert.equal((await context.outbox(USER))?.totalItems, 0);
   });
 
   it('the inbox handlers, held by dev mode with no switch of the plugin’s own (TASK-295)', async () => {

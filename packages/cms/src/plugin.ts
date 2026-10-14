@@ -284,9 +284,9 @@ export interface PluginFederationContext {
    * A user's outbox, the activities announcing their posts, or `undefined`
    * for a user the site does not have.
    */
-  outbox(username: string): PluginCollection<JsonLdDocument> | undefined;
+  outbox(username: string): Promise<PluginCollection<JsonLdDocument> | undefined>;
   /** A user's followers, or `undefined` for a user the site does not have. */
-  followers(username: string): PluginCollection<PluginRecipient> | undefined;
+  followers(username: string): Promise<PluginCollection<PluginRecipient> | undefined>;
   /**
    * Handle an activity a plugin's inbox verified, as the site's own inbox
    * handles it. `recipient` is the username of the personal inbox it arrived
