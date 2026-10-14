@@ -36,12 +36,12 @@
    reads the explanation with the box rather than leaving it to be found. A
    textarea given no `name` only shows something and posts nothing.
 
-   `label` and `hint` are written into the page as markup, because the admin's
-   labels and hints carry `<code>`, `<em>` and links. They are template
-   literals, never anything a visitor typed; a hint that interpolates a value
-   should be captured with `{% set … %}…{% endset %}`, which escapes what it
-   interpolates before this ever sees it. `error` is a message from the server
-   and is escaped. #}
+   `label`, `hint` and `error` are escaped, so a plugin's label or a stored
+   value can be passed straight in. A label or hint that carries `<code>`,
+   `<em>` or a link is marked as markup by its caller with `| safe`, on the
+   literal or on the `{% set … %}…{% endset %}` capture that builds it; the
+   capture escapes what it interpolates, so only the template's own tags
+   survive. #}
 
 {% from "components/alert.njk" import alert %}
 
@@ -60,8 +60,8 @@
 {% if errorHtml %}
   <div class="text-error">{{ errorHtml | safe }}</div>
 {% endif %}
-{% if hint %}
-  <p class="label block whitespace-normal"{% if hintId %} id="{{ hintId }}"{% endif %}>{{ hint | safe }}</p>
+{% if hint | length %}
+  <p class="label block whitespace-normal"{% if hintId %} id="{{ hintId }}"{% endif %}>{{ hint }}</p>
 {% endif %}
 {% endmacro %}
 
@@ -101,7 +101,7 @@
   disabled=false
 ) %}
 <div class="fieldset">
-  <label class="fieldset-legend" for="{{ id }}">{{ label | safe }}</label>
+  <label class="fieldset-legend" for="{{ id }}">{{ label }}</label>
   <input id="{{ id }}" name="{{ name }}" type="{{ type }}"{% if min %} min="{{ min }}"{% endif %}{% if step %} step="{{ step }}"{% endif %}{% if inputmode %} inputmode="{{ inputmode }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %} value="{{ value }}"{% if list %} list="{{ list }}"{% endif %}{% if maxlength %} maxlength="{{ maxlength }}"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error, hintId) }} class="input input-sm w-full read-only:bg-base-200 read-only:border-dashed{% if error %} validator{% endif %}" />
 {{ _below(id, hint, error, errorHtml, hintId) }}
 </div>
@@ -125,7 +125,7 @@
   autofocus=false
 ) %}
 <div class="fieldset">
-  <label class="fieldset-legend" for="{{ id }}">{{ label | safe }}</label>
+  <label class="fieldset-legend" for="{{ id }}">{{ label }}</label>
   <input id="{{ id }}" name="{{ name }}" type="password" value=""{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{{ _invalid(id, error) }} class="input input-sm w-full{% if error %} validator{% endif %}" />
 {{ _below(id, hint, error, errorHtml) }}
 </div>
@@ -149,7 +149,7 @@
   disabled=false
 ) %}
 <div class="fieldset">
-  <label class="fieldset-legend" for="{{ id }}">{{ label | safe }}</label>
+  <label class="fieldset-legend" for="{{ id }}">{{ label }}</label>
   <textarea id="{{ id }}"{% if name %} name="{{ name }}"{% endif %}{% if rows %} rows="{{ rows }}"{% endif %}{% if spellcheck %} spellcheck="{{ spellcheck }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error, hintId) }} class="textarea textarea-sm w-full read-only:bg-base-200 read-only:border-dashed{% if error %} validator{% endif %}">{{ value }}</textarea>
 {{ _below(id, hint, error, errorHtml, hintId) }}
 </div>
@@ -175,7 +175,7 @@
   disabled=false
 ) %}
 <div class="fieldset">
-  <label class="fieldset-legend" for="{{ id }}">{{ label | safe }}</label>
+  <label class="fieldset-legend" for="{{ id }}">{{ label }}</label>
   <select id="{{ id }}" name="{{ name }}"{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error, hintId) }} class="select select-sm w-full{% if error %} validator{% endif %}">
 {{ caller() }}
   </select>
@@ -200,7 +200,7 @@
 <div class="fieldset">
   <label class="label whitespace-normal text-base-content{% if error %} validator{% endif %}" for="{{ id }}">
     <input id="{{ id }}" name="{{ name }}" type="checkbox" value="{{ value }}"{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}{{ _invalid(id, error, hintId) }} class="checkbox checkbox-sm" />
-    {{ label | safe }}
+    {{ label }}
   </label>
 {{ _below(id, hint, error, errorHtml, hintId) }}
 </div>

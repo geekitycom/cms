@@ -36,7 +36,7 @@
     there, and its own URL redirects to <code>/</code> so there is one front page.
   {% endset %}
   {% call field.select('settings-homepage', fields.homepage, 'Your homepage displays',
-       error=problems.homepage, errorHtml=homepageGone, hint=homepageHint, autofocus=true) %}
+       error=problems.homepage, errorHtml=homepageGone, hint=homepageHint | safe, autofocus=true) %}
     <option value="">Your latest posts</option>
     {% for page in pageChoices %}
       <option value="{{ page.slug }}"{% if page.slug == form.homepage %} selected{% endif %}>{{ page.title }}</option>
@@ -57,7 +57,7 @@
     The feeds stay at <code>/feed/</code> either way.
   {% endset %}
   {% call field.select('settings-posts-page', fields.posts_page, 'Posts page',
-       error=problems.posts_page, errorHtml=postsPageGone, hint=postsPageHint) %}
+       error=problems.posts_page, errorHtml=postsPageGone, hint=postsPageHint | safe) %}
     <option value="">&mdash; None &mdash;</option>
     {% for page in pageChoices %}
       <option value="{{ page.slug }}"{% if page.slug == form.posts_page %} selected{% endif %}>{{ page.title }}</option>
@@ -74,7 +74,7 @@
     it. Leave it empty for none.
   {% endset %}
   {{ field.text('settings-notify-server', fields.notify_server, 'Notify server', form.notify_server,
-       error=problems.notify_server, hint=notifyHint, inputmode='url') }}
+       error=problems.notify_server, hint=notifyHint | safe, inputmode='url') }}
 
   {# TASK-152. The Syndication module's polling hint, which only RSS has an
      element for. #}
@@ -83,7 +83,7 @@
     for much longer than this may check less often, so pick a pace the site keeps.
   {% endset %}
   {% call field.select('settings-feed-update-period', fields.feed_update_period, 'Feed update period',
-       error=problems.feed_update_period, hint=periodHint) %}
+       error=problems.feed_update_period, hint=periodHint | safe) %}
     {% for option in [
          ['hourly', 'Hourly'],
          ['daily', 'Daily'],
@@ -109,7 +109,7 @@
     <a href="/robots.txt"><code>/robots.txt</code></a>.
   {% endset %}
   {% call field.select('settings-ai-crawlers', fields.ai_crawlers, 'AI crawlers',
-       error=problems.ai_crawlers, hint=aiHint) %}
+       error=problems.ai_crawlers, hint=aiHint | safe) %}
     {% for option in [
          ['allow', 'Allow all'],
          ['block-training', 'Block training crawlers'],
@@ -140,7 +140,7 @@
     keeps crawlers out of <code>/admin/</code>, and the sitemap is always named.
   {% endset %}
   {{ field.textarea('settings-robots-rules', fields.robots_rules, 'More robots.txt rules',
-       form.robots_rules, error=problems.robots_rules, hint=rulesHint,
+       form.robots_rules, error=problems.robots_rules, hint=rulesHint | safe,
        rows='5', spellcheck='false') }}
 
   {# TASK-149. The index for language models, beside the file for crawlers. #}
@@ -150,7 +150,7 @@
     to it. To write it yourself, put your own file at <code>content/llms.txt</code>.
   {% endset %}
   {{ field.checkbox('settings-llms-txt', fields.llms_txt, 'Serve /llms.txt',
-       checked=form.llms_txt, hint=llmsHint) }}
+       checked=form.llms_txt, hint=llmsHint | safe) }}
 
   {# TASK-151. Telling the search engines, beside the files they read. #}
   {% set indexNowHint %}
@@ -160,5 +160,5 @@
     <code>/{key}.txt</code>. Nothing is sent while the site's URL is local.
   {% endset %}
   {{ field.checkbox('settings-index-now', fields.index_now, 'Submit changes to IndexNow',
-       checked=form.index_now, hint=indexNowHint) }}
+       checked=form.index_now, hint=indexNowHint | safe) }}
 {% endblock %}

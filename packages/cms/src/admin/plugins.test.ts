@@ -631,6 +631,62 @@ describe('plugin settings on its screen (TASK-283, TASK-390)', () => {
     }
   });
 
+  it('writes a label and hint holding <script> as text, escaped once (TASK-397)', async () => {
+    const HOSTILE = '@test/plugin-hostile';
+    const hostile = definePlugin({
+      name: HOSTILE,
+      version: '1.0.0',
+      label: 'Hostile',
+      description: 'Labels its fields with markup.',
+      hostApi: HOST_API_VERSION,
+      register(host) {
+        const field = (key: string) => ({
+          key,
+          label: `<script>alert("${key}")</script> & co`,
+          hint: `<script>alert("${key} hint")</script> & co`,
+        });
+        host.settings([
+          { type: 'text', ...field('words') },
+          { type: 'url', ...field('home') },
+          { type: 'select', ...field('tone'), default: 'a', options: [{ value: 'a', label: 'A' }] },
+          { type: 'checkbox', ...field('loud') },
+          { type: 'secret', ...field('key') },
+          { type: 'text', ...field('fixed') },
+        ]);
+      },
+    });
+    process.env['TEST_PLUGIN_HOSTILE__FIXED'] = 'from-env';
+    try {
+      const { agent } = await site([hostile], [HOSTILE]);
+      const hostilePath = `${PLUGINS_PATH}/${HOSTILE}`;
+      const token = csrfField(await (await agent.get(hostilePath)).text());
+      assert.ok(token !== undefined);
+      await agent.post(hostilePath, { csrf_token: token, action: 'save', 'setting.key': 'sk-1' });
+      const html = await (await agent.get(hostilePath)).text();
+
+      assert.doesNotMatch(html, /<script>alert/, 'no label or hint is written as markup');
+      assert.doesNotMatch(html, /&amp;(lt|gt|quot|amp);/, 'nothing is escaped twice');
+      for (const key of ['words', 'home', 'tone', 'loud', 'key', 'fixed']) {
+        assert.ok(
+          html.includes(`&lt;script&gt;alert(&quot;${key}&quot;)&lt;/script&gt; &amp; co`),
+          `the ${key} label reads as its own text`,
+        );
+        assert.ok(
+          html.includes(`&lt;script&gt;alert(&quot;${key} hint&quot;)&lt;/script&gt; &amp; co`),
+          `the ${key} hint reads as its own text`,
+        );
+      }
+      assert.ok(
+        html.includes(
+          'Forget the stored &lt;script&gt;alert(&quot;key&quot;)&lt;/script&gt; &amp; co',
+        ),
+        'the forget box names the field as text',
+      );
+    } finally {
+      delete process.env['TEST_PLUGIN_HOSTILE__FIXED'];
+    }
+  });
+
   it('moves settings kept in site.json to the plugin folder at boot, keeping enabled', async () => {
     const contentDir = await box.dir('geekity-plugins-content-');
     const dataDir = await box.dir('geekity-plugins-data-');

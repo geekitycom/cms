@@ -22,7 +22,7 @@
        hint='One line, shown under the title and used as the feed subtitle.') }}
 
   {% set authorHint %}A user makes this their blog: the homepage shows their bio and links, claims their author archive and profiles with <code>rel="me"</code>, and is their IndieAuth sign-in URL. The feeds and the footer credit them by name. Several authors credits the site title instead.{% endset %}
-  {% call field.select('settings-author', fields.author, 'Site author', hint=authorHint) %}
+  {% call field.select('settings-author', fields.author, 'Site author', hint=authorHint | safe) %}
     <option value=""{% if not form.author %} selected{% endif %}>Several authors</option>
     {% for choice in authorChoices %}
       <option value="{{ choice.username }}"{% if choice.username == form.author %} selected{% endif %}>{{ choice.name }}</option>
@@ -31,24 +31,24 @@
 
   {% set baseUrlHint %}In effect: <code>{{ baseUrlInEffect }}</code>. {{ baseUrlNote }}{% endset %}
   {{ field.text('settings-base-url', fields.base_url, 'Base URL', form.base_url,
-       error=problems.base_url, hint=baseUrlHint, inputmode='url',
+       error=problems.base_url, hint=baseUrlHint | safe, inputmode='url',
        readonly=baseUrlOverridden, disabled=baseUrlOverridden) }}
 
   {% set timezoneHint %}An IANA name, such as <code>Europe/London</code> or <code>UTC</code>.{% endset %}
   {{ field.text('settings-timezone', fields.timezone, 'Time zone', form.timezone,
-       error=problems.timezone, hint=timezoneHint, required=true) }}
+       error=problems.timezone, hint=timezoneHint | safe, required=true) }}
 
   {% set languageHint %}A BCP 47 tag, such as <code>en</code> or <code>en-GB</code>. It is the page's <code>lang</code> and the feeds' language.{% endset %}
   {{ field.text('settings-language', fields.language, 'Language', form.language,
-       error=problems.language, hint=languageHint, required=true) }}
+       error=problems.language, hint=languageHint | safe, required=true) }}
 
   {% set localeHint %}How the public site writes dates and counts, such as <code>en-US</code> for <code>September 2, 2026</code>. Leave it empty to follow the language.{% endset %}
   {{ field.text('settings-locale', fields.locale, 'Locale', form.locale,
-       error=problems.locale, hint=localeHint) }}
+       error=problems.locale, hint=localeHint | safe) }}
 
   {% set iconHint %}A square image at least 512 pixels wide, uploaded on <a href="{{ adminUrl }}/media">Media</a>: a path such as <code>/uploads/2026/10/icon.png</code>. It is the favicon, the home screen icon, <code>/favicon.ico</code> and the web app manifest's icon. Anything not square is cropped to its middle.{% endset %}
   {{ field.text('settings-icon', fields.icon, 'Site icon', form.icon,
-       error=problems.icon, hint=iconHint) }}
+       error=problems.icon, hint=iconHint | safe) }}
 
   <div class="flex items-center gap-4">
     {% if iconPreview %}
@@ -78,7 +78,7 @@
   </div>
 
   {% set licenseHint %}What readers may do with your posts. The footer links it, and the structured data and the feeds declare it. A post can name its own with <code>license</code> in its front matter.{% endset %}
-  {% call field.select('settings-license', fields.license, 'License', error=problems.license, hint=licenseHint) %}
+  {% call field.select('settings-license', fields.license, 'License', error=problems.license, hint=licenseHint | safe) %}
     <option value=""{% if not form.license %} selected{% endif %}>No license (all rights reserved)</option>
     {% for choice in licenseChoices %}
       <option value="{{ choice.key }}"{% if choice.key == form.license %} selected{% endif %}>{{ choice.name }}</option>

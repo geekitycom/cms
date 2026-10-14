@@ -333,11 +333,24 @@ describe(`the error summary`, () => {
   });
 });
 
-describe(`a label or a hint written by the template,`, () => {
-  it('keeps the markup the admin writes into both', () => {
+describe('a label or a hint (TASK-397)', () => {
+  for (const { what, body } of CALLS) {
+    it(`${what} writes a plain label and hint as text`, () => {
+      const html = render(callWith(body, `, hint=hint`).replace(`'A label'`, 'label'), {
+        label: '<script>alert(1)</script> & co',
+        hint: '<script>alert(2)</script> & co',
+      });
+
+      assert.doesNotMatch(html, /<script>/, `${what} does not write a label or hint as markup`);
+      assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt; &amp; co'), html);
+      assert.ok(html.includes('&lt;script&gt;alert(2)&lt;/script&gt; &amp; co'), html);
+    });
+  }
+
+  it('keeps the markup the admin marks as safe in both', () => {
     const html =
-      render(`{{ field.text('f', 'n', 'Email <span class="opacity-70">(optional)</span>', '',
-         hint='A path such as <code>/uploads/me.jpg</code>.') }}`);
+      render(`{{ field.text('f', 'n', 'Email <span class="opacity-70">(optional)</span>' | safe, '',
+         hint='A path such as <code>/uploads/me.jpg</code>.' | safe) }}`);
 
     assert.match(
       html,
@@ -349,15 +362,24 @@ describe(`a label or a hint written by the template,`, () => {
     );
   });
 
-  it('escapes what a captured hint interpolates', () => {
+  it('keeps the markup of a captured hint marked safe, and escapes what it interpolates', () => {
     const html = render(
       `{% set hint %}The archives live at <code>/{{ base }}/</code>.{% endset %}
-       {{ field.text('f', 'n', 'Tag base', '', hint=hint) }}`,
+       {{ field.text('f', 'n', 'Tag base', '', hint=hint | safe) }}`,
       { base: '<b>' },
     );
 
     assert.match(html, /<code>\/&lt;b&gt;\/<\/code>/);
     assert.doesNotMatch(html, /<b>/);
+  });
+
+  it('writes no hint for a captured hint that came out empty', () => {
+    const html = render(
+      `{% set hint %}{% if note %}{{ note }}{% endif %}{% endset %}
+       {{ field.text('f', 'n', 'Tag base', '', hint=hint | safe) }}`,
+    );
+
+    assert.doesNotMatch(html, new RegExp(HINT));
   });
 });
 

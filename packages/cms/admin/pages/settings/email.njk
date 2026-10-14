@@ -22,7 +22,7 @@
     in <code>data/mail.json</code> rather than in <code>site.json</code>.
   {% endset %}
   {% call field.select('settings-mail-provider', fields.mail_provider, 'Provider',
-       error=problems.mail_provider, hint=providerHint) %}
+       error=problems.mail_provider, hint=providerHint | safe) %}
     {% for provider in mailProviders %}
       <option value="{{ provider }}"{% if form.mail_provider == provider %} selected{% endif %}>
         {% if provider == 'none' %}None &mdash; this site sends no email{% elif provider == 'brevo' %}Brevo (transactional API){% else %}SMTP{% endif %}
@@ -38,7 +38,7 @@
     one you own. Empty falls back to <code>no-reply@</code> at the site's host.
   {% endset %}
   {{ field.text('settings-mail-from-address', fields.mail_from_address, 'From address',
-       form.mail_from_address, error=problems.mail_from_address, hint=fromAddressHint,
+       form.mail_from_address, error=problems.mail_from_address, hint=fromAddressHint | safe,
        inputmode='email') }}
 
   {{ field.text('settings-mail-reply-to', fields.mail_reply_to, 'Reply-to', form.mail_reply_to,
@@ -51,7 +51,7 @@
     message arrives and never appears on the public site.
   {% endset %}
   {{ field.text('settings-contact-email', fields.contact_email, 'Contact address',
-       form.contact_email, error=problems.contact_email, hint=contactHint, inputmode='email') }}
+       form.contact_email, error=problems.contact_email, hint=contactHint | safe, inputmode='email') }}
 
   <h2 class="mt-6 text-lg font-semibold">Security contact</h2>
 
@@ -62,7 +62,7 @@
     which is not served at all while this is empty.
   {% endset %}
   {{ field.textarea('settings-security-contacts', fields.security_contacts, 'Contacts',
-       form.security_contacts, error=problems.security_contacts, hint=securityContactsHint,
+       form.security_contacts, error=problems.security_contacts, hint=securityContactsHint | safe,
        rows='2', spellcheck='false') }}
 
   {{ field.text('settings-security-policy', fields.security_policy, 'Disclosure policy',
