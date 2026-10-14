@@ -182,12 +182,18 @@ describe('what a plugin’s federation reaches', () => {
     assert.equal(await context.actor('nobody'), undefined);
     assert.equal((await context.keyPairs(USER)).length, 2, 'the RSA and the Ed25519 pair');
     assert.deepEqual(await context.keyPairs('nobody'), []);
-    const strangerOutbox = context.outbox('nobody');
-    const strangerFollowers = context.followers('nobody');
-    assert.ok(strangerOutbox instanceof Promise, 'the outbox is answered as a promise');
-    assert.ok(strangerFollowers instanceof Promise, 'the followers are answered as a promise');
-    assert.equal(await strangerOutbox, undefined);
-    assert.equal(await strangerFollowers, undefined);
+    assert.equal(await context.outbox('nobody'), undefined);
+    assert.equal(await context.followers('nobody'), undefined);
+  });
+
+  it('a count that throws rejects the promise instead of throwing', async () => {
+    const { cms, context } = await contextOf();
+    cms.admin.countFollowers = () => {
+      throw new Error('count failed');
+    };
+
+    const answer = context.followers(USER);
+    await assert.rejects(answer, /count failed/);
   });
 
   it('the shared KV store and the private-address rule', async () => {

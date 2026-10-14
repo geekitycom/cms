@@ -93,51 +93,63 @@ function federationContext(
     },
 
     outbox(username) {
-      const user = userNamed(username);
-      if (user === undefined) return Promise.resolve(undefined);
-      const names = authorNames(listUsers(config.dataDir), user);
-      const totalItems = c.var.store.countByAuthor(names);
-      return Promise.resolve({
-        totalItems,
-        firstCursor: '0',
-        lastCursor: lastOutboxCursor(totalItems),
-        async page(cursor) {
-          const context = canonical();
-          const page = outboxPage(context, names, cursor);
-          const items = await Promise.all(
-            page.items.map(
-              async (item) =>
-                (await item.toJsonLd({ contextLoader: context.contextLoader })) as JsonLdDocument,
-            ),
-          );
-          return {
-            items,
-            nextCursor: page.nextCursor ?? null,
-            prevCursor: page.prevCursor ?? null,
-          };
-        },
+      return new Promise((resolve) => {
+        const user = userNamed(username);
+        if (user === undefined) {
+          resolve(undefined);
+          return;
+        }
+        const names = authorNames(listUsers(config.dataDir), user);
+        const totalItems = c.var.store.countByAuthor(names);
+        resolve({
+          totalItems,
+          firstCursor: '0',
+          lastCursor: lastOutboxCursor(totalItems),
+          async page(cursor) {
+            const context = canonical();
+            const page = outboxPage(context, names, cursor);
+            const items = await Promise.all(
+              page.items.map(
+                async (item) =>
+                  (await item.toJsonLd({ contextLoader: context.contextLoader })) as JsonLdDocument,
+              ),
+            );
+            return {
+              items,
+              nextCursor: page.nextCursor ?? null,
+              prevCursor: page.prevCursor ?? null,
+            };
+          },
+        });
       });
     },
 
     followers(username) {
-      if (userNamed(username) === undefined) return Promise.resolve(undefined);
-      const totalItems = c.var.admin.countFollowers(username);
-      return Promise.resolve({
-        totalItems,
-        firstCursor: '0',
-        lastCursor: lastFollowersCursor(totalItems),
-        page(cursor) {
-          const page = followersPage(canonical(), username, cursor);
-          return Promise.resolve({
-            items: page.items.map((recipient) => ({
-              id: recipient.id?.href ?? '',
-              inboxId: recipient.inboxId?.href ?? '',
-              sharedInboxId: recipient.endpoints?.sharedInbox?.href ?? null,
-            })),
-            nextCursor: page.nextCursor ?? null,
-            prevCursor: page.prevCursor ?? null,
-          });
-        },
+      return new Promise((resolve) => {
+        if (userNamed(username) === undefined) {
+          resolve(undefined);
+          return;
+        }
+        const totalItems = c.var.admin.countFollowers(username);
+        resolve({
+          totalItems,
+          firstCursor: '0',
+          lastCursor: lastFollowersCursor(totalItems),
+          page(cursor) {
+            return new Promise((resolvePage) => {
+              const page = followersPage(canonical(), username, cursor);
+              resolvePage({
+                items: page.items.map((recipient) => ({
+                  id: recipient.id?.href ?? '',
+                  inboxId: recipient.inboxId?.href ?? '',
+                  sharedInboxId: recipient.endpoints?.sharedInbox?.href ?? null,
+                })),
+                nextCursor: page.nextCursor ?? null,
+                prevCursor: page.prevCursor ?? null,
+              });
+            });
+          },
+        });
       });
     },
 
