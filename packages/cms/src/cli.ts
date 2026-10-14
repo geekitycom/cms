@@ -12,7 +12,8 @@ import { migrateUsersToFile } from './admin/legacy-migrations.ts';
 import { adminStoreOwning, openAdminDatabase } from './store/admin-store.ts';
 import type { AdminStore } from './store/admin-store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
-import { dataPath } from './files/data-files.ts';
+import { CONTENT_SCRATCH_FILES, dataPath } from './files/data-files.ts';
+import { exportFileName, planSiteExport, writeSiteExport } from './export/site-export.ts';
 import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
 import type { ResolvedConfig } from './config.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './comments/migrations.ts';
@@ -38,6 +39,7 @@ import {
 import { describeUpgrade, upgradePlugins } from './plugins/upgrade.ts';
 import type { UpgradeReport } from './plugins/upgrade.ts';
 import { migratePluginSettings } from './plugins/migrate-settings.ts';
+import { siteDataFiles } from './plugins/data.ts';
 import { readEnabledPlugins } from './plugins/enabled.ts';
 import type { PluginRegistry, RegisteredPlugin } from './plugins/registry.ts';
 import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
@@ -46,9 +48,9 @@ import { superviseCluster } from './supervisor/primary.ts';
 import { processChannel, superviseWorker } from './supervisor/worker.ts';
 import { DEV_MODE, DEV_MODE_LATCHED } from './settings/dev-mode.ts';
 import { MAINTENANCE, MAINTENANCE_FILE } from './settings/maintenance.ts';
-import { overridden } from './settings/registry.ts';
+import { overridden, sourceLabel } from './settings/registry.ts';
 import { createSettings } from './site/namespace.ts';
-import type { SettingRef, SettingsRegistry, ValueSource } from './settings/types.ts';
+import type { SettingRef, SettingsRegistry } from './settings/types.ts';
 import { messageOf } from './util/errors.ts';
 
 type CoreCommand =
@@ -61,6 +63,7 @@ type CoreCommand =
   | 'dev-mode'
   | 'settings'
   | 'strip-metadata'
+  | 'export'
   | 'user'
   | 'plugin';
 
@@ -206,6 +209,26 @@ const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
     ],
     run: stripMetadataCommand,
   },
+  export: {
+    synopsis: [
+      'export [--out <file>] [--with-credentials] [--without-content] [--list] [--config <file>]',
+    ],
+    help: [
+      [
+        'export',
+        [
+          'Write the site to a .tar.gz: content/ and every file in',
+          'data/ the site cannot rebuild, with manifest.json first.',
+          'Credentials are left out unless --with-credentials is given.',
+          'It only reads, so it runs while the site serves. It prints',
+          'the deliveries waiting in the queue, which are never',
+          'exported. --list prints what each file in data/ is and',
+          'writes nothing.',
+        ],
+      ],
+    ],
+    run: exportCommand,
+  },
   user: {
     synopsis: ['user add <username> [--password <pw>] [--email <address>] [--config <file>]'],
     help: [
@@ -260,10 +283,17 @@ const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
  * The options one command reads out of {@link ParsedArgs.flags}, each of which
  * carries a value.
  */
-const VALUE_FLAGS = ['until'] as const;
+const VALUE_FLAGS = ['until', 'out'] as const;
 
 /** The options that are simply on or off. */
-const SWITCH_FLAGS = ['all', 'check', 'unset'] as const;
+const SWITCH_FLAGS = [
+  'all',
+  'check',
+  'unset',
+  'with-credentials',
+  'without-content',
+  'list',
+] as const;
 
 export interface ParsedArgs {
   command: Command;
@@ -309,6 +339,15 @@ const OPTIONS_HELP = `Options:
   --unset          With settings set: remove the stored value.
   --all            With resend: every announced post rather than named ones.
   --check          With plugin upgrade: say what would change, install nothing.
+  --out <file>     With export: the archive to write. Defaults to
+                   geekity-<host>-<time>.tar.gz in the working directory.
+  --with-credentials
+                   With export: include the API keys and logins kept in
+                   data/ (mail.json, akismet.json, each plugin's secrets).
+  --without-content
+                   With export: leave content/ out.
+  --list           With export: print each file data/ may hold, its class
+                   and what is lost without it, and write nothing.
   -h, --help       Show this help.
   -v, --version    Show the installed version.
 
@@ -704,17 +743,6 @@ function shown(ref: SettingRef<unknown>, value: unknown): string {
   return ref.declaration.type.toText(value);
 }
 
-function sourceLabel(source: ValueSource): string {
-  switch (source.tier) {
-    case 'env':
-      return `env ${source.variable}`;
-    case 'config':
-      return `config ${source.field}`;
-    default:
-      return source.tier;
-  }
-}
-
 async function settingRow(
   settings: SettingsRegistry,
   ref: SettingRef<unknown>,
@@ -969,6 +997,67 @@ async function rebuildCommand({ configPath }: ParsedArgs): Promise<number> {
   } finally {
     await cms.close();
   }
+}
+
+/**
+ * `geekity export`: the site as a `.tar.gz` (decision-55). It reads only, so
+ * it runs beside a serving site: no migration runs and no database is opened
+ * but the queue, read-only, to count what waits in it.
+ */
+async function exportCommand({ configPath, flags }: ParsedArgs): Promise<number> {
+  const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
+  const settings = createSettings({ config });
+  const plugins = await loadSitePlugins(config, settings);
+
+  if (flags['list'] === true) {
+    const declarations = siteDataFiles({ dataDir: config.dataDir, settings, plugins });
+    process.stdout.write(
+      table([
+        ...declarations.map((each) => [`data/${each.pattern}`, each.dataClass.kind, each.lost]),
+        ['content/**', 'kept', 'The site: its documents, uploads and _data.'],
+        ...CONTENT_SCRATCH_FILES.map((each) => [
+          `content/${each.pattern}`,
+          each.dataClass.kind,
+          each.lost,
+        ]),
+      ]),
+    );
+    return 0;
+  }
+
+  const plan = await planSiteExport(
+    { config, settings, plugins },
+    {
+      withCredentials: flags['with-credentials'] === true,
+      withContent: flags['without-content'] !== true,
+    },
+  );
+  const { deliveries } = plan.site.pending;
+  process.stdout.write(
+    `${count(deliveries, 'delivery is', 'deliveries are')} waiting in data/queue.sqlite. ` +
+      'They are not exported: before a move, wait until none are.\n' +
+      'The archive holds actor keys, password hashes and personal data. ' +
+      'Store it as carefully as data/.\n',
+  );
+
+  const now = config.now();
+  const out = path.resolve(text(flags, 'out') ?? exportFileName(config.baseUrl, now));
+  const manifest = await writeSiteExport(plan, { out, now });
+
+  for (const file of manifest.undeclared) {
+    process.stderr.write(`Left out ${file}: no declaration says what it is.\n`);
+  }
+  if (manifest.credentialsLeftOut.length > 0) {
+    process.stdout.write(
+      `Credentials left out: ${manifest.credentialsLeftOut.join(', ')}. ` +
+        '--with-credentials includes them.\n',
+    );
+  }
+  const bytes = manifest.files.reduce((total, file) => total + file.size, 0);
+  process.stdout.write(
+    `Wrote ${out}: ${count(manifest.files.length, 'file')}, ${count(bytes, 'byte')}.\n`,
+  );
+  return 0;
 }
 
 /** "1 follower", "2 followers". The plural is the singular plus s unless told. */

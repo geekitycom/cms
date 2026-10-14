@@ -125,7 +125,10 @@ declares its own file.
 | credential  | Typed in again from another service: `mail.json`, `akismet.json` and each plugin's `secrets.json`.                                                                                          |
 | rebuildable | Made again, fetched again or reset to a default: `geekity.db`, `images/`, `avatars/`, `maintenance.json`, `notification-digests.json`, `indieauth-activity.json` and `micropub-media.json`. |
 | pending     | Work not done yet, tied to this host: `queue.sqlite` with its `-wal` and `-shm`.                                                                                                            |
-| scratch     | Left by a write or a lock in flight: `*.tmp` and `*.lock` files.                                                                                                                            |
+| scratch     | Left by a write or a lock in flight: `*.tmp` and `*.lock` files. Also `exports/`, for site exports written inside `data/`.                                                                  |
+
+`geekity export` follows these classes: it exports `kept` files, and
+`credential` files only when asked. See [Exporting a site](cli.md#exporting-a-site).
 
 You may delete three things under `data/` while the site is stopped. Do not
 delete anything else in either directory.

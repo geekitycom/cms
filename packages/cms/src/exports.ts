@@ -36,8 +36,8 @@ export type {
   SyncResult,
   WatchDebounce,
 } from './content/index.ts';
-export { dataFileFor } from './files/data-files.ts';
-export type { DataClass, DataFileDeclaration } from './files/data-files.ts';
+export { classifyFiles, dataFileFor } from './files/data-files.ts';
+export type { ClassifiedFile, DataClass, DataFileDeclaration } from './files/data-files.ts';
 export type { Clock } from './util/clock.ts';
 export type { GeekityEnv } from './web/env.ts';
 export {

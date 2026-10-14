@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -122,6 +123,12 @@ export const LOCK_FILES = declareDataFile({
   pattern: '**/*.lock*',
   dataClass: SCRATCH,
   lost: 'Nothing. A stale lock is taken over.',
+});
+
+export const EXPORTS = declareDataFile({
+  pattern: 'exports/**',
+  dataClass: SCRATCH,
+  lost: 'Nothing. A site export written for the admin to download, made again on request.',
 });
 
 export const ACTOR_KEYS = declareDataFile({
@@ -264,6 +271,7 @@ export const QUEUE_LOG = declareDataFile({
 export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   TEMPORARY_FILES,
   LOCK_FILES,
+  EXPORTS,
   ACTOR_KEYS,
   USERS,
   NOTIFICATION_SECRET,
@@ -300,3 +308,37 @@ export const CONTENT_SCRATCH_FILES: readonly DataFileDeclaration[] = [
   LOCK_FILES,
   WATCH_PROBE,
 ];
+
+export interface ClassifiedFile {
+  /** Under the folder walked, `/`-separated. */
+  readonly relative: string;
+  readonly absolute: string;
+  /** The first declaration that covers it, or `undefined` when none does. */
+  readonly declaration: DataFileDeclaration | undefined;
+}
+
+/**
+ * Every regular file under `dir`, sorted by its relative path, with the
+ * declaration that covers it. Links and other non-files are not walked. A
+ * folder that is not there holds nothing.
+ */
+export function classifyFiles(
+  dir: string,
+  declarations: readonly DataFileDeclaration[],
+): ClassifiedFile[] {
+  let entries;
+  try {
+    entries = readdirSync(dir, { recursive: true, withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  return entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => {
+      const absolute = path.join(entry.parentPath, entry.name);
+      const relative = path.relative(dir, absolute).split(path.sep).join('/');
+      return { relative, absolute, declaration: dataFileFor(declarations, relative) };
+    })
+    .sort((a, b) => (a.relative < b.relative ? -1 : a.relative > b.relative ? 1 : 0));
+}

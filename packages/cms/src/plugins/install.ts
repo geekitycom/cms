@@ -12,10 +12,10 @@ import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { gunzipSync } from 'node:zlib';
 
 import semver from 'semver';
 
+import { readTar } from '../files/tar.ts';
 import { HOST_API_VERSION } from '../plugin.ts';
 import { messageOf } from '../util/errors.ts';
 import { withTrailingSlash } from '../util/url.ts';
@@ -262,49 +262,13 @@ function checkIntegrity(tarball: Buffer, release: Release): string | undefined {
  * (`package/` in an npm tarball) removed. Links and devices are skipped.
  */
 export function unpackTarball(gzipped: Buffer): Map<string, Buffer> {
-  const archive = gunzipSync(gzipped);
   const files = new Map<string, Buffer>();
-  let longName: string | undefined;
-  let offset = 0;
-  while (offset + 512 <= archive.length) {
-    const header = archive.subarray(offset, offset + 512);
-    if (header.every((byte) => byte === 0)) break;
-    const size = Number.parseInt(field(header, 124, 12).trim() || '0', 8);
-    const type = String.fromCharCode(header[156] ?? 0);
-    const body = archive.subarray(offset + 512, offset + 512 + size);
-    offset += 512 + Math.ceil(size / 512) * 512;
-
-    if (type === 'x') {
-      longName = paxPath(body.toString('utf8')) ?? longName;
-      continue;
-    }
-    if (type === 'L') {
-      longName = body.toString('utf8').replace(/\0.*$/s, '');
-      continue;
-    }
-    const prefix = field(header, 345, 155);
-    const name = longName ?? (prefix === '' ? '' : `${prefix}/`) + field(header, 0, 100);
-    longName = undefined;
-    if (type !== '0' && type !== '\0') continue;
-    const relative = name.split('/').slice(1).join('/');
-    if (relative !== '') files.set(relative, Buffer.from(body));
+  for (const entry of readTar(gzipped)) {
+    if (entry.type !== 'file') continue;
+    const relative = entry.name.split('/').slice(1).join('/');
+    if (relative !== '') files.set(relative, entry.body);
   }
   return files;
-}
-
-function field(header: Buffer, start: number, length: number): string {
-  return header
-    .subarray(start, start + length)
-    .toString('utf8')
-    .replace(/\0.*$/s, '');
-}
-
-function paxPath(records: string): string | undefined {
-  for (const record of records.split('\n')) {
-    const match = /^\d+ path=(.*)$/.exec(record);
-    if (match !== null) return match[1];
-  }
-  return undefined;
 }
 
 /** The files under the package's `dist/bundle/`, by path inside it. Anything that would climb out is refused. */

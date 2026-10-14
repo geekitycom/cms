@@ -22,6 +22,7 @@ Usage:
   geekity settings set <namespace.key> (<value> | --unset) [--config <file>]
   geekity settings migrate-plugins [--config <file>]
   geekity strip-metadata [--config <file>]
+  geekity export [--out <file>] [--with-credentials] [--without-content] [--list] [--config <file>]
   geekity user add <username> [--password <pw>] [--email <address>] [--config <file>]
   geekity plugin (add <package>[@version] | remove <package>) [--config <file>]
   geekity plugin upgrade [<package>...] [--check] [--config <file>]
@@ -69,6 +70,13 @@ Commands:
                    New uploads are stripped as they arrive; this is for the
                    ones from before. Safe to run again: a clean file is left
                    as it is.
+  export           Write the site to a .tar.gz: content/ and every file in
+                   data/ the site cannot rebuild, with manifest.json first.
+                   Credentials are left out unless --with-credentials is given.
+                   It only reads, so it runs while the site serves. It prints
+                   the deliveries waiting in the queue, which are never
+                   exported. --list prints what each file in data/ is and
+                   writes nothing.
   user add         Create an admin user, so a site can get its first login
                    without the setup screen.
   plugin add       Install a plugin package's bundle from the npm registry
@@ -102,6 +110,15 @@ Options:
   --unset          With settings set: remove the stored value.
   --all            With resend: every announced post rather than named ones.
   --check          With plugin upgrade: say what would change, install nothing.
+  --out <file>     With export: the archive to write. Defaults to
+                   geekity-<host>-<time>.tar.gz in the working directory.
+  --with-credentials
+                   With export: include the API keys and logins kept in
+                   data/ (mail.json, akismet.json, each plugin's secrets).
+  --without-content
+                   With export: leave content/ out.
+  --list           With export: print each file data/ may hold, its class
+                   and what is lost without it, and write nothing.
   -h, --help       Show this help.
   -v, --version    Show the installed version.
 

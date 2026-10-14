@@ -138,6 +138,19 @@ export function overridden(source: ValueSource): boolean {
   return source.tier === 'env' || source.tier === 'config';
 }
 
+/** Where a value came from, as the CLI and an export's manifest name it: `env GEEKITY_X`, `config field`, `file` or `default`. */
+export function sourceLabel(source: ValueSource): string {
+  switch (source.tier) {
+    case 'env':
+      return `env ${source.variable}`;
+    case 'config':
+      return `config ${source.field}`;
+    case 'file':
+    case 'default':
+      return source.tier;
+  }
+}
+
 /** Whether a namespace file is written at mode 0600: a credential is. */
 function writtenPrivately(dataClass: DataClass): boolean {
   switch (dataClass.kind) {

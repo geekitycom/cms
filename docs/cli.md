@@ -16,6 +16,7 @@ The generated `sync` script calls it the third way.
 | `geekity settings list`, `get`, `set`     | Print, read or change the runtime settings, such as `maintenance.on`, and each running plugin's settings, with where each value comes from. See [Runtime settings](settings.md#runtime-settings).                  |
 | `geekity settings migrate-plugins`        | Move plugin settings out of `content/_data/site.json` into `data/plugins/<name>/settings.json`. A server does this when it starts. See [Plugin settings](configuration.md#moving-plugin-settings-out-of-sitejson). |
 | `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`, as the same job the Media screen queues. See [Location and camera metadata](media.md#location-and-camera-metadata).                   |
+| `geekity export`                          | Write `content/` and the files in `data/` that the site cannot rebuild to a `.tar.gz`, with a manifest. It runs while the site serves. See [Exporting a site](#exporting-a-site).                                  |
 | `geekity user add <name>`                 | Create an admin account. Use it to give a site its first login without the setup screen.                                                                                                                           |
 | `geekity plugin add <package>`, `remove`  | Install a plugin package's bundle from the npm registry into the plugins folder (`GEEKITY_PLUGINS_DIR`), or delete a disabled one. A running `geekity serve` reloads with the change.                              |
 | `geekity --help`, `-h`                    | Print this table on the terminal.                                                                                                                                                                                  |
@@ -27,7 +28,7 @@ this includes a plugin in the plugins folder. [Plugins and hooks](plugins.md)
 describes `geekity plugin add` and how to write a plugin.
 
 These commands take `--config <file>`: `serve`, `sync`, `rebuild`, `resend`,
-`maintenance`, `dev-mode`, `settings`, `strip-metadata`, `user add`, `plugin` and every
+`maintenance`, `dev-mode`, `settings`, `strip-metadata`, `export`, `user add`, `plugin` and every
 plugin command. Without the option, they look in the working directory for
 `geekity.config.ts`, then `geekity.config.js`, then `geekity.config.mjs`. If
 none exists, they run on defaults.
@@ -159,6 +160,78 @@ the admin instead. It rebuilds the index in place on the live site, with no
 downtime, and no user is signed out. Use the command only when this version
 refuses to open the database. In that case no site is running, so the admin
 screen is not available.
+
+## Exporting a site
+
+`geekity export` writes the site to one gzipped tar file:
+
+```sh
+$ geekity export
+2 deliveries are waiting in data/queue.sqlite. They are not exported: before a move, wait until none are.
+The archive holds actor keys, password hashes and personal data. Store it as carefully as data/.
+Credentials left out: mail. --with-credentials includes them.
+Wrote /srv/blog/geekity-blog.example-20261014T150405Z.tar.gz: 412 files, 18204113 bytes.
+```
+
+The file is named `geekity-<host>-<yyyymmdd>T<hhmmss>Z.tar.gz` and is written
+in the working directory, unless `--out <file>` names another path. It is
+written at mode `0600`.
+
+The archive holds these entries, in this order:
+
+1. `manifest.json`.
+2. `content/`, apart from scratch files: the `.tmp` files of writes in
+   progress, lock files and the watcher's `.geekity-watch-*` probe.
+   `--without-content` leaves `content/` out.
+3. Each file under `data/` whose class is `kept`, such as `users.json`, the
+   actor keys in `keys/`, `notification-secret` and the comment emails.
+
+Each file keeps its mode, so a `0600` file in `data/` is `0600` in the
+archive. A `rebuildable`, `pending` or `scratch` file is never in the archive.
+For example, `geekity.db`, the image variants and `queue.sqlite` are not
+exported. `geekity export --list` prints each pattern that `data/` can hold,
+its class and what is lost without it. It writes nothing.
+
+A `credential` file holds an API key or a login that is typed in again from
+another service: `mail.json`, `akismet.json` and each plugin's
+`secrets.json`. These files are in the archive only with
+`--with-credentials`. Credentials set in the environment are not in a file, so
+they are never exported.
+
+`manifest.json` records:
+
+| Field                | What it holds                                                                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `format`             | The archive format, `1`.                                                                                                           |
+| `cms`                | The `@geekity/cms` version that wrote it.                                                                                          |
+| `exportedAt`         | When it was written.                                                                                                               |
+| `baseUrl`            | The base URL in effect.                                                                                                            |
+| `content`            | Whether `content/` is in the archive.                                                                                              |
+| `credentials`        | Whether credential files are in the archive.                                                                                       |
+| `devMode`            | Whether the site was in dev mode.                                                                                                  |
+| `files`              | Each file after the manifest: its path in the archive, its class (`kept` or `credential`), its size and its SHA-256.               |
+| `undeclared`         | Files under `data/` that no declaration covers. They are not in the archive.                                                       |
+| `credentialsLeftOut` | The settings namespaces and plugins whose credential files held something and were left out.                                       |
+| `plugins`            | Each installed plugin: its name, version, `source` (`folder` for the plugins folder, `config` for the site config) and `enabled`.  |
+| `overrides`          | Each setting that the environment or the config overrides, with the variable or config field. The value is not recorded.           |
+| `pending`            | `deliveries`, the number of messages waiting in `data/queue.sqlite`, and the number of `queued` and `running` jobs in `jobs.json`. |
+
+No plugin code is in the archive.
+
+The command only reads, so it runs while the site serves. It runs no
+migration and opens no database except `queue.sqlite`, which it reads with a
+read-only connection to count the waiting deliveries. Each writer under
+`data/` and `content/` replaces its file by a rename, so each file in the
+archive is a complete file. The archive is not a snapshot of one instant: two
+files can come from either side of a change that writes both.
+
+The deliveries in `queue.sqlite` belong to the host that queued them, and they
+are never exported. The command prints their number before it writes. Before
+you move a site, wait until the number is 0.
+
+A file in `data/` that no declaration covers is left out, and the command
+names it on standard error. This is usually a file that a plugin or a script
+wrote without a declaration.
 
 ## Creating an admin from the command line
 

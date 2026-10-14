@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
-import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
@@ -8,7 +8,7 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { crc32, deflateSync } from 'node:zlib';
 
-import { createCms, createMemoryMailProvider, createUser, dataFileFor } from '@geekity/cms';
+import { classifyFiles, createCms, createMemoryMailProvider, createUser } from '@geekity/cms';
 import type { Cms, DataFileDeclaration, MemoryMailProvider, OutgoingMail } from '@geekity/cms';
 import { pluginDataFolder, pluginSite } from '@geekity/cms/testing';
 import llm from '@geekity/plugin-llm';
@@ -523,14 +523,6 @@ async function settings(cms: Cms): Promise<void> {
 }
 
 /** Every file under `dir`, `/`-separated and relative to it. */
-function filesUnder(dir: string): string[] {
-  return readdirSync(dir, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => path.relative(dir, path.join(entry.parentPath, entry.name)))
-    .map((relative) => relative.split(path.sep).join('/'))
-    .sort();
-}
-
 /**
  * The declarations no file can reach: scratch, which is gone once its write
  * or lock is (data-files.test.ts pins those patterns to the code that makes
@@ -593,12 +585,10 @@ describe('the data census', () => {
       assert.ok(Number(waiting?.['waiting']) > 0, 'the Create for the follower waits in the queue');
 
       const declarations = cms.dataFiles();
-      const files = filesUnder(dataDir);
       const reached = new Set<DataFileDeclaration>();
       const undeclared: string[] = [];
-      for (const file of files) {
-        const declaration = dataFileFor(declarations, file);
-        if (declaration === undefined) undeclared.push(file);
+      for (const { relative, declaration } of classifyFiles(dataDir, declarations)) {
+        if (declaration === undefined) undeclared.push(relative);
         else reached.add(declaration);
       }
       assert.deepEqual(

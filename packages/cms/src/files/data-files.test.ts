@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -16,6 +16,7 @@ import {
   LOCK_FILES,
   TEMPORARY_FILES,
   USERS,
+  classifyFiles,
   dataFileFor,
   dataPath,
 } from './data-files.ts';
@@ -93,6 +94,7 @@ describe('the core declarations', () => {
       'comments/hello-world.json.1a2b-3.tmp': 'scratch',
       'jobs.json.lock': 'scratch',
       'jobs.json.lock.takeover': 'scratch',
+      'exports/geekity-blog.example-20261014T150000Z.tar.gz': 'scratch',
     };
     const found = Object.fromEntries(Object.keys(expected).map((each) => [each, classOf(each)]));
     assert.deepEqual(found, expected);
@@ -147,5 +149,35 @@ describe('discardDatabase', () => {
     const removed = before.filter((name) => !after.has(name));
     assert.deepEqual(removed.sort(), ['geekity.db', 'geekity.db-shm', 'geekity.db-wal']);
     for (const name of removed) assert.equal(classOf(name), 'rebuildable', name);
+  });
+});
+
+describe('classifyFiles', () => {
+  it('walks every regular file under a folder, sorted, each with the declaration that covers it', async () => {
+    const dir = await dataDir();
+    await mkdir(path.join(dir, 'keys'));
+    await writeFile(path.join(dir, 'users.json'), '[]');
+    await writeFile(path.join(dir, 'keys', 'ada.Ed25519.jwk'), '{}');
+    await writeFile(path.join(dir, 'surprise.json'), '{}');
+    await symlink(path.join(dir, 'users.json'), path.join(dir, 'linked.json'));
+
+    const found = classifyFiles(dir, CORE_DATA_FILES).map((file) => ({
+      relative: file.relative,
+      absolute: file.absolute,
+      pattern: file.declaration?.pattern,
+    }));
+    assert.deepEqual(found, [
+      {
+        relative: 'keys/ada.Ed25519.jwk',
+        absolute: path.join(dir, 'keys', 'ada.Ed25519.jwk'),
+        pattern: 'keys/*.jwk',
+      },
+      { relative: 'surprise.json', absolute: path.join(dir, 'surprise.json'), pattern: undefined },
+      { relative: 'users.json', absolute: path.join(dir, 'users.json'), pattern: 'users.json' },
+    ]);
+  });
+
+  it('finds nothing in a folder that is not there', async () => {
+    assert.deepEqual(classifyFiles(path.join(await dataDir(), 'missing'), CORE_DATA_FILES), []);
   });
 });
