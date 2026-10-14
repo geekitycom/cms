@@ -5,11 +5,7 @@
  * The theme is a setting in `content/_data/site.json` like every other, and it
  * is deliberately on no settings page. A settings page is a form of fields
  * somebody types into; this is a list of what a directory holds, and what you
- * do to a row is press it. So the screen is mounted the way the media library
- * is — its own module, its own template, one POST behind the same CSRF guard —
- * and it reaches the setting through the same `updateSiteSettings` and the
- * same field check the settings pages use, so the two doors cannot come to
- * disagree about what a valid theme is.
+ * do to a row is press it.
  *
  * The listing is a walk of the themes directory on every request, for the
  * reason the media screen walks `content/uploads/`: the directory is the truth
@@ -22,13 +18,17 @@ import path from 'node:path';
 import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../web/env.ts';
-import { formFromSettings, SETTINGS_FIELDS, settingsProblems } from '../site/settings-form.ts';
-import { updateSiteSettings } from '../site/site-json.ts';
 import { trimmedField } from '../util/forms.ts';
 import { listSiteThemes, PACKAGED_THEME, PACKAGED_THEME_DIR, readTheme } from '../theme/themes.ts';
 import type { Theme } from '../theme/themes.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
+import {
+  formFromSettings,
+  SETTINGS_FIELDS,
+  settingsProblems,
+  siteChanges,
+} from './settings-fields.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
@@ -158,13 +158,11 @@ export function mountAppearanceScreen(
       return c.redirect(THEMES_PATH, 303);
     }
 
-    // Applied to the settings re-read inside the write, like every settings
-    // save: this screen changes one key, and a save of something else made
-    // while the list was open must not be undone by it (decision-9).
-    await updateSiteSettings({
-      contentDir: c.var.config.contentDir,
-      change: (current) => ({ ...current, theme: submitted }),
-    });
+    const saved = await c.var.settings.set('site', siteChanges({ theme: submitted }), 'admin');
+    if (!saved.ok) {
+      flash(c, 'error', `Nothing was changed. ${Object.values(saved.problems).join(' ')}`);
+      return c.redirect(THEMES_PATH, 303);
+    }
 
     flash(c, 'notice', `${named(c, submitted)} is now this site’s theme.`);
     return c.redirect(THEMES_PATH, 303);

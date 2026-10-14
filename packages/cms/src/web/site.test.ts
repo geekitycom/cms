@@ -8,7 +8,7 @@ import { brotliDecompressSync } from 'node:zlib';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { avatarHref } from '../avatars/avatars.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 const started: Cms[] = [];
@@ -1387,7 +1387,7 @@ describe('the timezone setting as a lens on the dates', () => {
 
   /** Put the site in one zone, the way the settings screen would. */
   async function setTimezone(contentDir: string, timezone: string): Promise<void> {
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir,
       settings: { ...(await siteSettingsIn(contentDir)), timezone },
     });

@@ -6,6 +6,7 @@
 {% extends "layouts/shell.njk" %}
 {% import "components/fields.njk" as field %}
 {% from "components/button.njk" import button %}
+{% from "components/alert.njk" import alert %}
 
 {% block title %}{{ settingsLabel }} settings{% endblock %}
 
@@ -16,6 +17,21 @@
     <div class="mb-6 max-w-2xl">
       {% call field.summary('Nothing was saved. Fix the fields marked below and try again.') %}
         {% block settingsProblems %}{% endblock %}
+      {% endcall %}
+    </div>
+  {% endif %}
+
+  {% if setElsewhere.length %}
+    <div class="mb-6 max-w-2xl">
+      {% call alert(color='info', style='soft', polite=true) %}
+        <div>
+          <p>Set outside this page, so the form shows the value in effect and a save leaves it as it is:</p>
+          <ul class="list-disc ps-5">
+            {% for each in setElsewhere %}
+              <li><code>{{ each.setting }}</code> is set by <code>{{ each.source }}</code>.</li>
+            {% endfor %}
+          </ul>
+        </div>
       {% endcall %}
     </div>
   {% endif %}

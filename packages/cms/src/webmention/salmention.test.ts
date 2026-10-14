@@ -13,7 +13,7 @@ import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import type { CommentChecker } from '../forms/checker.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { sourceEntry } from './microformats.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
 import { SALMENTION_LIMIT } from './service.ts';
@@ -145,7 +145,7 @@ async function site(
     options.migrated === true ? REPLY_POST.replace('---\n', '---\nmigrated: true\n') : REPLY_POST,
     'utf8',
   );
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

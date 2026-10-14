@@ -11,7 +11,7 @@ import type { Cms } from './index.ts';
 import { createMemoryMailProvider } from './mail/memory.ts';
 import type { MemoryMailProvider } from './mail/memory.ts';
 import { DEFAULT_SITE_SETTINGS } from './site/settings.ts';
-import { writeSiteJson } from './site/site-json.ts';
+import { writeSiteSettings } from './__testing__/site-settings.ts';
 
 const BASE_URL = 'https://blog.example';
 const FOLLOWER = 'https://remote.example/users/bob';
@@ -56,7 +56,7 @@ interface DevSite {
 async function devSite(): Promise<DevSite> {
   let now = new Date('2026-10-09T12:00:00Z');
   const contentDir = await box.dir('geekity-dev-mode-content-');
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

@@ -8,7 +8,7 @@ import { addComment } from '../comments/records.ts';
 import { settingsOver } from '../__testing__/settings.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import {
@@ -110,7 +110,7 @@ async function admin(config: GeekityConfig = {}): Promise<{
   await mkdir(path.join(contentDir, 'posts'), { recursive: true });
   await writeFile(path.join(contentDir, 'posts/2026-09-02-hello-world.md'), POST, 'utf8');
   // So there is a settings file for the key to be provably absent from.
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: { ...DEFAULT_SITE_SETTINGS, base_url: 'https://blog.example' },
   });

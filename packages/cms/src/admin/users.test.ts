@@ -8,7 +8,7 @@ import {
 } from '../site/notification-preferences.ts';
 import { settingsOver } from '../__testing__/settings.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import {
   countUsers,
   createUser,
@@ -62,7 +62,7 @@ async function siteSendingMail(): Promise<Cms> {
   const contentDir = await box.dir('geekity-users-content-');
   const dataDir = await box.dir('geekity-users-data-');
 
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', mail_provider: 'brevo' },
   });

@@ -6,7 +6,7 @@ import { after, describe, it } from 'node:test';
 import { sandbox } from '../admin/__testing__/harness.ts';
 import { settingsOver } from '../__testing__/settings.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -18,7 +18,7 @@ describe('the "email me about replies" box on a public post', () => {
   it('is drawn once the mail credential is saved, with no restart', async () => {
     const contentDir = await box.dir('geekity-notify-field-content-');
     const dataDir = await box.dir('geekity-notify-field-data-');
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir,
       settings: { ...DEFAULT_SITE_SETTINGS, base_url: BASE_URL, mail_provider: 'brevo' },
     });

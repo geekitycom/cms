@@ -6,10 +6,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { formFromSettings, settingsFromForm, settingsProblems } from '../site/settings-form.ts';
-import { updateSiteSettings } from '../site/site-json.ts';
+import { changeSiteSettings } from '../__testing__/site-settings.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
+import { formFromSettings, settingsProblems, submittedSettings } from './settings-fields.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 /**
@@ -215,6 +215,67 @@ describe('where the values come from', () => {
   });
 });
 
+describe('a setting the environment overrides', () => {
+  it('shows the value in effect, names the variable, and a save does not write it', async () => {
+    const contentDir = await box.dir('geekity-settings-env-');
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({ title: 'Stored', tagline: 'stored tagline' }),
+      'utf8',
+    );
+    process.env['GEEKITY_SITE__TAGLINE'] = 'From the environment';
+    try {
+      const cms = await box.site({ contentDir });
+      const agent = await signedIn(cms);
+
+      const screen = await (await agent.get('/admin/settings')).text();
+      assert.equal(field(screen, 'tagline'), 'From the environment');
+      assert.match(screen, /site\.tagline[\s\S]*GEEKITY_SITE__TAGLINE/);
+
+      const saved = await saveSettings(agent, 'general', {
+        title: 'Saved',
+        tagline: 'From the environment',
+      });
+      assert.equal(saved.status, 303);
+    } finally {
+      delete process.env['GEEKITY_SITE__TAGLINE'];
+    }
+
+    const written = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.equal(written['title'], 'Saved');
+    assert.equal(written['tagline'], 'stored tagline', 'the file keeps its own tagline');
+  });
+});
+
+describe('two pages saved at once', () => {
+  it('both land: General and Discussion change different keys of one file', async () => {
+    const contentDir = await box.dir('geekity-settings-two-pages-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    for (let round = 0; round < 5; round += 1) {
+      const title = `Title ${String(round)}`;
+      const days = String(20 + round);
+      const saves = await Promise.all([
+        saveSettings(agent, 'general', { title }),
+        saveSettings(agent, 'discussion', { comments_close_after_days: days }),
+      ]);
+      assert.deepEqual(
+        saves.map((response) => response.status),
+        [303, 303],
+      );
+      const written = JSON.parse(
+        await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+      ) as Record<string, unknown>;
+      assert.equal(written['title'], title);
+      assert.equal(written['commentsCloseAfterDays'], Number(days));
+    }
+  });
+});
+
 describe('a database whose settings are still rows', () => {
   /** A `dataDir` holding a database in the shape TASK-14 left behind. */
   async function legacyDatabase(
@@ -368,7 +429,7 @@ describe('the apps allowed without PKCE (TASK-225)', () => {
   it('are none by default, and a site with none writes no key', async () => {
     const contentDir = await siteWith({ title: 'A Site' });
     assert.deepEqual((await siteSettingsIn(contentDir)).clients_without_pkce, []);
-    await updateSiteSettings({ contentDir, change: (current) => current });
+    await changeSiteSettings(contentDir, {});
     const written = JSON.parse(
       await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
     ) as Record<string, unknown>;
@@ -411,17 +472,14 @@ describe('the theme setting', () => {
   it('is read from site.json and written back, and is absent for the packaged theme', async () => {
     const contentDir = await box.dir('geekity-settings-theme-');
 
-    await updateSiteSettings({
-      contentDir,
-      change: (current) => ({ ...current, theme: 'midnight' }),
-    });
+    await changeSiteSettings(contentDir, { theme: 'midnight' });
 
     const file = path.join(contentDir, '_data', 'site.json');
     const chosen = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
     assert.equal(chosen['theme'], 'midnight');
     assert.equal((await siteSettingsIn(contentDir)).theme, 'midnight');
 
-    await updateSiteSettings({ contentDir, change: (current) => ({ ...current, theme: '' }) });
+    await changeSiteSettings(contentDir, { theme: '' });
 
     const packaged = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
     assert.ok(!('theme' in packaged), 'the packaged theme is the absence of the key');
@@ -430,10 +488,7 @@ describe('the theme setting', () => {
 
   it('survives a save of a settings page that does not carry it', async () => {
     const contentDir = await box.dir('geekity-settings-theme-keep-');
-    await updateSiteSettings({
-      contentDir,
-      change: (current) => ({ ...current, theme: 'midnight' }),
-    });
+    await changeSiteSettings(contentDir, { theme: 'midnight' });
 
     const cms = await box.site({ contentDir, themesDir: await themesDir('midnight') });
     const agent = await signedIn(cms);
@@ -448,7 +503,7 @@ describe('the theme setting', () => {
     const form = formFromSettings({ ...DEFAULT_SITE_SETTINGS, theme: 'midnight' });
 
     assert.equal(form.theme, 'midnight');
-    assert.equal(settingsFromForm(form).theme, 'midnight');
+    assert.equal(submittedSettings(form, ['theme']).theme, 'midnight');
   });
 
   it('takes a name that is a theme, and the empty name for the packaged one', async () => {

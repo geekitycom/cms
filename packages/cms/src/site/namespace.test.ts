@@ -7,7 +7,7 @@ import { after, describe, it } from 'node:test';
 
 import { resolveConfig } from '../config.ts';
 import type { SettingDeclaration } from '../settings/types.ts';
-import { createSettings, SITE } from './namespace.ts';
+import { createSettings, mintMissingIndexNowKey, SITE } from './namespace.ts';
 
 const DEMO_SITE_JSON = fileURLToPath(
   new URL('../../../../apps/demo/content/_data/site.json', import.meta.url),
@@ -72,6 +72,7 @@ after(async () => {
 async function siteWith(
   file: Record<string, unknown>,
   config: { baseUrl?: string } = {},
+  env: Record<string, string> = {},
 ): Promise<{ contentDir: string; file: string; settings: ReturnType<typeof createSettings> }> {
   const root = await mkdtemp(path.join(tmpdir(), 'geekity-site-namespace-'));
   dirs.push(root);
@@ -81,9 +82,9 @@ async function siteWith(
   await writeFile(siteJson, `${JSON.stringify(file, null, 2)}\n`);
   const resolved = resolveConfig(
     { contentDir, dataDir: path.join(root, 'data'), ...config },
-    { env: {} },
+    { env },
   );
-  return { contentDir, file: siteJson, settings: createSettings({ config: resolved, env: {} }) };
+  return { contentDir, file: siteJson, settings: createSettings({ config: resolved, env }) };
 }
 
 function fileKeysOf(declaration: SettingDeclaration<unknown>): readonly string[] {
@@ -99,7 +100,7 @@ describe('the site namespace', () => {
     }
   });
 
-  it('reads the demo site.json as its values and writes them back as the same file', async () => {
+  it('reads the demo site.json as its values and writes each of its keys back unchanged', async () => {
     const demo = JSON.parse(await readFile(DEMO_SITE_JSON, 'utf8')) as Record<string, unknown>;
     const { settings, file } = await siteWith(demo);
 
@@ -122,7 +123,8 @@ describe('the site namespace', () => {
 
     const result = await settings.set('site', new Map([['title', 'Geekity Demo']]), 'admin');
     assert.deepEqual(result, { ok: true });
-    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), demo);
+    const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(demo)) assert.deepEqual(written[key], value, key);
   });
 
   it('keeps the keys it does not declare through a write', async () => {
@@ -136,12 +138,102 @@ describe('the site namespace', () => {
     const result = await settings.set('site', new Map([['title', 'After']]), 'admin');
 
     assert.deepEqual(result, { ok: true });
-    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), {
-      title: 'After',
-      feedSize: 20,
-      plugins: { '@acme/plugin-x': { enabled: true } },
-      shelf: { books: ['Dune'] },
+    const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    assert.equal(written['title'], 'After');
+    assert.equal(written['feedSize'], 20);
+    assert.deepEqual(written['plugins'], { '@acme/plugin-x': { enabled: true } });
+    assert.deepEqual(written['shelf'], { books: ['Dune'] });
+  });
+
+  it('writes every setting it declares on any write, so the file shows what is in effect', async () => {
+    const { settings, file } = await siteWith({ title: 'Sparse' });
+
+    await settings.set('site', new Map([['tagline', 'now whole']]), 'admin');
+
+    const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    assert.equal(written['title'], 'Sparse');
+    assert.equal(written['tagline'], 'now whole');
+    assert.equal(written['postsPerPage'], 10);
+    assert.equal(written['notifyServer'], 'https://rpc.rsscloud.io');
+    assert.deepEqual(written['menus'], {});
+  });
+
+  it('writes each key it does not change as the value it reads, so a hand edit is tidied', async () => {
+    const { settings, file } = await siteWith({
+      license: 'CC0',
+      postsPerPage: 'lots',
+      securityLanguages: 'en,fr',
     });
+
+    await settings.set('site', new Map([['title', 'Tidy']]), 'admin');
+
+    const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    assert.equal(written['license'], 'cc0');
+    assert.equal(written['postsPerPage'], 10, 'a value it cannot read is written as the default');
+    assert.equal(written['securityLanguages'], 'en, fr');
+  });
+
+  it('drops the retired navigation and soloAuthor keys on the next write', async () => {
+    const { settings, file } = await siteWith({
+      title: 'Old',
+      navigation: [{ label: 'Home', url: '/' }],
+      soloAuthor: true,
+    });
+
+    await settings.set('site', new Map([['title', 'New']]), 'admin');
+
+    const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    assert.equal(written['navigation'], undefined);
+    assert.equal(written['soloAuthor'], undefined);
+  });
+
+  it('mints an IndexNow key when IndexNow turns on and the site has none', async () => {
+    const { settings } = await siteWith({ indexNow: false });
+
+    await settings.set('site', new Map([['index_now', true]]), 'admin');
+    const minted = await settings.get(SITE.index_now_key);
+    assert.match(minted, /^[0-9a-f]{32}$/);
+
+    await settings.set('site', new Map([['index_now', false]]), 'admin');
+    await settings.set('site', new Map([['index_now', true]]), 'admin');
+    assert.equal(await settings.get(SITE.index_now_key), minted, 'a key it has is kept');
+  });
+
+  it('mints a missing key for a site.json that has IndexNow on and no key', async () => {
+    const { settings, file } = await siteWith({ indexNow: true });
+
+    await mintMissingIndexNowKey(settings, 'boot');
+
+    const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    assert.match(String(written['indexNowKey']), /^[0-9a-f]{32}$/);
+  });
+
+  it('mints a missing key when the environment turns IndexNow on', async () => {
+    const { settings } = await siteWith({}, {}, { GEEKITY_SITE__INDEX_NOW: 'true' });
+
+    await mintMissingIndexNowKey(settings, 'boot');
+
+    assert.match(await settings.get(SITE.index_now_key), /^[0-9a-f]{32}$/);
+  });
+
+  it('mints nothing while IndexNow is off or the key is set elsewhere', async () => {
+    const off = await siteWith({ title: 'Off' });
+    await mintMissingIndexNowKey(off.settings, 'boot');
+    assert.deepEqual(JSON.parse(await readFile(off.file, 'utf8')), { title: 'Off' });
+
+    const elsewhere = await siteWith(
+      { indexNow: true },
+      {},
+      { GEEKITY_SITE__INDEX_NOW_KEY: 'from-the-environment' },
+    );
+    await mintMissingIndexNowKey(elsewhere.settings, 'boot');
+    assert.deepEqual(JSON.parse(await readFile(elsewhere.file, 'utf8')), { indexNow: true });
+  });
+
+  it('mints no key while IndexNow stays off', async () => {
+    const { settings } = await siteWith({});
+    await settings.set('site', new Map([['title', 'Quiet']]), 'admin');
+    assert.equal(await settings.get(SITE.index_now_key), '');
   });
 
   it('gives the base URL the config sets over the one in the file, and refuses to write it', async () => {

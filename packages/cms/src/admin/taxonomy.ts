@@ -20,7 +20,7 @@ import { saveDocument } from '../content/save.ts';
 import type { TermUsage } from '../content/store.ts';
 import { documentContent } from '../content/writer.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { updateSiteSettings } from '../site/site-json.ts';
+import { editSiteSetting } from './site-setting-edit.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import {
   forgetTerm,
@@ -30,7 +30,8 @@ import {
   termHref,
   termKey,
 } from '../content/taxonomy.ts';
-import type { Taxonomy, TaxonomyRedirect } from '../content/taxonomy.ts';
+import type { Taxonomy } from '../content/taxonomy.ts';
+import type { SetResult } from '../settings/types.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
@@ -166,7 +167,7 @@ export function mountTaxonomyScreens(
 
     // Recorded after the rewrite, so a rename that threw writes no redirect to
     // an archive that never moved.
-    await recordRedirects(c, (existing) =>
+    const recorded = await editSiteSetting(c.var.settings, 'taxonomy_redirects', (existing) =>
       recordTermRename(existing, { taxonomy: kind.taxonomy, from, to }),
     );
 
@@ -175,6 +176,7 @@ export function mountTaxonomyScreens(
       'notice',
       `${target.length > 0 ? 'Merged' : 'Renamed'} “${from}” ${target.length > 0 ? 'into' : 'to'} “${to}” in ${filesRewritten(report)}.${skipped(report)}`,
     );
+    warnUnrecorded(c, recorded, `The old archive does not redirect to “${to}”:`);
     return c.redirect(kind.basePath, 303);
   });
 
@@ -193,9 +195,12 @@ export function mountTaxonomyScreens(
 
     // Every record pointing at the term goes with it: the archive it named is
     // about to 404, and a redirect to a 404 is worse than the 404.
-    await recordRedirects(c, (existing) => forgetTerm(existing, kind.taxonomy, term));
+    const recorded = await editSiteSetting(c.var.settings, 'taxonomy_redirects', (existing) =>
+      forgetTerm(existing, kind.taxonomy, term),
+    );
 
     flash(c, 'notice', `Deleted “${term}” from ${filesRewritten(report)}.${skipped(report)}`);
+    warnUnrecorded(c, recorded, `The redirects to “${term}” were not removed:`);
     return c.redirect(kind.basePath, 303);
   });
 }
@@ -315,24 +320,9 @@ function skipped(report: TermRewriteReport): string {
   return ` ${String(report.skipped.length)} could not be read and were left alone: ${report.skipped.join(', ')}.`;
 }
 
-/**
- * Rewrite the recorded archive renames in `content/_data/site.json`.
- *
- * Through the same write path the settings screen uses, so the read of the
- * file and the write of it are one step: a rename recorded while somebody is
- * saving the settings form cannot lose either change.
- */
-async function recordRedirects(
-  c: Context<GeekityEnv>,
-  change: (existing: readonly TaxonomyRedirect[]) => TaxonomyRedirect[],
-): Promise<void> {
-  await updateSiteSettings({
-    contentDir: c.var.config.contentDir,
-    change: (settings) => ({
-      ...settings,
-      taxonomy_redirects: change(settings.taxonomy_redirects),
-    }),
-  });
+function warnUnrecorded(c: Context<GeekityEnv>, recorded: SetResult, what: string): void {
+  if (recorded.ok) return;
+  flash(c, 'warning', `${what} ${Object.values(recorded.problems).join(' ')}`);
 }
 
 /** Everything the taxonomy template renders. */

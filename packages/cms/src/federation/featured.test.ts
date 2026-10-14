@@ -7,7 +7,7 @@ import { sandbox } from '../admin/__testing__/harness.ts';
 import { writeUsers } from '../admin/__testing__/users.ts';
 import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 
 const BASE_URL = 'https://blog.example';
 const ACTOR_URL = `${BASE_URL}/author/ada/`;
@@ -22,7 +22,7 @@ async function site(posts: [string, string[]][]): Promise<Cms> {
   const contentDir = await box.dir('geekity-featured-content-');
   const dataDir = await box.dir('geekity-featured-data-');
 
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: { ...DEFAULT_SITE_SETTINGS, title: 'Geekity', base_url: BASE_URL, author: 'ada' },
   });

@@ -194,32 +194,12 @@ export { LANGUAGE_TAG_PATTERN } from '../content/language.ts';
 export { EMAIL_PATTERN, normalizeRelayInbox, relayList } from '../site/setting-values.ts';
 export { DEFAULT_SITE_SETTINGS, effectiveBaseUrl } from '../site/settings.ts';
 export {
-  formFromSettings,
-  SETTINGS_FIELD_NAMES,
-  SETTINGS_FIELDS,
-  settingsFromForm,
-  settingsProblems,
-} from '../site/settings-form.ts';
-export {
   migrateActorKeysToFiles,
   migrateSettingsToFile,
   migrateUsersToFile,
 } from './legacy-migrations.ts';
 export type { LegacyActorKey, LegacySetting, LegacyUser } from './legacy-migrations.ts';
-export {
-  settingsFromSiteJson,
-  siteDataPath,
-  siteJsonFor,
-  updateSiteSettings,
-  writeSiteJson,
-} from '../site/site-json.ts';
 export { SETTINGS_PATH } from './settings.ts';
-export type {
-  CarriedSettings,
-  SettingsField,
-  SettingsForm,
-  SettingsProblems,
-} from '../site/settings-form.ts';
 export type { SiteSettings } from '../site/settings.ts';
 export { mountSettingsPage, settingsPagePath, settingsScreen } from './settings-page.ts';
 export type { MountSettingsOptions, SettingsPage, SubmittedBody } from './settings-page.ts';

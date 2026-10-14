@@ -12,7 +12,7 @@ import type { AdminStore, NewFollower } from '../store/admin-store.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { deliveryTargets } from './delivery.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
 import {
@@ -611,7 +611,7 @@ async function boot(dirs: { contentDir: string; dataDir: string }): Promise<Cms>
 async function federatedDirs(): Promise<{ contentDir: string; dataDir: string }> {
   const contentDir = await temporaryDir();
   const dataDir = await temporaryDir();
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

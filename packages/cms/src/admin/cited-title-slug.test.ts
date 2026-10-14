@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 
-import { updateSiteSettings } from '../site/site-json.ts';
+import { changeSiteSettings } from '../__testing__/site-settings.ts';
 import { findUser } from '../site/users.ts';
 import { CITED_SLUG_TIMEOUT_MS } from '../webmention/reply-contexts.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
@@ -170,10 +170,7 @@ describe('a new untitled post that cites a page is named after its title (TASK-2
 
   it('keeps the fetched context and does not fetch the target again after the save', async () => {
     const { cms, contentDir } = await site();
-    await updateSiteSettings({
-      contentDir,
-      change: (settings) => ({ ...settings, webmentions_send: false }),
-    });
+    await changeSiteSettings(contentDir, { webmentions_send: false });
     assert.equal(
       await micropubSlug(cms, [['like-of', VIDEO]]),
       'liked-rick-astley-never-gonna-give',

@@ -6,7 +6,7 @@ import { after, describe, it } from 'node:test';
 import matter from 'gray-matter';
 
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { browser, csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import { assertInOrder, titleCell } from './__testing__/markup.ts';
 import { statuses } from './__testing__/statuses.ts';
@@ -2332,7 +2332,7 @@ describe('a conflicting save', () => {
 
 /** Put a site in one zone, the way the settings screen would. */
 async function setTimezone(contentDir: string, timezone: string): Promise<void> {
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: { ...(await siteSettingsIn(contentDir)), timezone },
   });
@@ -2483,7 +2483,7 @@ describe('an event in the editor (TASK-200 AC #4)', () => {
         permalink: '/2026/01/published/',
       },
     ]);
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir,
       settings: { ...(await siteSettingsIn(contentDir)), timezone },
     });

@@ -8,13 +8,6 @@
  * into a screen you can read and a form you can save. A page module describes
  * itself and writes its own template; nothing about how a page is wired lives
  * in the page.
- *
- * The save is the part worth reading twice. A page writes only the fields it
- * carries, and it writes them onto `content/_data/site.json` as re-read inside
- * the atomic update (decision-9), not onto the copy the form was rendered
- * from. So two people saving two different pages at the same moment both land:
- * the second save is applied to what the first one actually wrote, and a
- * setting neither page shows is not even in the picture.
  */
 
 import type { Context, Hono } from 'hono';
@@ -22,18 +15,21 @@ import type { Context, Hono } from 'hono';
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import type { DeliveryReport } from '../federation/delivery.ts';
+import { SITE } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
-import {
-  formFromSettings,
-  SETTINGS_FIELDS,
-  settingsFromForm,
-  settingsProblems,
-} from '../site/settings-form.ts';
-import type { SettingsField, SettingsForm } from '../site/settings-form.ts';
-import { updateSiteSettings } from '../site/site-json.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
+import { setElsewhere } from './setting-overrides.ts';
+import {
+  formFromSettings,
+  SETTINGS_FIELDS,
+  settingOf,
+  settingsProblems,
+  siteChanges,
+  submittedSettings,
+} from './settings-fields.ts';
+import type { SettingsField, SettingsForm, SettingsProblems } from './settings-fields.ts';
 import { SETTINGS_PATH } from './settings.ts';
 
 /** What {@link mountSettingsPage} needs from the admin around it. */
@@ -83,27 +79,7 @@ export interface SettingsPage {
     c: Context<GeekityEnv>,
     settings: SiteSettings,
   ) => Promise<Record<string, unknown>> | Record<string, unknown>;
-  /**
-   * The fields this page does not read straight off the body, because
-   * something other than the form decides them — a field rendered read-only
-   * submits nothing, and a save must not clear it.
-   */
-  reads?: (options: {
-    c: Context<GeekityEnv>;
-    body: SubmittedBody;
-    current: SiteSettings;
-  }) => Partial<SettingsForm>;
-  /**
-   * What a save of this page sets off beyond the file, as the sentence the
-   * flash adds. The side effect stays where the field is: the actor is told
-   * about a profile change on the page the profile is on, and the relays are
-   * reconciled on the page the relay list is on.
-   */
-  saved?: (
-    c: Context<GeekityEnv>,
-    before: SiteSettings,
-    after: SiteSettings,
-  ) => Promise<string> | string;
+  reads?: (options: { c: Context<GeekityEnv>; body: SubmittedBody }) => Partial<SettingsForm>;
   /**
    * The page's own endpoints: a credential, a test message. Each is its own
    * POST so a refused one cannot lose an edit to a field.
@@ -125,12 +101,6 @@ export function settingsPagePath(child: string): string {
 /**
  * Register one settings page: the screen, the save, and whatever endpoints of
  * its own it has.
- *
- * Every read is of `content/_data/site.json` as it is at that moment, and a
- * save rewrites it: a page is a view of the file rather than of anything this
- * process remembers (decision-9). A form the page's own validator has anything
- * to say about is a 400 that writes nothing at all and comes back with the
- * problems on the fields that have them.
  */
 export function mountSettingsPage(
   app: Hono<GeekityEnv>,
@@ -140,41 +110,44 @@ export function mountSettingsPage(
   const { render } = options;
 
   app.get(page.path, async (c) =>
-    render(c, page.template, await settingsScreen(c, page, c.var.siteAtRequestStart)),
+    render(
+      c,
+      page.template,
+      await settingsScreen(c, page, c.var.siteAtRequestStart, await setElsewhereOn(c, page)),
+    ),
   );
 
   app.post(page.path, async (c) => {
     const body: SubmittedBody = await c.req.parseBody();
-    const stored = c.var.siteAtRequestStart;
-    const submitted = pageForm(c, page, body, stored);
+    const site = c.var.siteAtRequestStart;
+    const elsewhere = await setElsewhereOn(c, page);
+    const editable = page.fields.filter((name) => elsewhere[settingOf(name)] === undefined);
+    const submitted = pageForm(c, page, editable, body, site);
 
-    const problems = settingsProblems(submitted, page.fields, {
-      themesDir: c.var.config.themesDir,
-      contentDir: c.var.config.contentDir,
-    });
-    if (Object.keys(problems).length > 0) {
+    const refuse = async (problems: SettingsProblems): Promise<Response> => {
       c.status(400);
       return render(c, page.template, {
-        ...(await settingsScreen(c, page, stored)),
+        ...(await settingsScreen(c, page, site, elsewhere)),
         form: submitted,
         problems,
         hasProblems: true,
       });
-    }
+    };
 
-    // The change is applied to the settings re-read inside the write, so a
-    // field this page does not carry is whatever the file says now rather than
-    // whatever it said when the form was drawn. The archive renames and the
-    // menus come from there for the same reason: a save of the title must not
-    // undo a term somebody renamed, or a menu somebody edited, while this form
-    // was open.
-    const settings = await updateSiteSettings({
+    const problems = settingsProblems(submitted, editable, {
+      themesDir: c.var.config.themesDir,
       contentDir: c.var.config.contentDir,
-      change: (current) => settingsFromForm(pageForm(c, page, body, current), current),
     });
+    if (Object.keys(problems).length > 0) return await refuse(problems);
 
-    const note = page.saved === undefined ? '' : await page.saved(c, stored, settings);
-    flash(c, 'notice', `${pageHeading(page)} settings saved.${note}`);
+    const result = await c.var.settings.set(
+      'site',
+      siteChanges(submittedSettings(submitted, editable)),
+      'admin',
+    );
+    if (!result.ok) return await refuse(result.problems as SettingsProblems);
+
+    flash(c, 'notice', `${pageHeading(page)} settings saved.`);
     return c.redirect(page.path, 303);
   });
 
@@ -186,16 +159,19 @@ export async function settingsScreen(
   c: Context<GeekityEnv>,
   page: SettingsPage,
   settings: SiteSettings,
+  elsewhere: Readonly<Record<string, string>>,
 ): Promise<Record<string, unknown>> {
-  const shown = page.shown === undefined ? settings : page.shown(c.var.config, settings);
-
   return {
     section: page.section ?? 'settings',
     child: page.child,
     settingsUrl: page.path,
     settingsLabel: pageHeading(page),
     fields: SETTINGS_FIELDS,
-    form: formFromSettings(shown),
+    form: formFromSettings(shownOn(c, page, settings)),
+    setElsewhere: Object.entries(elsewhere).map(([key, source]) => ({
+      setting: `site.${key}`,
+      source,
+    })),
     problems: {},
     // Whether to say "nothing was saved" over the form. A template cannot ask
     // an object whether it is empty, and every page would otherwise spell out
@@ -210,24 +186,29 @@ function pageHeading(page: SettingsPage): string {
   return page.heading ?? page.label;
 }
 
-/**
- * The whole form as this page's save means it: what is stored, with the
- * page's own fields taken from what was submitted.
- *
- * Every other field comes from `current` rather than from the body, which is
- * what makes a page write only its own settings — and it is read out of a
- * checkbox correctly for free, since a clear checkbox submits nothing at all
- * and only this page's checkboxes are read off the body.
- */
+function shownOn(c: Context<GeekityEnv>, page: SettingsPage, settings: SiteSettings): SiteSettings {
+  return page.shown === undefined ? settings : page.shown(c.var.config, settings);
+}
+
+async function setElsewhereOn(
+  c: Context<GeekityEnv>,
+  page: SettingsPage,
+): Promise<Readonly<Record<string, string>>> {
+  return await setElsewhere(c.var.settings, SITE, page.fields.map(settingOf));
+}
+
 function pageForm(
   c: Context<GeekityEnv>,
   page: SettingsPage,
+  editable: readonly SettingsField[],
   body: SubmittedBody,
-  current: SiteSettings,
+  site: SiteSettings,
 ): SettingsForm {
-  const form = formFromSettings(current);
-  for (const name of page.fields) form[name] = stringOrEmpty(body[SETTINGS_FIELDS[name]]);
-  return { ...form, ...page.reads?.({ c, body, current }) };
+  const form = formFromSettings(shownOn(c, page, site));
+  const read = page.reads?.({ c, body }) ?? {};
+  for (const name of editable)
+    form[name] = read[name] ?? stringOrEmpty(body[SETTINGS_FIELDS[name]]);
+  return form;
 }
 
 /**

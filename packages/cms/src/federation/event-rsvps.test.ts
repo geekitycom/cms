@@ -11,7 +11,7 @@ import { writeUsers } from '../admin/__testing__/users.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
 
 const BASE_URL = 'https://blog.example';
@@ -97,7 +97,7 @@ async function site(): Promise<Cms> {
       '',
     ].join('\n'),
   );
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

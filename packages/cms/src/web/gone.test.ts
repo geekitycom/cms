@@ -12,7 +12,7 @@ import { seedActorKeys } from '../federation/__testing__/keys.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 
 const BASE_URL = 'https://blog.example';
 const ADA = { username: 'ada', password: 'correct horse battery' };
@@ -68,7 +68,7 @@ async function site(files: Record<string, string>): Promise<Site> {
   const dataDir = await temporaryDir('geekity-gone-data-');
   const contentDir = await temporaryDir('geekity-gone-content-');
   await writeTree(contentDir, files);
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

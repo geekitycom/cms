@@ -14,7 +14,7 @@ import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import type { OutgoingMail } from '../mail/provider.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { createUser, setUserNotification } from '../site/users.ts';
 
 /**
@@ -82,7 +82,7 @@ async function site(
   const file = path.join(contentDir, 'posts/2026-09-19-hello-world.md');
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, POST, 'utf8');
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: { ...DEFAULT_SITE_SETTINGS, title: 'A Site', base_url: BASE_URL },
   });

@@ -122,6 +122,23 @@ describe('the relays setting', () => {
     return match?.[1];
   }
 
+  it('follows a relay set through the registry rather than the page', async () => {
+    const cms = await relaySite();
+    assert.deepEqual(
+      await cms.settings.set('site', new Map([['relays', ['https://relay.example/inbox']]]), 'cli'),
+      { ok: true },
+    );
+    await cms.relays.settled();
+    assert.deepEqual(
+      cms.admin.listRelays().map((relay) => relay.inboxId),
+      ['https://relay.example/inbox'],
+    );
+
+    await cms.settings.set('site', new Map([['relays', []]]), 'cli');
+    await cms.relays.settled();
+    assert.deepEqual(cms.admin.listRelays(), [], 'and leaves it when the line goes');
+  });
+
   it('starts empty, takes one inbox URL per line and reaches site.json', async () => {
     const contentDir = await box.dir('geekity-settings-relays-');
     const cms = await relaySite(contentDir);

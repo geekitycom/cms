@@ -23,14 +23,20 @@ import {
   text,
   wholeNumber,
 } from '../settings/kinds.ts';
-import { createSettingsRegistry } from '../settings/registry.ts';
+import { createSettingsRegistry, overridden } from '../settings/registry.ts';
 import type { CreateSettingsRegistryOptions } from '../settings/registry.ts';
-import type { SettingsRegistry, SettingType, ValuesOf } from '../settings/types.ts';
+import type {
+  ChangedBy,
+  SettingChange,
+  SettingsRegistry,
+  SettingType,
+  ValuesOf,
+} from '../settings/types.ts';
 import { PACKAGED_THEME, themeNameProblem } from '../theme/themes.ts';
 import { isFileSync } from '../util/files.ts';
 import { isRecord } from '../util/guards.ts';
 import { DEFAULT_FEED_CADENCE, DEFAULT_NOTIFY_SERVER, UPDATE_PERIODS } from './feed-settings.ts';
-import { isIndexNowKey } from './indexnow-key.ts';
+import { generateIndexNowKey, isIndexNowKey } from './indexnow-key.ts';
 import { menusOf } from './navigation.ts';
 import type { NavigationMenus } from './navigation.ts';
 import { AI_CRAWLER_POLICIES, robotsRuleLines } from './robots.ts';
@@ -47,11 +53,6 @@ import {
 } from './setting-values.ts';
 import type { ContentSignalChoice, LicenseChoice } from './settings.ts';
 
-/**
- * How long a post takes comments for, in days, before this is decided
- * otherwise. WordPress's own default, and the age at which a post stops being
- * a conversation and starts being a spam target.
- */
 export const DEFAULT_COMMENTS_CLOSE_AFTER_DAYS = 14;
 
 /**
@@ -87,7 +88,7 @@ const license: SettingType<SiteLicense> = {
   fromText: (value) => license.fromJson({ license: value }),
   toJson: (value) =>
     value.choice === ''
-      ? {}
+      ? undefined
       : value.choice === 'custom'
         ? { license: value.url, licenseName: value.name }
         : { license: value.choice },
@@ -181,6 +182,37 @@ function frontPage(after: Readonly<Record<string, unknown>>): string | undefined
   return undefined;
 }
 
+const RETIRED_KEYS = ['navigation', 'soloAuthor'];
+
+export function withoutRetiredKeys(
+  file: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const kept = { ...file };
+  for (const key of RETIRED_KEYS) delete kept[key];
+  return kept;
+}
+
+export async function mintMissingIndexNowKey(
+  settings: SettingsRegistry,
+  by: ChangedBy,
+): Promise<void> {
+  if (!(await settings.get(SITE.index_now))) return;
+  const key = await settings.resolve(SITE.index_now_key);
+  if (key.value !== '' || overridden(key.source)) return;
+  const minted = await settings.set(
+    'site',
+    new Map([['index_now_key', generateIndexNowKey()]]),
+    by,
+  );
+  if (!minted.ok) {
+    console.error(`No IndexNow key was minted: ${Object.values(minted.problems).join(' ')}`);
+  }
+}
+
+async function mintIndexNowKey({ next, by, settings }: SettingChange<boolean>): Promise<void> {
+  if (next) await mintMissingIndexNowKey(settings, by);
+}
+
 /**
  * The site's settings: `content/_data/site.json` (decision-9, decision-53).
  *
@@ -188,7 +220,8 @@ function frontPage(after: Readonly<Record<string, unknown>>): string | undefined
  * `fileKeys`, so themes, Eleventy builds and hand edits read the file as
  * before. Reads are tolerant, key by key: a value of the wrong type is set
  * aside for the default rather than taking the site down. The checks are what
- * a write must pass on top of parsing.
+ * a write must pass on top of parsing. A write stores every declared key, so
+ * the file a theme or an Eleventy build reads holds each value in effect.
  */
 export const SITE = declareNamespace({
   namespace: 'site',
@@ -199,6 +232,8 @@ export const SITE = declareNamespace({
     dataClass: { kept: true, secret: false },
   },
   envPrefix: 'GEEKITY_SITE',
+  legacy: (raw) => (isRecord(raw) ? withoutRetiredKeys(raw) : raw),
+  writtenWhole: true,
   settings: {
     title: {
       type: nonEmptyText,
@@ -261,8 +296,6 @@ export const SITE = declareNamespace({
       default: DEFAULT_COMMENTS_CLOSE_AFTER_DAYS,
       description: 'How many days after its date a post stops taking comments. 0 never closes one.',
     },
-    // Forever, so a site that upgrades loses nothing it never chose to lose.
-    // `geekity init` writes the recommended periods for a new site.
     comment_email_retention_days: {
       fileKey: 'commentEmailRetentionDays',
       type: wholeNumber(0),
@@ -356,6 +389,7 @@ export const SITE = declareNamespace({
       type: boolean,
       default: false,
       description: 'Whether the site tells the IndexNow search engines what changed.',
+      onChange: mintIndexNowKey,
     },
     mail_provider: {
       fileKey: 'mailProvider',
@@ -516,4 +550,17 @@ function iconProblem(icon: string, contentDir: string): string | undefined {
 
 export function createSettings(options: CreateSettingsRegistryOptions): SettingsRegistry {
   return createSettingsRegistry({ ...options, coreDeclaredAbove: [SITE] });
+}
+
+export function siteJsonPath(contentDir: string): string {
+  return path.join(contentDir, SITE.declaration.storage.path);
+}
+
+export function parseSiteJson(source: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(source);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }

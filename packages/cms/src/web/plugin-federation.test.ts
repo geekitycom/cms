@@ -19,7 +19,7 @@ import type { Cms } from '../index.ts';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { PluginFederationContext, PluginFederationMiddleware } from '../plugin.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 
 const BASE_URL = 'https://blog.example';
 const USER = 'ada';
@@ -86,7 +86,7 @@ async function site(middleware: PluginFederationMiddleware, enabled = true): Pro
   const contentDir = await dir('geekity-plugin-fed-content-');
   seedActorKeys(dataDir, USER);
   writeUsers(dataDir, [{ username: USER, profile: { displayName: 'Ada' }, actorId: STORED_ID }]);
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: { ...DEFAULT_SITE_SETTINGS, title: 'Geekity', base_url: BASE_URL, author: USER },
   });

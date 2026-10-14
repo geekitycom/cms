@@ -158,6 +158,27 @@ describe('the settings registry', () => {
     assert.equal(await registry.get(MAINTENANCE.on), false);
   });
 
+  it('rewrites each maintenance key a set does not name as the value it reads, an unreadable one as the default', async () => {
+    const { registry, dataDir } = await site();
+    const file = path.join(dataDir, 'maintenance.json');
+
+    await writeFile(file, JSON.stringify({ on: true, until: '2026-10-14T09:00:00Z' }));
+    await registry.set('maintenance', changes({ on: true }), 'cli');
+    assert.deepEqual(await fileOf(dataDir, 'maintenance.json'), {
+      on: true,
+      until: '2026-10-14T09:00:00.000Z',
+    });
+
+    await writeFile(file, JSON.stringify({ on: 'yes', until: '' }));
+    assert.equal(await registry.get(MAINTENANCE.on), false, 'an unreadable on reads as off');
+    await registry.set('maintenance', changes({ until: '2026-10-14T09:00:00Z' }), 'cli');
+    assert.deepEqual(await fileOf(dataDir, 'maintenance.json'), {
+      on: false,
+      until: '2026-10-14T09:00:00.000Z',
+    });
+    assert.equal(await registry.get(MAINTENANCE.on), false, 'and still reads as off');
+  });
+
   it('refuses a key an override is in effect for, naming the source, and writes nothing for the whole call', async () => {
     const { registry, dataDir } = await site({}, { GEEKITY_MAINTENANCE: 'true' });
 
@@ -328,6 +349,42 @@ describe('the settings registry', () => {
     }
     assert.deepEqual(await fileOf(dataDir, 'failing.json'), { on: true });
     assert.match(String(logged[0]), /failing\.on.*the hook broke/);
+  });
+
+  it('hands a change hook the registry, so it can set a second setting', async () => {
+    const { registry, dataDir } = await site();
+    const paired = declareNamespace({
+      namespace: 'paired',
+      storage: { kind: 'file', under: 'data', path: 'paired.json', dataClass: { kept: false } },
+      envPrefix: 'PAIRED',
+      settings: {
+        on: {
+          type: boolean,
+          default: false,
+          description: 'Turns the other on.',
+          onChange: async ({ next, settings }) => {
+            if (next) await settings.set('paired', changes({ other: true }), 'plugin');
+          },
+        },
+        other: { type: boolean, default: false, description: 'Follows on.' },
+      },
+    });
+    registry.register(paired.declaration);
+    await registry.set('paired', changes({ on: true }), 'admin');
+    assert.deepEqual(await fileOf(dataDir, 'paired.json'), { on: true, other: true });
+  });
+
+  it('runs a watcher of one setting when it changes, and not after it stops watching', async () => {
+    const { registry } = await site();
+    const seen: [unknown, unknown][] = [];
+    const unwatch = registry.watch(MAINTENANCE.on, ({ previous, next }) => {
+      seen.push([previous, next]);
+    });
+    await registry.set('maintenance', changes({ on: true }), 'cli');
+    await registry.set('maintenance', changes({ until: '2026-10-14T09:00:00.000Z' }), 'cli');
+    unwatch();
+    await registry.set('maintenance', changes({ on: false }), 'cli');
+    assert.deepEqual(seen, [[false, true]]);
   });
 });
 

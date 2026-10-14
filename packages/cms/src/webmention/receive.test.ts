@@ -11,7 +11,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { createUser } from '../site/users.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { WEBMENTION_PATH } from './endpoint.ts';
@@ -146,7 +146,7 @@ async function site(
   await mkdir(path.join(contentDir, 'pages'), { recursive: true });
   await writeFile(path.join(contentDir, 'pages', 'about.md'), PAGE, 'utf8');
 
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,

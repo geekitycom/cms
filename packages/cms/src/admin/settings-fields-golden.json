@@ -1097,10 +1097,8 @@
         "address_hash_retention_days": 0,
         "ai_crawlers": "allow",
         "author": "",
-        "avatar": "",
         "base_url": "",
         "category_base": "category",
-        "clients_without_pkce": [],
         "comment_email_retention_days": 0,
         "comments": true,
         "comments_close_after_days": 14,
@@ -1114,7 +1112,6 @@
         "homepage": "",
         "icon": "",
         "index_now": false,
-        "index_now_key": "",
         "language": "en",
         "license": {
           "choice": "",
@@ -1128,7 +1125,6 @@
         "mail_from_name": "",
         "mail_provider": "none",
         "mail_reply_to": "",
-        "menus": {},
         "notify_server": "https://rpc.rsscloud.io",
         "posts_page": "",
         "posts_per_page": 10,
@@ -1139,7 +1135,6 @@
         "security_policy": "",
         "tag_base": "tag",
         "tagline": "",
-        "taxonomy_redirects": [],
         "theme": "",
         "timezone": "UTC",
         "title": "Geekity",
@@ -1147,17 +1142,15 @@
         "webmentions_send": true
       },
       "fresh": "{\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"https://rpc.rsscloud.io\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"menus\": {},\n  \"taxonomyRedirects\": []\n}\n",
-      "overEveryKey": "{\n  \"feedSize\": 20,\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"https://rpc.rsscloud.io\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"menus\": {},\n  \"taxonomyRedirects\": [],\n  \"custom\": {\n    \"kept\": true\n  }\n}\n"
+      "overEveryKey": "{\n  \"feedSize\": 20,\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"https://rpc.rsscloud.io\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"indexNowKey\": \"abcdef0123456789\",\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"menus\": {\n    \"main\": [\n      {\n        \"label\": \"Home\",\n        \"url\": \"/\"\n      }\n    ],\n    \"footer\": [\n      {\n        \"label\": \"Me\",\n        \"url\": \"https://me.example/\",\n        \"rel\": \"me\"\n      }\n    ]\n  },\n  \"taxonomyRedirects\": [\n    {\n      \"taxonomy\": \"tag\",\n      \"from\": \"old\",\n      \"to\": \"new\"\n    }\n  ],\n  \"clientsWithoutPkce\": [\n    \"https://app.example/\"\n  ],\n  \"custom\": {\n    \"kept\": true\n  }\n}\n"
     },
     "every field": {
       "settings": {
         "address_hash_retention_days": 60,
         "ai_crawlers": "block-all",
         "author": "ada",
-        "avatar": "/uploads/2026/09/me.png",
         "base_url": "https://blog.example",
         "category_base": "sections",
-        "clients_without_pkce": ["https://app.example/"],
         "comment_email_retention_days": 90,
         "comments": false,
         "comments_close_after_days": 30,
@@ -1171,7 +1164,6 @@
         "homepage": "home",
         "icon": "/uploads/2026/10/icon.png",
         "index_now": true,
-        "index_now_key": "abcdef0123456789",
         "language": "en-GB",
         "license": {
           "choice": "custom",
@@ -1185,14 +1177,6 @@
         "mail_from_name": "The Blog",
         "mail_provider": "smtp",
         "mail_reply_to": "hello@blog.example",
-        "menus": {
-          "main": [
-            {
-              "label": "Home",
-              "url": "/"
-            }
-          ]
-        },
         "notify_server": "https://rpc.example/RPC2",
         "posts_page": "blog",
         "posts_per_page": 7,
@@ -1207,31 +1191,26 @@
         "security_policy": "https://blog.example/policy",
         "tag_base": "topics",
         "tagline": "about things",
-        "taxonomy_redirects": [
-          {
-            "taxonomy": "tag",
-            "from": "old",
-            "to": "new"
-          }
-        ],
         "theme": "midnight",
         "timezone": "Europe/London",
         "title": "A Blog",
         "webmentions_receive": false,
         "webmentions_send": false
       },
-      "fresh": "{\n  \"title\": \"A Blog\",\n  \"tagline\": \"about things\",\n  \"url\": \"https://blog.example\",\n  \"postsPerPage\": 7,\n  \"timezone\": \"Europe/London\",\n  \"language\": \"en-GB\",\n  \"tagBase\": \"topics\",\n  \"categoryBase\": \"sections\",\n  \"comments\": false,\n  \"commentsCloseAfterDays\": 30,\n  \"commentEmailRetentionDays\": 90,\n  \"addressHashRetentionDays\": 60,\n  \"contactMessageRetentionDays\": 365,\n  \"webmentionsSend\": false,\n  \"webmentionsReceive\": false,\n  \"notifyServer\": \"https://rpc.example/RPC2\",\n  \"feedUpdatePeriod\": \"daily\",\n  \"feedUpdateFrequency\": 2,\n  \"aiCrawlers\": \"block-all\",\n  \"contentSignalSearch\": \"yes\",\n  \"contentSignalAiInput\": \"no\",\n  \"contentSignalAiTrain\": \"yes\",\n  \"robotsRules\": [\n    \"User-agent: BadBot\",\n    \"Disallow: /\"\n  ],\n  \"llmsTxt\": false,\n  \"indexNow\": true,\n  \"mailProvider\": \"smtp\",\n  \"mailFromName\": \"The Blog\",\n  \"mailFromAddress\": \"blog@blog.example\",\n  \"mailReplyTo\": \"hello@blog.example\",\n  \"contactEmail\": \"me@blog.example\",\n  \"securityContacts\": [\n    \"mailto:security@blog.example\",\n    \"https://blog.example/security\",\n    \"tel:+1-555-0100\"\n  ],\n  \"securityPolicy\": \"https://blog.example/policy\",\n  \"securityLanguages\": \"en, fr\",\n  \"relays\": [\n    \"https://relay.example/inbox\"\n  ],\n  \"locationSharing\": \"exact\",\n  \"menus\": {\n    \"main\": [\n      {\n        \"label\": \"Home\",\n        \"url\": \"/\"\n      }\n    ]\n  },\n  \"taxonomyRedirects\": [\n    {\n      \"taxonomy\": \"tag\",\n      \"from\": \"old\",\n      \"to\": \"new\"\n    }\n  ],\n  \"homepage\": \"home\",\n  \"postsPage\": \"blog\",\n  \"theme\": \"midnight\",\n  \"locale\": \"en-US\",\n  \"author\": \"ada\",\n  \"icon\": \"/uploads/2026/10/icon.png\",\n  \"avatar\": \"/uploads/2026/09/me.png\",\n  \"license\": \"https://license.example/terms\",\n  \"licenseName\": \"My License\",\n  \"indexNowKey\": \"abcdef0123456789\",\n  \"clientsWithoutPkce\": [\n    \"https://app.example/\"\n  ]\n}\n",
-      "overEveryKey": "{\n  \"feedSize\": 20,\n  \"title\": \"A Blog\",\n  \"tagline\": \"about things\",\n  \"url\": \"https://blog.example\",\n  \"postsPerPage\": 7,\n  \"timezone\": \"Europe/London\",\n  \"language\": \"en-GB\",\n  \"locale\": \"en-US\",\n  \"homepage\": \"home\",\n  \"postsPage\": \"blog\",\n  \"author\": \"ada\",\n  \"theme\": \"midnight\",\n  \"icon\": \"/uploads/2026/10/icon.png\",\n  \"license\": \"https://license.example/terms\",\n  \"licenseName\": \"My License\",\n  \"tagBase\": \"topics\",\n  \"categoryBase\": \"sections\",\n  \"comments\": false,\n  \"commentsCloseAfterDays\": 30,\n  \"commentEmailRetentionDays\": 90,\n  \"addressHashRetentionDays\": 60,\n  \"contactMessageRetentionDays\": 365,\n  \"webmentionsSend\": false,\n  \"webmentionsReceive\": false,\n  \"notifyServer\": \"https://rpc.example/RPC2\",\n  \"feedUpdatePeriod\": \"daily\",\n  \"feedUpdateFrequency\": 2,\n  \"aiCrawlers\": \"block-all\",\n  \"contentSignalSearch\": \"yes\",\n  \"contentSignalAiInput\": \"no\",\n  \"contentSignalAiTrain\": \"yes\",\n  \"robotsRules\": [\n    \"User-agent: BadBot\",\n    \"Disallow: /\"\n  ],\n  \"llmsTxt\": false,\n  \"indexNow\": true,\n  \"indexNowKey\": \"abcdef0123456789\",\n  \"mailProvider\": \"smtp\",\n  \"mailFromName\": \"The Blog\",\n  \"mailFromAddress\": \"blog@blog.example\",\n  \"mailReplyTo\": \"hello@blog.example\",\n  \"contactEmail\": \"me@blog.example\",\n  \"securityContacts\": [\n    \"mailto:security@blog.example\",\n    \"https://blog.example/security\",\n    \"tel:+1-555-0100\"\n  ],\n  \"securityPolicy\": \"https://blog.example/policy\",\n  \"securityLanguages\": \"en, fr\",\n  \"relays\": [\n    \"https://relay.example/inbox\"\n  ],\n  \"locationSharing\": \"exact\",\n  \"menus\": {\n    \"main\": [\n      {\n        \"label\": \"Home\",\n        \"url\": \"/\"\n      }\n    ]\n  },\n  \"taxonomyRedirects\": [\n    {\n      \"taxonomy\": \"tag\",\n      \"from\": \"old\",\n      \"to\": \"new\"\n    }\n  ],\n  \"clientsWithoutPkce\": [\n    \"https://app.example/\"\n  ],\n  \"custom\": {\n    \"kept\": true\n  },\n  \"avatar\": \"/uploads/2026/09/me.png\"\n}\n"
+      "fresh": {
+        "icon": "There is no upload at /uploads/2026/10/icon.png."
+      },
+      "overEveryKey": {
+        "icon": "There is no upload at /uploads/2026/10/icon.png."
+      }
     },
     "a creative commons license, with stale custom fields": {
       "settings": {
         "address_hash_retention_days": 0,
         "ai_crawlers": "allow",
         "author": "",
-        "avatar": "",
         "base_url": "",
         "category_base": "category",
-        "clients_without_pkce": [],
         "comment_email_retention_days": 0,
         "comments": true,
         "comments_close_after_days": 14,
@@ -1245,7 +1224,6 @@
         "homepage": "",
         "icon": "",
         "index_now": false,
-        "index_now_key": "",
         "language": "en",
         "license": {
           "choice": "cc-by",
@@ -1259,7 +1237,6 @@
         "mail_from_name": "",
         "mail_provider": "none",
         "mail_reply_to": "",
-        "menus": {},
         "notify_server": "https://rpc.rsscloud.io",
         "posts_page": "",
         "posts_per_page": 10,
@@ -1270,25 +1247,22 @@
         "security_policy": "",
         "tag_base": "tag",
         "tagline": "",
-        "taxonomy_redirects": [],
         "theme": "",
         "timezone": "UTC",
         "title": "Geekity",
         "webmentions_receive": true,
         "webmentions_send": true
       },
-      "fresh": "{\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"https://rpc.rsscloud.io\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"menus\": {},\n  \"taxonomyRedirects\": [],\n  \"license\": \"cc-by\"\n}\n",
-      "overEveryKey": "{\n  \"feedSize\": 20,\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"license\": \"cc-by\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"https://rpc.rsscloud.io\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"menus\": {},\n  \"taxonomyRedirects\": [],\n  \"custom\": {\n    \"kept\": true\n  }\n}\n"
+      "fresh": "{\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"https://rpc.rsscloud.io\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"license\": \"cc-by\",\n  \"menus\": {},\n  \"taxonomyRedirects\": []\n}\n",
+      "overEveryKey": "{\n  \"feedSize\": 20,\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"license\": \"cc-by\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"https://rpc.rsscloud.io\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"indexNowKey\": \"abcdef0123456789\",\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"menus\": {\n    \"main\": [\n      {\n        \"label\": \"Home\",\n        \"url\": \"/\"\n      }\n    ],\n    \"footer\": [\n      {\n        \"label\": \"Me\",\n        \"url\": \"https://me.example/\",\n        \"rel\": \"me\"\n      }\n    ]\n  },\n  \"taxonomyRedirects\": [\n    {\n      \"taxonomy\": \"tag\",\n      \"from\": \"old\",\n      \"to\": \"new\"\n    }\n  ],\n  \"clientsWithoutPkce\": [\n    \"https://app.example/\"\n  ],\n  \"custom\": {\n    \"kept\": true\n  }\n}\n"
     },
     "a posts page without a homepage": {
       "settings": {
         "address_hash_retention_days": 0,
         "ai_crawlers": "allow",
         "author": "",
-        "avatar": "",
         "base_url": "",
         "category_base": "category",
-        "clients_without_pkce": [],
         "comment_email_retention_days": 0,
         "comments": true,
         "comments_close_after_days": 14,
@@ -1302,7 +1276,6 @@
         "homepage": "",
         "icon": "",
         "index_now": false,
-        "index_now_key": "",
         "language": "en",
         "license": {
           "choice": "",
@@ -1316,7 +1289,6 @@
         "mail_from_name": "",
         "mail_provider": "none",
         "mail_reply_to": "",
-        "menus": {},
         "notify_server": "https://rpc.rsscloud.io",
         "posts_page": "",
         "posts_per_page": 10,
@@ -1327,7 +1299,6 @@
         "security_policy": "",
         "tag_base": "tag",
         "tagline": "",
-        "taxonomy_redirects": [],
         "theme": "",
         "timezone": "UTC",
         "title": "Geekity",
@@ -1335,17 +1306,15 @@
         "webmentions_send": true
       },
       "fresh": "{\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"https://rpc.rsscloud.io\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"menus\": {},\n  \"taxonomyRedirects\": []\n}\n",
-      "overEveryKey": "{\n  \"feedSize\": 20,\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"https://rpc.rsscloud.io\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"menus\": {},\n  \"taxonomyRedirects\": [],\n  \"custom\": {\n    \"kept\": true\n  }\n}\n"
+      "overEveryKey": "{\n  \"feedSize\": 20,\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"https://rpc.rsscloud.io\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"indexNowKey\": \"abcdef0123456789\",\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"menus\": {\n    \"main\": [\n      {\n        \"label\": \"Home\",\n        \"url\": \"/\"\n      }\n    ],\n    \"footer\": [\n      {\n        \"label\": \"Me\",\n        \"url\": \"https://me.example/\",\n        \"rel\": \"me\"\n      }\n    ]\n  },\n  \"taxonomyRedirects\": [\n    {\n      \"taxonomy\": \"tag\",\n      \"from\": \"old\",\n      \"to\": \"new\"\n    }\n  ],\n  \"clientsWithoutPkce\": [\n    \"https://app.example/\"\n  ],\n  \"custom\": {\n    \"kept\": true\n  }\n}\n"
     },
     "choices nobody offered": {
       "settings": {
         "address_hash_retention_days": 0,
         "ai_crawlers": "allow",
         "author": "",
-        "avatar": "",
         "base_url": "",
         "category_base": "category",
-        "clients_without_pkce": [],
         "comment_email_retention_days": 0,
         "comments": true,
         "comments_close_after_days": 14,
@@ -1359,7 +1328,6 @@
         "homepage": "",
         "icon": "",
         "index_now": false,
-        "index_now_key": "",
         "language": "en",
         "license": {
           "choice": "",
@@ -1373,7 +1341,6 @@
         "mail_from_name": "",
         "mail_provider": "none",
         "mail_reply_to": "",
-        "menus": {},
         "notify_server": "",
         "posts_page": "",
         "posts_per_page": 10,
@@ -1384,7 +1351,6 @@
         "security_policy": "",
         "tag_base": "tag",
         "tagline": "",
-        "taxonomy_redirects": [],
         "theme": "",
         "timezone": "UTC",
         "title": "Geekity",
@@ -1392,7 +1358,7 @@
         "webmentions_send": true
       },
       "fresh": "{\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"menus\": {},\n  \"taxonomyRedirects\": []\n}\n",
-      "overEveryKey": "{\n  \"feedSize\": 20,\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"menus\": {},\n  \"taxonomyRedirects\": [],\n  \"custom\": {\n    \"kept\": true\n  }\n}\n"
+      "overEveryKey": "{\n  \"feedSize\": 20,\n  \"title\": \"Geekity\",\n  \"tagline\": \"\",\n  \"url\": \"\",\n  \"postsPerPage\": 10,\n  \"timezone\": \"UTC\",\n  \"language\": \"en\",\n  \"tagBase\": \"tag\",\n  \"categoryBase\": \"category\",\n  \"comments\": true,\n  \"commentsCloseAfterDays\": 14,\n  \"commentEmailRetentionDays\": 0,\n  \"addressHashRetentionDays\": 0,\n  \"contactMessageRetentionDays\": 0,\n  \"webmentionsSend\": true,\n  \"webmentionsReceive\": true,\n  \"notifyServer\": \"\",\n  \"feedUpdatePeriod\": \"hourly\",\n  \"feedUpdateFrequency\": 1,\n  \"aiCrawlers\": \"allow\",\n  \"contentSignalSearch\": \"\",\n  \"contentSignalAiInput\": \"\",\n  \"contentSignalAiTrain\": \"\",\n  \"robotsRules\": [],\n  \"llmsTxt\": true,\n  \"indexNow\": false,\n  \"indexNowKey\": \"abcdef0123456789\",\n  \"mailProvider\": \"none\",\n  \"mailFromName\": \"\",\n  \"mailFromAddress\": \"\",\n  \"mailReplyTo\": \"\",\n  \"contactEmail\": \"\",\n  \"securityContacts\": [],\n  \"securityPolicy\": \"\",\n  \"securityLanguages\": \"\",\n  \"relays\": [],\n  \"locationSharing\": \"none\",\n  \"menus\": {\n    \"main\": [\n      {\n        \"label\": \"Home\",\n        \"url\": \"/\"\n      }\n    ],\n    \"footer\": [\n      {\n        \"label\": \"Me\",\n        \"url\": \"https://me.example/\",\n        \"rel\": \"me\"\n      }\n    ]\n  },\n  \"taxonomyRedirects\": [\n    {\n      \"taxonomy\": \"tag\",\n      \"from\": \"old\",\n      \"to\": \"new\"\n    }\n  ],\n  \"clientsWithoutPkce\": [\n    \"https://app.example/\"\n  ],\n  \"custom\": {\n    \"kept\": true\n  }\n}\n"
     }
   },
   "problems": {

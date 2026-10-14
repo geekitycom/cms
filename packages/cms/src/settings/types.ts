@@ -37,7 +37,10 @@ export interface SettingChange<V> {
   readonly at: Date;
   readonly by: ChangedBy;
   readonly dirs: SettingsDirs;
+  readonly settings: SettingsRegistry;
 }
+
+export type ChangeListener<V> = (change: SettingChange<V>) => Promise<void> | void;
 
 /** A field of the resolved config that, when it holds a value, wins over the file. */
 export interface ConfigOverride<V> {
@@ -146,6 +149,7 @@ export interface SettingsRegistry {
    * setting whose value changed.
    */
   set(namespace: string, changes: ReadonlyMap<string, unknown>, by: ChangedBy): Promise<SetResult>;
+  watch<V>(setting: SettingRef<V>, listener: ChangeListener<V>): () => void;
   /** Every declared setting, core first, for the CLI's `list`. */
   list(): readonly SettingRef<unknown>[];
   /** Register a plugin's namespace. Refuses a reserved or clashing namespace. */

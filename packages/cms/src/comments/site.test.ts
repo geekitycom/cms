@@ -10,7 +10,7 @@ import { tiedErrors } from '../__testing__/form-errors.ts';
 import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { COMMENT_FIELDS, MINIMUM_SUBMIT_SECONDS } from './submission.ts';
 import type { CommentChecker, CommentSubmission, CommentVerdict } from '../forms/checker.ts';
 import { COMMENT_POST_PATH } from './form.ts';
@@ -639,7 +639,7 @@ Words.
 
   it('is closed everywhere when the site switch is off', async () => {
     const { cms, contentDir } = await site();
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir,
       settings: { ...DEFAULT_SITE_SETTINGS, base_url: BASE_URL, comments: false },
     });
@@ -650,7 +650,7 @@ Words.
 
   it('never closes when the window is zero', async () => {
     const { cms, contentDir } = await site({ 'posts/2026-01-01-hello-world.md': OLD });
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir,
       settings: { ...DEFAULT_SITE_SETTINGS, base_url: BASE_URL, comments_close_after_days: 0 },
     });
@@ -665,7 +665,7 @@ Words.
     await approve(cms, held?.id ?? '');
 
     // Now close the site's comments and ask again.
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir,
       settings: { ...DEFAULT_SITE_SETTINGS, base_url: BASE_URL, comments: false },
     });

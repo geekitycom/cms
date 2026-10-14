@@ -430,8 +430,6 @@ export function createWebmentionService(
       if (change.origin === 'scan') return;
       whenSending((site) => {
         sendFor(change, site.language);
-        // And a reply post edited, published or withdrawn changes the replies
-        // under whatever it is in.
         for (const version of [change.previous, change.next]) {
           if (version !== undefined) conversationChanged(version);
         }

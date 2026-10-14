@@ -28,7 +28,7 @@
 import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../web/env.ts';
-import { updateSiteSettings } from '../site/site-json.ts';
+import { editSiteSetting } from './site-setting-edit.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import {
   menuItemLineProblem,
@@ -245,10 +245,11 @@ export function mountNavigationScreen(
     }
 
     const parsed = menuItemsFromText(items);
-    await updateSiteSettings({
-      contentDir: c.var.config.contentDir,
-      change: (current) => ({ ...current, menus: { ...current.menus, [name]: parsed } }),
-    });
+    const saved = await editSiteSetting(c.var.settings, 'menus', (menus) => ({
+      ...menus,
+      [name]: parsed,
+    }));
+    if (!saved.ok) return refused(c, saved.problems);
 
     flash(c, 'notice', `${box.label} saved: ${count(parsed.length, 'item')}.`);
     return c.redirect(NAVIGATION_PATH, 303);
@@ -277,13 +278,11 @@ export function mountNavigationScreen(
     // An empty menu under that name, and only if the file still has none: the
     // re-read inside the write is the same guard the check above is, against
     // the same name added twice in the moment between them.
-    await updateSiteSettings({
-      contentDir: c.var.config.contentDir,
-      change: (current) => ({
-        ...current,
-        menus: { ...current.menus, [name]: current.menus[name] ?? [] },
-      }),
-    });
+    const added = await editSiteSetting(c.var.settings, 'menus', (menus) => ({
+      ...menus,
+      [name]: menus[name] ?? [],
+    }));
+    if (!added.ok) return refused(c, added.problems);
 
     const { areas } = activeThemeAreas({
       themesDir: c.var.config.themesDir,
@@ -329,14 +328,12 @@ export function mountNavigationScreen(
       return c.redirect(NAVIGATION_PATH, 303);
     }
 
-    await updateSiteSettings({
-      contentDir: c.var.config.contentDir,
-      change: (current) => {
-        const menus = { ...current.menus };
-        delete menus[name];
-        return { ...current, menus };
-      },
+    const deleted = await editSiteSetting(c.var.settings, 'menus', (menus) => {
+      const kept = { ...menus };
+      delete kept[name];
+      return kept;
     });
+    if (!deleted.ok) return refused(c, deleted.problems);
 
     flash(c, 'notice', `The “${name}” menu is gone.`);
     return c.redirect(NAVIGATION_PATH, 303);
@@ -395,4 +392,9 @@ export function addMenuProblem(name: string, menus: NavigationMenus): string | u
 /** "1 item", "2 items". */
 function count(howMany: number, singular: string): string {
   return `${String(howMany)} ${howMany === 1 ? singular : `${singular}s`}`;
+}
+
+function refused(c: Context<GeekityEnv>, problems: Readonly<Record<string, string>>): Response {
+  flash(c, 'error', `Nothing was saved. ${Object.values(problems).join(' ')}`);
+  return c.redirect(NAVIGATION_PATH, 303);
 }

@@ -5,12 +5,8 @@ import { actorKeyFile, ensureKeysDir, KEY_FILE_MODE } from '../federation/keys.t
 import { readFileIfPresentSync, writeFileAtomicallySync } from '../files/atomic.ts';
 import { relayList } from '../site/setting-values.ts';
 import type { SiteSettings } from '../site/settings.ts';
-import {
-  parseSiteJson,
-  settingsFromSiteJson,
-  siteDataPath,
-  siteJsonText,
-} from '../site/site-json.ts';
+import { fileWith, storedValues } from '../settings/registry.ts';
+import { parseSiteJson, SITE, siteJsonPath, withoutRetiredKeys } from '../site/namespace.ts';
 import { USERS_FILE_MODE, usersFile, usersJsonText } from '../site/users.ts';
 import { DEFAULT_MENU_NAME, menuItemsFromText } from '../site/navigation.ts';
 import { taxonomyRedirectsOf } from '../content/taxonomy.ts';
@@ -162,11 +158,14 @@ export function migrateSettingsToFile(db: DatabaseSync, contentDir: string): voi
 
   if (rows !== undefined && rows.length > 0) {
     const stored = settingsFromRows(rows);
-    const file = siteDataPath(contentDir);
-    const existing = parseSiteJson(readFileIfPresentSync(file) ?? '');
-    const settings = fileWasEditedLast(file, rows) ? settingsFromSiteJson(existing) : stored;
+    const file = siteJsonPath(contentDir);
+    const existing = withoutRetiredKeys(parseSiteJson(readFileIfPresentSync(file) ?? ''));
+    const settings = fileWasEditedLast(file, rows) ? storedValues(SITE, existing) : stored;
 
-    writeFileAtomicallySync(file, siteJsonText(settings, existing));
+    writeFileAtomicallySync(
+      file,
+      `${JSON.stringify(fileWith(SITE, settings, existing), null, 2)}\n`,
+    );
   }
 
   // Dropped whether or not it had rows: a fresh database gets the table from
@@ -270,7 +269,7 @@ function settingsFromRows(rows: readonly LegacySetting[]): SiteSettings {
   // worth serves both: the rows are spelled as the file spells them and read
   // back the same way. `relays`, `navigation` and `taxonomyRedirects` were
   // stored one entry per line, which is not how the file holds them.
-  return settingsFromSiteJson({
+  return storedValues(SITE, {
     ...stored,
     ...(stored['baseUrl'] === undefined ? {} : { url: stored['baseUrl'] }),
     ...(stored['postsPerPage'] === undefined

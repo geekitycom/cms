@@ -13,7 +13,7 @@ import { createCms } from '../index.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
-import { writeSiteJson } from '../site/site-json.ts';
+import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { postObject } from './article.ts';
 import { OUTBOX_PAGE_SIZE } from './federation.ts';
 import { createActivityId } from './paths.ts';
@@ -70,7 +70,7 @@ async function site(
   const contentDir = await temporaryDir('geekity-article-content-');
   await writeTree(contentDir, files);
 
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,
@@ -1461,7 +1461,7 @@ describe('a site in a subdirectory', () => {
     const contentDir = await temporaryDir('geekity-article-sub-content-');
     await writeTree(contentDir, HELLO);
 
-    await writeSiteJson({
+    await writeSiteSettings({
       contentDir,
       settings: {
         ...DEFAULT_SITE_SETTINGS,

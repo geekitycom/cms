@@ -10,7 +10,9 @@ import type { Cms } from './index.ts';
 import { INDEXNOW_ENDPOINT } from './indexnow.ts';
 import { saveUrlOf } from './admin/__testing__/editor-form.ts';
 import { DEFAULT_SITE_SETTINGS } from './site/settings.ts';
-import { writeSiteJson } from './site/site-json.ts';
+import { writeSiteSettings } from './__testing__/site-settings.ts';
+import { nextEvent } from './__testing__/wait.ts';
+import { SITE } from './site/namespace.ts';
 
 /**
  * IndexNow (TASK-151): a site that turns it on serves a key at `/{key}.txt`
@@ -76,7 +78,7 @@ async function site(
   }
 
   const baseUrl = options.baseUrl ?? BASE_URL;
-  await writeSiteJson({
+  await writeSiteSettings({
     contentDir,
     settings: {
       ...DEFAULT_SITE_SETTINGS,
@@ -161,6 +163,31 @@ describe('turning IndexNow on (AC #1)', () => {
     ) as Record<string, unknown>;
     assert.equal(again['indexNowKey'], key);
     assert.equal((await cms.app.request(`/${key as string}.txt`)).status, 200);
+  });
+});
+
+describe('a site that boots with IndexNow on and no key', () => {
+  it('mints a key at boot and serves it', async () => {
+    const contentDir = await box.dir('geekity-indexnow-boot-');
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    const siteJson = path.join(contentDir, '_data', 'site.json');
+    await writeFile(siteJson, JSON.stringify({ url: BASE_URL, indexNow: true }), 'utf8');
+
+    const cms = await box.site({ contentDir, baseUrl: BASE_URL });
+
+    const key = await nextEvent<string>('the IndexNow key', (done) => {
+      const unwatch = cms.settings.watch(SITE.index_now_key, ({ next }) => {
+        done(next);
+      });
+      void cms.settings.get(SITE.index_now_key).then((current) => {
+        if (current !== '') done(current);
+      });
+      return unwatch;
+    });
+    assert.match(key, /^[0-9a-f]{32}$/);
+    const file = JSON.parse(await readFile(siteJson, 'utf8')) as Record<string, unknown>;
+    assert.equal(file['indexNowKey'], key);
+    assert.equal((await cms.app.request(`/${key}.txt`)).status, 200);
   });
 });
 
