@@ -11,7 +11,7 @@ import { cleanupTemporaryDirs, PACKAGE_ROOT, temporaryDir } from './__testing__/
 import { nextEvent } from './__testing__/wait.ts';
 import { createFileRecords } from './jobs/file-records.ts';
 import type { JobStatus } from './jobs/types.ts';
-import { askToReload, controlSocketPath } from './supervisor/control.ts';
+import { askToReload, controlSocketPath, isServing } from './supervisor/control.ts';
 
 after(cleanupTemporaryDirs);
 
@@ -156,6 +156,7 @@ async function reloadWhenUp(site: Site): Promise<void> {
   await whenChanged('the control socket', tmpdir(), () =>
     Promise.resolve(existsSync(socket) ? true : undefined),
   );
+  while (!(await isServing(site.dataDir)));
   assert.deepEqual(await askToReload(site.dataDir), { ok: true });
 }
 
