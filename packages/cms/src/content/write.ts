@@ -12,7 +12,7 @@ import type { Document, DocumentContent } from './document.ts';
 import { CITATION_FIELDS, extraFromForm, formInReplyTo, splitTags } from './document-form.ts';
 import type { EditorForm, ResolvedMedia } from './document-form.ts';
 import type { DocumentKind } from './document-kind.ts';
-import { enclosureOf, isUploadUrl, isWebUrl } from './enclosure.ts';
+import { enclosureOf, isWebUrl } from './enclosure.ts';
 import { resolveEnclosure } from './enclosure-form.ts';
 import { resolveEvent } from './event-form.ts';
 import type { EditorField, Refusal } from './form-error.ts';
@@ -25,7 +25,7 @@ import { postLocations } from './locations.ts';
 import { renderMarkdown } from './markdown.ts';
 import { parseDocument } from './parser.ts';
 import type { Photo } from './photo.ts';
-import { isLibraryImage, resolvePhotos } from './photo-form.ts';
+import { resolvePhotos } from './photo-form.ts';
 import { PINNED_POST_LIMIT, pinnedAt } from './pinned.ts';
 import { discoverPostType, replyTarget } from './post-type.ts';
 import type { PostType } from './post-type.ts';
@@ -174,15 +174,8 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
       );
     }
   }
-  const read = resolveRead(form.readStatus, form.readOf);
+  const read = resolveRead(form.readStatus, form.readOf, contentDir);
   if ('error' in read) return refused(read.error, read.field);
-  const cover = read.read?.of.photo?.url;
-  if (cover !== undefined && isUploadUrl(cover) && !isLibraryImage(cover, contentDir)) {
-    return refused(
-      `The cover ${cover} is not an image in the media library.`,
-      'editor-read-of-photo',
-    );
-  }
   if (read.read !== undefined && form.description !== '') {
     return refused(
       'A read is described by what it says, so it keeps no Description. Empty Description to save it.',
@@ -202,7 +195,11 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
   if ('error' in recording) return refused(recording.error, recording.field);
   const photos = resolvePhotos(form.photos, contentDir);
   if ('error' in photos) return refused(photos.error, photos.field);
-  const media: ResolvedMedia = { recording: recording.enclosure, photos: photos.photos };
+  const media: ResolvedMedia = {
+    recording: recording.enclosure,
+    photos: photos.photos,
+    read: read.read,
+  };
 
   const located = resolveLocation(form.location);
   if ('error' in located) return refused(located.error, located.field);

@@ -74,4 +74,12 @@ describe('findAsset', () => {
       assert.equal(served?.split(';')[0], canonicalType(media), extension);
     }
   });
+
+  it('serves captions and Markdown as UTF-8 text under their registered types', async () => {
+    const [, second] = await roots();
+    await writeFile(path.join(second, 'captions.vtt'), 'WEBVTT\n');
+    await writeFile(path.join(second, 'notes.md'), '# Notes\n');
+    assert.equal(findAsset('captions.vtt', [second])?.contentType, 'text/vtt; charset=utf-8');
+    assert.equal(findAsset('notes.md', [second])?.contentType, 'text/markdown; charset=utf-8');
+  });
 });

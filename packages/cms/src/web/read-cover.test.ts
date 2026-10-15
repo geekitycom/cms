@@ -111,6 +111,18 @@ describe('a read post with a cover (TASK-394)', () => {
     assert.doesNotMatch(html, /class="post-photos"/, 'the cover is not a post photo');
   });
 
+  it('asks for a cover-sized candidate and never fetches the cover first', async () => {
+    for (const pathname of [PERMALINK, '/']) {
+      const html = await get(pathname);
+      const cover = /<span class="read-cover">[\s\S]*?<\/span>/.exec(html)?.[0] ?? '';
+      assert.match(cover, /<source [^>]*sizes="6rem"/, `${pathname}: the source is cover-sized`);
+      assert.match(cover, /<img [^>]*sizes="6rem"/, `${pathname}: the img is cover-sized`);
+      assert.doesNotMatch(cover, /100vw/, `${pathname}: no full-width candidate`);
+      assert.doesNotMatch(cover, /fetchpriority/, `${pathname}: the cover is not the lead image`);
+      assert.match(cover, /loading="lazy"/, `${pathname}: the cover loads lazily`);
+    }
+  });
+
   it('lists the cover on the citation in a listing', async () => {
     const html = await get('/');
     const article = /<article class="feed-item h-entry">[\s\S]*?<\/article>/.exec(html)?.[0] ?? '';

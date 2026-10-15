@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { after, describe, it } from 'node:test';
 
 import {
   readCite,
@@ -10,6 +13,13 @@ import {
 } from './read-form.ts';
 
 const BASE = 'https://site.example';
+
+const contentDir = mkdtempSync(path.join(tmpdir(), 'geekity-read-form-'));
+mkdirSync(path.join(contentDir, 'uploads'));
+writeFileSync(path.join(contentDir, 'uploads', 'a.jpg'), '');
+after(() => {
+  rmSync(contentDir, { recursive: true, force: true });
+});
 
 describe('the read form’s cover (TASK-394)', () => {
   it('reads the cover and its alt text off the submitted form and back into it', () => {
@@ -30,7 +40,7 @@ describe('the read form’s cover (TASK-394)', () => {
   it('keeps a cover that is an upload or a web address, and drops one emptied', () => {
     const blank = { name: 'Dune', author: '', uid: '', url: '', photo: '', photoAlt: '' };
     assert.deepEqual(
-      resolveRead('finished', { ...blank, photo: '/uploads/a.jpg', photoAlt: 'Sand' }),
+      resolveRead('finished', { ...blank, photo: '/uploads/a.jpg', photoAlt: 'Sand' }, contentDir),
       {
         read: {
           status: 'finished',
@@ -44,27 +54,40 @@ describe('the read form’s cover (TASK-394)', () => {
         },
       },
     );
-    const removed = resolveRead('finished', { ...blank, photoAlt: 'Left behind' });
+    const removed = resolveRead('finished', { ...blank, photoAlt: 'Left behind' }, contentDir);
     assert.ok('read' in removed);
     assert.equal(removed.read?.of.photo, undefined);
   });
 
   it('refuses a cover that is neither an upload nor a web address', () => {
     const blank = { name: 'Dune', author: '', uid: '', url: '', photo: '', photoAlt: '' };
-    const refused = resolveRead('finished', { ...blank, photo: 'dune.jpg' });
+    const refused = resolveRead('finished', { ...blank, photo: 'dune.jpg' }, contentDir);
     assert.ok('error' in refused);
     assert.equal(refused.field, 'editor-read-of-photo');
   });
 
-  it('refuses a cover with no title, as any read without one', () => {
-    const refused = resolveRead('', {
-      name: '',
-      author: '',
-      uid: '',
-      url: '',
-      photo: '/uploads/a.jpg',
-      photoAlt: '',
+  it('refuses a cover that is an upload the media library does not have', () => {
+    const blank = { name: 'Dune', author: '', uid: '', url: '', photo: '', photoAlt: '' };
+    const refused = resolveRead('finished', { ...blank, photo: '/uploads/b.jpg' }, contentDir);
+    assert.deepEqual(refused, {
+      error: 'The cover /uploads/b.jpg is not an image in the media library.',
+      field: 'editor-read-of-photo',
     });
+  });
+
+  it('refuses a cover with no title, as any read without one', () => {
+    const refused = resolveRead(
+      '',
+      {
+        name: '',
+        author: '',
+        uid: '',
+        url: '',
+        photo: '/uploads/a.jpg',
+        photoAlt: '',
+      },
+      contentDir,
+    );
     assert.ok('error' in refused);
     assert.equal(refused.field, 'editor-read-of-name');
   });

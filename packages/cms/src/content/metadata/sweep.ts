@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { stripMetadata, strippable, UnreadableMetadataError } from './index.ts';
 
-export const STRIP_TEMPORARY_SUFFIX = '.geekity-strip';
+export const HALF_WRITTEN_STRIP_SUFFIX = '.geekity-strip';
 
 export type SweptFile =
   | { path: string; outcome: 'stripped'; removed: readonly string[] }
@@ -27,7 +27,7 @@ export async function stripStoredUploads(
   options: SweepOptions = {},
 ): Promise<SweptFile[]> {
   const listed = await listFiles(directory);
-  for (const relative of listed.filter((each) => each.endsWith(STRIP_TEMPORARY_SUFFIX))) {
+  for (const relative of listed.filter((each) => each.endsWith(HALF_WRITTEN_STRIP_SUFFIX))) {
     await rm(path.join(directory, ...relative.split('/')), { force: true });
   }
   const files = listed.filter((relative) => strippable(path.extname(relative)));
@@ -84,7 +84,7 @@ async function listFiles(directory: string): Promise<string[]> {
 
 async function replaceKeepingTimes(file: string, bytes: Uint8Array): Promise<void> {
   const { atime, mtime } = await stat(file);
-  const temporary = `${file}${STRIP_TEMPORARY_SUFFIX}`;
+  const temporary = `${file}${HALF_WRITTEN_STRIP_SUFFIX}`;
   await writeFile(temporary, bytes);
   await utimes(temporary, atime, mtime);
   await rename(temporary, file);

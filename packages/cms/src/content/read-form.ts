@@ -1,8 +1,7 @@
 import { trimmedField } from '../util/forms.ts';
-import { isWebUrl } from './enclosure.ts';
+import { isUploadUrl, isWebUrl } from './enclosure.ts';
 import type { FieldError } from './form-error.ts';
-import { isPhotoUrl } from './photo.ts';
-import { photoRowFromMicropub, photoToMicropub } from './photo-form.ts';
+import { isLibraryImage, photoRowFromMicropub, photoToMicropub } from './photo-form.ts';
 import { isReadStatus, READ_STATUSES } from './read.ts';
 import type { Read, ReadOf } from './read.ts';
 
@@ -59,6 +58,7 @@ export function readOfForm(of: ReadOf | undefined): ReadOfForm {
 export function resolveRead(
   status: string,
   of: ReadOfForm,
+  contentDir: string,
 ): { read: Read | undefined } | FieldError {
   const filled = Object.values(of).some((value) => value !== '');
   if (status === '' && !filled) return { read: undefined };
@@ -84,11 +84,16 @@ export function resolveRead(
       field: 'editor-read-of-url',
     };
   }
-  if (of.photo !== '' && !isPhotoUrl(of.photo)) {
+  if (isUploadUrl(of.photo)) {
+    if (!isLibraryImage(of.photo, contentDir)) {
+      return {
+        error: `The cover ${of.photo} is not an image in the media library.`,
+        field: 'editor-read-of-photo',
+      };
+    }
+  } else if (of.photo !== '' && !isWebUrl(of.photo)) {
     return {
-      error:
-        'A cover is an image in the media library or an address starting https://, not ' +
-        `${of.photo}.`,
+      error: `A cover is an image in the media library or a web address, not ${of.photo}.`,
       field: 'editor-read-of-photo',
     };
   }

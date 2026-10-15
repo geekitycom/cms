@@ -470,6 +470,8 @@ function readContext(document: Document, images: ImageConfig | undefined): Docum
     line:
       images === undefined
         ? readLine(read)
-        : siteImageMarkup(images, readLine(read, { library: readAltTexts(images.contentDir) })),
+        : siteImageMarkup(images, readLine(read, { library: readAltTexts(images.contentDir) }), {
+            sizes: '6rem',
+          }),
   };
 }

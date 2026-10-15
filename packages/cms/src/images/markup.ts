@@ -1,3 +1,4 @@
+import { escapeAttribute } from '../util/html.ts';
 import { messageOf } from '../util/errors.ts';
 import { IMG_TAG, parseAttributes, uploadPath } from '../content/image-tags.ts';
 import { describeImage, generateImageVariants, imageMediaType } from './variants.ts';
@@ -24,7 +25,8 @@ export type DescribeImage = (source: string) => DescribedImage | undefined;
  *
  * `100vw` is 11ty/image's own default and the only honest one a CMS can pick:
  * how wide a picture is drawn is a fact about the theme's stylesheet, which
- * this code has never seen. A theme that knows better overrides it, and being
+ * this code has never seen. A tag that carries its own `sizes`, or a caller
+ * that passes {@link ImageLoading.sizes}, overrides it, and being
  * wrong here costs bandwidth rather than correctness — the browser picks a
  * candidate that is too wide, never one that is too small.
  */
@@ -40,6 +42,8 @@ export const IMAGE_SIZES = '100vw';
  */
 export interface ImageLoading {
   lead?: boolean;
+  /** The `sizes` for a fragment whose images are drawn at a known width. */
+  sizes?: string;
 }
 
 /**
@@ -78,7 +82,8 @@ export function responsiveImages(
     const record = describe(source);
     if (record === undefined || record.variants.length === 0) return tag;
 
-    return picture({ tag, attributes: parsed, record, lead });
+    const sizes = parsed.get('sizes') ?? loading.sizes ?? IMAGE_SIZES;
+    return picture({ tag, attributes: parsed, record, lead, sizes });
   });
 }
 
@@ -121,6 +126,7 @@ function picture(input: {
   attributes: Map<string, string>;
   record: DescribedImage;
   lead: boolean;
+  sizes: string;
 }): string {
   const { record } = input;
 
@@ -137,12 +143,12 @@ function picture(input: {
     const type = imageMediaType(format);
     if (type === undefined) continue;
     sources.push(
-      `<source type="${type}" srcset="${srcset(record, variants)}" sizes="${IMAGE_SIZES}">`,
+      `<source type="${type}" srcset="${srcset(record, variants)}" sizes="${escapeAttribute(input.sizes)}">`,
     );
   }
 
   const fallback = byFormat.get(record.format) ?? [];
-  return `<picture>${sources.join('')}${image(input.tag, input.attributes, record, fallback, input.lead)}</picture>`;
+  return `<picture>${sources.join('')}${image(input, fallback)}</picture>`;
 }
 
 /**
@@ -154,16 +160,20 @@ function picture(input: {
  * would be a CMS that could not be argued with.
  */
 function image(
-  tag: string,
-  attributes: Map<string, string>,
-  record: DescribedImage,
+  input: {
+    tag: string;
+    attributes: Map<string, string>;
+    record: DescribedImage;
+    lead: boolean;
+    sizes: string;
+  },
   fallback: ImageVariant[],
-  lead: boolean,
 ): string {
+  const { tag, attributes, record, lead } = input;
   const additions: string[] = [];
 
   if (fallback.length > 0) additions.push(`srcset="${srcset(record, fallback)}"`);
-  additions.push(`sizes="${IMAGE_SIZES}"`);
+  additions.push(`sizes="${escapeAttribute(input.sizes)}"`);
   additions.push(`width="${String(record.width)}"`);
   additions.push(`height="${String(record.height)}"`);
   additions.push(lead ? 'fetchpriority="high"' : 'loading="lazy"');

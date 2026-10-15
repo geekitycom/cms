@@ -36,7 +36,7 @@ export interface UploadMediaType {
    * always accepted alongside these: a browser that does not recognise a file
    * sends no type at all, and there is then nothing to disagree with.
    */
-  declared: readonly string[];
+  declared: readonly [string, ...string[]];
   /** What the file is for. */
   kind: UploadKind;
   /**
@@ -255,12 +255,12 @@ export function normalizeUploadType(value: string): string {
  * first one {@link UploadMediaType.declared} lists, which is the registered
  * name where a browser may also send an older one.
  */
-export function canonicalType(media: UploadMediaType): string | undefined {
+export function canonicalType(media: UploadMediaType): string {
   return media.declared[0];
 }
 
 export function servedType(media: UploadMediaType): string {
-  const type = media.declared[0] ?? 'application/octet-stream';
+  const type = canonicalType(media);
   return media.text === true ? `${type}; charset=utf-8` : type;
 }
 

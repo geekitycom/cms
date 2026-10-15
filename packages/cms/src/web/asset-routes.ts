@@ -2,7 +2,7 @@ import type { Context, Next } from 'hono';
 
 import {
   findUpload,
-  isStripTemporary,
+  isHalfWrittenStrip,
   UPLOAD_ASSET_PREFIX,
   VARIANT_ASSET_PREFIX,
 } from '../content/uploads.ts';
@@ -119,7 +119,7 @@ function decodeVariantPath(relative: string): string {
  */
 export async function upload(c: Context<GeekityEnv>, next: Next): Promise<Response | undefined> {
   const relative = requestPath(c).slice(UPLOAD_ASSET_PREFIX.length);
-  if (isStripTemporary(relative)) return notFound(c);
+  if (isHalfWrittenStrip(relative)) return notFound(c);
   const asset = findUpload(relative, c.var.config.contentDir);
   if (asset === undefined) {
     await next();

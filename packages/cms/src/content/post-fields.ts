@@ -40,7 +40,6 @@ import {
   readCite,
   readOfForm,
   readOfFromMicropub,
-  resolveRead,
   submittedReadOfForm,
 } from './read-form.ts';
 import { RSVP_FRONT_MATTER_KEY, rsvpOf, rsvpValue } from './rsvp.ts';
@@ -251,10 +250,7 @@ const READ_FIELD: PostField = {
     readStatus: trimmedField(body, READ_FIELDS.status),
     readOf: submittedReadOfForm(body),
   }),
-  write: (extra, form) => {
-    const resolved = resolveRead(form.readStatus, form.readOf);
-    if (!('read' in resolved)) return;
-    const { read } = resolved;
+  write: (extra, _form, { media: { read } }) => {
     setOrDelete(extra, READ_OF_FRONT_MATTER_KEY, read && readWorkFrontMatter(read.of));
     setOrDelete(extra, READ_STATUS_FRONT_MATTER_KEY, read?.status);
   },

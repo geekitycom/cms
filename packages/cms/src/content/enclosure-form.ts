@@ -302,9 +302,8 @@ function measuredUpload(
   const media = UPLOAD_MEDIA_TYPES.get(path.extname(url).toLowerCase());
   if (media === undefined || !kinds.includes(media.kind)) return undefined;
   const asset = findUpload(url.slice(UPLOAD_ASSET_PREFIX.length), contentDir);
-  const type = canonicalType(media);
-  if (asset === undefined || type === undefined || asset.stats.size === 0) return undefined;
-  return { type, length: asset.stats.size };
+  if (asset === undefined || asset.stats.size === 0) return undefined;
+  return { type: canonicalType(media), length: asset.stats.size };
 }
 
 export function transcriptTypeFor(extension: string): Transcript['type'] | undefined {

@@ -357,7 +357,7 @@
           {{ field.text('editor-read-of-author', readFields.author, 'Author', value=form.readOf.author) }}
           {{ field.text('editor-read-of-uid', readFields.uid, 'Identifier', value=form.readOf.uid, placeholder='isbn:9780441478125', autocomplete='off', spellcheck='false') }}
           {{ field.text('editor-read-of-url', readFields.url, 'Address', value=form.readOf.url, type='url', error=(error if errorField == 'editor-read-of-url' else '')) }}
-          {{ field.text('editor-read-of-photo', readFields.photo, 'Cover', value=form.readOf.photo, list='editor-photo-uploads', autocomplete='off', error=(error if errorField == 'editor-read-of-photo' else ''), hint='An image in the media library or an address starting https://. Empty it to remove the cover.', hintId='editor-read-of-photo-hint') }}
+          {{ field.text('editor-read-of-photo', readFields.photo, 'Cover', value=form.readOf.photo, list='editor-photo-uploads', autocomplete='off', error=(error if errorField == 'editor-read-of-photo' else ''), hint='An image in the media library or a web address. Empty it to remove the cover.', hintId='editor-read-of-photo-hint') }}
           {{ field.text('editor-read-of-photo-alt', readFields.photoAlt, 'Cover alt text', value=form.readOf.photoAlt) }}
           <p class="label block whitespace-normal text-xs">A book or paper this post says its author read. An identifier is an ISBN or a DOI, written isbn:… or doi:…. Choose Not a read post and empty every box to remove it. A read is described by what it says, so leave its Description empty.</p>
         {% endcall %}

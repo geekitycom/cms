@@ -114,7 +114,7 @@ function previewDocument(
           return cited === '' ? [] : [[property, cited]];
         }),
       ),
-      ...previewRead(body),
+      ...previewRead(body, c.var.config.contentDir),
       ...previewRsvp(body),
       ...previewEvent(body, timezone),
     },
@@ -139,10 +139,11 @@ function previewRsvp(body: Record<string, unknown>): Record<string, unknown> {
   return rsvp === undefined ? {} : { [RSVP_FRONT_MATTER_KEY]: rsvp };
 }
 
-function previewRead(body: Record<string, unknown>): Record<string, unknown> {
+function previewRead(body: Record<string, unknown>, contentDir: string): Record<string, unknown> {
   const resolved = resolveRead(
     stringOrEmpty(body[READ_FIELDS.status]).trim(),
     submittedReadOfForm(body),
+    contentDir,
   );
   if (!('read' in resolved) || resolved.read === undefined) return {};
   return {
