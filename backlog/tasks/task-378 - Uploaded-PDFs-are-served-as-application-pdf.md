@@ -1,11 +1,11 @@
 ---
 id: TASK-378
 title: Uploaded PDFs are served as application/pdf
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-13 02:38'
-updated_date: '2026-10-15 01:04'
+updated_date: '2026-10-15 11:48'
 labels:
   - bug
 milestone: m-39
@@ -28,7 +28,7 @@ Seen on the andrewshell.org migration (v0.31.0). Every PDF under content/uploads
 <!-- AC:BEGIN -->
 - [x] #1 An uploaded .pdf is served with Content-Type: application/pdf
 - [x] #2 Every extension media.ts accepts is served with a specific type, not application/octet-stream; a test pins the two tables together
-- [ ] #3 On andrewshell.org, /uploads/2026/03/resume.pdf opens in the browser, as it does on WordPress today
+- [x] #3 On andrewshell.org, /uploads/2026/03/resume.pdf opens in the browser, as it does on WordPress today
 <!-- AC:END -->
 
 ## Implementation Plan

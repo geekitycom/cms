@@ -1,11 +1,11 @@
 ---
 id: TASK-377
 title: A missing upload falls through to declared redirects
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-13 02:35'
-updated_date: '2026-10-15 01:13'
+updated_date: '2026-10-15 11:48'
 labels:
   - bug
 milestone: m-39
@@ -27,7 +27,7 @@ Found building the andrewshell.org redirect generator (phase 3's legacy assets).
 <!-- AC:BEGIN -->
 - [x] #1 A request for an /uploads/ path with no file behind it is answered by a matching path-only declared redirect, else 404 as today
 - [x] #2 An existing upload is served exactly as today, and a declared redirect never shadows one
-- [ ] #3 On andrewshell.org, /uploads/2019/02/resume.pdf answers one 301 to /uploads/2026/03/resume.pdf
+- [x] #3 On andrewshell.org, /uploads/2019/02/resume.pdf answers one 301 to /uploads/2026/03/resume.pdf
 <!-- AC:END -->
 
 ## Implementation Plan
