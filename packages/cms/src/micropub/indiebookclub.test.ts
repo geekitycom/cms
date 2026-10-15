@@ -182,6 +182,33 @@ describe("indiebookclub's read posts (TASK-229)", () => {
     assert.deepEqual(data['read-of'], STORED);
   });
 
+  it('keeps a cover on the h-cite through create and q=source, never as the entry photo (TASK-394)', async () => {
+    const { cms, token } = await site();
+    const cite = {
+      type: ['h-cite'],
+      properties: {
+        name: ['The Left Hand of Darkness'],
+        photo: [{ value: 'https://covers.example/left-hand.jpg', alt: 'A figure on the ice' }],
+      },
+    };
+    const location = await created(
+      await post(cms, token, {
+        type: ['h-entry'],
+        properties: { 'read-status': ['finished'], 'read-of': [cite] },
+      }),
+    );
+    const { data } = matter(await fileOf(cms, location));
+    assert.deepEqual(data['read-of'], {
+      name: 'The Left Hand of Darkness',
+      photo: { url: 'https://covers.example/left-hand.jpg', alt: 'A figure on the ice' },
+    });
+    assert.equal(data['photo'], undefined);
+
+    const properties = await source(cms, token, location);
+    assert.deepEqual(properties['read-of'], [cite]);
+    assert.equal(properties['photo'], undefined);
+  });
+
   it('answers 201 to the request App activity recorded, visibility Public (TASK-243)', async () => {
     const { cms, token } = await site();
     const location = await created(

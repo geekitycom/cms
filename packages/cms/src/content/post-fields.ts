@@ -262,18 +262,22 @@ const READ_FIELD: PostField = {
     properties: { 'read-of': ['readOf'], 'read-status': ['readStatus'] },
     publishable: ['read-of'],
     toForm: (request) => {
-      const readOfForm = readOfFromMicropub(request.values('read-of'), request.refuse);
+      const readOfForm = readOfFromMicropub(
+        request.values('read-of'),
+        request.refuse,
+        request.baseUrl,
+      );
       const readStatus = request.text('read-status');
       if (readStatus !== '' && !isReadStatus(readStatus)) {
         request.refuse(`read-status is ${READ_STATUSES.join(', ')}, not ${readStatus}.`);
       }
       return { readOf: readOfForm, readStatus };
     },
-    toProperties: (document) => {
+    toProperties: (document, { baseUrl }) => {
       const read = readOf(document.extra);
       return read === undefined
         ? {}
-        : { 'read-of': [readCite(read.of)], 'read-status': [read.status] };
+        : { 'read-of': [readCite(read.of, baseUrl)], 'read-status': [read.status] };
     },
   },
 };

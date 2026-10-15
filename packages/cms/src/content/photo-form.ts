@@ -69,9 +69,7 @@ export function resolvePhotos(
   for (const [index, row] of rows.entries()) {
     const field: EditorField = `editor-photo-url-${String(index)}`;
     if (isUploadUrl(row.url)) {
-      const media = UPLOAD_MEDIA_TYPES.get(path.extname(row.url).toLowerCase());
-      const file = findUpload(row.url.slice(UPLOAD_ASSET_PREFIX.length), contentDir);
-      if (media?.kind !== 'image' || file === undefined) {
+      if (!isLibraryImage(row.url, contentDir)) {
         return { error: `The photo ${row.url} is not an image in the media library.`, field };
       }
     } else if (!isWebUrl(row.url)) {
@@ -83,6 +81,15 @@ export function resolvePhotos(
     photos.push(row.alt === '' ? { url: row.url } : { url: row.url, alt: row.alt });
   }
   return { photos };
+}
+
+/** Whether an upload's address names an image the media library holds. */
+export function isLibraryImage(url: string, contentDir: string): boolean {
+  const media = UPLOAD_MEDIA_TYPES.get(path.extname(url).toLowerCase());
+  return (
+    media?.kind === 'image' &&
+    findUpload(url.slice(UPLOAD_ASSET_PREFIX.length), contentDir) !== undefined
+  );
 }
 
 export function photoRowFromMicropub(value: unknown, baseUrl: string): PhotoRow | undefined {

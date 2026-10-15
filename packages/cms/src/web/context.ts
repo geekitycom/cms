@@ -332,7 +332,7 @@ export function documentContext(
     rsvp: rsvpContext(document),
     event: eventContext(document),
     citations: citationsOf(document.extra),
-    read: readContext(document),
+    read: readContext(document, images),
     // Over the raw front-matter value the spread above put here.
     lang: documentLanguage(document),
     enclosure: enclosureContext(document),
@@ -459,7 +459,7 @@ function eventContext(document: Document): DocumentContext['event'] {
   };
 }
 
-function readContext(document: Document): DocumentContext['read'] {
+function readContext(document: Document, images: ImageConfig | undefined): DocumentContext['read'] {
   const read = readOf(document.extra);
   if (read === undefined) return undefined;
   const { uid } = read.of;
@@ -467,6 +467,9 @@ function readContext(document: Document): DocumentContext['read'] {
     status: read.status,
     statusLabel: READ_STATUS_LABELS[read.status],
     of: { ...read.of, uidLabel: uid === undefined ? undefined : uidLabel(uid) },
-    line: readLine(read),
+    line:
+      images === undefined
+        ? readLine(read)
+        : siteImageMarkup(images, readLine(read, { library: readAltTexts(images.contentDir) })),
   };
 }

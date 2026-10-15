@@ -380,6 +380,15 @@ describe('a read (TASK-229)', () => {
       'read',
     );
   });
+
+  it('calls a read with a cover and no post photos a read, since the cover is the book’s (TASK-394)', () => {
+    const covered = post(
+      'read-of:\n  name: A Book\n  photo:\n    url: /uploads/a.jpg\n    alt: A cover\nread-status: finished\n',
+      'Loved it.',
+    );
+    assert.equal(postTypeOf(covered), 'read');
+    assert.equal(postLabel(covered), 'Finished reading: A Book Loved it.');
+  });
 });
 
 describe('an RSVP (TASK-198 AC #3)', () => {

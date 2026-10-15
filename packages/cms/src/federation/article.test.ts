@@ -641,6 +641,37 @@ function archive(count: number): Record<string, string> {
 }
 
 /** Follow a link the collection published, and read it as ActivityStreams. */
+describe('a read’s cover (TASK-394 AC #6)', () => {
+  it('rides on the read line’s h-cite in content, absolute, and is no attachment', async () => {
+    const instance = await site({
+      '_data/media.json': JSON.stringify({ '2026/10/peregrine.jpg': { alt: 'A girl floating' } }),
+      'posts/2026-10-02-peregrine.md': rawPost(
+        [
+          "date: '2026-10-02T09:00:00Z'",
+          'permalink: /2026/10/peregrine/',
+          'read-status: finished',
+          'read-of:',
+          '  name: Miss Peregrine’s Home for Peculiar Children',
+          '  photo:',
+          '    url: /uploads/2026/10/peregrine.jpg',
+        ],
+        'Strange and lovely.',
+      ),
+    });
+    const object = await articleAt(instance, '/2026/10/peregrine/');
+
+    assert.equal(object['type'], 'Note');
+    assert.equal(object['attachment'], undefined, 'the cover is not the post’s own image');
+    assert.match(
+      String(object['content']),
+      new RegExp(
+        '<span class="p-read-of h-cite"><span class="read-cover"><img class="u-photo" ' +
+          `src="${BASE_URL}/uploads/2026/10/peregrine.jpg" alt="A girl floating"></span>`,
+      ),
+    );
+  });
+});
+
 async function fetchLink(instance: Cms, href: unknown): Promise<Record<string, unknown>> {
   assert.equal(typeof href, 'string', 'the collection published a link to follow');
   const url = new URL(href as string);

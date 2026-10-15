@@ -149,6 +149,8 @@ const FILLED_FORM: [string, string][] = [
   ['photo-url-1', ''],
   ['read-of-author', ''],
   ['read-of-name', 'A book'],
+  ['read-of-photo', ''],
+  ['read-of-photo-alt', ''],
   ['read-of-uid', ''],
   ['read-of-url', ''],
   ['read-status', 'finished'],

@@ -75,7 +75,7 @@ const GROUPS: Readonly<Record<EditorGroup, GroupRule>> = {
   },
   read: {
     filled: ({ readStatus, readOf: of }) =>
-      filledIn(readStatus, of.name, of.author, of.uid, of.url),
+      filledIn(readStatus, of.name, of.author, of.uid, of.url, of.photo, of.photoAlt),
     fieldPrefixes: ['editor-read-'],
   },
   summary: {

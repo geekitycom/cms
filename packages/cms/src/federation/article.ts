@@ -316,12 +316,16 @@ export function postObject(
     ],
   };
 
+  const readLineOptions = {
+    library: readAltTexts(context.data.config.contentDir),
+    baseUrl,
+  };
   if (postObjectType(document) === 'Note') {
     return new Note({
       ...common,
       contents: inLanguage(
         citing(document, context.data.cited) +
-          readLine(readOf(document.extra)) +
+          readLine(readOf(document.extra), readLineOptions) +
           noteContent(document),
         language,
       ),
@@ -347,7 +351,9 @@ export function postObject(
     name: document.title === '' ? null : document.title,
     summaries: summary === '' ? [] : inLanguage(escapeText(summary), language),
     contents: inLanguage(
-      citing(document, context.data.cited) + readLine(readOf(document.extra)) + document.html,
+      citing(document, context.data.cited) +
+        readLine(readOf(document.extra), readLineOptions) +
+        document.html,
       language,
     ),
   });

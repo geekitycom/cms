@@ -23,46 +23,46 @@ Every template gets:
 
 A document, which is one post, one page or one entry of a listing, adds:
 
-| Key                                         | What it holds                                                                                                                  |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `title`                                     | Display title. Empty for an untitled post or page.                                                                             |
-| `label`                                     | What a link to it says: its title, else its first words or `Untitled` ([Titles](../content.md#titles)).                        |
-| `date`                                      | Publish date, a JavaScript `Date` at the UTC instant the file holds. Absent when the document has none.                        |
-| `updated`                                   | Last modified date, a `Date`, when the front matter has one.                                                                   |
-| `tags`                                      | The document's tags, in file order.                                                                                            |
-| `categories`                                | The document's categories, in file order.                                                                                      |
-| `content`                                   | The Markdown body rendered to HTML. Print it with `\| safe`.                                                                   |
-| `summary`                                   | Its `description` as plain text, else an excerpt of the body, else empty. The line the feeds publish.                          |
-| `excerpt`                                   | `summary` without a read post's read line: its own words. What a listing prints under a headline.                              |
-| `url`                                       | The document's URL path, the same value as `page.url`.                                                                         |
-| `page.url`                                  | The document's URL path. Always ends in `/`.                                                                                   |
-| `page.date`                                 | The same `Date` as `date`.                                                                                                     |
-| `page.fileSlug`                             | The permalink's last segment.                                                                                                  |
-| `page.inputPath`                            | The source file, relative to the content directory.                                                                            |
-| `type`                                      | `post` or `page`.                                                                                                              |
-| `permalink`, `slug`, `draft`, `description` | Straight from the front matter.                                                                                                |
-| `lang`                                      | The `lang` front matter as a canonical tag, such as `fr-CA`. Absent when it names none or no tag.                              |
-| `enclosure`                                 | The post's recording, parsed, with `player` (`audio` or `video`) and `transcript.captions`. Absent with none.                  |
-| `photos`                                    | The post's photos, each `{ url, alt, html }`. `html` is the `img.u-photo`, responsive. Empty with none.                        |
-| `citations`                                 | What it reposts, likes or bookmarks, each `{ property, url, context }`. `context` has the shape of `replyContext`, when known. |
-| `read`                                      | A read post's `{ status, statusLabel, of, line }`. `of` is `{ name, author, uid, uidLabel, url }`.                             |
-| `rsvp`                                      | An RSVP's `{ value, label, line }`: `yes`, `no`, `maybe` or `interested`, its words, and its `p-rsvp` line.                    |
-| `event`                                     | An event's `{ start, end, location }`: `Date`s, and `{ kind: "place", name }` or `{ kind: "virtual", url }`.                   |
-| `syndicateTo`                               | On a post's page, the syndication targets it selects, each `{ id, name, url }`. Empty with none.                               |
-| `syndication`                               | Its copies elsewhere, each `{ url, label }`: front matter `syndication`, and on its page the copies targets made.              |
-| `original`                                  | Where it was first published, `{ url, label }`: `canonical_href`, named by `canonical_name` or its host.                       |
-| `author`                                    | Who wrote it, as a profile, not a string. See [Bylines and author archives](bylines.md).                                       |
-| `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                                 |
-| `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                                    |
-| `next`                                      | The published post after it. Absent on the newest post, and on a page.                                                         |
-| `backlinks`                                 | The site's listed posts and pages that link to it, newest first, each `{ title, url, date }`. Empty with none.                 |
-| `newestPosts`                               | A function, front page only: `newestPosts(5)` is the five newest published posts, as entries.                                  |
-| `postsPage`                                 | The page carrying the listing, as `{ title, url }`, on the front page only. Absent when the site names none.                   |
-| `archiveMonths`                             | Every published post as `{ month, posts }`, newest month first. Only on a page that says `archive: true`.                      |
-| `webmention`                                | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.                   |
-| `noindex`                                   | `true` on an unlisted or unpublished page, which the base layout prints as a robots `noindex` meta. Else absent.               |
-| `conversation`                              | The replies, likes and boosts under the post. Only when there are any. See [The conversation](conversation.md).                |
-| everything else                             | Any front matter key the CMS does not model is on the context under its own name.                                              |
+| Key                                         | What it holds                                                                                                                                 |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`                                     | Display title. Empty for an untitled post or page.                                                                                            |
+| `label`                                     | What a link to it says: its title, else its first words or `Untitled` ([Titles](../content.md#titles)).                                       |
+| `date`                                      | Publish date, a JavaScript `Date` at the UTC instant the file holds. Absent when the document has none.                                       |
+| `updated`                                   | Last modified date, a `Date`, when the front matter has one.                                                                                  |
+| `tags`                                      | The document's tags, in file order.                                                                                                           |
+| `categories`                                | The document's categories, in file order.                                                                                                     |
+| `content`                                   | The Markdown body rendered to HTML. Print it with `\| safe`.                                                                                  |
+| `summary`                                   | Its `description` as plain text, else an excerpt of the body, else empty. The line the feeds publish.                                         |
+| `excerpt`                                   | `summary` without a read post's read line: its own words. What a listing prints under a headline.                                             |
+| `url`                                       | The document's URL path, the same value as `page.url`.                                                                                        |
+| `page.url`                                  | The document's URL path. Always ends in `/`.                                                                                                  |
+| `page.date`                                 | The same `Date` as `date`.                                                                                                                    |
+| `page.fileSlug`                             | The permalink's last segment.                                                                                                                 |
+| `page.inputPath`                            | The source file, relative to the content directory.                                                                                           |
+| `type`                                      | `post` or `page`.                                                                                                                             |
+| `permalink`, `slug`, `draft`, `description` | Straight from the front matter.                                                                                                               |
+| `lang`                                      | The `lang` front matter as a canonical tag, such as `fr-CA`. Absent when it names none or no tag.                                             |
+| `enclosure`                                 | The post's recording, parsed, with `player` (`audio` or `video`) and `transcript.captions`. Absent with none.                                 |
+| `photos`                                    | The post's photos, each `{ url, alt, html }`. `html` is the `img.u-photo`, responsive. Empty with none.                                       |
+| `citations`                                 | What it reposts, likes or bookmarks, each `{ property, url, context }`. `context` has the shape of `replyContext`, when known.                |
+| `read`                                      | A read post's `{ status, statusLabel, of, line }`. `of` is `{ name, author, uid, uidLabel, url, photo }`, `photo` the cover's `{ url, alt }`. |
+| `rsvp`                                      | An RSVP's `{ value, label, line }`: `yes`, `no`, `maybe` or `interested`, its words, and its `p-rsvp` line.                                   |
+| `event`                                     | An event's `{ start, end, location }`: `Date`s, and `{ kind: "place", name }` or `{ kind: "virtual", url }`.                                  |
+| `syndicateTo`                               | On a post's page, the syndication targets it selects, each `{ id, name, url }`. Empty with none.                                              |
+| `syndication`                               | Its copies elsewhere, each `{ url, label }`: front matter `syndication`, and on its page the copies targets made.                             |
+| `original`                                  | Where it was first published, `{ url, label }`: `canonical_href`, named by `canonical_name` or its host.                                      |
+| `author`                                    | Who wrote it, as a profile, not a string. See [Bylines and author archives](bylines.md).                                                      |
+| `activityStreams`                           | The post's ActivityPub object id, absolute. Only on a rendered published post.                                                                |
+| `previous`                                  | The published post before this one by date, as `{ title, url }`. Absent on the oldest post.                                                   |
+| `next`                                      | The published post after it. Absent on the newest post, and on a page.                                                                        |
+| `backlinks`                                 | The site's listed posts and pages that link to it, newest first, each `{ title, url, date }`. Empty with none.                                |
+| `newestPosts`                               | A function, front page only: `newestPosts(5)` is the five newest published posts, as entries.                                                 |
+| `postsPage`                                 | The page carrying the listing, as `{ title, url }`, on the front page only. Absent when the site names none.                                  |
+| `archiveMonths`                             | Every published post as `{ month, posts }`, newest month first. Only on a page that says `archive: true`.                                     |
+| `webmention`                                | Where a webmention about this page is sent. Only on a rendered document, and only while the site takes them.                                  |
+| `noindex`                                   | `true` on an unlisted or unpublished page, which the base layout prints as a robots `noindex` meta. Else absent.                              |
+| `conversation`                              | The replies, likes and boosts under the post. Only when there are any. See [The conversation](conversation.md).                               |
+| everything else                             | Any front matter key the CMS does not model is on the context under its own name.                                                             |
 
 A listing, which is the home page, a tag archive, a category archive or an
 author archive, adds:
