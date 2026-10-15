@@ -41,8 +41,10 @@ Commit that release-please can read.
    notes, and the rule that it must not commit.
 2. When it returns, read its report, then verify yourself:
    ```
-   pnpm build && pnpm test && pnpm typecheck && pnpm lint && pnpm format:check
+   pnpm build && pnpm test && pnpm test:11ty && pnpm typecheck && pnpm lint && pnpm format:check
    ```
+   This is the same set CI runs. Commit only when it exits 0: put the commit
+   after the checks in one `&&` chain, or test the exit status first.
    Skim the diff with `git diff --stat` and `git diff` on anything surprising.
    `backlog task view <id> --plain` must show the task Done with every criterion
    checked, or In Progress with the unchecked ones explained in its notes.

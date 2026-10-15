@@ -26,7 +26,7 @@ How to work:
 - Use the backlog CLI for every change to the task; never edit files under
   backlog/ by hand.
 - Verify with real commands before you claim anything: `pnpm build && pnpm test
-  && pnpm typecheck && pnpm lint && pnpm format:check`, and curl the running
+  && pnpm test:11ty && pnpm typecheck && pnpm lint && pnpm format:check`, and curl the running
   site where a criterion is about HTTP. Stop any server you start.
 - Check each acceptance criterion with `--check-ac` only when you have proof.
   Leave a criterion unchecked and the task In Progress when the proof needs
