@@ -267,8 +267,7 @@ async function activityStreamsDocument(
  * and query on the site's base URL — rather than taken from `request.url`,
  * which behind a proxy is the internal address. A post whose stored id is its
  * permalink is not one of these: the permalink lookup has already answered for
- * it, and answering again here would only invite a redirect to itself. A
- * revision a reissued id carries (TASK-417) is dropped before the match.
+ * it, and answering again here would only invite a redirect to itself.
  */
 function storedObjectAt(c: Context<GeekityEnv>): Document | undefined {
   const { search } = new URL(c.req.url);

@@ -170,8 +170,7 @@ export const SOURCE_MEDIA_TYPE = 'text/markdown';
  *
  * Either the post whose file stores that id, or the one at the permalink the
  * id spells — and then only when that post's id really is this URL, so a
- * migrated post is not found a second time under its permalink. An id a post
- * was reissued under (TASK-417) names the post its natural id does.
+ * migrated post is not found a second time under its permalink.
  */
 export function postByObjectId(
   store: DocumentLookup,
@@ -516,10 +515,6 @@ function citing(document: Document, cited: CitedPageReader): string {
     .join('');
 }
 
-/**
- * A note's title as a paragraph, or nothing when its text already opens with
- * it or, for a read, when it is only the name the read line already gives.
- */
 function noteHeading(document: Document, read: Read | undefined): string {
   const title = document.title.trim();
   if (
@@ -702,7 +697,7 @@ export type PinChange = 'pin' | 'unpin';
 /**
  * A post's ActivityStreams object id, off the Fedify context: its permalink,
  * or the id its file already names (decision-13), or the id it was federated
- * under after a `Delete` of that one (TASK-417).
+ * under after a `Delete` of that one.
  *
  * A thin wrapper over {@link postObjectId} so everything in this module reads
  * the id the same way and off the same base URL the object's `url` is built

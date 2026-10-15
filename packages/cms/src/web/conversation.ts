@@ -264,11 +264,6 @@ function fromQuotes(
   };
 }
 
-/**
- * What the fediverse said about a post, under every id it has federated
- * under (TASK-417): the first is the one its conversation is rooted at, so a
- * reply to any of them is a reply to the post.
- */
 function fromActivities(
   context: Reading,
   objectIds: readonly string[],

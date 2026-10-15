@@ -320,7 +320,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     const deleted = store.now().toISOString();
     if (shape.kind === 'object') {
       // Recorded before the first POST rather than after the last, so a crash
-      // in between never leaves a tombstoned id looking reusable (TASK-417).
+      // in between never leaves a tombstoned id looking reusable.
       return await send(
         context,
         postDeleteActivity(context, document, deleted),
@@ -572,7 +572,6 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         const shape = await shapeOf(context, stamped);
         // A like or a repost is sent again as it is: its id is one a peer
         // that already holds it recognises, and one that missed it does not.
-        // An object whose id was deleted is announced again, under a new one.
         if (!announced || shape.kind === 'citing' || wasDeleted(shape.id)) {
           return await announce(context, stamped, shape);
         }

@@ -5,7 +5,7 @@ import { FEDERATION_DATA_DIRECTORY } from './records.ts';
 
 /**
  * The object ids this site has sent a `Delete` for, and the ids a post was
- * federated under after one of them (TASK-417).
+ * federated under after one of them.
  *
  * Mastodon keeps a `Tombstone` for every id it is sent a `Delete` of, for
  * good, and from then on drops a `Create` of that id and every search that
@@ -20,7 +20,6 @@ import { FEDERATION_DATA_DIRECTORY } from './records.ts';
  * must not forget what the fediverse has been told is gone.
  */
 export interface ObjectIdRecord {
-  /** Every object id a `Delete` went out for, oldest first. */
   readonly deleted: readonly string[];
   /** The ids each natural id was federated under since, oldest first; the last is current. */
   readonly reissued: Readonly<Record<string, readonly string[]>>;
@@ -36,7 +35,6 @@ export function objectIdsFile(contentDir: string): string {
   return path.join(contentDir, ...OBJECT_IDS_FILE.split('/'));
 }
 
-/** The record, or an empty one for a site that never deleted anything. A damaged file throws. */
 export function readObjectIds(contentDir: string): ObjectIdRecord {
   const file = objectIdsFile(contentDir);
   const source = readFileIfPresentSync(file);
@@ -49,22 +47,18 @@ export function readObjectIds(contentDir: string): ObjectIdRecord {
   return parsed;
 }
 
-/** The id a post with this natural id federates under now. */
 export function currentObjectId(record: ObjectIdRecord, naturalId: string): string {
   return record.reissued[naturalId]?.at(-1) ?? naturalId;
 }
 
-/** Every id a post with this natural id has federated under, the natural one first. */
 export function objectIdsOf(record: ObjectIdRecord, naturalId: string): string[] {
   return [naturalId, ...(record.reissued[naturalId] ?? [])];
 }
 
-/** The natural id an id names: the id without the revision a reissue added. */
 export function naturalObjectId(objectId: string): string {
   return objectId.replace(REVISION, '');
 }
 
-/** Remember that a `Delete` of this id went out. */
 export async function recordDeleted(contentDir: string, objectId: string): Promise<void> {
   const file = objectIdsFile(contentDir);
   await withFileLock(file, () => {
@@ -74,11 +68,6 @@ export async function recordDeleted(contentDir: string, objectId: string): Promi
   });
 }
 
-/**
- * The id to announce a post with this natural id under: the current one, or,
- * when a `Delete` of that one went out, the next revision nobody was ever sent
- * a `Delete` of, which becomes current.
- */
 export async function claimObjectId(contentDir: string, naturalId: string): Promise<string> {
   const file = objectIdsFile(contentDir);
   return await withFileLock(file, () => {
