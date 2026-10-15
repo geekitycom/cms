@@ -2,7 +2,9 @@ import type { Context, Hono } from 'hono';
 
 import { CITATION_PROPERTIES, citedHost, citesAnImage, shownInFull } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
-import type { Document } from '../content/document.ts';
+import { commentPolicyOf } from '../comments/policy.ts';
+import type { CommentPolicy } from '../comments/policy.ts';
+import type { Document, DocumentType } from '../content/document.ts';
 import {
   AUTHOR_UNTIL_REQUEST,
   blankForm,
@@ -591,6 +593,15 @@ interface EditorAction {
   label: string;
 }
 
+function siteDefaultLabel(type: DocumentType, policy: CommentPolicy): string {
+  const these = type === 'post' ? 'posts' : 'pages';
+  if (!policy.enabled) return 'comments are off on this site';
+  if (!policy.openByDefault[type]) return `closed for ${these}`;
+  const days = policy.closeAfterDays;
+  if (days <= 0) return `open for ${these}`;
+  return `open for ${these}, closing ${String(days)} day${days === 1 ? '' : 's'} after the date`;
+}
+
 /** What {@link renderEditor} puts on the screen. */
 interface RenderEditorOptions {
   kind: DocumentScreens;
@@ -650,6 +661,7 @@ async function renderEditor(
     actions,
     trashed,
     commentSettings: COMMENT_SETTINGS,
+    commentsSiteDefault: siteDefaultLabel(kind.type, commentPolicyOf(c.var.renderer.site())),
     ...(kind.type === 'post'
       ? {
           enclosureFields: ENCLOSURE_FIELDS,

@@ -10,6 +10,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
+import { saveSettings } from './__testing__/settings.ts';
 import type { Browser } from './__testing__/harness.ts';
 import {
   COMMENT_ADMIN_FIELDS,
@@ -319,9 +320,35 @@ describe('the editor’s Comments field', () => {
     const { html } = await editing(agent);
 
     assert.match(html, /<select id="editor-comments" name="comments"[\s>]/);
-    assert.match(html, /<option value=""[^>]* selected>Follow the site settings<\/option>/);
+    assert.match(
+      html,
+      /<option value=""[^>]* selected>Follow the site settings \(open for posts, closing 14 days after the date\)<\/option>/,
+    );
     assert.match(html, /<option value="open">Open<\/option>/);
     assert.match(html, /<option value="closed">Closed<\/option>/);
+  });
+
+  it('names what the site settings say for the document’s type', async () => {
+    const { agent } = await moderating();
+    const label = async (url: string): Promise<string | undefined> =>
+      /<option value=""[^>]*>(Follow the site settings[^<]*)<\/option>/.exec(
+        await (await agent.get(url)).text(),
+      )?.[1];
+
+    assert.equal(await label('/admin/pages/new'), 'Follow the site settings (closed for pages)');
+
+    await saveSettings(agent, 'discussion', {
+      comments_on_pages: '1',
+      comments_close_after_days: '0',
+    });
+    assert.equal(await label('/admin/pages/new'), 'Follow the site settings (open for pages)');
+    assert.equal(await label('/admin/posts/new'), 'Follow the site settings (open for posts)');
+
+    await saveSettings(agent, 'discussion', { comments: '', comments_on_pages: '1' });
+    assert.equal(
+      await label('/admin/pages/new'),
+      'Follow the site settings (comments are off on this site)',
+    );
   });
 
   it('writes comments: false into the front matter, and closes the post', async () => {

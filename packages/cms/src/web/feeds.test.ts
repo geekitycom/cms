@@ -1551,10 +1551,9 @@ describe('a post’s comments feed', () => {
         permalink: '/2026/09/draft/',
         draft: true,
       }),
-      'pages/about.md': `---\ntitle: About\npermalink: /about/\n---\n\nA page.\n`,
     });
 
-    for (const url of ['/2026/09/nothing/feed/', '/2026/09/draft/feed/', '/about/feed/']) {
+    for (const url of ['/2026/09/nothing/feed/', '/2026/09/draft/feed/']) {
       assert.equal((await cms.app.request(url)).status, 404, url);
     }
   });
@@ -1822,7 +1821,7 @@ describe('the comments feeds on an HTML page', () => {
     }
   });
 
-  it('advertises a post’s own comments feed, and not a closed page’s', async () => {
+  it('advertises a post’s own comments feed, and a closed page’s', async () => {
     const { cms } = await site(files);
 
     const post =
@@ -1836,8 +1835,8 @@ describe('the comments feeds on an HTML page', () => {
 
     const page = (await (await cms.app.request('/about/')).text()).split('</head>')[0] ?? '';
     assert.ok(
-      !page.includes('/about/feed/'),
-      'a page that takes no comments has no comments feed to advertise',
+      page.includes('href="/about/feed/"'),
+      'a page that takes no comments still has what was said in a feed',
     );
   });
 });

@@ -237,7 +237,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     html:
       citationLines(document, context.replyContext, baseUrl) +
       rsvpLine(rsvpOf(document.extra)) +
-      readLine(readOf(document.extra)) +
+      readLine(readOf(document.extra), { library: context.altTexts, baseUrl }) +
       photosHtml(photos, context.altTexts ?? new Map(), baseUrl) +
       absoluteHtmlUrls(document.html, link, baseUrl),
     markdown: document.body,

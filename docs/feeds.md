@@ -225,11 +225,10 @@ Neither feed carries a [migrated comment](comments.md#migrated-comments).
 Both feeds are RSS 2.0 only. A comments feed has no Atom or JSON version, so
 `{permalink}feed/atom/` answers 404.
 
-- A post has a comments feed whether or not it still takes comments.
-- A page has one while it takes comments (`comments: true` in its front matter,
-  and comments on for the site). That is when the page shows its conversation.
-  For any other page, `{permalink}feed/` answers 404, and `/comments/feed/`
-  leaves out its comments.
+- A post or a page has a comments feed whether or not it still takes
+  comments, and `/comments/feed/` carries what was said on either. The page
+  chosen as the posts page is the exception: it shows the post listing rather
+  than its own content, so `{permalink}feed/` there answers 404.
 - A document with no replies answers an empty feed, not a 404. The document
   exists, and a feed reader that subscribed before the first reply should keep
   polling.

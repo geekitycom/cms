@@ -8,8 +8,9 @@
  * has one, against the bytes the file actually starts with.
  *
  * The table lives here rather than beside the endpoint because
- * {@link ResolvedConfig} validates a site's allowlist against it, and config
- * may not depend on the admin.
+ * {@link ResolvedConfig} validates a site's allowlist against it and the
+ * static file server serves each upload as the type named here, and neither
+ * may depend on the admin or the content layer.
  */
 
 /** Bytes a file of some format carries at a fixed offset. */
@@ -35,7 +36,7 @@ export interface UploadMediaType {
    * always accepted alongside these: a browser that does not recognise a file
    * sends no type at all, and there is then nothing to disagree with.
    */
-  declared: readonly string[];
+  declared: readonly [string, ...string[]];
   /** What the file is for. */
   kind: UploadKind;
   /**
@@ -44,6 +45,7 @@ export interface UploadMediaType {
    * which have no header to check.
    */
   signatures?: readonly (readonly UploadSignature[])[] | undefined;
+  text?: true;
 }
 
 /** The bytes of an ASCII string, for spelling a signature readably. */
@@ -152,12 +154,13 @@ export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
   // The two text formats have no header. Nothing is sniffed, and nothing needs
   // to be: they are served as text, and `application/octet-stream` is allowed
   // because that is what a browser sends for a file type it does not know.
-  ['.txt', { declared: ['text/plain', 'application/octet-stream'], kind: 'document' }],
+  ['.txt', { declared: ['text/plain', 'application/octet-stream'], kind: 'document', text: true }],
   [
     '.md',
     {
       declared: ['text/markdown', 'text/x-markdown', 'text/plain', 'application/octet-stream'],
       kind: 'document',
+      text: true,
     },
   ],
   // WebVTT opens with its name, after a byte order mark when the editor that
@@ -168,6 +171,7 @@ export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
     {
       declared: ['text/vtt', 'text/plain', 'application/octet-stream'],
       kind: 'document',
+      text: true,
       signatures: [
         [{ offset: 0, bytes: ascii('WEBVTT') }],
         [{ offset: 0, bytes: [0xef, 0xbb, 0xbf, ...ascii('WEBVTT')] }],
@@ -179,6 +183,7 @@ export const UPLOAD_MEDIA_TYPES: ReadonlyMap<string, UploadMediaType> = new Map<
     {
       declared: ['application/x-subrip', 'text/srt', 'text/plain', 'application/octet-stream'],
       kind: 'document',
+      text: true,
     },
   ],
   [
@@ -250,8 +255,13 @@ export function normalizeUploadType(value: string): string {
  * first one {@link UploadMediaType.declared} lists, which is the registered
  * name where a browser may also send an older one.
  */
-export function canonicalType(media: UploadMediaType): string | undefined {
+export function canonicalType(media: UploadMediaType): string {
   return media.declared[0];
+}
+
+export function servedType(media: UploadMediaType): string {
+  const type = canonicalType(media);
+  return media.text === true ? `${type}; charset=utf-8` : type;
 }
 
 /**

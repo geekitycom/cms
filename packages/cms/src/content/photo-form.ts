@@ -15,7 +15,7 @@ import { absoluteUrl } from '../util/url.ts';
 import type { Document } from './document.ts';
 import { isUploadUrl, isWebUrl } from './enclosure.ts';
 import type { EditorField, FieldError } from './form-error.ts';
-import { UPLOAD_MEDIA_TYPES } from './media.ts';
+import { UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import { PHOTO_FRONT_MATTER_KEY, photosOf } from './photo.ts';
 import type { Photo } from './photo.ts';
 import { findUpload, UPLOAD_ASSET_PREFIX } from './uploads.ts';
@@ -69,20 +69,26 @@ export function resolvePhotos(
   for (const [index, row] of rows.entries()) {
     const field: EditorField = `editor-photo-url-${String(index)}`;
     if (isUploadUrl(row.url)) {
-      const media = UPLOAD_MEDIA_TYPES.get(path.extname(row.url).toLowerCase());
-      const file = findUpload(row.url.slice(UPLOAD_ASSET_PREFIX.length), contentDir);
-      if (media?.kind !== 'image' || file === undefined) {
+      if (!isLibraryImage(row.url, contentDir)) {
         return { error: `The photo ${row.url} is not an image in the media library.`, field };
       }
     } else if (!isWebUrl(row.url)) {
       return {
-        error: `A photo is an image in the media library or an address starting https://, not ${row.url}.`,
+        error: `A photo is an image in the media library or a web address, not ${row.url}.`,
         field,
       };
     }
     photos.push(row.alt === '' ? { url: row.url } : { url: row.url, alt: row.alt });
   }
   return { photos };
+}
+
+export function isLibraryImage(url: string, contentDir: string): boolean {
+  const media = UPLOAD_MEDIA_TYPES.get(path.extname(url).toLowerCase());
+  return (
+    media?.kind === 'image' &&
+    findUpload(url.slice(UPLOAD_ASSET_PREFIX.length), contentDir) !== undefined
+  );
 }
 
 export function photoRowFromMicropub(value: unknown, baseUrl: string): PhotoRow | undefined {

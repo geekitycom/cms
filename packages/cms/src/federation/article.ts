@@ -36,8 +36,9 @@ import { photoAlt, photosOf } from '../content/photo.ts';
 import { placeWordList, shareLocation } from '../content/location.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { postLocations } from '../content/locations.ts';
-import { canonicalType, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
+import { canonicalType, UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import { readAltTexts } from '../content/alt-text.ts';
+import type { AltTextLibrary } from '../content/alt-text.ts';
 import { imagesIn } from '../content/image-tags.ts';
 import type { DocumentLookup } from '../content/store.ts';
 import { postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
@@ -279,6 +280,8 @@ export function postObject(
   ).tags;
   const inReplyTo = replyTarget(document);
   const mentioned = mentionedAccounts(document.body, context.data.config.contentDir);
+  let library: AltTextLibrary | undefined;
+  const altTexts = (): AltTextLibrary => (library ??= readAltTexts(context.data.config.contentDir));
   const common = {
     id: articleObjectId(context, document),
     // On either type, so an activitypub.type override never breaks a thread.
@@ -295,8 +298,8 @@ export function postObject(
     interactionPolicy: QUOTABLE_BY_ANYONE,
     attachments: [
       ...recordingAttachment(document, baseUrl, context.data.cited),
-      ...photoAttachments(document, context.data.config),
-      ...imageAttachments(document, context.data.config),
+      ...photoAttachments(document, context.data.config.baseUrl, altTexts),
+      ...imageAttachments(document, context.data.config.baseUrl, altTexts),
     ],
     location: place(
       shareLocation(
@@ -316,13 +319,16 @@ export function postObject(
     ],
   };
 
+  const read = readOf(document.extra);
+  const readLineHtml = readLine(read, {
+    library: read?.of.photo === undefined ? undefined : altTexts(),
+    baseUrl,
+  });
   if (postObjectType(document) === 'Note') {
     return new Note({
       ...common,
       contents: inLanguage(
-        citing(document, context.data.cited) +
-          readLine(readOf(document.extra)) +
-          noteContent(document),
+        citing(document, context.data.cited) + readLineHtml + noteContent(document),
         language,
       ),
     });
@@ -347,7 +353,7 @@ export function postObject(
     name: document.title === '' ? null : document.title,
     summaries: summary === '' ? [] : inLanguage(escapeText(summary), language),
     contents: inLanguage(
-      citing(document, context.data.cited) + readLine(readOf(document.extra)) + document.html,
+      citing(document, context.data.cited) + readLineHtml + document.html,
       language,
     ),
   });
@@ -420,17 +426,17 @@ function recordingAttachment(
  */
 function photoAttachments(
   document: Document,
-  config: { contentDir: string; baseUrl: string },
+  baseUrl: string,
+  altTexts: () => AltTextLibrary,
 ): Image[] {
-  const library = readAltTexts(config.contentDir);
   return photosOf(document.extra).map((photo) => {
     const media = isUploadUrl(photo.url)
       ? UPLOAD_MEDIA_TYPES.get(path.extname(photo.url).toLowerCase())
       : undefined;
-    const alt = photoAlt(photo, library) ?? '';
+    const alt = photoAlt(photo, altTexts()) ?? '';
     return new Image({
-      url: new URL(absoluteUrl(photo.url, config.baseUrl)),
-      mediaType: media?.kind === 'image' ? (canonicalType(media) ?? null) : null,
+      url: new URL(absoluteUrl(photo.url, baseUrl)),
+      mediaType: media?.kind === 'image' ? canonicalType(media) : null,
       name: alt === '' ? null : alt,
     });
   });
@@ -448,23 +454,23 @@ function photoAttachments(
  */
 function imageAttachments(
   document: Document,
-  config: { contentDir: string; baseUrl: string },
+  baseUrl: string,
+  altTexts: () => AltTextLibrary,
 ): Image[] {
-  const library = readAltTexts(config.contentDir);
   // A photo shown again in the body is already attached.
   const photos = new Set(photosOf(document.extra).map((photo) => photo.url));
   const attachments: Image[] = [];
   for (const image of imagesIn(document.html)) {
     if (image.source === undefined || photos.has(image.src)) continue;
-    if (library.get(image.source)?.kind === 'decorative') continue;
+    if (altTexts().get(image.source)?.kind === 'decorative') continue;
     const extension = path.extname(image.source).toLowerCase();
     const media = UPLOAD_MEDIA_TYPES.get(extension);
     if (media?.kind !== 'image') continue;
     const alt = image.alt?.trim() ?? '';
     attachments.push(
       new Image({
-        url: new URL(absoluteUrl(image.src, config.baseUrl)),
-        mediaType: canonicalType(media) ?? null,
+        url: new URL(absoluteUrl(image.src, baseUrl)),
+        mediaType: canonicalType(media),
         name: alt === '' ? null : alt,
       }),
     );

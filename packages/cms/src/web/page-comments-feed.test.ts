@@ -8,12 +8,6 @@ import type { Cms } from '../index.ts';
 import { child, childrenNamed, parseXml } from './__testing__/xml.ts';
 import type { XmlElement } from './__testing__/xml.ts';
 
-/**
- * A page that takes comments has a comments feed as a post does (TASK-323),
- * and a page that does not shows no conversation, so it has no feed and its
- * comments are not in the site's either.
- */
-
 const box = sandbox();
 after(() => box.cleanup());
 
@@ -126,31 +120,36 @@ describe('a page’s comments feed', () => {
     assert.deepEqual(childrenNamed(await channel('/quiet/feed/'), 'item'), []);
   });
 
-  it('is a 404 for a page that takes no comments, whatever is stored for it', async () => {
-    for (const url of ['/about/feed/', '/shut/feed/']) {
-      assert.equal((await cms.app.request(url)).status, 404, url);
-    }
+  it('carries what was said on a page that takes no comments', async () => {
+    const found = await channel('/about/feed/');
+    assert.deepEqual(
+      childrenNamed(found, 'item').map((item) => child(item, 'title').text),
+      ['Quinn'],
+    );
+    assert.deepEqual(childrenNamed(await channel('/shut/feed/'), 'item'), []);
   });
 
   it('is where ?feed=rss2 on the page’s permalink leads', async () => {
     const response = await cms.app.request('/guestbook/?feed=rss2');
     assert.equal(response.status, 301);
     assert.equal(response.headers.get('location'), '/guestbook/feed/');
-    assert.equal((await cms.app.request('/about/?feed=rss2')).status, 200);
+    const closed = await cms.app.request('/about/?feed=rss2');
+    assert.equal(closed.status, 301);
+    assert.equal(closed.headers.get('location'), '/about/feed/');
   });
 });
 
 describe('the site’s comments feed', () => {
-  it('names a page a comment is on as it names a post, and leaves out a closed page’s', async () => {
+  it('names a page a comment is on as it names a post, a closed page’s included', async () => {
     const titles = childrenNamed(await channel('/comments/feed/'), 'item').map(
       (item) => child(item, 'title').text,
     );
-    assert.deepEqual(titles, ['Pat on Guestbook', 'Ann on Hello']);
+    assert.deepEqual(titles, ['Quinn on About', 'Pat on Guestbook', 'Ann on Hello']);
   });
 });
 
 describe('a page advertises its comments feed', () => {
-  it('as a post does, when it takes comments', async () => {
+  it('as a post does', async () => {
     assert.ok(
       (await head('/guestbook/')).includes(
         '<link rel="alternate" type="application/rss+xml" title="Comments on: Guestbook" href="/guestbook/feed/">',
@@ -159,9 +158,9 @@ describe('a page advertises its comments feed', () => {
     assert.ok((await head('/quiet/')).includes('href="/quiet/feed/"'));
   });
 
-  it('not at all, when it takes none', async () => {
+  it('when it takes none, too', async () => {
     for (const url of ['/about/', '/shut/']) {
-      assert.ok(!(await head(url)).includes(`href="${url}feed/"`), url);
+      assert.ok((await head(url)).includes(`href="${url}feed/"`), url);
     }
   });
 });

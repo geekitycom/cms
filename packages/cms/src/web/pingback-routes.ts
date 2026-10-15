@@ -65,7 +65,7 @@ async function answerPing(c: Context<GeekityEnv>): Promise<string | PingbackFaul
   if (!checked.ok)
     return { code: PINGBACK_REQUEST_FAULTS[checked.problem], message: checked.message };
 
-  if (pingbackEndpointFor(renderer.site(), checked.document, config.now()) === undefined) {
+  if (pingbackEndpointFor(renderer.site()) === undefined) {
     return { code: PINGBACK_FAULTS.notATarget, message: 'That page takes no pingbacks.' };
   }
 

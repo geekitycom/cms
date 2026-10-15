@@ -19,13 +19,11 @@ the key:
 
 `layouts/post.njk` and `layouts/page.njk` both do this.
 
-A page has a conversation only while it takes comments: its front matter says
-`comments: true` and the site has not switched comments off. Pages are closed
-by default, as in WordPress. The CMS leaves `conversation` off the context of a
-closed page, however many responses are approved for it. A page that turns
-comments off shows nothing. A post is different: it keeps its thread after it
-closes. The CMS receives and moderates webmentions to a page whether it is open
-or closed, the same as webmentions to a post. They appear when the page opens.
+A page has a conversation the same way a post does, whether or not it takes
+comments. Closing a page's comments, in its front matter, on Settings >
+Discussion or for the whole site, removes the form and nothing else: what was
+already said stays on the context. The CMS receives and moderates webmentions
+to a page whether it is open or closed, the same as webmentions to a post.
 
 `partials/conversation.njk` is the whole section:
 
@@ -194,8 +192,9 @@ because the page is what the visitor wants to read.
 
 No key says that a post has stopped taking comments. **A closed post is a post
 without `commentForm`.** The CMS puts the form on the context only while the
-site switch, the closing window and the post's own front matter all allow
-comments. When there is no form, the packaged partial prints `p.no-comments`
+site switch, the setting for the document's type, the closing window and the
+document's own front matter all allow comments. A closed page works the same
+way. When there is no form, the packaged partial prints `p.no-comments`
 under the thread. This is WordPress's "Comments are closed." message, and it
 tells the visitor why there is no form.
 

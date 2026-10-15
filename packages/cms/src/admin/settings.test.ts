@@ -55,6 +55,8 @@ describe('content/_data/site.json', () => {
       tagBase: 'tag',
       categoryBase: 'category',
       comments: true,
+      commentsOnPosts: true,
+      commentsOnPages: false,
       commentsCloseAfterDays: 14,
       commentEmailRetentionDays: 0,
       addressHashRetentionDays: 0,

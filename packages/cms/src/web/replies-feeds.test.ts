@@ -269,13 +269,11 @@ describe('the /replies/ feeds', () => {
     assert.equal(child(found[0] as XmlElement, 'source:inReplyTo').text, `${BASE_URL}${PAGE}`);
   });
 
-  it('404 for a page not showing its conversation, as its {permalink}feed/ does', async () => {
-    const segments = [keyOf(`${BASE_URL}${CLOSED_PAGE}`), ON_CLOSED_PAGE];
-    for (const segment of segments) {
-      const response = await cms.app.request(`/replies/${segment}/`);
-      assert.equal(response.status, 404, `/replies/${segment}/`);
-    }
-    assert.equal((await cms.app.request(`${CLOSED_PAGE}feed/`)).status, 404);
+  it('answer a page that takes no comments, as its {permalink}feed/ does', async () => {
+    const found = await items(`/replies/${keyOf(`${BASE_URL}${CLOSED_PAGE}`)}/`);
+    assert.deepEqual(found.map(guidOf), [commentPage(ON_CLOSED_PAGE)]);
+    assert.deepEqual(await items(`/replies/${ON_CLOSED_PAGE}/`), []);
+    assert.equal((await cms.app.request(`${CLOSED_PAGE}feed/`)).status, 200);
   });
 
   it('404 for an unknown key, anything that is not a key, and a comment a reader may not see', async () => {

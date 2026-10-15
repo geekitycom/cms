@@ -128,6 +128,8 @@ async function submit(
     'read-of-author': field(html, 'read-of-author') ?? '',
     'read-of-uid': field(html, 'read-of-uid') ?? '',
     'read-of-url': field(html, 'read-of-url') ?? '',
+    'read-of-photo': field(html, 'read-of-photo') ?? '',
+    'read-of-photo-alt': field(html, 'read-of-photo-alt') ?? '',
     lang: field(html, 'lang') ?? '',
     visibility:
       /<select[^>]*name="visibility"[^>]*>[\s\S]*?<option value="([^"]*)" selected>/.exec(
@@ -703,6 +705,88 @@ describe('a read in the editor (TASK-229 AC #2)', () => {
       assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
     });
   }
+});
+
+describe('a read’s cover in the editor (TASK-394 AC #2)', () => {
+  const FILE = ['posts', '2026-01-02-published.md'];
+  const BOOK = { 'read-status': 'finished', 'read-of-name': 'Dune' };
+
+  async function published(): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+      },
+    ]);
+    const uploads = path.join(contentDir, 'uploads', '2026', '10');
+    await mkdir(uploads, { recursive: true });
+    for (const name of ['dune.jpg', 'episode.mp3']) {
+      await writeFile(path.join(uploads, name), new Uint8Array(8));
+    }
+    const cms = await box.site({ contentDir });
+    return { contentDir, agent: await signedIn(cms) };
+  }
+
+  async function readOf(contentDir: string): Promise<unknown> {
+    return matter(await readFile(path.join(contentDir, ...FILE), 'utf8')).data['read-of'];
+  }
+
+  it('chooses a cover, changes it and removes it, keeping the read', async () => {
+    const { contentDir, agent } = await published();
+
+    const blank = await (await agent.get('/admin/posts/published')).text();
+    assert.equal(field(blank, 'read-of-photo'), '', 'the cover is offered empty');
+    assert.match(blank, /name="read-of-photo"[^>]*list="editor-photo-uploads"/);
+
+    let response = await submit(agent, '/admin/posts/published', {
+      ...BOOK,
+      'read-of-photo': '/uploads/2026/10/dune.jpg',
+      'read-of-photo-alt': 'A desert under two moons',
+    });
+    assert.equal(response.status, 303);
+    assert.deepEqual(await readOf(contentDir), {
+      name: 'Dune',
+      photo: { url: '/uploads/2026/10/dune.jpg', alt: 'A desert under two moons' },
+    });
+    const reloaded = await (await agent.get('/admin/posts/published')).text();
+    assert.equal(field(reloaded, 'read-of-photo'), '/uploads/2026/10/dune.jpg');
+    assert.equal(field(reloaded, 'read-of-photo-alt'), 'A desert under two moons');
+
+    response = await submit(agent, '/admin/posts/published', {
+      'read-of-photo': 'https://covers.example/dune.jpg',
+      'read-of-photo-alt': '',
+    });
+    assert.equal(response.status, 303);
+    assert.deepEqual(await readOf(contentDir), {
+      name: 'Dune',
+      photo: { url: 'https://covers.example/dune.jpg' },
+    });
+
+    response = await submit(agent, '/admin/posts/published', { 'read-of-photo': '' });
+    assert.equal(response.status, 303);
+    assert.deepEqual(await readOf(contentDir), { name: 'Dune' });
+  });
+
+  it('refuses a cover that is not an image in the media library or a web address', async () => {
+    const { contentDir, agent } = await published();
+    const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+
+    for (const url of [
+      '/uploads/2026/10/episode.mp3',
+      '/uploads/2026/10/missing.jpg',
+      'dune.jpg',
+    ]) {
+      const response = await submit(agent, '/admin/posts/published', {
+        ...BOOK,
+        'read-of-photo': url,
+      });
+      assert.equal(response.status, 400, url);
+      assert.match(await response.text(), /cover/i, url);
+    }
+    assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+  });
 });
 
 describe('an RSVP in the editor (TASK-198 AC #3)', () => {
@@ -1461,8 +1545,7 @@ describe('the recording in the post editor (TASK-213 AC #1, #2)', () => {
         'alternate-url-0': 'cdn.example.com/episode.mp4',
         'alternate-type-0': 'video/mp4',
       },
-      message:
-        /An alternate version is a file in the media library or an address starting https:\/\//,
+      message: /An alternate version is a file in the media library or a web address/,
     },
     {
       name: 'a linked version without a media type',

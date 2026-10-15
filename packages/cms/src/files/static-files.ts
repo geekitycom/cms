@@ -2,6 +2,8 @@ import { statSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import path from 'node:path';
 
+import { servedType, UPLOAD_MEDIA_TYPES } from './upload-types.ts';
+
 /** A file on disk, located and described, ready to be served. */
 export interface StaticAsset {
   /** Absolute path on disk. */
@@ -63,41 +65,24 @@ function normalizeAssetPath(relative: string): string | undefined {
   return relative.replace(/^\/+/, '');
 }
 
-/** Media types for what a theme ships and what the upload endpoint accepts. */
-const CONTENT_TYPES: ReadonlyMap<string, string> = new Map([
+const THEME_CONTENT_TYPES: ReadonlyMap<string, string> = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],
   ['.mjs', 'text/javascript; charset=utf-8'],
   ['.json', 'application/json; charset=utf-8'],
   ['.map', 'application/json; charset=utf-8'],
   ['.svg', 'image/svg+xml'],
-  ['.png', 'image/png'],
-  ['.jpg', 'image/jpeg'],
-  ['.jpeg', 'image/jpeg'],
-  ['.gif', 'image/gif'],
-  ['.webp', 'image/webp'],
-  ['.avif', 'image/avif'],
   ['.ico', 'image/x-icon'],
   ['.woff', 'font/woff'],
   ['.woff2', 'font/woff2'],
   ['.ttf', 'font/ttf'],
   ['.otf', 'font/otf'],
-  ['.txt', 'text/plain; charset=utf-8'],
-  // A `<track>` is ignored unless its file is served as `text/vtt`.
-  ['.vtt', 'text/vtt; charset=utf-8'],
-  ['.srt', 'application/x-subrip; charset=utf-8'],
-  ['.mp3', 'audio/mpeg'],
-  ['.m4a', 'audio/mp4'],
-  ['.aac', 'audio/aac'],
-  ['.ogg', 'audio/ogg'],
-  ['.oga', 'audio/ogg'],
-  ['.opus', 'audio/ogg'],
-  ['.mp4', 'video/mp4'],
-  ['.m4v', 'video/mp4'],
-  ['.webm', 'video/webm'],
   ['.webmanifest', 'application/manifest+json'],
 ]);
 
 function contentTypeFor(file: string): string {
-  return CONTENT_TYPES.get(path.extname(file).toLowerCase()) ?? 'application/octet-stream';
+  const extension = path.extname(file).toLowerCase();
+  const upload = UPLOAD_MEDIA_TYPES.get(extension);
+  if (upload !== undefined) return servedType(upload);
+  return THEME_CONTENT_TYPES.get(extension) ?? 'application/octet-stream';
 }

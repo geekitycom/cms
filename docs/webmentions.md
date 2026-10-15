@@ -95,7 +95,7 @@ comments still receives webmentions, as it still receives fediverse replies.
 **Pingbacks** are how most WordPress sites report a link. The
 `webmentionsReceive` switch also accepts them at `/_geekity/pingback`. The
 site advertises the endpoint as an absolute URL in an `X-Pingback` header and
-a `<link rel="pingback">` on every post and on every page that takes comments.
+a `<link rel="pingback">` on every post and page.
 
 A `pingback.ping(source, target)` XML-RPC call goes through the same check,
 verification, spam checker, and moderation queue as a webmention. The site

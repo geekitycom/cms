@@ -107,19 +107,30 @@ moderator's decision on it. The server matches arrivals as follows:
 An answer to an imported fediverse note threads under the imported comment. The
 backfill reads that note's `replies` collection by its `origin`.
 
-Three settings and one front-matter key decide whether a post still accepts
-comments. The server reads them in one place, so the form and the endpoint
-always agree.
+Four settings and one front-matter key decide whether a post or a page
+accepts comments. All of them are on **Settings > Discussion** except the
+front-matter key, which the editor offers. The server reads them in one place,
+so the form and the endpoint always agree.
 
-| Where                                      | What it says                                                                       |
-| ------------------------------------------ | ---------------------------------------------------------------------------------- |
-| `comments` in `site.json`                  | Whether the site takes comments at all. On by default; off is off everywhere.      |
-| `commentsCloseAfterDays` in `site.json`    | Days after a post's `date` that it closes. `14` by default; `0` never closes.      |
-| `comments: true` / `false` in front matter | The post's own answer, which beats both, in both directions. The editor offers it. |
-| The document's type                        | A page is closed unless it says otherwise.                                         |
+| Where                                      | What it says                                                                                                      |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `comments` in `site.json`                  | Whether the site takes comments at all. On by default. Off is off everywhere, whatever a document says.           |
+| `commentsOnPosts` in `site.json`           | Whether a post takes comments when its front matter does not say. `true` by default.                              |
+| `commentsOnPages` in `site.json`           | Whether a page takes comments when its front matter does not say. `false` by default, as in WordPress.            |
+| `commentsCloseAfterDays` in `site.json`    | Days after a document's `date` that it closes, for posts and pages alike. `14` by default; `0` never closes.      |
+| `comments: true` / `false` in front matter | The document's own answer. It beats the type setting and the closing window in both directions. Drafts take none. |
 
-These settings do not affect the fediverse. A reply, a like or a boost arrives
-because a remote server sent it, and a closed post shows all of them.
+A document with no `date`, which most pages are, has no age and never closes.
+In the editor, "Follow the site settings" leaves the front-matter key out and
+names what the type setting currently gives, for example "Follow the site
+settings (closed for pages)".
+
+Closing comments stops new ones and nothing else. A closed post or page, and a
+site with comments switched off, still shows every comment, webmention, reply
+post and fediverse response it has, and keeps them in its comments feed and in
+the site's. Only the form and the endpoint follow the open or closed rule. A
+reply, a like or a boost from the fediverse arrives because a remote server
+sent it, whatever these settings say.
 
 The server holds a comment for a moderator unless the same **name and email**
 had a comment approved before. WordPress uses the same rule. Before that check,

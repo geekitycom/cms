@@ -156,26 +156,29 @@ describe('a page that takes comments', () => {
 describe('a page that does not take comments', () => {
   for (const [why, pathname] of [
     ['its front matter turns them off', '/shut/'],
-    ['it never turned them on, as pages do not by default', '/plain/'],
+    ['it is left to the site, which leaves pages closed by default', '/plain/'],
   ] as const) {
-    it(`shows nothing when ${why}`, async () => {
+    it(`still shows what was said when ${why}, with no form`, async () => {
       const html = await body(await site(), pathname);
 
-      assert.doesNotMatch(html, /Approved words\.|reactions-section|comments-area/);
+      assert.match(conversation(html), /Approved words\./);
+      assert.match(conversation(html), /p-like/);
       assert.doesNotMatch(html, /id="respond"/);
     });
   }
 
-  it('shows nothing when the site has switched comments off', async () => {
+  it('still shows what was said when the site has switched comments off, with no form', async () => {
     const cms = await site({ comments: false });
     const html = await body(cms, '/open/');
 
-    assert.doesNotMatch(html, /Approved words\.|reactions-section|comments-area/);
+    assert.match(conversation(html), /Approved words\./);
     assert.doesNotMatch(html, /id="respond"/);
-    assert.match(
-      await body(cms, '/2026/09/twin/'),
-      /Approved words\./,
-      'while a post still shows what was said before the switch',
-    );
+    assert.match(await body(cms, '/2026/09/twin/'), /Approved words\./, 'as a post does');
+  });
+
+  it('takes comments once pages are open by default', async () => {
+    const html = await body(await site({ commentsOnPages: true }), '/plain/');
+
+    assert.match(html, /<section class="comment-respond" id="respond">/);
   });
 });

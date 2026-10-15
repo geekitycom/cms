@@ -139,7 +139,7 @@
       {% if kind.type == "post" %}
         {% call collapse('Photos', open.photos, fields=true) %}
           <p class="label block whitespace-normal text-xs">
-            Each is an image in the media library or an address starting https://. Leave the alt text
+            Each is an image in the media library or a web address. Leave the alt text
             empty to use the media library’s. Empty an address to remove that photo.
           </p>
           {% for row in photoRows %}
@@ -190,7 +190,7 @@
               <option value="{{ url }}"></option>
             {% endfor %}
           </datalist>
-          {% call field.select('editor-enclosure-transcript-type', enclosureFields.transcriptType, 'Transcript type', error=(error if errorField == 'editor-enclosure-transcript-type' else ''), hint='A .vtt, .srt or .txt file in the media library, or an address starting https://. A linked transcript needs its type.', hintId='editor-enclosure-transcript-hint') %}
+          {% call field.select('editor-enclosure-transcript-type', enclosureFields.transcriptType, 'Transcript type', error=(error if errorField == 'editor-enclosure-transcript-type' else ''), hint='A .vtt, .srt or .txt file in the media library, or a web address. A linked transcript needs its type.', hintId='editor-enclosure-transcript-hint') %}
             <option value=""{% if form.enclosure.transcriptType == "" %} selected{% endif %}>From the file</option>
             {% for type in transcriptTypes %}
               <option value="{{ type }}"{% if type == form.enclosure.transcriptType %} selected{% endif %}>{{ type }}</option>
@@ -200,7 +200,7 @@
           {% call collapse('Other versions', open.versions, fields=true) %}
             <p class="label block whitespace-normal text-xs">
               A video of an audio episode, a smaller file, another language. Each is a file in the media
-              library or an address starting https://, which needs its type. Empty an address to remove
+              library or a web address, which needs its type. Empty an address to remove
               that version.
             </p>
             {% for row in alternateRows %}
@@ -357,6 +357,8 @@
           {{ field.text('editor-read-of-author', readFields.author, 'Author', value=form.readOf.author) }}
           {{ field.text('editor-read-of-uid', readFields.uid, 'Identifier', value=form.readOf.uid, placeholder='isbn:9780441478125', autocomplete='off', spellcheck='false') }}
           {{ field.text('editor-read-of-url', readFields.url, 'Address', value=form.readOf.url, type='url', error=(error if errorField == 'editor-read-of-url' else '')) }}
+          {{ field.text('editor-read-of-photo', readFields.photo, 'Cover', value=form.readOf.photo, list='editor-photo-uploads', autocomplete='off', error=(error if errorField == 'editor-read-of-photo' else ''), hint='An image in the media library or a web address. Empty it to remove the cover.', hintId='editor-read-of-photo-hint') }}
+          {{ field.text('editor-read-of-photo-alt', readFields.photoAlt, 'Cover alt text', value=form.readOf.photoAlt) }}
           <p class="label block whitespace-normal text-xs">A book or paper this post says its author read. An identifier is an ISBN or a DOI, written isbn:… or doi:…. Choose Not a read post and empty every box to remove it. A read is described by what it says, so leave its Description empty.</p>
         {% endcall %}
       {% endif %}
@@ -390,8 +392,8 @@
       {% call collapse('Display and discussion', open.display, fields=true) %}
         {# What this document says about comments, if anything. Three answers
            rather than two: the site's own rules, always open, always closed. #}
-        {% call field.select('editor-comments', 'comments', 'Comments', hintHtml='Writes <code>comments: true</code> or <code>comments: false</code> into the front matter, which beats the site’s switch and its closing window in both directions. Fediverse replies are shown either way.') %}
-          <option value="{{ commentSettings.site }}"{% if form.comments == commentSettings.site %} selected{% endif %}>Follow the site settings</option>
+        {% call field.select('editor-comments', 'comments', 'Comments', hintHtml='Open or Closed writes <code>comments: true</code> or <code>comments: false</code> into the front matter, which beats Settings › Discussion’s choice for this type and its closing window in both directions. Comments switched off for the whole site stay off. What was already said, and fediverse replies, are shown either way.') %}
+          <option value="{{ commentSettings.site }}"{% if form.comments == commentSettings.site %} selected{% endif %}>Follow the site settings ({{ commentsSiteDefault }})</option>
           <option value="{{ commentSettings.open }}"{% if form.comments == commentSettings.open %} selected{% endif %}>Open</option>
           <option value="{{ commentSettings.closed }}"{% if form.comments == commentSettings.closed %} selected{% endif %}>Closed</option>
         {% endcall %}

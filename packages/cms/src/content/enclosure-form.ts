@@ -26,8 +26,8 @@ import {
 import type { AlternateEnclosure, Enclosure, Transcript } from './enclosure.ts';
 import type { EditorField, FieldError } from './form-error.ts';
 import { LANGUAGE_TAG_PATTERN } from './language.ts';
-import { canonicalType, UPLOAD_MEDIA_TYPES } from './media.ts';
-import type { UploadMediaType } from './media.ts';
+import { canonicalType, UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
+import type { UploadMediaType } from '../files/upload-types.ts';
 import { findUpload, UPLOAD_ASSET_PREFIX } from './uploads.ts';
 
 /** One alternate version's row, as the form has it. */
@@ -218,7 +218,7 @@ function resolveTranscript(
 
   if (!isWebUrl(form.transcriptUrl)) {
     return {
-      error: 'A transcript is a file in the media library or an address starting https://.',
+      error: 'A transcript is a file in the media library or a web address.',
       field: 'editor-enclosure-transcript',
     };
   }
@@ -278,7 +278,7 @@ function resolveAlternate(
 
   if (!isWebUrl(row.url)) {
     return {
-      error: `An alternate version is a file in the media library or an address starting https://, not ${row.url}.`,
+      error: `An alternate version is a file in the media library or a web address, not ${row.url}.`,
       field: field('url'),
     };
   }
@@ -302,9 +302,8 @@ function measuredUpload(
   const media = UPLOAD_MEDIA_TYPES.get(path.extname(url).toLowerCase());
   if (media === undefined || !kinds.includes(media.kind)) return undefined;
   const asset = findUpload(url.slice(UPLOAD_ASSET_PREFIX.length), contentDir);
-  const type = canonicalType(media);
-  if (asset === undefined || type === undefined || asset.stats.size === 0) return undefined;
-  return { type, length: asset.stats.size };
+  if (asset === undefined || asset.stats.size === 0) return undefined;
+  return { type: canonicalType(media), length: asset.stats.size };
 }
 
 export function transcriptTypeFor(extension: string): Transcript['type'] | undefined {

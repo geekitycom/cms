@@ -126,7 +126,7 @@ function feedAt(view: SiteView, pathname: string): PathMatch | undefined {
 
   if (format !== 'rss') return undefined;
   const document = publicDocumentAt(view.store, split.root);
-  if (document === undefined || !view.showsConversation(document)) return undefined;
+  if (document === undefined || document.slug === view.pages.posts?.slug) return undefined;
   return feed({ kind: 'comments', document });
 }
 

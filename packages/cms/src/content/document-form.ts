@@ -18,6 +18,7 @@ import type { PhotoRow } from './photo-form.ts';
 import type { PostField } from './post-fields.ts';
 import { BLANK_READ_OF_FORM } from './read-form.ts';
 import type { ReadOfForm } from './read-form.ts';
+import type { Read } from './read.ts';
 import { wallClockIn } from './time.ts';
 import { VISIBILITY_FRONT_MATTER_KEY, visibilityOf } from './visibility.ts';
 import type { StoredVisibility } from './visibility.ts';
@@ -266,10 +267,11 @@ export function splitTags(value: string): string[] {
   return tags;
 }
 
-/** The post's recording and photos, as a form resolved them against the media library. */
+/** The post's recording, photos and read, as a form resolved them against the media library. */
 export interface ResolvedMedia {
   readonly recording: Enclosure | undefined;
   readonly photos: readonly Photo[];
+  readonly read: Read | undefined;
 }
 
 /**

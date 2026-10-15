@@ -1,6 +1,5 @@
 import type { Context } from 'hono';
 
-import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import { authorNames } from '../content/authors.ts';
 import type { Document } from '../content/document.ts';
 import { isServed } from '../content/served.ts';
@@ -46,8 +45,6 @@ export interface SiteView {
   readonly bases: TaxonomyBases;
   users(): readonly User[];
   author(username: string): AuthorListing | undefined;
-  /** Whether this document's page shows its conversation, and so has a comments feed. */
-  showsConversation(document: Document): boolean;
 }
 
 const views = new WeakMap<Context<GeekityEnv>, SiteView>();
@@ -76,8 +73,6 @@ function createSiteView(c: Context<GeekityEnv>): SiteView {
       const user = all.find((candidate) => candidate.username === username);
       return user === undefined ? undefined : { user, names: authorNames(all, user) };
     },
-    showsConversation: (document) =>
-      answerable(document, commentPolicyOf(renderer.site()), store.now()),
   };
 }
 

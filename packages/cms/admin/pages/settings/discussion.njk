@@ -27,18 +27,33 @@
   <h2 class="mt-2 text-lg font-semibold">Comments</h2>
 
   {% set commentsHint %}
-    Clear this and no post shows a comment form and every submission is
-    refused. Fediverse replies keep arriving and keep being shown either way:
+    Clear this and nothing shows a comment form and every submission is
+    refused. What was already said stays under its post or page. Fediverse replies keep arriving and keep being shown either way:
     a remote server sends those, and nothing here can stop it.
   {% endset %}
   {{ field.checkbox('settings-comments', fields.comments, 'Take comments on this site',
        checked=form.comments, hintHtml=commentsHint) }}
 
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Take comments by default on</legend>
+    {{ field.checkbox('settings-comments-on-posts', fields.comments_on_posts, 'Posts',
+         checked=form.comments_on_posts) }}
+    {{ field.checkbox('settings-comments-on-pages', fields.comments_on_pages, 'Pages',
+         checked=form.comments_on_pages) }}
+    <p class="label block whitespace-normal">
+      What a document left on "Follow the site settings" in the editor does. A
+      document set to Open or Closed there, which writes
+      <code>comments: true</code> or <code>comments: false</code> into its
+      front matter, overrides this in both directions. Drafts take none, and
+      nothing reopens a site with comments switched off above.
+    </p>
+  </fieldset>
+
   {% set closeHint %}
-    Days after a post's date that it stops taking comments; <code>0</code>
-    never closes one. A post overrides this for itself with
-    <code>comments: true</code> or <code>comments: false</code>, which the
-    editor offers as a field. Pages are closed unless they say otherwise.
+    Days after a document's date that it stops taking comments, for posts and
+    pages alike; <code>0</code> never closes one. A document with no date,
+    which most pages are, never closes, and one set to Open in the editor
+    ignores the window.
   {% endset %}
   {{ field.text('settings-comments-close', fields.comments_close_after_days, 'Close comments after',
        form.comments_close_after_days, type='number', min='0', step='1',

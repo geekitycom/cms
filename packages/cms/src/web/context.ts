@@ -21,7 +21,7 @@ import type { ImageLoading } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import { escapeAttribute } from '../util/html.ts';
 import type { AuthorContext } from '../site/authors.ts';
-import { feedExcerpt } from '../content/excerpt.ts';
+import { feedExcerpt, postExcerpt } from '../content/excerpt.ts';
 import { documentLanguage } from '../content/locale.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
 
@@ -130,6 +130,11 @@ export interface DocumentContext {
    * theme prints it without asking whether it is there.
    */
   summary: string;
+  /**
+   * The document's own words in one line: `summary` without a read post's
+   * read line, which a listing prints after the headline instead.
+   */
+  excerpt: string;
   /** The document's URL path, the same value as `page.url`. */
   url: string;
   /** Eleventy's `page`. */
@@ -327,7 +332,7 @@ export function documentContext(
     rsvp: rsvpContext(document),
     event: eventContext(document),
     citations: citationsOf(document.extra),
-    read: readContext(document),
+    read: readContext(document, images),
     // Over the raw front-matter value the spread above put here.
     lang: documentLanguage(document),
     enclosure: enclosureContext(document),
@@ -351,6 +356,7 @@ export function documentContext(
     // markup above: an excerpt is text, and the `<picture>` a site's image
     // config puts in the HTML is not something to cut words out of.
     summary: feedExcerpt(document),
+    excerpt: postExcerpt(document),
     url: document.permalink,
     type: document.type,
     page: {
@@ -453,7 +459,7 @@ function eventContext(document: Document): DocumentContext['event'] {
   };
 }
 
-function readContext(document: Document): DocumentContext['read'] {
+function readContext(document: Document, images: ImageConfig | undefined): DocumentContext['read'] {
   const read = readOf(document.extra);
   if (read === undefined) return undefined;
   const { uid } = read.of;
@@ -461,6 +467,11 @@ function readContext(document: Document): DocumentContext['read'] {
     status: read.status,
     statusLabel: READ_STATUS_LABELS[read.status],
     of: { ...read.of, uidLabel: uid === undefined ? undefined : uidLabel(uid) },
-    line: readLine(read),
+    line:
+      images === undefined
+        ? readLine(read)
+        : siteImageMarkup(images, readLine(read, { library: readAltTexts(images.contentDir) }), {
+            sizes: '6rem',
+          }),
   };
 }

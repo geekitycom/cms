@@ -7,7 +7,7 @@ import sharp from 'sharp';
 import type { ResolvedConfig } from '../config.ts';
 import { citedImageAlt, citesAnImage, shownInFull } from '../content/citation.ts';
 import type { Document } from '../content/document.ts';
-import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
+import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import { stripMetadata } from '../content/metadata/index.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';
 import { generateImageVariants, removeImageVariants } from '../images/variants.ts';

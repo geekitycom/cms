@@ -40,7 +40,6 @@ import {
   readCite,
   readOfForm,
   readOfFromMicropub,
-  resolveRead,
   submittedReadOfForm,
 } from './read-form.ts';
 import { RSVP_FRONT_MATTER_KEY, rsvpOf, rsvpValue } from './rsvp.ts';
@@ -251,10 +250,7 @@ const READ_FIELD: PostField = {
     readStatus: trimmedField(body, READ_FIELDS.status),
     readOf: submittedReadOfForm(body),
   }),
-  write: (extra, form) => {
-    const resolved = resolveRead(form.readStatus, form.readOf);
-    if (!('read' in resolved)) return;
-    const { read } = resolved;
+  write: (extra, _form, { media: { read } }) => {
     setOrDelete(extra, READ_OF_FRONT_MATTER_KEY, read && readWorkFrontMatter(read.of));
     setOrDelete(extra, READ_STATUS_FRONT_MATTER_KEY, read?.status);
   },
@@ -262,18 +258,22 @@ const READ_FIELD: PostField = {
     properties: { 'read-of': ['readOf'], 'read-status': ['readStatus'] },
     publishable: ['read-of'],
     toForm: (request) => {
-      const readOfForm = readOfFromMicropub(request.values('read-of'), request.refuse);
+      const readOfForm = readOfFromMicropub(
+        request.values('read-of'),
+        request.refuse,
+        request.baseUrl,
+      );
       const readStatus = request.text('read-status');
       if (readStatus !== '' && !isReadStatus(readStatus)) {
         request.refuse(`read-status is ${READ_STATUSES.join(', ')}, not ${readStatus}.`);
       }
       return { readOf: readOfForm, readStatus };
     },
-    toProperties: (document) => {
+    toProperties: (document, { baseUrl }) => {
       const read = readOf(document.extra);
       return read === undefined
         ? {}
-        : { 'read-of': [readCite(read.of)], 'read-status': [read.status] };
+        : { 'read-of': [readCite(read.of, baseUrl)], 'read-status': [read.status] };
     },
   },
 };

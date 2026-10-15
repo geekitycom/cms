@@ -174,7 +174,7 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
       );
     }
   }
-  const read = resolveRead(form.readStatus, form.readOf);
+  const read = resolveRead(form.readStatus, form.readOf, contentDir);
   if ('error' in read) return refused(read.error, read.field);
   if (read.read !== undefined && form.description !== '') {
     return refused(
@@ -195,7 +195,11 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
   if ('error' in recording) return refused(recording.error, recording.field);
   const photos = resolvePhotos(form.photos, contentDir);
   if ('error' in photos) return refused(photos.error, photos.field);
-  const media: ResolvedMedia = { recording: recording.enclosure, photos: photos.photos };
+  const media: ResolvedMedia = {
+    recording: recording.enclosure,
+    photos: photos.photos,
+    read: read.read,
+  };
 
   const located = resolveLocation(form.location);
   if ('error' in located) return refused(located.error, located.field);

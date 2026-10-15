@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { Document } from './document.ts';
-import { EXCERPT_WORDS, excerptFromHtml, feedExcerpt } from './excerpt.ts';
+import { EXCERPT_WORDS, excerptFromHtml, feedExcerpt, postExcerpt } from './excerpt.ts';
 
 function post(overrides: Partial<Document> = {}): Document {
   return {
@@ -29,6 +29,24 @@ describe('feedExcerpt', () => {
 
   it('is the first paragraph as text otherwise', () => {
     assert.equal(feedExcerpt(post()), 'First words, & more.');
+  });
+});
+
+describe('postExcerpt', () => {
+  const read = { 'read-status': 'finished', 'read-of': { name: 'Dune' } };
+
+  it('is the read post’s own words, where the feed summary is its read line', () => {
+    const document = post({ extra: read, html: '<p>I enjoyed this book.</p>' });
+    assert.equal(feedExcerpt(document), 'Finished reading: Dune');
+    assert.equal(postExcerpt(document), 'I enjoyed this book.');
+  });
+
+  it('is empty for a read post with no words', () => {
+    assert.equal(postExcerpt(post({ extra: read, html: '' })), '');
+  });
+
+  it('is the description when the post has one', () => {
+    assert.equal(postExcerpt(post({ extra: read, description: 'Said here.' })), 'Said here.');
   });
 });
 

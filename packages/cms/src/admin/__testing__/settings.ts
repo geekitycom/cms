@@ -51,6 +51,8 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
   },
   discussion: {
     comments: '1',
+    comments_on_posts: '1',
+    comments_on_pages: '',
     comments_close_after_days: '14',
     webmentions_send: '1',
     webmentions_receive: '1',

@@ -24,6 +24,10 @@ export function feedExcerpt(document: Document): string {
   return excerptFromHtml(readLine(readOf(document.extra)) + document.html);
 }
 
+export function postExcerpt(document: Document): string {
+  return document.description ?? excerptFromHtml(document.html);
+}
+
 /**
  * The first paragraph of some HTML as plain text, cut where WordPress cuts an
  * excerpt. What a post falls back to when it carries no `description`, and

@@ -113,6 +113,10 @@ and every player uses it to seek. The CMS removes location and camera metadata
 from pictures and videos before it stores them. See
 [Location and camera metadata](media.md#location-and-camera-metadata).
 
+A request for an upload that is not there gets the site's 404 page, unless a
+declared redirect or a document's `redirect_from` names that path. See
+[Declared redirects](public-site.md#declared-redirects).
+
 ## The base URL
 
 `baseUrl` is the only field that the admin's [settings screen](settings.md)

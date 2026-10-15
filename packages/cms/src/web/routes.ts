@@ -255,7 +255,7 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
     if (href !== here || (match.kind === 'feed' && !match.canonical)) {
       return c.redirect(`${href}${search}`, 301);
     }
-    return serve(c, view, match);
+    return serve(c, match);
   }
 
   const hidden = hiddenDocumentForSignedInHtml(c, pathname);
@@ -308,7 +308,7 @@ function resolveRequest(c: Context<GeekityEnv>): Response {
   return notFound(c);
 }
 
-function serve(c: Context<GeekityEnv>, view: SiteView, match: PathMatch): Response {
+function serve(c: Context<GeekityEnv>, match: PathMatch): Response {
   switch (match.kind) {
     case 'listing':
       return listing(c, match);
@@ -321,7 +321,7 @@ function serve(c: Context<GeekityEnv>, view: SiteView, match: PathMatch): Respon
       // comments feed, which is the only feed a document has here too. The
       // other spellings name a format a comments feed does not come in, so
       // they are not a feed request at all and the page is served.
-      if (queryFeedFormat(c) === 'rss' && view.showsConversation(match.document)) {
+      if (queryFeedFormat(c) === 'rss') {
         return c.redirect(commentsFeedHref(match.document), 301);
       }
       return negotiateDocument(c, match.document, selectFromAccept(c, DOCUMENT_REPRESENTATIONS));

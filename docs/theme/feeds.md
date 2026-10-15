@@ -27,7 +27,7 @@ the site's feeds. On an author archive, the root is `author.url`.
 
 `layouts/base.njk` fills the `alternates` block with `feedLinks` for `/` and
 then the site's comments feed. Every page that extends it advertises all four
-feeds. On a published post, and on a page that takes comments, it adds the
+feeds. On a published post or page, it adds the
 document's own comments feed, from `commentsFeed` on the context. On a
 published post, it also adds a link to the post's ActivityPub object:
 
@@ -71,8 +71,7 @@ requires one:
 ```
 
 It comes from `pingback` on the context. That key is there only when the site
-takes webmentions and the document accepts responses: every post, and a page
-only while it takes comments. The CMS sends the same endpoint in an
+takes webmentions, on every post and page. The CMS sends the same endpoint in an
 `X-Pingback` header under the same rule.
 
 On the front page, the base layout also writes the site's index for language

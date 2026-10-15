@@ -2,8 +2,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { ResolvedConfig } from '../config.ts';
-import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
-import type { UploadMediaType } from '../content/media.ts';
+import { matchesSignature, UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
+import type { UploadMediaType } from '../files/upload-types.ts';
 import { stripMetadata, UnreadableMetadataError } from '../content/metadata/index.ts';
 import { slugify } from '../content/slug.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';

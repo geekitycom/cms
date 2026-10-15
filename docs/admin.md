@@ -32,7 +32,7 @@ override any public template. It must not be able to shadow the login form.
 | `/admin/settings`                                | Settings > General: title, tagline, author, base URL, time zone, language, locale, site icon. |
 | `/admin/settings/reading`                        | What the homepage displays, posts per page, the notify server.                                |
 | `/admin/settings/permalinks`                     | The tag and category bases, and the archive redirects already recorded.                       |
-| `/admin/settings/discussion`                     | Comments and the closing window, webmentions, and the Akismet key.                            |
+| `/admin/settings/discussion`                     | Comments, the types that take them and the closing window, webmentions, and the Akismet key.  |
 | `/admin/settings/akismet`                        | `POST` only. Saves the Akismet key, or forgets it.                                            |
 | `/admin/settings/email`                          | The mail provider, the From line, the reply-to and the contact address.                       |
 | `/admin/settings/mail`                           | `POST` only. Saves a mail credential, or forgets every one of them.                           |

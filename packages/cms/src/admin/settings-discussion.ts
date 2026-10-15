@@ -49,6 +49,8 @@ export const DISCUSSION_SETTINGS: SettingsPage = {
   template: ADMIN_TEMPLATES.settingsDiscussion,
   fields: [
     'comments',
+    'comments_on_posts',
+    'comments_on_pages',
     'comments_close_after_days',
     'webmentions_send',
     'webmentions_receive',

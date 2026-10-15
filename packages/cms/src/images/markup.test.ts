@@ -71,6 +71,27 @@ describe('responsiveImages', () => {
     assert.match(html, /class="wide"/);
   });
 
+  it('gives the sources the sizes the author wrote on the img', () => {
+    const html = responsiveImages(
+      '<img src="/uploads/2026/09/photo.png" alt="A photo" sizes="10rem">',
+      known,
+      { sizes: '6rem' },
+    );
+
+    assert.match(html, /<source [^>]*sizes="10rem">/);
+    assert.doesNotMatch(html, /6rem|100vw/);
+  });
+
+  it('gives every candidate the sizes a caller passes', () => {
+    const html = responsiveImages('<img src="/uploads/2026/09/photo.png" alt="A photo">', known, {
+      sizes: '6rem',
+    });
+
+    assert.match(html, /<source [^>]*sizes="6rem">/);
+    assert.match(html, /<img [^>]*sizes="6rem"/);
+    assert.doesNotMatch(html, /100vw/);
+  });
+
   it('does not argue with dimensions the author set themselves', () => {
     const html = responsiveImages(
       '<img src="/uploads/2026/09/photo.png" alt="A photo" width="200" height="100" loading="eager">',
