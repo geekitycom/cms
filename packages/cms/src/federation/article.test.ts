@@ -672,6 +672,71 @@ describe('a read’s cover (TASK-394 AC #6)', () => {
   });
 });
 
+describe('a titled read post’s Note (TASK-416)', () => {
+  const BOOK = 'Miss Peregrine’s Home for Peculiar Children';
+  const WORDS = 'Strange and lovely.';
+
+  async function readNote(title: string): Promise<string> {
+    const instance = await site({
+      'posts/2026-10-02-peregrine.md': rawPost(
+        [
+          `title: ${JSON.stringify(title)}`,
+          "date: '2026-10-02T09:00:00Z'",
+          'permalink: /2026/10/peregrine/',
+          'read-status: finished',
+          'read-of:',
+          `  name: ${BOOK}`,
+          '  author: Ransom Riggs',
+        ],
+        WORDS,
+      ),
+    });
+    const note = await articleAt(instance, '/2026/10/peregrine/');
+    assert.equal(note['type'], 'Note');
+    return String(note['content']);
+  }
+
+  it('opens with its title, then the read line, then its words, as its page does', async () => {
+    const content = await readNote('A peculiar book & a good one');
+
+    assert.match(content, /^<p>A peculiar book &amp; a good one<\/p>\n<p class="read-line">/);
+    assert.ok(content.endsWith(renderMarkdown(WORDS)), content);
+  });
+
+  it('leaves out a title that is only the book’s name, ignoring case and spacing', async () => {
+    const content = await readNote('  miss peregrine’s   HOME for peculiar children ');
+
+    assert.match(content, /^<p class="read-line">/);
+    assert.doesNotMatch(content, /<p>miss peregrine/i);
+    assert.ok(content.endsWith(renderMarkdown(WORDS)), content);
+  });
+});
+
+describe('a titled like’s Note', () => {
+  const LIKED = 'https://them.example/2026/09/their-post/';
+
+  it('keeps its citation first, then its title, then its words', async () => {
+    const instance = await site({
+      'posts/2026-09-02-liked.md': rawPost(
+        [
+          'title: Worth a look',
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/liked/',
+          `like-of: ${LIKED}`,
+        ],
+        'So good.',
+      ),
+    });
+    const note = await articleAt(instance, '/2026/09/liked/');
+
+    assert.equal(
+      note['content'],
+      `<p>Liked <a href="${LIKED}">a page on them.example</a></p>\n` +
+        `<p>Worth a look</p>\n${renderMarkdown('So good.')}`,
+    );
+  });
+});
+
 async function fetchLink(instance: Cms, href: unknown): Promise<Record<string, unknown>> {
   assert.equal(typeof href, 'string', 'the collection published a link to follow');
   const url = new URL(href as string);

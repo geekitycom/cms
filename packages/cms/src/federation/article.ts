@@ -27,6 +27,7 @@ import path from 'node:path';
 import { CITATION_VERBS, citationsOf, citedPageName } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { readLine, readOf } from '../content/read.ts';
+import type { Read } from '../content/read.ts';
 import { RSVP_PHRASES, rsvpOf } from '../content/rsvp.ts';
 import type { Document } from '../content/document.ts';
 import { eventOf } from '../content/event.ts';
@@ -325,10 +326,14 @@ export function postObject(
     baseUrl,
   });
   if (postObjectType(document) === 'Note') {
+    const heading = noteHeading(document, read);
+    const lead = citing(document, context.data.cited) + readLineHtml;
     return new Note({
       ...common,
       contents: inLanguage(
-        citing(document, context.data.cited) + readLineHtml + noteContent(document),
+        read === undefined
+          ? lead + headed(heading, document.html)
+          : headed(heading, lead + document.html),
         language,
       ),
     });
@@ -508,14 +513,29 @@ function citing(document: Document, cited: CitedPageReader): string {
     .join('');
 }
 
-/** A note's HTML: its title first when its text does not already open with it. */
-function noteContent(document: Document): string {
+/**
+ * A note's title as a paragraph, or nothing when its text already opens with
+ * it or, for a read, when it is only the name the read line already gives.
+ */
+function noteHeading(document: Document, read: Read | undefined): string {
   const title = document.title.trim();
-  if (title === '' || collapse(htmlToText(document.html)).startsWith(collapse(title))) {
-    return document.html;
+  if (
+    title === '' ||
+    collapse(htmlToText(document.html)).startsWith(collapse(title)) ||
+    (read !== undefined && sameWords(title, read.of.name))
+  ) {
+    return '';
   }
-  const heading = `<p>${escapeText(title)}</p>`;
-  return document.html === '' ? heading : `${heading}\n${document.html}`;
+  return `<p>${escapeText(title)}</p>`;
+}
+
+function headed(heading: string, html: string): string {
+  if (heading === '') return html;
+  return html === '' ? heading : `${heading}\n${html}`;
+}
+
+function sameWords(left: string, right: string): boolean {
+  return collapse(left).toLowerCase() === collapse(right).toLowerCase();
 }
 
 function collapse(value: string): string {
