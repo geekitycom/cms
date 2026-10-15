@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.32.0](https://github.com/geekitycom/cms/compare/v0.31.0...v0.32.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** a plugin names every file it keeps through host.data in a `data` field on its definition (kept, rebuildable or credential). host.data.read and update throw on an undeclared file, and PluginDataFolder.path is removed. The testing helper pluginDataFolder takes the plugin instead of its name.
+* **cms:** PluginFederationContext.outbox(username) and .followers(username) return Promise<PluginCollection<…> | undefined>; await them before reading totalItems, firstCursor, lastCursor or a page.
+* **cms:** settings.current() returns a Promise and HOST_API_VERSION is 2. Plugin settings move from site.json to data/plugins/<name>/ at boot.
+* **cms:** host.siteInfo() returns a Promise. SiteSettings keys are snake_case and the three license fields are one license value; readSiteSettings is removed, read cms.settings.values(SITE) instead. ConversationReader methods take the site settings. RelayService.sync, FeedNotifier.feedsFor, IndexNowNotifier.urlsFor and MailService.from return promises. A site that builds its own CMS passes await settleConfig(config) to createCms.
+* **cms:** MailService.configured() and providerName() return promises, and CommentNotifier gains settled().
+
+### Features
+
+* **cms:** a census test fails on any data file a site writes without a declaration ([1d853c2](https://github.com/geekitycom/cms/commit/1d853c21ab315b7a39f7c6264524e8e113d48dfd))
+* **cms:** choose on Settings &gt; Discussion which document types take comments by default ([e84e774](https://github.com/geekitycom/cms/commit/e84e7742ca83ea736d829b06cb08ff12f063404d))
+* **cms:** geekity export writes a tar.gz of the kept files with a manifest ([e992983](https://github.com/geekitycom/cms/commit/e992983afd73b6016871e957ff31755735c0acea))
+* **cms:** geekity import restores an export and installs its plugins from npm ([3f158c3](https://github.com/geekitycom/cms/commit/3f158c3b018744282d8642423f58124bd6efea39))
+* **cms:** give a read citation an optional book cover ([df8f1f1](https://github.com/geekitycom/cms/commit/df8f1f1a5d5fff8ebbcc0466844cb1156b3a2bdc))
+* **cms:** keep federation messages in a SQLite queue under data/ ([2872231](https://github.com/geekitycom/cms/commit/2872231d69a353eda935eccf58c50a20df5debcf))
+* **cms:** keep plugin settings in data/plugins/&lt;name&gt; on the settings registry ([f046118](https://github.com/geekitycom/cms/commit/f046118bf30e929e65e1da4a6d0e8f42c60dbcc0))
+* **cms:** list, get and set plugin settings from geekity settings ([4a7cb23](https://github.com/geekitycom/cms/commit/4a7cb231fd4fbd309204c7642b890dfee465783f))
+* **cms:** mail and Akismet credentials move onto the settings registry ([e2341f0](https://github.com/geekitycom/cms/commit/e2341f0178eca017920ee35ac77ba763ecadf1ce))
+* **cms:** plugins declare their data files, and an undeclared file is refused ([91319f1](https://github.com/geekitycom/cms/commit/91319f1c3a44487f93fceff23e057918dc9a942b))
+* **cms:** return promises from the plugin federation outbox and followers ([02eeafc](https://github.com/geekitycom/cms/commit/02eeafcba58e588854375d244c1c6827342f417f))
+* **cms:** run admin jobs on an in-process queue with records in data/ ([9c26bab](https://github.com/geekitycom/cms/commit/9c26bab115362bd079cf42f254b54c188e704bd6))
+* **cms:** run resends as a queued job from the federation screen ([88abd04](https://github.com/geekitycom/cms/commit/88abd04cc190edca2cc07d5db30f853c35f17655))
+* **cms:** run strip-metadata as a queued job from the media screen ([68a1246](https://github.com/geekitycom/cms/commit/68a12465b6e71849683d02dc777d40c2b1d8ae68))
+* **cms:** settings registry with maintenance and dev mode switches ([7a16fce](https://github.com/geekitycom/cms/commit/7a16fce05475e636b24f286adfcca494e5a99a59))
+* **cms:** the site settings move onto the settings registry ([5e8ac71](https://github.com/geekitycom/cms/commit/5e8ac7176280735303d542b6edc329d60d4ad927))
+* **cms:** tools &gt; export runs a site export as a job and offers the download ([cfc37b7](https://github.com/geekitycom/cms/commit/cfc37b7bc1e92ed0e3846e1cb3818033fef01260))
+
+
+### Bug Fixes
+
+* **cms:** answer 404 for a variant of an upload that is not an image ([2e67287](https://github.com/geekitycom/cms/commit/2e67287105a23c284b16b083a7be5f9206e4eb3b))
+* **cms:** close the gaps the review found in site export and import ([b20c83b](https://github.com/geekitycom/cms/commit/b20c83b83717c2f7967d5055174e985b8224a175))
+* **cms:** escape admin field labels and hints unless the caller marks them safe ([caa8be3](https://github.com/geekitycom/cms/commit/caa8be37bd34cbfdfb5cd4bb79c9805ae49acc8e))
+* **cms:** give newestPosts entries an excerpt in the Eleventy example config ([1c53e16](https://github.com/geekitycom/cms/commit/1c53e16359fa48b9eac941d595a494cb0b713c8c))
+* **cms:** leave a job a live process is running alone at start-up recovery ([41230d1](https://github.com/geekitycom/cms/commit/41230d1bccdb5ef7c161dcbd4724177fdd3b94de))
+* **cms:** leave the export's own job and lost+found out of a site move ([7033ff0](https://github.com/geekitycom/cms/commit/7033ff071fd0722aa880b3cbc498c1b9370c05e1))
+* **cms:** let a missing upload fall through to declared redirects ([8e7480a](https://github.com/geekitycom/cms/commit/8e7480aae3fe74c23314fb549169877e3cc8c26d))
+* **cms:** list a titled read post by its headline and words, with the read line after them ([312c524](https://github.com/geekitycom/cms/commit/312c52424aaf1f9d00114c9306a8e6076973ba36))
+* **cms:** migrate plugin settings before a plugin command and keep env secrets untrimmed ([8691bdd](https://github.com/geekitycom/cms/commit/8691bdd27292b62154c23c2bcbdf1c3cf4af464a))
+* **cms:** mint the indexnow key at boot and warn when a term redirect is not saved ([57d46c3](https://github.com/geekitycom/cms/commit/57d46c34b07ae3f2d06caf52815a726e5e648aac))
+* **cms:** name every file under content/ an export could not carry ([e716415](https://github.com/geekitycom/cms/commit/e7164157f0fae92ea5064e6ddf081870405bf2bf))
+* **cms:** refuse a job command while the same job is active ([960167c](https://github.com/geekitycom/cms/commit/960167cb8ebc91c1c960884bcfbc93282c8deed5))
+* **cms:** remove temp files a cut-off metadata sweep left in uploads ([d51d9ca](https://github.com/geekitycom/cms/commit/d51d9ca25358769af17cc8f90e7d9b415e8f805a))
+* **cms:** run a job a dead or discarded worker left behind without a restart ([0148218](https://github.com/geekitycom/cms/commit/0148218b4d6b3cbdf442e0fcbeceab054dd23282))
+* **cms:** say a web address where the editor accepts http and https ([d0b4482](https://github.com/geekitycom/cms/commit/d0b448298313c15ae70e345d100190efbf0539a5))
+* **cms:** serve uploads with the type of their kind, so a PDF is application/pdf ([6b01f82](https://github.com/geekitycom/cms/commit/6b01f82c7e63d5c39ba1ccdddfcc20acfd1ba2ba))
+* **cms:** stage an import inside content/ and data/ so it works on mount points ([0f50930](https://github.com/geekitycom/cms/commit/0f5093001e91bfcf859cd010338230348f8dd514))
+* **cms:** wait for and stop a federation queue passed through config ([ca575fc](https://github.com/geekitycom/cms/commit/ca575fc705bf0bcfc49de199623d92fb625a644c))
+
 ## [0.31.0](https://github.com/geekitycom/cms/compare/v0.30.0...v0.31.0) (2026-10-12)
 
 

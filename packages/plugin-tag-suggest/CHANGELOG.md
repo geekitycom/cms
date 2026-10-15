@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0](https://github.com/geekitycom/cms/compare/plugin-tag-suggest-v0.2.2...plugin-tag-suggest-v0.3.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** a plugin names every file it keeps through host.data in a `data` field on its definition (kept, rebuildable or credential). host.data.read and update throw on an undeclared file, and PluginDataFolder.path is removed. The testing helper pluginDataFolder takes the plugin instead of its name.
+
+### Features
+
+* **cms:** plugins declare their data files, and an undeclared file is refused ([91319f1](https://github.com/geekitycom/cms/commit/91319f1c3a44487f93fceff23e057918dc9a942b))
+
+
+### Bug Fixes
+
+* **plugin-tag-suggest:** await the settings and target host api 2 ([d08d771](https://github.com/geekitycom/cms/commit/d08d771b79c47b58241b1a5bd1df024ea25ad0e2))
+* **plugin-tag-suggest:** await the site info the host now returns as a promise ([f95571a](https://github.com/geekitycom/cms/commit/f95571a1b45036897e952023571e9064751c83c9))
+
 ## [0.2.2](https://github.com/geekitycom/cms/compare/plugin-tag-suggest-v0.2.1...plugin-tag-suggest-v0.2.2) (2026-10-12)
 
 

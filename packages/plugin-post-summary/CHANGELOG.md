@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0](https://github.com/geekitycom/cms/compare/plugin-post-summary-v0.3.0...plugin-post-summary-v0.4.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** a plugin names every file it keeps through host.data in a `data` field on its definition (kept, rebuildable or credential). host.data.read and update throw on an undeclared file, and PluginDataFolder.path is removed. The testing helper pluginDataFolder takes the plugin instead of its name.
+
+### Features
+
+* **cms:** plugins declare their data files, and an undeclared file is refused ([91319f1](https://github.com/geekitycom/cms/commit/91319f1c3a44487f93fceff23e057918dc9a942b))
+
+
+### Bug Fixes
+
+* **plugin-post-summary:** target host api 2 ([686dac6](https://github.com/geekitycom/cms/commit/686dac6ce0aa059a8644836a2ba5d550905119ee))
+
 ## [0.3.0](https://github.com/geekitycom/cms/compare/plugin-post-summary-v0.2.1...plugin-post-summary-v0.3.0) (2026-10-09)
 
 

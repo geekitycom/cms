@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.5.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.4.0...plugin-wordpress-v0.5.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** a plugin names every file it keeps through host.data in a `data` field on its definition (kept, rebuildable or credential). host.data.read and update throw on an undeclared file, and PluginDataFolder.path is removed. The testing helper pluginDataFolder takes the plugin instead of its name.
+* **cms:** PluginFederationContext.outbox(username) and .followers(username) return Promise<PluginCollection<…> | undefined>; await them before reading totalItems, firstCursor, lastCursor or a page.
+
+### Features
+
+* **cms:** a census test fails on any data file a site writes without a declaration ([1d853c2](https://github.com/geekitycom/cms/commit/1d853c21ab315b7a39f7c6264524e8e113d48dfd))
+* **cms:** geekity export writes a tar.gz of the kept files with a manifest ([e992983](https://github.com/geekitycom/cms/commit/e992983afd73b6016871e957ff31755735c0acea))
+* **cms:** geekity import restores an export and installs its plugins from npm ([3f158c3](https://github.com/geekitycom/cms/commit/3f158c3b018744282d8642423f58124bd6efea39))
+* **cms:** plugins declare their data files, and an undeclared file is refused ([91319f1](https://github.com/geekitycom/cms/commit/91319f1c3a44487f93fceff23e057918dc9a942b))
+* **cms:** return promises from the plugin federation outbox and followers ([02eeafc](https://github.com/geekitycom/cms/commit/02eeafcba58e588854375d244c1c6827342f417f))
+
+
+### Bug Fixes
+
+* **plugin-wordpress:** target host api 2 ([dc41cde](https://github.com/geekitycom/cms/commit/dc41cdeb85566971bae518cb9b25f9657eeb5972))
+
 ## [0.4.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.3.0...plugin-wordpress-v0.4.0) (2026-10-12)
 
 
