@@ -260,6 +260,13 @@ page. A document that later gets that URL takes it over. The server checks a
 The admin, the federation endpoints and the health check answer before any
 declared redirect.
 
+An upload is a real page too. A `from` under `/uploads/` answers only when no
+file is at that path, so you can send an old upload URL to where the file
+lives now, such as `/uploads/2019/02/resume.pdf` to
+`/uploads/2026/03/resume.pdf`. A `redirect_from` on a document can also name
+an old upload URL. Paths under `/uploads/_/`, where the server keeps derived
+images, never reach a declared redirect.
+
 The server reads the file on the next request after it changes, with no
 restart. The server skips an entry it cannot serve, and logs a warning at boot
 and again on the first request after the file changes. It skips these

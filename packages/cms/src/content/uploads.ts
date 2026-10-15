@@ -16,8 +16,13 @@ export const UPLOAD_ASSET_PREFIX = '/uploads/';
 /** The content subdirectory {@link UPLOAD_ASSET_PREFIX} is served from. */
 export const UPLOAD_DIRECTORY = 'uploads';
 
+/** Whether an upload path names a half-written file a metadata sweep left (TASK-401). */
+export function isStripTemporary(relative: string): boolean {
+  return relative.toLowerCase().endsWith(STRIP_TEMPORARY_SUFFIX);
+}
+
 export function findUpload(relative: string, contentDir: string): StaticAsset | undefined {
-  if (relative.toLowerCase().endsWith(STRIP_TEMPORARY_SUFFIX)) return undefined;
+  if (isStripTemporary(relative)) return undefined;
   return findAsset(relative, [path.join(contentDir, UPLOAD_DIRECTORY)]);
 }
 

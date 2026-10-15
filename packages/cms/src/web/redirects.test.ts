@@ -262,6 +262,75 @@ describe('a declared redirect and what lives on the site', () => {
   });
 });
 
+describe('a declared redirect from an upload URL (TASK-377)', () => {
+  it('answers for an upload path with no file behind it', async () => {
+    const { cms } = await site({
+      ...CONTENT,
+      'uploads/2026/03/resume.pdf': '%PDF-1.4 current',
+      '_data/redirects/legacy.json': redirects({
+        '/uploads/2019/02/resume.pdf': '/uploads/2026/03/resume.pdf',
+      }),
+    });
+
+    assert.deepEqual(await redirectOf(cms, '/uploads/2019/02/resume.pdf'), {
+      status: 301,
+      location: '/uploads/2026/03/resume.pdf',
+    });
+    const head = await cms.app.request('/uploads/2019/02/resume.pdf', { method: 'HEAD' });
+    assert.equal(head.status, 301);
+    assert.equal((await cms.app.request('/uploads/2019/02/other.pdf')).status, 404);
+  });
+
+  it('answers from a document that names the upload URL in redirect_from', async () => {
+    const { cms } = await site({
+      ...CONTENT,
+      'pages/resume.md':
+        '---\ntitle: Resume\npermalink: /resume/\nredirect_from:\n  - /uploads/2019/02/resume.pdf\n---\n\nMy resume.\n',
+    });
+
+    assert.deepEqual(await redirectOf(cms, '/uploads/2019/02/resume.pdf'), {
+      status: 301,
+      location: '/resume/',
+    });
+  });
+
+  it('never shadows an upload that is there', async () => {
+    const { cms } = await site({
+      ...CONTENT,
+      'uploads/2026/03/resume.pdf': '%PDF-1.4 current',
+      '_data/redirects.json': redirects([
+        { from: '/uploads/2026/03/resume.pdf', to: '/elsewhere/' },
+      ]),
+    });
+
+    const response = await cms.app.request('/uploads/2026/03/resume.pdf');
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'application/pdf');
+    assert.equal(await response.text(), '%PDF-1.4 current');
+  });
+
+  it('never answers for a metadata sweep temp file or a derived image path', async () => {
+    const { cms } = await site({
+      ...CONTENT,
+      'uploads/2026/09/beach.jpg': 'stripped',
+      'uploads/2026/09/beach.jpg.geekity-strip': 'half written',
+      '_data/redirects.json': redirects([
+        { from: '/uploads/2026/09/beach.jpg.geekity-strip', to: '/elsewhere/' },
+        { from: '/uploads/2026/09/gone.jpg.geekity-strip', to: '/elsewhere/' },
+        { from: '/uploads/_/2026/09/gone.jpg/w400.webp', to: '/elsewhere/' },
+      ]),
+    });
+
+    for (const url of [
+      '/uploads/2026/09/beach.jpg.geekity-strip',
+      '/uploads/2026/09/gone.jpg.geekity-strip',
+      '/uploads/_/2026/09/gone.jpg/w400.webp',
+    ]) {
+      assert.equal((await cms.app.request(url)).status, 404, url);
+    }
+  });
+});
+
 describe('a redirect file with problems', () => {
   it('reports invalid entries and loops at boot and serves none of them', async (t) => {
     const warn = t.mock.method(console, 'warn', () => undefined);

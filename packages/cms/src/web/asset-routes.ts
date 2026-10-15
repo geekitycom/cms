@@ -1,6 +1,11 @@
-import type { Context } from 'hono';
+import type { Context, Next } from 'hono';
 
-import { findUpload, UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
+import {
+  findUpload,
+  isStripTemporary,
+  UPLOAD_ASSET_PREFIX,
+  VARIANT_ASSET_PREFIX,
+} from '../content/uploads.ts';
 import type { GeekityEnv } from './env.ts';
 import { FAVICON_FILE, iconSetting, siteIconSource } from '../images/icons.ts';
 import { sourceVersion } from '../images/paths.ts';
@@ -107,11 +112,20 @@ function decodeVariantPath(relative: string): string {
  * assets get. The cache lifetime is longer than a theme asset's because an
  * upload's URL names one set of bytes: the upload endpoint never overwrites,
  * it suffixes.
+ *
+ * A path with no file behind it is not answered here (TASK-377): it goes on to
+ * the not-found handler, so an upload that moved can be led on by
+ * `redirect_from` or a declared redirect, which never shadow a file that is
+ * there. A metadata sweep's temporary file is the exception and 404s.
  */
-export function upload(c: Context<GeekityEnv>): Response {
+export async function upload(c: Context<GeekityEnv>, next: Next): Promise<Response | undefined> {
   const relative = requestPath(c).slice(UPLOAD_ASSET_PREFIX.length);
+  if (isStripTemporary(relative)) return notFound(c);
   const asset = findUpload(relative, c.var.config.contentDir);
-  if (asset === undefined) return notFound(c);
+  if (asset === undefined) {
+    await next();
+    return undefined;
+  }
 
   const options = { maxAge: UPLOAD_ASSET_MAX_AGE };
   if (matchesEtag(c.req.header('if-none-match'), asset.etag)) {
