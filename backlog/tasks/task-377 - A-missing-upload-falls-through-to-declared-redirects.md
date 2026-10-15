@@ -4,9 +4,10 @@ title: A missing upload falls through to declared redirects
 status: To Do
 assignee: []
 created_date: '2026-10-13 02:35'
+updated_date: '2026-10-15 00:56'
 labels:
   - bug
-milestone: m-31
+milestone: m-39
 dependencies: []
 references:
   - packages/cms/src/web/asset-routes.ts

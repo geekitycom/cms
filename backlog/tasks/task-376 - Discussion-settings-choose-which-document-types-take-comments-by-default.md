@@ -4,11 +4,12 @@ title: 'Discussion settings: choose which document types take comments by defaul
 status: To Do
 assignee: []
 created_date: '2026-10-13 02:21'
-updated_date: '2026-10-13 02:27'
+updated_date: '2026-10-15 00:56'
 labels:
   - comments
   - admin
   - settings
+milestone: m-39
 dependencies: []
 ordinal: 335800
 ---

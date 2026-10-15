@@ -4,7 +4,9 @@ title: A read post can carry a book cover on its citation
 status: To Do
 assignee: []
 created_date: '2026-10-13 20:24'
+updated_date: '2026-10-15 00:56'
 labels: []
+milestone: m-39
 dependencies: []
 references:
   - packages/cms/src/content/read.ts

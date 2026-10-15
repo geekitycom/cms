@@ -6,7 +6,9 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-13 21:12'
+updated_date: '2026-10-15 00:56'
 labels: []
+milestone: m-39
 dependencies: []
 references:
   - packages/cms/themes/default/partials/post-list.njk
