@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0](https://github.com/geekitycom/cms/compare/plugin-llm-v0.2.2...plugin-llm-v0.3.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** a plugin names every file it keeps through host.data in a `data` field on its definition (kept, rebuildable or credential). host.data.read and update throw on an undeclared file, and PluginDataFolder.path is removed. The testing helper pluginDataFolder takes the plugin instead of its name.
+
+### Features
+
+* **cms:** plugins declare their data files, and an undeclared file is refused ([91319f1](https://github.com/geekitycom/cms/commit/91319f1c3a44487f93fceff23e057918dc9a942b))
+
+
+### Bug Fixes
+
+* **plugin-llm:** await the settings and target host api 2 ([d5a892f](https://github.com/geekitycom/cms/commit/d5a892ffa1362a9e7645b0db6af18ddbd6330742))
+* **plugin-llm:** await the site info the host now returns as a promise ([0a836a6](https://github.com/geekitycom/cms/commit/0a836a6d40c5e357626483edc1e7bb4578e8e24d))
+
 ## [0.2.2](https://github.com/geekitycom/cms/compare/plugin-llm-v0.2.1...plugin-llm-v0.2.2) (2026-10-12)
 
 
