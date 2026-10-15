@@ -33,6 +33,7 @@ A document, which is one post, one page or one entry of a listing, adds:
 | `categories`                                | The document's categories, in file order.                                                                                      |
 | `content`                                   | The Markdown body rendered to HTML. Print it with `\| safe`.                                                                   |
 | `summary`                                   | Its `description` as plain text, else an excerpt of the body, else empty. The line the feeds publish.                          |
+| `excerpt`                                   | `summary` without a read post's read line: its own words. What a listing prints under a headline.                              |
 | `url`                                       | The document's URL path, the same value as `page.url`.                                                                         |
 | `page.url`                                  | The document's URL path. Always ends in `/`.                                                                                   |
 | `page.date`                                 | The same `Date` as `date`.                                                                                                     |

@@ -25,6 +25,15 @@ export function feedExcerpt(document: Document): string {
 }
 
 /**
+ * The post's own words in one line: the `description`, else the first
+ * paragraph of the body. {@link feedExcerpt} without the read line, for a
+ * listing that prints the read line itself after the headline (TASK-395).
+ */
+export function postExcerpt(document: Document): string {
+  return document.description ?? excerptFromHtml(document.html);
+}
+
+/**
  * The first paragraph of some HTML as plain text, cut where WordPress cuts an
  * excerpt. What a post falls back to when it carries no `description`, and
  * what a comment — which never carries one — always uses.

@@ -482,7 +482,10 @@ indiebookclub's own. The line holds:
   identifier as a `data.p-uid` whose value is the `isbn:` or `doi:` uid.
 
 The read's kicker and hidden `h1` say Read. A listing prints each entry's read
-line from the same partial. The partial prints `read.line`, the same HTML that
+line from the same partial: an untitled read prints it above its words, and a
+titled read prints it after its headline and `excerpt`, where a titled reply
+prints its citation (TASK-395). The feeds' `summary` of a read opens with the
+line; the listing's `excerpt` leaves it out, so it is not printed twice. The partial prints `read.line`, the same HTML that
 the feeds and the federated Note open with (TASK-233). `read.status`,
 `read.statusLabel` and `read.of` are available for a theme that marks up the
 line differently.

@@ -21,7 +21,7 @@ import type { ImageLoading } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import { escapeAttribute } from '../util/html.ts';
 import type { AuthorContext } from '../site/authors.ts';
-import { feedExcerpt } from '../content/excerpt.ts';
+import { feedExcerpt, postExcerpt } from '../content/excerpt.ts';
 import { documentLanguage } from '../content/locale.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
 
@@ -130,6 +130,11 @@ export interface DocumentContext {
    * theme prints it without asking whether it is there.
    */
   summary: string;
+  /**
+   * The document's own words in one line: `summary` without a read post's
+   * read line, which a listing prints after the headline instead (TASK-395).
+   */
+  excerpt: string;
   /** The document's URL path, the same value as `page.url`. */
   url: string;
   /** Eleventy's `page`. */
@@ -351,6 +356,7 @@ export function documentContext(
     // markup above: an excerpt is text, and the `<picture>` a site's image
     // config puts in the HTML is not something to cut words out of.
     summary: feedExcerpt(document),
+    excerpt: postExcerpt(document),
     url: document.permalink,
     type: document.type,
     page: {
