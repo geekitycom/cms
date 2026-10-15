@@ -68,6 +68,7 @@ export {
   writeActorKeyFile,
 } from './keys.ts';
 export type { ActorKeyAlgorithm } from './keys.ts';
+export { backfillDeleted } from './object-ids.ts';
 export {
   addFollower,
   appendInboxActivity,

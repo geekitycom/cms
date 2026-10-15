@@ -1574,12 +1574,79 @@ describe('a post federated again under a fresh id (TASK-417 AC #3)', () => {
     const instance = await site(FILES);
 
     for (const id of [PERMALINK_ID, REISSUED, MIGRATED_ID, `${MIGRATED_ID}&v=2`]) {
-      assert.ok(postByObjectId(instance.store, id, BASE_URL) !== undefined, id);
+      assert.ok(postByObjectId(instance.store, id, instance.config) !== undefined, id);
     }
-    assert.equal(
-      postByObjectId(instance.store, `${BASE_URL}/2011/06/old-news/`, BASE_URL),
-      undefined,
+    for (const id of [
+      `${BASE_URL}/2011/06/old-news/`,
+      `${PERMALINK_ID}?v=3`,
+      `${MIGRATED_ID}&v=3`,
+    ]) {
+      assert.equal(postByObjectId(instance.store, id, instance.config), undefined, id);
+    }
+  });
+
+  it('advertises the current id on the page', async () => {
+    const instance = await site(FILES);
+
+    const html = await (await get(instance, '/2026/09/hello/', 'text/html')).text();
+
+    assert.ok(
+      html.includes(`<link rel="alternate" type="application/activity+json" href="${REISSUED}">`),
+      html,
     );
+  });
+
+  it('names a same-site post it replies to by that post’s current id', async () => {
+    const instance = await site({
+      ...FILES,
+      'posts/2026-09-04-answer.md': rawPost(
+        [
+          "date: '2026-09-04T09:00:00Z'",
+          'permalink: /2026/09/answer/',
+          `in-reply-to: ${PERMALINK_ID}`,
+        ],
+        'Agreed.',
+      ),
+      'posts/2026-09-05-old-answer.md': rawPost(
+        [
+          "date: '2026-09-05T09:00:00Z'",
+          'permalink: /2026/09/old-answer/',
+          `in-reply-to: ${BASE_URL}/2011/06/old-news/`,
+        ],
+        'Still true.',
+      ),
+    });
+
+    assert.equal((await articleAt(instance, '/2026/09/answer/'))['inReplyTo'], REISSUED);
+    assert.equal(
+      (await articleAt(instance, '/2026/09/old-answer/'))['inReplyTo'],
+      `${MIGRATED_ID}&v=2`,
+    );
+  });
+});
+
+describe('a damaged objectIds.json (TASK-417)', () => {
+  it('still serves the post and its page, under its natural id', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    const instance = await site({
+      ...HELLO,
+      '_data/federation/objectIds.json': '{"deleted": [',
+    });
+
+    const response = await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS);
+    assert.equal(response.status, 200);
+    assert.equal(
+      ((await response.json()) as Record<string, unknown>)['id'],
+      `${BASE_URL}/2026/09/hello/`,
+    );
+    const page = await get(instance, '/2026/09/hello/', 'text/html');
+    assert.equal(page.status, 200);
+    await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS);
+
+    const damaged = warn.mock.calls.filter((call) =>
+      String(call.arguments[0]).includes('objectIds.json'),
+    );
+    assert.equal(damaged.length, 1, 'said once, not on every read');
   });
 });
 

@@ -1531,6 +1531,65 @@ describe('a post that comes back after its Delete (TASK-417)', () => {
   });
 });
 
+describe('a Delete sent before objectIds.json kept a record of it (TASK-417)', () => {
+  const PERMALINK_ID = `${BASE_URL}/2026/03/hello-world/`;
+  const POST_FILE = 'posts/2026-03-04-hello-world.md';
+
+  function restart(dataDir: string, contentDir: string): Cms {
+    const cms = createCms({
+      dataDir,
+      contentDir,
+      port: 0,
+      watch: false,
+      baseUrl: BASE_URL,
+      federation: { queue: null, allowPrivateAddress: true },
+    });
+    started.push(cms);
+    return cms;
+  }
+
+  it('learns the ids from the delivery log at boot, once', async () => {
+    const first = await site();
+    const agent = await signedIn(first.cms);
+    await publishNewPost(agent);
+    await first.cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
+    await first.cms.delivery.settled();
+    await first.cms.close();
+    started.splice(started.indexOf(first.cms), 1);
+    const objectIds = path.join(first.contentDir, '_data', 'federation', 'objectIds.json');
+    await rm(objectIds);
+
+    await restart(first.dataDir, first.contentDir).close();
+    const cms = restart(first.dataDir, first.contentDir);
+    assert.deepEqual(JSON.parse(await readFile(objectIds, 'utf8')), {
+      deleted: [PERMALINK_ID],
+      reissued: {},
+    });
+
+    await cms.sync();
+    await writeDocument(
+      first.contentDir,
+      POST_FILE,
+      (await readFile(path.join(first.contentDir, POST_FILE), 'utf8')).replace(
+        /^draft: true\n/m,
+        '',
+      ),
+    );
+    await cms.sync();
+    deliveries.length = 0;
+    await cms.delivery.resend('hello-world');
+    await cms.delivery.settled();
+
+    const creates = delivered('Create');
+    assert.equal(creates.length, 1, `expected one Create, saw ${JSON.stringify(deliveries)}`);
+    assert.equal(
+      ((creates[0] as Delivery).body['object'] as Record<string, unknown>)['id'],
+      `${PERMALINK_ID}?v=2`,
+    );
+  });
+});
+
 describe('editing a published post file on disk', () => {
   const POST_FILE = 'posts/2026-03-04-watched.md';
 

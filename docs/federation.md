@@ -209,8 +209,12 @@ entry names it. A resend of a post whose current id was deleted sends a
 
 The permalink route ignores the query, so the new id dereferences to the post.
 An ActivityStreams request for the page URL answers with an object whose `id`
-is the current id, and Mastodon then fetches that id. A reply, like, boost or
-quote of any id the post has had reaches the post.
+is the current id, and Mastodon then fetches that id. The page's
+`<link rel="alternate" type="application/activity+json">` names the current
+id too, and so does the `inReplyTo` of a reply post that answers the post. A
+reply, like, boost or quote of any id the post has had reaches the post. One of
+a revision the post never had, such as `?v=7` for a post that has only been
+`?v=2`, reaches nothing.
 
 A post that was never deleted keeps its permalink as its id. Feed guids, the
 `/replies/` keys, and the front matter do not change.
@@ -228,12 +232,25 @@ The record is `content/_data/federation/objectIds.json`:
 }
 ```
 
-`deleted` lists the ids a `Delete` went out for. A `Delete` that dev mode
-holds, or that has no inbox to go to, is not recorded. `reissued` lists, for
-each post's own id, the ids it was federated under since, oldest first. The
-last one is current. The file lives with the content because the site cannot
-rebuild it: a rebuilt database must not forget what the fediverse was told is
-gone. Do not delete entries from it.
+`deleted` lists the ids a `Delete` went out for. The id is recorded before the
+first POST, so a `Delete` that dev mode holds, or that has no inbox to go to,
+is recorded too. `reissued` lists, for each post's own id, the ids it was
+federated under since, oldest first. The last one is current. The file lives
+with the content because the site cannot rebuild it: a rebuilt database must
+not forget what the fediverse was told is gone. Do not delete entries from it.
+
+A site that sent a `Delete` before it kept this file has it recorded only in
+the delivery log, in `data/geekity.db`. Every boot adds the object id of each
+`Delete` in that log to `deleted`, and writes nothing when there is none to
+add. `geekity rebuild` deletes the database and the log with it, so a `Delete`
+the file has not picked up by then is forgotten. Start the site once on this
+version before a rebuild.
+
+A file that cannot be read as JSON, or that is not shaped as above, is read as
+empty, and the site logs a warning that names the file once. Pages and objects
+are served under the posts' own ids in the meantime. The site does not write
+over a damaged file, so every `Create` and `Delete` of a post fails, and logs
+why, until the file is fixed.
 
 One POST serves a whole instance, and the site prefers the shared inbox. The
 site records the outcome per recipient, so an admin can see which recipient did

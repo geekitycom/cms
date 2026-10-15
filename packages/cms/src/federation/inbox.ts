@@ -218,9 +218,7 @@ export async function handleQuoteRequest(
 ): Promise<void> {
   const { config, store } = context.data;
   const post =
-    request.objectId === null
-      ? undefined
-      : postByObjectId(store, request.objectId.href, config.baseUrl);
+    request.objectId === null ? undefined : postByObjectId(store, request.objectId.href, config);
   const author =
     post === undefined
       ? (userByUsername(config.dataDir, context.recipient ?? '') ?? primaryUser(config.dataDir))
@@ -302,7 +300,7 @@ function answersPost(context: SiteInboxContext, activity: Accept | Reject): bool
   const { config, store } = context.data;
   return (
     activity.objectId !== null &&
-    postByObjectId(store, activity.objectId.href, config.baseUrl) !== undefined
+    postByObjectId(store, activity.objectId.href, config) !== undefined
   );
 }
 

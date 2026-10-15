@@ -23,7 +23,13 @@ import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { profileContext } from '../site/authors.ts';
 import { publicDocumentAt } from '../content/permalinks.ts';
 import { postObjectId } from '../content/guids.ts';
-import { currentObjectId, readObjectIds } from '../federation/object-ids.ts';
+import {
+  currentObjectId,
+  isObjectIdOf,
+  naturalObjectId,
+  readObjectIds,
+} from '../federation/object-ids.ts';
+import type { ObjectIdRecord } from '../federation/object-ids.ts';
 import { documentEditorPath, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
@@ -118,13 +124,13 @@ export function mountFederationScreen(
     const admin = c.var.admin;
     const baseUrl = c.var.config.baseUrl;
     const cited: CitedPageReader = (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart);
-    const post = localPosts(c.var.store, baseUrl, cited, (url) =>
+    const objectIds = readObjectIds(c.var.config.contentDir);
+    const post = localPosts(c.var.store, baseUrl, objectIds, cited, (url) =>
       c.var.conversation.documentOf(url),
     );
     const users = listUsers(c.var.config.dataDir);
     const targets = syndicationTargetsReader(c.var.config.contentDir);
     const copies = syndicationCopies(c.var.config.contentDir);
-    const objectIds = readObjectIds(c.var.config.contentDir);
     const siteLanguage = c.var.siteAtRequestStart.language;
 
     return render(c, ADMIN_TEMPLATES.federation, {
@@ -160,10 +166,10 @@ export function mountFederationScreen(
         .map((relay) => relayRow(relay, admin.lastDeliveryToInbox(relay.inboxId))),
       posts: deliveryRows(c.var.store.listFederated({ limit: FEDERATION_RECENT }), {
         baseUrl,
+        objectIds,
         cited,
         author: (document) => userForAuthor(users, document.author)?.username ?? null,
-        lastDelivery: (objectId) =>
-          admin.lastDeliveryToObject(currentObjectId(objectIds, objectId)),
+        lastDelivery: (objectId) => admin.lastDeliveryToObject(objectId),
         counts: (activityId) => admin.countDeliveriesByStatus(activityId),
         webmentions: (slug) => admin.countSentWebmentionsByStatus(slug),
         syndication: (document) => {
@@ -306,6 +312,8 @@ export interface SyndicationRow {
 export interface DeliveryRowsContext {
   /** The site's public origin, which a post's object id is built on. */
   readonly baseUrl: string;
+  /** What each post was federated under after a `Delete`, so its current id is the one looked up. */
+  readonly objectIds: ObjectIdRecord;
   readonly cited: CitedPageReader;
   /** Whose actor announced one post, or `null` when its `author` names nobody. */
   readonly author: (document: Document) => string | null;
@@ -339,7 +347,9 @@ export function deliveryRows(
   context: DeliveryRowsContext,
 ): DeliveryRow[] {
   return documents.map((document) => {
-    const last = context.lastDelivery(postObjectId(document, context.baseUrl));
+    const last = context.lastDelivery(
+      currentObjectId(context.objectIds, postObjectId(document, context.baseUrl)),
+    );
 
     return {
       post: {
@@ -589,11 +599,13 @@ function replyObject(
  * A post's id is its permalink (decision-13), so this is a lookup by URL
  * against the content index: an id from anywhere else — a like of somebody
  * else's post that reached the shared inbox, a reply to a reply — is `null`
- * rather than a guess, and so is one whose path the index has never heard of.
+ * rather than a guess, and so is one whose path the index has never heard of,
+ * or a revision the post was never federated under.
  */
 export function localPosts(
   store: DocumentLookup & CatalogReader & IndexClock,
   baseUrl: string,
+  objectIds: ObjectIdRecord,
   cited: CitedPageReader,
   threadOf: (url: string) => Document | undefined = () => undefined,
 ): (objectId: string | null) => LocalPost | null {
@@ -610,10 +622,13 @@ export function localPosts(
       return null;
     }
 
+    const natural = naturalObjectId(objectId);
     const own =
-      url.origin === origin
-        ? (store.getByStoredObjectId(objectId) ??
-          publicDocumentAt(store, decodeURIComponent(url.pathname)))
+      url.origin === origin && isObjectIdOf(objectIds, natural, objectId)
+        ? (store.getByStoredObjectId(natural) ??
+          (new URL(natural).search === ''
+            ? publicDocumentAt(store, decodeURIComponent(url.pathname))
+            : undefined))
         : undefined;
     const document = own ?? threadOf(objectId);
     if (document === undefined || document.type !== 'post') return null;

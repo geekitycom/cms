@@ -42,6 +42,7 @@ import { readAltTexts } from '../content/alt-text.ts';
 import type { AltTextLibrary } from '../content/alt-text.ts';
 import { imagesIn } from '../content/image-tags.ts';
 import type { DocumentLookup } from '../content/store.ts';
+import type { ResolvedConfig } from '../config.ts';
 import { postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { htmlToText } from '../content/search.ts';
@@ -63,7 +64,7 @@ import type { CitedObject } from './citations.ts';
 import type { FederationContextData } from './federation.ts';
 import { mentionedAccounts } from './handles.ts';
 import type { MentionedAccount } from './handles.ts';
-import { currentObjectId, naturalObjectId, readObjectIds } from './object-ids.ts';
+import { currentObjectId, isObjectIdOf, naturalObjectId, readObjectIds } from './object-ids.ts';
 import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } from './paths.ts';
 
 /**
@@ -170,12 +171,14 @@ export const SOURCE_MEDIA_TYPE = 'text/markdown';
  *
  * Either the post whose file stores that id, or the one at the permalink the
  * id spells — and then only when that post's id really is this URL, so a
- * migrated post is not found a second time under its permalink.
+ * migrated post is not found a second time under its permalink. A revision of
+ * either names the post only when the post was federated under it: a like of
+ * `?v=7` is about nothing here when the post has only ever been `?v=2`.
  */
 export function postByObjectId(
   store: DocumentLookup,
   objectId: string,
-  baseUrl: string,
+  { baseUrl, contentDir }: Pick<ResolvedConfig, 'baseUrl' | 'contentDir'>,
 ): Document | undefined {
   const natural = naturalObjectId(objectId);
   const permalink = permalinkOfObjectId(natural, baseUrl);
@@ -183,7 +186,7 @@ export function postByObjectId(
     store.getByStoredObjectId(natural) ??
     (permalink === undefined ? undefined : store.getByPermalink(permalink));
   if (document?.type !== 'post' || postObjectId(document, baseUrl) !== natural) return undefined;
-  return document;
+  return isObjectIdOf(readObjectIds(contentDir), natural, objectId) ? document : undefined;
 }
 
 /** The ActivityStreams object types a post can federate as, by name. */
@@ -288,7 +291,8 @@ export function postObject(
   const common = {
     id: articleObjectId(context, document),
     // On either type, so an activitypub.type override never breaks a thread.
-    replyTarget: replyTo?.id ?? (inReplyTo === undefined ? null : new URL(inReplyTo)),
+    replyTarget:
+      replyTo?.id ?? (inReplyTo === undefined ? null : replyTargetId(context, inReplyTo)),
     url: new URL(absoluteUrl(document.permalink, baseUrl)),
     source: new Source({ content: document.body, mediaType: SOURCE_MEDIA_TYPE }),
     published: toInstant(document.date) ?? null,
@@ -704,6 +708,20 @@ export type PinChange = 'pin' | 'unpin';
  * on. The rule itself lives in `content/permalinks.ts`, because the page, the feed
  * item and the object are one identity now rather than three.
  */
+/**
+ * What a reply names the post it answers by: a post on this site by its
+ * current object id, which is not always the URL the reply cites, and
+ * anything else by that URL.
+ */
+function replyTargetId(context: Context<FederationContextData>, inReplyTo: string): URL {
+  const { config, store } = context.data;
+  const permalink = permalinkOfObjectId(inReplyTo, config.baseUrl);
+  const target =
+    (permalink === undefined ? undefined : store.getByPermalink(permalink)) ??
+    postByObjectId(store, inReplyTo, config);
+  return target?.type === 'post' ? articleObjectId(context, target) : new URL(inReplyTo);
+}
+
 export function articleObjectId(context: Context<FederationContextData>, document: Document): URL {
   const { baseUrl, contentDir } = context.data.config;
   return new URL(currentObjectId(readObjectIds(contentDir), postObjectId(document, baseUrl)));

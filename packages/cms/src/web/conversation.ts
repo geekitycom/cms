@@ -6,7 +6,13 @@ import type { CitedPageReader } from '../content/citation.ts';
 import { RSVP_LABELS } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
 import type { ArchiveReader, DocumentLookup, IndexClock, ReplyReader } from '../content/store.ts';
-import { naturalObjectId, objectIdsOf, readObjectIds } from '../federation/object-ids.ts';
+import {
+  isObjectIdOf,
+  naturalObjectId,
+  objectIdsOf,
+  readObjectIds,
+} from '../federation/object-ids.ts';
+import type { ObjectIds } from '../federation/object-ids.ts';
 import { readAllQuoteAuthorizations } from '../federation/quotes.ts';
 import type { QuoteAuthorizationRecord } from '../federation/quotes.ts';
 import {
@@ -206,17 +212,14 @@ function gather(
   const naming = authorNaming(context.admin);
   const isEvent = postTypeOf(document) === 'event';
 
-  const objectIds =
-    deliveredObjectId === undefined
-      ? []
-      : objectIdsOf(readObjectIds(context.contentDir), deliveredObjectId);
-  const fediverse =
-    objectIds.length === 0
-      ? []
-      : [
-          fromQuotes(context, objectIds, naming),
-          fromActivities(context, objectIds, stored, naming, isEvent),
-        ];
+  const fediverse: Part[] = [];
+  if (deliveredObjectId !== undefined) {
+    const objectIds = objectIdsOf(readObjectIds(context.contentDir), deliveredObjectId);
+    fediverse.push(
+      fromQuotes(context, objectIds, naming),
+      fromActivities(context, root, objectIds, stored, naming, isEvent),
+    );
+  }
   const comments = fromStored(context, document, stored, isEvent);
   const sources = [...fediverse, comments];
   const replyPosts = fromReplyPosts(context, document, root, seen, [
@@ -266,7 +269,8 @@ function fromQuotes(
 
 function fromActivities(
   context: Reading,
-  objectIds: readonly string[],
+  root: string,
+  objectIds: ObjectIds,
   stored: readonly PostComment[],
   naming: (actorId: string) => InteractionAuthor,
   isEvent: boolean,
@@ -276,7 +280,6 @@ function fromActivities(
   const origins = stored.flatMap((comment) =>
     comment.source === 'activitypub' && comment.origin !== undefined ? [comment.origin] : [],
   );
-  const [root = ''] = objectIds;
   const named = new Set(objectIds);
   const aboutPost = (activity: InboxActivity): boolean =>
     activity.objectId !== null && named.has(activity.objectId);
@@ -606,9 +609,7 @@ function documentNamed(context: ConversationContext, url: string, depth = 0): Do
       const comment = context.admin.getComment(key);
       return comment === undefined ? undefined : context.store.getBySlug(comment.slug);
     }
-    const permalink = permalinkOfObjectId(`${named.origin}${named.pathname}`, context.baseUrl);
-    const found = permalink === undefined ? undefined : context.store.getByPermalink(permalink);
-    return found ?? context.store.getByStoredObjectId(named.href);
+    return ownDocumentNamed(context, named.href);
   }
 
   const comment =
@@ -621,6 +622,20 @@ function documentNamed(context: ConversationContext, url: string, depth = 0): Do
     return documentNamed(context, reply.inReplyTo, depth + 1);
   }
   return context.store.getByStoredObjectId(named.href);
+}
+
+/**
+ * The document one of this site's own URLs names: the one at the permalink it
+ * spells, or the post whose file stores it as its id. A query string rules the
+ * permalink out, as it does for {@link permalinkOfObjectId}, unless it is a
+ * revision the post was federated under; one it was never given names nothing.
+ */
+function ownDocumentNamed(context: ConversationContext, url: string): Document | undefined {
+  const natural = naturalObjectId(url);
+  if (!isObjectIdOf(readObjectIds(context.contentDir), natural, url)) return undefined;
+  const permalink = permalinkOfObjectId(natural, context.baseUrl);
+  const found = permalink === undefined ? undefined : context.store.getByPermalink(permalink);
+  return found ?? context.store.getByStoredObjectId(natural);
 }
 
 /**
@@ -655,8 +670,8 @@ function rootOf(context: Reading, document: Document): string {
 /**
  * Every URL a reply post's `in-reply-to` could name something here by, and the
  * id each one names: the post by its permalink, every URL it used to live at
- * and its object id, and every entry by its id, its url and, for a comment
- * written here, its page and its anchor.
+ * and every object id it has had, and every entry by its id, its url and, for
+ * a comment written here, its page and its anchor.
  */
 function namesIn(
   context: Reading,
@@ -666,7 +681,10 @@ function namesIn(
 ): Map<string, string> {
   const permalink = absoluteUrl(document.permalink, context.baseUrl);
   const former = (document.redirectFrom ?? []).map((url) => absoluteUrl(url, context.baseUrl));
-  const names = new Map<string, string>([permalink, ...former, root].map((url) => [url, root]));
+  const objectIds = objectIdsOf(readObjectIds(context.contentDir), root);
+  const names = new Map<string, string>(
+    [permalink, ...former, ...objectIds].map((url) => [url, root]),
+  );
   for (const reply of replies) {
     for (const name of namesOf(reply, permalink, context.baseUrl)) {
       if (!names.has(name)) names.set(name, reply.id);
@@ -1153,6 +1171,7 @@ class PostsByObjectId {
 
   #resolve(objectId: string): Document | undefined {
     const natural = naturalObjectId(objectId);
+    if (!isObjectIdOf(readObjectIds(this.#context.contentDir), natural, objectId)) return undefined;
     const permalink = permalinkOfObjectId(natural, this.#context.baseUrl);
     if (permalink !== undefined) {
       const document = this.#context.store.getByPermalink(permalink);

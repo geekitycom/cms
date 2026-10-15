@@ -251,7 +251,6 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     activity: Activity,
     about: Document,
     also: readonly DeliveryTarget[] = [],
-    beforeSending?: () => Promise<void>,
   ): Promise<DeliveryReport> {
     const activityId = activity.id?.href;
     if (activityId === undefined) {
@@ -268,7 +267,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         slug: about.slug,
       },
       also,
-      { relays: visibilityOf(about) === 'public', beforeSending },
+      { relays: visibilityOf(about) === 'public' },
     );
   }
 
@@ -320,13 +319,15 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     const deleted = store.now().toISOString();
     if (shape.kind === 'object') {
       // Recorded before the first POST rather than after the last, so a crash
-      // in between never leaves a tombstoned id looking reusable.
+      // in between never leaves a tombstoned id looking reusable. A Delete
+      // held in dev mode or sent to nobody is recorded too, which costs the
+      // post a revision it did not strictly need when it comes back.
+      await recordDeleted(config.contentDir, shape.id);
       return await send(
         context,
         postDeleteActivity(context, document, deleted),
         document,
         postTargets(document, shape),
-        () => recordDeleted(config.contentDir, shape.id),
       );
     }
     return await send(
@@ -398,10 +399,7 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     activity: Activity,
     about: ActivityAbout,
     also: readonly DeliveryTarget[] = [],
-    {
-      relays = true,
-      beforeSending,
-    }: { relays?: boolean; beforeSending?: (() => Promise<void>) | undefined } = {},
+    { relays = true }: { relays?: boolean } = {},
   ): Promise<DeliveryReport> {
     const deliveries: Delivery[] = [];
     const targets = fanOutTargets(deliveryTargets(admin, sender.username, { relays }), also);
@@ -420,7 +418,6 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       held,
     };
     if (held) return report;
-    if (targets.length > 0) await beforeSending?.();
     const keys = await senderKeyPairs(context, sender);
 
     for (const target of targets) {
