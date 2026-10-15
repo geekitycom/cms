@@ -676,6 +676,112 @@ Words.
   });
 });
 
+describe('which types take comments by default (TASK-376)', () => {
+  const ABOUT = '---\ntitle: About\n---\n\nMe.\n';
+  const OPEN_ABOUT = '---\ntitle: About\ncomments: true\n---\n\nMe.\n';
+  const CLOSED_ABOUT = '---\ntitle: About\ncomments: false\n---\n\nMe.\n';
+
+  async function aboutPage(cms: Cms): Promise<string> {
+    const response = await cms.app.request('/about/');
+    assert.equal(response.status, 200);
+    return await response.text();
+  }
+
+  async function withSettings(
+    contentDir: string,
+    settings: Partial<typeof DEFAULT_SITE_SETTINGS>,
+  ): Promise<void> {
+    await writeSiteSettings({
+      contentDir,
+      settings: { ...DEFAULT_SITE_SETTINGS, base_url: BASE_URL, ...settings },
+    });
+  }
+
+  const onAbout = (fields: Record<string, string> = {}) =>
+    submission({ [COMMENT_FIELDS.post]: 'about', ...fields });
+
+  it('opens a page left to the site settings once pages are ticked, and closes it again', async () => {
+    const { cms, contentDir } = await site({ 'pages/about.md': ABOUT });
+
+    assert.ok(!(await aboutPage(cms)).includes('id="respond"'), 'pages start closed');
+    assert.equal((await submit(cms, onAbout())).status, 403);
+
+    await withSettings(contentDir, { comments_on_pages: true });
+    assert.match(await aboutPage(cms), /id="respond"/);
+    assert.equal((await submit(cms, onAbout())).status, 303);
+
+    await withSettings(contentDir, { comments_on_pages: false });
+    assert.ok(!(await aboutPage(cms)).includes('id="respond"'));
+    assert.equal((await submit(cms, onAbout())).status, 403);
+  });
+
+  it('keeps a page set to closed closed with pages ticked', async () => {
+    const { cms, contentDir } = await site({ 'pages/about.md': CLOSED_ABOUT });
+    await withSettings(contentDir, { comments_on_pages: true });
+
+    assert.ok(!(await aboutPage(cms)).includes('id="respond"'));
+    assert.equal((await submit(cms, onAbout())).status, 403);
+  });
+
+  it('opens a post set to open with posts unticked, and closes one left to the site', async () => {
+    const opened = POST.replace('---\n\nWords.', 'comments: true\n---\n\nWords.');
+    const { cms, contentDir } = await site({
+      'posts/2026-09-19-hello-world.md': opened,
+      'posts/2026-09-19-other.md': POST.replace('hello-world', 'other').replace('Hello', 'Other'),
+    });
+    await withSettings(contentDir, { comments_on_posts: false });
+
+    assert.match(await postPage(cms), /id="respond"/);
+    assert.equal((await submit(cms, submission())).status, 303);
+
+    const other = await (await cms.app.request('/2026/09/other/')).text();
+    assert.ok(!other.includes('id="respond"'), 'a post left to the site is closed');
+    assert.equal((await submit(cms, submission({ [COMMENT_FIELDS.post]: 'other' }))).status, 403);
+  });
+
+  it('keeps what was said under a page however its comments are closed', async () => {
+    const { cms, contentDir } = await site({ 'pages/about.md': OPEN_ABOUT });
+    await submit(cms, onAbout({ [COMMENT_FIELDS.body]: 'A remark about you.' }));
+    const held = cms.admin.listComments({ status: 'pending' })[0];
+    await approve(cms, held?.id ?? '');
+
+    const closings: [string, () => Promise<void>][] = [
+      [
+        'closed on the page',
+        async () => {
+          await writeFile(path.join(contentDir, 'pages/about.md'), CLOSED_ABOUT, 'utf8');
+          await cms.sync();
+        },
+      ],
+      [
+        'left to a site with pages unticked',
+        async () => {
+          await writeFile(path.join(contentDir, 'pages/about.md'), ABOUT, 'utf8');
+          await cms.sync();
+        },
+      ],
+      ['switched off site-wide', () => withSettings(contentDir, { comments: false })],
+    ];
+
+    for (const [how, close] of closings) {
+      await close();
+      const html = await aboutPage(cms);
+      assert.match(html, /A remark about you\./, how);
+      assert.ok(!html.includes('id="respond"'), `${how}: no form`);
+
+      const feed = await cms.app.request('/about/feed/');
+      assert.equal(feed.status, 200, how);
+      assert.match(await feed.text(), /A remark about you\./, how);
+
+      const siteWide = await (await cms.app.request('/comments/feed/')).text();
+      assert.match(siteWide, /A remark about you\./, how);
+
+      const own = await cms.app.request(`/comment/${held?.id ?? ''}/`);
+      assert.equal(own.status, 200, how);
+    }
+  });
+});
+
 describe('the comments feeds', () => {
   it('carry an approved comment, and count it in source:comments', async () => {
     const { cms } = await site();

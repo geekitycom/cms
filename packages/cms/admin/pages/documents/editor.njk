@@ -392,8 +392,8 @@
       {% call collapse('Display and discussion', open.display, fields=true) %}
         {# What this document says about comments, if anything. Three answers
            rather than two: the site's own rules, always open, always closed. #}
-        {% call field.select('editor-comments', 'comments', 'Comments', hintHtml='Writes <code>comments: true</code> or <code>comments: false</code> into the front matter, which beats the site’s switch and its closing window in both directions. Fediverse replies are shown either way.') %}
-          <option value="{{ commentSettings.site }}"{% if form.comments == commentSettings.site %} selected{% endif %}>Follow the site settings</option>
+        {% call field.select('editor-comments', 'comments', 'Comments', hintHtml='Open or Closed writes <code>comments: true</code> or <code>comments: false</code> into the front matter, which beats Settings › Discussion’s choice for this type and its closing window in both directions. Comments switched off for the whole site stay off. What was already said, and fediverse replies, are shown either way.') %}
+          <option value="{{ commentSettings.site }}"{% if form.comments == commentSettings.site %} selected{% endif %}>Follow the site settings ({{ commentsSiteDefault }})</option>
           <option value="{{ commentSettings.open }}"{% if form.comments == commentSettings.open %} selected{% endif %}>Open</option>
           <option value="{{ commentSettings.closed }}"{% if form.comments == commentSettings.closed %} selected{% endif %}>Closed</option>
         {% endcall %}

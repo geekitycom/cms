@@ -40,7 +40,6 @@ import {
   themeName,
 } from '../theme/site-data.ts';
 import type { CommentFormContext, CommentViewer } from '../comments/form.ts';
-import { answerable, commentPolicyOf } from '../comments/policy.ts';
 import type { ContactFormContext } from '../contact/form.ts';
 import { commentAnchor } from '../comments/conversation.ts';
 import { commentPageHref } from '../content/guids.ts';
@@ -787,14 +786,13 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // `conversation` is what was said back. It is on the context only when
     // there is something in it, so a theme can ask `{% if conversation %}`
     // and a post nobody has answered renders no empty section (TASK-49).
-    // `commentsFeed` is where it is syndicated, for a served document that
-    // shows one, and is set here rather than in a layout so that a site which
+    // `commentsFeed` is where it is syndicated, for a served document, and
+    // is set here rather than in a layout so that a site which
     // overrides `post.njk` or `page.njk` keeps the link.
     const site = siteData.read();
     const settings = requestSite();
-    const shows = answerable(document, commentPolicyOf(site), now);
-    const said = shows ? options.conversation?.(document, settings) : undefined;
-    const feedsIt = shows && isServed(document, now);
+    const said = options.conversation?.(document, settings);
+    const feedsIt = isServed(document, now);
     // `commentForm` is on the context only when the post is open, so the
     // theme asks `{% if commentForm %}` rather than working the rules out
     // for itself — and a closed post shows the thread with no form.
@@ -817,7 +815,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // only when the site takes them, so a theme asks `{% if webmention %}`
     // and a site that has turned them off advertises nothing.
     const webmention = webmentionEndpointFor(site);
-    const pingback = pingbackEndpointFor(site, document, now);
+    const pingback = pingbackEndpointFor(site);
     // The posts either side of this one, as the two links a theme draws under
     // an entry (TASK-79). Each is on the context only when there is one, so a
     // theme asks `{% if previous %}` and the ends of the archive draw nothing.

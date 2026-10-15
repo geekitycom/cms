@@ -125,7 +125,8 @@
       "strict-transport-security": "max-age=31536000; includeSubDomains",
       "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
-      "x-frame-options": "SAMEORIGIN"
+      "x-frame-options": "SAMEORIGIN",
+      "x-pingback": "https://blog.example/_geekity/pingback"
     },
     "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>About</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>About</h1><p>Me.</p>\n</main>\n  </body>\n</html>\n"
   },
@@ -143,7 +144,8 @@
       "strict-transport-security": "max-age=31536000; includeSubDomains",
       "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
-      "x-frame-options": "SAMEORIGIN"
+      "x-frame-options": "SAMEORIGIN",
+      "x-pingback": "https://blog.example/_geekity/pingback"
     },
     "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>About</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  </head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>About</h1><p>Me.</p>\n</main>\n  </body>\n</html>\n"
   },
@@ -160,7 +162,8 @@
       "strict-transport-security": "max-age=31536000; includeSubDomains",
       "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
-      "x-frame-options": "SAMEORIGIN"
+      "x-frame-options": "SAMEORIGIN",
+      "x-pingback": "https://blog.example/_geekity/pingback"
     },
     "body": ""
   },
@@ -373,7 +376,8 @@
       "strict-transport-security": "max-age=31536000; includeSubDomains",
       "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
-      "x-frame-options": "SAMEORIGIN"
+      "x-frame-options": "SAMEORIGIN",
+      "x-pingback": "https://blog.example/_geekity/pingback"
     },
     "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n    <title>About</title>\n    <link rel=\"stylesheet\" href=\"/theme/style.css\">\n  <link rel=\"indieauth-metadata\" href=\"https://blog.example/_geekity/indieauth/metadata\"><link rel=\"authorization_endpoint\" href=\"https://blog.example/_geekity/indieauth/auth\"><link rel=\"token_endpoint\" href=\"https://blog.example/_geekity/indieauth/token\"><link rel=\"micropub\" href=\"https://blog.example/_geekity/micropub\"></head>\n  <body class=\"bare\">\n    <header class=\"bare-header\"><a href=\"/\">A Site</a></header>\n    <main><h1>About</h1><p>Me.</p>\n</main>\n  </body>\n</html>\n"
   },

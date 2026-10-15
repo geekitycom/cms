@@ -31,6 +31,8 @@ const STABLE_SITE_JSON_KEYS = [
   'tagBase',
   'categoryBase',
   'comments',
+  'commentsOnPosts',
+  'commentsOnPages',
   'commentsCloseAfterDays',
   'commentEmailRetentionDays',
   'addressHashRetentionDays',

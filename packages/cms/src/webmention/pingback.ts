@@ -1,5 +1,3 @@
-import { answerable, commentPolicyOf } from '../comments/policy.ts';
-import type { Document } from '../content/document.ts';
 import type { RequestProblem, WebmentionOutcome } from './receive.ts';
 import { webmentionEndpointFor } from './endpoint.ts';
 
@@ -51,16 +49,11 @@ export const PINGBACK_REQUEST_FAULTS: Record<RequestProblem, number> = {
 /**
  * The endpoint a document should advertise, or `undefined` when it should not.
  *
- * Every post, and a page only while it takes comments, and nothing when the
- * site takes no webmentions: the same switch, since they are the same thing.
+ * Every document, and nothing when the site takes no webmentions: the same
+ * switch, since they are the same thing.
  */
-export function pingbackEndpointFor(
-  site: Record<string, unknown>,
-  document: Document,
-  now: Date,
-): string | undefined {
-  if (webmentionEndpointFor(site) === undefined) return undefined;
-  return answerable(document, commentPolicyOf(site), now) ? PINGBACK_PATH : undefined;
+export function pingbackEndpointFor(site: Record<string, unknown>): string | undefined {
+  return webmentionEndpointFor(site) === undefined ? undefined : PINGBACK_PATH;
 }
 
 export function pingbackAnswerFor(outcome: WebmentionOutcome): string | PingbackFault {

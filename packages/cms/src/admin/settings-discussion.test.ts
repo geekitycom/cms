@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
@@ -41,6 +41,52 @@ describe('the Discussion settings page', () => {
 
     await saveSettings(agent, 'discussion', { comments: '1' });
     assert.equal((await siteSettingsIn(contentDir)).comments, true);
+  });
+
+  it('saves which types take comments by default, both into site.json', async () => {
+    const contentDir = await box.dir('geekity-settings-comment-types-');
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const before = await siteSettingsIn(contentDir);
+    assert.equal(before.comments_on_posts, true, 'a new site opens posts');
+    assert.equal(before.comments_on_pages, false, 'and closes pages');
+
+    const form = await (await agent.get(settingsPageUrl('discussion'))).text();
+    assert.match(form, /<input[^>]*name="comments_on_posts"[^>]*checked/);
+    assert.doesNotMatch(form, /<input[^>]*name="comments_on_pages"[^>]*checked/);
+
+    const saved = await saveSettings(agent, 'discussion', {
+      comments_on_posts: '',
+      comments_on_pages: '1',
+    });
+    assert.equal(saved.status, 303);
+
+    const written = JSON.parse(
+      await readFile(path.join(contentDir, '_data', 'site.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    assert.equal(written['commentsOnPosts'], false);
+    assert.equal(written['commentsOnPages'], true);
+
+    const after = await (await agent.get(settingsPageUrl('discussion'))).text();
+    assert.doesNotMatch(after, /<input[^>]*name="comments_on_posts"[^>]*checked/);
+    assert.match(after, /<input[^>]*name="comments_on_pages"[^>]*checked/);
+  });
+
+  it('shows a site.json from before the type settings as it was: off, posts, no pages', async () => {
+    const contentDir = await box.dir('geekity-settings-comment-types-legacy-');
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({ title: 'Old', comments: false }),
+    );
+    const cms = await box.site({ contentDir });
+    const agent = await signedIn(cms);
+
+    const form = await (await agent.get(settingsPageUrl('discussion'))).text();
+    assert.doesNotMatch(form, /<input[^>]*name="comments"[^>]*checked/);
+    assert.match(form, /<input[^>]*name="comments_on_posts"[^>]*checked/);
+    assert.doesNotMatch(form, /<input[^>]*name="comments_on_pages"[^>]*checked/);
   });
 
   it('keeps the closing window and both webmention switches', async () => {

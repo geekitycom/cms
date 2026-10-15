@@ -107,13 +107,12 @@ export function comments(c: Context<GeekityEnv>, document: Document | undefined)
  * The feed of one item's direct replies (TASK-324): a post's or page's, or a
  * reply's, so a reader can walk a thread one level at a time through
  * `source:comments`. An item nobody answered has an empty feed; a segment
- * naming nothing a reader can see 404s, as does one on a document not showing
- * its conversation, by the rule `{permalink}feed/` follows.
+ * naming nothing a reader can see 404s.
  */
 export function repliesFeed(c: Context<GeekityEnv>, segment: string): Response {
   const { conversation, renderer, config } = c.var;
   const found = conversation.repliesTo(segment, c.var.siteAtRequestStart);
-  if (found === undefined || !siteView(c).showsConversation(found.post)) return notFound(c);
+  if (found === undefined) return notFound(c);
 
   const site = renderer.site();
   const cited = (url: string) => c.var.replyContexts.read(url, c.var.siteAtRequestStart);
@@ -139,8 +138,8 @@ export function repliesFeed(c: Context<GeekityEnv>, segment: string): Response {
 
 /**
  * One native comment on a page of its own (TASK-318), answering as its post
- * would: 410 once the post is deleted, and 404 while it is not served or not
- * showing its conversation. It is never listed anywhere, so it is noindex.
+ * would: 410 once the post is deleted, and 404 while it is not served. It is
+ * never listed anywhere, so it is noindex.
  */
 export function commentPage(c: Context<GeekityEnv>, id: string): Response {
   const { conversation, renderer, store } = c.var;
@@ -149,8 +148,6 @@ export function commentPage(c: Context<GeekityEnv>, id: string): Response {
 
   const now = store.now();
   if (isGone(found.post, now)) return gone(c);
-  if (!isServed(found.post, now) || !siteView(c).showsConversation(found.post)) {
-    return notFound(c);
-  }
+  if (!isServed(found.post, now)) return notFound(c);
   return c.html(renderer.renderComment(found), 200, { 'x-robots-tag': 'noindex' });
 }

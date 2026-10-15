@@ -1,5 +1,4 @@
 import { avatarHref } from '../avatars/avatars.ts';
-import { answerable } from '../comments/policy.ts';
 import type { ActorProfile, AdminStore, InboxActivity, PostComment } from '../store/admin-store.ts';
 import type { Document } from '../content/document.ts';
 import { postLabel, postTypeOf } from '../content/post-type.ts';
@@ -791,13 +790,8 @@ function siteConversation(context: Reading, limit: number): SiteInteraction[] {
   const naming = authorNaming(context.admin);
   const posts = new PostsByObjectId(context);
   const now = context.store.now();
-  const policy = {
-    enabled: context.site.comments,
-    closeAfterDays: context.site.comments_close_after_days,
-  };
-  // A page that takes no comments shows none, so the site's feed has none of its.
   const shown = (post: Document | undefined): post is Document =>
-    post !== undefined && isListed(post, now) && answerable(post, policy, now);
+    post !== undefined && isListed(post, now);
   const said: (Interaction & { post: Document })[] = [];
 
   for (let offset = 0; said.length < limit;) {

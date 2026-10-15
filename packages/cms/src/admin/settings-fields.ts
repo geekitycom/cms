@@ -312,6 +312,10 @@ const SETTING_ROWS: SettingRows = {
 
   comments: flag('comments', 'comments'),
 
+  comments_on_posts: flag('comments_on_posts', 'comments_on_posts'),
+
+  comments_on_pages: flag('comments_on_pages', 'comments_on_pages'),
+
   comments_close_after_days: {
     field: 'comments_close_after_days',
     submitted: (form) => Number(form.comments_close_after_days),

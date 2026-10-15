@@ -19,7 +19,6 @@ const BASE_URL = 'https://blog.example';
 const ENDPOINT = `${BASE_URL}${PINGBACK_PATH}`;
 const POST_URL = `${BASE_URL}/2026/09/hello-world/`;
 const OPEN_PAGE_URL = `${BASE_URL}/about/`;
-const CLOSED_PAGE_URL = `${BASE_URL}/colophon/`;
 const NOW = new Date('2026-09-20T12:00:00.000Z');
 
 const FILES: Record<string, string> = {
@@ -187,7 +186,7 @@ describe('advertising the pingback endpoint', () => {
     assert.match(await response.text(), new RegExp(`<link rel="pingback" href="${ENDPOINT}">`));
   });
 
-  it('puts it on a page that takes comments, and not on one that does not', async () => {
+  it('puts it on a page, whether or not it takes comments', async () => {
     const cms = await site();
 
     const open = await cms.app.request('/about/');
@@ -195,8 +194,8 @@ describe('advertising the pingback endpoint', () => {
     assert.match(await open.text(), /<link rel="pingback"/);
 
     const closed = await cms.app.request('/colophon/');
-    assert.equal(closed.headers.get('x-pingback'), null);
-    assert.doesNotMatch(await closed.text(), /rel="pingback"/);
+    assert.equal(closed.headers.get('x-pingback'), ENDPOINT);
+    assert.match(await closed.text(), /<link rel="pingback"/);
   });
 
   it('advertises nothing, and has no endpoint, when the site takes no webmentions', async () => {
@@ -327,15 +326,11 @@ describe('the faults a pingback is answered with', () => {
     assert.equal(await faultOf(await ping(cms, 'https://them.example/a', 'nonsense')), 0x0020);
   });
 
-  it('0x0021 for a target elsewhere, or a page here that takes no comments', async () => {
+  it('0x0021 for a target elsewhere', async () => {
     const cms = await site();
 
     const elsewhere = await ping(cms, 'https://them.example/a', 'https://other.example/post/');
     assert.equal(await faultOf(elsewhere), 0x0021);
-
-    pages.set('https://them.example/a', { body: linkingTo(CLOSED_PAGE_URL) });
-    assert.equal(await faultOf(await ping(cms, 'https://them.example/a', CLOSED_PAGE_URL)), 0x0021);
-    assert.equal(mentionsOf(cms, 'colophon').length, 0);
     assert.deepEqual(fetched, [], 'nothing was fetched for a target that cannot be pinged');
   });
 

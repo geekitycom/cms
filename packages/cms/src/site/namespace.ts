@@ -287,11 +287,24 @@ export const SITE = declareNamespace({
       check: taxonomyBase('category'),
     },
     comments: { type: boolean, default: true, description: 'Whether the site takes comments.' },
+    comments_on_posts: {
+      fileKey: 'commentsOnPosts',
+      type: boolean,
+      default: true,
+      description: 'Whether a post takes comments when its front matter does not say.',
+    },
+    comments_on_pages: {
+      fileKey: 'commentsOnPages',
+      type: boolean,
+      default: false,
+      description: 'Whether a page takes comments when its front matter does not say.',
+    },
     comments_close_after_days: {
       fileKey: 'commentsCloseAfterDays',
       type: wholeNumber(0, { coerced: true }),
       default: DEFAULT_COMMENTS_CLOSE_AFTER_DAYS,
-      description: 'How many days after its date a post stops taking comments. 0 never closes one.',
+      description:
+        'How many days after its date a document stops taking comments. 0 never closes one.',
     },
     comment_email_retention_days: {
       fileKey: 'commentEmailRetentionDays',

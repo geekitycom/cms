@@ -102,7 +102,7 @@ export function negotiateDocument(
     conditional: conditionalHeaders(c),
   });
 
-  const pingback = pingbackEndpointFor(c.var.renderer.site(), document, c.var.config.now());
+  const pingback = pingbackEndpointFor(c.var.renderer.site());
   if (pingback !== undefined) {
     response.headers.set('x-pingback', absoluteUrl(pingback, c.var.config.baseUrl));
   }

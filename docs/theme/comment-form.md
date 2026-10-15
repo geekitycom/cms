@@ -1,11 +1,13 @@
 # The comment form
 
-`commentForm` is on the context of a rendered post **only when that post is
-still taking comments**. The CMS combines three inputs before it sets the key:
+`commentForm` is on the context of a rendered post or page **only when it is
+still taking comments**. The CMS combines four inputs before it sets the key:
 
 - the site switch
-- a closing window counted from the post's date
-- `comments: true` or `comments: false` in the post's own front matter
+- whether the document's type takes comments by default (posts do and pages
+  do not, unless Settings > Discussion says otherwise)
+- a closing window counted from the document's date
+- `comments: true` or `comments: false` in the document's own front matter
 
 A layout tests for the key:
 
