@@ -218,7 +218,7 @@ function resolveTranscript(
 
   if (!isWebUrl(form.transcriptUrl)) {
     return {
-      error: 'A transcript is a file in the media library or an address starting https://.',
+      error: 'A transcript is a file in the media library or a web address.',
       field: 'editor-enclosure-transcript',
     };
   }
@@ -278,7 +278,7 @@ function resolveAlternate(
 
   if (!isWebUrl(row.url)) {
     return {
-      error: `An alternate version is a file in the media library or an address starting https://, not ${row.url}.`,
+      error: `An alternate version is a file in the media library or a web address, not ${row.url}.`,
       field: field('url'),
     };
   }

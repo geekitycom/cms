@@ -74,7 +74,7 @@ export function resolvePhotos(
       }
     } else if (!isWebUrl(row.url)) {
       return {
-        error: `A photo is an image in the media library or an address starting https://, not ${row.url}.`,
+        error: `A photo is an image in the media library or a web address, not ${row.url}.`,
         field,
       };
     }

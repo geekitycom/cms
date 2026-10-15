@@ -1545,8 +1545,7 @@ describe('the recording in the post editor (TASK-213 AC #1, #2)', () => {
         'alternate-url-0': 'cdn.example.com/episode.mp4',
         'alternate-type-0': 'video/mp4',
       },
-      message:
-        /An alternate version is a file in the media library or an address starting https:\/\//,
+      message: /An alternate version is a file in the media library or a web address/,
     },
     {
       name: 'a linked version without a media type',
