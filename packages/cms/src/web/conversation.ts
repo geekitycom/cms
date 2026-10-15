@@ -6,6 +6,7 @@ import type { CitedPageReader } from '../content/citation.ts';
 import { RSVP_LABELS } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
 import type { ArchiveReader, DocumentLookup, IndexClock, ReplyReader } from '../content/store.ts';
+import { naturalObjectId, objectIdsOf, readObjectIds } from '../federation/object-ids.ts';
 import { readAllQuoteAuthorizations } from '../federation/quotes.ts';
 import type { QuoteAuthorizationRecord } from '../federation/quotes.ts';
 import {
@@ -205,12 +206,16 @@ function gather(
   const naming = authorNaming(context.admin);
   const isEvent = postTypeOf(document) === 'event';
 
-  const fediverse =
+  const objectIds =
     deliveredObjectId === undefined
       ? []
+      : objectIdsOf(readObjectIds(context.contentDir), deliveredObjectId);
+  const fediverse =
+    objectIds.length === 0
+      ? []
       : [
-          fromQuotes(context, deliveredObjectId, naming),
-          fromActivities(context, deliveredObjectId, stored, naming, isEvent),
+          fromQuotes(context, objectIds, naming),
+          fromActivities(context, objectIds, stored, naming, isEvent),
         ];
   const comments = fromStored(context, document, stored, isEvent);
   const sources = [...fediverse, comments];
@@ -248,20 +253,25 @@ function merged(root: string, parts: readonly Part[]): Gathered {
 
 function fromQuotes(
   context: Reading,
-  objectId: string,
+  objectIds: readonly string[],
   naming: (actorId: string) => InteractionAuthor,
 ): Part {
   const approvals = readAllQuoteAuthorizations(context.contentDir);
   return {
-    said: quotesOf(context.admin, approvals, objectId, naming).map(
+    said: quotesOf(context.admin, approvals, objectIds, naming).map(
       (quote) => ['mentions', quote] as const,
     ),
   };
 }
 
+/**
+ * What the fediverse said about a post, under every id it has federated
+ * under (TASK-417): the first is the one its conversation is rooted at, so a
+ * reply to any of them is a reply to the post.
+ */
 function fromActivities(
   context: Reading,
-  objectId: string,
+  objectIds: readonly string[],
   stored: readonly PostComment[],
   naming: (actorId: string) => InteractionAuthor,
   isEvent: boolean,
@@ -271,7 +281,11 @@ function fromActivities(
   const origins = stored.flatMap((comment) =>
     comment.source === 'activitypub' && comment.origin !== undefined ? [comment.origin] : [],
   );
-  const activities = activitiesAround(context.admin, [objectId, ...origins]);
+  const [root = ''] = objectIds;
+  const named = new Set(objectIds);
+  const aboutPost = (activity: InboxActivity): boolean =>
+    activity.objectId !== null && named.has(activity.objectId);
+  const activities = activitiesAround(context.admin, [...objectIds, ...origins]);
   const withdrawn = withdrawnBy(activities);
   const taken = (activityId: string | null): boolean =>
     activityId !== null && withdrawn.has(activityId);
@@ -283,7 +297,7 @@ function fromActivities(
   for (const activity of activities) {
     const answer = isEvent ? RSVP_ACTIVITIES[activity.activityType] : undefined;
     if (answer !== undefined) {
-      if (activity.objectId !== objectId || taken(activity.activityId)) continue;
+      if (!aboutPost(activity) || taken(activity.activityId)) continue;
       said.push([
         'answers',
         {
@@ -299,7 +313,7 @@ function fromActivities(
     if (kind !== undefined) {
       // Only a reaction to the post itself: a like of one of the replies
       // belongs to that reply's own conversation, wherever it is shown.
-      if (activity.objectId !== objectId) continue;
+      if (!aboutPost(activity)) continue;
       // One like per actor, however many times it was delivered, and none
       // at all once its actor has taken it back.
       const key = reactionKey(kind, activity.actorId);
@@ -318,8 +332,9 @@ function fromActivities(
       continue;
     }
 
-    const reply = replyFrom(activity);
-    if (reply === undefined || heldComment(context.admin, reply.id) !== undefined) continue;
+    const found = replyFrom(activity);
+    if (found === undefined || heldComment(context.admin, found.id) !== undefined) continue;
+    const reply = named.has(found.inReplyTo) ? { ...found, inReplyTo: root } : found;
     const parent = heldComment(context.admin, reply.inReplyTo);
     said.push([
       'written',
@@ -817,7 +832,7 @@ function siteConversation(context: Reading, limit: number): SiteInteraction[] {
   for (const approval of readAllQuoteAuthorizations(context.contentDir)) {
     const post = posts.get(approval.post);
     if (!shown(post)) continue;
-    for (const quote of quotesOf(context.admin, [approval], approval.post, naming)) {
+    for (const quote of quotesOf(context.admin, [approval], [approval.post], naming)) {
       said.push({ ...quote, post });
     }
   }
@@ -900,17 +915,17 @@ const OVERSCAN = 4;
 function quotesOf(
   admin: AdminStore,
   approvals: readonly QuoteAuthorizationRecord[],
-  objectId: string,
+  objectIds: readonly string[],
   naming: (actorId: string) => InteractionAuthor,
 ): Interaction[] {
   const quotes: Interaction[] = [];
   for (const approval of approvals) {
-    if (approval.post !== objectId) continue;
+    if (!objectIds.includes(approval.post)) continue;
 
     for (const activity of admin.listActivitiesAbout([approval.quote])) {
       if (activity.actorId !== approval.actor) continue;
       const quote = quoteFrom(activity);
-      if (quote?.id !== approval.quote || quote.quoted !== objectId) continue;
+      if (quote?.id !== approval.quote || !objectIds.includes(quote.quoted)) continue;
 
       quotes.push({
         ...unstored(quote.id),
@@ -1142,17 +1157,18 @@ class PostsByObjectId {
   }
 
   #resolve(objectId: string): Document | undefined {
-    const permalink = permalinkOfObjectId(objectId, this.#context.baseUrl);
+    const natural = naturalObjectId(objectId);
+    const permalink = permalinkOfObjectId(natural, this.#context.baseUrl);
     if (permalink !== undefined) {
       const document = this.#context.store.getByPermalink(permalink);
       if (
         document !== undefined &&
-        activityStreamsId(document, this.#context.baseUrl, this.#context.store.now()) === objectId
+        activityStreamsId(document, this.#context.baseUrl, this.#context.store.now()) === natural
       ) {
         return document;
       }
     }
-    return this.#everything().get(objectId);
+    return this.#everything().get(natural);
   }
 
   #everything(): Map<string, Document> {

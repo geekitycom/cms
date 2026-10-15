@@ -23,6 +23,7 @@ import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { profileContext } from '../site/authors.ts';
 import { publicDocumentAt } from '../content/permalinks.ts';
 import { postObjectId } from '../content/guids.ts';
+import { currentObjectId, readObjectIds } from '../federation/object-ids.ts';
 import { documentEditorPath, POST_SCREENS } from './documents.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
@@ -123,6 +124,7 @@ export function mountFederationScreen(
     const users = listUsers(c.var.config.dataDir);
     const targets = syndicationTargetsReader(c.var.config.contentDir);
     const copies = syndicationCopies(c.var.config.contentDir);
+    const objectIds = readObjectIds(c.var.config.contentDir);
     const siteLanguage = c.var.siteAtRequestStart.language;
 
     return render(c, ADMIN_TEMPLATES.federation, {
@@ -160,7 +162,8 @@ export function mountFederationScreen(
         baseUrl,
         cited,
         author: (document) => userForAuthor(users, document.author)?.username ?? null,
-        lastDelivery: (objectId) => admin.lastDeliveryToObject(objectId),
+        lastDelivery: (objectId) =>
+          admin.lastDeliveryToObject(currentObjectId(objectIds, objectId)),
         counts: (activityId) => admin.countDeliveriesByStatus(activityId),
         webmentions: (slug) => admin.countSentWebmentionsByStatus(slug),
         syndication: (document) => {

@@ -1387,19 +1387,24 @@ describe('pinning a post (TASK-207 AC #3)', () => {
   });
 });
 
-describe('restoring a post from the trash', () => {
-  it('announces it again under the object id it was first published with', async () => {
+describe('a post that comes back after its Delete (TASK-417)', () => {
+  const PERMALINK_ID = `${BASE_URL}/2026/03/hello-world/`;
+
+  function objectOf(delivery: Delivery | undefined): Record<string, unknown> {
+    assert.ok(delivery !== undefined, `expected a delivery, saw ${JSON.stringify(deliveries)}`);
+    return delivery.body['object'] as Record<string, unknown>;
+  }
+
+  it('announces a post restored from the trash under an id it never deleted (AC #1)', async () => {
     const { cms } = await site();
     const agent = await signedIn(cms);
     await publishNewPost(agent);
     await cms.delivery.settled();
-    const firstObjectId = (
-      (delivered('Create')[0] as Delivery).body['object'] as Record<string, unknown>
-    )['id'];
+    assert.equal(objectOf(delivered('Create')[0])['id'], PERMALINK_ID);
 
     await submitEditor(agent, '/admin/posts/hello-world', { action: 'trash', return: '' });
     await cms.delivery.settled();
-    assert.equal(delivered('Delete').length, 1, 'trashing withdrew the post');
+    assert.equal(objectOf(delivered('Delete')[0])['id'], PERMALINK_ID, 'trashing withdrew it');
 
     deliveries.length = 0;
     const response = await submitEditor(agent, '/admin/posts/hello-world', {
@@ -1411,9 +1416,118 @@ describe('restoring a post from the trash', () => {
 
     const creates = delivered('Create');
     assert.equal(creates.length, 1, `expected one Create, saw ${JSON.stringify(deliveries)}`);
-    const object = (creates[0] as Delivery).body['object'] as Record<string, unknown>;
-    assert.equal(object['id'], firstObjectId, 'the restored post kept its object id');
-    assert.equal(object['id'], `${BASE_URL}/2026/03/hello-world/`);
+    const object = objectOf(creates[0]);
+    assert.equal(object['id'], `${PERMALINK_ID}?v=2`);
+    assert.equal(object['url'], PERMALINK_ID, 'the page is where it was');
+    assert.equal((creates[0] as Delivery).body['id'], `${PERMALINK_ID}?v=2#create`);
+  });
+
+  it('announces a post published again from a draft under a fresh id each time (AC #1)', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+
+    const ids: unknown[] = [];
+    for (let round = 0; round < 2; round += 1) {
+      await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
+      await cms.delivery.settled();
+      deliveries.length = 0;
+      await submitEditor(agent, '/admin/posts/hello-world', { action: 'publish' });
+      await cms.delivery.settled();
+      const creates = delivered('Create');
+      assert.equal(creates.length, 1, `expected one Create, saw ${JSON.stringify(deliveries)}`);
+      ids.push(objectOf(creates[0])['id']);
+    }
+    assert.deepEqual(ids, [`${PERMALINK_ID}?v=2`, `${PERMALINK_ID}?v=3`]);
+  });
+
+  it('keeps the fresh id for the edits, the Delete and the page after it', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'publish' });
+    await cms.delivery.settled();
+
+    deliveries.length = 0;
+    await submitEditor(agent, '/admin/posts/hello-world', { body: 'A second thought.' });
+    await cms.delivery.settled();
+    assert.deepEqual(delivered('Create'), [], 'an edit is not a new post');
+    assert.equal(objectOf(delivered('Update')[0])['id'], `${PERMALINK_ID}?v=2`);
+
+    for (const url of [PERMALINK_ID, `${PERMALINK_ID}?v=2`]) {
+      const response = await cms.app.request(url, {
+        headers: { accept: 'application/activity+json' },
+      });
+      assert.equal(response.status, 200, url);
+      const article = (await response.json()) as Record<string, unknown>;
+      assert.equal(article['id'], `${PERMALINK_ID}?v=2`, `${url} answers with the current id`);
+      assert.equal(article['url'], PERMALINK_ID);
+    }
+
+    deliveries.length = 0;
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
+    await cms.delivery.settled();
+    assert.equal(objectOf(delivered('Delete')[0])['id'], `${PERMALINK_ID}?v=2`);
+  });
+
+  it('keeps the permalink as the id of a post that was never deleted (AC #4)', async () => {
+    const { cms } = await site();
+    const agent = await signedIn(cms);
+    await publishNewPost(agent);
+    await cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/hello-world', { body: 'Edited.' });
+    await cms.delivery.settled();
+
+    const response = await cms.delivery.resend('hello-world');
+    await cms.delivery.settled();
+    assert.equal(response?.objectId, PERMALINK_ID);
+    for (const delivery of deliveries) {
+      assert.equal(objectOf(delivery)['id'], PERMALINK_ID, JSON.stringify(delivery.body));
+    }
+  });
+
+  it('remembers what it deleted across a restart over the same directories', async () => {
+    const first = await site();
+    const agent = await signedIn(first.cms);
+    await publishNewPost(agent);
+    await first.cms.delivery.settled();
+    await submitEditor(agent, '/admin/posts/hello-world', { action: 'save-draft' });
+    await first.cms.delivery.settled();
+    await first.cms.close();
+    started.splice(started.indexOf(first.cms), 1);
+    for (const file of ['geekity.db', 'geekity.db-wal', 'geekity.db-shm']) {
+      await rm(path.join(first.dataDir, file), { force: true });
+    }
+
+    const cms = createCms({
+      dataDir: first.dataDir,
+      contentDir: first.contentDir,
+      port: 0,
+      watch: false,
+      baseUrl: BASE_URL,
+      federation: { queue: null, allowPrivateAddress: true },
+    });
+    started.push(cms);
+    await cms.sync();
+    await writeDocument(
+      first.contentDir,
+      'posts/2026-03-04-hello-world.md',
+      (
+        await readFile(path.join(first.contentDir, 'posts/2026-03-04-hello-world.md'), 'utf8')
+      ).replace(/^draft: true\n/m, ''),
+    );
+    await cms.sync();
+    deliveries.length = 0;
+    await cms.delivery.resend('hello-world');
+    await cms.delivery.settled();
+
+    const creates = delivered('Create');
+    assert.equal(creates.length, 1, `expected one Create, saw ${JSON.stringify(deliveries)}`);
+    assert.equal(objectOf(creates[0])['id'], `${PERMALINK_ID}?v=2`);
   });
 });
 
@@ -1446,6 +1560,57 @@ describe('editing a published post file on disk', () => {
     await cms.delivery.settled();
     assert.equal(delivered('Update').length, 1, `saw ${JSON.stringify(deliveries)}`);
     assert.equal(delivered('Create').length, 0, 'an edit is not a new post');
+  });
+});
+
+describe('a post file whose permalink is moved away and back on disk (TASK-417 AC #2)', () => {
+  const POST_FILE = 'posts/2026-03-04-watched.md';
+  const FIRST = `${BASE_URL}/2026/03/watched/`;
+  const SECOND = `${BASE_URL}/2026/03/moved/`;
+
+  function waitForCount(type: string, count: number): Promise<Delivery[]> {
+    return nextEvent(`${count} deliveries of a ${type}`, (done) => {
+      const check = () => {
+        const found = delivered(type);
+        if (found.length >= count) done(found);
+      };
+      check();
+      arrivals.add(check);
+      return () => arrivals.delete(check);
+    });
+  }
+
+  it('federates under an id it never deleted when it returns to an old permalink', async () => {
+    const { cms, contentDir } = await site({
+      watch: true,
+      account: true,
+      files: { [POST_FILE]: publishedPost('Where it started.') },
+    });
+    await cms.serve();
+    await cms.delivery.settled();
+
+    await writeDocument(
+      contentDir,
+      POST_FILE,
+      publishedPost('Moved.').replace('/2026/03/watched/', '/2026/03/moved/'),
+    );
+    await waitForCount('Create', 1);
+    await cms.delivery.settled();
+    assert.deepEqual(
+      delivered('Delete').map((one) => (one.body['object'] as Record<string, unknown>)['id']),
+      [FIRST],
+    );
+
+    await writeDocument(contentDir, POST_FILE, publishedPost('Back where it started.'));
+    const creates = await waitForCount('Create', 2);
+    await cms.delivery.settled();
+
+    const ids = creates.map((one) => (one.body['object'] as Record<string, unknown>)['id']);
+    assert.deepEqual(ids, [SECOND, `${FIRST}?v=2`]);
+    assert.deepEqual(
+      delivered('Delete').map((one) => (one.body['object'] as Record<string, unknown>)['id']),
+      [FIRST, SECOND],
+    );
   });
 });
 

@@ -547,6 +547,66 @@ function indexComment(
   });
 }
 
+describe('a post federated again under a fresh id (TASK-417 AC #3)', () => {
+  const REISSUED = `${POST}?v=2`;
+
+  async function reissued(): Promise<Awaited<ReturnType<typeof reader>>> {
+    const opened = await reader();
+    const file = path.join(opened.contentDir, '_data', 'federation', 'objectIds.json');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify({ deleted: [POST], reissued: { [POST]: [REISSUED] } }));
+    return opened;
+  }
+
+  it('reads replies, likes and boosts of every id the post has had', async () => {
+    const { admin, conversation: read } = await reissued();
+    logReply(admin, { inReplyTo: POST, id: 'https://remote.example/notes/1' });
+    logReply(admin, { inReplyTo: REISSUED, id: 'https://remote.example/notes/2' });
+    logReply(admin, {
+      inReplyTo: 'https://remote.example/notes/2',
+      id: 'https://remote.example/notes/3',
+    });
+    logReaction(admin, 'Like', {
+      id: 'https://remote.example/likes/1',
+      actor: 'https://remote.example/users/ada',
+    });
+    logReaction(admin, 'Like', {
+      id: 'https://remote.example/likes/2',
+      actor: 'https://remote.example/users/bob',
+      object: REISSUED,
+    });
+    logReaction(admin, 'Announce', {
+      id: 'https://remote.example/boosts/1',
+      actor: 'https://remote.example/users/cal',
+      object: REISSUED,
+    });
+
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
+
+    assert.deepEqual(
+      conversation.replies.map((reply) => reply.id),
+      ['https://remote.example/notes/1', 'https://remote.example/notes/2'],
+    );
+    assert.deepEqual(
+      visible(conversation.replies[1])?.replies.map((reply) => reply.id),
+      ['https://remote.example/notes/3'],
+    );
+    assert.equal(conversation.counts.likes, 2);
+    assert.equal(conversation.counts.boosts, 1);
+  });
+
+  it('takes no reaction to an id the post never had', async () => {
+    const { admin, conversation: read } = await reissued();
+    logReaction(admin, 'Like', {
+      id: 'https://remote.example/likes/1',
+      actor: 'https://remote.example/users/ada',
+      object: `${POST}?v=3`,
+    });
+
+    assert.equal(read.thread(hello(), DEFAULT_SITE_SETTINGS).counts.likes, 0);
+  });
+});
+
 describe('how many answers a post has', () => {
   it('counts the fediverse replies and the approved comments together, by permalink', async () => {
     const { admin, conversation: read } = await reader();

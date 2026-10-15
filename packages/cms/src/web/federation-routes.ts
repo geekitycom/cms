@@ -13,6 +13,7 @@ import { goneDocumentAt, publicDocumentAt } from '../content/permalinks.ts';
 import { actorAliases, actorId, userActor } from '../federation/actor.ts';
 import { postObject, postTombstone } from '../federation/article.ts';
 import type { FederationContextData, SiteFederation } from '../federation/federation.ts';
+import { naturalObjectId } from '../federation/object-ids.ts';
 import { acctOf, WEBFINGER_PATH, webFingerUser } from '../federation/webfinger.ts';
 import type { GeekityEnv } from './env.ts';
 import { prefersActivityStreams } from './negotiate.ts';
@@ -266,11 +267,14 @@ async function activityStreamsDocument(
  * and query on the site's base URL — rather than taken from `request.url`,
  * which behind a proxy is the internal address. A post whose stored id is its
  * permalink is not one of these: the permalink lookup has already answered for
- * it, and answering again here would only invite a redirect to itself.
+ * it, and answering again here would only invite a redirect to itself. A
+ * revision a reissued id carries (TASK-417) is dropped before the match.
  */
 function storedObjectAt(c: Context<GeekityEnv>): Document | undefined {
   const { search } = new URL(c.req.url);
-  const candidate = `${absoluteUrl(requestPath(c), c.var.config.baseUrl)}${search}`;
+  const candidate = naturalObjectId(
+    `${absoluteUrl(requestPath(c), c.var.config.baseUrl)}${search}`,
+  );
 
   const document = c.var.store.getByStoredObjectId(candidate);
   if (document === undefined || document.type !== 'post') return undefined;

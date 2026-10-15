@@ -14,7 +14,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { postObject } from './article.ts';
+import { postByObjectId, postObject } from './article.ts';
 import { OUTBOX_PAGE_SIZE } from './federation.ts';
 import { createActivityId } from './paths.ts';
 import { SITE } from '../site/namespace.ts';
@@ -1504,6 +1504,82 @@ describe('a post whose file already names an activitypub.id', () => {
     const atGuid = await get(instance, '/essays/old-news/', 'text/html');
     assert.equal(atGuid.status, 404, 'the guid is a name, not a URL the site answers');
     assert.equal((await get(instance, '/essays/old-news/', ACTIVITY_STREAMS)).status, 404);
+  });
+});
+
+describe('a post federated again under a fresh id (TASK-417 AC #3)', () => {
+  const PERMALINK_ID = `${BASE_URL}/2026/09/hello/`;
+  const REISSUED = `${PERMALINK_ID}?v=2`;
+  const MIGRATED_ID = 'https://blog.example/?p=813';
+
+  const FILES = {
+    ...HELLO,
+    'posts/2011-06-06-old-news.md': [
+      '---',
+      'title: Old news',
+      "date: '2011-06-06T09:00:00Z'",
+      'permalink: /2011/06/old-news/',
+      `author: ${ADA}`,
+      'activitypub:',
+      `  id: '${MIGRATED_ID}'`,
+      "  published: '2011-06-06T09:00:00Z'",
+      '---',
+      '',
+      'Body.',
+      '',
+    ].join('\n'),
+    '_data/federation/objectIds.json': JSON.stringify({
+      deleted: [PERMALINK_ID, MIGRATED_ID],
+      reissued: { [PERMALINK_ID]: [REISSUED], [MIGRATED_ID]: [`${MIGRATED_ID}&v=2`] },
+    }),
+  };
+
+  it('answers the page URL, and the id itself, with the current id', async () => {
+    const instance = await site(FILES);
+
+    for (const pathname of ['/2026/09/hello/', '/2026/09/hello/?v=2']) {
+      const response = await get(instance, pathname, ACTIVITY_STREAMS);
+      assert.equal(response.status, 200, pathname);
+      const article = (await response.json()) as Record<string, unknown>;
+      assert.equal(article['id'], REISSUED, pathname);
+      assert.equal(article['url'], PERMALINK_ID, pathname);
+    }
+  });
+
+  it('serves a reissued stored id, query string and all', async () => {
+    const instance = await site(FILES);
+
+    const response = await get(instance, '/?p=813&v=2', ACTIVITY_STREAMS);
+    assert.equal(response.status, 200);
+    assert.equal(((await response.json()) as Record<string, unknown>)['id'], `${MIGRATED_ID}&v=2`);
+  });
+
+  it('lists the current id in the outbox', async () => {
+    const instance = await site(FILES);
+
+    const outbox = (await (
+      await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+    const page = await fetchLink(instance, outbox['first']);
+    const ids = (page['orderedItems'] as { id: string; object: { id: string } }[]).map(
+      (activity) => [activity.id, activity.object.id],
+    );
+    assert.deepEqual(ids, [
+      [`${REISSUED}#create`, REISSUED],
+      [`${MIGRATED_ID}&v=2#create`, `${MIGRATED_ID}&v=2`],
+    ]);
+  });
+
+  it('finds the post by every id it has had, and by no other', async () => {
+    const instance = await site(FILES);
+
+    for (const id of [PERMALINK_ID, REISSUED, MIGRATED_ID, `${MIGRATED_ID}&v=2`]) {
+      assert.ok(postByObjectId(instance.store, id, BASE_URL) !== undefined, id);
+    }
+    assert.equal(
+      postByObjectId(instance.store, `${BASE_URL}/2011/06/old-news/`, BASE_URL),
+      undefined,
+    );
   });
 });
 

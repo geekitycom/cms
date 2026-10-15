@@ -63,6 +63,7 @@ import type { CitedObject } from './citations.ts';
 import type { FederationContextData } from './federation.ts';
 import { mentionedAccounts } from './handles.ts';
 import type { MentionedAccount } from './handles.ts';
+import { currentObjectId, naturalObjectId, readObjectIds } from './object-ids.ts';
 import { createActivityId, deleteActivityId, pinActivityId, updateActivityId } from './paths.ts';
 
 /**
@@ -169,18 +170,20 @@ export const SOURCE_MEDIA_TYPE = 'text/markdown';
  *
  * Either the post whose file stores that id, or the one at the permalink the
  * id spells — and then only when that post's id really is this URL, so a
- * migrated post is not found a second time under its permalink.
+ * migrated post is not found a second time under its permalink. An id a post
+ * was reissued under (TASK-417) names the post its natural id does.
  */
 export function postByObjectId(
   store: DocumentLookup,
   objectId: string,
   baseUrl: string,
 ): Document | undefined {
-  const permalink = permalinkOfObjectId(objectId, baseUrl);
+  const natural = naturalObjectId(objectId);
+  const permalink = permalinkOfObjectId(natural, baseUrl);
   const document =
-    store.getByStoredObjectId(objectId) ??
+    store.getByStoredObjectId(natural) ??
     (permalink === undefined ? undefined : store.getByPermalink(permalink));
-  if (document?.type !== 'post' || postObjectId(document, baseUrl) !== objectId) return undefined;
+  if (document?.type !== 'post' || postObjectId(document, baseUrl) !== natural) return undefined;
   return document;
 }
 
@@ -698,7 +701,8 @@ export type PinChange = 'pin' | 'unpin';
 
 /**
  * A post's ActivityStreams object id, off the Fedify context: its permalink,
- * or the id its file already names (decision-13).
+ * or the id its file already names (decision-13), or the id it was federated
+ * under after a `Delete` of that one (TASK-417).
  *
  * A thin wrapper over {@link postObjectId} so everything in this module reads
  * the id the same way and off the same base URL the object's `url` is built
@@ -706,7 +710,8 @@ export type PinChange = 'pin' | 'unpin';
  * item and the object are one identity now rather than three.
  */
 export function articleObjectId(context: Context<FederationContextData>, document: Document): URL {
-  return new URL(postObjectId(document, context.data.config.baseUrl));
+  const { baseUrl, contentDir } = context.data.config;
+  return new URL(currentObjectId(readObjectIds(contentDir), postObjectId(document, baseUrl)));
 }
 
 /**
