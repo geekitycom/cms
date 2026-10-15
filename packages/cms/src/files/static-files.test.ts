@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { canonicalType, UPLOAD_MEDIA_TYPES } from './upload-types.ts';
 import { findAsset } from './static-files.ts';
 
 const dirs: string[] = [];
@@ -57,5 +58,20 @@ describe('findAsset', () => {
     assert.equal(findAsset('', [first]), undefined);
     assert.equal(findAsset('nul\0.txt', [first]), undefined);
     assert.equal(findAsset('missing.txt', [first, second]), undefined);
+  });
+
+  it('serves an uploaded PDF as application/pdf, so a browser opens it', async () => {
+    const [, second] = await roots();
+    await writeFile(path.join(second, 'resume.pdf'), '%PDF-1.7');
+    assert.equal(findAsset('resume.pdf', [second])?.contentType, 'application/pdf');
+  });
+
+  it('serves every extension an upload may have as the type that upload is', async () => {
+    const [, second] = await roots();
+    for (const [extension, media] of UPLOAD_MEDIA_TYPES) {
+      await writeFile(path.join(second, `upload${extension}`), '');
+      const served = findAsset(`upload${extension}`, [second])?.contentType;
+      assert.equal(served?.split(';')[0], canonicalType(media), extension);
+    }
   });
 });

@@ -15,7 +15,7 @@ import { absoluteUrl } from '../util/url.ts';
 import type { Document } from './document.ts';
 import { isUploadUrl, isWebUrl } from './enclosure.ts';
 import type { EditorField, FieldError } from './form-error.ts';
-import { UPLOAD_MEDIA_TYPES } from './media.ts';
+import { UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import { PHOTO_FRONT_MATTER_KEY, photosOf } from './photo.ts';
 import type { Photo } from './photo.ts';
 import { findUpload, UPLOAD_ASSET_PREFIX } from './uploads.ts';

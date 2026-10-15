@@ -36,7 +36,7 @@ import { photoAlt, photosOf } from '../content/photo.ts';
 import { placeWordList, shareLocation } from '../content/location.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { postLocations } from '../content/locations.ts';
-import { canonicalType, UPLOAD_MEDIA_TYPES } from '../content/media.ts';
+import { canonicalType, UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import { readAltTexts } from '../content/alt-text.ts';
 import { imagesIn } from '../content/image-tags.ts';
 import type { DocumentLookup } from '../content/store.ts';

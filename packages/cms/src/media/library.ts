@@ -2,8 +2,8 @@ import type { Dirent } from 'node:fs';
 import { readdir, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 
-import { UPLOAD_MEDIA_TYPES } from '../content/media.ts';
-import type { UploadKind } from '../content/media.ts';
+import { UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
+import type { UploadKind } from '../files/upload-types.ts';
 import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';
 import { readAltTexts, writeAltText } from '../content/alt-text.ts';
 import { STRIP_TEMPORARY_SUFFIX } from '../content/metadata/sweep.ts';

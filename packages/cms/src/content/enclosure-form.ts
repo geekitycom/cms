@@ -26,8 +26,8 @@ import {
 import type { AlternateEnclosure, Enclosure, Transcript } from './enclosure.ts';
 import type { EditorField, FieldError } from './form-error.ts';
 import { LANGUAGE_TAG_PATTERN } from './language.ts';
-import { canonicalType, UPLOAD_MEDIA_TYPES } from './media.ts';
-import type { UploadMediaType } from './media.ts';
+import { canonicalType, UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
+import type { UploadMediaType } from '../files/upload-types.ts';
 import { findUpload, UPLOAD_ASSET_PREFIX } from './uploads.ts';
 
 /** One alternate version's row, as the form has it. */

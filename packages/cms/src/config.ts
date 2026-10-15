@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { KvStore, MessageQueue } from '@fedify/fedify';
 
 import type { CommentChecker } from './forms/checker.ts';
-import { KNOWN_UPLOAD_TYPES, normalizeUploadType } from './content/media.ts';
+import { KNOWN_UPLOAD_TYPES, normalizeUploadType } from './files/upload-types.ts';
 import { systemClock } from './util/clock.ts';
 import type { Clock } from './util/clock.ts';
 import { defaultWatchDebounce } from './content/sync.ts';
