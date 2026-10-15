@@ -1,6 +1,6 @@
-import path from 'node:path';
-
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
+import { dataPath } from '../files/data-files.ts';
+import type { DataFileDeclaration } from '../files/data-files.ts';
 
 const PERMALINK_FILE_MODE = 0o600;
 
@@ -12,10 +12,10 @@ export interface PermalinkFile<T> {
 
 export function permalinkFile<T>(
   dataDir: string,
-  name: string,
+  declaration: DataFileDeclaration,
   keptOrDropped: (value: unknown) => T | undefined,
 ): PermalinkFile<T> {
-  const file = path.join(dataDir, name);
+  const file = dataPath(dataDir, declaration);
   let cachedText: string | undefined;
   let cached: Record<string, T> = {};
 

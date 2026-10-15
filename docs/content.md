@@ -115,6 +115,21 @@ the same directory reads all of it, and everything in it is public.
 [Personal data](personal-data.md) lists the files that hold readers' data, and
 how long each is kept.
 
+Each file under `data/` has a declared class (decision-55). Core files are
+declared in `packages/cms/src/files/data-files.ts`, and each settings namespace
+declares its own file.
+
+| Class       | Files                                                                                                                                                                                                                                                                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| kept        | The site cannot be rebuilt without it: every file in the table above apart from those below, `dev-mode.json`, `dev-mode.jsonl`, each plugin's `settings.json`, each plugin file the plugin declares `kept`, and every file but `secrets.json` in the folder of a plugin that is not loaded. See **Data files** in [Writing a plugin](plugins.md#writing-a-plugin). |
+| credential  | Typed in again from another service: `mail.json`, `akismet.json` and each plugin's `secrets.json`.                                                                                                                                                                                                                                                                 |
+| rebuildable | Made again, fetched again or reset to a default: `geekity.db` with its `-wal` and `-shm`, `images/`, `avatars/`, `maintenance.json`, `notification-digests.json`, `indieauth-activity.json`, `micropub-media.json`, and each plugin file the plugin declares `rebuildable`.                                                                                        |
+| pending     | Work not done yet, tied to this host: `queue.sqlite` with its `-wal` and `-shm`.                                                                                                                                                                                                                                                                                   |
+| scratch     | Left by a write or a lock in flight: the `<file>.<pid>-<n>.tmp` files of atomic writes, and under `data/` the `*.lock` files with their `.lock.takeover`. Also `exports/`, for site exports written inside `data/`, and what `geekity import` leaves while it runs or after `--replace`: `.geekity-import`, `.geekity-importing/` and `.geekity-before-import-*/`. |
+
+`geekity export` follows these classes: it exports `kept` files, and
+`credential` files only when asked. See [Exporting a site](cli.md#exporting-a-site).
+
 You may delete three things under `data/` while the site is stopped. Do not
 delete anything else in either directory.
 

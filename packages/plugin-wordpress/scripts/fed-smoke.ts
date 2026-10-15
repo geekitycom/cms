@@ -25,7 +25,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import type { webcrypto } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
       publicKeyEncoding: { type: 'spki', format: 'pem' },
       privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
     });
-    const records = wordPressRecords(pluginDataFolder(dataDir, wordpress.name));
+    const records = wordPressRecords(pluginDataFolder(dataDir, wordpress));
     const imported = await importWordPressActor({
       site: pluginSite({ admin: cms.admin, config: cms.config }),
       records,
@@ -133,10 +133,7 @@ async function main(): Promise<void> {
     ok(`accepted a Follow from ${peer.actorId} delivered to ${wpActor}/inbox`);
 
     const requests = JSON.parse(
-      await readFile(
-        path.join(pluginDataFolder(dataDir, wordpress.name).path, REQUESTS_FILE),
-        'utf8',
-      ),
+      pluginDataFolder(dataDir, wordpress).read(REQUESTS_FILE) ?? '{}',
     ) as { users: Record<string, Record<string, string>> };
     for (const route of ['actor', 'inbox', 'outbox', 'followers', 'following']) {
       assert.ok(requests.users[USERNAME]?.[route] !== undefined, `${route} was timed`);

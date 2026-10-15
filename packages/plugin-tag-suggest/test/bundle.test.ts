@@ -32,6 +32,10 @@ after(async () => {
 });
 
 describe('the bundled plugin', () => {
+  it('declares the files it keeps in its data folder, with their classes', () => {
+    assert.deepEqual(bundled.data, { 'followers.json': 'rebuildable' });
+  });
+
   it('suggests tags through the llm service and tags.pub', async () => {
     assert.equal(bundled.name, '@geekity/plugin-tag-suggest');
     const { admin } = await tagSite([llm, bundled], {

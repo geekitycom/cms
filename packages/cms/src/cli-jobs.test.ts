@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { existsSync, watch } from 'node:fs';
+import { existsSync, openSync, watch } from 'node:fs';
 import fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -101,16 +101,42 @@ async function site(
     jobId,
     runs,
     logged: (line, times = 1) =>
-      whenChanged(`a run logging ${String(line)}`, directory, async () =>
-        (await runs()).filter((entry) => line.test(entry)).at(times - 1),
+      explained(
+        directory,
+        whenChanged(`a run logging ${String(line)}`, directory, async () =>
+          (await runs()).filter((entry) => line.test(entry)).at(times - 1),
+        ),
       ),
     recorded: (check) =>
-      whenChanged('the job record the test waits for', dataDir, async () => {
-        const status = await records.get(jobId);
-        return status !== undefined && check(status) ? status : undefined;
-      }),
+      explained(
+        directory,
+        whenChanged('the job record the test waits for', dataDir, async () => {
+          const status = await records.get(jobId);
+          return status !== undefined && check(status) ? status : undefined;
+        }),
+      ),
     release: () => fs.writeFile(path.join(directory, 'release'), ''),
   };
+}
+
+const SERVER_LOG = 'server.log';
+
+async function explained<T>(directory: string, waiting: Promise<T>): Promise<T> {
+  try {
+    return await waiting;
+  } catch (error) {
+    const read = (file: string) =>
+      fs.readFile(path.join(directory, file), 'utf8').catch(() => '(none)');
+    const [server, runs, records] = await Promise.all([
+      read(SERVER_LOG),
+      read('runs.log'),
+      read(path.join('data', 'jobs.json')),
+    ]);
+    throw new Error(
+      `${(error as Error).message}\n--- server stderr\n${server}\n--- runs.log\n${runs}\n--- data/jobs.json\n${records}`,
+      { cause: error },
+    );
+  }
 }
 
 function serve(site: Site): { child: ChildProcess; exited: Promise<number | null> } {
@@ -126,7 +152,7 @@ function serve(site: Site): { child: ChildProcess; exited: Promise<number | null
       GEEKITY_ACCESS_LOG: 'false',
       GEEKITY_TEST_JOB_DIR: site.directory,
     },
-    stdio: ['ignore', 'ignore', 'ignore'],
+    stdio: ['ignore', 'ignore', openSync(path.join(site.directory, SERVER_LOG), 'a')],
   });
   running.push(child);
   const exited = new Promise<number | null>((resolve) => child.once('close', resolve));

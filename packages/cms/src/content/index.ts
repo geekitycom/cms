@@ -60,13 +60,7 @@ export type {
   ScheduleTimers,
   ScheduleWatermark,
 } from './schedule.ts';
-export {
-  DATABASE_FILE,
-  dateSortKey,
-  DuplicatePermalinkError,
-  isTrashedPath,
-  TRASH_DIRECTORY,
-} from './store.ts';
+export { dateSortKey, DuplicatePermalinkError, isTrashedPath, TRASH_DIRECTORY } from './store.ts';
 export { openContentStore } from './sqlite/open.ts';
 export type {
   CategoryCount,

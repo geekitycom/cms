@@ -213,6 +213,8 @@ async function mintIndexNowKey({ next, by, settings }: SettingChange<boolean>): 
   if (next) await mintMissingIndexNowKey(settings, by);
 }
 
+const SITE_JSON = path.join('_data', 'site.json');
+
 /**
  * The site's settings: `content/_data/site.json` (decision-9, decision-53).
  *
@@ -225,12 +227,7 @@ async function mintIndexNowKey({ next, by, settings }: SettingChange<boolean>): 
  */
 export const SITE = declareNamespace({
   namespace: 'site',
-  storage: {
-    kind: 'file',
-    under: 'content',
-    path: path.join('_data', 'site.json'),
-    dataClass: { kept: true, secret: false },
-  },
+  storage: { kind: 'file', under: 'content', path: SITE_JSON },
   envPrefix: 'GEEKITY_SITE',
   legacy: (raw) => (isRecord(raw) ? withoutRetiredKeys(raw) : raw),
   writtenWhole: true,
@@ -553,7 +550,7 @@ export function createSettings(options: CreateSettingsRegistryOptions): Settings
 }
 
 export function siteJsonPath(contentDir: string): string {
-  return path.join(contentDir, SITE.declaration.storage.path);
+  return path.join(contentDir, SITE_JSON);
 }
 
 export function parseSiteJson(source: string): Record<string, unknown> {

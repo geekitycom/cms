@@ -1,3 +1,4 @@
+import { declareDataFile } from '../files/data-files.ts';
 import { isRecord } from '../util/guards.ts';
 import { declareNamespace } from './declare.ts';
 import { instantOrEmpty, oneOf, text } from './kinds.ts';
@@ -6,14 +7,15 @@ export const AKISMET_KEY_STATUSES = ['valid', 'invalid', 'unchecked'] as const;
 
 export type AkismetKeyStatus = (typeof AKISMET_KEY_STATUSES)[number];
 
+export const AKISMET_FILE = declareDataFile({
+  pattern: 'akismet.json',
+  dataClass: { kind: 'credential' },
+  lost: 'The Akismet key, typed in again on Settings > Discussion.',
+});
+
 export const AKISMET = declareNamespace({
   namespace: 'akismet',
-  storage: {
-    kind: 'file',
-    under: 'data',
-    path: 'akismet.json',
-    dataClass: { kept: true, secret: true },
-  },
+  storage: { kind: 'file', under: 'data', file: AKISMET_FILE },
   envPrefix: 'GEEKITY_AKISMET',
   legacy: renameCheckedAt,
   settings: {

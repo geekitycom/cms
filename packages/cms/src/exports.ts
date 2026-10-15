@@ -36,6 +36,8 @@ export type {
   SyncResult,
   WatchDebounce,
 } from './content/index.ts';
+export { classifyFiles, dataFileFor } from './files/data-files.ts';
+export type { ClassifiedFile, DataClass, DataFileDeclaration } from './files/data-files.ts';
 export type { Clock } from './util/clock.ts';
 export type { GeekityEnv } from './web/env.ts';
 export {
@@ -201,6 +203,7 @@ export type {
   PluginCommand,
   PluginCommandContext,
   PluginCommandOption,
+  PluginDataClass,
   PluginDataFolder,
   PluginFederationContext,
   PluginFederationMiddleware,

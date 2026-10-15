@@ -246,6 +246,16 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `RetentionService`      | type | The sweep, on a timer once the site serves.                                                                                       |
 | `SiteFederation`        | type | A CMS federation object, with the context data its dispatchers expect.                                                            |
 
+## Data files
+
+| Export                | Kind     | What it is                                                                                                                                                          |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `classifyFiles`       | function | Every regular file under a folder, sorted, each with the declaration `dataFileFor` gives it, or `undefined` when none covers it.                                    |
+| `ClassifiedFile`      | type     | One file `classifyFiles` found: its path relative to the folder, its absolute path and its declaration.                                                             |
+| `dataFileFor`         | function | The declaration in a list, such as `cms.dataFiles()`, that covers a path under `data/`: a scratch one if any covers it, else the first. `undefined` when none does. |
+| `DataClass`           | type     | What a file under `data/` is to the site, and so what an export does with it: kept, credential, rebuildable, pending or scratch.                                    |
+| `DataFileDeclaration` | type     | A pattern under `data/`, its class, and what is lost if its files are lost. `cms.dataFiles()` returns every one in effect for the site.                             |
+
 ## Plugins
 
 | Export                       | Kind | What it is                                                                                                                  |
@@ -258,7 +268,8 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 | `PluginCommand`              | type | A command on the `geekity` command line.                                                                                    |
 | `PluginCommandContext`       | type | What a command's run is handed.                                                                                             |
 | `PluginCommandOption`        | type | One option a command takes.                                                                                                 |
-| `PluginDataFolder`           | type | The plugin's private folder, `data/plugins/<package name>/`.                                                                |
+| `PluginDataClass`            | type | The class of a file a plugin keeps in its folder: `kept`, `rebuildable` or `credential`.                                    |
+| `PluginDataFolder`           | type | The plugin's private folder, `data/plugins/<package name>/`, holding the files its `data` declares.                         |
 | `PluginFederationContext`    | type | What a federation middleware is handed for one request.                                                                     |
 | `PluginFederationMiddleware` | type | Answers a request in the federation mount, or hands it on with `next`, which resolves to what the rest of the site answers. |
 | `PluginFollower`             | type | A follower, as a user's `followers.json` holds one.                                                                         |

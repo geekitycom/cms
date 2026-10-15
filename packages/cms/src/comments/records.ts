@@ -18,6 +18,7 @@ import { rsvpValue } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
 import type { DocumentLookup } from '../content/store.ts';
 import { readFileIfPresentSync, withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
+import { COMMENT_EMAILS, dataPath } from '../files/data-files.ts';
 import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { isRecord } from '../util/guards.ts';
 import { isKey } from '../content/guids.ts';
@@ -96,9 +97,6 @@ function slugOfFileName(name: string): string | undefined {
 
 const SAFE_NAME = /^[A-Za-z0-9%][A-Za-z0-9._%-]*$/;
 
-/** Where commenters' emails live, relative to the data directory. */
-export const COMMENT_EMAILS_DIRECTORY = 'comments';
-
 /** Nobody but the site's own user reads a commenter's email. */
 export const COMMENT_EMAILS_FILE_MODE = 0o600;
 
@@ -108,7 +106,7 @@ export const COMMENT_EMAILS_FILE_MODE = 0o600;
  * never published with it.
  */
 export function commentEmailsFile(dataDir: string, slug: string): string {
-  return path.join(dataDir, COMMENT_EMAILS_DIRECTORY, `${fileNameOf(slug)}.json`);
+  return dataPath(dataDir, COMMENT_EMAILS, `${fileNameOf(slug)}.json`);
 }
 
 /** What `data/` holds about one comment: how to reach whoever wrote it. */

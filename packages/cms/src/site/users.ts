@@ -1,5 +1,3 @@
-import path from 'node:path';
-
 import { adminTheme } from './admin-theme.ts';
 import type { AdminTheme } from './admin-theme.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
@@ -13,6 +11,7 @@ import { systemClock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
 import { relText } from './navigation.ts';
 import { hashPassword, verifyPasswordHash } from './passwords.ts';
+import { USERS, dataPath } from '../files/data-files.ts';
 
 /**
  * Who may sign in: `data/users.json`, and everything that reads or writes it.
@@ -31,15 +30,12 @@ import { hashPassword, verifyPasswordHash } from './passwords.ts';
  * around it to lean on.
  */
 
-/** The file, relative to `dataDir`. */
-export const USERS_FILE = 'users.json';
-
 /** The permissions the file is written with: nobody but the site's own user. */
 export const USERS_FILE_MODE = 0o600;
 
 /** Where the users file lives for a given data directory. */
 export function usersFile(dataDir: string): string {
-  return path.join(dataDir, USERS_FILE);
+  return dataPath(dataDir, USERS);
 }
 
 /** An admin user. There is one role, so there is nothing else to say about one. */

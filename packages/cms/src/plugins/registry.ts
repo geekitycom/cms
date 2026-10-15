@@ -9,16 +9,14 @@
  */
 
 import { createRequire } from 'node:module';
-import path from 'node:path';
 
 import semver from 'semver';
 
-import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
+import type { DataFileDeclaration } from '../files/data-files.ts';
 import { HOST_API_VERSION } from '../plugin.ts';
 import type {
   Plugin,
   PluginCommand,
-  PluginDataFolder,
   PluginEditorAction,
   PluginFederationMiddleware,
   PluginHost,
@@ -32,16 +30,12 @@ import type {
 } from '../plugin.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
+import { declaredDataFolder, pluginDataFiles } from './data.ts';
 import { pluginFetch } from './fetch.ts';
 import type { PluginFetchOptions } from './fetch.ts';
 import { pluginEnvPrefix, reservedNamespaceProblem } from '../settings/names.ts';
 import type { DeclaredNamespace, RenderedSetting, SettingsRegistry } from '../settings/types.ts';
-import {
-  pluginFolderPath,
-  pluginNamespace,
-  pluginSetting,
-  settingFieldsProblem,
-} from './settings.ts';
+import { pluginNamespace, pluginSetting, settingFieldsProblem } from './settings.ts';
 
 /** A plugin as it arrived, and a description of where it came from. */
 export interface InstalledPlugin {
@@ -77,6 +71,7 @@ export interface PluginContributions {
   settingsNamespace: DeclaredNamespace | undefined;
   /** Its buttons beside editor fields, in the order it declared them. */
   editorActions: readonly PluginEditorAction[];
+  dataFiles: readonly DataFileDeclaration[];
 }
 
 export interface PluginRegistryOptions extends PluginFetchOptions {
@@ -90,6 +85,7 @@ export interface PluginRegistryOptions extends PluginFetchOptions {
 export interface RegisteredPlugin extends InstalledPlugin, PluginContributions {
   /** Why it cannot run, or `undefined` when it can be enabled. */
   problem: string | undefined;
+  registered: boolean;
 }
 
 /**
@@ -235,7 +231,12 @@ export function createPluginRegistry(
 
   const plugins: RegisteredPlugin[] = installed.map((entry) => {
     const declared = contributions.get(entry.plugin.name) ?? NOTHING_DECLARED;
-    return { ...entry, ...declared, problem: problem(entry.plugin.name) };
+    return {
+      ...entry,
+      ...declared,
+      problem: problem(entry.plugin.name),
+      registered: own.get(entry.plugin.name) === undefined,
+    };
   });
 
   const order = dependencyOrder(plugins.filter((entry) => entry.problem === undefined));
@@ -334,6 +335,7 @@ const NOTHING_DECLARED: PluginContributions = {
   renderedSettings: [],
   settingsNamespace: undefined,
   editorActions: [],
+  dataFiles: [],
 };
 
 function namingProblem(
@@ -385,6 +387,13 @@ function register(
     };
   }
 
+  let dataFiles: DataFileDeclaration[];
+  try {
+    dataFiles = pluginDataFiles(plugin);
+  } catch (error) {
+    return { problem: messageOf(error), declared: NOTHING_DECLARED };
+  }
+
   const routes: PluginRoute[] = [];
   const federation: PluginFederationMiddleware[] = [];
   const commands: PluginCommand[] = [];
@@ -402,7 +411,7 @@ function register(
   const host: PluginHost = {
     apiVersion: HOST_API_VERSION,
     name,
-    data: pluginDataFolder(options.dataDir, name),
+    data: declaredDataFolder(options.dataDir, name, dataFiles),
     get(path, handler) {
       declaring('a route');
       routes.push({ path, handler });
@@ -489,6 +498,7 @@ function register(
         renderedSettings: renderedSettings ?? [],
         settingsNamespace,
         editorActions,
+        dataFiles,
       },
       service,
     };
@@ -505,27 +515,6 @@ function register(
 
 /** An editor action's id, which is the last segment of its endpoint's path. */
 const EDITOR_ACTION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-/** A file name a plugin may use in its folder: one segment, not hidden. */
-const DATA_FILE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
-
-/** `data/plugins/<package name>/`, which only its plugin reads and writes. */
-export function pluginDataFolder(dataDir: string, name: string): PluginDataFolder {
-  const folder = pluginFolderPath(dataDir, name);
-
-  function fileIn(file: string): string {
-    if (!DATA_FILE_NAME.test(file)) {
-      throw new Error(`${JSON.stringify(file)} is not a file name a plugin can use in its folder.`);
-    }
-    return path.join(folder, file);
-  }
-
-  return {
-    path: folder,
-    read: (file) => readFileIfPresentSync(fileIn(file)),
-    update: (file, change) => updateFileAtomically(fileIn(file), change),
-  };
-}
 
 async function lifecycle(plugin: Plugin, hook: 'start' | 'stop'): Promise<void> {
   try {

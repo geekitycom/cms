@@ -30,7 +30,6 @@ export type { ContactForm, ContactFormContext, ContactProblems } from './form.ts
 
 export {
   addContactMessage,
-  CONTACT_DATA_DIRECTORY,
   contactDirectory,
   contactMessageFile,
   contactMessageId,

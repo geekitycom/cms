@@ -23,10 +23,12 @@ import type {
   SiteFederation,
 } from '../federation/index.ts';
 import { refuseWritesUnder } from '../files/atomic.ts';
+import type { DataFileDeclaration } from '../files/data-files.ts';
 import type { IndexNowNotifier } from '../indexnow.ts';
 import type { JobQueue } from '../jobs/types.ts';
 import type { MailService, CommentDigest, CommentNotifier } from '../notifications/index.ts';
 import type { FeedNotifier, NotifyReport } from '../notify.ts';
+import { siteDataFiles } from '../plugins/data.ts';
 import type { InstalledPlugin } from '../plugins/registry.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import type { RetentionService } from '../privacy/retention.ts';
@@ -66,6 +68,14 @@ export interface Cms {
    * default, and written by the admin and `geekity settings`.
    */
   readonly settings: SettingsRegistry;
+  /**
+   * Every declaration in effect for this site: core's, the
+
+   * settings registry's, each loaded plugin's, and one for each folder under
+   * `data/plugins/` whose plugin is not loaded. A file under `dataDir` that
+   * none of them covers is a file nobody declared.
+   */
+  dataFiles(): DataFileDeclaration[];
   /**
    * The site's ActivityPub actor, already mounted on {@link Cms.app}: the
    * actor document, WebFinger, NodeInfo, the inbox and the collections.
@@ -325,6 +335,12 @@ export function createCms(
     store,
     admin,
     settings: booted.settings,
+    dataFiles: () =>
+      siteDataFiles({
+        dataDir: resolved.dataDir,
+        settings: booted.settings,
+        plugins: booted.plugins,
+      }),
     federation: services.federation,
     delivery: services.delivery,
     jobs: services.jobs,

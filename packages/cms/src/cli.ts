@@ -12,13 +12,33 @@ import { migrateUsersToFile } from './admin/legacy-migrations.ts';
 import { adminStoreOwning, openAdminDatabase } from './store/admin-store.ts';
 import type { AdminStore } from './store/admin-store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
-import { CONFIG_FILENAMES, loadResolvedConfig } from './config-loader.ts';
+import { CONTENT_SCRATCH_FILES, dataPath } from './files/data-files.ts';
+import {
+  compactTime,
+  exportFileName,
+  planSiteExport,
+  writeSiteExport,
+} from './export/site-export.ts';
+import {
+  checkImportTargets,
+  discardStaging,
+  finishSiteImport,
+  importNotes,
+  installArchivedPlugins,
+  placeSiteImport,
+  pluginFailureLine,
+  readSiteManifest,
+  restoreEnabledPlugins,
+  stageSiteImport,
+} from './export/site-import.ts';
+import { CONFIG_FILENAMES, loadConfig, loadResolvedConfig } from './config-loader.ts';
+import { resolveConfig } from './config.ts';
 import type { ResolvedConfig } from './config.ts';
 import { migrateCommentEmails, migrateCommentKeys } from './comments/migrations.ts';
 import { STRIP_METADATA_JOB } from './content/metadata/strip-job.ts';
 import { RESEND_JOB } from './federation/resend-job.ts';
 import { createUser, DuplicateUsernameError } from './site/users.ts';
-import { createCms } from './index.ts';
+import { createCms, settleConfig } from './index.ts';
 import type { Cms } from './index.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
 import { finishedResult } from './jobs/types.ts';
@@ -37,6 +57,7 @@ import {
 import { describeUpgrade, upgradePlugins } from './plugins/upgrade.ts';
 import type { UpgradeReport } from './plugins/upgrade.ts';
 import { migratePluginSettings } from './plugins/migrate-settings.ts';
+import { siteDataFiles } from './plugins/data.ts';
 import { readEnabledPlugins } from './plugins/enabled.ts';
 import type { PluginRegistry, RegisteredPlugin } from './plugins/registry.ts';
 import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
@@ -44,10 +65,10 @@ import { askToReload, isServing } from './supervisor/control.ts';
 import { superviseCluster } from './supervisor/primary.ts';
 import { processChannel, superviseWorker } from './supervisor/worker.ts';
 import { DEV_MODE, DEV_MODE_LATCHED } from './settings/dev-mode.ts';
-import { MAINTENANCE } from './settings/maintenance.ts';
-import { overridden } from './settings/registry.ts';
+import { MAINTENANCE, MAINTENANCE_FILE } from './settings/maintenance.ts';
+import { overridden, sourceLabel } from './settings/registry.ts';
 import { createSettings } from './site/namespace.ts';
-import type { SettingRef, SettingsRegistry, ValueSource } from './settings/types.ts';
+import type { SettingRef, SettingsRegistry } from './settings/types.ts';
 import { messageOf } from './util/errors.ts';
 
 type CoreCommand =
@@ -60,6 +81,8 @@ type CoreCommand =
   | 'dev-mode'
   | 'settings'
   | 'strip-metadata'
+  | 'export'
+  | 'import'
   | 'user'
   | 'plugin';
 
@@ -67,6 +90,7 @@ export type Command = CoreCommand | 'help' | 'version';
 
 interface CommandEntry {
   synopsis: readonly string[];
+  sharedWithPlugins?: true;
   help: readonly (readonly [words: string, summary: readonly string[]])[];
   run(parsed: ParsedArgs): Promise<number>;
 }
@@ -205,6 +229,45 @@ const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
     ],
     run: stripMetadataCommand,
   },
+  export: {
+    synopsis: [
+      'export [--out <file>] [--with-credentials] [--without-content] [--list] [--config <file>]',
+    ],
+    help: [
+      [
+        'export',
+        [
+          'Write the site to a .tar.gz: content/ and every file in',
+          'data/ the site cannot rebuild, with manifest.json first.',
+          'Credentials are left out unless --with-credentials is given.',
+          'It only reads, so it runs while the site serves. It prints',
+          'the deliveries waiting in the queue, which are never',
+          'exported. --list prints what each file in data/ is and',
+          'writes nothing.',
+        ],
+      ],
+    ],
+    run: exportCommand,
+  },
+  import: {
+    synopsis: ['import <file> [--replace] [--dev-mode] [--new-base-url] [--config <file>]'],
+    help: [
+      [
+        'import',
+        [
+          'Restore a site from an archive geekity export wrote, with the',
+          'site stopped. Every file is checked against the manifest and',
+          'unpacked beside content/ and data/ before it replaces them.',
+          'Folder plugins are installed from the npm registry at the',
+          'versions the archive records, and the database is rebuilt.',
+          'It exits 1 when a plugin could not be installed, naming it',
+          'and the command to retry.',
+        ],
+      ],
+    ],
+    sharedWithPlugins: true,
+    run: importCommand,
+  },
   user: {
     synopsis: ['user add <username> [--password <pw>] [--email <address>] [--config <file>]'],
     help: [
@@ -259,10 +322,20 @@ const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
  * The options one command reads out of {@link ParsedArgs.flags}, each of which
  * carries a value.
  */
-const VALUE_FLAGS = ['until'] as const;
+const VALUE_FLAGS = ['until', 'out'] as const;
 
 /** The options that are simply on or off. */
-const SWITCH_FLAGS = ['all', 'check', 'unset'] as const;
+const SWITCH_FLAGS = [
+  'all',
+  'check',
+  'unset',
+  'with-credentials',
+  'without-content',
+  'list',
+  'replace',
+  'dev-mode',
+  'new-base-url',
+] as const;
 
 export interface ParsedArgs {
   command: Command;
@@ -308,6 +381,21 @@ const OPTIONS_HELP = `Options:
   --unset          With settings set: remove the stored value.
   --all            With resend: every announced post rather than named ones.
   --check          With plugin upgrade: say what would change, install nothing.
+  --out <file>     With export: the archive to write. Defaults to
+                   geekity-<host>-<time>.tar.gz in the working directory.
+  --with-credentials
+                   With export: include the API keys and logins kept in
+                   data/ (mail.json, akismet.json, each plugin's secrets).
+  --without-content
+                   With export: leave content/ out.
+  --list           With export: print each file data/ may hold, its class
+                   and what is lost without it, and write nothing.
+  --replace        With import: move what content/ and data/ hold into
+                   <dir>/.geekity-before-import-<time> when they hold a site.
+  --dev-mode       With import: turn dev mode on, for a staging copy of a
+                   live site.
+  --new-base-url   With import: accept a base URL in effect that differs
+                   from the one the archive was exported from.
   -h, --help       Show this help.
   -v, --version    Show the installed version.
 
@@ -445,9 +533,12 @@ function isCommand(value: string): value is CoreCommand {
 
 /** Run one command. Resolves with the exit code the process should use. */
 async function main(argv: readonly string[]): Promise<number> {
-  const first = leadingWords(argv)[0];
-  if (first !== undefined && !isCommand(first) && !argv.some(isHelpOrVersion)) {
-    return await pluginCommand(argv);
+  const words = leadingWords(argv);
+  const first = words[0];
+  if (first !== undefined && !argv.some(isHelpOrVersion)) {
+    if (!isCommand(first) || (await pluginExtends(first, words, configFlag(argv)))) {
+      return await pluginCommand(argv);
+    }
   }
 
   const parsed = parseArgs(argv);
@@ -497,7 +588,7 @@ async function maintenanceCommand({ args, configPath, flags }: ParsedArgs): Prom
   if (action === 'on') {
     const until = untilFlag(text(flags, 'until'));
     await setOrThrow(settings, 'maintenance', { on: true, until: until?.toISOString() ?? '' });
-    const file = path.join(config.dataDir, MAINTENANCE.declaration.storage.path);
+    const file = dataPath(config.dataDir, MAINTENANCE_FILE);
     process.stdout.write(`Maintenance mode is on (${file}).${untilLine(until)}\n`);
     return 0;
   }
@@ -701,17 +792,6 @@ function shown(ref: SettingRef<unknown>, value: unknown): string {
     return value === ref.declaration.default ? '(not set)' : '(set)';
   }
   return ref.declaration.type.toText(value);
-}
-
-function sourceLabel(source: ValueSource): string {
-  switch (source.tier) {
-    case 'env':
-      return `env ${source.variable}`;
-    case 'config':
-      return `config ${source.field}`;
-    default:
-      return source.tier;
-  }
 }
 
 async function settingRow(
@@ -941,13 +1021,17 @@ async function rebuildCommand({ configPath }: ParsedArgs): Promise<number> {
     return 1;
   }
 
+  return (await rebuildDatabase(config)) > 0 ? 1 : 0;
+}
+
+async function rebuildDatabase(config: ResolvedConfig): Promise<number> {
   discardDatabase(config.dataDir);
 
   const cms = createCms(config);
   try {
     const result = await cms.sync();
     process.stdout.write(
-      `Rebuilt ${file} from the files.\n` +
+      `Rebuilt ${databaseFile(config.dataDir)} from the files.\n` +
         `Scanned ${String(result.scanned)}: ${String(result.created)} created, ` +
         `${String(result.updated)} updated, ${String(result.removed)} removed, ` +
         `${String(result.unchanged)} unchanged, ${String(result.failed)} failed\n` +
@@ -962,12 +1046,169 @@ async function rebuildCommand({ configPath }: ParsedArgs): Promise<number> {
           `${result.failed === 1 ? 'was' : 'were'} left out of the index; the warnings above name ` +
           `${result.failed === 1 ? 'it' : 'them'}.\n`,
       );
-      return 1;
     }
-    return 0;
+    return result.failed;
   } finally {
     await cms.close();
   }
+}
+
+async function importCommand({ args, configPath, flags }: ParsedArgs): Promise<number> {
+  const [file, ...extra] = args;
+  if (file === undefined) {
+    throw new Error('geekity import needs one archive: geekity import <file>.');
+  }
+  if (extra.length > 0) {
+    throw new Error(
+      `geekity import takes one archive, and no plugin on this site adds "import ${file}".`,
+    );
+  }
+  const unsettled = resolveConfig({
+    ...(await loadConfig(process.cwd(), configPath)),
+    watch: false,
+  });
+  const { contentDir, dataDir } = unsettled;
+  if (databaseInUse(dataDir) || (await isServing(dataDir))) {
+    process.stderr.write(
+      `The site is running: ${dataDir} is in use. Stop it and run geekity import again.\n`,
+    );
+    return 1;
+  }
+
+  const archive = path.resolve(file);
+  const targets = { contentDir, dataDir };
+  const settings = createSettings({ config: unsettled });
+  const archived = await readSiteManifest(archive);
+  const { manifest } = archived;
+  const occupied = checkImportTargets(archived, targets, settings).filter(
+    (target) => target.state === 'occupied',
+  );
+  if (occupied.length > 0 && flags['replace'] !== true) {
+    process.stderr.write(
+      `${occupied.map((target) => target.dir).join(' and ')} already ${occupied.length === 1 ? 'holds' : 'hold'} a site. ` +
+        'Import into empty folders, or give --replace to move what they hold into <dir>/.geekity-before-import-<time> first.\n',
+    );
+    return 1;
+  }
+
+  const staged = await stageSiteImport({ archive, archived, targets, settings });
+  const inEffect = await settleConfig(
+    Object.freeze({ ...unsettled, contentDir: staged.content ?? contentDir }),
+  );
+  if (inEffect.baseUrl !== manifest.baseUrl && flags['new-base-url'] !== true) {
+    await discardStaging(staged);
+    process.stderr.write(
+      `The base URL in effect is ${inEffect.baseUrl}, and the archive was exported from ${manifest.baseUrl}. ` +
+        'Actor ids are built from the base URL, so followers would not follow the site to a new address. ' +
+        `Set GEEKITY_BASE_URL, or baseUrl in the config, to ${manifest.baseUrl}, ` +
+        `or give --new-base-url to import it at ${inEffect.baseUrl}.\n`,
+    );
+    return 1;
+  }
+  for (const skipped of staged.skipped) {
+    process.stderr.write(`Left out ${skipped.path}: ${skipped.why}.\n`);
+  }
+
+  for (const aside of await placeSiteImport(staged, { stamp: compactTime(unsettled.now()) })) {
+    process.stdout.write(`Moved what was there into ${aside}.\n`);
+  }
+  process.stdout.write(
+    `Restored ${count(manifest.files.length - staged.skipped.length, 'file')} from ${archive}.\n`,
+  );
+
+  const config = await settleConfig(unsettled);
+  if (flags['dev-mode'] === true) {
+    await setOrThrow(createSettings({ config }), 'dev_mode', { on: true });
+    process.stdout.write(
+      'Dev mode is on: nothing the site does is sent until `geekity dev-mode off`.\n',
+    );
+  }
+  const failures = await installArchivedPlugins(manifest, {
+    pluginsDir: config.pluginsDir,
+    registry: pluginRegistry(process.env),
+    coreVersion: ownManifest().version,
+  });
+  for (const plugin of manifest.plugins) {
+    if (plugin.source === 'folder' && !failures.some((failed) => failed.name === plugin.name)) {
+      process.stdout.write(`Installed ${plugin.name} ${plugin.version}.\n`);
+    }
+  }
+  await restoreEnabledPlugins(manifest, config.contentDir);
+  await rebuildDatabase(config);
+  await finishSiteImport(targets);
+
+  process.stdout.write(
+    importNotes(manifest)
+      .map((note) => `${note}\n`)
+      .join(''),
+  );
+  for (const failed of failures) process.stderr.write(`${pluginFailureLine(failed)}\n`);
+  return failures.length > 0 ? 1 : 0;
+}
+
+/**
+ * It runs beside a serving site: no migration runs and no database is opened
+ * but the queue, read-only, to count what waits in it.
+ */
+async function exportCommand({ configPath, flags }: ParsedArgs): Promise<number> {
+  const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
+  const settings = createSettings({ config });
+  const plugins = await loadSitePlugins(config, settings);
+
+  if (flags['list'] === true) {
+    const declarations = siteDataFiles({ dataDir: config.dataDir, settings, plugins });
+    process.stdout.write(
+      table([
+        ...declarations.map((each) => [`data/${each.pattern}`, each.dataClass.kind, each.lost]),
+        ['content/**', 'kept', 'The site: its documents, uploads and _data.'],
+        ...CONTENT_SCRATCH_FILES.map((each) => [
+          `content/${each.pattern}`,
+          each.dataClass.kind,
+          each.lost,
+        ]),
+      ]),
+    );
+    return 0;
+  }
+
+  const plan = await planSiteExport(
+    { config, settings, plugins },
+    {
+      withCredentials: flags['with-credentials'] === true,
+      withContent: flags['without-content'] !== true,
+    },
+  );
+  const { deliveries } = plan.site.pending;
+  process.stdout.write(
+    `${count(deliveries, 'delivery is', 'deliveries are')} waiting in data/queue.sqlite. ` +
+      'They are not exported: before a move, wait until none are.\n' +
+      'The archive holds actor keys, password hashes and personal data. ' +
+      'Store it as carefully as data/.\n',
+  );
+
+  const now = config.now();
+  const out = path.resolve(text(flags, 'out') ?? exportFileName(config.baseUrl, now));
+  const manifest = await writeSiteExport(plan, { out, now });
+
+  for (const file of manifest.undeclared) {
+    process.stderr.write(`Left out ${file}: no declaration says what it is.\n`);
+  }
+  for (const entry of manifest.notCarried) {
+    process.stderr.write(
+      `Left out ${entry.path}: it is ${entry.why}, and an export holds only regular files.\n`,
+    );
+  }
+  if (manifest.credentialsLeftOut.length > 0) {
+    process.stdout.write(
+      `Credentials left out: ${manifest.credentialsLeftOut.join(', ')}. ` +
+        '--with-credentials includes them.\n',
+    );
+  }
+  const bytes = manifest.files.reduce((total, file) => total + file.size, 0);
+  process.stdout.write(
+    `Wrote ${out}: ${count(manifest.files.length, 'file')}, ${count(bytes, 'byte')}.\n`,
+  );
+  return 0;
 }
 
 /** "1 follower", "2 followers". The plural is the singular plus s unless told. */
@@ -1342,6 +1583,16 @@ async function pluginCommands(config: ResolvedConfig): Promise<FoundCommand[]> {
     .filter((entry) => entry.problem === undefined)
     .flatMap((entry) => entry.commands.map((command) => ({ plugin: entry.plugin.name, command })))
     .sort((a, b) => b.command.words.length - a.command.words.length);
+}
+
+async function pluginExtends(
+  first: CoreCommand,
+  words: readonly string[],
+  configPath: string | undefined,
+): Promise<boolean> {
+  if (COMMANDS[first].sharedWithPlugins !== true || words.length < 2) return false;
+  const found = await pluginCommands(await loadResolvedConfig(configPath));
+  return found.some(({ command }) => command.words.every((word, index) => words[index] === word));
 }
 
 /**

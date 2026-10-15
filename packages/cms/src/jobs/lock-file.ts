@@ -8,6 +8,14 @@ import { isAlive } from './processes.ts';
 const STALE_LOCK_MS = 10_000;
 const LOCK_RETRY_MS = 5;
 
+export function lockFileFor(file: string): string {
+  return `${file}.lock`;
+}
+
+export function guardFileFor(lockFile: string): string {
+  return `${lockFile}.takeover`;
+}
+
 /**
  * Hold a lock file for the length of a task, so a second process waits. A
  * lock file whose process has gone, or that has outlived any honest write,
@@ -47,7 +55,7 @@ async function takeOver(lockFile: string): Promise<void> {
 }
 
 async function underGuard(lockFile: string, task: () => Promise<void>): Promise<boolean> {
-  const guard = `${lockFile}.takeover`;
+  const guard = guardFileFor(lockFile);
   if (!(await create(guard, newToken()))) {
     if (await isStale(guard)) await unlink(guard).catch(() => undefined);
     return false;

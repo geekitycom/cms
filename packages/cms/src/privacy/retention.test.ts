@@ -186,7 +186,12 @@ describe('the retention sweep', () => {
     await message(dataDir, MIDDLING, 'middling@example.com');
 
     const first = await cms.retention.sweep();
-    assert.deepEqual(first, { comments: 1, messagesDeleted: 0, messagesRedacted: 1 });
+    assert.deepEqual(first, {
+      comments: 1,
+      messagesDeleted: 0,
+      messagesRedacted: 1,
+      exportsDeleted: 0,
+    });
 
     const comments = await readFile(file, 'utf8');
     const contact = await readdir(contactDirectory(dataDir));
@@ -195,7 +200,12 @@ describe('the retention sweep', () => {
     );
 
     const second = await cms.retention.sweep();
-    assert.deepEqual(second, { comments: 0, messagesDeleted: 0, messagesRedacted: 0 });
+    assert.deepEqual(second, {
+      comments: 0,
+      messagesDeleted: 0,
+      messagesRedacted: 0,
+      exportsDeleted: 0,
+    });
     assert.equal(
       await readFile(file, 'utf8'),
       comments,
@@ -241,7 +251,12 @@ describe('the retention sweep', () => {
 
     const report = await cms.retention.sweep();
 
-    assert.deepEqual(report, { comments: 0, messagesDeleted: 0, messagesRedacted: 0 });
+    assert.deepEqual(report, {
+      comments: 0,
+      messagesDeleted: 0,
+      messagesRedacted: 0,
+      exportsDeleted: 0,
+    });
     assert.equal(await readFile(file, 'utf8'), before, 'the old email and hash are still there');
     assert.equal(cms.admin.getComment('00000000000000a1')?.author.email, 'ada@example.com');
     assert.equal(readContactMessage(dataDir, oldMessage)?.from.email, 'old@example.com');

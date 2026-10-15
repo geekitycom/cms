@@ -18,6 +18,7 @@ import {
   updateComment,
 } from '@geekity/cms/testing';
 
+import wordpress from '../src/index.ts';
 import { commentsAndReactions } from '../src/comments-import.ts';
 import { importWordPressContent } from '../src/content-import.ts';
 import type { ReportRow } from '../src/content-import.ts';
@@ -85,7 +86,7 @@ async function site(): Promise<Site> {
     site: pluginSite({ admin, config }),
     write: () => undefined,
   };
-  const data = pluginDataFolder(dataDir, '@geekity/plugin-wordpress');
+  const data = pluginDataFolder(dataDir, wordpress);
 
   return {
     root,

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 import { withFileLock, writeFileAtomicallySync } from '../files/atomic.ts';
-import { withLockFile } from './lock-file.ts';
+import { lockFileFor, withLockFile } from './lock-file.ts';
 import { JOB_STATES } from './types.ts';
 import type { JobRecords, JobStateName, JobStatus } from './types.ts';
 
@@ -18,7 +18,7 @@ const TERMINAL: ReadonlySet<JobStateName> = new Set(['finished', 'failed', 'inte
  */
 export function createFileRecords(file: string, options: { keep?: number } = {}): JobRecords {
   const keep = options.keep ?? KEPT_PER_NAME;
-  const lockFile = `${file}.lock`;
+  const lockFile = lockFileFor(file);
 
   async function read(): Promise<JobStatus[]> {
     let text: string;

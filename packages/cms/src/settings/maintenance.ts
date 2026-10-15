@@ -1,10 +1,17 @@
+import { declareDataFile } from '../files/data-files.ts';
 import { declareNamespace } from './declare.ts';
 import { boolean, instantOrEmpty } from './kinds.ts';
 import { presenceMeansOn } from './presence.ts';
 
+export const MAINTENANCE_FILE = declareDataFile({
+  pattern: 'maintenance.json',
+  dataClass: { kind: 'rebuildable' },
+  lost: 'Maintenance mode, which falls back to off.',
+});
+
 export const MAINTENANCE = declareNamespace({
   namespace: 'maintenance',
-  storage: { kind: 'file', under: 'data', path: 'maintenance.json', dataClass: { kept: false } },
+  storage: { kind: 'file', under: 'data', file: MAINTENANCE_FILE },
   envPrefix: 'GEEKITY_MAINTENANCE',
   legacy: presenceMeansOn,
   writtenWhole: true,

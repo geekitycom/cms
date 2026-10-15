@@ -8,13 +8,13 @@ import { mf2 } from 'microformats-parser';
 import { FIRST_ADMIN, sandbox, signedIn, signIn } from '../admin/__testing__/harness.ts';
 import { saveSettings } from '../admin/__testing__/settings.ts';
 import type { LocationSharing } from '../content/location.ts';
-import { LOCATIONS_FILE } from '../content/locations.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
 import { changeSiteSettings } from '../__testing__/site-settings.ts';
 import { findUser } from '../site/users.ts';
 import { feedPathUnder } from '../web/feed-source.ts';
 import { OEMBED_PATH } from '../web/oembed.ts';
+import { LOCATIONS, dataPath } from '../files/data-files.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -113,9 +113,10 @@ async function source(cms: Cms, token: string, url: string): Promise<Record<stri
 }
 
 async function storedLocations(cms: Cms): Promise<Record<string, unknown>> {
-  return JSON.parse(
-    await readFile(path.join(cms.config.dataDir, LOCATIONS_FILE), 'utf8'),
-  ) as Record<string, unknown>;
+  return JSON.parse(await readFile(dataPath(cms.config.dataDir, LOCATIONS), 'utf8')) as Record<
+    string,
+    unknown
+  >;
 }
 
 async function filesUnder(root: string): Promise<[string, string][]> {
@@ -185,7 +186,7 @@ describe('a Micropub location (AC #3)', () => {
     assert.deepEqual(await storedLocations(cms), {
       [permalink]: { geo: { latitude: 48.85837, longitude: 2.29448, accuracy: 50 } },
     });
-    assert.equal((await stat(path.join(cms.config.dataDir, LOCATIONS_FILE))).mode & 0o777, 0o600);
+    assert.equal((await stat(dataPath(cms.config.dataDir, LOCATIONS))).mode & 0o777, 0o600);
 
     for (const [file, contents] of await filesUnder(cms.config.contentDir)) {
       for (const needle of [...COORDINATES, 'geo:', 'location']) {
@@ -265,7 +266,7 @@ describe('a Micropub location (AC #3)', () => {
       await readdir(path.join(cms.config.contentDir, 'posts')).catch(() => []),
       before,
     );
-    await assert.rejects(stat(path.join(cms.config.dataDir, LOCATIONS_FILE)));
+    await assert.rejects(stat(dataPath(cms.config.dataDir, LOCATIONS)));
   });
 
   it('answers q=source with the location whatever the setting, and takes it back', async () => {

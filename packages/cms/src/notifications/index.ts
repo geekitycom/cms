@@ -10,7 +10,6 @@ export {
   createCommentDigest,
   DIGEST_MAX_ITEMS,
   DIGEST_TICK_MS,
-  DIGEST_TIMES_FILE,
   digestTimesFile,
   readDigestTimes,
   recordDigestTimes,
@@ -35,7 +34,6 @@ export {
 export type { LinkContext } from './links.ts';
 export {
   addCommentOptOut,
-  COMMENT_OPTOUTS_FILE,
   commentOptOutsFile,
   hasOptedOut,
   readCommentOptOuts,
@@ -62,12 +60,7 @@ export type {
   NotificationEvent,
   NotificationSwitch,
 } from '../site/notification-preferences.ts';
-export {
-  NOTIFICATION_SECRET_FILE,
-  notificationTokenExpiry,
-  readNotificationToken,
-  signNotificationToken,
-} from './tokens.ts';
+export { notificationTokenExpiry, readNotificationToken, signNotificationToken } from './tokens.ts';
 export type { NewNotificationToken, NotificationClaim } from './tokens.ts';
 export { createMailService, DEFAULT_MAIL_ATTEMPTS, defaultMailBackoffMs } from './mail-service.ts';
 export type {

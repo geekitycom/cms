@@ -1,13 +1,11 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
-import path from 'node:path';
 
 import { readFileIfPresentSync } from '../files/atomic.ts';
+import { DEV_MODE_RECORD, dataPath, declareDataFile } from '../files/data-files.ts';
 import { declareNamespace } from './declare.ts';
 import { boolean } from './kinds.ts';
 import { presenceMeansOn } from './presence.ts';
 import type { ChangedBy, SettingChange, SettingsRegistry } from './types.ts';
-
-const DEV_MODE_RECORD_FILE = 'dev-mode.jsonl';
 
 export type HeldKind = 'activitypub' | 'webmention' | 'feed-ping' | 'indexnow' | 'mail';
 
@@ -33,9 +31,15 @@ export type DevModeEntry =
 
 type LegacyOffEntry = { readonly type: 'off'; readonly at: string; readonly by?: undefined };
 
+export const DEV_MODE_FILE = declareDataFile({
+  pattern: 'dev-mode.json',
+  dataClass: { kind: 'kept' },
+  lost: 'Dev mode, so a lost file takes the site live.',
+});
+
 export const DEV_MODE = declareNamespace({
   namespace: 'dev_mode',
-  storage: { kind: 'file', under: 'data', path: 'dev-mode.json', dataClass: { kept: false } },
+  storage: { kind: 'file', under: 'data', file: DEV_MODE_FILE },
   envPrefix: 'GEEKITY_DEV_MODE',
   legacy: presenceMeansOn,
   writtenWhole: true,
@@ -93,5 +97,5 @@ function fromRecordLine(line: string): DevModeEntry {
 }
 
 function recordFile(dataDir: string): string {
-  return path.join(dataDir, DEV_MODE_RECORD_FILE);
+  return dataPath(dataDir, DEV_MODE_RECORD);
 }

@@ -15,8 +15,7 @@ import { Create, Note } from '@fedify/vocab';
 import { cleanupTemporaryDirs, PACKAGE_ROOT, temporaryDir } from './__testing__/cli.ts';
 import { queuedMessages } from './__testing__/federation-queue.ts';
 import { nextEvent } from './__testing__/wait.ts';
-import { FEDERATION_QUEUE_TABLE } from './federation/queue.ts';
-import { queueFile } from './store/queue-database.ts';
+import { FEDERATION_QUEUE_TABLE, queueFile } from './store/queue-database.ts';
 import { askToReload, isServing } from './supervisor/control.ts';
 
 after(cleanupTemporaryDirs);

@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { readFile, stat } from 'node:fs/promises';
-import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
@@ -16,7 +15,6 @@ import {
   ACCESS_TOKEN_LIFETIME_MS,
   LAST_USE_RESOLUTION_MS,
   REFRESH_TOKEN_LIFETIME_MS,
-  TOKENS_FILE,
   createToken,
   issueTokens,
   listTokens,
@@ -26,6 +24,7 @@ import {
   revokeToken,
   verifyAccessToken,
 } from './tokens.ts';
+import { INDIEAUTH_TOKENS, dataPath } from '../files/data-files.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -65,7 +64,7 @@ describe('issuing a token', () => {
   it('keeps a hash of each token in a 0600 file, never the token itself', async () => {
     const dir = await dataDir();
     const issued = await issueTokens(dir, GRANT, T0);
-    const file = path.join(dir, TOKENS_FILE);
+    const file = dataPath(dir, INDIEAUTH_TOKENS);
     const text = await readFile(file, 'utf8');
 
     assert.equal(text.includes(issued.accessToken), false, 'no access token in the file');
@@ -107,7 +106,7 @@ describe('creating a token on the connected apps screen (TASK-230)', () => {
     const dir = await dataDir();
     await issueTokens(dir, GRANT, T0);
     const { accessToken, token } = await createToken(dir, created, T0);
-    const text = await readFile(path.join(dir, TOKENS_FILE), 'utf8');
+    const text = await readFile(dataPath(dir, INDIEAUTH_TOKENS), 'utf8');
 
     assert.equal(text.includes(accessToken), false, 'no token in the file');
     assert.equal(listTokens(dir).length, 2);
@@ -269,7 +268,7 @@ describe('refreshing a token', () => {
     const dir = await dataDir();
     const refused = await refreshTokens(dir, refreshForm('made-up'), T0);
     assert.equal(!refused.ok && refused.error, 'invalid_grant');
-    await assert.rejects(stat(path.join(dir, TOKENS_FILE)), { code: 'ENOENT' });
+    await assert.rejects(stat(dataPath(dir, INDIEAUTH_TOKENS)), { code: 'ENOENT' });
   });
 
   it('refuses a request missing the refresh token or client_id', async () => {
@@ -315,7 +314,7 @@ describe('revoking a token', () => {
   it('writes nothing for a token nobody issued', async () => {
     const dir = await dataDir();
     assert.equal(await revokeToken(dir, 'made-up', T0), false);
-    await assert.rejects(stat(path.join(dir, TOKENS_FILE)), { code: 'ENOENT' });
+    await assert.rejects(stat(dataPath(dir, INDIEAUTH_TOKENS)), { code: 'ENOENT' });
   });
 });
 
@@ -341,12 +340,12 @@ describe('revoking a connection from the connected apps screen', () => {
   it('leaves another user’s connection alone, and writes nothing', async () => {
     const dir = await dataDir();
     const issued = await issueTokens(dir, GRANT, T0);
-    const before = await readFile(path.join(dir, TOKENS_FILE), 'utf8');
+    const before = await readFile(dataPath(dir, INDIEAUTH_TOKENS), 'utf8');
 
     assert.equal(await revokeConnection(dir, GRANT.userId + 1, issued.token.id, T0), undefined);
     assert.equal(await revokeConnection(dir, GRANT.userId, 'made-up', T0), undefined);
 
-    assert.equal(await readFile(path.join(dir, TOKENS_FILE), 'utf8'), before);
+    assert.equal(await readFile(dataPath(dir, INDIEAUTH_TOKENS), 'utf8'), before);
     assert.ok(verifyAccessToken(dir, issued.accessToken, MICROPUB, T0));
   });
 });
@@ -362,7 +361,7 @@ describe('recording when a connection was last used', () => {
   it('writes the first use, then nothing more until the resolution has passed', async () => {
     const dir = await dataDir();
     const issued = await issueTokens(dir, GRANT, T0);
-    const file = path.join(dir, TOKENS_FILE);
+    const file = dataPath(dir, INDIEAUTH_TOKENS);
 
     await recordUse(dir, listTokens(dir)[0] ?? issued.token, later(1000));
     assert.equal(listTokens(dir)[0]?.lastUsedAt, later(1000).toISOString());

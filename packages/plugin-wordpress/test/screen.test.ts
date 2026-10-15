@@ -40,7 +40,7 @@ async function site(enabled = true): Promise<Cms> {
 }
 
 function records(cms: Cms) {
-  return wordPressRecords(pluginDataFolder(cms.config.dataDir, wordpress.name));
+  return wordPressRecords(pluginDataFolder(cms.config.dataDir, wordpress));
 }
 
 describe('the WordPress screen', () => {

@@ -1,3 +1,4 @@
+import { declareDataFile } from '../files/data-files.ts';
 import { isRecord } from '../util/guards.ts';
 import { declareNamespace } from './declare.ts';
 import { boolean, port, text } from './kinds.ts';
@@ -22,14 +23,15 @@ function tlsMatchesPort(namespaceAfterSet: Readonly<Record<string, unknown>>): s
   return undefined;
 }
 
+export const MAIL_FILE = declareDataFile({
+  pattern: 'mail.json',
+  dataClass: { kind: 'credential' },
+  lost: 'The Brevo key or SMTP login, typed in again on Settings > Email.',
+});
+
 export const MAIL = declareNamespace({
   namespace: 'mail',
-  storage: {
-    kind: 'file',
-    under: 'data',
-    path: 'mail.json',
-    dataClass: { kept: true, secret: true },
-  },
+  storage: { kind: 'file', under: 'data', file: MAIL_FILE },
   envPrefix: 'GEEKITY_MAIL',
   legacy: flattenNestedMailFile,
   settings: {

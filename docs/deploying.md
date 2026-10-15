@@ -237,6 +237,10 @@ tar -C /opt/stacks -czf geekity-$(date +%F).tar.gz \
 To restore, unpack the archive into `/opt/stacks`, check that uid 1000 still
 owns `content/` and `data/`, and start the stack.
 
+`geekity export` writes a smaller backup that holds only what the site cannot
+rebuild, and `geekity import` restores it. See
+[Back up and move a site](#back-up-and-move-a-site).
+
 ### Upgrading and rolling back
 
 Every published version is a tag. See
@@ -315,6 +319,196 @@ that ships in the image. To use your own theme:
 
 A theme can replace a single template or `style.css` and use the default theme
 for everything else.
+
+## Back up and move a site
+
+`geekity export` writes `content/` and the files in `data/` that the site
+cannot rebuild to one archive. `geekity import` restores a site from it on
+another host, or on the same host after a loss. This section gives the order
+of the steps for a move. [Exporting a site](cli.md#exporting-a-site) says what
+the archive holds, and [Importing a site](cli.md#importing-a-site) says what
+the import does, step by step.
+
+Keep the base URL. Actor ids are built from it, so followers do not follow a
+site to a new address. Move the site to the new host under the same address,
+and point DNS at the new host at the end. `geekity import` refuses a base URL
+that differs from the archive's unless you give `--new-base-url`.
+
+### Before the move
+
+- Lower the TTL of the site's DNS records a day or more before the move, so
+  that the change at the end reaches clients quickly.
+- Set up the new host with the config and environment the site will run with.
+  `GEEKITY_BASE_URL`, or `baseUrl` in the config, is the old site's base URL.
+  Copy every other setting that the old host sets in its environment or config,
+  credentials included. The import prints the names of those settings, but not
+  their values.
+- Give the new host a plugins folder (`GEEKITY_PLUGINS_DIR`, or `pluginsDir` in
+  the config) and access to the npm registry. The import installs the site's
+  plugins from there.
+- Add each plugin that the old site's config names to the new host's config and
+  `package.json`. The import does not install these.
+- Do not start the site on the new host yet. On Docker, the first start writes
+  the starter site into `content/`, and the import then needs `--replace`.
+
+### 1. Drain the queue on the old host
+
+Deliveries, inbox work and retries that wait in `data/queue.sqlite` belong to
+the host that queued them. They are never in an archive, so let them finish
+before you export:
+
+1. Turn on [maintenance mode](public-site.md#maintenance-mode) with
+   `geekity maintenance on` or Tools > Maintenance. Every public URL, the
+   ActivityPub inboxes included, then answers 503 to anyone who is not signed
+   in, so visitors' comments and inbox activities stop arriving. A fediverse
+   server whose delivery was refused tries again later. Maintenance mode does
+   not stop the deliveries already waiting. The admin stays open.
+2. Wait until the number of waiting messages is 0.
+   [Tools > Export](admin.md#tools--export) shows it when the page loads.
+   `geekity export` prints it before it writes.
+
+A delivery to a server that is down stays in the queue between attempts, and
+Fedify can wait up to 12 hours between two attempts. If the number stops
+going down, you can export anyway. Those deliveries are lost, and the
+manifest's `pending.deliveries` records how many there were.
+
+Do not change anything on the old site from here on. The admin works in
+maintenance mode, but a post, a setting or a user that changes after the export
+is not in the archive.
+
+### 2. Export
+
+Run `geekity export` in the site directory, or use Tools > Export in the
+admin and download the archive. On Docker, write the archive inside the
+container and copy it out, as
+[Importing on Docker](cli.md#importing-on-docker) shows.
+
+Decide whether to include credentials: `--with-credentials`, or
+**Include credentials** on Tools > Export. A credential is a key or login that
+comes from another service: the mail login in `mail.json`, the Akismet key in
+`akismet.json`, and each plugin's `secrets.json`. Without the option, these
+files are left out, and you type them in again on the new host on
+Settings > Email, Settings > Discussion and each plugin's settings screen. A
+credential set in the old host's environment is never in a file, so it is
+never exported. Set it in the new host's environment.
+
+The archive holds the actor keys, the password hashes and personal data, with
+or without credentials. Store and copy it as carefully as `data/`. See
+[Site exports](personal-data.md#site-exports).
+
+### 3. Stop the old site
+
+Stop the old site, for example with `docker compose stop`. Leave its
+`content/` and `data/` in place until the new host works. If the move fails,
+start the old site again and turn maintenance mode off.
+
+### 4. Copy the archive to the new host
+
+Copy the archive with `scp` or another encrypted channel. Do not put it inside
+the new host's `content/` or `data/`, because the import moves what those
+folders hold.
+
+The archive is mode `0600`. On Docker, the container runs as uid 1000, so give
+the copy to that user before you mount it into the container:
+
+```sh
+sudo chown 1000:1000 geekity-blog.example-20261014T150405Z.tar.gz
+```
+
+### 5. Import on the new host
+
+Run `geekity import <file>` in the site directory with the site stopped. On
+Docker, run it in a one-off container, as
+[Importing on Docker](cli.md#importing-on-docker) shows. The one-off container
+reads the stack's `.env`, so the base URL check uses `GEEKITY_BASE_URL`.
+
+If the import refuses the base URL, correct `GEEKITY_BASE_URL` or `baseUrl` on
+the new host. Use `--new-base-url` only for a copy at another address, such as
+a staging site, and never for the site its followers follow.
+
+The import restores the files and rebuilds `data/geekity.db`. It installs each
+plugin that the old site added to its plugins folder from the npm registry, at
+the version the archive records, and enables or disables it as it was. It
+never installs another version.
+
+When it finishes, it prints what is left to do: the settings to set again in
+the environment or config, the credentials to type in again, and the config
+plugins to check.
+
+| Exit code | What to do                                                                                                                                                                                                                                                                          |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`       | Nothing. The site is restored and every plugin is installed.                                                                                                                                                                                                                        |
+| `1`       | Read standard error. If the import was refused, nothing changed. Fix what it names and run it again. If a plugin could not be installed, the site is restored. Run the `geekity plugin add <name>@<version>` that the line names. If a plugin will not run, upgrade `@geekity/cms`. |
+
+A failed plugin keeps its enabled state, so once `geekity plugin add` installs
+it, it runs as it did on the old site. Do not run the import again for a
+plugin. A plugin that needs a newer `@geekity/cms` is installed but does not
+run. Upgrade `@geekity/cms` on the new host first. On Docker, run the
+command in a one-off container while the site is stopped:
+
+```sh
+docker compose run --rm geekity geekity plugin add @geekity/plugin-llm@1.2.0
+```
+
+If the import stops part way, run the same command again with the same flags.
+It finishes the import that was stopped.
+
+Dev mode comes back as it was exported. A site exported in dev mode is
+imported in dev mode and sends nothing until `geekity dev-mode off`. Give
+`--dev-mode` to import a staging copy of a live site in dev mode. See
+[Dev mode](#dev-mode). Maintenance mode is not exported, so the imported site
+starts with it off, unless the new host's environment or config turns it on.
+
+### 6. Start the new site and point DNS at it
+
+Start the site, for example with `docker compose up -d`. Check it on the new
+host before you change DNS, for example with
+`curl http://127.0.0.1:3000/healthz`. Then point the site's DNS records at the
+new host.
+
+Until every client sees the new records, some requests still go to the old
+host, which is stopped. A fediverse server whose delivery fails tries again
+later.
+
+### 7. After the move
+
+- **Everyone signs in again.** Sessions are in the database, which is not
+  exported. The accounts and passwords are restored. A password reset link sent
+  before the move no longer works.
+- **Type in the credentials again.** Type in each credential that the export
+  left out, and set again each setting the import named.
+- **Announce the posts that came due during the move.** A post whose date fell
+  between the export and the first start of the new site is published, but it
+  is not announced to followers. Run `geekity resend <slug>` for each one after
+  DNS points at the new host. It sends a `Create` for a published post that
+  was never announced. On Docker, run
+  `docker compose exec geekity geekity resend <slug>`. `geekity resend --all`
+  does not reach these posts, because it resends only posts that were
+  announced.
+- **Delete what you no longer need.** Once the new site works, delete the old
+  host's `content/` and `data/`, every copy of the archive, and the
+  `.geekity-before-import-*` folders that `--replace` leaves inside `content/`
+  and `data/`. They hold the keys and personal data.
+
+The import keeps the fediverse identity: the actor ids, the keys and the
+followers. IndieAuth apps stay signed in, and the links in mail already sent
+keep working. The new site rebuilds the content, follower and comment indexes,
+follows its relays again, and derives image variants and avatars again when
+they are needed.
+
+What the move loses:
+
+- Sessions and password reset links in flight.
+- The delivery history. The federation screen starts with nothing recorded.
+- The record of sent webmentions, so a link removed later does not notify the
+  page it pointed to.
+- Announcements of posts that came due during the move, until you resend them.
+- Deliveries still waiting when the export ran.
+- Credentials, unless the archive includes them.
+- Anything that changed on the old site after the export.
+
+[What is in the database, and what a rebuild costs](content.md#what-is-in-the-database-and-what-a-rebuild-costs)
+lists each table that the rebuild starts empty.
 
 ## Dev mode
 

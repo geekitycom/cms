@@ -1,0 +1,89 @@
+{% extends "layouts/shell.njk" %}
+{% import "components/fields.njk" as field %}
+{% from "components/button.njk" import button, buttonLink %}
+{% from "components/card.njk" import card, cardActions %}
+{% from "components/job-status.njk" import jobStatus %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
+
+  <div class="flex max-w-2xl flex-col gap-6">
+    {% if problem %}
+      {% call field.summary('Nothing was exported. Fix the field marked below and try again.') %}
+        {{ field.problem('export-password', problem) }}
+      {% endcall %}
+    {% endif %}
+
+    <p class="max-w-prose">
+      An export is one <code>.tar.gz</code> file of <code>content/</code> and everything under
+      <code>data/</code> that the site cannot make again. <code>geekity import</code> restores
+      it on another host. It holds the actors' signing keys, password hashes and personal
+      data, so store it as carefully as <code>data/</code>.
+    </p>
+
+    <p id="export-pending" class="max-w-prose">
+      {% if pending.deliveries == 1 %}1 delivery is{% else %}{{ pending.deliveries }} deliveries are{% endif %}
+      waiting in <code>data/queue.sqlite</code>. They are not exported: before moving the
+      site, wait until none are, and look again here.
+    </p>
+
+    {% if job %}
+      <section id="export-status" aria-labelledby="export-status-heading">
+        {% call card() %}
+          <h2 id="export-status-heading" class="card-title">Latest export</h2>
+          {% call jobStatus(job, exportUrl, verb='Exported', unit='files') %}
+            {% if result %}
+              <p>
+                {{ result.files }} {% if result.files == 1 %}file{% else %}files{% endif %},
+                {{ result.size }} before compression, {% if result.credentials %}with{% else %}without{% endif %} credentials.
+              </p>
+              {% if result.credentialsLeftOut.length %}
+                <p>Credentials left out: {{ result.credentialsLeftOut | join(', ') }}.</p>
+              {% endif %}
+              {% if result.undeclared.length %}
+                <p>Left out because no declaration says what they are:</p>
+                <ul class="list-disc pl-6">
+                  {% for file in result.undeclared %}<li><code class="break-all">{{ file }}</code></li>{% endfor %}
+                </ul>
+              {% endif %}
+              {% if result.notCarried.length %}
+                <p>Left out because an export holds only regular files:</p>
+                <ul class="list-disc pl-6">
+                  {% for entry in result.notCarried %}<li><code class="break-all">{{ entry.path }}</code>, {{ entry.why }}</li>{% endfor %}
+                </ul>
+              {% endif %}
+              {% if archive %}
+                <p>
+                  <code class="break-all">{{ archive.name }}</code> is deleted at
+                  <time datetime="{{ archive.expiresAt }}">{{ archive.expiresAt | date('datetime') }}</time>,
+                  or when the next export finishes.
+                </p>
+                <div>{{ buttonLink('Download ' + archive.size, downloadUrl, color='primary') }}</div>
+              {% else %}
+                <p>The archive was deleted 24 hours after it was written, or a later export replaced it. Export again to download one.</p>
+              {% endif %}
+            {% endif %}
+          {% endcall %}
+        {% endcall %}
+      </section>
+    {% endif %}
+
+    {% if not job or not job.active %}
+      {% call card(title='Export the site') %}
+        <form method="post" action="{{ exportUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          {{ field.checkbox('export-with-credentials', fields.withCredentials,
+               'Include credentials', checked=withCredentials,
+               hint='API keys and logins for other services, such as an email provider. Left out, they are typed in again after an import.') }}
+          {{ field.password('export-password', fields.password, 'Your password',
+               error=problem, autocomplete='current-password', required=true) }}
+          {% call cardActions() %}
+            {{ button('Export', type='submit', color='primary') }}
+          {% endcall %}
+        </form>
+      {% endcall %}
+    {% endif %}
+  </div>
+{% endblock %}

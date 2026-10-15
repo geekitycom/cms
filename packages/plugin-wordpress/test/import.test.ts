@@ -170,7 +170,7 @@ async function site(): Promise<Where> {
     dataDir,
     contentDir,
     cms,
-    records: wordPressRecords(pluginDataFolder(dataDir, wordpress.name)),
+    records: wordPressRecords(pluginDataFolder(dataDir, wordpress)),
   };
 }
 

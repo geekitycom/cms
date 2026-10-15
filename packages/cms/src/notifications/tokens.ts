@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import path from 'node:path';
 
 import { readFileIfPresentSync, writeFileAtomicallySync } from '../files/atomic.ts';
+import { NOTIFICATION_SECRET, dataPath } from '../files/data-files.ts';
 
 /**
  * The thing that makes a link in an email work without a login.
@@ -27,9 +27,6 @@ import { readFileIfPresentSync, writeFileAtomicallySync } from '../files/atomic.
  * deleting one that is gone — whereas forgetting the secret would break every
  * link a site had sent.
  */
-
-/** Where the signing secret lives, under `dataDir`. */
-export const NOTIFICATION_SECRET_FILE = 'notification-secret';
 
 /** What a link is allowed to do, once its signature checks out. */
 export interface NotificationClaim {
@@ -143,7 +140,7 @@ function matches(expected: string, given: string): boolean {
  * every link a site has sent and costs nothing else.
  */
 function notificationSecret(dataDir: string): string {
-  const file = path.join(dataDir, NOTIFICATION_SECRET_FILE);
+  const file = dataPath(dataDir, NOTIFICATION_SECRET);
   const held = readFileIfPresentSync(file)?.trim();
   if (held !== undefined && held !== '') return held;
 

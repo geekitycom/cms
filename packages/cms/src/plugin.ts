@@ -212,10 +212,25 @@ export type PluginUploadCheck =
   | { readonly accepted: true; readonly bytes: Uint8Array }
   | { readonly accepted: false; readonly why: string };
 
-/** The plugin's private folder, `data/plugins/<package name>/`. */
+/**
+ * What a file in a plugin's folder is to the site, and so what a site export
+ * does with it.
+
+ *
+ * - `kept`: the site cannot be rebuilt without it. Always exported.
+ * - `rebuildable`: the plugin makes it again, fetches it again, or falls back
+ *   to a default. Never exported.
+ * - `credential`: typed in again from another service, such as an API key.
+ *   Exported only when asked, and written at mode `0600`.
+ */
+export type PluginDataClass = 'kept' | 'rebuildable' | 'credential';
+
+/**
+ * The plugin's private folder, `data/plugins/<package name>/`. It reads and
+ * writes only the files {@link Plugin.data} declares, and throws on any other
+ * name.
+ */
 export interface PluginDataFolder {
-  /** The folder, absolute. */
-  readonly path: string;
   /** A file's text, or `undefined` when it is not there. */
   read(file: string): string | undefined;
   /**
@@ -701,6 +716,12 @@ export interface Plugin<
   readonly hostApi: number;
   /** The plugins it needs installed and enabled before it can be enabled. */
   readonly requires?: Requires;
+  /**
+   * Every file it keeps in its folder through {@link PluginHost.data}, by
+   * name, with its class. A name is one path segment and may not be
+   * `settings.json` or `secrets.json`, which hold its settings.
+   */
+  readonly data?: Readonly<Record<string, PluginDataClass>>;
   /**
    * Called once at boot for every installed plugin, enabled or not, to
    * declare what the plugin contributes.

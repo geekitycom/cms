@@ -3,8 +3,6 @@ import type { RedirectTable } from './redirects.ts';
 import type { Taxonomy } from './taxonomy.ts';
 import type { Clock } from '../util/clock.ts';
 
-export { DATABASE_FILE } from '../cache.ts';
-
 /** Directory name that marks a document as thrown away but not yet deleted. */
 export const TRASH_DIRECTORY = '_trash';
 

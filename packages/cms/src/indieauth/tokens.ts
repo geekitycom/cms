@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
-import path from 'node:path';
 
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import type { AuthorizationCode } from './grants.ts';
 import type { RedemptionForm } from './redeem.ts';
 import type { Scope } from './request.ts';
+import { INDIEAUTH_TOKENS, dataPath } from '../files/data-files.ts';
 
 /**
  * The access tokens the token endpoint has issued: `data/indieauth-tokens.json`
@@ -20,9 +20,6 @@ import type { Scope } from './request.ts';
  * replaces both hashes in place, so the record keeps the id and the time the
  * person approved it while the tokens change under it.
  */
-
-/** The file, relative to `dataDir`. */
-export const TOKENS_FILE = 'indieauth-tokens.json';
 
 /** The permissions the file is written with: nobody but the site's own user. */
 export const TOKENS_FILE_MODE = 0o600;
@@ -120,7 +117,7 @@ interface TokensFile {
 
 /** Where the tokens file lives for a given data directory. */
 export function tokensFile(dataDir: string): string {
-  return path.join(dataDir, TOKENS_FILE);
+  return dataPath(dataDir, INDIEAUTH_TOKENS);
 }
 
 /** Every connection in the file, live or not. */

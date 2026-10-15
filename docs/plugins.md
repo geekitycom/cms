@@ -234,7 +234,45 @@ The plugin's admin screen draws them as a form. Public values are stored in
 `data/plugins/<package name>/secrets.json`, mode `0600`. An environment
 variable overrides any of them, as
 [Plugin settings](configuration.md#plugin-settings) describes.
-`host.data` reads and writes other files in that folder.
+
+**Data files.** `host.data` reads and writes other files in
+`data/plugins/<package name>/`. A plugin declares each of these files in the
+`data` field of its definition, with the file's class:
+
+```ts
+export default definePlugin({
+  name: '@acme/plugin-hello',
+  // ...
+  data: { 'greetings.json': 'kept', 'cache.json': 'rebuildable' },
+  register(host) {
+    host.get('/hello', () => new Response(host.data.read('greetings.json')));
+  },
+});
+```
+
+The class says what a site export does with the file:
+
+| Class         | Meaning                                                                  | In an export        |
+| ------------- | ------------------------------------------------------------------------ | ------------------- |
+| `kept`        | The site cannot be rebuilt without it.                                   | Always              |
+| `rebuildable` | The plugin makes it again, fetches it again, or falls back to a default. | Never               |
+| `credential`  | A key or login that is typed in again from another service.              | Only when asked for |
+
+A `credential` file is written at mode `0600`. A plugin cannot use the other
+classes core uses (`pending` and `scratch`).
+
+A name in `data` is one path segment, such as `cache.json`. It cannot be
+`settings.json` or `secrets.json`, which hold the plugin's settings. A
+declaration that breaks these rules makes the plugin unavailable, and the
+Plugins screen shows why.
+
+`host.data.read` and `host.data.update` throw on a file that `data` does not
+declare. The error names the file and the `data` field. There is no other way
+into the folder: the plugin is not given its path.
+
+The folder of a plugin that is not loaded, such as one that was removed, is
+kept whole in an export, apart from its `secrets.json`, which is a credential.
+The site may add the plugin again.
 
 `settings.current()` returns a promise of the values in effect. It reads the
 files and the environment on each call, so call it when the plugin handles a
@@ -340,22 +378,22 @@ import { createCms } from '@geekity/cms';
 import { pluginDataFolder, pluginSite } from '@geekity/cms/testing';
 ```
 
-| Export                  | Kind     | What it is                                                                                             |
-| ----------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
-| `addComment`            | function | Record a comment: append it to its post's file and index it.                                           |
-| `deleteComment`         | function | Forget a comment altogether.                                                                           |
-| `documentContent`       | function | The writable half of a parsed document: what it would be written back from.                            |
-| `intakeComment`         | function | The one door into `content/_data/comments/`.                                                           |
-| `openAdminStore`        | function | Open (and if needed create) the admin tables in `dataDir`, applying every migration the package ships. |
-| `pluginDataFolder`      | function | `data/plugins/<package name>/`, which only its plugin reads and writes.                                |
-| `pluginSite`            | function | The `PluginSite` a plugin's host is given, built from a site's admin store and config.                 |
-| `updateComment`         | function | Move a stored comment: approve it, mark it spam, put it back, or rewrite what it says.                 |
-| `CommentIntakeOutcome`  | type     | What became of one proposed comment.                                                                   |
-| `CommentOrigin`         | type     | Who is proposing a comment, which is the one thing the rules differ on.                                |
-| `IntakeCommentOptions`  | type     | What `intakeComment` needs around a proposed comment.                                                  |
-| `NewComment`            | type     | A `CommentRecord` on its way in, before the store has named it.                                        |
-| `OpenAdminStoreOptions` | type     | Where `openAdminStore` puts, and finds, its tables. Pass `now` to pin the time its records carry.      |
-| `ProposedComment`       | type     | A comment as its writer proposes it: everything but its name, where it stands, and where it came from. |
+| Export                  | Kind     | What it is                                                                                                        |
+| ----------------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| `addComment`            | function | Record a comment: append it to its post's file and index it.                                                      |
+| `deleteComment`         | function | Forget a comment altogether.                                                                                      |
+| `documentContent`       | function | The writable half of a parsed document: what it would be written back from.                                       |
+| `intakeComment`         | function | The one door into `content/_data/comments/`.                                                                      |
+| `openAdminStore`        | function | Open (and if needed create) the admin tables in `dataDir`, applying every migration the package ships.            |
+| `pluginDataFolder`      | function | Takes the data folder and the plugin. It returns the plugin's `host.data`, holding the files its `data` declares. |
+| `pluginSite`            | function | The `PluginSite` a plugin's host is given, built from a site's admin store and config.                            |
+| `updateComment`         | function | Move a stored comment: approve it, mark it spam, put it back, or rewrite what it says.                            |
+| `CommentIntakeOutcome`  | type     | What became of one proposed comment.                                                                              |
+| `CommentOrigin`         | type     | Who is proposing a comment, which is the one thing the rules differ on.                                           |
+| `IntakeCommentOptions`  | type     | What `intakeComment` needs around a proposed comment.                                                             |
+| `NewComment`            | type     | A `CommentRecord` on its way in, before the store has named it.                                                   |
+| `OpenAdminStoreOptions` | type     | Where `openAdminStore` puts, and finds, its tables. Pass `now` to pin the time its records carry.                 |
+| `ProposedComment`       | type     | A comment as its writer proposes it: everything but its name, where it stands, and where it came from.            |
 
 `src/public-api.test.ts` in `packages/cms` compares `src/testing.ts` with this
 table, and fails when a value here is not imported by any plugin test. It also

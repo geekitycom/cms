@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { Hono } from 'hono';
@@ -23,8 +22,8 @@ import {
   LAST_USE_RESOLUTION_MS,
   listTokens,
   revokeToken,
-  TOKENS_FILE,
 } from '../indieauth/tokens.ts';
+import { INDIEAUTH_TOKENS, dataPath } from '../files/data-files.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -264,7 +263,7 @@ describe('when a connection was last used', () => {
     let clock = t0;
     const app = guarded(cms, { audience: MICROPUB }, () => clock);
     const { accessToken } = await issueTokens(cms.config.dataDir, grant, t0);
-    const file = path.join(cms.config.dataDir, TOKENS_FILE);
+    const file = dataPath(cms.config.dataDir, INDIEAUTH_TOKENS);
 
     assert.equal((await app.request('/thing', withHeader(accessToken))).status, 200);
     assert.equal(listTokens(cms.config.dataDir)[0]?.lastUsedAt, t0.toISOString());

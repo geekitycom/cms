@@ -27,7 +27,6 @@ export { DEFAULT_COMMENTS_CLOSE_AFTER_DAYS } from '../site/settings.ts';
 export type { CommentPolicy } from './policy.ts';
 export {
   addComment,
-  COMMENT_EMAILS_DIRECTORY,
   COMMENT_EMAILS_FILE_MODE,
   commentEmailsFile,
   COMMENTS_DATA_DIRECTORY,
@@ -58,7 +57,6 @@ export {
   COMMENT_FIELDS,
   COMMENT_RATE_LIMIT,
   COMMENT_RATE_WINDOW_SECONDS,
-  COMMENT_SALT_FILE,
   commentKeys,
   commentProblems,
   hashClientAddress,

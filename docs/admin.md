@@ -534,3 +534,53 @@ ones.
 - A term that comes back into use is served, not redirected.
 - Deleting a term drops every record that points at it, because a redirect to a
   404 is worse than the 404.
+
+## Tools > Export
+
+Tools > Export writes the same archive as
+[`geekity export`](cli.md#exporting-a-site) and offers it as a download. The
+archive always holds `content/`. An archive of a site with many uploads can
+take minutes to write, so the export runs as the `site.export` job in the
+background, and the request that starts it returns at once.
+
+Before you start an export, the screen shows how many deliveries are waiting
+in `data/queue.sqlite`. The archive never holds them. Before you move a site,
+wait until the number is 0. The number is read when the page loads, so load
+the page again to see it change.
+
+To start an export:
+
+1. Select **Include credentials** to put the credential files in the archive:
+   `mail.json`, `akismet.json` and each plugin's `secrets.json`. Without it,
+   they are left out, and you type them in again after an import.
+2. Type your password. Every archive holds the actor keys, the password hashes
+   and personal data, so the screen asks for the password again. A wrong or
+   missing password queues nothing.
+3. Select **Export**.
+
+While the job waits or runs, the screen shows its state, the number of files
+written out of the total, and the bytes written out of the total. The page
+does not reload by itself: select **Check again**. While an export is queued
+or running, the screen does not offer a second one.
+
+When the job finishes, the screen shows the number of files, the size, whether
+credentials are included, which credentials were left out, any file under
+`data/` that was left out because no declaration covers it, and any entry
+under `content/` that was left out because it is not a regular file, such as
+a symbolic link. **Download** sends
+the archive with `Content-Disposition: attachment`. The download URL,
+`/admin/tools/export/download`, is behind the admin sign-in like every other
+admin URL.
+
+The job writes the archive to `data/exports/`, whose class is `scratch`, so an
+export never holds an earlier export. The folder keeps one archive:
+
+- When an export finishes, the job deletes every other file in the folder.
+- An archive is deleted 24 hours after it was written. The time is the one in
+  its name. From that moment the screen and the download no longer offer it.
+  The retention sweep, which runs every 6 hours, deletes the file if nobody
+  opens the screen.
+
+If the server stops during an export, the job runs again when the server
+starts, and it writes a new archive. It deletes the temporary files that the
+cut-off run left in `data/exports/`.

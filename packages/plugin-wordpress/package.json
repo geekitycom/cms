@@ -51,6 +51,9 @@
   "devDependencies": {
     "@fedify/cli": "2.4.3",
     "@geekity/cms": "workspace:*",
+    "@geekity/plugin-llm": "workspace:*",
+    "@geekity/plugin-post-summary": "workspace:*",
+    "@geekity/plugin-tag-suggest": "workspace:*",
     "@hono/node-server": "^2.1.4",
     "@types/node": "^26.6.5",
     "@types/sax": "^1.2.7",

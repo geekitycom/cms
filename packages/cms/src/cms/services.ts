@@ -1,5 +1,3 @@
-import path from 'node:path';
-
 import { MemoryKvStore } from '@fedify/fedify';
 import type { KvStore } from '@fedify/fedify';
 
@@ -36,7 +34,9 @@ import type {
 import { createFederationQueue } from '../federation/queue.ts';
 import { settleImageVariants } from '../images/variants.ts';
 import { stripMetadataJob } from '../content/metadata/strip-job.ts';
+import { siteExportJob } from '../export/export-job.ts';
 import { resendJob } from '../federation/resend-job.ts';
+import { JOBS, dataPath } from '../files/data-files.ts';
 import { createFileRecords } from '../jobs/file-records.ts';
 import { createInProcessTransport } from '../jobs/in-process.ts';
 import { createJobQueue } from '../jobs/queue.ts';
@@ -349,10 +349,11 @@ export function createServices({
 
   const jobs = createJobQueue({
     transport: resolved.jobs.transport ?? createInProcessTransport(),
-    records: resolved.jobs.records ?? createFileRecords(path.join(resolved.dataDir, 'jobs.json')),
+    records: resolved.jobs.records ?? createFileRecords(dataPath(resolved.dataDir, JOBS)),
     jobs: [
       stripMetadataJob(resolved.contentDir),
       resendJob({ store, delivery, webmentions }),
+      siteExportJob({ config: resolved, settings, plugins }, resolved.now),
       ...(resolved.jobs.definitions ?? []),
     ],
     now: resolved.now,

@@ -95,7 +95,7 @@ async function site(): Promise<Site> {
   const uploadsDir = path.join(root, 'wp-content', 'uploads');
   await fs.mkdir(path.join(contentDir, '_data'), { recursive: true });
   await fs.writeFile(path.join(contentDir, '_data', 'site.json'), '{\n  "title": "Blog"\n}\n');
-  const data = pluginDataFolder(path.join(root, 'data'), '@geekity/plugin-wordpress');
+  const data = pluginDataFolder(path.join(root, 'data'), wordpress);
   const pluginSite: PluginSite = {
     baseUrl: 'https://new.example',
     contentDir,

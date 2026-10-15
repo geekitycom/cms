@@ -9,8 +9,8 @@ import { SqliteMessageQueue } from '@fedify/sqlite';
 import { Temporal } from '@js-temporal/polyfill';
 
 import { queuedMessages } from '../__testing__/federation-queue.ts';
-import { openQueueDatabase } from '../store/queue-database.ts';
-import { createCountingQueue, createPausingQueue, FEDERATION_QUEUE_TABLE } from './queue.ts';
+import { FEDERATION_QUEUE_TABLE, openQueueDatabase } from '../store/queue-database.ts';
+import { createCountingQueue, createPausingQueue } from './queue.ts';
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve: () => void = () => undefined;

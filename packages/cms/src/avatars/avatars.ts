@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { readdir, rm, stat, utimes } from 'node:fs/promises';
-import path from 'node:path';
 
 import sharp from 'sharp';
 
 import type { AdminStore } from '../store/admin-store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { writeFileAtomically } from '../files/atomic.ts';
+import { AVATARS, dataFolder, dataPath } from '../files/data-files.ts';
 import { findAsset } from '../files/static-files.ts';
 import type { StaticAsset } from '../files/static-files.ts';
 import { systemNotificationTimers } from '../notifications/digest.ts';
@@ -39,9 +39,6 @@ import { fetchPublic, webUrl } from '../webmention/fetch-public.ts';
 
 /** Where an avatar is served, followed by its key. */
 export const AVATAR_PATH_PREFIX = '/_geekity/avatars/';
-
-/** The directory under `dataDir` the cache lives in. */
-export const AVATAR_DIRECTORY = 'avatars';
 
 /**
  * The width and height of a cached avatar, in pixels: twice the 40 the
@@ -159,7 +156,8 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
   const timers = options.timers ?? systemNotificationTimers;
   const firstViewWaitMs = options.firstViewWaitMs ?? AVATAR_FIRST_VIEW_WAIT_MS;
   const logger = options.logger ?? console;
-  const directory = path.join(config.dataDir, AVATAR_DIRECTORY);
+  const directory = dataFolder(config.dataDir, AVATARS);
+  const avatarFile = (name: string): string => dataPath(config.dataDir, AVATARS, name);
 
   const inFlight = new Map<string, Promise<boolean>>();
   const sweeps = createSerialQueue();
@@ -171,7 +169,7 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
   /** How long ago a cache file was written, or `undefined` when there is none. */
   async function ageOf(name: string): Promise<number | undefined> {
     try {
-      return config.now().getTime() - (await stat(path.join(directory, name))).mtimeMs;
+      return config.now().getTime() - (await stat(avatarFile(name))).mtimeMs;
     } catch {
       return undefined;
     }
@@ -191,15 +189,15 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
     const shrunk = await fetchAvatar(source, config);
     if (!shrunk.ok) {
       logger.warn(`Could not fetch the avatar at ${source}: ${shrunk.reason}`);
-      await touch(path.join(directory, failedName(source)), config.now());
+      await touch(avatarFile(failedName(source)), config.now());
       return false;
     }
-    await writeFileAtomically(path.join(directory, imageName(source)), shrunk.image);
+    await writeFileAtomically(avatarFile(imageName(source)), shrunk.image);
     // The write is stamped with the site's clock rather than the machine's, so
     // the age the sweep reads is the one the rest of the site agrees on.
     const at = config.now();
-    await utimes(path.join(directory, imageName(source)), at, at);
-    await rm(path.join(directory, failedName(source)), { force: true });
+    await utimes(avatarFile(imageName(source)), at, at);
+    await rm(avatarFile(failedName(source)), { force: true });
     return true;
   }
 
@@ -226,7 +224,7 @@ export function createAvatarService(options: CreateAvatarServiceOptions): Avatar
       return;
     }
     for (const name of names) {
-      if (!keep.has(name)) await rm(path.join(directory, name), { force: true });
+      if (!keep.has(name)) await rm(avatarFile(name), { force: true });
     }
   }
 

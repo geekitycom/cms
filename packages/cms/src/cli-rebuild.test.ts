@@ -9,8 +9,7 @@ import { Temporal } from '@js-temporal/polyfill';
 
 import { cleanupTemporaryDirs, exists, runCli, siteWithContent } from './__testing__/cli.ts';
 import { queuedMessages } from './__testing__/federation-queue.ts';
-import { FEDERATION_QUEUE_TABLE } from './federation/queue.ts';
-import { queueFile } from './store/queue-database.ts';
+import { FEDERATION_QUEUE_TABLE, queueFile } from './store/queue-database.ts';
 import { createCms } from './index.ts';
 
 after(cleanupTemporaryDirs);

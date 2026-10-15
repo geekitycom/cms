@@ -1,7 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
-import path from 'node:path';
 
 import {
   readFileIfPresentSync,
@@ -9,6 +8,7 @@ import {
   writeFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
+import { CONTACT_MESSAGES, dataFolder, dataPath } from '../files/data-files.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 
 /**
@@ -35,12 +35,9 @@ import { stringOrEmpty } from '../util/forms.ts';
  * arrived — so `ls` is the inbox in order, and so no two messages can collide.
  */
 
-/** Where the messages live, relative to the data directory. */
-export const CONTACT_DATA_DIRECTORY = 'contact';
-
 /** The absolute path of one site's `data/contact`. */
 export function contactDirectory(dataDir: string): string {
-  return path.join(dataDir, CONTACT_DATA_DIRECTORY);
+  return dataFolder(dataDir, CONTACT_MESSAGES);
 }
 
 /**
@@ -125,7 +122,7 @@ export function contactMessageFile(dataDir: string, id: string): string {
   if (!SAFE_ID.test(id)) {
     throw new Error(`"${id}" is not an id a contact message file can be named after.`);
   }
-  return path.join(contactDirectory(dataDir), `${id}.json`);
+  return dataPath(dataDir, CONTACT_MESSAGES, `${id}.json`);
 }
 
 /**

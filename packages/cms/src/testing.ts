@@ -9,5 +9,5 @@ export type {
   ProposedComment,
 } from './comments/index.ts';
 export { documentContent } from './content/index.ts';
-export { pluginDataFolder } from './plugins/registry.ts';
+export { pluginDataFolder } from './plugins/data.ts';
 export { pluginSite } from './plugins/site.ts';

@@ -1,13 +1,14 @@
-import { chmodSync, closeSync, mkdirSync, openSync } from 'node:fs';
-import path from 'node:path';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
-const QUEUE_FILE = 'queue.sqlite';
+import { QUEUE, dataPath } from '../files/data-files.ts';
+
+export const FEDERATION_QUEUE_TABLE = 'federation_messages';
 
 const BUSY_TIMEOUT_MS = 5000;
 
 export function queueFile(dataDir: string): string {
-  return path.join(dataDir, QUEUE_FILE);
+  return dataPath(dataDir, QUEUE);
 }
 
 /**
@@ -21,4 +22,20 @@ export function openQueueDatabase(dataDir: string): DatabaseSync {
   closeSync(openSync(file, 'a', 0o600));
   chmodSync(file, 0o600);
   return new DatabaseSync(file, { timeout: BUSY_TIMEOUT_MS });
+}
+
+export function countWaitingMessages(dataDir: string): number {
+  const file = queueFile(dataDir);
+  if (!existsSync(file)) return 0;
+  const db = new DatabaseSync(file, { readOnly: true, timeout: BUSY_TIMEOUT_MS });
+  try {
+    const table = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(FEDERATION_QUEUE_TABLE);
+    if (table === undefined) return 0;
+    const row = db.prepare(`SELECT count(*) AS waiting FROM ${FEDERATION_QUEUE_TABLE}`).get();
+    return Number(row?.['waiting'] ?? 0);
+  } finally {
+    db.close();
+  }
 }

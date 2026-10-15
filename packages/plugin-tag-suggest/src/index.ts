@@ -16,7 +16,7 @@ import type {
 } from '@geekity/cms/plugin';
 import type { LlmService } from '@geekity/plugin-llm';
 
-import { followerCounts, LOOKUP_TIMEOUT_MS } from './followers.ts';
+import { followerCounts, FOLLOWERS_FILE, LOOKUP_TIMEOUT_MS } from './followers.ts';
 import type { FollowerCount, FollowerLookup } from './followers.ts';
 import { hashtagKey, readableTag } from './key.ts';
 import { SEED } from './seed.ts';
@@ -261,6 +261,7 @@ export default definePlugin({
     'ranked by how many people follow each tag on tags.pub, when the author asks.',
   hostApi: 2,
   requires: { [LLM]: '>=0.2.0 <1.0.0' },
+  data: { [FOLLOWERS_FILE]: 'rebuildable' },
   register(host) {
     const settings = host.settings(SETTINGS);
     host.editorAction({

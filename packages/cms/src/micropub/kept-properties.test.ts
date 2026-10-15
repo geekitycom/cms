@@ -6,12 +6,12 @@ import { after, describe, it } from 'node:test';
 import { remoteHostsDoNotExist } from '../__testing__/offline.ts';
 import { csrfField, FIRST_ADMIN, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Browser } from '../admin/__testing__/harness.ts';
-import { KEPT_PROPERTIES_FILE } from '../content/kept-properties.ts';
 import { issueTokens } from '../indieauth/tokens.ts';
 import type { Cms } from '../index.ts';
 import { findUser } from '../site/users.ts';
 import { feedPathUnder } from '../web/feed-source.ts';
 import { OEMBED_PATH } from '../web/oembed.ts';
+import { KEPT_PROPERTIES, dataPath } from '../files/data-files.ts';
 
 remoteHostsDoNotExist();
 
@@ -101,7 +101,7 @@ async function source(cms: Cms, token: string, url: string): Promise<Record<stri
 
 async function keptFile(cms: Cms): Promise<Record<string, Record<string, unknown[]>>> {
   return JSON.parse(
-    await readFile(path.join(cms.config.dataDir, KEPT_PROPERTIES_FILE), 'utf8'),
+    await readFile(dataPath(cms.config.dataDir, KEPT_PROPERTIES), 'utf8'),
   ) as Record<string, Record<string, unknown[]>>;
 }
 
@@ -159,7 +159,7 @@ describe('a property the site does not understand (AC #1, #5)', () => {
 
     assert.match(await text(cms, permalink), /Lunch meeting/);
     assert.deepEqual(await keptFile(cms), { [permalink]: { ate: ATE } });
-    const mode = (await stat(path.join(cms.config.dataDir, KEPT_PROPERTIES_FILE))).mode & 0o777;
+    const mode = (await stat(dataPath(cms.config.dataDir, KEPT_PROPERTIES))).mode & 0o777;
     assert.equal(mode, 0o600);
     for (const [file, contents] of await filesUnder(cms.config.contentDir)) {
       for (const needle of SECRETS)
@@ -190,7 +190,7 @@ describe('a property the site does not understand (AC #1, #5)', () => {
         ['content', 'Plain.'],
       ]),
     );
-    await assert.rejects(stat(path.join(cms.config.dataDir, KEPT_PROPERTIES_FILE)));
+    await assert.rejects(stat(dataPath(cms.config.dataDir, KEPT_PROPERTIES)));
   });
 
   it('refuses more than it keeps for a post, and writes nothing', async () => {
@@ -234,7 +234,7 @@ describe('a create with nothing to publish (AC #6)', () => {
       /does not understand weight, and the post has nothing else/,
     );
     assert.deepEqual(await postFiles(cms), []);
-    await assert.rejects(stat(path.join(cms.config.dataDir, KEPT_PROPERTIES_FILE)));
+    await assert.rejects(stat(dataPath(cms.config.dataDir, KEPT_PROPERTIES)));
   });
 
   it('takes the same property beside a like, which needs no content', async () => {

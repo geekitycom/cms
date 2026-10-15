@@ -227,6 +227,7 @@ export default definePlugin({
     'Connects the site to a language model through the OpenAI chat-completions API, ' +
     'OpenRouter by default, for other plugins to use.',
   hostApi: 2,
+  data: { [LAST_CALL_FILE]: 'rebuildable' },
   register(host) {
     const settings = host.settings(LLM_SETTINGS);
     const catalog = modelCatalog();

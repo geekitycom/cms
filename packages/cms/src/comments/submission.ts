@@ -1,6 +1,5 @@
 import {
   CSRF_FIELD,
-  ADDRESS_SALT_FILE,
   FORM_LOADED_FIELD,
   FORM_TRAP_FIELD,
   formTimingRefusal,
@@ -40,9 +39,6 @@ export {
   MAXIMUM_FORM_AGE_SECONDS,
   MINIMUM_SUBMIT_SECONDS,
 } from '../forms/protection.ts';
-
-/** Where the salt that hides commenters' addresses lives, under `dataDir`. */
-export const COMMENT_SALT_FILE = ADDRESS_SALT_FILE;
 
 /** The fields the comment form submits. */
 export const COMMENT_FIELDS = {

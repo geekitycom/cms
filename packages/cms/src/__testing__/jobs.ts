@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import net from 'node:net';
 import { hostname } from 'node:os';
-import path from 'node:path';
 
+import { JOBS, dataPath } from '../files/data-files.ts';
 import { createFileRecords } from '../jobs/file-records.ts';
 import type { JobStatus } from '../jobs/types.ts';
 import { controlSocketPath } from '../supervisor/control.ts';
@@ -14,7 +14,7 @@ export async function recordJob(
   state: 'queued' | 'running',
 ): Promise<JobStatus> {
   await mkdir(dataDir, { recursive: true });
-  const records = createFileRecords(path.join(dataDir, 'jobs.json'));
+  const records = createFileRecords(dataPath(dataDir, JOBS));
   const queued = {
     id: randomUUID(),
     name,

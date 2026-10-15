@@ -1,6 +1,5 @@
 import { mkdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 
 import { exportJwk, generateCryptoKeyPair, importJwk } from '@fedify/fedify';
 
@@ -9,6 +8,7 @@ import {
   updateFileAtomically,
   writeFileAtomicallySync,
 } from '../files/atomic.ts';
+import { ACTOR_KEYS, dataFolder, dataPath } from '../files/data-files.ts';
 import { messageOf } from '../util/errors.ts';
 
 /**
@@ -23,7 +23,7 @@ export type ActorKeyAlgorithm = (typeof ACTOR_KEY_ALGORITHMS)[number];
 
 /** Where an actor's key files live: `data/keys`, beside the disposable index. */
 export function actorKeysDir(dataDir: string): string {
-  return path.join(dataDir, 'keys');
+  return dataFolder(dataDir, ACTOR_KEYS);
 }
 
 /**
@@ -40,7 +40,7 @@ export function actorKeysDir(dataDir: string): string {
  * this one does not still has to reach a file before the table is dropped.
  */
 export function actorKeyFile(dataDir: string, identifier: string, algorithm: string): string {
-  return path.join(actorKeysDir(dataDir), `${fileToken(identifier)}.${fileToken(algorithm)}.jwk`);
+  return dataPath(dataDir, ACTOR_KEYS, `${fileToken(identifier)}.${fileToken(algorithm)}.jwk`);
 }
 
 /**

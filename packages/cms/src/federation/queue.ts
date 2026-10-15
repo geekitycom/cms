@@ -9,10 +9,8 @@ import { SqliteMessageQueue } from '@fedify/sqlite';
 
 import { holdOutbound } from '../dev-mode.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
-import { openQueueDatabase } from '../store/queue-database.ts';
+import { FEDERATION_QUEUE_TABLE, openQueueDatabase } from '../store/queue-database.ts';
 import type { Clock } from '../util/clock.ts';
-
-export const FEDERATION_QUEUE_TABLE = 'federation_messages';
 
 interface Settling extends MessageQueue {
   settled(): Promise<void>;
