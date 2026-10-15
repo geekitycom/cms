@@ -436,6 +436,7 @@ function listingEntry(item) {
     postType: title === '' ? 'note' : 'article',
     date: item.date,
     summary: typeof item.data.description === 'string' ? item.data.description : '',
+    excerpt: typeof item.data.description === 'string' ? item.data.description : '',
     content: item.content,
     categories: categoriesOf(item.data),
     tags: Array.isArray(item.data.tags) ? item.data.tags : [],
@@ -940,10 +941,10 @@ export default function (eleventyConfig) {
   //
   // Each is a listing entry in the shape the default theme's
   // `partials/post-list.njk` reads: `url`, `title`, `named`, `postType`,
-  // `date`, `summary`, `content`, `categories`, `tags` and `lang`. The CMS
+  // `date`, `summary`, `excerpt`, `content`, `categories`, `tags` and `lang`. The CMS
   // reads a post's kind out of its front matter (a reply, a like, a photo);
   // here a post with a title is an `article` and one without is a `note`, and
-  // the `summary` is the `description`, where the CMS cuts the first
+  // the `summary` and `excerpt` are the `description`, where the CMS cuts the first
   // paragraph for a post that has none. Drafts, scheduled and unlisted posts
   // are out, because the preprocessors below keep them out of every
   // collection. Call it from a layout: a layout runs once every document's
