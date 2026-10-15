@@ -3,7 +3,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import sharp from 'sharp';
-import type { Sharp } from 'sharp';
+import type { Metadata, Sharp } from 'sharp';
 
 import { writeFileAtomically } from '../files/atomic.ts';
 import { IMAGES, dataFolder } from '../files/data-files.ts';
@@ -148,7 +148,10 @@ const generating = new Map<string, Promise<ImageRecord | undefined>>();
  * text file), when it is animated, or when it is not there at all. None of
  * those is an error: an upload that has no variants is the ordinary case for
  * most of what a site holds, and the caller's job is to fall back to the
- * original, which is exactly what it would have served anyway.
+ * original, which is exactly what it would have served anyway. Whether the
+ * file is an image is whatever sharp makes of its header; once that has been
+ * read, a failure to make the directory, encode or write is thrown, because
+ * it is the server failing and not the upload.
  *
  * Two callers asking for the same image at once share one encode.
  */
@@ -207,7 +210,12 @@ async function derive(
     return undefined;
   }
 
-  const metadata = await sharp(file).metadata();
+  let metadata: Metadata;
+  try {
+    metadata = await sharp(file).metadata();
+  } catch {
+    return undefined;
+  }
   const stored = { width: metadata.width, height: metadata.height };
   if (stored.width === undefined || stored.height === undefined) return undefined;
   // An animated WebP or AVIF is the GIF case wearing another extension: sharp

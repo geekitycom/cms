@@ -269,6 +269,64 @@ async function deleteUpload(agent: Browser, relative: string): Promise<void> {
   assert.equal(response.status, 303);
 }
 
+/** Request a URL and answer its status with whatever was logged as an error meanwhile. */
+async function requestLogging(
+  cms: Cms,
+  url: string,
+): Promise<{ status: number; logged: string[] }> {
+  const logged: string[] = [];
+  const error = console.error;
+  console.error = (...args: unknown[]) => logged.push(args.map(String).join(' '));
+  try {
+    return { status: (await cms.app.request(url)).status, logged };
+  } finally {
+    console.error = error;
+  }
+}
+
+/** Put bytes straight into `content/uploads/`, as a file copied in by hand. */
+async function placedUpload(contentDir: string, relative: string, bytes: Buffer): Promise<void> {
+  const file = path.join(contentDir, 'uploads', ...relative.split('/'));
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, bytes);
+}
+
+describe('a variant of an upload that cannot be derived', () => {
+  it('answers 404 and logs nothing when the source is not an image', async () => {
+    const contentDir = await box.dir('geekity-image-content-');
+    const cms = await box.site({ contentDir });
+    await placedUpload(contentDir, '2026/01/notes.jpg', Buffer.from('not a picture\n'));
+    await placedUpload(contentDir, '2026/01/paper.png', Buffer.from('%PDF-1.4\n%%EOF\n'));
+
+    for (const url of [
+      '/uploads/_/2026/01/notes.jpg/320.webp',
+      '/uploads/_/2026/01/paper.png/320.png',
+    ]) {
+      const { status, logged } = await requestLogging(cms, url);
+      assert.equal(status, 404, url);
+      assert.deepEqual(logged, [], url);
+    }
+  });
+
+  it('still answers 500 when a variant of a real image cannot be written', async () => {
+    const contentDir = await box.dir('geekity-image-content-');
+    const cms = await box.site({ contentDir });
+    await placedUpload(
+      contentDir,
+      '2026/01/photo.png',
+      await rectangle(1000, 500).png().toBuffer(),
+    );
+    const derived = path.join(cms.config.dataDir, 'images', '2026', '01', 'photo.png');
+    await mkdir(path.dirname(derived), { recursive: true });
+    await writeFile(derived, 'a file where the derived directory belongs');
+
+    const { status, logged } = await requestLogging(cms, '/uploads/_/2026/01/photo.png/320.webp');
+
+    assert.equal(status, 500);
+    assert.match(logged.join('\n'), /failed/);
+  });
+});
+
 describe('closing a site while its images derive', () => {
   it('waits for the variants a render started before close returns', async () => {
     const contentDir = await box.dir('geekity-image-content-');
