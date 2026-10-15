@@ -20,9 +20,8 @@ import { holdOutbound } from '../dev-mode.ts';
 import { listUsers, primaryUser } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { actorId, senderKeyPairs, userByUsername } from './actor.ts';
-import { documentAuthor, postByObjectId } from './article.ts';
+import { articleObjectId, documentAuthor, postByObjectId } from './article.ts';
 import { isFederatedDocument } from '../content/served.ts';
-import { postObjectId } from '../content/guids.ts';
 import type { FederationContextData } from './federation.ts';
 import { authorizeQuote, quoteAuthorization, revokeQuotes } from './quotes.ts';
 import { profileFrom } from './profiles.ts';
@@ -219,9 +218,7 @@ export async function handleQuoteRequest(
 ): Promise<void> {
   const { config, store } = context.data;
   const post =
-    request.objectId === null
-      ? undefined
-      : postByObjectId(store, request.objectId.href, config.baseUrl);
+    request.objectId === null ? undefined : postByObjectId(store, request.objectId.href, config);
   const author =
     post === undefined
       ? (userByUsername(config.dataDir, context.recipient ?? '') ?? primaryUser(config.dataDir))
@@ -256,7 +253,7 @@ export async function handleQuoteRequest(
     author.username,
     {
       quote: quote.href,
-      post: postObjectId(post, config.baseUrl),
+      post: articleObjectId(context, post).href,
       request: request.id.href,
       actor: requester.id.href,
     },
@@ -303,7 +300,7 @@ function answersPost(context: SiteInboxContext, activity: Accept | Reject): bool
   const { config, store } = context.data;
   return (
     activity.objectId !== null &&
-    postByObjectId(store, activity.objectId.href, config.baseUrl) !== undefined
+    postByObjectId(store, activity.objectId.href, config) !== undefined
   );
 }
 

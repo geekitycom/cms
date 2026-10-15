@@ -13,6 +13,7 @@ import { goneDocumentAt, publicDocumentAt } from '../content/permalinks.ts';
 import { actorAliases, actorId, userActor } from '../federation/actor.ts';
 import { postObject, postTombstone } from '../federation/article.ts';
 import type { FederationContextData, SiteFederation } from '../federation/federation.ts';
+import { naturalObjectId } from '../federation/object-ids.ts';
 import { acctOf, WEBFINGER_PATH, webFingerUser } from '../federation/webfinger.ts';
 import type { GeekityEnv } from './env.ts';
 import { prefersActivityStreams } from './negotiate.ts';
@@ -270,7 +271,9 @@ async function activityStreamsDocument(
  */
 function storedObjectAt(c: Context<GeekityEnv>): Document | undefined {
   const { search } = new URL(c.req.url);
-  const candidate = `${absoluteUrl(requestPath(c), c.var.config.baseUrl)}${search}`;
+  const candidate = naturalObjectId(
+    `${absoluteUrl(requestPath(c), c.var.config.baseUrl)}${search}`,
+  );
 
   const document = c.var.store.getByStoredObjectId(candidate);
   if (document === undefined || document.type !== 'post') return undefined;

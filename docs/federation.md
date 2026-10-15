@@ -127,7 +127,8 @@ A post's ActivityStreams object id is its permalink, absolute on the site's
 base URL. One URL serves both audiences. A browser gets the page, and a peer
 that asks for `application/activity+json` gets the post's object. A shared
 link, a feed item, an object id, and a reply's `inReplyTo` all name the same
-thing. The site does not mint or sync any other id.
+thing. The site mints another id only for a post that comes back after a
+`Delete`. See [A post that comes back after a Delete](#a-post-that-comes-back-after-a-delete).
 
 The object is a `Note` or an `Article`, depending on the post's discovered
 type. A post with no title, or whose text opens with its title, is a `Note`.
@@ -160,7 +161,7 @@ keep showing the post as it first arrived.
 The first activity about a post writes one key into its front matter:
 `activitypub.published`. It records that the post was announced, and when. It
 decides between `Create` and `Update`, and a resend reads it. Restoring a
-trashed post reuses it too.
+trashed post keeps it too.
 
 If a post's file already names an `activitypub.id`, the post keeps that as its
 object id for the life of the post. A post migrated from WordPress keeps the
@@ -179,6 +180,77 @@ rename an object it holds, so the URL the post is leaving becomes its stored
 peer at the old URL still gets the object, and a browser there is redirected to
 the new permalink. The object's `url` is the new permalink. See
 [Moved URLs](public-site.md#moved-urls).
+
+### A post that comes back after a Delete
+
+Mastodon keeps a `Tombstone` for every object id it receives a `Delete` for,
+and it keeps it permanently. After that it drops any `Create` of that id, and a
+search for the post's URL finds nothing, because the search fetches the object
+through the same path. A post that federated again under an id the site had
+deleted would reach no Mastodon server that saw the `Delete`.
+
+The site sends a `Delete` when a post becomes a draft, is trashed, or has its
+file deleted. It also sends one when an edit changes the post's object id, for
+example when a permalink is changed by hand in the file: the old id gets a
+`Delete` and the new id gets a `Create`. So a post can come back under a
+deleted id in two ways:
+
+- it is published again after a draft or the trash
+- an edit moves it back to a permalink it had before
+
+The site records every object id it sends a `Delete` for. When it announces a
+post with a `Create` and the post's id is in that record, it federates the post
+under a new id: the post's own id with a revision query, `?v=2`, then `?v=3`
+after the next `Delete`, and so on. A WordPress id such as `?p=813` gets
+`&v=2`. The object's `url` stays the permalink. The new id is the post's id
+until the next `Delete`, so every later `Update`, `Delete`, pin, and outbox
+entry names it. A resend of a post whose current id was deleted sends a
+`Create` under a new id, not an `Update`.
+
+The permalink route ignores the query, so the new id dereferences to the post.
+An ActivityStreams request for the page URL answers with an object whose `id`
+is the current id, and Mastodon then fetches that id. The page's
+`<link rel="alternate" type="application/activity+json">` names the current
+id too, and so does the `inReplyTo` of a reply post that answers the post. A
+reply, like, boost or quote of any id the post has had reaches the post. One of
+a revision the post never had, such as `?v=7` for a post that has only been
+`?v=2`, reaches nothing.
+
+A post that was never deleted keeps its permalink as its id. Feed guids, the
+`/replies/` keys, and the front matter do not change.
+
+The record is `content/_data/federation/objectIds.json`:
+
+```json
+{
+  "deleted": ["https://example.com/2026/10/hello/"],
+  "reissued": {
+    "https://example.com/2026/10/hello/": [
+      "https://example.com/2026/10/hello/?v=2"
+    ]
+  }
+}
+```
+
+`deleted` lists the ids a `Delete` went out for. The id is recorded before the
+first POST, so a `Delete` that dev mode holds, or that has no inbox to go to,
+is recorded too. `reissued` lists, for each post's own id, the ids it was
+federated under since, oldest first. The last one is current. The file lives
+with the content because the site cannot rebuild it: a rebuilt database must
+not forget what the fediverse was told is gone. Do not delete entries from it.
+
+A site that sent a `Delete` before it kept this file has it recorded only in
+the delivery log, in `data/geekity.db`. Every boot adds the object id of each
+`Delete` in that log to `deleted`, and writes nothing when there is none to
+add. `geekity rebuild` deletes the database and the log with it, so a `Delete`
+the file has not picked up by then is forgotten. Start the site once on this
+version before a rebuild.
+
+A file that cannot be read as JSON, or that is not shaped as above, is read as
+empty, and the site logs a warning that names the file once. Pages and objects
+are served under the posts' own ids in the meantime. The site does not write
+over a damaged file, so every `Create` and `Delete` of a post fails, and logs
+why, until the file is fixed.
 
 One POST serves a whole instance, and the site prefers the shared inbox. The
 site records the outcome per recipient, so an admin can see which recipient did

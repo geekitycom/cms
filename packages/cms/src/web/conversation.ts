@@ -6,6 +6,13 @@ import type { CitedPageReader } from '../content/citation.ts';
 import { RSVP_LABELS } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
 import type { ArchiveReader, DocumentLookup, IndexClock, ReplyReader } from '../content/store.ts';
+import {
+  isObjectIdOf,
+  naturalObjectId,
+  objectIdsOf,
+  readObjectIds,
+} from '../federation/object-ids.ts';
+import type { ObjectIds } from '../federation/object-ids.ts';
 import { readAllQuoteAuthorizations } from '../federation/quotes.ts';
 import type { QuoteAuthorizationRecord } from '../federation/quotes.ts';
 import {
@@ -205,13 +212,14 @@ function gather(
   const naming = authorNaming(context.admin);
   const isEvent = postTypeOf(document) === 'event';
 
-  const fediverse =
-    deliveredObjectId === undefined
-      ? []
-      : [
-          fromQuotes(context, deliveredObjectId, naming),
-          fromActivities(context, deliveredObjectId, stored, naming, isEvent),
-        ];
+  const fediverse: Part[] = [];
+  if (deliveredObjectId !== undefined) {
+    const objectIds = objectIdsOf(readObjectIds(context.contentDir), deliveredObjectId);
+    fediverse.push(
+      fromQuotes(context, objectIds, naming),
+      fromActivities(context, root, objectIds, stored, naming, isEvent),
+    );
+  }
   const comments = fromStored(context, document, stored, isEvent);
   const sources = [...fediverse, comments];
   const replyPosts = fromReplyPosts(context, document, root, seen, [
@@ -248,12 +256,12 @@ function merged(root: string, parts: readonly Part[]): Gathered {
 
 function fromQuotes(
   context: Reading,
-  objectId: string,
+  objectIds: readonly string[],
   naming: (actorId: string) => InteractionAuthor,
 ): Part {
   const approvals = readAllQuoteAuthorizations(context.contentDir);
   return {
-    said: quotesOf(context.admin, approvals, objectId, naming).map(
+    said: quotesOf(context.admin, approvals, objectIds, naming).map(
       (quote) => ['mentions', quote] as const,
     ),
   };
@@ -261,7 +269,8 @@ function fromQuotes(
 
 function fromActivities(
   context: Reading,
-  objectId: string,
+  root: string,
+  objectIds: ObjectIds,
   stored: readonly PostComment[],
   naming: (actorId: string) => InteractionAuthor,
   isEvent: boolean,
@@ -271,7 +280,10 @@ function fromActivities(
   const origins = stored.flatMap((comment) =>
     comment.source === 'activitypub' && comment.origin !== undefined ? [comment.origin] : [],
   );
-  const activities = activitiesAround(context.admin, [objectId, ...origins]);
+  const named = new Set(objectIds);
+  const aboutPost = (activity: InboxActivity): boolean =>
+    activity.objectId !== null && named.has(activity.objectId);
+  const activities = activitiesAround(context.admin, [...objectIds, ...origins]);
   const withdrawn = withdrawnBy(activities);
   const taken = (activityId: string | null): boolean =>
     activityId !== null && withdrawn.has(activityId);
@@ -283,7 +295,7 @@ function fromActivities(
   for (const activity of activities) {
     const answer = isEvent ? RSVP_ACTIVITIES[activity.activityType] : undefined;
     if (answer !== undefined) {
-      if (activity.objectId !== objectId || taken(activity.activityId)) continue;
+      if (!aboutPost(activity) || taken(activity.activityId)) continue;
       said.push([
         'answers',
         {
@@ -299,7 +311,7 @@ function fromActivities(
     if (kind !== undefined) {
       // Only a reaction to the post itself: a like of one of the replies
       // belongs to that reply's own conversation, wherever it is shown.
-      if (activity.objectId !== objectId) continue;
+      if (!aboutPost(activity)) continue;
       // One like per actor, however many times it was delivered, and none
       // at all once its actor has taken it back.
       const key = reactionKey(kind, activity.actorId);
@@ -318,8 +330,9 @@ function fromActivities(
       continue;
     }
 
-    const reply = replyFrom(activity);
-    if (reply === undefined || heldComment(context.admin, reply.id) !== undefined) continue;
+    const found = replyFrom(activity);
+    if (found === undefined || heldComment(context.admin, found.id) !== undefined) continue;
+    const reply = named.has(found.inReplyTo) ? { ...found, inReplyTo: root } : found;
     const parent = heldComment(context.admin, reply.inReplyTo);
     said.push([
       'written',
@@ -596,9 +609,7 @@ function documentNamed(context: ConversationContext, url: string, depth = 0): Do
       const comment = context.admin.getComment(key);
       return comment === undefined ? undefined : context.store.getBySlug(comment.slug);
     }
-    const permalink = permalinkOfObjectId(`${named.origin}${named.pathname}`, context.baseUrl);
-    const found = permalink === undefined ? undefined : context.store.getByPermalink(permalink);
-    return found ?? context.store.getByStoredObjectId(named.href);
+    return ownDocumentNamed(context, named.href);
   }
 
   const comment =
@@ -611,6 +622,20 @@ function documentNamed(context: ConversationContext, url: string, depth = 0): Do
     return documentNamed(context, reply.inReplyTo, depth + 1);
   }
   return context.store.getByStoredObjectId(named.href);
+}
+
+/**
+ * The document one of this site's own URLs names: the one at the permalink it
+ * spells, or the post whose file stores it as its id. A query string rules the
+ * permalink out, as it does for {@link permalinkOfObjectId}, unless it is a
+ * revision the post was federated under; one it was never given names nothing.
+ */
+function ownDocumentNamed(context: ConversationContext, url: string): Document | undefined {
+  const natural = naturalObjectId(url);
+  if (!isObjectIdOf(readObjectIds(context.contentDir), natural, url)) return undefined;
+  const permalink = permalinkOfObjectId(natural, context.baseUrl);
+  const found = permalink === undefined ? undefined : context.store.getByPermalink(permalink);
+  return found ?? context.store.getByStoredObjectId(natural);
 }
 
 /**
@@ -645,8 +670,8 @@ function rootOf(context: Reading, document: Document): string {
 /**
  * Every URL a reply post's `in-reply-to` could name something here by, and the
  * id each one names: the post by its permalink, every URL it used to live at
- * and its object id, and every entry by its id, its url and, for a comment
- * written here, its page and its anchor.
+ * and every object id it has had, and every entry by its id, its url and, for
+ * a comment written here, its page and its anchor.
  */
 function namesIn(
   context: Reading,
@@ -656,7 +681,10 @@ function namesIn(
 ): Map<string, string> {
   const permalink = absoluteUrl(document.permalink, context.baseUrl);
   const former = (document.redirectFrom ?? []).map((url) => absoluteUrl(url, context.baseUrl));
-  const names = new Map<string, string>([permalink, ...former, root].map((url) => [url, root]));
+  const objectIds = objectIdsOf(readObjectIds(context.contentDir), root);
+  const names = new Map<string, string>(
+    [permalink, ...former, ...objectIds].map((url) => [url, root]),
+  );
   for (const reply of replies) {
     for (const name of namesOf(reply, permalink, context.baseUrl)) {
       if (!names.has(name)) names.set(name, reply.id);
@@ -817,7 +845,7 @@ function siteConversation(context: Reading, limit: number): SiteInteraction[] {
   for (const approval of readAllQuoteAuthorizations(context.contentDir)) {
     const post = posts.get(approval.post);
     if (!shown(post)) continue;
-    for (const quote of quotesOf(context.admin, [approval], approval.post, naming)) {
+    for (const quote of quotesOf(context.admin, [approval], [approval.post], naming)) {
       said.push({ ...quote, post });
     }
   }
@@ -900,17 +928,17 @@ const OVERSCAN = 4;
 function quotesOf(
   admin: AdminStore,
   approvals: readonly QuoteAuthorizationRecord[],
-  objectId: string,
+  objectIds: readonly string[],
   naming: (actorId: string) => InteractionAuthor,
 ): Interaction[] {
   const quotes: Interaction[] = [];
   for (const approval of approvals) {
-    if (approval.post !== objectId) continue;
+    if (!objectIds.includes(approval.post)) continue;
 
     for (const activity of admin.listActivitiesAbout([approval.quote])) {
       if (activity.actorId !== approval.actor) continue;
       const quote = quoteFrom(activity);
-      if (quote?.id !== approval.quote || quote.quoted !== objectId) continue;
+      if (quote?.id !== approval.quote || !objectIds.includes(quote.quoted)) continue;
 
       quotes.push({
         ...unstored(quote.id),
@@ -1142,17 +1170,19 @@ class PostsByObjectId {
   }
 
   #resolve(objectId: string): Document | undefined {
-    const permalink = permalinkOfObjectId(objectId, this.#context.baseUrl);
+    const natural = naturalObjectId(objectId);
+    if (!isObjectIdOf(readObjectIds(this.#context.contentDir), natural, objectId)) return undefined;
+    const permalink = permalinkOfObjectId(natural, this.#context.baseUrl);
     if (permalink !== undefined) {
       const document = this.#context.store.getByPermalink(permalink);
       if (
         document !== undefined &&
-        activityStreamsId(document, this.#context.baseUrl, this.#context.store.now()) === objectId
+        activityStreamsId(document, this.#context.baseUrl, this.#context.store.now()) === natural
       ) {
         return document;
       }
     }
-    return this.#everything().get(objectId);
+    return this.#everything().get(natural);
   }
 
   #everything(): Map<string, Document> {

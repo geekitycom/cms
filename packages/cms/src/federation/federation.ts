@@ -165,7 +165,7 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
         (entry) => entry.id === id,
       );
       if (record === undefined) return null;
-      const post = postByObjectId(store, record.post, config.baseUrl);
+      const post = postByObjectId(store, record.post, config);
       if (post === undefined || !isFederatedDocument(post, store.now())) return null;
       return quoteAuthorization(context, user, record);
     },

@@ -22,6 +22,7 @@ import { openContentStore } from '../content/index.ts';
 import type { ContentStore } from '../content/index.ts';
 import {
   assertActorKeysUsable,
+  backfillDeleted,
   migrateFederationToFiles,
   rebuildFederationIndexes,
 } from '../federation/index.ts';
@@ -99,6 +100,12 @@ export function boot(
   // who no longer exists.
   migrateFederationToFiles({ admin, contentDir: resolved.contentDir });
   rebuildFederationIndexes({ admin, contentDir: resolved.contentDir });
+
+  // And the Deletes sent before objectIds.json kept them, so a post they
+  // tombstoned comes back under a fresh id. The delivery log is a cache a
+  // rebuild throws away, so this is only as good as the log is on the first
+  // boot that runs it; from then on the file holds them.
+  backfillDeleted(resolved.contentDir, admin.listDeletedObjectIds());
 
   // And the comments, which are files under content/_data/comments/ with
   // their authors' emails under data/comments/ (TASK-50, TASK-182). A comment

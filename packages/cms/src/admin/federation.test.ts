@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
@@ -13,6 +14,10 @@ import { createFileRecords } from '../jobs/file-records.ts';
 import type { JobState } from '../jobs/types.ts';
 import { flashes } from './__testing__/flash.ts';
 import type { FederationRecords } from '../federation/records.ts';
+import { openContentStore } from '../content/index.ts';
+import type { ContentStore } from '../content/store.ts';
+import { parseDocument } from '../content/parser.ts';
+import { localPosts } from './federation.ts';
 
 /** The site under test. Its origin is what an ActivityStreams id is built on. */
 const BASE_URL = 'https://blog.example';
@@ -870,5 +875,51 @@ describe('the relays panel', () => {
 
     assert.equal(response.status, 303);
     assert.match(await federationScreen(agent), /does not subscribe to that relay/);
+  });
+});
+
+describe('the post a logged id names (TASK-417)', () => {
+  const MIGRATED = `${BASE_URL}/?p=813`;
+
+  async function posts(): Promise<ContentStore> {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-local-posts-'));
+    after(() => rm(dataDir, { recursive: true, force: true }));
+    const store = openContentStore({ dataDir, baseUrl: BASE_URL });
+    after(() => store.close());
+    store.upsertAll([
+      parseDocument(
+        [
+          '---',
+          'title: Old news',
+          "date: '2011-06-06T09:00:00Z'",
+          'permalink: /2011/06/old-news/',
+          'activitypub:',
+          `  id: '${MIGRATED}'`,
+          '---',
+          '',
+        ].join('\n'),
+        { path: 'posts/2011-06-06-old-news.md' },
+      ),
+      parseDocument(
+        ['---', 'title: Welcome', "date: '2026-01-01T09:00:00Z'", 'permalink: /', '---', ''].join(
+          '\n',
+        ),
+        { path: 'pages/home.md' },
+      ),
+    ]);
+    return store;
+  }
+
+  it('links a reissued stored id to its post, and an unissued one to none', async () => {
+    const post = localPosts(
+      await posts(),
+      BASE_URL,
+      { deleted: [MIGRATED], reissued: { [MIGRATED]: [`${MIGRATED}&v=2`] } },
+      () => undefined,
+    );
+
+    assert.equal(post(`${MIGRATED}&v=2`)?.slug, 'old-news');
+    assert.equal(post(MIGRATED)?.slug, 'old-news');
+    assert.equal(post(`${MIGRATED}&v=3`), null);
   });
 });

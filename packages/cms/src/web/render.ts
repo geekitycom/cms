@@ -45,6 +45,7 @@ import { commentAnchor } from '../comments/conversation.ts';
 import { commentPageHref } from '../content/guids.ts';
 import type { CommentThread, Conversation } from '../comments/conversation.ts';
 import { activityStreamsId } from '../content/permalinks.ts';
+import { currentObjectId, readObjectIds } from '../federation/object-ids.ts';
 import { isServed } from '../content/served.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, NeighbourContext, PhotoContext } from './context.ts';
@@ -782,7 +783,11 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // added here rather than in `documentContext` because it needs the
     // site's base URL, which a document on its own does not carry.
     const now = config.now();
-    const objectId = activityStreamsId(document, config.baseUrl, now);
+    const naturalId = activityStreamsId(document, config.baseUrl, now);
+    const objectId =
+      naturalId === undefined
+        ? undefined
+        : currentObjectId(readObjectIds(config.contentDir), naturalId);
     // `conversation` is what was said back. It is on the context only when
     // there is something in it, so a theme can ask `{% if conversation %}`
     // and a post nobody has answered renders no empty section (TASK-49).

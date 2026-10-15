@@ -14,7 +14,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { postObject } from './article.ts';
+import { postByObjectId, postObject } from './article.ts';
 import { OUTBOX_PAGE_SIZE } from './federation.ts';
 import { createActivityId } from './paths.ts';
 import { SITE } from '../site/namespace.ts';
@@ -668,6 +668,71 @@ describe('a read’s cover (TASK-394 AC #6)', () => {
         '<span class="p-read-of h-cite"><span class="read-cover"><img class="u-photo" ' +
           `src="${BASE_URL}/uploads/2026/10/peregrine.jpg" alt="A girl floating"></span>`,
       ),
+    );
+  });
+});
+
+describe('a titled read post’s Note (TASK-416)', () => {
+  const BOOK = 'Miss Peregrine’s Home for Peculiar Children';
+  const WORDS = 'Strange and lovely.';
+
+  async function readNote(title: string): Promise<string> {
+    const instance = await site({
+      'posts/2026-10-02-peregrine.md': rawPost(
+        [
+          `title: ${JSON.stringify(title)}`,
+          "date: '2026-10-02T09:00:00Z'",
+          'permalink: /2026/10/peregrine/',
+          'read-status: finished',
+          'read-of:',
+          `  name: ${BOOK}`,
+          '  author: Ransom Riggs',
+        ],
+        WORDS,
+      ),
+    });
+    const note = await articleAt(instance, '/2026/10/peregrine/');
+    assert.equal(note['type'], 'Note');
+    return String(note['content']);
+  }
+
+  it('opens with its title, then the read line, then its words, as its page does', async () => {
+    const content = await readNote('A peculiar book & a good one');
+
+    assert.match(content, /^<p>A peculiar book &amp; a good one<\/p>\n<p class="read-line">/);
+    assert.ok(content.endsWith(renderMarkdown(WORDS)), content);
+  });
+
+  it('leaves out a title that is only the book’s name, ignoring case and spacing', async () => {
+    const content = await readNote('  miss peregrine’s   HOME for peculiar children ');
+
+    assert.match(content, /^<p class="read-line">/);
+    assert.doesNotMatch(content, /<p>miss peregrine/i);
+    assert.ok(content.endsWith(renderMarkdown(WORDS)), content);
+  });
+});
+
+describe('a titled like’s Note', () => {
+  const LIKED = 'https://them.example/2026/09/their-post/';
+
+  it('keeps its citation first, then its title, then its words', async () => {
+    const instance = await site({
+      'posts/2026-09-02-liked.md': rawPost(
+        [
+          'title: Worth a look',
+          "date: '2026-09-02T09:00:00Z'",
+          'permalink: /2026/09/liked/',
+          `like-of: ${LIKED}`,
+        ],
+        'So good.',
+      ),
+    });
+    const note = await articleAt(instance, '/2026/09/liked/');
+
+    assert.equal(
+      note['content'],
+      `<p>Liked <a href="${LIKED}">a page on them.example</a></p>\n` +
+        `<p>Worth a look</p>\n${renderMarkdown('So good.')}`,
     );
   });
 });
@@ -1439,6 +1504,149 @@ describe('a post whose file already names an activitypub.id', () => {
     const atGuid = await get(instance, '/essays/old-news/', 'text/html');
     assert.equal(atGuid.status, 404, 'the guid is a name, not a URL the site answers');
     assert.equal((await get(instance, '/essays/old-news/', ACTIVITY_STREAMS)).status, 404);
+  });
+});
+
+describe('a post federated again under a fresh id (TASK-417 AC #3)', () => {
+  const PERMALINK_ID = `${BASE_URL}/2026/09/hello/`;
+  const REISSUED = `${PERMALINK_ID}?v=2`;
+  const MIGRATED_ID = 'https://blog.example/?p=813';
+
+  const FILES = {
+    ...HELLO,
+    'posts/2011-06-06-old-news.md': [
+      '---',
+      'title: Old news',
+      "date: '2011-06-06T09:00:00Z'",
+      'permalink: /2011/06/old-news/',
+      `author: ${ADA}`,
+      'activitypub:',
+      `  id: '${MIGRATED_ID}'`,
+      "  published: '2011-06-06T09:00:00Z'",
+      '---',
+      '',
+      'Body.',
+      '',
+    ].join('\n'),
+    '_data/federation/objectIds.json': JSON.stringify({
+      deleted: [PERMALINK_ID, MIGRATED_ID],
+      reissued: { [PERMALINK_ID]: [REISSUED], [MIGRATED_ID]: [`${MIGRATED_ID}&v=2`] },
+    }),
+  };
+
+  it('answers the page URL, and the id itself, with the current id', async () => {
+    const instance = await site(FILES);
+
+    for (const pathname of ['/2026/09/hello/', '/2026/09/hello/?v=2']) {
+      const response = await get(instance, pathname, ACTIVITY_STREAMS);
+      assert.equal(response.status, 200, pathname);
+      const article = (await response.json()) as Record<string, unknown>;
+      assert.equal(article['id'], REISSUED, pathname);
+      assert.equal(article['url'], PERMALINK_ID, pathname);
+    }
+  });
+
+  it('serves a reissued stored id, query string and all', async () => {
+    const instance = await site(FILES);
+
+    const response = await get(instance, '/?p=813&v=2', ACTIVITY_STREAMS);
+    assert.equal(response.status, 200);
+    assert.equal(((await response.json()) as Record<string, unknown>)['id'], `${MIGRATED_ID}&v=2`);
+  });
+
+  it('lists the current id in the outbox', async () => {
+    const instance = await site(FILES);
+
+    const outbox = (await (
+      await get(instance, `/author/${ADA}/outbox/`, ACTIVITY_STREAMS)
+    ).json()) as Record<string, unknown>;
+    const page = await fetchLink(instance, outbox['first']);
+    const ids = (page['orderedItems'] as { id: string; object: { id: string } }[]).map(
+      (activity) => [activity.id, activity.object.id],
+    );
+    assert.deepEqual(ids, [
+      [`${REISSUED}#create`, REISSUED],
+      [`${MIGRATED_ID}&v=2#create`, `${MIGRATED_ID}&v=2`],
+    ]);
+  });
+
+  it('finds the post by every id it has had, and by no other', async () => {
+    const instance = await site(FILES);
+
+    for (const id of [PERMALINK_ID, REISSUED, MIGRATED_ID, `${MIGRATED_ID}&v=2`]) {
+      assert.ok(postByObjectId(instance.store, id, instance.config) !== undefined, id);
+    }
+    for (const id of [
+      `${BASE_URL}/2011/06/old-news/`,
+      `${PERMALINK_ID}?v=3`,
+      `${MIGRATED_ID}&v=3`,
+    ]) {
+      assert.equal(postByObjectId(instance.store, id, instance.config), undefined, id);
+    }
+  });
+
+  it('advertises the current id on the page', async () => {
+    const instance = await site(FILES);
+
+    const html = await (await get(instance, '/2026/09/hello/', 'text/html')).text();
+
+    assert.ok(
+      html.includes(`<link rel="alternate" type="application/activity+json" href="${REISSUED}">`),
+      html,
+    );
+  });
+
+  it('names a same-site post it replies to by that post’s current id', async () => {
+    const instance = await site({
+      ...FILES,
+      'posts/2026-09-04-answer.md': rawPost(
+        [
+          "date: '2026-09-04T09:00:00Z'",
+          'permalink: /2026/09/answer/',
+          `in-reply-to: ${PERMALINK_ID}`,
+        ],
+        'Agreed.',
+      ),
+      'posts/2026-09-05-old-answer.md': rawPost(
+        [
+          "date: '2026-09-05T09:00:00Z'",
+          'permalink: /2026/09/old-answer/',
+          `in-reply-to: ${BASE_URL}/2011/06/old-news/`,
+        ],
+        'Still true.',
+      ),
+    });
+
+    assert.equal((await articleAt(instance, '/2026/09/answer/'))['inReplyTo'], REISSUED);
+    assert.equal(
+      (await articleAt(instance, '/2026/09/old-answer/'))['inReplyTo'],
+      `${MIGRATED_ID}&v=2`,
+    );
+  });
+});
+
+describe('a damaged objectIds.json (TASK-417)', () => {
+  it('still serves the post and its page, under its natural id', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    const instance = await site({
+      ...HELLO,
+      '_data/federation/objectIds.json': '{"deleted": [',
+    });
+
+    const response = await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS);
+    assert.equal(response.status, 200);
+    assert.equal(
+      ((await response.json()) as Record<string, unknown>)['id'],
+      `${BASE_URL}/2026/09/hello/`,
+    );
+    const page = await get(instance, '/2026/09/hello/', 'text/html');
+    assert.equal(page.status, 200);
+    await get(instance, '/2026/09/hello/', ACTIVITY_STREAMS);
+
+    const damaged = warn.mock.calls.filter((call) =>
+      String(call.arguments[0]).includes('objectIds.json'),
+    );
+    assert.equal(damaged.length, 1, 'said once, not on every read');
   });
 });
 

@@ -96,15 +96,15 @@ const SUMMARY = /<div class="feed-excerpt p-summary">([\s\S]*?)<\/div>/;
 describe('a read post on a listing', () => {
   for (const listing of LISTINGS) {
     describe(listing, () => {
-      it('lists a titled read by kicker, headline and summary, then its read line', async () => {
+      it('lists a titled read as its page does: kicker, headline, read line, then summary', async () => {
         const html = article(await get(listing), 'titled-read');
         ascending(
           html,
           [
             /class="kicker"/,
             /class="feed-title p-name"/,
-            /class="feed-excerpt p-summary"/,
             /<p class="read-line">/,
+            /class="feed-excerpt p-summary"/,
             /class="feed-more"/,
           ],
           `titled read on ${listing}`,

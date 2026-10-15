@@ -12,6 +12,7 @@ import { citationsOf } from '../content/citation.ts';
 import type { CitedPage, CitedPageReader } from '../content/citation.ts';
 import type { ConversationSite } from '../comments/conversation.ts';
 import type { Document } from '../content/document.ts';
+import { postObjectId } from '../content/guids.ts';
 import { isMigrated } from '../content/migrated.ts';
 import { replyTarget } from '../content/post-type.ts';
 import { saveDocument } from '../content/save.ts';
@@ -54,6 +55,7 @@ import {
 import type { ActivityAbout, DeliveryTarget, ObjectShape, Shape } from './delivery-plan.ts';
 import { mentionedAccounts } from './handles.ts';
 import { updateActivityId } from './paths.ts';
+import { claimObjectId, readObjectIds, recordDeleted } from './object-ids.ts';
 import { acceptedRelays } from './relays.ts';
 
 /** What one activity's delivery came to, recipient by recipient. */
@@ -297,11 +299,12 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
     shape: Shape,
   ): Promise<DeliveryReport> {
     if (shape.kind === 'object') {
+      const id = await claimObjectId(config.contentDir, postObjectId(document, config.baseUrl));
       return await sendAndRecordObject(
         context,
         postCreateActivity(context, document, shape.replyTo),
         document,
-        shape,
+        { ...shape, id },
       );
     }
     return await send(context, shape.citing.activity, document, citedAuthor(shape.citing.author));
@@ -315,6 +318,11 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
   ): Promise<DeliveryReport> {
     const deleted = store.now().toISOString();
     if (shape.kind === 'object') {
+      // Recorded before the first POST rather than after the last, so a crash
+      // in between never leaves a tombstoned id looking reusable. A Delete
+      // held in dev mode or sent to nobody is recorded too, which costs the
+      // post a revision it did not strictly need when it comes back.
+      await recordDeleted(config.contentDir, shape.id);
       return await send(
         context,
         postDeleteActivity(context, document, deleted),
@@ -328,6 +336,10 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
       document,
       citedAuthor(shape.citing.author),
     );
+  }
+
+  function wasDeleted(objectId: string): boolean {
+    return readObjectIds(config.contentDir).deleted.includes(objectId);
   }
 
   function postTargets(document: Document, shape: ObjectShape): DeliveryTarget[] {
@@ -557,7 +569,9 @@ export function createDeliveryService(options: CreateDeliveryServiceOptions): De
         const shape = await shapeOf(context, stamped);
         // A like or a repost is sent again as it is: its id is one a peer
         // that already holds it recognises, and one that missed it does not.
-        if (!announced || shape.kind === 'citing') return await announce(context, stamped, shape);
+        if (!announced || shape.kind === 'citing' || wasDeleted(shape.id)) {
+          return await announce(context, stamped, shape);
+        }
 
         // The moment rather than the content hash, which is what a save uses:
         // the point of a resend is that the followers hear about a revision

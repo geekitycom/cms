@@ -547,6 +547,159 @@ function indexComment(
   });
 }
 
+describe('a post federated again under a fresh id (TASK-417 AC #3)', () => {
+  const REISSUED = `${POST}?v=2`;
+
+  async function reissued(): Promise<Awaited<ReturnType<typeof reader>>> {
+    const opened = await reader();
+    const file = path.join(opened.contentDir, '_data', 'federation', 'objectIds.json');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify({ deleted: [POST], reissued: { [POST]: [REISSUED] } }));
+    return opened;
+  }
+
+  it('reads replies, likes and boosts of every id the post has had', async () => {
+    const { admin, conversation: read } = await reissued();
+    logReply(admin, { inReplyTo: POST, id: 'https://remote.example/notes/1' });
+    logReply(admin, { inReplyTo: REISSUED, id: 'https://remote.example/notes/2' });
+    logReply(admin, {
+      inReplyTo: 'https://remote.example/notes/2',
+      id: 'https://remote.example/notes/3',
+    });
+    logReaction(admin, 'Like', {
+      id: 'https://remote.example/likes/1',
+      actor: 'https://remote.example/users/ada',
+    });
+    logReaction(admin, 'Like', {
+      id: 'https://remote.example/likes/2',
+      actor: 'https://remote.example/users/bob',
+      object: REISSUED,
+    });
+    logReaction(admin, 'Announce', {
+      id: 'https://remote.example/boosts/1',
+      actor: 'https://remote.example/users/cal',
+      object: REISSUED,
+    });
+
+    const conversation = read.thread(hello(), DEFAULT_SITE_SETTINGS);
+
+    assert.deepEqual(
+      conversation.replies.map((reply) => reply.id),
+      ['https://remote.example/notes/1', 'https://remote.example/notes/2'],
+    );
+    assert.deepEqual(
+      visible(conversation.replies[1])?.replies.map((reply) => reply.id),
+      ['https://remote.example/notes/3'],
+    );
+    assert.equal(conversation.counts.likes, 2);
+    assert.equal(conversation.counts.boosts, 1);
+  });
+
+  it('takes no reaction to an id the post never had', async () => {
+    const { admin, conversation: read } = await reissued();
+    logReaction(admin, 'Like', {
+      id: 'https://remote.example/likes/1',
+      actor: 'https://remote.example/users/ada',
+      object: `${POST}?v=3`,
+    });
+
+    assert.equal(read.thread(hello(), DEFAULT_SITE_SETTINGS).counts.likes, 0);
+  });
+});
+
+describe('which ids name a post here (TASK-417)', () => {
+  const MIGRATED = 'https://blog.example/?p=813';
+
+  function migrated(): Document {
+    return parseDocument(
+      [
+        '---',
+        'title: Old news',
+        "date: '2011-06-06T09:00:00Z'",
+        'permalink: /2011/06/old-news/',
+        'activitypub:',
+        `  id: '${MIGRATED}'`,
+        "  published: '2011-06-06T09:00:00Z'",
+        '---',
+        '',
+      ].join('\n'),
+      { path: 'posts/2011-06-06-old-news.md' },
+    );
+  }
+
+  function frontPage(): Document {
+    return parseDocument(
+      ['---', 'title: Welcome', "date: '2026-01-01T09:00:00Z'", 'permalink: /', '---', ''].join(
+        '\n',
+      ),
+      { path: 'pages/home.md' },
+    );
+  }
+
+  function replyPost(name: string, inReplyTo: string): Document {
+    return parseDocument(
+      [
+        '---',
+        "title: ''",
+        "date: '2026-09-03T09:00:00Z'",
+        `permalink: /2026/09/${name}/`,
+        'visibility: unlisted',
+        `in-reply-to: ${inReplyTo}`,
+        '---',
+        '',
+        `${name} says so.`,
+        '',
+      ].join('\n'),
+      { path: `posts/2026-09-03-${name}.md` },
+    );
+  }
+
+  async function reissued(): Promise<Awaited<ReturnType<typeof reader>>> {
+    const opened = await reader();
+    opened.posts.upsertAll([hello(), migrated(), frontPage()]);
+    const file = path.join(opened.contentDir, '_data', 'federation', 'objectIds.json');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(
+      file,
+      JSON.stringify({
+        deleted: [POST, MIGRATED],
+        reissued: { [POST]: [`${POST}?v=2`], [MIGRATED]: [`${MIGRATED}&v=2`] },
+      }),
+    );
+    return opened;
+  }
+
+  it('finds a migrated post by its stored id and its reissued one, not the front page', async () => {
+    const { conversation: read } = await reissued();
+
+    for (const id of [MIGRATED, `${MIGRATED}&v=2`]) {
+      assert.equal(read.documentOf(id)?.path, 'posts/2011-06-06-old-news.md', id);
+    }
+  });
+
+  it('finds no post by a revision it was never given', async () => {
+    const { conversation: read } = await reissued();
+
+    assert.equal(read.documentOf(`${POST}?v=2`)?.path, 'posts/2026-09-02-hello.md');
+    assert.equal(read.documentOf(`${POST}?v=3`), undefined);
+    assert.equal(read.documentOf(`${MIGRATED}&v=3`), undefined);
+  });
+
+  it('lists the latest replies to the ids a post has, and not to one it never had', async () => {
+    const { admin, posts, conversation: read } = await reissued();
+    logReply(admin, { inReplyTo: `${POST}?v=2`, id: 'https://remote.example/notes/1' });
+    logReply(admin, { inReplyTo: `${POST}?v=3`, id: 'https://remote.example/notes/2' });
+    posts.upsert(replyPost('answer', `${MIGRATED}&v=2`));
+
+    const latest = read.latest(10, DEFAULT_SITE_SETTINGS);
+
+    assert.deepEqual(latest.map((said) => [said.url, said.post.path]).sort(), [
+      ['/2026/09/answer/', 'posts/2011-06-06-old-news.md'],
+      ['https://remote.example/notes/1', 'posts/2026-09-02-hello.md'],
+    ]);
+  });
+});
+
 describe('how many answers a post has', () => {
   it('counts the fediverse replies and the approved comments together, by permalink', async () => {
     const { admin, conversation: read } = await reader();

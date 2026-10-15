@@ -95,6 +95,8 @@ export interface DeliveryStore {
    * that says where the post currently stands with the fediverse.
    */
   lastDeliveryToObject(objectId: string): Delivery | undefined;
+  /** Every object id a `Delete` was ever recorded going out for. */
+  listDeletedObjectIds(): string[];
 }
 
 export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore {
@@ -130,6 +132,9 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
       SELECT * FROM ap_deliveries WHERE object_id = ?
       ORDER BY attempted_at DESC, rowid DESC
       LIMIT 1
+    `),
+    listDeletedObjectIds: db.prepare(`
+      SELECT DISTINCT object_id FROM ap_deliveries WHERE activity_type = 'Delete' ORDER BY object_id
     `),
   };
   return {
@@ -173,6 +178,11 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
       const row = statements.lastDeliveryToObject.get(objectId) as
         Record<string, unknown> | undefined;
       return row === undefined ? undefined : toDelivery(row);
+    },
+
+    listDeletedObjectIds() {
+      const rows = statements.listDeletedObjectIds.all() as { object_id: string }[];
+      return rows.map((row) => row.object_id);
     },
   };
 }
