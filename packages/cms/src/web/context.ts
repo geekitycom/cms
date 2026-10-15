@@ -132,7 +132,7 @@ export interface DocumentContext {
   summary: string;
   /**
    * The document's own words in one line: `summary` without a read post's
-   * read line, which a listing prints after the headline instead (TASK-395).
+   * read line, which a listing prints after the headline instead.
    */
   excerpt: string;
   /** The document's URL path, the same value as `page.url`. */

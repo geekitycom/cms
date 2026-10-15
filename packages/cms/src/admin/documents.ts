@@ -593,7 +593,6 @@ interface EditorAction {
   label: string;
 }
 
-/** What "Follow the site settings" comes to for a document of this type, in brackets after it. */
 function siteDefaultLabel(type: DocumentType, policy: CommentPolicy): string {
   const these = type === 'post' ? 'posts' : 'pages';
   if (!policy.enabled) return 'comments are off on this site';

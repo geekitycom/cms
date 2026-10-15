@@ -65,11 +65,6 @@ function normalizeAssetPath(relative: string): string | undefined {
   return relative.replace(/^\/+/, '');
 }
 
-/**
- * Media types for what a theme ships beyond what an upload may be; an upload's
- * type comes from {@link UPLOAD_MEDIA_TYPES}, so anything the upload endpoint
- * accepts is served as what it is.
- */
 const THEME_CONTENT_TYPES: ReadonlyMap<string, string> = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],

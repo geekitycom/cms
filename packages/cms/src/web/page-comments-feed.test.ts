@@ -8,12 +8,6 @@ import type { Cms } from '../index.ts';
 import { child, childrenNamed, parseXml } from './__testing__/xml.ts';
 import type { XmlElement } from './__testing__/xml.ts';
 
-/**
- * A page has a comments feed as a post does (TASK-323), open or closed: closing
- * a page's comments stops new ones, and what was already said stays in its
- * feed and in the site's (TASK-376).
- */
-
 const box = sandbox();
 after(() => box.cleanup());
 

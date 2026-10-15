@@ -734,8 +734,6 @@
     @apply block h-auto w-full;
   }
 
-  /* A read's cover (TASK-394): a thumbnail beside the read line, drawn at its
-     own size or smaller, never stretched to the column. */
   .read-line {
     @apply flow-root;
   }

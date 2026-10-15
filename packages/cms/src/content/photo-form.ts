@@ -83,7 +83,6 @@ export function resolvePhotos(
   return { photos };
 }
 
-/** Whether an upload's address names an image the media library holds. */
 export function isLibraryImage(url: string, contentDir: string): boolean {
   const media = UPLOAD_MEDIA_TYPES.get(path.extname(url).toLowerCase());
   return (

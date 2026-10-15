@@ -23,7 +23,6 @@ export interface ReadOf {
   readonly author?: string | undefined;
   readonly uid?: string | undefined;
   readonly url?: string | undefined;
-  /** The work's cover, the h-cite's `photo` (TASK-394): it describes the book, not the post. */
   readonly photo?: Photo | undefined;
 }
 
@@ -80,9 +79,7 @@ export function readWorkFrontMatter({ name, author, uid, url, photo }: ReadOf): 
 }
 
 export interface ReadLineOptions {
-  /** The media library, for a cover's alt text the post does not give. */
   readonly library?: AltTextLibrary | undefined;
-  /** The site's origin, to make an uploaded cover's address absolute for a feed or a remote server. */
   readonly baseUrl?: string | undefined;
 }
 

@@ -1,7 +1,3 @@
-/**
- * A read post's book cover (TASK-394): the citation's own `u-photo`, beside
- * the read line, never the entry's photo.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';

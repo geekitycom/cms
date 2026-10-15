@@ -113,10 +113,9 @@ function decodeVariantPath(relative: string): string {
  * upload's URL names one set of bytes: the upload endpoint never overwrites,
  * it suffixes.
  *
- * A path with no file behind it is not answered here (TASK-377): it goes on to
- * the not-found handler, so an upload that moved can be led on by
- * `redirect_from` or a declared redirect, which never shadow a file that is
- * there. A metadata sweep's temporary file is the exception and 404s.
+ * A path with no file behind it is not answered here: it goes on to the
+ * not-found handler, so an upload that moved can be led on by `redirect_from`
+ * or a declared redirect, which never shadow a file that is there.
  */
 export async function upload(c: Context<GeekityEnv>, next: Next): Promise<Response | undefined> {
   const relative = requestPath(c).slice(UPLOAD_ASSET_PREFIX.length);

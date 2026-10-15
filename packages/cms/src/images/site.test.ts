@@ -269,7 +269,6 @@ async function deleteUpload(agent: Browser, relative: string): Promise<void> {
   assert.equal(response.status, 303);
 }
 
-/** Request a URL and answer its status with whatever was logged as an error meanwhile. */
 async function requestLogging(
   cms: Cms,
   url: string,
@@ -284,7 +283,6 @@ async function requestLogging(
   }
 }
 
-/** Put bytes straight into `content/uploads/`, as a file copied in by hand. */
 async function placedUpload(contentDir: string, relative: string, bytes: Buffer): Promise<void> {
   const file = path.join(contentDir, 'uploads', ...relative.split('/'));
   await mkdir(path.dirname(file), { recursive: true });

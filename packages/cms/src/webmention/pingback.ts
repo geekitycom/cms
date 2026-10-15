@@ -46,12 +46,6 @@ export const PINGBACK_REQUEST_FAULTS: Record<RequestProblem, number> = {
   same: PINGBACK_FAULTS.notATarget,
 };
 
-/**
- * The endpoint a document should advertise, or `undefined` when it should not.
- *
- * Every document, and nothing when the site takes no webmentions: the same
- * switch, since they are the same thing.
- */
 export function pingbackEndpointFor(site: Record<string, unknown>): string | undefined {
   return webmentionEndpointFor(site) === undefined ? undefined : PINGBACK_PATH;
 }

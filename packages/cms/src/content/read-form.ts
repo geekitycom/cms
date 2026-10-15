@@ -11,7 +11,6 @@ export interface ReadOfForm {
   author: string;
   uid: string;
   url: string;
-  /** The cover's address, an upload or a web address (TASK-394). */
   photo: string;
   photoAlt: string;
 }

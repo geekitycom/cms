@@ -45,7 +45,6 @@ export interface UploadMediaType {
    * which have no header to check.
    */
   signatures?: readonly (readonly UploadSignature[])[] | undefined;
-  /** Whether the file is text, served with its character set named. */
   text?: true;
 }
 
@@ -260,10 +259,6 @@ export function canonicalType(media: UploadMediaType): string | undefined {
   return media.declared[0];
 }
 
-/**
- * The `Content-Type` an upload of this kind is served with: its
- * {@link canonicalType}, with the character set when it is text.
- */
 export function servedType(media: UploadMediaType): string {
   const type = media.declared[0] ?? 'application/octet-stream';
   return media.text === true ? `${type}; charset=utf-8` : type;
