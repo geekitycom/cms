@@ -141,6 +141,19 @@
   min-inline-size: 24px;
 }
 
+@utility target-hit-area {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+
+  &::before {
+    position: absolute;
+    inset: min(0px, (100% - 24px) / 2);
+    content: '';
+  }
+}
+
 /* A link outside prose still says it is a link at rest, with a thin underline
    in its own colour; hover and focus thicken it and turn it accent, so the
    change is never colour alone (WCAG 1.4.1). */
@@ -330,7 +343,7 @@
   }
 
   .breadcrumbs a {
-    @apply target quiet-link text-muted;
+    @apply target-hit-area quiet-link text-muted;
   }
 
   .breadcrumbs-sep {
