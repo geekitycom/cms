@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.5.0...plugin-wordpress-v0.5.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **plugin-wordpress:** turn a Jetpack contact form into contact: true ([c06d552](https://github.com/geekitycom/cms/commit/c06d552b0544ef1eb86edd3ba78d506f787970e2))
+
 ## [0.5.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.4.0...plugin-wordpress-v0.5.0) (2026-10-15)
 
 

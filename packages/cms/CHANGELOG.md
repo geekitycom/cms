@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.2](https://github.com/geekitycom/cms/compare/v0.32.1...v0.32.2) (2026-10-16)
+
+
+### Bug Fixes
+
+* **cms:** even the gaps around a short breadcrumb link ([bcc2dca](https://github.com/geekitycom/cms/commit/bcc2dcad43e9c19232800903e38da4b337ab86d7))
+
 ## [0.32.1](https://github.com/geekitycom/cms/compare/v0.32.0...v0.32.1) (2026-10-15)
 
 
