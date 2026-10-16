@@ -40,7 +40,7 @@ import { postLocations } from '../content/locations.ts';
 import { canonicalType, UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import { readAltTexts } from '../content/alt-text.ts';
 import type { AltTextLibrary } from '../content/alt-text.ts';
-import { imagesIn } from '../content/image-tags.ts';
+import { imagesIn, uploadPath } from '../content/image-tags.ts';
 import type { DocumentLookup } from '../content/store.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { postLabel, postTypeOf, replyTarget } from '../content/post-type.ts';
@@ -288,6 +288,7 @@ export function postObject(
   const mentioned = mentionedAccounts(document.body, context.data.config.contentDir);
   let library: AltTextLibrary | undefined;
   const altTexts = (): AltTextLibrary => (library ??= readAltTexts(context.data.config.contentDir));
+  const read = readOf(document.extra);
   const common = {
     id: articleObjectId(context, document),
     // On either type, so an activitypub.type override never breaks a thread.
@@ -306,7 +307,8 @@ export function postObject(
     attachments: [
       ...recordingAttachment(document, baseUrl, context.data.cited),
       ...photoAttachments(document, context.data.config.baseUrl, altTexts),
-      ...imageAttachments(document, context.data.config.baseUrl, altTexts),
+      ...coverAttachment(document, read, context.data.config.baseUrl, altTexts),
+      ...imageAttachments(document, read, context.data.config.baseUrl, altTexts),
     ],
     location: place(
       shareLocation(
@@ -326,7 +328,6 @@ export function postObject(
     ],
   };
 
-  const read = readOf(document.extra);
   const readLineHtml = readLine(read, {
     library: read?.of.photo === undefined ? undefined : altTexts(),
     baseUrl,
@@ -453,40 +454,62 @@ function photoAttachments(
   });
 }
 
+function coverAttachment(
+  document: Document,
+  read: Read | undefined,
+  baseUrl: string,
+  altTexts: () => AltTextLibrary,
+): Image[] {
+  const cover = read?.of.photo;
+  if (cover === undefined) return [];
+  if (photosOf(document.extra).some((photo) => photo.url === cover.url)) return [];
+  return uploadedImage(cover.url, photoAlt(cover, altTexts()), baseUrl, altTexts);
+}
+
 /**
  * Each image the post shows from the site's own uploads, as an `Image` whose
  * `name` is its alt text (TASK-141).
  *
  * Mastodon strips `<img>` out of `content` and shows attachments instead, so
  * this is how a post's pictures reach a timeline, and `name` is where it reads
- * their description from. A decorative image is left out: it is not part of
- * what the post says. An image from another site is left out too, since its
- * media type is a guess this site cannot check.
+ * their description from.
  */
 function imageAttachments(
   document: Document,
+  read: Read | undefined,
   baseUrl: string,
   altTexts: () => AltTextLibrary,
 ): Image[] {
-  // A photo shown again in the body is already attached.
-  const photos = new Set(photosOf(document.extra).map((photo) => photo.url));
-  const attachments: Image[] = [];
-  for (const image of imagesIn(document.html)) {
-    if (image.source === undefined || photos.has(image.src)) continue;
-    if (altTexts().get(image.source)?.kind === 'decorative') continue;
-    const extension = path.extname(image.source).toLowerCase();
-    const media = UPLOAD_MEDIA_TYPES.get(extension);
-    if (media?.kind !== 'image') continue;
-    const alt = image.alt?.trim() ?? '';
-    attachments.push(
-      new Image({
-        url: new URL(absoluteUrl(image.src, baseUrl)),
-        mediaType: canonicalType(media),
-        name: alt === '' ? null : alt,
-      }),
-    );
-  }
-  return attachments;
+  const attached = new Set(photosOf(document.extra).map((photo) => photo.url));
+  if (read?.of.photo !== undefined) attached.add(read.of.photo.url);
+  return imagesIn(document.html)
+    .filter((image) => !attached.has(image.src))
+    .flatMap((image) => uploadedImage(image.src, image.alt, baseUrl, altTexts));
+}
+
+/**
+ * A decorative image is left out: it is not part of what the post says. An
+ * image from another site is left out too, since its media type is a guess
+ * this site cannot check.
+ */
+function uploadedImage(
+  src: string,
+  alt: string | undefined,
+  baseUrl: string,
+  altTexts: () => AltTextLibrary,
+): Image[] {
+  const source = uploadPath(src);
+  if (source === undefined || altTexts().get(source)?.kind === 'decorative') return [];
+  const media = UPLOAD_MEDIA_TYPES.get(path.extname(source).toLowerCase());
+  if (media?.kind !== 'image') return [];
+  const name = alt?.trim() ?? '';
+  return [
+    new Image({
+      url: new URL(absoluteUrl(src, baseUrl)),
+      mediaType: canonicalType(media),
+      name: name === '' ? null : name,
+    }),
+  ];
 }
 
 const QUOTABLE_BY_ANYONE = new InteractionPolicy({

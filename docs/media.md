@@ -94,8 +94,9 @@ at all, publishes with a warning that names each image. If the site sets
 are never checked.
 
 A federated post carries each picture from `content/uploads` as an `Image`
-attachment. The attachment's `name` is the alt text. Mastodon reads the
-description from `name`. Decorative pictures are left out.
+attachment, including a read post's cover. The attachment's `name` is the alt
+text. Mastodon reads the description from `name`. Decorative pictures are left
+out.
 
 A picture's row in the library has three alt-text controls:
 
