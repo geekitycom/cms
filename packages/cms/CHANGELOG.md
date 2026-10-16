@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.32.1](https://github.com/geekitycom/cms/compare/v0.32.0...v0.32.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **cms:** federate a returning post under an object id it never deleted ([2302840](https://github.com/geekitycom/cms/commit/2302840921a3676f4261cb3fe600f82d5656e4bf))
+* **cms:** list a titled read post's read line under its headline, as its page does ([ae223ce](https://github.com/geekitycom/cms/commit/ae223cea6cb7e513518d74d7ed95ba33f51c672b))
+* **cms:** open a titled read post's Note with its title, as its page does ([bc9cd78](https://github.com/geekitycom/cms/commit/bc9cd78375152633a7f7d046906c03e141786d72))
+* **cms:** use a post's current object id everywhere and backfill earlier deletes ([f1856c3](https://github.com/geekitycom/cms/commit/f1856c30adc708a62a169a96b2622c067bd23a3d))
+
 ## [0.32.0](https://github.com/geekitycom/cms/compare/v0.31.0...v0.32.0) (2026-10-15)
 
 
