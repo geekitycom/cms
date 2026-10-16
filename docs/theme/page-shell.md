@@ -488,8 +488,10 @@ The stylesheet floats the cover at the start of the read line as a thumbnail.
 It is drawn at its natural size or smaller, at most 6rem wide and 8rem tall,
 and never stretched to the column the way a post photo is. An uploaded cover is
 served as a responsive `<picture>`, like the body's images. The feeds and the
-federated Note carry the same `img`, with an absolute `src`; the cover is not
-the feed item's `image` and not an ActivityPub attachment.
+federated Note carry the same `img`, with an absolute `src`. The cover is not
+the feed item's `image`. An uploaded cover is also an `Image` attachment on the
+federated Note, because Mastodon strips `img` from content and shows only
+attachments. The read stays a Note and its page is unchanged.
 
 The read's kicker and hidden `h1` say Read. A listing prints each entry's read
 line from the same partial: an untitled read prints it above its words, and a
