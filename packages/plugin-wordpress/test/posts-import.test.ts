@@ -612,6 +612,117 @@ describe('the posts and pages import', () => {
     assert.equal(await imported.body('posts/2024-03-05-reply.md'), 'I disagree.\n');
   });
 
+  it('turns a Jetpack contact form on a page into contact: true and drops the shortcode (TASK-418)', async () => {
+    const atEnd = [
+      'Write to me.',
+      '',
+      '[contact-form][contact-field label="Name" type="name" required="true" /][contact-field label="Email" type="email" required="true" /][contact-field label="Message" type="textarea" /][/contact-form]',
+    ].join('\n');
+    const inMiddle = [
+      'Before the form,',
+      'on two lines.',
+      '',
+      '[contact-form to="ada@example.com" subject="Hello"]',
+      '[contact-field label="Topic" type="select" options="One,Two"][/contact-field]',
+      '[contact-field label="Email" type="email" /]',
+      '[/contact-form]',
+      '',
+      'After the form.',
+    ].join('\n');
+    const selfClosed = ['Hello.', '', '[contact-form /]', '', 'Bye.'].join('\n');
+    const block = [
+      '<!-- wp:paragraph -->',
+      '<p>Before.</p>',
+      '<!-- /wp:paragraph -->',
+      '',
+      '<!-- wp:shortcode -->',
+      '[contact-form][contact-field label="Name" type="name" /][/contact-form]',
+      '<!-- /wp:shortcode -->',
+      '',
+      '<!-- wp:paragraph -->',
+      '<p>After.</p>',
+      '<!-- /wp:paragraph -->',
+    ].join('\n');
+    const page = (id: number, slug: string, content: string): TestItem => ({
+      id,
+      type: 'page',
+      slug,
+      link: `${SITE}/${slug}/`,
+      content,
+    });
+
+    const imported = await (
+      await site()
+    ).run([
+      page(20, 'at-end', atEnd),
+      page(21, 'in-middle', inMiddle),
+      page(22, 'self-closed', selfClosed),
+      page(23, 'block', block),
+      page(24, 'no-form', '<p>Just text.</p>'),
+    ]);
+
+    const expected: [string, string][] = [
+      ['at-end', 'Write to me.\n'],
+      ['in-middle', 'Before the form,  \non two lines.\n\nAfter the form.\n'],
+      ['self-closed', 'Hello.\n\nBye.\n'],
+      ['block', 'Before.\n\nAfter.\n'],
+    ];
+    for (const [slug, body] of expected) {
+      assert.equal((await imported.frontMatter(`pages/${slug}.md`))['contact'], true, slug);
+      assert.equal(await imported.body(`pages/${slug}.md`), body, slug);
+    }
+    assert.equal((await imported.frontMatter('pages/no-form.md'))['contact'], undefined);
+    assert.deepEqual(
+      imported.rows.filter((row) => row.outcome === 'warned'),
+      [],
+    );
+  });
+
+  it('drops a Jetpack contact form from a post with a warning, since only pages offer one (TASK-418)', async () => {
+    const imported = await (
+      await site()
+    ).run([
+      {
+        id: 10,
+        slug: 'with-form',
+        content:
+          'Say hi.\n\n[contact-form][contact-field label="Name" type="name" /][/contact-form]',
+      },
+    ]);
+
+    assert.equal(
+      (await imported.frontMatter('posts/2024-03-05-with-form.md'))['contact'],
+      undefined,
+    );
+    assert.equal(await imported.body('posts/2024-03-05-with-form.md'), 'Say hi.\n');
+    const warned = rowsFor(imported.rows, 10).filter((row) => row.outcome === 'warned');
+    assert.equal(warned.length, 1);
+    assert.match(warned[0]?.why ?? '', /Jetpack contact form/);
+  });
+
+  it('reports a page with a Jetpack contact form unchanged on a second run (TASK-418)', async () => {
+    const items: TestItem[] = [
+      {
+        id: 20,
+        type: 'page',
+        slug: 'contact',
+        link: `${SITE}/contact/`,
+        content:
+          'Write to me.\n\n[contact-form][contact-field label="Name" type="name" /][/contact-form]',
+      },
+    ];
+    const fresh = await site();
+    const first = await fresh.run(items);
+    const before = await first.file('pages/contact.md');
+    const second = await fresh.run(items);
+
+    assert.equal(await second.file('pages/contact.md'), before);
+    assert.ok(
+      second.rows.every((row) => row.outcome === 'unchanged'),
+      JSON.stringify(second.rows),
+    );
+  });
+
   it('picks up the posts, pages and edits a newer export carries', async () => {
     const fresh = await site();
     await fresh.run([

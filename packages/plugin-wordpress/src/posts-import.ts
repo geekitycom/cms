@@ -133,11 +133,19 @@ function importPostsAndPages(
     }
 
     const body = convertBody(item.content);
+    if (body.contact && item.type !== 'page') {
+      notes.push({
+        item,
+        outcome: 'warned',
+        why: 'had a Jetpack contact form, which was dropped, since only pages offer the contact form',
+      });
+    }
     const document = documentOf(item, disposition, {
       permalink,
       formerly: formerPermalinks(item, permalink),
       author,
       inReplyTo: body.inReplyTo,
+      contact: body.contact,
       home,
       body: media.rewrite(body.markdown),
     });
@@ -338,6 +346,7 @@ function documentOf(
     formerly: readonly string[];
     author: string | undefined;
     inReplyTo: string | undefined;
+    contact: boolean;
     home: Home;
     body: string;
   },
@@ -361,6 +370,7 @@ function documentOf(
   const extra: Record<string, unknown> = {};
   if (guid !== undefined) extra['guid'] = guid;
   if (disposition.migrated) extra['migrated'] = true;
+  if (derived.contact && item.type === 'page') extra['contact'] = true;
   return {
     title,
     ...(date === undefined ? {} : { date }),

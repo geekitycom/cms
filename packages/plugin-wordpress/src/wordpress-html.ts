@@ -4,10 +4,17 @@ import type { TurndownNode } from 'turndown';
 interface ConvertedBody {
   readonly markdown: string;
   readonly inReplyTo?: string | undefined;
+  readonly contact: boolean;
 }
 
 export function convertBody(content: string): ConvertedBody {
   let html = content.replace(/\r\n?/g, '\n');
+
+  let contact = false;
+  html = html.replace(JETPACK_CONTACT_FORM, () => {
+    contact = true;
+    return '';
+  });
 
   let inReplyTo: string | undefined;
   html = html.replace(
@@ -33,8 +40,11 @@ export function convertBody(content: string): ConvertedBody {
   if (!blocks) html = wpautop(html);
 
   const markdown = tidy(turndown.turndown(html));
-  return { markdown, ...(inReplyTo === undefined ? {} : { inReplyTo }) };
+  return { markdown, contact, ...(inReplyTo === undefined ? {} : { inReplyTo }) };
 }
+
+const JETPACK_CONTACT_FORM =
+  /\[contact-form(?=[\s/\]])[^\]]*?(?:\/\]|\][\s\S]*?\[\/contact-form\])/g;
 
 function tidy(markdown: string): string {
   const lines: string[] = [];
