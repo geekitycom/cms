@@ -7,7 +7,13 @@ import { promisify } from 'node:util';
 import { execFile as execFileCallback } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 
-import { CLI, cleanupTemporaryDirs, PACKAGE_ROOT, temporaryDir } from './__testing__/cli.ts';
+import {
+  CLI,
+  cleanupTemporaryDirs,
+  PACKAGE_ROOT,
+  runCli,
+  temporaryDir,
+} from './__testing__/cli.ts';
 import { parseArgs, readPassword } from './cli.ts';
 import { findSiteTsx, loadConfig, registerTypeScriptLoader } from './config-loader.ts';
 
@@ -22,6 +28,9 @@ import { findSiteTsx, loadConfig, registerTypeScriptLoader } from './config-load
  */
 
 const execFile = promisify(execFileCallback);
+
+const UNRESOLVED_IMPORT_CONFIG =
+  "import { defineConfig } from '@geekity/not-installed';\nexport default defineConfig({ port: 4321 });\n";
 
 after(cleanupTemporaryDirs);
 
@@ -330,6 +339,21 @@ describe('loadConfig', () => {
     );
   });
 
+  it('names the config and the package when the config imports one the site cannot resolve', async () => {
+    const directory = await temporaryDir('geekity-config-unresolved-');
+    const config = path.join(directory, 'geekity.config.mjs');
+    await fs.writeFile(config, UNRESOLVED_IMPORT_CONFIG, 'utf8');
+
+    await assert.rejects(
+      () => loadConfig(directory, undefined),
+      (error: Error) => {
+        assert.ok(error.message.includes(config), error.message);
+        assert.match(error.message, /@geekity\/not-installed/);
+        return true;
+      },
+    );
+  });
+
   it('names both fixes when a TypeScript config needs tsx and the site has none', async () => {
     const withoutTsx = await temporaryDir('geekity-no-tsx-');
 
@@ -386,6 +410,17 @@ describe('the geekity bin', () => {
     } finally {
       await fs.rm(linkDir, { recursive: true, force: true });
     }
+  });
+
+  it('exits non-zero naming the config when the config imports a package the site cannot resolve', async () => {
+    const site = await temporaryDir('geekity-bin-unresolved-');
+    await fs.writeFile(path.join(site, 'geekity.config.mjs'), UNRESOLVED_IMPORT_CONFIG, 'utf8');
+
+    const run = await runCli(['settings', 'list'], site);
+
+    assert.notEqual(run.code, 0);
+    assert.match(run.stderr, /geekity\.config\.mjs/);
+    assert.match(run.stderr, /@geekity\/not-installed/);
   });
 });
 
