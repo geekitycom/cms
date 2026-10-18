@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/geekitycom/cms/compare/plugin-tag-suggest-v0.3.0...plugin-tag-suggest-v0.4.0) (2026-10-18)
+
+
+### Features
+
+* **cms:** add @geekity/cms/config so a site config loads without the whole CMS ([b61a063](https://github.com/geekitycom/cms/commit/b61a063a29a80dd51be7c5230c3df49f73aa582c))
+
 ## [0.3.0](https://github.com/geekitycom/cms/compare/plugin-tag-suggest-v0.2.2...plugin-tag-suggest-v0.3.0) (2026-10-15)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/geekitycom/cms/compare/plugin-post-summary-v0.4.0...plugin-post-summary-v0.5.0) (2026-10-18)
+
+
+### Features
+
+* **cms:** add @geekity/cms/config so a site config loads without the whole CMS ([b61a063](https://github.com/geekitycom/cms/commit/b61a063a29a80dd51be7c5230c3df49f73aa582c))
+
 ## [0.4.0](https://github.com/geekitycom/cms/compare/plugin-post-summary-v0.3.0...plugin-post-summary-v0.4.0) (2026-10-15)
 
 
