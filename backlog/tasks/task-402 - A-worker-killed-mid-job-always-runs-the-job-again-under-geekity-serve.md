@@ -4,7 +4,7 @@ title: A worker killed mid-job always runs the job again under geekity serve
 status: To Do
 assignee: []
 created_date: '2026-10-14 14:09'
-updated_date: '2026-10-14 21:44'
+updated_date: '2026-10-18 12:51'
 labels: []
 milestone: m-38
 dependencies: []
@@ -14,6 +14,7 @@ references:
   - packages/cms/src/jobs/processes.ts
   - packages/cms/src/jobs/lock-file.ts
   - packages/cms/src/supervisor/primary.ts
+  - backlog/tasks/task-422
 priority: low
 type: bug
 ordinal: 358800
@@ -35,4 +36,6 @@ cli-jobs.test.ts 'runs a job cut off by a killed worker again as the next attemp
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-14: recurred on CI for PR #191 in 'shows a job cut off three times as interrupted' (start 2 never came within 90 s after the first SIGKILL). Could not reproduce locally: 90 isolated runs of the kill tests under CPU load and 15 full-suite runs in a node:24 container all passed. cli-jobs.test.ts now captures the server's stderr and, when a wait times out, appends it with runs.log and data/jobs.json to the error, so the next CI failure shows where recovery stopped.
+
+2026-10-18: related flake filed as TASK-422 (delivery.test.ts, TASK-417 AC #2: a second rewrite of the same file never produced its Create within 15 s on CI). Different code path (in process, no job queue or killed worker), but it shares this task's watcher candidate: a file watcher that misses or merges a second quick change under CI load. Whatever either task finds about the watcher applies to both.
 <!-- SECTION:NOTES:END -->

@@ -1,10 +1,10 @@
 ---
 id: TASK-375
 title: 'Reevaluate the geekity CLI: keep, cut, or move to its own package'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-12 17:52'
-updated_date: '2026-10-13 12:10'
+updated_date: '2026-10-18 12:51'
 labels: []
 milestone: m-37
 dependencies: []
@@ -37,4 +37,12 @@ Options to weigh, per command:
 
 <!-- SECTION:NOTES:BEGIN -->
 Discussion on 2026-10-12/13 widened this into decision-52 and milestone m-38 (M39 Foundational systems). Chosen fates so far: CLI commands all stay for now. Maintenance and dev mode get admin switches through the settings registry (TASK-383). Strip-metadata and resend get admin actions through the job queue (TASK-380). The plugin commands are already covered by Admin > Plugins.
+
+2026-10-18: closed by the user's call to keep the CLI for now. Every command stays in core. The admin equivalents already chosen (maintenance and dev mode switches, strip-metadata and resend actions, Admin > Plugins) are built or tracked separately. The per-command decision record in AC #1 to #3 was not written, and no follow-up tasks are needed (AC #4). TASK-374 takes on the test-time cost that started this spike.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Decision: keep the geekity CLI in core for now, with no commands cut or moved to a separate package. The criteria asking for a measured per-command record were not met, by choice: the user decided without it. The test cost is handled by TASK-374.
+<!-- SECTION:FINAL_SUMMARY:END -->
