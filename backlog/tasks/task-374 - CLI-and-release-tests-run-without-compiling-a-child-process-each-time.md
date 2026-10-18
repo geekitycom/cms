@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-12 17:49'
-updated_date: '2026-10-18 12:51'
+updated_date: '2026-10-18 12:55'
 labels: []
 milestone: m-37
 dependencies:
@@ -34,3 +34,18 @@ CI baseline before this task, packages/cms pnpm test duration_ms on main's test 
 - [ ] #3 Tests that move in process still assert the same exit codes, stdout and stderr, and files written; tests that still spawn still exercise a real process where that is the point
 - [ ] #4 pnpm test passes on a fresh checkout and with a stale dist: the test script makes sure the spawned JavaScript is current before any test spawns it
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Stage 1, one lever: every test that spawns the CLI runs dist/cli.js with plain node (the shared runCli helper, and the serve spawns in cli-serve, cli-reload, cli-federation-queue and cli-jobs). Supervised workers then inherit plain node, not the tsx loader. pretest builds dist first with tsc -p tsconfig.build.json (about 1 s), so a stale dist cannot be tested (AC #4). Small TS helper scripts that tests spawn run on Node's own type stripping where they allow it.
+2. Measure stage 1: the slow suites alone locally, then three CI runs of the test job on the branch, against the CI baseline in the description.
+3. Stage 2 only for suites still short of 50% on CI: run the command in process where no real process is the point, which needs main() to take its cwd, output streams and stdin instead of reading process globals.
+4. Record per-suite CI times and both medians in the notes.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Measured 2026-10-18 on the dev Mac before stage 1. One spawn of --help: tsx 0.52 s, dist with plain node 0.28 s. Node's own type stripping cannot run src/cli.ts (init.ts uses a parameter property). Six suites alone, tsx vs dist: settings 18 s vs 11 s, plugin upgrade 16 vs 9, import 11 vs 8, user 6 vs 4, maintenance 8 vs 5, rebuild 6 vs 4 (27 to 44% faster). tsc -p tsconfig.build.json takes about 1 s.
+<!-- SECTION:NOTES:END -->
