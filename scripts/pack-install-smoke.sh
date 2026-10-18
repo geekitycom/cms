@@ -169,6 +169,19 @@ log "importing @geekity/cms/plugin from the installed tarball"
     console.log("ok  @geekity/cms/plugin, host API version " + plugin.HOST_API_VERSION);
   '
 )
+
+log "importing @geekity/cms/config from the installed tarball"
+(
+  cd "${site}"
+  node --input-type=module -e '
+    const config = await import("@geekity/cms/config");
+    if (typeof config.defineConfig !== "function") {
+      console.error("@geekity/cms/config resolved without defineConfig");
+      process.exit(1);
+    }
+    console.log("ok  @geekity/cms/config");
+  '
+)
 cat >"${site}/plugin-check.ts" <<'TS'
 import { definePlugin } from '@geekity/cms/plugin';
 import type { Plugin, PluginHost } from '@geekity/cms/plugin';

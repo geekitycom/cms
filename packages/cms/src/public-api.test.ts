@@ -11,9 +11,11 @@ const PLUGINS_DOC = path.join(DOCS, 'plugins.md');
 const TESTING_SECTION = '### Testing a plugin';
 const ROOT_FILES = ['index.ts', 'exports.ts'];
 const TESTING_FILES = ['testing.ts'];
+const CONFIG_FILES = ['config-entry.ts'];
 const ENTRY_RE_EXPORT = "export * from './exports.ts';";
 
 const ROOT = '@geekity/cms';
+const CONFIG_ENTRY = '@geekity/cms/config';
 const PLUGIN_ENTRY = '@geekity/cms/plugin';
 const TESTING_ENTRY = '@geekity/cms/testing';
 
@@ -169,6 +171,26 @@ describe('the root entry of @geekity/cms', () => {
 
     assert.deepEqual(duplicates([...values, ...types]), []);
     assert.deepEqual(duplicates(documentedRootExports()), []);
+  });
+});
+
+describe(`the ${CONFIG_ENTRY} entry`, () => {
+  it('exports at runtime exactly the values its export statements name', async () => {
+    const runtime = Object.keys(await import('./config-entry.ts')).sort();
+
+    assert.deepEqual(runtime, entryExports(CONFIG_FILES).values);
+  });
+
+  it('exports only names the root entry also exports, so a config can import from either', () => {
+    const root = entryExports(ROOT_FILES);
+    const config = entryExports(CONFIG_FILES);
+
+    assert.deepEqual(
+      [...config.values, ...config.types].filter(
+        (name) => !root.values.includes(name) && !root.types.includes(name),
+      ),
+      [],
+    );
   });
 });
 
