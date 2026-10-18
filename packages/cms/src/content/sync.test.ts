@@ -13,6 +13,7 @@ import type { WatchDebounce } from './watch-debounce.ts';
 import { heldDebounce } from '../__testing__/debounce.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { liveWatchers } from '../__testing__/watchers.ts';
+import { writeFileAtomically } from '../files/atomic.ts';
 
 const temporaryDirs: string[] = [];
 const openStores: ContentStore[] = [];
@@ -607,6 +608,84 @@ describe('the watcher', () => {
     assert.deepEqual(
       changes.map((change) => [change.type, change.origin]),
       [['updated', 'watch']],
+    );
+  });
+
+  it('keeps indexing a post after the CMS has replaced it atomically', async () => {
+    const dir = await contentDir({
+      'posts/2026-09-02-hello.md': markdown({
+        title: 'Hello',
+        permalink: '/2026/09/hello/',
+        date: '2026-09-02T09:00:00Z',
+        body: 'First.',
+      }),
+    });
+    const { sync: content, store: index } = await sync(dir, { watch: true });
+    await content.start();
+
+    await writeFileAtomically(
+      path.join(dir, 'posts/2026-09-02-hello.md'),
+      markdown({
+        title: 'Hello',
+        permalink: '/2026/09/hello/',
+        date: '2026-09-02T09:00:00Z',
+        body: 'Replaced.',
+      }),
+    );
+    await eventually(
+      content,
+      () => index.getByPath('posts/2026-09-02-hello.md')?.html.includes('Replaced.'),
+      'the atomic replacement to reach the index',
+    );
+
+    await writeFiles(dir, {
+      'posts/2026-09-02-hello.md': markdown({
+        title: 'Hello',
+        permalink: '/2026/09/hello/',
+        date: '2026-09-02T09:00:00Z',
+        body: 'Edited by hand.',
+      }),
+    });
+    await eventually(
+      content,
+      () => index.getByPath('posts/2026-09-02-hello.md')?.html.includes('Edited by hand.'),
+      'the edit after the replacement to reach the index',
+    );
+  });
+
+  it('indexes a post in a directory made after it started, and an edit to that post', async () => {
+    const dir = await contentDir({
+      'pages/about.md': markdown({ title: 'About', permalink: '/about/' }),
+    });
+    const { sync: content, store: index } = await sync(dir, { watch: true });
+    await content.start();
+
+    await writeFiles(dir, {
+      'posts/2026/10/later.md': markdown({
+        title: 'Later',
+        permalink: '/2026/10/later/',
+        date: '2026-10-01T09:00:00Z',
+        body: 'First.',
+      }),
+    });
+    await eventually(
+      content,
+      () => index.getByPath('posts/2026/10/later.md'),
+      'the post in the new directory to be indexed',
+    );
+
+    await writeFiles(dir, {
+      'posts/2026/10/later.md': markdown({
+        title: 'Later',
+        permalink: '/2026/10/later/',
+        date: '2026-10-01T09:00:00Z',
+        body: 'Edited.',
+      }),
+    });
+    await eventually(
+      content,
+      () => index.getByPath('posts/2026/10/later.md')?.html.includes('Edited.'),
+      'the edit in the new directory to reach the index',
     );
   });
 
