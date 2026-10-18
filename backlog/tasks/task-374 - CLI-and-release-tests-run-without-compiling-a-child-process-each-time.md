@@ -1,11 +1,11 @@
 ---
 id: TASK-374
 title: CLI and release tests run without compiling a child process each time
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-10-12 17:49'
-updated_date: '2026-10-18 13:42'
+updated_date: '2026-10-18 16:06'
 labels: []
 milestone: m-37
 dependencies:
@@ -29,10 +29,10 @@ CI baseline before this task, packages/cms pnpm test duration_ms on main's test 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Each suite listed in the description runs at least 50% faster on CI than its listed CI time, or the implementation notes say why one cannot, with its measured time
-- [ ] #2 The packages/cms test duration on CI is taken from three runs of the test job on the change and compared with the median of the three newest baseline runs in the description; the after median is lower, and both medians are reported
-- [ ] #3 Tests that move in process still assert the same exit codes, stdout and stderr, and files written; tests that still spawn still exercise a real process where that is the point
-- [ ] #4 pnpm test passes on a fresh checkout and with a stale dist: the test script makes sure the spawned JavaScript is current before any test spawns it
+- [x] #1 Each suite listed in the description runs at least 50% faster on CI than its listed CI time, or the implementation notes say why one cannot, with its measured time
+- [x] #2 The packages/cms test duration on CI is taken from three runs of the test job on the change and compared with the median of the three newest baseline runs in the description; the after median is lower, and both medians are reported
+- [x] #3 Tests that move in process still assert the same exit codes, stdout and stderr, and files written; tests that still spawn still exercise a real process where that is the point
+- [x] #4 pnpm test passes on a fresh checkout and with a stale dist: the test script makes sure the spawned JavaScript is current before any test spawns it
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -49,9 +49,14 @@ CI baseline before this task, packages/cms pnpm test duration_ms on main's test 
 <!-- SECTION:NOTES:BEGIN -->
 Measured 2026-10-18 on the dev Mac before stage 1. One spawn of --help: tsx 0.52 s, dist with plain node 0.28 s. Node's own type stripping cannot run src/cli.ts (init.ts uses a parameter property). Six suites alone, tsx vs dist: settings 18 s vs 11 s, plugin upgrade 16 vs 9, import 11 vs 8, user 6 vs 4, maintenance 8 vs 5, rebuild 6 vs 4 (27 to 44% faster). tsc -p tsconfig.build.json takes about 1 s.
 
-Stage 1 on CI (PR #200, run 39130926903): packages/cms 398.8 s (attempt 1), 378.0 s (attempt 2). Per suite against the CI baseline: admin jobs under serve 97.9 -> 83.9 s, serve supervised 76.4 -> 51.5, settings 55.1 -> 30.5, plugin upgrade 42.9 -> 26.5, import 33.9 -> 20.8, plugin add 30.7 -> 19.0, serve 26.9 -> 14.1, maintenance 20.9 -> 12.4, user add 19.7 -> 11.1, a command used wrongly 18.3 -> 10.7, rebuild 15.1 -> 8.8, resend 14.7 -> 9.3, strip-metadata 14.1 -> 8.5, a plugin command 12.7 -> 7.5, dev-mode 12.2 -> 7.1, init 11.1 -> 6.4. All 33 to 48% faster except the jobs suite.
-Jobs suite: the TASK-400 AC #2 test took 61 s because its fail-boot fixture plugin hung every start while its marker existed, including the old worker's plugin restart on resume, so close() waited behind it until SHUTDOWN_MS (60 s) killed the worker. Found by timing each service's stop and settle: the plugin registry's stop never returned. Fixed in the fixture (it removes the marker when it fails a boot): test 61 s -> 1.1 s, suite 72 s -> 11.5 s locally. Not a product bug: a plugin whose start never ends holding shutdown until SHUTDOWN_MS is the designed backstop.
-Stage 2: each spawn of dist/cli.js spends about 0.25 s loading modules (bare node 0.01 s, --help 0.27 s). cms/boot.js costs 0.22 s and every command loads it through config-loader for settleConfig, which needs only resolveConfig and the settings registry. Plan: move settleConfig to a light module and import heavy modules inside the commands that use them.
-
-Stage 1 CI, three runs of the test job on PR #200 head 55745472: 398.8 s, 378.0 s, 385.4 s; median 385.4 s against the baseline median 455.2 s (15% lower). Stage 2 and the fixture fix are measured separately.
+Final CI, three runs of the test job on PR #200 head 8bd4ed79 (stages 1 and 2, the fixture fix and the startup guard): 315.2 s, 315.4 s, 310.7 s. Median 315.2 s against the baseline median 455.2 s, 31% lower (AC #2).
+Per suite, baseline -> run 3 (job 117720916422): admin jobs under geekity serve 97.9 -> 19.5 s (-80%), serve supervised 76.4 -> 46.3 (-39%), settings 55.1 -> 4.0 (-93%), plugin upgrade 42.9 -> 6.2 (-85%), import 33.9 -> 13.4 (-60%), plugin add 30.7 -> 4.4 (-86%), serve 26.9 -> 8.7 (-68%), maintenance 20.9 -> 1.5 (-93%), user add 19.7 -> 4.2 (-79%), a command used wrongly 18.3 -> 1.2 (-93%), rebuild 15.1 -> 8.1 (-46%), resend 14.7 -> 9.8 (-34%), strip-metadata 14.1 -> 8.9 (-37%), a plugin command 12.7 -> 3.0 (-76%), dev-mode 12.2 -> 0.9 (-93%), init 11.1 -> 0.8 (-93%).
+Short of 50% (AC #1), and why: serve supervised 46.3 s, whose slowest tests wait on the plugin watcher's PLUGIN_SETTLE_MS (5 s, TASK-309) by design, several times per test; rebuild 8.1 s, resend 9.8 s and strip-metadata 8.9 s, whose commands build the whole CMS (createCms, the index scan, the job queue), so the full module graph and the boot are the work under test, not overhead. Running them in process would still build the CMS once per test.
+Stage 2 found and filed TASK-423 (a config whose import fails loaded as {}) and TASK-424 (@geekity/cms/config so a real site keeps the faster start); both built in PR #201, stacked on this one.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+CLI tests no longer compile TypeScript per spawn: every spawned geekity runs the built dist/cli.js with plain node, pretest builds dist first, and a test file run on its own refuses a dist older than src. The geekity command itself starts in about 0.04 s instead of 0.28 s for commands that do not build the CMS, because each command loads its heavy modules when it runs and four helpers moved to light modules; a test keeps settings list from loading the core. A fixture that held a jobs test's shutdown for 60 s now fails only the boot it means to. On CI the packages/cms test median fell from 455.2 s to 315.2 s; 12 of 16 slow suites are 50 to 93% faster, and the notes say why the other four cannot be.
+<!-- SECTION:FINAL_SUMMARY:END -->
