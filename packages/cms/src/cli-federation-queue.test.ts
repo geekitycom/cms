@@ -12,7 +12,7 @@ import { createFederation, generateCryptoKeyPair, MemoryKvStore } from '@fedify/
 import { SqliteMessageQueue } from '@fedify/sqlite';
 import { Create, Note } from '@fedify/vocab';
 
-import { cleanupTemporaryDirs, PACKAGE_ROOT, temporaryDir } from './__testing__/cli.ts';
+import { cleanupTemporaryDirs, CLI, temporaryDir } from './__testing__/cli.ts';
 import { queuedMessages } from './__testing__/federation-queue.ts';
 import { nextEvent } from './__testing__/wait.ts';
 import { FEDERATION_QUEUE_TABLE, queueFile } from './store/queue-database.ts';
@@ -20,8 +20,6 @@ import { askToReload, isServing } from './supervisor/control.ts';
 
 after(cleanupTemporaryDirs);
 
-const CLI = path.join(PACKAGE_ROOT, 'src', 'cli.ts');
-const TSX = import.meta.resolve('tsx');
 const PROCESS_EVENT_TIMEOUT_MS = 90_000;
 const MESSAGES = 20;
 const ORIGIN = 'https://blog.example';
@@ -123,7 +121,7 @@ function serve(directory: string): {
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !name.startsWith('GEEKITY_') && name !== 'PORT'),
   );
-  const child = spawn(process.execPath, ['--import', TSX, CLI, 'serve'], {
+  const child = spawn(process.execPath, [CLI, 'serve'], {
     cwd: directory,
     env: { ...inherited, GEEKITY_PORT: '0', GEEKITY_WATCH: 'false', GEEKITY_ACCESS_LOG: 'false' },
     stdio: ['ignore', 'pipe', 'pipe'],

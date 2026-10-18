@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -40,8 +40,13 @@ const failBoot = {
   hostApi: 2,
   register: () => undefined,
   async start() {
-    if (!existsSync(path.join(directory, 'fail-boot'))) return;
+    const marker = path.join(directory, 'fail-boot');
+    if (!existsSync(marker)) return;
     while (!startedHere()) await delay(20);
+    // Only the boot the test asked to fail: the old worker restarts its
+    // plugins when it resumes, and a start that never ends would hold its
+    // shutdown until the supervisor gives up and kills it.
+    rmSync(marker);
     process.send?.({ type: 'boot-failed', error: 'The test failed this boot.' });
     await new Promise<never>(() => undefined);
   },

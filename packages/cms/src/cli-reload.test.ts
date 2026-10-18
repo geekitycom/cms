@@ -12,15 +12,13 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { promisify } from 'node:util';
 
-import { cleanupTemporaryDirs, PACKAGE_ROOT, runCli, temporaryDir } from './__testing__/cli.ts';
+import { cleanupTemporaryDirs, CLI, runCli, temporaryDir } from './__testing__/cli.ts';
 import { fakeNpmRegistry, pluginFiles } from './__testing__/npm-registry.ts';
 import { nextEvent } from './__testing__/wait.ts';
 import { PLUGIN_SETTLE_MS } from './supervisor/primary.ts';
 
 after(cleanupTemporaryDirs);
 
-const CLI = path.join(PACKAGE_ROOT, 'src', 'cli.ts');
-const TSX = import.meta.resolve('tsx');
 const PLUGINS_PATH = '/admin/plugins';
 const RELOAD_PATH = '/admin/plugins/reload';
 const PROCESS_EVENT_TIMEOUT_MS = 90_000;
@@ -48,7 +46,7 @@ async function serve(
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !name.startsWith('GEEKITY_') && name !== 'PORT'),
   );
-  const child = spawn(process.execPath, ['--import', TSX, CLI, 'serve'], {
+  const child = spawn(process.execPath, [CLI, 'serve'], {
     cwd: site,
     env: {
       ...inherited,
@@ -508,7 +506,7 @@ describe('geekity serve, supervised', () => {
       '-P',
       String(server.child.pid),
       '-f',
-      'cli.ts',
+      CLI,
     ]);
     const [worker] = stdout.trim().split('\n').map(Number);
     assert.ok(worker !== undefined && worker > 0, 'the supervisor runs a worker');

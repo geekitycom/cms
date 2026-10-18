@@ -1,3 +1,4 @@
+import { readdirSync, statSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -5,7 +6,7 @@ import { promisify } from 'node:util';
 import { execFile as execFileCallback } from 'node:child_process';
 
 /**
- * What the CLI's tests need in common: a way to run `geekity` from source, a
+ * What the CLI's tests need in common: a way to run the built `geekity`, a
  * scratch directory that goes away at the end of the file, and the two or
  * three reads every command's tests do afterwards.
  *
@@ -20,14 +21,32 @@ const execFile = promisify(execFileCallback);
 /** The root of `@geekity/cms`, the directory holding its `package.json`. */
 export const PACKAGE_ROOT = path.resolve(import.meta.dirname, '..', '..');
 
-/** The bin, as source. `dist/cli.js` is what a published shim runs instead. */
-const CLI = path.join(PACKAGE_ROOT, 'src', 'cli.ts');
+export const CLI = path.join(PACKAGE_ROOT, 'dist', 'cli.js');
+
+assertBuildIsCurrent();
 
 /**
- * tsx, as an absolute URL. The CLI is run from a temporary directory, where a
- * bare `--import tsx` has nothing to resolve against.
+ * `pnpm test` builds `dist` first, but a test file run on its own does not,
+ * and would quietly test whatever an earlier build left there.
  */
-const TSX = import.meta.resolve('tsx');
+function assertBuildIsCurrent(): void {
+  const built = statSync(CLI, { throwIfNoEntry: false })?.mtimeMs ?? 0;
+  const source = path.join(PACKAGE_ROOT, 'src');
+  const newer = readdirSync(source, { recursive: true, encoding: 'utf8' }).find(
+    (file) =>
+      file.endsWith('.ts') &&
+      !file.endsWith('.test.ts') &&
+      !file.includes('__testing__') &&
+      !file.includes('__fixtures__') &&
+      statSync(path.join(source, file)).mtimeMs > built,
+  );
+  if (newer !== undefined) {
+    throw new Error(
+      `dist/cli.js is older than src/${newer}. Run \`pnpm exec tsc -p tsconfig.build.json\` ` +
+        'in packages/cms, or run the tests with `pnpm test`, which builds first.',
+    );
+  }
+}
 
 /** What running the bin did. Non-zero exits are results here, not throws. */
 export interface CliRun {
@@ -37,7 +56,7 @@ export interface CliRun {
 }
 
 /**
- * Run `geekity` from source, the way a bin shim runs `dist/cli.js`.
+ * Run `geekity` the way a bin shim does.
  *
  * `stdin`, when given, is written to the child and the pipe is closed, which
  * is how a password reaches `user add` without a terminal. `env` is added to
@@ -50,7 +69,7 @@ export async function runCli(
   env: Readonly<Record<string, string>> = {},
 ): Promise<CliRun> {
   try {
-    const running = execFile(process.execPath, ['--import', TSX, CLI, ...args], {
+    const running = execFile(process.execPath, [CLI, ...args], {
       cwd,
       env: { ...process.env, ...env },
     });

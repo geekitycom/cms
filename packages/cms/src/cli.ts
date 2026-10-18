@@ -8,62 +8,24 @@ import { Writable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 
 import { credentialProblem, emailProblem } from './admin/credentials.ts';
-import { migrateUsersToFile } from './admin/legacy-migrations.ts';
-import { adminStoreOwning, openAdminDatabase } from './store/admin-store.ts';
 import type { AdminStore } from './store/admin-store.ts';
 import { databaseFile, discardDatabase } from './cache.ts';
 import { CONTENT_SCRATCH_FILES, dataPath } from './files/data-files.ts';
-import {
-  compactTime,
-  exportFileName,
-  planSiteExport,
-  writeSiteExport,
-} from './export/site-export.ts';
-import {
-  checkImportTargets,
-  discardStaging,
-  finishSiteImport,
-  importNotes,
-  installArchivedPlugins,
-  placeSiteImport,
-  pluginFailureLine,
-  readSiteManifest,
-  restoreEnabledPlugins,
-  stageSiteImport,
-} from './export/site-import.ts';
-import { CONFIG_FILENAMES, loadConfig, loadResolvedConfig } from './config-loader.ts';
+import { CONFIG_FILENAMES, loadConfig, loadResolvedConfig, settleConfig } from './config-loader.ts';
 import { resolveConfig } from './config.ts';
 import type { ResolvedConfig } from './config.ts';
-import { migrateCommentEmails, migrateCommentKeys } from './comments/migrations.ts';
-import { STRIP_METADATA_JOB } from './content/metadata/strip-job.ts';
-import { RESEND_JOB } from './federation/resend-job.ts';
-import { createUser, DuplicateUsernameError } from './site/users.ts';
-import { createCms, settleConfig } from './index.ts';
 import type { Cms } from './index.ts';
 import { initSite, ownManifest, seedStarterContent } from './init.ts';
 import { finishedResult } from './jobs/types.ts';
 import type { JobName, Json } from './jobs/types.ts';
 import type { PluginCommand } from './plugin.ts';
 import { importPluginFolders, scanPluginFolders } from './plugins/folder.ts';
-import {
-  ADD_WITH_COMMAND,
-  addPlugin,
-  installedFolders,
-  parsePackageSpec,
-  pluginRegistry,
-  removePlugin,
-  requirementNotes,
-} from './plugins/install.ts';
-import { describeUpgrade, upgradePlugins } from './plugins/upgrade.ts';
 import type { UpgradeReport } from './plugins/upgrade.ts';
 import { migratePluginSettings } from './plugins/migrate-settings.ts';
-import { siteDataFiles } from './plugins/data.ts';
 import { readEnabledPlugins } from './plugins/enabled.ts';
 import type { PluginRegistry, RegisteredPlugin } from './plugins/registry.ts';
-import { pluginSite, sitePluginRegistry } from './plugins/site.ts';
+import { sitePluginRegistry } from './plugins/site-registry.ts';
 import { askToReload, isServing } from './supervisor/control.ts';
-import { superviseCluster } from './supervisor/primary.ts';
-import { processChannel, superviseWorker } from './supervisor/worker.ts';
 import { DEV_MODE, DEV_MODE_LATCHED } from './settings/dev-mode.ts';
 import { MAINTENANCE, MAINTENANCE_FILE } from './settings/maintenance.ts';
 import { overridden, sourceLabel } from './settings/registry.ts';
@@ -858,6 +820,7 @@ async function runJobHere<P extends Json, R extends Json>(
   what: string,
   prepare?: (cms: Cms) => Promise<unknown>,
 ): Promise<R | undefined> {
+  const { createCms } = await import('./index.ts');
   const cms = createCms(config);
   let status;
   try {
@@ -887,6 +850,7 @@ async function runJobHere<P extends Json, R extends Json>(
 
 async function stripMetadataCommand({ configPath }: ParsedArgs): Promise<number> {
   const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
+  const { STRIP_METADATA_JOB } = await import('./content/metadata/strip-job.ts');
   const report = await runJobHere(config, STRIP_METADATA_JOB, null, 'sweep');
   if (report === undefined) return 1;
 
@@ -910,6 +874,7 @@ async function stripMetadataCommand({ configPath }: ParsedArgs): Promise<number>
  * that then sat in a watcher would never exit.
  */
 async function syncCommand({ configPath }: ParsedArgs): Promise<number> {
+  const { createCms } = await import('./index.ts');
   const cms = createCms(
     await loadResolvedConfig(configPath, (config) => ({ ...config, watch: false })),
   );
@@ -960,6 +925,7 @@ async function resendCommand({ args, configPath, flags }: ParsedArgs): Promise<n
     watch: false,
     federation: { ...loaded.federation, queue: null },
   }));
+  const { RESEND_JOB } = await import('./federation/resend-job.ts');
   const report = await runJobHere(
     config,
     RESEND_JOB,
@@ -1027,6 +993,7 @@ async function rebuildCommand({ configPath }: ParsedArgs): Promise<number> {
 async function rebuildDatabase(config: ResolvedConfig): Promise<number> {
   discardDatabase(config.dataDir);
 
+  const { createCms } = await import('./index.ts');
   const cms = createCms(config);
   try {
     const result = await cms.sync();
@@ -1075,6 +1042,20 @@ async function importCommand({ args, configPath, flags }: ParsedArgs): Promise<n
     return 1;
   }
 
+  const {
+    checkImportTargets,
+    discardStaging,
+    finishSiteImport,
+    importNotes,
+    installArchivedPlugins,
+    placeSiteImport,
+    pluginFailureLine,
+    readSiteManifest,
+    restoreEnabledPlugins,
+    stageSiteImport,
+  } = await import('./export/site-import.ts');
+  const { compactTime } = await import('./export/site-export.ts');
+  const { pluginRegistry } = await import('./plugins/install.ts');
   const archive = path.resolve(file);
   const targets = { contentDir, dataDir };
   const settings = createSettings({ config: unsettled });
@@ -1154,6 +1135,9 @@ async function exportCommand({ configPath, flags }: ParsedArgs): Promise<number>
   const config = await loadResolvedConfig(configPath, (loaded) => ({ ...loaded, watch: false }));
   const settings = createSettings({ config });
   const plugins = await loadSitePlugins(config, settings);
+  const { exportFileName, planSiteExport, writeSiteExport } =
+    await import('./export/site-export.ts');
+  const { siteDataFiles } = await import('./plugins/data.ts');
 
   if (flags['list'] === true) {
     const declarations = siteDataFiles({ dataDir: config.dataDir, settings, plugins });
@@ -1289,6 +1273,7 @@ async function serveCommand({ configPath }: ParsedArgs): Promise<number> {
   ) {
     process.stdout.write(`Seeded ${resolved.contentDir} with the starter site\n`);
   }
+  const { superviseCluster } = await import('./supervisor/primary.ts');
   superviseCluster({
     dataDir: resolved.dataDir,
     pluginsDir: resolved.pluginsDir,
@@ -1303,6 +1288,8 @@ async function serveCommand({ configPath }: ParsedArgs): Promise<number> {
  * act on; it tells this worker when to close.
  */
 async function serveWorker(configPath: string | undefined): Promise<number> {
+  const { processChannel, superviseWorker } = await import('./supervisor/worker.ts');
+  const { createCms } = await import('./index.ts');
   const channel = processChannel();
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => undefined);
 
@@ -1357,9 +1344,19 @@ async function pluginFolderCommand({ args, configPath, flags }: ParsedArgs): Pro
       'geekity plugin needs a plugins folder: set GEEKITY_PLUGINS_DIR, or pluginsDir in the config.',
     );
   }
+  const {
+    ADD_WITH_COMMAND,
+    addPlugin,
+    installedFolders,
+    parsePackageSpec,
+    pluginRegistry,
+    removePlugin,
+    requirementNotes,
+  } = await import('./plugins/install.ts');
   const registry = pluginRegistry(process.env);
 
   if (action === 'upgrade') {
+    const { upgradePlugins } = await import('./plugins/upgrade.ts');
     const report = await upgradePlugins({
       pluginsDir,
       registry,
@@ -1373,7 +1370,7 @@ async function pluginFolderCommand({ args, configPath, flags }: ParsedArgs): Pro
       check: flags['check'] === true,
       addAdvice: ADD_WITH_COMMAND,
     });
-    process.stdout.write(upgradeReportText(report));
+    process.stdout.write(await upgradeReportText(report));
     const reloaded = report.plugins.some((plugin) => plugin.status === 'upgraded')
       ? await reloadRunningSite(config)
       : true;
@@ -1434,7 +1431,8 @@ async function reloadRunningSite(config: ResolvedConfig): Promise<boolean> {
 const PLUGIN_USAGE =
   'geekity plugin needs add <package>[@version], remove <package> or upgrade [<package>...].';
 
-function upgradeReportText(report: UpgradeReport): string {
+async function upgradeReportText(report: UpgradeReport): Promise<string> {
+  const { describeUpgrade } = await import('./plugins/upgrade.ts');
   const lines = report.plugins.map((plugin) => `${plugin.name}: ${describeUpgrade(plugin)}`);
   for (const { name, notes } of report.unmet) {
     lines.push(...notes.map((note) => `${name}: ${note}`));
@@ -1490,6 +1488,9 @@ async function userCommand({
   }
 
   const config = await loadResolvedConfig(configPath);
+  const { adminStoreOwning, openAdminDatabase } = await import('./store/admin-store.ts');
+  const { migrateUsersToFile } = await import('./admin/legacy-migrations.ts');
+  const { createUser, DuplicateUsernameError } = await import('./site/users.ts');
   const adminDb = openAdminDatabase(config.dataDir, config.now);
   migrateUsersToFile(adminDb, config.dataDir);
   const admin = adminStoreOwning(adminDb, databaseFile(config.dataDir), config.now);
@@ -1631,6 +1632,10 @@ async function pluginCommand(argv: readonly string[]): Promise<number> {
     withoutConfig(argv).slice(found.command.words.length),
     found.command,
   );
+  const { adminStoreOwning, openAdminDatabase } = await import('./store/admin-store.ts');
+  const { migrateUsersToFile } = await import('./admin/legacy-migrations.ts');
+  const { migrateCommentEmails, migrateCommentKeys } = await import('./comments/migrations.ts');
+  const { pluginSite } = await import('./plugins/site.ts');
   const adminDb = openAdminDatabase(config.dataDir, config.now);
   migrateUsersToFile(adminDb, config.dataDir);
   const admin = adminStoreOwning(adminDb, databaseFile(config.dataDir), config.now);

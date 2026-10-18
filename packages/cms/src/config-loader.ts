@@ -3,9 +3,9 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { settleConfig } from './cms/boot.ts';
-import { resolveConfig } from './config.ts';
+import { isResolvedConfig, resolveConfig } from './config.ts';
 import type { GeekityConfig, ResolvedConfig } from './config.ts';
+import { createSettings, SITE } from './site/namespace.ts';
 
 export const CONFIG_FILENAMES = ['geekity.config.ts', 'geekity.config.js', 'geekity.config.mjs'];
 
@@ -58,6 +58,24 @@ export async function loadResolvedConfig(
   adjust: (config: GeekityConfig) => GeekityConfig = (config) => config,
 ): Promise<ResolvedConfig> {
   return await settleConfig(resolveConfig(adjust(await loadConfig(process.cwd(), configPath))));
+}
+
+/**
+ * A config with the base URL the site's settings hold, when neither the
+ * environment nor the config file sets one: `site.base_url`, which the
+ * General settings page writes to `url` in `content/_data/site.json`.
+ *
+ * It is settled once, before the CMS is built, rather than per request.
+ * `geekity` settles every config it loads; a site that builds its own CMS and
+ * keeps its base URL in the settings awaits this first.
+ */
+export async function settleConfig(
+  config: GeekityConfig | ResolvedConfig,
+): Promise<ResolvedConfig> {
+  const resolved = isResolvedConfig(config) ? config : resolveConfig(config);
+  if (resolved.baseUrlSource !== 'default') return resolved;
+  const stored = await createSettings({ config: resolved }).get(SITE.base_url);
+  return stored === '' ? resolved : Object.freeze({ ...resolved, baseUrl: stored });
 }
 
 /**

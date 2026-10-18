@@ -24,7 +24,7 @@ import { readTar } from '../files/tar.ts';
 import type { TarEntry } from '../files/tar.ts';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { Plugin } from '../plugin.ts';
-import { sitePluginRegistry } from '../plugins/site.ts';
+import { sitePluginRegistry } from '../plugins/site-registry.ts';
 import { createSettings } from '../site/namespace.ts';
 import { FEDERATION_QUEUE_TABLE } from '../store/queue-database.ts';
 import { exportFileName, pendingWork, planSiteExport, writeSiteExport } from './site-export.ts';

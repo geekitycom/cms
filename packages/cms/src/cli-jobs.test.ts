@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import { cleanupTemporaryDirs, PACKAGE_ROOT, temporaryDir } from './__testing__/cli.ts';
+import { cleanupTemporaryDirs, CLI, temporaryDir } from './__testing__/cli.ts';
 import { nextEvent } from './__testing__/wait.ts';
 import { createFileRecords } from './jobs/file-records.ts';
 import type { JobStatus } from './jobs/types.ts';
@@ -15,8 +15,6 @@ import { askToReload, controlSocketPath, isServing } from './supervisor/control.
 
 after(cleanupTemporaryDirs);
 
-const CLI = path.join(PACKAGE_ROOT, 'src', 'cli.ts');
-const TSX = import.meta.resolve('tsx');
 const CONFIG = path.join(import.meta.dirname, 'jobs', '__fixtures__', 'serve-config.ts');
 const CLAIM = path.join(import.meta.dirname, 'jobs', '__fixtures__', 'claim-process.ts');
 const PROCESS_EVENT_TIMEOUT_MS = 90_000;
@@ -143,7 +141,7 @@ function serve(site: Site): { child: ChildProcess; exited: Promise<number | null
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !name.startsWith('GEEKITY_') && name !== 'PORT'),
   );
-  const child = spawn(process.execPath, ['--import', TSX, CLI, 'serve'], {
+  const child = spawn(process.execPath, [CLI, 'serve'], {
     cwd: site.directory,
     env: {
       ...inherited,
@@ -162,14 +160,10 @@ function serve(site: Site): { child: ChildProcess; exited: Promise<number | null
 const pidOf = (line: string) => Number(line.split(' ').at(-1));
 
 function runInCli(site: Site): { child: ChildProcess; output: Promise<string> } {
-  const child = spawn(
-    process.execPath,
-    ['--import', TSX, CLAIM, path.join(site.dataDir, 'jobs.json'), site.jobId],
-    {
-      env: { ...process.env, GEEKITY_TEST_JOB_DIR: site.directory },
-      stdio: ['ignore', 'pipe', 'ignore'],
-    },
-  );
+  const child = spawn(process.execPath, [CLAIM, path.join(site.dataDir, 'jobs.json'), site.jobId], {
+    env: { ...process.env, GEEKITY_TEST_JOB_DIR: site.directory },
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
   running.push(child);
   let printed = '';
   child.stdout?.setEncoding('utf8').on('data', (chunk: string) => (printed += chunk));

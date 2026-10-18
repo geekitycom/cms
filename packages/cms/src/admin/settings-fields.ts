@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { LANGUAGE_TAG_PATTERN } from '../content/language.ts';
 import { isLocationSharing, LOCATION_SHARING } from '../content/location.ts';
-import { parseIconSetting } from '../images/icons.ts';
+import { parseIconSetting } from '../images/icon-setting.ts';
 import { sourceFile } from '../images/paths.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import { isFileSync } from '../util/files.ts';

@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { execFile as execFileCallback } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 
-import { cleanupTemporaryDirs, PACKAGE_ROOT, temporaryDir } from './__testing__/cli.ts';
+import { CLI, cleanupTemporaryDirs, PACKAGE_ROOT, temporaryDir } from './__testing__/cli.ts';
 import { parseArgs, readPassword } from './cli.ts';
 import { findSiteTsx, loadConfig, registerTypeScriptLoader } from './config-loader.ts';
 
@@ -378,15 +378,41 @@ describe('the geekity bin', () => {
     await fs.symlink(PACKAGE_ROOT, link, 'dir');
 
     try {
-      const { stdout } = await execFile(
-        process.execPath,
-        ['--import', 'tsx', path.join(link, 'src', 'cli.ts'), '--version'],
-        // Run from the package root so tsx resolves; only the script path is symlinked.
-        { cwd: PACKAGE_ROOT },
-      );
+      const { stdout } = await execFile(process.execPath, [
+        path.join(link, 'dist', 'cli.js'),
+        '--version',
+      ]);
       assert.match(stdout.trim(), /^\d+\.\d+\.\d+/);
     } finally {
       await fs.rm(linkDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('starting geekity', () => {
+  const LOADED_MODULES = path.join(import.meta.dirname, '__testing__', 'loaded-modules.ts');
+
+  it('reads settings without loading the CMS core, sharp or Fedify (TASK-374)', async () => {
+    const site = await temporaryDir('geekity-startup-');
+    const { stderr } = await execFile(
+      process.execPath,
+      ['--import', LOADED_MODULES, CLI, 'settings', 'list'],
+      { cwd: site },
+    );
+    const line = stderr.split('\n').find((one) => one.startsWith('loaded-modules '));
+    const loaded = JSON.parse(line?.slice('loaded-modules '.length) ?? '[]') as string[];
+
+    assert.ok(
+      loaded.some((url) => url.endsWith('/dist/cli.js')),
+      'the hook saw the CLI load',
+    );
+    const heavy = loaded.filter(
+      (url) =>
+        url.endsWith('/dist/index.js') ||
+        url.endsWith('/dist/cms/create.js') ||
+        url.includes('/node_modules/sharp/') ||
+        url.includes('/node_modules/@fedify/'),
+    );
+    assert.deepEqual(heavy, []);
   });
 });

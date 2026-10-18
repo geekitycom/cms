@@ -5,6 +5,7 @@ import sharp from 'sharp';
 
 import { UPLOAD_ASSET_PREFIX, VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
 import { writeFileAtomically } from '../files/atomic.ts';
+import { ICON_SOURCES, parseIconSetting } from './icon-setting.ts';
 import { derivedDir, sourceFile, sourceVersion, versioned } from './paths.ts';
 import type { ImageConfig } from './paths.ts';
 
@@ -109,27 +110,6 @@ const MANIFEST_ICONS: readonly { file: string; size: number; maskable: boolean }
  * a circle of 40% radius, so the picture is drawn 80% wide in the middle.
  */
 const MASKABLE_SAFE_ZONE = 0.8;
-
-/**
- * The extensions an icon may be derived from.
- *
- * Wider than the responsive variants' set — an SVG has no pixels to resize but
- * rasterises to a square perfectly well, and only the first frame of a GIF was
- * ever going to be a favicon — and narrower than "anything sharp might open",
- * so a site whose icon setting points at a PDF links no icons rather than
- * three that 404.
- */
-const ICON_SOURCES: ReadonlySet<string> = new Set([
-  '.avif',
-  '.gif',
-  '.jpeg',
-  '.jpg',
-  '.png',
-  '.svg',
-  '.tif',
-  '.tiff',
-  '.webp',
-]);
 
 /** Whether a derived filename names an icon this site offers. */
 export function isDerivedIcon(file: string): boolean {
@@ -330,24 +310,6 @@ function squareSizes(size: number): string {
 
 function isSvg(source: string): boolean {
   return path.extname(source).toLowerCase() === '.svg';
-}
-
-export function parseIconSetting(
-  setting: string,
-): { source: string } | { problem: 'not-an-upload' | 'not-an-image' } {
-  if (!setting.startsWith(UPLOAD_ASSET_PREFIX)) return { problem: 'not-an-upload' };
-
-  const relative = setting.slice(UPLOAD_ASSET_PREFIX.length);
-  if (relative === '' || relative.includes('..')) return { problem: 'not-an-upload' };
-  if (!ICON_SOURCES.has(path.extname(relative).toLowerCase())) return { problem: 'not-an-image' };
-
-  // The setting holds a URL and the lookup wants a path, so whatever the
-  // upload endpoint encoded comes off again here.
-  try {
-    return { source: relative.split('/').map(decodeURIComponent).join('/') };
-  } catch {
-    return { problem: 'not-an-upload' };
-  }
 }
 
 function iconSource(setting: string | undefined): string | undefined {

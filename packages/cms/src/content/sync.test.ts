@@ -6,8 +6,10 @@ import { after, afterEach, describe, it } from 'node:test';
 
 import { openContentStore } from './sqlite/open.ts';
 import type { ContentStore } from './store.ts';
-import { createContentSync, debounceFor } from './sync.ts';
-import type { ContentSync, DocumentChange, WatchDebounce } from './sync.ts';
+import { createContentSync } from './sync.ts';
+import type { ContentSync, DocumentChange } from './sync.ts';
+import { debounceFor } from './watch-debounce.ts';
+import type { WatchDebounce } from './watch-debounce.ts';
 import { heldDebounce } from '../__testing__/debounce.ts';
 import { nextEvent } from '../__testing__/wait.ts';
 import { liveWatchers } from '../__testing__/watchers.ts';
