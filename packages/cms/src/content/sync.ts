@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { watch as watchTree } from 'node:fs';
-import type { FSWatcher } from 'node:fs';
 import { mkdir, readdir, readFile, rmdir } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -19,6 +17,8 @@ import { replyTarget } from './post-type.ts';
 import { DuplicatePermalinkError, TRASH_DIRECTORY } from './store.ts';
 import type { CatalogReader, DocumentLookup, IndexClock, IndexWriter } from './store.ts';
 import { isServed } from './served.ts';
+import { watchTree } from './tree-watch.ts';
+import type { TreeWatcher } from './tree-watch.ts';
 
 /** File extensions the sync treats as documents. */
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
@@ -379,7 +379,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
   const pending = new Map<string, () => void>();
   const debounce = options.debounce ?? defaultWatchDebounce;
   const queue = createSerialQueue();
-  let watcher: FSWatcher | undefined;
+  let watcher: TreeWatcher | undefined;
 
   const settledListeners = new Set<() => unknown>();
   let unsettled = false;
@@ -444,37 +444,25 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
     return [...gone, ...onDisk];
   }
 
-  /**
-   * Watch the whole content tree with one recursive watch.
-   *
-   * One watch for the tree, rather than one per directory, is what lets a new
-   * directory's documents be reported at all on macOS: there every directory
-   * watch in the process shares one FSEvents stream, and adding a watch
-   * restarts that stream, deaf to anything that happens while it does.
-   */
   async function startWatching(): Promise<void> {
     if (watcher !== undefined) return;
     await mkdir(contentDir, { recursive: true });
 
-    const started = watchTree(contentDir, {
-      recursive: true,
-      persistent: true,
-      ignore: isIgnored,
-    });
+    const started = watchTree(contentDir, { ignore: isIgnored });
     watcher = started;
 
-    started.on('change', (_type: string, filename: string | null) => {
-      if (filename === null) {
+    started.on('change', (_type: string, relativePath: string | null) => {
+      if (relativePath === null) {
         handle('');
         return;
       }
-      const relativePath = filename.replace(/\\/g, '/');
       if (!path.basename(relativePath).startsWith(PROBE_PREFIX)) handle(relativePath);
     });
     started.on('error', (error: unknown) => {
       logger.warn(`Content watcher error: ${messageOf(error)}`);
     });
 
+    await started.ready;
     if (!(await hearsChanges(started))) {
       logger.warn(
         `The content watcher reported nothing for ${PROBE_DEADLINE_MS / 1000}s, so a file changed while the site runs may not show until it restarts.`,
@@ -487,7 +475,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
    * starts reporting a moment after the watch returns, and a change made
    * before then is never reported, so the boot scan waits for this.
    */
-  async function hearsChanges(started: FSWatcher): Promise<boolean> {
+  async function hearsChanges(started: TreeWatcher): Promise<boolean> {
     const deadline = Date.now() + PROBE_DEADLINE_MS;
     while (Date.now() < deadline) {
       const probe = `${PROBE_PREFIX}${randomUUID()}`;
