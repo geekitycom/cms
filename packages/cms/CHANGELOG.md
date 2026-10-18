@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.33.0](https://github.com/geekitycom/cms/compare/v0.32.1...v0.33.0) (2026-10-18)
+
+
+### Features
+
+* **cms:** add @geekity/cms/config so a site config loads without the whole CMS ([b61a063](https://github.com/geekitycom/cms/commit/b61a063a29a80dd51be7c5230c3df49f73aa582c))
+* **cms:** attach a read post's uploaded cover when it federates ([9aafc74](https://github.com/geekitycom/cms/commit/9aafc7445156e9db7a965dc763e4b5c7f6dcf8ca))
+
+
+### Bug Fixes
+
+* **cms:** even the gaps around a short breadcrumb link ([bcc2dca](https://github.com/geekitycom/cms/commit/bcc2dcad43e9c19232800903e38da4b337ab86d7))
+* **cms:** keep watching a content file the CMS has replaced on Linux ([29e32c2](https://github.com/geekitycom/cms/commit/29e32c2fe85cd32f50d52f2fe08e6cd47087ae8f))
+* **cms:** report a config whose imports fail instead of ignoring it ([503e483](https://github.com/geekitycom/cms/commit/503e483c650bfb7827371eef653f8d28a4ce78c8))
+* **cms:** report files in a new directory and watch existing ones before start ([c157715](https://github.com/geekitycom/cms/commit/c1577154e3a1480e2da9163969f930151b1f8648))
+
+
+### Performance Improvements
+
+* **cms:** start the geekity command without loading the whole CMS ([ccfe4ad](https://github.com/geekitycom/cms/commit/ccfe4adea1f628f97cc0fe3dcb7eb8ff5d0db16c))
+
 ## [0.32.1](https://github.com/geekitycom/cms/compare/v0.32.0...v0.32.1) (2026-10-15)
 
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.5.0...plugin-wordpress-v0.6.0) (2026-10-18)
+
+
+### Features
+
+* **cms:** add @geekity/cms/config so a site config loads without the whole CMS ([b61a063](https://github.com/geekitycom/cms/commit/b61a063a29a80dd51be7c5230c3df49f73aa582c))
+
+
+### Bug Fixes
+
+* **plugin-wordpress:** turn a Jetpack contact form into contact: true ([c06d552](https://github.com/geekitycom/cms/commit/c06d552b0544ef1eb86edd3ba78d506f787970e2))
+
 ## [0.5.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.4.0...plugin-wordpress-v0.5.0) (2026-10-15)
 
 
