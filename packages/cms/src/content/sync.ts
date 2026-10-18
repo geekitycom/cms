@@ -462,6 +462,7 @@ export function createContentSync(options: CreateContentSyncOptions): ContentSyn
       logger.warn(`Content watcher error: ${messageOf(error)}`);
     });
 
+    await started.ready;
     if (!(await hearsChanges(started))) {
       logger.warn(
         `The content watcher reported nothing for ${PROBE_DEADLINE_MS / 1000}s, so a file changed while the site runs may not show until it restarts.`,

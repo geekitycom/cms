@@ -14,6 +14,8 @@ export interface TreeWatcher {
   on(event: 'change', listener: TreeChangeListener): this;
   on(event: 'error', listener: (error: unknown) => void): this;
   off(event: 'change', listener: TreeChangeListener): this;
+  /** Settles once every directory that was there at the start is watched. */
+  readonly ready: Promise<void>;
   close(): void;
 }
 
@@ -43,6 +45,8 @@ export function watchTree(root: string, options: WatchTreeOptions): TreeWatcher 
 }
 
 class Tree extends EventEmitter implements TreeWatcher {
+  ready: Promise<void> = Promise.resolve();
+
   constructor(private readonly stop: () => void) {
     super();
   }
@@ -107,7 +111,16 @@ function watchEachDirectory(root: string, options: WatchTreeOptions): TreeWatche
     });
   }
 
-  async function watchDirectoriesUnder(directory: string, ino: number): Promise<void> {
+  /**
+   * `report` names what is already inside a directory that appeared while
+   * watching: its files were written before its watch existed, so no event
+   * of their own will come, as Node's recursive watcher reported them.
+   */
+  async function watchDirectoriesUnder(
+    directory: string,
+    ino: number,
+    report: boolean,
+  ): Promise<void> {
     watchDirectory(directory, ino);
     let entries;
     try {
@@ -118,11 +131,14 @@ function watchEachDirectory(root: string, options: WatchTreeOptions): TreeWatche
     }
     for (const entry of entries) {
       if (closed) return;
-      if (!entry.isDirectory()) continue;
       const child = path.join(directory, entry.name);
       if (options.ignore(relativeTo(child))) continue;
+      if (!entry.isDirectory()) {
+        if (report) emit('rename', relativeTo(child));
+        continue;
+      }
       const found = await statIfPresent(child);
-      if (found?.isDirectory()) await watchDirectoriesUnder(child, found.ino);
+      if (found?.isDirectory()) await watchDirectoriesUnder(child, found.ino, report);
     }
   }
 
@@ -150,7 +166,7 @@ function watchEachDirectory(root: string, options: WatchTreeOptions): TreeWatche
         return;
       }
     } else if (found.isDirectory()) {
-      await watchDirectoriesUnder(absolute, found.ino);
+      await watchDirectoriesUnder(absolute, found.ino, true);
     }
     emit(type, relativePath);
   }
@@ -172,8 +188,6 @@ function watchEachDirectory(root: string, options: WatchTreeOptions): TreeWatche
     }
   }
 
-  const rootIno = lstatSync(root).ino;
-  watchDirectory(root, rootIno);
-  void watchDirectoriesUnder(root, rootIno);
+  tree.ready = watchDirectoriesUnder(root, lstatSync(root).ino, false);
   return tree;
 }
