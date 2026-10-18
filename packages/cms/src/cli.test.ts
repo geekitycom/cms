@@ -448,13 +448,12 @@ describe('starting geekity', () => {
   const LOADED_MODULES = path.join(import.meta.dirname, '__testing__', 'loaded-modules.ts');
 
   async function settingsListLoads(site: string): Promise<string[]> {
-    const { stderr } = await execFile(
-      process.execPath,
-      ['--import', LOADED_MODULES, CLI, 'settings', 'list'],
-      { cwd: site },
-    );
-    const line = stderr.split('\n').find((one) => one.startsWith('loaded-modules '));
-    const loaded = JSON.parse(line?.slice('loaded-modules '.length) ?? '[]') as string[];
+    const list = path.join(await temporaryDir('geekity-loaded-'), 'modules.json');
+    await execFile(process.execPath, ['--import', LOADED_MODULES, CLI, 'settings', 'list'], {
+      cwd: site,
+      env: { ...process.env, GEEKITY_TEST_LOADED_MODULES: list },
+    });
+    const loaded = JSON.parse(await fs.readFile(list, 'utf8')) as string[];
     assert.ok(
       loaded.some((url) => url.endsWith('/dist/cli.js')),
       'the hook saw the CLI load',
