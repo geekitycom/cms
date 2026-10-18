@@ -10,7 +10,6 @@ import { promisify } from 'node:util';
 import { withLockFile } from './lock-file.ts';
 
 const execFile = promisify(execFileCallback);
-const TSX = import.meta.resolve('tsx');
 const OTHER_PROCESS_TIMEOUT_MS = 30_000;
 const OTHER_PROCESS = path.join(import.meta.dirname, '__fixtures__', 'lock-process.ts');
 
@@ -66,7 +65,7 @@ describe('the records lock file', () => {
 
     await Promise.all(
       Array.from({ length: 6 }, () =>
-        execFile(process.execPath, ['--import', TSX, OTHER_PROCESS, lock, log, '4'], {
+        execFile(process.execPath, [OTHER_PROCESS, lock, log, '4'], {
           timeout: OTHER_PROCESS_TIMEOUT_MS,
         }),
       ),

@@ -378,12 +378,10 @@ describe('the geekity bin', () => {
     await fs.symlink(PACKAGE_ROOT, link, 'dir');
 
     try {
-      const { stdout } = await execFile(
-        process.execPath,
-        ['--import', 'tsx', path.join(link, 'src', 'cli.ts'), '--version'],
-        // Run from the package root so tsx resolves; only the script path is symlinked.
-        { cwd: PACKAGE_ROOT },
-      );
+      const { stdout } = await execFile(process.execPath, [
+        path.join(link, 'dist', 'cli.js'),
+        '--version',
+      ]);
       assert.match(stdout.trim(), /^\d+\.\d+\.\d+/);
     } finally {
       await fs.rm(linkDir, { recursive: true, force: true });

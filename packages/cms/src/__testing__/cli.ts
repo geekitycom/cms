@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { execFile as execFileCallback } from 'node:child_process';
 
 /**
- * What the CLI's tests need in common: a way to run `geekity` from source, a
+ * What the CLI's tests need in common: a way to run the built `geekity`, a
  * scratch directory that goes away at the end of the file, and the two or
  * three reads every command's tests do afterwards.
  *
@@ -20,14 +20,7 @@ const execFile = promisify(execFileCallback);
 /** The root of `@geekity/cms`, the directory holding its `package.json`. */
 export const PACKAGE_ROOT = path.resolve(import.meta.dirname, '..', '..');
 
-/** The bin, as source. `dist/cli.js` is what a published shim runs instead. */
-const CLI = path.join(PACKAGE_ROOT, 'src', 'cli.ts');
-
-/**
- * tsx, as an absolute URL. The CLI is run from a temporary directory, where a
- * bare `--import tsx` has nothing to resolve against.
- */
-const TSX = import.meta.resolve('tsx');
+export const CLI = path.join(PACKAGE_ROOT, 'dist', 'cli.js');
 
 /** What running the bin did. Non-zero exits are results here, not throws. */
 export interface CliRun {
@@ -37,7 +30,7 @@ export interface CliRun {
 }
 
 /**
- * Run `geekity` from source, the way a bin shim runs `dist/cli.js`.
+ * Run `geekity` the way a bin shim does.
  *
  * `stdin`, when given, is written to the child and the pipe is closed, which
  * is how a password reaches `user add` without a terminal. `env` is added to
@@ -50,7 +43,7 @@ export async function runCli(
   env: Readonly<Record<string, string>> = {},
 ): Promise<CliRun> {
   try {
-    const running = execFile(process.execPath, ['--import', TSX, CLI, ...args], {
+    const running = execFile(process.execPath, [CLI, ...args], {
       cwd,
       env: { ...process.env, ...env },
     });

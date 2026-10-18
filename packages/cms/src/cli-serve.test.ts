@@ -4,18 +4,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
-import {
-  cleanupTemporaryDirs,
-  exists,
-  PACKAGE_ROOT,
-  readJson,
-  temporaryDir,
-} from './__testing__/cli.ts';
+import { cleanupTemporaryDirs, CLI, exists, readJson, temporaryDir } from './__testing__/cli.ts';
 
 after(cleanupTemporaryDirs);
-
-const CLI = path.join(PACKAGE_ROOT, 'src', 'cli.ts');
-const TSX = import.meta.resolve('tsx');
 
 /** A `geekity serve` that is up, and how to stop it. */
 interface Serving {
@@ -34,7 +25,7 @@ async function serve(cwd: string, env: Record<string, string>): Promise<Serving>
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !name.startsWith('GEEKITY_') && name !== 'PORT'),
   );
-  const child = spawn(process.execPath, ['--import', TSX, CLI, 'serve'], {
+  const child = spawn(process.execPath, [CLI, 'serve'], {
     cwd,
     env: { ...inherited, GEEKITY_PORT: '0', GEEKITY_WATCH: 'false', ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
