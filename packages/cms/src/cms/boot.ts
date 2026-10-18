@@ -28,7 +28,7 @@ import {
 } from '../federation/index.ts';
 import type { InstalledPlugin, PluginRegistry } from '../plugins/registry.ts';
 import { migratePluginSettings } from '../plugins/migrate-settings.ts';
-import { sitePluginRegistry } from '../plugins/site.ts';
+import { sitePluginRegistry } from '../plugins/site-registry.ts';
 import { latchDevModeOn } from '../settings/dev-mode.ts';
 import { createSettings, SITE } from '../site/namespace.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
@@ -128,24 +128,6 @@ export function boot(
   }
 
   return { resolved, plugins, store, admin, commentRecords, settings };
-}
-
-/**
- * A config with the base URL the site's settings hold, when neither the
- * environment nor the config file sets one: `site.base_url`, which the
- * General settings page writes to `url` in `content/_data/site.json`.
- *
- * It is settled once, before the CMS is built, rather than per request.
- * `geekity` settles every config it loads; a site that builds its own CMS and
- * keeps its base URL in the settings awaits this first.
- */
-export async function settleConfig(
-  config: GeekityConfig | ResolvedConfig,
-): Promise<ResolvedConfig> {
-  const resolved = isResolvedConfig(config) ? config : resolveConfig(config);
-  if (resolved.baseUrlSource !== 'default') return resolved;
-  const stored = await createSettings({ config: resolved }).get(SITE.base_url);
-  return stored === '' ? resolved : Object.freeze({ ...resolved, baseUrl: stored });
 }
 
 function withCommentChecker(resolved: ResolvedConfig, settings: SettingsRegistry): ResolvedConfig {

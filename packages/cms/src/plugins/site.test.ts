@@ -13,7 +13,8 @@ import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { PluginComment, PluginHost, PluginSite } from '../plugin.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
 import { createSettings } from '../site/namespace.ts';
-import { pluginSite, sitePluginRegistry } from './site.ts';
+import { sitePluginRegistry } from './site-registry.ts';
+import { pluginSite } from './site.ts';
 
 const roots: string[] = [];
 const stores: AdminStore[] = [];

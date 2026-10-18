@@ -86,5 +86,5 @@ export type {
   DocumentChangeType,
   SyncLogger,
   SyncResult,
-  WatchDebounce,
 } from './sync.ts';
+export type { WatchDebounce } from './watch-debounce.ts';

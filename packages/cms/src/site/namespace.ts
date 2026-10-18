@@ -10,7 +10,7 @@ import {
   taxonomyRedirectsOf,
 } from '../content/taxonomy.ts';
 import type { TaxonomyRedirect } from '../content/taxonomy.ts';
-import { parseIconSetting } from '../images/icons.ts';
+import { parseIconSetting } from '../images/icon-setting.ts';
 import { sourceFile } from '../images/paths.ts';
 import { MAIL_PROVIDERS } from '../mail/provider.ts';
 import { declareNamespace } from '../settings/declare.ts';
