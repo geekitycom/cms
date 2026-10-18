@@ -93,10 +93,12 @@ at all, publishes with a warning that names each image. If the site sets
 `requireAltText`, publishing is refused instead and nothing is written. Drafts
 are never checked.
 
-A federated post carries each picture from `content/uploads` as an `Image`
-attachment, including a read post's cover. The attachment's `name` is the alt
-text. Mastodon reads the description from `name`. Decorative pictures are left
-out.
+A federated post carries its pictures as `Image` attachments. The attachment's
+`name` is the alt text, and Mastodon reads the description from `name`. The
+post's photos are always attached, because they are the post: a decorative
+photo is attached with no `name`, and a photo from another site with no media
+type. A read post's cover and the images in a post's text are attached only
+when they are uploads the library does not mark decorative.
 
 A picture's row in the library has three alt-text controls:
 

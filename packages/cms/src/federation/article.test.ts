@@ -586,6 +586,29 @@ describe('photos as attachments (TASK-166 AC #4)', () => {
       { type: 'Image', url: 'https://cdn.example/cat.webp', name: 'A cat on a wall' },
     ]);
   });
+
+  it('attaches a photo the library marks decorative, with no name, since the photo is the post', async () => {
+    const object = await objectAt(
+      {
+        '_data/media.json': JSON.stringify({ '2026/09/rule.png': { decorative: true } }),
+        'posts/2026-09-02-rule.md': rawPost(
+          [
+            "date: '2026-09-02T09:00:00Z'",
+            'permalink: /2026/09/rule/',
+            'photo: /uploads/2026/09/rule.png',
+          ],
+          'A rule.',
+        ),
+      },
+      '/2026/09/rule/',
+    );
+
+    assert.deepEqual(object['attachment'], {
+      type: 'Image',
+      mediaType: 'image/png',
+      url: `${BASE_URL}/uploads/2026/09/rule.png`,
+    });
+  });
 });
 
 describe('the quote policy (TASK-125 AC #1)', () => {
