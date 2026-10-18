@@ -146,6 +146,14 @@ language is the post's `lang` front matter when it names one, and the site's
 `language` otherwise. Clients can filter and translate by it. Mastodon reads a
 status's language from that key.
 
+Mastodon strips `img` from `content` and shows only attachments, so a post's
+pictures are also `Image` attachments, each with its alt text as `name`. The
+post's photos come first, then a read post's cover, then the images in its
+text. A cover or a text image is attached only when it is an upload the
+library does not mark decorative. One from another site is left out, because
+the site cannot check its media type. The cover also stays in the read line in
+`content`, and the read is still a `Note`. See [Alt text](media.md#alt-text).
+
 To choose the type for one post, set it in the front matter:
 
 ```yaml
