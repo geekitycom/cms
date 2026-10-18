@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-12 17:49'
-updated_date: '2026-10-18 12:55'
+updated_date: '2026-10-18 13:42'
 labels: []
 milestone: m-37
 dependencies:
@@ -48,4 +48,10 @@ CI baseline before this task, packages/cms pnpm test duration_ms on main's test 
 
 <!-- SECTION:NOTES:BEGIN -->
 Measured 2026-10-18 on the dev Mac before stage 1. One spawn of --help: tsx 0.52 s, dist with plain node 0.28 s. Node's own type stripping cannot run src/cli.ts (init.ts uses a parameter property). Six suites alone, tsx vs dist: settings 18 s vs 11 s, plugin upgrade 16 vs 9, import 11 vs 8, user 6 vs 4, maintenance 8 vs 5, rebuild 6 vs 4 (27 to 44% faster). tsc -p tsconfig.build.json takes about 1 s.
+
+Stage 1 on CI (PR #200, run 39130926903): packages/cms 398.8 s (attempt 1), 378.0 s (attempt 2). Per suite against the CI baseline: admin jobs under serve 97.9 -> 83.9 s, serve supervised 76.4 -> 51.5, settings 55.1 -> 30.5, plugin upgrade 42.9 -> 26.5, import 33.9 -> 20.8, plugin add 30.7 -> 19.0, serve 26.9 -> 14.1, maintenance 20.9 -> 12.4, user add 19.7 -> 11.1, a command used wrongly 18.3 -> 10.7, rebuild 15.1 -> 8.8, resend 14.7 -> 9.3, strip-metadata 14.1 -> 8.5, a plugin command 12.7 -> 7.5, dev-mode 12.2 -> 7.1, init 11.1 -> 6.4. All 33 to 48% faster except the jobs suite.
+Jobs suite: the TASK-400 AC #2 test took 61 s because its fail-boot fixture plugin hung every start while its marker existed, including the old worker's plugin restart on resume, so close() waited behind it until SHUTDOWN_MS (60 s) killed the worker. Found by timing each service's stop and settle: the plugin registry's stop never returned. Fixed in the fixture (it removes the marker when it fails a boot): test 61 s -> 1.1 s, suite 72 s -> 11.5 s locally. Not a product bug: a plugin whose start never ends holding shutdown until SHUTDOWN_MS is the designed backstop.
+Stage 2: each spawn of dist/cli.js spends about 0.25 s loading modules (bare node 0.01 s, --help 0.27 s). cms/boot.js costs 0.22 s and every command loads it through config-loader for settleConfig, which needs only resolveConfig and the settings registry. Plan: move settleConfig to a light module and import heavy modules inside the commands that use them.
+
+Stage 1 CI, three runs of the test job on PR #200 head 55745472: 398.8 s, 378.0 s, 385.4 s; median 385.4 s against the baseline median 455.2 s (15% lower). Stage 2 and the fixture fix are measured separately.
 <!-- SECTION:NOTES:END -->
