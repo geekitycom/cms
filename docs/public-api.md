@@ -1,10 +1,12 @@
 # The package API
 
-`@geekity/cms` has three entry points:
+`@geekity/cms` has four entry points:
 
-- `@geekity/cms` is for a site's own code: its `geekity.config.ts`, a
-  `server.ts` entry file, and its tests. This page lists everything it
-  exports.
+- `@geekity/cms` is for a site's own code: a `server.ts` entry file and its
+  tests. This page lists everything it exports.
+- `@geekity/cms/config` is for a site's `geekity.config.ts`. It exports
+  `defineConfig` and the config types from the root entry without loading the
+  rest of the CMS. [Configuration](configuration.md) describes it.
 - `@geekity/cms/plugin` is for plugins. [Plugins and hooks](plugins.md#writing-a-plugin)
   describes it.
 - `@geekity/cms/testing` is for a plugin's tests. It exports parts of the

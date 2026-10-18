@@ -1,4 +1,4 @@
-import { defineConfig } from '@geekity/cms';
+import { defineConfig } from '@geekity/cms/config';
 
 export default defineConfig({
   port: 3000,

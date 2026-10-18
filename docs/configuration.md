@@ -3,7 +3,7 @@
 Declare config in `geekity.config.ts`. `defineConfig` type checks it.
 
 ```ts
-import { defineConfig } from '@geekity/cms';
+import { defineConfig } from '@geekity/cms/config';
 
 export default defineConfig({
   port: 3000,
@@ -18,6 +18,13 @@ export default defineConfig({
   trustProxy: false,
 });
 ```
+
+`@geekity/cms/config` exports `defineConfig` and the config types without
+loading the rest of the CMS. Every `geekity` command reads the config, and a
+command such as `geekity settings list` does not need the CMS core, sharp or
+Fedify. A config that imports `defineConfig` from `@geekity/cms` still works,
+but it loads the whole CMS on every command, which adds about a quarter of a
+second.
 
 Every field is optional. Relative directories resolve against the working
 directory. Absolute directories are used as given.
@@ -391,7 +398,7 @@ same file needs a table of its own:
 ```ts
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteMessageQueue } from '@fedify/sqlite';
-import { defineConfig } from '@geekity/cms';
+import { defineConfig } from '@geekity/cms/config';
 
 export default defineConfig({
   jobs: {

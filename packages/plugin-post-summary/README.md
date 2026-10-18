@@ -18,7 +18,7 @@ pnpm add @geekity/plugin-llm @geekity/plugin-post-summary
 ```
 
 ```ts
-import { defineConfig } from '@geekity/cms';
+import { defineConfig } from '@geekity/cms/config';
 import llm from '@geekity/plugin-llm';
 import postSummary from '@geekity/plugin-post-summary';
 

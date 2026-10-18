@@ -20,7 +20,7 @@ pnpm add @geekity/plugin-llm
 ```
 
 ```ts
-import { defineConfig } from '@geekity/cms';
+import { defineConfig } from '@geekity/cms/config';
 import llm from '@geekity/plugin-llm';
 
 export default defineConfig({

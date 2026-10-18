@@ -26,7 +26,7 @@ pnpm add @geekity/plugin-wordpress
 ```
 
 ```ts
-import { defineConfig } from '@geekity/cms';
+import { defineConfig } from '@geekity/cms/config';
 import wordpress from '@geekity/plugin-wordpress';
 
 export default defineConfig({

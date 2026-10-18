@@ -7,7 +7,13 @@ import { promisify } from 'node:util';
 import { execFile as execFileCallback } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 
-import { CLI, cleanupTemporaryDirs, PACKAGE_ROOT, temporaryDir } from './__testing__/cli.ts';
+import {
+  CLI,
+  cleanupTemporaryDirs,
+  PACKAGE_ROOT,
+  runCli,
+  temporaryDir,
+} from './__testing__/cli.ts';
 import { parseArgs, readPassword } from './cli.ts';
 import { findSiteTsx, loadConfig, registerTypeScriptLoader } from './config-loader.ts';
 
@@ -22,6 +28,21 @@ import { findSiteTsx, loadConfig, registerTypeScriptLoader } from './config-load
  */
 
 const execFile = promisify(execFileCallback);
+
+const UNRESOLVED_IMPORT_CONFIG =
+  "import { defineConfig } from '@geekity/not-installed';\nexport default defineConfig({ port: 4321 });\n";
+
+async function siteImporting(specifier: string): Promise<string> {
+  const site = await temporaryDir('geekity-config-import-');
+  await fs.mkdir(path.join(site, 'node_modules', '@geekity'), { recursive: true });
+  await fs.symlink(PACKAGE_ROOT, path.join(site, 'node_modules', '@geekity', 'cms'), 'dir');
+  await fs.writeFile(
+    path.join(site, 'geekity.config.mjs'),
+    `import { defineConfig } from '${specifier}';\nexport default defineConfig({ port: 4321 });\n`,
+    'utf8',
+  );
+  return site;
+}
 
 after(cleanupTemporaryDirs);
 
@@ -330,6 +351,29 @@ describe('loadConfig', () => {
     );
   });
 
+  it('names the config and the package when the config imports one the site cannot resolve', async () => {
+    const directory = await temporaryDir('geekity-config-unresolved-');
+    const config = path.join(directory, 'geekity.config.mjs');
+    await fs.writeFile(config, UNRESOLVED_IMPORT_CONFIG, 'utf8');
+
+    await assert.rejects(
+      () => loadConfig(directory, undefined),
+      (error: Error) => {
+        assert.ok(error.message.includes(config), error.message);
+        assert.match(error.message, /@geekity\/not-installed/);
+        return true;
+      },
+    );
+  });
+
+  for (const specifier of ['@geekity/cms', '@geekity/cms/config']) {
+    it(`reads a config that imports defineConfig from ${specifier}`, async () => {
+      const site = await siteImporting(specifier);
+
+      assert.deepEqual(await loadConfig(site, undefined), { port: 4321 });
+    });
+  }
+
   it('names both fixes when a TypeScript config needs tsx and the site has none', async () => {
     const withoutTsx = await temporaryDir('geekity-no-tsx-');
 
@@ -387,32 +431,61 @@ describe('the geekity bin', () => {
       await fs.rm(linkDir, { recursive: true, force: true });
     }
   });
+
+  it('exits non-zero naming the config when the config imports a package the site cannot resolve', async () => {
+    const site = await temporaryDir('geekity-bin-unresolved-');
+    await fs.writeFile(path.join(site, 'geekity.config.mjs'), UNRESOLVED_IMPORT_CONFIG, 'utf8');
+
+    const run = await runCli(['settings', 'list'], site);
+
+    assert.notEqual(run.code, 0);
+    assert.match(run.stderr, /geekity\.config\.mjs/);
+    assert.match(run.stderr, /@geekity\/not-installed/);
+  });
 });
 
 describe('starting geekity', () => {
   const LOADED_MODULES = path.join(import.meta.dirname, '__testing__', 'loaded-modules.ts');
 
-  it('reads settings without loading the CMS core, sharp or Fedify (TASK-374)', async () => {
-    const site = await temporaryDir('geekity-startup-');
-    const { stderr } = await execFile(
-      process.execPath,
-      ['--import', LOADED_MODULES, CLI, 'settings', 'list'],
-      { cwd: site },
-    );
-    const line = stderr.split('\n').find((one) => one.startsWith('loaded-modules '));
-    const loaded = JSON.parse(line?.slice('loaded-modules '.length) ?? '[]') as string[];
-
+  async function settingsListLoads(site: string): Promise<string[]> {
+    const list = path.join(await temporaryDir('geekity-loaded-'), 'modules.json');
+    await execFile(process.execPath, ['--import', LOADED_MODULES, CLI, 'settings', 'list'], {
+      cwd: site,
+      env: { ...process.env, GEEKITY_TEST_LOADED_MODULES: list },
+    });
+    const loaded = JSON.parse(await fs.readFile(list, 'utf8')) as string[];
     assert.ok(
       loaded.some((url) => url.endsWith('/dist/cli.js')),
       'the hook saw the CLI load',
     );
-    const heavy = loaded.filter(
+    return loaded;
+  }
+
+  function heavy(loaded: readonly string[]): string[] {
+    return loaded.filter(
       (url) =>
         url.endsWith('/dist/index.js') ||
         url.endsWith('/dist/cms/create.js') ||
         url.includes('/node_modules/sharp/') ||
         url.includes('/node_modules/@fedify/'),
     );
-    assert.deepEqual(heavy, []);
+  }
+
+  it('reads settings without loading the CMS core, sharp or Fedify (TASK-374)', async () => {
+    const site = await temporaryDir('geekity-startup-');
+
+    assert.deepEqual(heavy(await settingsListLoads(site)), []);
+  });
+
+  it('reads a config importing @geekity/cms/config without loading the CMS core (TASK-424)', async () => {
+    const site = await siteImporting('@geekity/cms/config');
+
+    const loaded = await settingsListLoads(site);
+
+    assert.ok(
+      loaded.some((url) => url.endsWith('/dist/config-entry.js')),
+      'the config loaded the config entry',
+    );
+    assert.deepEqual(heavy(loaded), []);
   });
 });

@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { isResolvedConfig, resolveConfig } from './config.ts';
 import type { GeekityConfig, ResolvedConfig } from './config.ts';
 import { createSettings, SITE } from './site/namespace.ts';
+import { messageOf } from './util/errors.ts';
 
 export const CONFIG_FILENAMES = ['geekity.config.ts', 'geekity.config.js', 'geekity.config.mjs'];
 
@@ -32,25 +33,33 @@ export async function loadConfig(
       ? CONFIG_FILENAMES.map((name) => path.resolve(cwd, name))
       : [path.resolve(cwd, configPath)];
 
-  for (const candidate of candidates) {
-    const href = pathToFileURL(candidate).href;
-    let module: { default?: GeekityConfig };
+  const found = candidates.find((candidate) => existsSync(candidate));
+  if (found === undefined) {
+    if (configPath !== undefined) {
+      throw new Error(`Config file not found: ${path.resolve(cwd, configPath)}`);
+    }
+    return {};
+  }
+
+  const href = pathToFileURL(found).href;
+  let module: { default?: GeekityConfig };
+  try {
+    module = (await import(href)) as { default?: GeekityConfig };
+  } catch (error) {
+    if (!needsTypeScriptLoader(error, found)) throw loadFailure(found, error);
+
+    await registerTypeScriptLoader(cwd, found);
     try {
       module = (await import(href)) as { default?: GeekityConfig };
-    } catch (error) {
-      if (isModuleNotFound(error, candidate)) continue;
-      if (!needsTypeScriptLoader(error, candidate)) throw error;
-
-      await registerTypeScriptLoader(cwd, candidate);
-      module = (await import(href)) as { default?: GeekityConfig };
+    } catch (retried) {
+      throw loadFailure(found, retried);
     }
-    return module.default ?? {};
   }
+  return module.default ?? {};
+}
 
-  if (configPath !== undefined) {
-    throw new Error(`Config file not found: ${path.resolve(cwd, configPath)}`);
-  }
-  return {};
+function loadFailure(configFile: string, error: unknown): Error {
+  return new Error(`Could not load ${configFile}: ${messageOf(error)}`, { cause: error });
 }
 
 export async function loadResolvedConfig(
@@ -136,14 +145,4 @@ function needsTypeScriptLoader(error: unknown, candidate: string): boolean {
   if (!TYPESCRIPT_EXTENSIONS.has(path.extname(candidate).toLowerCase())) return false;
   const code = (error as { code?: unknown } | null)?.code;
   return code === 'ERR_UNKNOWN_FILE_EXTENSION' || code === 'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX';
-}
-
-function isModuleNotFound(error: unknown, candidate: string): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: string }).code === 'ERR_MODULE_NOT_FOUND' &&
-    String((error as { message?: string }).message ?? '').includes(candidate)
-  );
 }

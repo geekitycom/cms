@@ -1,4 +1,4 @@
-import { defineConfig } from '@geekity/cms';
+import { defineConfig } from '@geekity/cms/config';
 
 import greetings from './plugins/greetings.ts';
 import hello from './plugins/hello.ts';

@@ -20,7 +20,7 @@ pnpm add @geekity/plugin-llm @geekity/plugin-tag-suggest
 ```
 
 ```ts
-import { defineConfig } from '@geekity/cms';
+import { defineConfig } from '@geekity/cms/config';
 import llm from '@geekity/plugin-llm';
 import tagSuggest from '@geekity/plugin-tag-suggest';
 
