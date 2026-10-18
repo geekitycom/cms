@@ -1,3 +1,4 @@
+import { readdirSync, statSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,6 +22,31 @@ const execFile = promisify(execFileCallback);
 export const PACKAGE_ROOT = path.resolve(import.meta.dirname, '..', '..');
 
 export const CLI = path.join(PACKAGE_ROOT, 'dist', 'cli.js');
+
+assertBuildIsCurrent();
+
+/**
+ * `pnpm test` builds `dist` first, but a test file run on its own does not,
+ * and would quietly test whatever an earlier build left there.
+ */
+function assertBuildIsCurrent(): void {
+  const built = statSync(CLI, { throwIfNoEntry: false })?.mtimeMs ?? 0;
+  const source = path.join(PACKAGE_ROOT, 'src');
+  const newer = readdirSync(source, { recursive: true, encoding: 'utf8' }).find(
+    (file) =>
+      file.endsWith('.ts') &&
+      !file.endsWith('.test.ts') &&
+      !file.includes('__testing__') &&
+      !file.includes('__fixtures__') &&
+      statSync(path.join(source, file)).mtimeMs > built,
+  );
+  if (newer !== undefined) {
+    throw new Error(
+      `dist/cli.js is older than src/${newer}. Run \`pnpm exec tsc -p tsconfig.build.json\` ` +
+        'in packages/cms, or run the tests with `pnpm test`, which builds first.',
+    );
+  }
+}
 
 /** What running the bin did. Non-zero exits are results here, not throws. */
 export interface CliRun {
