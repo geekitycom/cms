@@ -110,6 +110,7 @@ async function site(): Promise<Site> {
     comments: unused,
     putComments: unused,
     renameComments: unused,
+    removeComment: unused,
   };
   return {
     root,
@@ -144,7 +145,7 @@ async function site(): Promise<Site> {
 }
 
 function rowsFor(rows: readonly ReportRow[], id: number): readonly ReportRow[] {
-  return mediaRows(rows).filter((row) => row.item.id === id);
+  return mediaRows(rows).filter((row) => row.item?.id === id);
 }
 
 function mediaRows(rows: readonly ReportRow[]): readonly ReportRow[] {

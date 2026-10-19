@@ -56,6 +56,7 @@ function testSite(contentDir: string): PluginSite {
     comments: unused,
     putComments: unused,
     renameComments: unused,
+    removeComment: unused,
   };
 }
 
@@ -110,7 +111,7 @@ async function site(): Promise<Site> {
 }
 
 function row(rows: readonly ReportRow[], id: number): ReportRow {
-  const found = rows.find((entry) => entry.item.id === id);
+  const found = rows.find((entry) => entry.item?.id === id);
   assert.ok(found, `no report row for item ${String(id)}`);
   return found;
 }

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import { importJwk } from '@fedify/fedify';
+import { importJwk, verifyRequest } from '@fedify/fedify';
 
 import { createCms, listUsers } from '@geekity/cms';
 import type { Cms, PluginFollower } from '@geekity/cms';
@@ -45,6 +45,10 @@ const WELDON = 'https://mstdn.example/users/weldon';
 
 /** An actor the collection names and that nobody can fetch. */
 const GONE = 'https://gone.example/users/ghost';
+
+const AUTHORIZED_FETCH_FOLLOWERS = `${WORDPRESS_ORIGIN}/secure-followers`;
+const STRICT = 'https://strict.example/users/sterling';
+const REFUSER = 'https://refuser.example/users/rhoda';
 
 const temporaryDirs: string[] = [];
 const started: Cms[] = [];
@@ -137,7 +141,33 @@ function serveFakeWordPress(): () => void {
         partOf: WP_FOLLOWERS,
       });
     }
+    if (request.url === AUTHORIZED_FETCH_FOLLOWERS) {
+      return json({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: AUTHORIZED_FETCH_FOLLOWERS,
+        type: 'OrderedCollectionPage',
+        orderedItems: [MARIEN, STRICT, REFUSER],
+      });
+    }
+    if (`${url.origin}${url.pathname}${url.search}` === STORED_ACTOR_ID) {
+      return json({
+        '@context': ['https://www.w3.org/ns/activitystreams', 'https://w3id.org/security/v1'],
+        id: STORED_ACTOR_ID,
+        type: 'Person',
+        inbox: `${WP_BASE}/actors/${String(WORDPRESS_ACTOR_ID)}/inbox`,
+        publicKey: { id: MAIN_KEY_ID, owner: STORED_ACTOR_ID, publicKeyPem },
+      });
+    }
     if (request.url === MARIEN || request.url === WELDON) return json(remoteActor(request.url));
+    if (request.url === STRICT) {
+      const key = await verifyRequest(request, { documentLoader: fetchDocument });
+      return key?.id?.href === MAIN_KEY_ID
+        ? json(remoteActor(request.url))
+        : new Response('Unauthorized', { status: 401, statusText: 'Unauthorized' });
+    }
+    if (url.origin === 'https://refuser.example') {
+      return new Response('Unauthorized', { status: 401, statusText: 'Unauthorized' });
+    }
     if (url.origin === 'https://gone.example') {
       return new Response('Gone.', { status: 410 });
     }
@@ -148,6 +178,15 @@ function serveFakeWordPress(): () => void {
   return () => {
     globalThis.fetch = original;
   };
+}
+
+const MAIN_KEY_ID = `${STORED_ACTOR_ID}#main-key`;
+
+async function fetchDocument(
+  url: string,
+): Promise<{ contextUrl: null; documentUrl: string; document: unknown }> {
+  const response = await fetch(url, { headers: { accept: 'application/activity+json' } });
+  return { contextUrl: null, documentUrl: url, document: (await response.json()) as unknown };
 }
 
 /** A site with one account and the plugin installed, ready to be imported into. */
@@ -396,6 +435,72 @@ describe('importWordPressActor', () => {
       }),
     );
     assert.equal(forced.keys[0]?.state, 'replaced');
+  });
+
+  it('signs follower fetches with the imported key, so an authorized-fetch server answers', async () => {
+    const where = await site();
+
+    const report = await importWordPressActor(
+      importing(where, { followers: AUTHORIZED_FETCH_FOLLOWERS }),
+    );
+
+    assert.deepEqual(
+      readFollowers(where).map((follower) => follower.actorId),
+      [MARIEN, STRICT],
+      'the follower whose server refuses an unsigned fetch is in the file',
+    );
+    assert.equal(readFollowers(where)[1]?.inboxId, `${STRICT}/inbox`);
+    assert.deepEqual(
+      report.followers.failed.map((failure) => [failure.actor, failure.refused]),
+      [[REFUSER, true]],
+      'the one that refuses even a signed fetch is listed, and the rest are imported',
+    );
+    assert.match(report.followers.failed[0]?.reason ?? '', /refused a signed fetch/);
+  });
+
+  it('is refused by an authorized-fetch server when the signature does not verify', async () => {
+    const where = await site();
+    const other = rsaPem();
+
+    const report = await importWordPressActor(
+      importing(where, {
+        privateKeyPem: other.privateKeyPem,
+        publicKeyPem: other.publicKeyPem,
+        followers: AUTHORIZED_FETCH_FOLLOWERS,
+      }),
+    );
+
+    assert.deepEqual(
+      readFollowers(where).map((follower) => follower.actorId),
+      [MARIEN],
+    );
+    assert.deepEqual(
+      report.followers.failed.map((failure) => [failure.actor, failure.refused]),
+      [
+        [STRICT, true],
+        [REFUSER, true],
+      ],
+      'a key the actor id does not publish verifies against nothing',
+    );
+  });
+
+  it('adds, on a rerun, the followers an earlier run skipped and leaves the others as they were', async () => {
+    const where = await site();
+    const earlier = path.join(where.dataDir, 'earlier.json');
+    await writeFile(
+      earlier,
+      JSON.stringify({ type: 'OrderedCollection', orderedItems: [remoteActor(MARIEN)] }),
+    );
+    await importWordPressActor(importing(where, { followers: earlier }));
+    const marien = readFollowers(where)[0];
+
+    const rerun = await importWordPressActor(
+      importing(where, { followers: AUTHORIZED_FETCH_FOLLOWERS }),
+    );
+
+    assert.deepEqual(rerun.followers.added, [STRICT]);
+    assert.deepEqual(rerun.followers.unchanged, [MARIEN]);
+    assert.deepEqual(readFollowers(where)[0], marien, 'with its place and follow time');
   });
 
   it('takes the followers from a file, so a collection can be exported before the DNS moves', async () => {

@@ -158,7 +158,7 @@ need its own copy:
 - `writeFileAtomically`: writes to a temporary file beside the target, then
   renames it over the target.
 - `isRecord`, `messageOf`, `withTrailingSlash`, `withoutTrailingSlash`.
-- `repliesKey` and `webmentionKey`: the keys of a comment.
+- `repliesKey` and `webmentionKey`: the keys of a comment. `isKey` says whether an id is already one.
 
 Its default export is the plugin:
 

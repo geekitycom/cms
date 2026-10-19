@@ -7,6 +7,8 @@ import { after, describe, it } from 'node:test';
 
 import { listUsers } from '@geekity/cms';
 
+import { importSummary } from '../src/command.ts';
+import type { ImportWordPressActorReport } from '../src/import.ts';
 import { runCli, writeConfigWithPlugin } from './site.ts';
 
 const temporaryDirs: string[] = [];
@@ -251,5 +253,55 @@ describe('geekity import wordpress-actor', () => {
 
     assert.equal(run.code, 0, run.stderr);
     assert.ok(await exists(path.join(site.dataDir, 'keys', 'ada.rsassa-pkcs1-v1_5.jwk')));
+  });
+});
+
+describe('the wordpress-actor summary', () => {
+  const report: ImportWordPressActorReport = {
+    username: 'ada',
+    actorId: 'https://blog.example/?author=2',
+    wordpressActorId: 2,
+    identity: 'unchanged',
+    keys: [],
+    followers: {
+      source: 'https://blog.example/wp-json/activitypub/1.0/actors/2/followers',
+      added: [],
+      unchanged: [],
+      refreshed: [],
+      failed: [
+        {
+          actor: 'https://down.example/users/dot',
+          reason: 'https://down.example/users/dot answered 503 Service Unavailable',
+          refused: false,
+        },
+        {
+          actor: 'https://strict.example/users/sterling',
+          reason: 'https://strict.example/users/sterling refused a signed fetch: 401 Unauthorized',
+          refused: true,
+        },
+      ],
+    },
+    changed: false,
+  };
+
+  it('says a refused follower refused a signed fetch, and keeps the rerun advice for the rest', () => {
+    const summary = importSummary(report);
+
+    assert.match(
+      summary,
+      /down\.example\/users\/dot.*\n.*Run this again once their servers answer/s,
+    );
+    assert.match(summary, /strict\.example\/users\/sterling: .*refused a signed fetch/);
+    assert.match(summary, /refused a fetch signed with the imported key/);
+  });
+
+  it('does not tell the owner a rerun will fix a follower that refused a signed fetch', () => {
+    const summary = importSummary({
+      ...report,
+      followers: { ...report.followers, failed: report.followers.failed.slice(1) },
+    });
+
+    assert.doesNotMatch(summary, /Run this again/);
+    assert.match(summary, /running this again will not bring them across/);
   });
 });

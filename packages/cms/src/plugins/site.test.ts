@@ -249,6 +249,30 @@ describe('PluginSite.putComments and PluginSite.comments', () => {
     );
     assert.equal(await readFile(file, 'utf8'), before);
   });
+
+  it('removes a comment by id from its post, its email and the index, and answers whether it held one', async () => {
+    const { site: plugin, dataDir, admin } = await site();
+    await plugin.putComments('/2026/09/hello/', [
+      imported({ author: { name: 'Ada', url: null, email: 'ada@example.com', avatar: null } }),
+      imported({
+        id: '0000000000007004',
+        author: { name: 'Bo', url: null, email: 'bo@example.com', avatar: null },
+      }),
+    ]);
+
+    assert.equal(await plugin.removeComment('0000000000007003'), true);
+
+    assert.deepEqual(
+      plugin.comments('/2026/09/hello/').comments.map((comment) => comment.id),
+      ['0000000000007004'],
+    );
+    assert.equal(admin.getComment('0000000000007003'), undefined);
+    assert.doesNotMatch(
+      await readFile(path.join(dataDir, 'comments', 'hello.json'), 'utf8'),
+      /ada@example\.com/,
+    );
+    assert.equal(await plugin.removeComment('0000000000007003'), false);
+  });
 });
 
 describe('PluginHost.siteInfo', () => {

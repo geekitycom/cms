@@ -20,6 +20,7 @@ import {
 
 import wordpress from '../src/index.ts';
 import { commentsAndReactions } from '../src/comments-import.ts';
+import { contentImportCommand } from '../src/content-command.ts';
 import { importWordPressContent } from '../src/content-import.ts';
 import type { ReportRow } from '../src/content-import.ts';
 import { postsAndPages } from '../src/posts-import.ts';
@@ -45,8 +46,14 @@ interface Site {
   readonly dataDir: string;
   readonly admin: AdminStore;
   run(items: readonly TestItem[]): Promise<readonly ReportRow[]>;
+  report(items: readonly TestItem[]): Promise<string>;
+  record(): Promise<SavedRecord>;
   comments(slugFile: string): Promise<CommentEntry[]>;
   serve(): Promise<Cms>;
+}
+
+interface SavedRecord {
+  comments?: Record<string, Record<string, string>>;
 }
 
 interface CommentEntry {
@@ -102,6 +109,26 @@ async function site(): Promise<Site> {
           importers: [postsAndPages, commentsAndReactions],
         })
       ).rows,
+    report: async (items) => {
+      const file = path.join(root, 'export.xml');
+      await fs.writeFile(file, wxr(items));
+      let printed = '';
+      await contentImportCommand(data).run({
+        ...context,
+        args: [file],
+        write: (text) => {
+          printed += text;
+        },
+      });
+      return printed;
+    },
+    record: async () =>
+      JSON.parse(
+        await fs.readFile(
+          path.join(dataDir, 'plugins', '@geekity', 'plugin-wordpress', 'import.json'),
+          'utf8',
+        ),
+      ) as SavedRecord,
     comments: async (slugFile) =>
       (
         JSON.parse(
@@ -239,7 +266,7 @@ const id = (n: number) => {
 const numbered = new Map(Array.from({ length: 20 }, (_, n) => [id(n), String(n)]));
 
 function rowsWhy(rows: readonly ReportRow[]): string[] {
-  return rows.filter((row) => row.item.id === 753 && row.path !== undefined).map((row) => row.why);
+  return rows.filter((row) => row.item?.id === 753 && row.path !== undefined).map((row) => row.why);
 }
 
 describe('the comments and reactions import', () => {
@@ -907,6 +934,148 @@ describe('the comments and reactions import', () => {
         rows.filter((row) => row.path === `_data/comments/${FILE}`).map((row) => row.outcome),
         ['written', 'conflict'],
       );
+    });
+  });
+
+  describe('a comment that left WordPress after it was imported (TASK-425)', () => {
+    const without = (...gone: number[]): TestItem => ({
+      ...THE_POST,
+      comments: (THE_POST.comments ?? []).filter((comment) => !gone.includes(comment.id)),
+    });
+    const recorded = async (wp: Site) =>
+      Object.keys((await wp.record()).comments?.[`_data/comments/${FILE}`] ?? {});
+
+    it('removes an undone boost on the next import, names it in its own row and counts it', async () => {
+      const wp = await site();
+      await wp.run([THE_POST]);
+      const before = await wp.comments(FILE);
+
+      const printed = await wp.report([without(4)]);
+
+      assert.deepEqual(
+        (await wp.comments(FILE)).map((comment) => comment.id),
+        before.map((comment) => comment.id).filter((key) => key !== id(4)),
+      );
+      assert.ok(!(await recorded(wp)).includes(id(4)), 'its record entry goes');
+      assert.match(
+        printed,
+        new RegExp(
+          `^removed\tpost\t753\tI ♥ RSS\t_data/comments/${FILE}\tcomment 4, a boost by Four: .*removed$`,
+          'm',
+        ),
+      );
+      assert.match(printed, /\b1 removed\b/);
+
+      const again = await wp.run([without(4)]);
+      assert.ok(!again.some((row) => /comment 4\b/.test(row.why)), 'the next run converges');
+    });
+
+    it('removes a comment WordPress has since filed as spam or put in the trash', async () => {
+      const wp = await site();
+      await wp.run([THE_POST]);
+
+      const rows = await wp.run([
+        {
+          ...THE_POST,
+          comments: (THE_POST.comments ?? []).map((comment) =>
+            comment.id === 5
+              ? { ...comment, approved: 'spam' }
+              : comment.id === 6
+                ? { ...comment, approved: 'trash' }
+                : comment,
+          ),
+        },
+      ]);
+
+      const held = (await wp.comments(FILE)).map((comment) => comment.id);
+      assert.ok(!held.includes(id(5)) && !held.includes(id(6)));
+      for (const n of [5, 6]) {
+        assert.ok(
+          rows.some(
+            (row) =>
+              row.outcome === 'removed' && new RegExp(`comment ${String(n)}\\b`).test(row.why),
+          ),
+          `comment ${String(n)} is reported removed`,
+        );
+      }
+    });
+
+    it('keeps an imported comment edited here, reporting it, and never touches one the site received', async () => {
+      const wp = await site();
+      await wp.run([THE_POST]);
+      const records = { admin: wp.admin, contentDir: wp.contentDir, dataDir: wp.dataDir };
+      await updateComment(records, id(7), {
+        content: { markdown: 'Edited here.', html: '<p>Edited here.</p>\n' },
+      });
+      const live = await addComment(records, {
+        slug: 'i-♥-rss',
+        permalink: PERMALINK,
+        source: 'comment',
+        kind: 'reply',
+        status: 'approved',
+        author: { name: 'Live', url: null, email: null, avatar: null },
+        content: { markdown: 'Said here.', html: '<p>Said here.</p>\n' },
+        submitted: '2024-04-01T10:00:00.000Z',
+        addressHash: 'hash',
+        inReplyTo: null,
+        url: null,
+        notify: false,
+      });
+
+      const rows = await wp.run([without(7, 8)]);
+
+      const held = await wp.comments(FILE);
+      assert.equal(held.find((comment) => comment.id === id(7))?.content.markdown, 'Edited here.');
+      assert.ok(held.some((comment) => comment.id === live.id));
+      assert.ok(!held.some((comment) => comment.id === id(8)));
+      assert.equal(rows.find((row) => /comment 7\b/.test(row.why))?.outcome, 'kept');
+      assert.equal(rows.find((row) => /comment 8\b/.test(row.why))?.outcome, 'removed');
+      assert.ok(!rows.some((row) => row.why.includes(live.id)));
+      assert.ok((await recorded(wp)).includes(id(7)), 'the edited one is reported again next run');
+    });
+
+    it('removes the comments of a post that has none left in the export', async () => {
+      const wp = await site();
+      await wp.run([THE_POST]);
+
+      const rows = await wp.run([{ ...THE_POST, comments: [] }]);
+
+      assert.deepEqual(await wp.comments(FILE), []);
+      const removed = rows.filter((row) => row.outcome === 'removed');
+      assert.equal(removed.length, 12);
+      assert.ok(removed.every((row) => row.item?.id === 753));
+      assert.equal((await wp.record()).comments, undefined);
+    });
+
+    it('removes the comments of a post gone from the export, naming the post by its permalink', async () => {
+      const wp = await site();
+      await wp.run([THE_POST]);
+
+      const printed = await wp.report([]);
+
+      assert.deepEqual(await wp.comments(FILE), []);
+      assert.match(
+        printed,
+        new RegExp(
+          `^removed\t\t\t\t_data/comments/${FILE}\tcomment 4, a boost by Four: on ${PERMALINK}, which this export no longer imports; .*removed$`,
+          'm',
+        ),
+      );
+      assert.match(printed, /\b12 removed\b/);
+    });
+
+    it('removes a comment a 0.2.0 import recorded under its former id', async () => {
+      const wp = await site();
+      await wp.run([THE_POST]);
+      await asImportedBy020(wp);
+      await wp.serve();
+
+      const rows = await wp.run([without(4)]);
+
+      const held = (await wp.comments(FILE)).map((comment) => comment.id);
+      assert.ok(!held.includes(hex(formerId(4))) && !held.includes(id(4)));
+      assert.equal(rows.find((row) => /comment 4\b/.test(row.why))?.outcome, 'removed');
+      assert.ok(!(await recorded(wp)).includes(formerId(4)));
     });
   });
 

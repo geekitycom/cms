@@ -41,7 +41,7 @@ export type { KvStore };
  * reaction by {@link repliesKey} of its note or activity id, a webmention by
  * {@link webmentionKey} of its source and the post's permalink.
  */
-export { repliesKey } from './content/guids.ts';
+export { isKey, repliesKey } from './content/guids.ts';
 export { webmentionKey } from './content/guids.ts';
 
 /**
@@ -165,6 +165,11 @@ export interface PluginSite {
    * changing nothing, when a new id is one the post already holds.
    */
   renameComments(permalink: string, renames: ReadonlyMap<string, string>): Promise<void>;
+  /**
+   * Remove the comment with an id from whichever post holds it, its email in
+   * `data/` with it. Returns whether the site held it. Nobody is told.
+   */
+  removeComment(id: string): Promise<boolean>;
 }
 
 /** What {@link PluginSite.comments} reads. */

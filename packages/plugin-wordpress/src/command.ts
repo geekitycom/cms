@@ -189,7 +189,7 @@ function followersSource(context: PluginCommandContext): string | false | undefi
 }
 
 /** What the run did, as the operator reads it. */
-function importSummary(report: ImportWordPressActorReport): string {
+export function importSummary(report: ImportWordPressActorReport): string {
   const lines: string[] = [];
   const { followers } = report;
 
@@ -217,10 +217,17 @@ function importSummary(report: ImportWordPressActorReport): string {
     for (const failure of followers.failed) {
       lines.push(`    skipped   ${failure.actor}: ${failure.reason}`);
     }
-    if (followers.failed.length > 0) {
+    if (followers.failed.some((failure) => !failure.refused)) {
       lines.push(
-        '  Those followers were left out. Run this again once their servers answer; ' +
-          'nothing already imported is touched twice.',
+        '  Followers whose servers did not answer were left out. Run this again once their ' +
+          'servers answer; nothing already imported is touched twice.',
+      );
+    }
+    if (followers.failed.some((failure) => failure.refused)) {
+      lines.push(
+        '  Followers whose servers refused a fetch signed with the imported key were left out, ' +
+          'and running this again will not bring them across. A --followers file that holds ' +
+          'their actor documents will.',
       );
     }
   }
