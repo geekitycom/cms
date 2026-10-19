@@ -650,7 +650,6 @@ describe('an invalid HTTP signature', () => {
 });
 
 describe('a delivery refused for its signature (TASK-427)', () => {
-  /** What the site warned about while `run` ran. */
   async function warnings(t: TestContext, run: () => Promise<unknown>): Promise<string[]> {
     const warn = t.mock.method(console, 'warn', () => undefined);
     await run();

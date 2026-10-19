@@ -85,10 +85,6 @@ function describe(request: Request, reason: InboxRefusalReason, at: number): str
   }
 }
 
-/**
- * The request's Date header, or failing that its RFC 9421 `created` time,
- * when it is outside the window Fedify checks it against.
- */
 function staleDate(request: Request, at: number): string | undefined {
   const outside = (time: number) => Math.abs(time - at) > SIGNATURE_TIME_WINDOW_MS;
 
