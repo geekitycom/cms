@@ -314,6 +314,22 @@ describe('with the plugin enabled', () => {
     assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
   });
 
+  it('logs each refusal through the site, with who sent it and why (TASK-427)', async (t) => {
+    const instance = await site({ enabled: true });
+    const warn = t.mock.method(console, 'warn', () => undefined);
+
+    await deliver(instance, follow(), { unsigned: true, inbox: WP_SHARED_INBOX });
+    await deliver(instance, follow(), { key: strangerKeys.privateKey });
+    const lines = warn.mock.calls.map((call) => String(call.arguments[0]));
+    warn.mock.restore();
+
+    const activity = `actor=${REMOTE_ACTOR} type=Follow id=${REMOTE_ORIGIN}/follows/1`;
+    assert.deepEqual(lines, [
+      `Refused an inbox POST to ${WP_BASE}/inbox: no signature; keyId=none ${activity}`,
+      `Refused an inbox POST to ${WP_BASE}/actors/2/inbox: signature mismatch; keyId=${REMOTE_KEY} ${activity}`,
+    ]);
+  });
+
   it('answers the actor and the three collections under actors/{id}', async () => {
     const instance = await site({ enabled: true });
     await deliver(instance, follow());

@@ -18,6 +18,7 @@ import { openContentStore } from '../content/index.ts';
 import type { ContentStore } from '../content/store.ts';
 import { parseDocument } from '../content/parser.ts';
 import { localPosts } from './federation.ts';
+import { avatarHref } from '../avatars/avatars.ts';
 
 /** The site under test. Its origin is what an ActivityStreams id is built on. */
 const BASE_URL = 'https://blog.example';
@@ -179,7 +180,43 @@ describe('the follower list', () => {
     assert.match(html, /@ada@remote\.example/, 'the handle is there');
     assert.match(html, /2026/, 'the follow date is there');
     assert.match(html, /https:\/\/remote\.example\/@ada/, 'the profile is linked');
-    assert.match(html, /avatars\/ada\.png/, 'the avatar is shown');
+    assert.ok(
+      html.includes(avatarHref('https://remote.example/avatars/ada.png')),
+      'the avatar is shown',
+    );
+  });
+
+  it('shows a follower’s avatar from the site’s own avatar cache, under the admin CSP', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms);
+
+    const response = await agent.get('/admin/federation');
+    const html = await response.text();
+
+    assert.ok(
+      html.includes(`src="${avatarHref('https://remote.example/avatars/ada.png')}"`),
+      'the avatar is the same-origin cache URL',
+    );
+    const remote = [...html.matchAll(/<img[^>]*src="(https?:[^"]*)"/g)].map((match) => match[1]);
+    assert.deepEqual(remote, [], 'no follower avatar is hotlinked');
+    assert.match(
+      response.headers.get('content-security-policy') ?? '',
+      /(^|; )img-src 'self' data:(;|$)/,
+      'the CSP still allows only same-origin and data: images',
+    );
+  });
+
+  it('draws the placeholder circle for a follower with no avatar', async () => {
+    const cms = await federatedSite();
+    const agent = await signedIn(cms);
+    follow(cms, { iconUrl: null });
+
+    const html = await federationScreen(agent);
+    const table = html.slice(html.indexOf('Followers of'));
+
+    assert.match(table, /avatar-placeholder/, 'the placeholder circle is there');
+    assert.doesNotMatch(table, /<img\b/, 'and no image');
   });
 
   it('falls back to the actor id when the actor published no name or handle', async () => {

@@ -17,6 +17,7 @@ import type { SiteFederation } from '../federation/federation.ts';
 import { followersPage, lastFollowersCursor } from '../federation/followers.ts';
 import { receiveActivity } from '../federation/inbox.ts';
 import { loadActorKeyPairs } from '../federation/keys.ts';
+import type { InboxRefusals } from '../federation/refusals.ts';
 import { contextData } from './federation-routes.ts';
 import type {
   JsonLdDocument,
@@ -33,6 +34,7 @@ export interface PluginFederationOptions {
   canonical: SiteFederation;
   kv: KvStore;
   allowPrivateAddress: boolean;
+  refusals: InboxRefusals;
 }
 
 /**
@@ -155,6 +157,10 @@ function federationContext(
 
     async receive(activity, recipient) {
       await receiveActivity(canonical(), activity, recipient);
+    },
+
+    refused(activity, reason) {
+      options.refusals.refused(c.req.raw, activity, reason);
     },
   };
 }

@@ -32,8 +32,9 @@ export interface StoredActorProfile extends ActorProfile {
 export interface ProfileStore {
   /**
    * Whether a URL is an avatar a reader of this site can be shown: the picture
-   * of a follower who has done something to a post, or of the author of an
-   * approved comment or webmention. The avatar proxy fetches nothing else
+   * of a follower, which the admin's follower list shows, of a remote actor
+   * who has done something to a post, or of the author of an approved comment
+   * or webmention. The avatar proxy fetches nothing else
    * (TASK-134), so it cannot be pointed at an arbitrary URL.
    */
   isAvatarSource(url: string): boolean;
@@ -54,8 +55,7 @@ export interface ProfileStore {
 export function openProfileStore(db: DatabaseSync): ProfileStore {
   const statements = {
     isAvatarSource: db.prepare(`
-      SELECT 1 FROM followers
-      WHERE icon_url = ?1 AND actor_id IN (SELECT actor_id FROM ap_inbox)
+      SELECT 1 FROM followers WHERE icon_url = ?1
       UNION ALL
       SELECT 1 FROM actor_profiles
       WHERE icon_url = ?1 AND actor_id IN (SELECT actor_id FROM ap_inbox)
@@ -64,8 +64,7 @@ export function openProfileStore(db: DatabaseSync): ProfileStore {
       LIMIT 1
     `),
     listAvatarSources: db.prepare(`
-      SELECT icon_url AS url FROM followers
-      WHERE icon_url IS NOT NULL AND actor_id IN (SELECT actor_id FROM ap_inbox)
+      SELECT icon_url AS url FROM followers WHERE icon_url IS NOT NULL
       UNION
       SELECT icon_url AS url FROM actor_profiles
       WHERE icon_url IS NOT NULL AND actor_id IN (SELECT actor_id FROM ap_inbox)

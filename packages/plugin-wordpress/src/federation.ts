@@ -191,6 +191,9 @@ function build(
       const recipient =
         wordpressNumber === null ? undefined : usernameOfWordPressNumber(context, wordpressNumber);
       await context.data.receive((await activity.toJsonLd()) as JsonLdDocument, recipient ?? null);
+    })
+    .onUnverifiedActivity(async (context, activity, reason) => {
+      context.data.refused((await activity.toJsonLd()) as JsonLdDocument, reason);
     });
 
   return federation;

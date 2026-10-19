@@ -195,6 +195,7 @@ export type {
 } from './jobs/types.ts';
 export type { RetentionReport, RetentionService } from './privacy/retention.ts';
 export type {
+  InboxRefusalReason,
   JsonLdDocument,
   Plugin,
   PluginActorKey,

@@ -153,6 +153,7 @@ export function createApp(
       registry: plugins,
       canonical: federation,
       kv: services.federationKv,
+      refusals: services.inboxRefusals,
       allowPrivateAddress: resolved.federation.allowPrivateAddress ?? false,
     }),
   });

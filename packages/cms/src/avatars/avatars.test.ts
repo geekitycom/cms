@@ -33,7 +33,7 @@ const HELLO = `${BASE_URL}/2026/09/hello/`;
 
 /** A follower who liked the post: their picture is shown. */
 const ADA_ICON = 'https://remote.example/avatars/ada.png';
-/** A follower who has done nothing: their picture is shown nowhere. */
+/** A follower who has done nothing: their picture is shown in the admin. */
 const IDLE_ICON = 'https://remote.example/avatars/idle.png';
 /** An approved webmention's author. */
 const GRACE_PHOTO = 'https://grace.example/avatar.jpg';
@@ -275,15 +275,33 @@ describe('the avatar route (AC #2)', () => {
   it('is not an open proxy: a URL the site has not recorded is a 404 and fetches nothing', async () => {
     const { cms } = await site();
     web[STRANGER] = image(await picture(80, 80, 'png'), 'image/png');
-    web[IDLE_ICON] = image(await picture(80, 80, 'png'), 'image/png');
     web[PENDING_PHOTO] = image(await picture(80, 80, 'png'), 'image/png');
 
-    for (const source of [STRANGER, IDLE_ICON, PENDING_PHOTO]) {
+    for (const source of [STRANGER, PENDING_PHOTO]) {
       const response = await cms.app.request(avatarHref(source));
       assert.equal(response.status, 404, `${source} is refused`);
     }
     assert.equal((await cms.app.request('/_geekity/avatars/not-a-key!')).status, 404);
     assert.deepEqual(requested, [], 'nothing was fetched');
+  });
+
+  it('serves any follower’s avatar, one with no inbox activity too', async () => {
+    const { cms } = await site();
+    web[IDLE_ICON] = image(await picture(80, 80, 'png'), 'image/png');
+
+    const response = await cms.app.request(avatarHref(IDLE_ICON));
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'image/webp');
+  });
+
+  it('serves the placeholder for a follower whose avatar cannot be fetched', async () => {
+    const { cms } = await site();
+
+    const response = await cms.app.request(avatarHref(IDLE_ICON));
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'image/svg+xml');
   });
 
   it('serves the placeholder for a body over the size limit', async () => {
@@ -345,10 +363,10 @@ describe('refreshing (AC #3)', () => {
 
     await cms.avatars.sweep();
 
-    assert.deepEqual([...requested].sort(), [ADA_ICON, GRACE_PHOTO].sort());
+    assert.deepEqual([...requested].sort(), [ADA_ICON, GRACE_PHOTO, IDLE_ICON].sort());
     const response = await cms.app.request(avatarHref(ADA_ICON));
     assert.equal(response.headers.get('content-type'), 'image/webp');
-    assert.equal(requested.length, 2, 'the page view fetched nothing');
+    assert.equal(requested.length, 3, 'the page view fetched nothing');
   });
 
   it('refetches an avatar older than the maximum age, and keeps a fresh one', async () => {

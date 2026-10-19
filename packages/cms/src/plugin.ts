@@ -268,6 +268,19 @@ export interface PluginRecipient {
   readonly sharedInboxId: string | null;
 }
 
+/**
+ * Why an inbox could not verify a delivery's signature: Fedify's
+ * `UnverifiedActivityReason`, as plain data any copy of Fedify produces.
+ */
+export type InboxRefusalReason =
+  | {
+      readonly type: 'keyFetchError';
+      readonly keyId: URL;
+      readonly result: { readonly status: number } | { readonly error: Error };
+    }
+  | { readonly type: 'invalidSignature'; readonly keyId?: URL }
+  | { readonly type: 'noSignature' };
+
 /** What a federation middleware is handed for one request. */
 export interface PluginFederationContext {
   readonly request: Request;
@@ -298,6 +311,11 @@ export interface PluginFederationContext {
    * at, or `null` for a shared inbox.
    */
   receive(activity: JsonLdDocument, recipient: string | null): Promise<void>;
+  /**
+   * Log a delivery a plugin's inbox refused because its signature did not
+   * verify, as the site's own inbox logs one. It changes no response.
+   */
+  refused(activity: JsonLdDocument, reason: InboxRefusalReason): void;
 }
 
 /**

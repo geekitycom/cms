@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
+import type { TestContext } from 'node:test';
 
 import { exportJwk, importJwk, signRequest } from '@fedify/fedify';
 import {
@@ -645,6 +646,81 @@ describe('an invalid HTTP signature', () => {
       `a Follow signed by an unknown key was answered ${String(response.status)}`,
     );
     assert.equal(instance.admin.countFollowers(LOCAL_USER), 0);
+  });
+});
+
+describe('a delivery refused for its signature (TASK-427)', () => {
+  async function warnings(t: TestContext, run: () => Promise<unknown>): Promise<string[]> {
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    await run();
+    const lines = warn.mock.calls.map((call) => String(call.arguments[0]));
+    warn.mock.restore();
+    return lines;
+  }
+
+  const FOLLOW = `actor=${REMOTE_ACTOR} type=Follow id=${REMOTE_ORIGIN}/follows/1`;
+
+  it('logs a missing signature at the personal inbox, and still answers 401', async (t) => {
+    const instance = await site();
+    let status = 0;
+
+    const lines = await warnings(t, async () => {
+      status = (await deliver(instance, follow(), { unsigned: true })).status;
+    });
+
+    assert.equal(status, 401);
+    assert.deepEqual(lines, [
+      `Refused an inbox POST to /author/blog/inbox/: no signature; keyId=none ${FOLLOW}`,
+    ]);
+  });
+
+  it('logs a key that 404s at the shared inbox', async (t) => {
+    const instance = await site();
+    const keyId = `${REMOTE_ORIGIN}/keys/gone#main-key`;
+
+    const lines = await warnings(t, () =>
+      deliver(instance, follow(), { inbox: SHARED_INBOX, keyId }),
+    );
+
+    assert.deepEqual(lines, [
+      `Refused an inbox POST to /inbox/: key not fetchable (HTTP 404); keyId=${keyId} ${FOLLOW}`,
+    ]);
+  });
+
+  it('logs a stale Date, and holds back the next refusal from that keyId', async (t) => {
+    const instance = await site();
+    const stale = new Date(Date.now() - 2 * 60 * 60 * 1000).toUTCString();
+
+    const lines = await warnings(t, async () => {
+      await deliver(instance, follow(), { headers: { date: stale } });
+      await deliver(instance, follow(), { key: strangerKeys.privateKey, inbox: SHARED_INBOX });
+    });
+
+    assert.deepEqual(lines, [
+      `Refused an inbox POST to /author/blog/inbox/: date out of range (Date ${stale}); keyId=${REMOTE_KEY} ${FOLLOW}`,
+    ]);
+    assert.equal(lines.length, 1, 'the second refusal from the same keyId is held back');
+  });
+
+  it('logs a signature that does not match', async (t) => {
+    const instance = await site();
+
+    const lines = await warnings(t, () =>
+      deliver(instance, follow(), { key: strangerKeys.privateKey }),
+    );
+
+    assert.deepEqual(lines, [
+      `Refused an inbox POST to /author/blog/inbox/: signature mismatch; keyId=${REMOTE_KEY} ${FOLLOW}`,
+    ]);
+  });
+
+  it('logs nothing for a delivery it accepts', async (t) => {
+    const instance = await site();
+
+    const lines = await warnings(t, () => deliver(instance, follow()));
+
+    assert.deepEqual(lines, []);
+    assert.equal(instance.admin.countFollowers(LOCAL_USER), 1);
   });
 });
 
