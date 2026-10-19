@@ -76,6 +76,7 @@ async function readExport(given: string, file: string): Promise<WordPressExport>
 const OUTCOMES: readonly Outcome[] = [
   'written',
   'unchanged',
+  'removed',
   'kept',
   'conflict',
   'clash',
@@ -91,7 +92,7 @@ function formatReport(given: string, contentDir: string, report: ImportReport): 
   };
   const outcomes = count(report.rows.map((row) => row.outcome));
   const skippedTypes = count(
-    report.rows.filter((row) => row.outcome === 'skipped').map((row) => row.item.type),
+    report.rows.filter((row) => row.outcome === 'skipped').map((row) => row.item?.type ?? ''),
   );
 
   const lines = [
@@ -117,9 +118,9 @@ function formatReport(given: string, contentDir: string, report: ImportReport): 
     lines.push(
       [
         row.outcome,
-        row.item.type,
-        String(row.item.id),
-        row.item.title.replace(/\s+/g, ' '),
+        row.item?.type ?? '',
+        row.item === undefined ? '' : String(row.item.id),
+        row.item?.title.replace(/\s+/g, ' ') ?? '',
         row.path ?? '',
         row.why,
       ].join('\t'),

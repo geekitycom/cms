@@ -37,7 +37,14 @@ export interface ImportedComment {
   readonly comment: PluginComment;
   /** Its id as plugin-wordpress 0.2.0 wrote it: its WordPress URL, `{guid}#comment-N`. */
   readonly formerId: string;
+  readonly wordPressId: number;
   readonly label: string;
+}
+
+/** A post or page a comment can be on, at the permalink it is imported to. */
+export interface ImportedPost {
+  readonly item: WordPressItem;
+  readonly permalink: string;
 }
 
 export interface ImporterOutput {
@@ -45,6 +52,7 @@ export interface ImporterOutput {
   readonly notes: readonly ItemNote[];
   readonly entries?: readonly DataEntry[] | undefined;
   readonly comments?: readonly ImportedComment[] | undefined;
+  readonly posts?: readonly ImportedPost[] | undefined;
 }
 
 export interface WordPressImporter {
@@ -81,11 +89,12 @@ const SKIPPED_POST_TYPES: Readonly<Record<string, string>> = {
 };
 
 export type Outcome =
-  'written' | 'unchanged' | 'kept' | 'conflict' | 'clash' | 'skipped' | 'warned';
+  'written' | 'unchanged' | 'removed' | 'kept' | 'conflict' | 'clash' | 'skipped' | 'warned';
 
 export interface ReportRow {
   readonly outcome: Outcome;
-  readonly item: WordPressItem;
+  /** Absent for a comment on a post the export no longer has. */
+  readonly item?: WordPressItem | undefined;
   readonly path?: string | undefined;
   readonly why: string;
 }
@@ -119,12 +128,14 @@ export async function importWordPressContent(options: {
   const files: ImportedFile[] = [];
   const entries: DataEntry[] = [];
   const comments: ImportedComment[] = [];
+  const posts: ImportedPost[] = [];
   for (const importer of importers) {
     const output = await importer.import(exported, context);
     files.push(...output.files);
     rows.push(...output.notes);
     entries.push(...(output.entries ?? []));
     comments.push(...(output.comments ?? []));
+    posts.push(...(output.posts ?? []));
   }
 
   const record = readRecord(data);
@@ -152,9 +163,12 @@ export async function importWordPressContent(options: {
   for (const [permalink, onPost] of byPost) {
     rows.push(...(await writeComments(context.site, permalink, onPost, record, data)));
   }
+  rows.push(...(await pruneComments(context.site, byPost, posts, record, data)));
 
   const order = new Map(exported.items.map((item, index) => [item, index]));
-  rows.sort((a, b) => (order.get(a.item) ?? 0) - (order.get(b.item) ?? 0));
+  const at = (row: ReportRow) =>
+    row.item === undefined ? exported.items.length : (order.get(row.item) ?? 0);
+  rows.sort((a, b) => at(a) - at(b));
   return { rows };
 }
 
@@ -163,17 +177,23 @@ type Sha256 = string;
 type EntryKey = string;
 type JsonText = string;
 type CommentId = string;
+type Permalink = string;
 
 interface ImportRecord {
   readonly files: Map<ContentPath, Sha256>;
   readonly entries: Map<ContentPath, Map<EntryKey, JsonText>>;
   readonly comments: Map<ContentPath, Map<CommentId, Sha256>>;
+  /** The post each comment file in `comments` is on. */
+  readonly commentPosts: Map<ContentPath, Permalink>;
+  readonly commentWordPressIds: Map<ContentPath, Map<CommentId, number>>;
 }
 
 interface SavedRecord {
   files?: Record<ContentPath, Sha256>;
   entries?: Record<ContentPath, Record<EntryKey, JsonText>>;
   comments?: Record<ContentPath, Record<CommentId, Sha256>>;
+  commentPosts?: Record<ContentPath, Permalink>;
+  commentWordPressIds?: Record<ContentPath, Record<CommentId, number>>;
 }
 
 function readRecord(data: PluginDataFolder): ImportRecord {
@@ -187,6 +207,8 @@ function readRecord(data: PluginDataFolder): ImportRecord {
     files: new Map(Object.entries(parsed.files ?? {})),
     entries: nested(parsed.entries),
     comments: nested(parsed.comments),
+    commentPosts: new Map(Object.entries(parsed.commentPosts ?? {})),
+    commentWordPressIds: nested(parsed.commentWordPressIds),
   };
 }
 
@@ -200,6 +222,10 @@ async function saveRecord(data: PluginDataFolder, record: ImportRecord): Promise
   const saved: SavedRecord = { files: sorted(record.files) };
   if (record.entries.size > 0) saved.entries = nested(record.entries);
   if (record.comments.size > 0) saved.comments = nested(record.comments);
+  if (record.commentPosts.size > 0) saved.commentPosts = sorted(record.commentPosts);
+  if (record.commentWordPressIds.size > 0) {
+    saved.commentWordPressIds = nested(record.commentWordPressIds);
+  }
   await data.update(IMPORT_RECORD_FILE, () => `${JSON.stringify(saved, null, 2)}\n`);
 }
 
@@ -335,7 +361,8 @@ async function writeComments(
 
   const rows: ReportRow[] = [];
   const writes: PluginComment[] = [];
-  for (const { item, comment, label } of comments) {
+  const wordPressIds = record.commentWordPressIds.get(held.file) ?? new Map<CommentId, number>();
+  for (const { item, comment, wordPressId, label } of comments) {
     const here = byId.get(comment.id);
     const now = here === undefined ? undefined : sha256(canonical(here));
     const before = recorded.get(comment.id);
@@ -368,13 +395,120 @@ async function writeComments(
       why = `${why}; marked migrated, with its origin${comment.user === undefined ? '' : ' and its user'}${comment.actor === undefined ? '' : ' and its actor'}`;
     }
     if (decision.action !== 'leave') recorded.set(comment.id, next);
+    if (recorded.has(comment.id)) wordPressIds.set(comment.id, wordPressId);
     rows.push({ outcome: decision.outcome, item, path: held.file, why: `${label}: ${why}` });
   }
 
   await site.putComments(permalink, writes);
-  if (recorded.size > 0) record.comments.set(held.file, recorded);
+  if (recorded.size > 0) {
+    record.comments.set(held.file, recorded);
+    record.commentPosts.set(held.file, permalink);
+    record.commentWordPressIds.set(held.file, wordPressIds);
+  }
   await saveRecord(data, record);
   return rows;
+}
+
+/**
+ * Each comment the record says the import wrote that this export no longer
+ * imports: deleted on WordPress, or spam or trash there. One still exactly as
+ * the import wrote it, and so still migrated, is removed; one edited here is
+ * kept.
+ */
+async function pruneComments(
+  site: PluginSite,
+  imported: ReadonlyMap<Permalink, readonly ImportedComment[]>,
+  posts: readonly ImportedPost[],
+  record: ImportRecord,
+  data: PluginDataFolder,
+): Promise<ReportRow[]> {
+  const items = new Map(posts.map(({ item, permalink }) => [permalink, item]));
+  const formerIds = new Map(
+    [...imported.values()].flat().map(({ comment, formerId }) => [comment.id, formerId]),
+  );
+  // A record from before this version names no post for a file.
+  let postsByFile: Map<ContentPath, Permalink> | undefined;
+
+  const rows: ReportRow[] = [];
+  let changed = false;
+  for (const [file, recorded] of [...record.comments]) {
+    let permalink = record.commentPosts.get(file);
+    if (permalink === undefined) {
+      postsByFile ??= new Map(
+        posts.map((post) => [site.comments(post.permalink).file, post.permalink]),
+      );
+      permalink = postsByFile.get(file);
+    }
+    if (permalink === undefined) continue;
+    const item = items.get(permalink);
+    const kept = new Set((imported.get(permalink) ?? []).map(({ comment }) => comment.id));
+    const held = new Map(site.comments(permalink).comments.map((comment) => [comment.id, comment]));
+    const wordPressIds = record.commentWordPressIds.get(file);
+    const former = new Map(
+      [...recorded.keys()]
+        .filter((entry) => !isKey(entry))
+        .map((entry) => [repliesKey(entry), entry]),
+    );
+
+    for (const [entry, before] of [...recorded]) {
+      // 0.2.0 recorded a comment under its former id, which a boot keyed.
+      const id = isKey(entry) ? entry : repliesKey(entry);
+      if (kept.has(id)) continue;
+      const forget = () => {
+        recorded.delete(entry);
+        wordPressIds?.delete(entry);
+        changed = true;
+      };
+      const here = held.get(id);
+      if (here === undefined) {
+        forget();
+        continue;
+      }
+      const asWritten = isKey(entry)
+        ? here
+        : {
+            ...here,
+            id: entry,
+            inReplyTo:
+              here.inReplyTo === null
+                ? null
+                : (former.get(here.inReplyTo) ?? formerIds.get(here.inReplyTo) ?? here.inReplyTo),
+          };
+      const wordPressId = wordPressIds?.get(entry) ?? /#comment-(\d+)$/.exec(entry)?.[1];
+      const label = `${wordPressId === undefined ? `comment with key ${id}` : `comment ${String(wordPressId)}`}, a ${here.kind} by ${here.author.name}`;
+      const where =
+        item === undefined ? `on ${permalink}, which this export no longer imports; ` : '';
+      const gone = 'no longer on WordPress, or spam or trash there';
+      if (sha256(canonical(asWritten)) === before) {
+        await site.removeComment(id);
+        forget();
+        rows.push({
+          outcome: 'removed',
+          item,
+          path: file,
+          why: `${label}: ${where}${gone}; removed`,
+        });
+      } else {
+        rows.push({
+          outcome: 'kept',
+          item,
+          path: file,
+          why: `${label}: ${where}${gone}, but edited on this site; left alone`,
+        });
+      }
+    }
+    if (recorded.size === 0) {
+      record.comments.delete(file);
+      record.commentPosts.delete(file);
+      record.commentWordPressIds.delete(file);
+    }
+  }
+  if (changed) await saveRecord(data, record);
+  return rows;
+}
+
+function isKey(id: string): boolean {
+  return /^[0-9a-f]{16}$/.test(id);
 }
 
 /**

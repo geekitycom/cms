@@ -105,6 +105,7 @@ reason.
 | ----------- | -------------------------------------------------------------------------------------------------------- |
 | `written`   | The file is new, was changed on WordPress since the last run, or was removed here and is written again.  |
 | `unchanged` | The file already holds what WordPress has.                                                               |
+| `removed`   | A comment the import wrote is no longer on WordPress, or is spam or trash there. It is removed here.     |
 | `kept`      | The file was edited on this site and WordPress has not changed it since. The edit stays.                 |
 | `conflict`  | The file was edited on this site and changed on WordPress too. The edit stays. The row gives both dates. |
 | `clash`     | A file the import never wrote is at the path. It is left alone.                                          |
@@ -115,7 +116,8 @@ reason.
 content directory byte for byte the same as one run. A run over a newer export
 picks up what was added or edited on WordPress since. The import never
 overwrites a file it did not write, and never deletes a file, so you can edit
-imported files and keep the edits. To take WordPress's side of a conflict,
+imported files and keep the edits. The one thing a rerun removes is an imported
+comment that WordPress no longer has, as described under comments below. To take WordPress's side of a conflict,
 remove the file and run the import again.
 
 ### Posts and pages
@@ -268,6 +270,17 @@ site received itself. It also leaves unchanged the words and status of an
 imported comment that a moderator approved, filed as spam, edited or deleted.
 It still marks such a comment migrated and gives it its origin, its user and
 its actor.
+
+A rerun also removes an imported comment that has left WordPress since the
+last run: one that was deleted there, or moved to spam or the trash. The
+WordPress ActivityPub plugin deletes a like or boost when its sender undoes
+it, so this keeps reaction counts the same on both sites. The import removes a
+comment only when it is still exactly as the import wrote it, compared with
+the hash in `import.json`. Each removal is a `removed` row naming the post and
+the WordPress comment id. A comment that was edited or moderated on this site
+stays and is reported as `kept`. A comment this site received itself is never
+removed. Comments recorded by an earlier version of the import have no
+WordPress id in `import.json`, so their rows name the comment's key instead.
 
 **Upgrading from 0.2.0.** Version 0.2.0 used each comment's WordPress URL as
 its id. The site replaces every such id with the key of that URL when it next

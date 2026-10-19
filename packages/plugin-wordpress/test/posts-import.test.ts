@@ -64,6 +64,7 @@ async function site(siteJson: Record<string, unknown> = { title: 'Blog' }): Prom
     comments: unused,
     putComments: unused,
     renameComments: unused,
+    removeComment: unused,
   };
   const context: PluginCommandContext = {
     args: [],
@@ -104,7 +105,7 @@ async function site(siteJson: Record<string, unknown> = { title: 'Blog' }): Prom
 }
 
 function rowsFor(rows: readonly ReportRow[], id: number): readonly ReportRow[] {
-  return rows.filter((row) => row.item.id === id);
+  return rows.filter((row) => row.item?.id === id);
 }
 
 const FEDERATED = { key: 'activitypub_status', value: 'federated' };
@@ -745,7 +746,7 @@ describe('the posts and pages import', () => {
     assert.deepEqual(
       newer.rows
         .filter((row) => row.path !== '_data/redirects/wordpress.json')
-        .map((row) => [row.item.id, row.outcome, row.why]),
+        .map((row) => [row.item?.id, row.outcome, row.why]),
       [
         [10, 'written', 'changed on WordPress since the last import'],
         [20, 'unchanged', 'already as WordPress has it'],

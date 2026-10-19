@@ -52,6 +52,7 @@ function importComments(exported: WordPressExport, context: PluginCommandContext
   for (const placement of placements(exported)) {
     if ('permalink' in placement) permalinks.set(placement.item, placement.permalink);
   }
+  const posts = [...permalinks].map(([item, permalink]) => ({ item, permalink }));
 
   // Who wrote it signed in: the WordPress user's login, when this site has a
   // user by that name, the rule a post's author is mapped by.
@@ -83,7 +84,7 @@ function importComments(exported: WordPressExport, context: PluginCommandContext
     notes.push(...mapped.notes);
     comments.push(...mapped.comments);
   }
-  return { files: [], notes, comments };
+  return { files: [], notes, comments, posts };
 }
 
 function mapComments(
@@ -159,7 +160,7 @@ function mapComments(
       .map(({ wordPress, comment }) => [wordPress.id, comment.id]),
   );
   const comments = kept.map(({ wordPress, comment, formerId, label }) => {
-    const imported = { item, permalink, formerId, label };
+    const imported = { item, permalink, formerId, wordPressId: wordPress.id, label };
     const { parent } = wordPress;
     if (parent === 0) return { ...imported, comment };
     const inReplyTo = replies.get(parent);

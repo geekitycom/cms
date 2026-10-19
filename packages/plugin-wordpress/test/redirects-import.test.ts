@@ -69,6 +69,7 @@ async function site(): Promise<Site> {
     comments: unused,
     putComments: unused,
     renameComments: unused,
+    removeComment: unused,
   };
   return {
     contentDir,
