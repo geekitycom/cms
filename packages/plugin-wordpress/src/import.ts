@@ -2,7 +2,7 @@ import { createPrivateKey, createPublicKey } from 'node:crypto';
 import type { KeyObject } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
-import { exportJwk } from '@fedify/fedify';
+import { exportJwk, signRequest } from '@fedify/fedify';
 import { isRecord, messageOf } from '@geekity/cms/plugin';
 import type { PluginFollower, PluginKeyAlgorithm, PluginSite } from '@geekity/cms/plugin';
 
@@ -84,6 +84,11 @@ export interface UnreachableFollower {
   readonly actor: string;
   /** Why it was skipped, for the report. */
   readonly reason: string;
+  /**
+   * Whether its server answered and refused a fetch signed with the imported
+   * key, which running the command again will not change.
+   */
+  readonly refused: boolean;
 }
 
 /** What the followers step did. */
@@ -101,7 +106,8 @@ export interface FollowersImportReport {
    *
    * Reported rather than fatal: an instance that is down, or an account that
    * has been deleted, must not stop the other hundred followers from coming
-   * across, and the owner can run the command again once it is back.
+   * across, and the owner can run the command again once it is back. A
+   * server that refused the signed fetch is marked `refused`.
    */
   readonly failed: readonly UnreachableFollower[];
 }
@@ -265,12 +271,16 @@ async function importFollowers(
   const unchanged: string[] = [];
   const refreshed: string[] = [];
   const failed: UnreachableFollower[] = [];
+  const signer: Signer = {
+    privateKey: await signingKeyOf(privateKeyFrom(options.privateKeyPem)),
+    keyId: new URL(`${options.actorId}#main-key`),
+  };
 
   for (const item of await collectionItems(source)) {
     const actor = uriOf(item) ?? String(item);
     try {
       const document =
-        isRecord(item) && uriOf(item['inbox']) !== null ? item : await fetchAs(actor);
+        isRecord(item) && uriOf(item['inbox']) !== null ? item : await fetchAs(actor, signer);
       const follower = followerFrom(document);
       const held = site.followers(username).find((entry) => entry.actorId === follower.actorId);
       await site.addFollower(username, follower);
@@ -279,7 +289,11 @@ async function importFollowers(
       else if (sameFollower(held, follower)) unchanged.push(follower.actorId);
       else refreshed.push(follower.actorId);
     } catch (error) {
-      failed.push({ actor, reason: messageOf(error) });
+      failed.push({
+        actor,
+        reason: messageOf(error),
+        refused: error instanceof RefusedSignedFetchError,
+      });
     }
   }
 
@@ -361,16 +375,47 @@ function isUrl(source: string): boolean {
 const ACTIVITY_STREAMS_ACCEPT =
   'application/activity+json, application/ld+json; profile="https://www.w3.org/ns/activitystreams"';
 
-/** One ActivityStreams document, or a thrown error naming the URL and the status. */
-async function fetchAs(url: string): Promise<unknown> {
+/**
+ * The imported RSA key and the id WordPress publishes it under, which a
+ * follower GET is signed with.
+ *
+ * Servers running Mastodon's authorized fetch answer an unsigned GET of an
+ * actor with 401. The key id is `<actor id>#main-key`, the form the WordPress
+ * plugin publishes and the form the CMS publishes once it serves the actor id,
+ * so the signature verifies on either side of the DNS move.
+ */
+interface Signer {
+  readonly privateKey: CryptoKey;
+  readonly keyId: URL;
+}
+
+/** A follower's server answered a signed fetch with 401 or 403. */
+class RefusedSignedFetchError extends Error {
+  override readonly name = 'RefusedSignedFetchError';
+}
+
+/**
+ * One ActivityStreams document, or a thrown error naming the URL and the status.
+ *
+ * Signed with draft-cavage HTTP Signatures when given a {@link Signer}, which
+ * is what Mastodon verifies.
+ */
+async function fetchAs(url: string, signer?: Signer): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(url, { headers: { accept: ACTIVITY_STREAMS_ACCEPT } });
+    const request = new Request(url, { headers: { accept: ACTIVITY_STREAMS_ACCEPT } });
+    response = await fetch(
+      signer === undefined ? request : await signRequest(request, signer.privateKey, signer.keyId),
+    );
   } catch (error) {
     throw new Error(`${url} could not be fetched: ${messageOf(error)}`, { cause: error });
   }
+  const status = `${String(response.status)} ${response.statusText}`.trim();
+  if (signer !== undefined && (response.status === 401 || response.status === 403)) {
+    throw new RefusedSignedFetchError(`${url} refused a signed fetch: ${status}`);
+  }
   if (!response.ok) {
-    throw new Error(`${url} answered ${String(response.status)} ${response.statusText}`.trim());
+    throw new Error(`${url} answered ${status}`);
   }
   try {
     return await response.json();
@@ -584,11 +629,15 @@ function assertPairMatches(privateKey: KeyObject, publicKeyPem: string | undefin
  * loader's boot check insists on.
  */
 async function privateJwkOf(privateKey: KeyObject): ReturnType<typeof exportJwk> {
+  return await exportJwk(await signingKeyOf(privateKey));
+}
+
+/** The private key as the WebCrypto key Fedify signs and exports with. */
+async function signingKeyOf(privateKey: KeyObject): Promise<CryptoKey> {
   const pkcs8 = privateKey.export({ type: 'pkcs8', format: 'der' });
-  const key = await crypto.subtle.importKey('pkcs8', pkcs8, { name: RSA, hash: 'SHA-256' }, true, [
+  return await crypto.subtle.importKey('pkcs8', pkcs8, { name: RSA, hash: 'SHA-256' }, true, [
     'sign',
   ]);
-  return await exportJwk(key);
 }
 
 /**

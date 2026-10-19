@@ -584,8 +584,10 @@ now says install and enable the WordPress plugin.
    `geekity import wordpress-actor ada --actor-id … --wordpress-id … --keypair ada.keypair.json`
    for each user. Both commands work before the plugin is enabled. Check the
    reports: every post is written, every conflict or clash is resolved, and
-   every follower is added. Re-run any skipped follower once its server
-   answers. Tools > Dev mode shows that the imports sent nothing. You can run
+   every follower is added. Run the import again for a follower whose server
+   did not answer. A follower whose server refused the signed fetch is not
+   added by running it again; pass `--followers` a file that holds that
+   follower's actor document instead. Tools > Dev mode shows that the imports sent nothing. You can run
    both imports again safely. Run them over a fresh export just before step 4
    to pick up what WordPress received in the meantime.
 4. **Enable the WordPress plugin, move the DNS, and go live.** Enable the

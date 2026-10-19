@@ -337,7 +337,11 @@ The command:
    plugin's `actors.json`
 3. fetches the WordPress plugin's public followers collection into
    `content/_data/federation/ada/followers.json`. It dereferences each follower
-   for its inbox, shared inbox, handle, name, avatar and profile URL.
+   for its inbox, shared inbox, handle, name, avatar and profile URL. Each of
+   those requests is signed with the imported RSA key under
+   `<actor id>#main-key`, so servers that run Mastodon's authorized fetch
+   answer it. The report lists a follower whose server refuses the signed
+   request, and running the command again does not change that.
 
 | Option                                        | What it is                                                                                                                                            |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
