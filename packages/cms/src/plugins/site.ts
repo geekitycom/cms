@@ -10,7 +10,13 @@ import path from 'node:path';
 import { importedFields } from '../store/admin-store.ts';
 import type { AdminStore, CommentRecord } from '../store/admin-store.ts';
 import { renderCommentMarkdown } from '../comments/markdown.ts';
-import { commentsFile, putComments, readComments, renameComments } from '../comments/records.ts';
+import {
+  commentsFile,
+  deleteComment,
+  putComments,
+  readComments,
+  renameComments,
+} from '../comments/records.ts';
 import type { ResolvedConfig } from '../config.ts';
 import { slugForPermalink } from '../content/parser.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
@@ -90,6 +96,10 @@ export function pluginSite(options: { admin: AdminStore; config: ResolvedConfig 
 
     async renameComments(permalink, renames) {
       await renameComments({ admin, contentDir, dataDir }, postSlug(permalink), renames);
+    },
+
+    async removeComment(id) {
+      return await deleteComment({ admin, contentDir, dataDir }, id);
     },
   };
 }

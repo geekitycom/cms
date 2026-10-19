@@ -165,6 +165,11 @@ export interface PluginSite {
    * changing nothing, when a new id is one the post already holds.
    */
   renameComments(permalink: string, renames: ReadonlyMap<string, string>): Promise<void>;
+  /**
+   * Remove the comment with an id from whichever post holds it, its email in
+   * `data/` with it. Returns whether the site held it. Nobody is told.
+   */
+  removeComment(id: string): Promise<boolean>;
 }
 
 /** What {@link PluginSite.comments} reads. */
