@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.6.0...plugin-wordpress-v0.6.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **plugin-wordpress:** remove imported comments that left WordPress on a rerun ([4b8f36b](https://github.com/geekitycom/cms/commit/4b8f36be88e41ae8025c55ecbf4ebea477c45477))
+* **plugin-wordpress:** sign follower fetches so authorized-fetch servers answer ([9ac1047](https://github.com/geekitycom/cms/commit/9ac1047f3c4d591735869719dedc53386a0f9f3a))
+
 ## [0.6.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.5.0...plugin-wordpress-v0.6.0) (2026-10-18)
 
 
