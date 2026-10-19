@@ -41,6 +41,28 @@ beside the posts. An Eleventy build of the same content directory sees them as
 - An `Undo(Follow)`, or an actor's own `Delete`, removes the entry.
 - A like, a boost, or a reply appends a line to the inbox log.
 
+A delivery whose HTTP signature does not verify is answered 401 and is not
+logged in the inbox log. The server writes one warning for it instead. This
+applies to the personal inbox, the shared inbox, and a plugin's inbox, such as
+the WordPress compatibility inbox:
+
+```text
+Refused an inbox POST to /inbox/: key not fetchable (HTTP 410); keyId=https://remote.example/users/ada#main-key actor=https://remote.example/users/ada type=Delete id=https://remote.example/users/ada#delete
+```
+
+The reason is one of these:
+
+- `key not fetchable`, with the HTTP status or the error.
+- `date out of range`, with the `Date` header or the signature's `created`
+  time. The limit is one hour from the server's time.
+- `signature mismatch`.
+- `no signature`.
+
+Many refusals are expected. For example, an actor whose account was deleted
+signs its `Delete` with a key that is gone, so the key fetch returns 410. The
+server logs only the first refusal from a keyId in five minutes. After that
+window, one line gives the number of refusals it did not log.
+
 Each write updates the SQLite index in the same step, behind a lock on the
 file, so the file and the index always agree. The `followers` and `ap_inbox`
 tables are only an index. Every boot empties them and reads them back from the

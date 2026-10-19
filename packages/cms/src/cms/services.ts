@@ -32,6 +32,9 @@ import type {
   SiteFederation,
 } from '../federation/index.ts';
 import { createFederationQueue } from '../federation/queue.ts';
+import { createInboxRefusals } from '../federation/refusals.ts';
+import type { InboxRefusals } from '../federation/refusals.ts';
+import { systemClock } from '../util/clock.ts';
 import { settleImageVariants } from '../images/variants.ts';
 import { stripMetadataJob } from '../content/metadata/strip-job.ts';
 import { siteExportJob } from '../export/export-job.ts';
@@ -101,6 +104,7 @@ export interface Services {
   readonly mail: MailService;
   readonly federation: SiteFederation;
   readonly federationKv: KvStore;
+  readonly inboxRefusals: InboxRefusals;
   readonly delivery: DeliveryService;
   readonly relays: RelayService;
   readonly webmentions: WebmentionService;
@@ -237,11 +241,21 @@ export function createServices({
 
   const federationKv = resolved.federation.kv ?? new MemoryKvStore();
   const federationQueue = createFederationQueue(resolved.federation.queue, site);
+  // On the system clock rather than the site's: Fedify checks a signature's
+  // date against the real time, and the log has to agree with it about which
+  // dates were out of range.
+  const inboxRefusals = createInboxRefusals({
+    now: systemClock,
+    warn: (line) => {
+      console.warn(line);
+    },
+  });
   const federation = createSiteFederation({
     baseUrl: resolved.baseUrl,
     ...resolved.federation,
     queue: federationQueue ?? null,
     kv: federationKv,
+    refusals: inboxRefusals,
     federationOptions: { manuallyStartQueue: true },
   });
 
@@ -494,6 +508,7 @@ export function createServices({
     mail,
     federation,
     federationKv,
+    inboxRefusals,
     delivery,
     relays,
     webmentions,

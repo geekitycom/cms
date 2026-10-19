@@ -325,7 +325,10 @@ job rather than once in `register`.
 `followers(username)` return promises of the collection, or of `undefined`
 for a user the site does not have. Await them before reading `totalItems`,
 `firstCursor`, `lastCursor` or a page. In host API version 1 they returned the
-collection directly.
+collection directly. A plugin inbox that registers Fedify's
+`onUnverifiedActivity` hands the activity's JSON-LD and the reason to
+`refused(activity, reason)`. The site then logs the refusal in the same format
+and under the same rate limit as its own inboxes.
 
 **The host API version and the peer range.** `HOST_API_VERSION` in
 `@geekity/cms/plugin` is the version of the host API this core provides. A

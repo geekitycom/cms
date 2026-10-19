@@ -11,6 +11,7 @@ import type {
 import { Create, type Object as APObject, QuoteAuthorization } from '@fedify/vocab';
 
 import type { AdminStore } from '../store/admin-store.ts';
+import type { JsonLdDocument } from '../plugin.ts';
 import type { FederationOverrides, ResolvedConfig } from '../config.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import type { SettingsRegistry } from '../settings/types.ts';
@@ -32,6 +33,7 @@ import { isFederatedDocument } from '../content/served.ts';
 import { followersPage, lastFollowersCursor } from './followers.ts';
 import { INBOX_LISTENERS } from './inbox.ts';
 import { loadActorKeyPairs } from './keys.ts';
+import type { InboxRefusals } from './refusals.ts';
 import type { ActorProfileService } from './profiles.ts';
 import {
   ACTOR_PATH,
@@ -93,6 +95,8 @@ export interface CreateSiteFederationOptions extends FederationOverrides {
    */
   baseUrl: string;
   queue: MessageQueue | null;
+  /** Where a delivery refused for its signature is logged. */
+  refusals: InboxRefusals;
   /** Anything else Fedify takes, for a site that needs to reach past this factory. */
   federationOptions?: Partial<FederationOptions<FederationContextData>> | undefined;
 }
@@ -261,7 +265,11 @@ export function createSiteFederation(options: CreateSiteFederationOptions): Site
     // recipient identifier into the key: one `Follow` delivered to a personal
     // and a shared inbox, or to a plugin's second federation over the same KV
     // store, would otherwise be handled twice (doc-8).
-    .withIdempotency('per-origin');
+    .withIdempotency('per-origin')
+    .onUnverifiedActivity(async (context, activity, reason) => {
+      const json = (await activity.toJsonLd()) as JsonLdDocument;
+      options.refusals.refused(context.request, json, reason);
+    });
   for (const { type, handle } of INBOX_LISTENERS) inbox.on(type, handle);
 
   federation.setNodeInfoDispatcher(NODEINFO_PATH, (context) => {

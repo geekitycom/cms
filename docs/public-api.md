@@ -262,6 +262,7 @@ root entry. It seeds its comment with `addComment` from `@geekity/cms/testing`. 
 
 | Export                       | Kind | What it is                                                                                                                  |
 | ---------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------- |
+| `InboxRefusalReason`         | type | Why an inbox could not verify a delivery's signature, as `PluginFederationContext.refused` takes it.                        |
 | `JsonLdDocument`             | type | A JSON-LD document as plain data.                                                                                           |
 | `Plugin`                     | type | A plugin, as a site config or a bundle's default export hands it over.                                                      |
 | `PluginActorKey`             | type | One of a user's key files.                                                                                                  |
