@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.0](https://github.com/geekitycom/cms/compare/v0.33.0...v0.34.0) (2026-10-19)
+
+
+### Features
+
+* **cms:** let a plugin remove a comment by id ([2ec5f76](https://github.com/geekitycom/cms/commit/2ec5f76594668800f6d0e6740b4a85e82edfb778))
+
 ## [0.33.0](https://github.com/geekitycom/cms/compare/v0.32.1...v0.33.0) (2026-10-18)
 
 
