@@ -42,7 +42,6 @@ const SCREENS: readonly ListScreen[] = [
   'activity',
   'activityFailures',
   'activityEntry',
-  'media',
   'followers',
   'syndication',
 ];
@@ -164,10 +163,6 @@ describe('the list screens', async () => {
       ],
       activity: [{ label: 'Refused', modifiers: 'badge-error' }],
       activityEntry: [{ label: 'Refused', modifiers: 'badge-error' }],
-      media: [
-        { label: 'Missing', modifiers: 'badge-warning' },
-        { label: 'Trash', modifiers: 'badge-ghost' },
-      ],
       followers: [
         { label: 'Rejected', modifiers: 'badge-error' },
         { label: 'Waiting', modifiers: 'badge-warning' },

@@ -1,4 +1,4 @@
-import { mkdir, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { readActivityLog } from '../../web/indieauth-activity-log.ts';
@@ -23,7 +23,6 @@ export const LIST_SCREENS = {
   apps: '/admin/users/apps',
   activity: '/admin/users/activity',
   activityFailures: '/admin/users/activity?show=failures',
-  media: '/admin/media',
   followers: '/admin/federation',
   syndication: '/admin/syndication',
 } as const;
@@ -84,7 +83,7 @@ export async function listSite(
     contentDir,
     '_trash/posts/2026-09-03-thrown-away.md',
     ['title: Thrown away', 'date: 2026-09-03T09:00:00Z', 'permalink: /2026/09/thrown-away/'],
-    '![](/uploads/2026/09/photo.png)',
+    'Thrown away.',
   );
   await write(contentDir, 'pages/about.md', ['title: About', 'permalink: /about/']);
   await write(contentDir, 'pages/colophon.md', [
@@ -92,21 +91,6 @@ export async function listSite(
     'permalink: /colophon/',
     'draft: true',
   ]);
-
-  const uploads = path.join(contentDir, 'uploads', '2026', '09');
-  await mkdir(uploads, { recursive: true });
-  await writeFile(
-    path.join(uploads, 'photo.png'),
-    new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-  );
-  await writeFile(
-    path.join(uploads, 'paper.pdf'),
-    new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]),
-  );
-  const older = new Date('2026-09-01T09:00:00Z');
-  const newer = new Date('2026-09-02T09:00:00Z');
-  await utimes(path.join(uploads, 'photo.png'), newer, newer);
-  await utimes(path.join(uploads, 'paper.pdf'), older, older);
 
   await mkdir(path.join(contentDir, '_data'), { recursive: true });
   await writeFile(

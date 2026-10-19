@@ -2,19 +2,48 @@
 
 ## The media library
 
-`/admin/media` lists every file under `content/uploads`, newest first by
-modification time. Each row shows:
+`/admin/media` shows every file under `content/uploads` as a grid of square
+tiles, newest first by modification time. A tile shows a thumbnail for a
+picture, or the file's extension for anything else, and the file name under
+it. Two badges mark what needs doing:
 
-- a thumbnail for a picture, or the file's extension at the same size for
-  anything else
-- the size in bytes
-- the date
-- the public URL
-- the ready-made Markdown
+- **No alt text** on a picture with neither alt text nor a decorative flag
+- **Unused** on a file that no document, live or in the trash, mentions
+
+A thumbnail is the narrowest derived copy, in the first configured format, that
+is at least 400 pixels wide. A picture with no variants yet shows the original.
+
+Above the grid, tabs pick a kind of file (All, Images, Audio, Video, Documents)
+and show how many files each holds. A filter form below them searches file
+names and alt text, keeps only files that need alt text or that nothing uses,
+and sorts by newest, oldest, largest or name. The filters are query parameters
+(`kind`, `q`, `alt=missing`, `unused=1`, `sort`), so a filtered view is a link,
+and the page links keep them. When a view holds more than twenty-four files, a
+pager splits it into pages of twenty-four.
+
+**Upload** above the grid opens the upload form.
+
+Each tile links to the file's details screen, `/admin/media/file?path=…`. It
+shows:
+
+- a preview: the picture, an audio or video player, or the extension
+- the upload date, the size, the dimensions of a picture with variants, and the
+  path under `content/uploads`
+- the alt-text form, for a picture
+- the public URL and the ready-made Markdown
 - the documents that point at the file
+- **Delete**
 
-When the library holds more than twenty-four files, a pager splits it into
-pages of twenty-four.
+**Previous** and **Next** step through the view the screen was opened from. The
+rest of the query string is that view, so stepping from a file that needs alt
+text goes to the next file that needs alt text. The file on screen always
+counts as part of its view, so a picture you have just described still has
+Previous and Next links.
+
+With JavaScript on, `static/media.js` opens a tile's details screen in a dialog
+over the grid, and the left and right arrow keys step to the previous and next
+file. The forms in the dialog post as they do on the details screen. With
+JavaScript off, every tile is a link and every form posts on its own.
 
 The server walks the directory on every request. No record says that an upload
 exists, because the files on disk are the record (decision-1, decision-9). A
@@ -100,14 +129,15 @@ photo is attached with no `name`, and a photo from another site with no media
 type. A read post's cover and the images in a post's text are attached only
 when they are uploads the library does not mark decorative.
 
-A picture's row in the library has three alt-text controls:
+A picture's details screen has three alt-text controls:
 
 - a text field
 - a Decorative checkbox, which overrides the text
 - a line that says whether the library holds alt text, the decorative flag, or
   neither
 
-The form posts to `/admin/media/alt`. The server writes
+The form posts to `/admin/media/alt` and returns to the details screen. The
+server writes
 `content/_data/media.json` atomically and keeps every other entry. The file is
 the source of truth (decision-9) and the server reads it on each request, so an
 entry written by hand appears without a restart. The editor's publish check and
@@ -150,7 +180,7 @@ arrive. An episode's tags hold its title and artwork, not where it was
 recorded.
 
 Files uploaded before this version still carry their metadata. To strip them,
-press **Strip metadata from every upload** on the **Media** screen, or run:
+press **Strip metadata from every upload** on **Tools > Maintenance**, or run:
 
 ```sh
 geekity strip-metadata
@@ -165,15 +195,20 @@ The job:
 - replaces each file by renaming a stripped copy over it, so a file is never
   half written
 - deletes any `.geekity-strip` copy that an earlier sweep left behind when it
-  was killed between writing the copy and renaming it. The **Media** screen
+  was killed between writing the copy and renaming it. The media library
   never lists these copies.
 
-The button returns at once, and the job runs in the server. The **Media**
-screen shows the latest sweep: queued, running with the files checked out of
+The button returns at once, and the job runs in the server. The
+**Maintenance** screen shows the latest sweep: queued, running with the files checked out of
 the total, finished with the counts and each file it stripped, failed with the
 error, or interrupted. The page does not reload itself. Select **Check again**
 to see how far it got. While a sweep is queued or running, the screen offers no
 second one.
+
+Until a sweep has finished, the media library shows a one-line notice with a
+**Strip it now** button and a link to the sweep on the Maintenance screen. Once
+one has finished, the sweep has checked every older upload and `storeUpload`
+cleaned every newer one, so the notice goes away.
 
 The command runs the job in its own process and waits for it. It prints each
 file it stripped and what it removed, names each file it could not read on

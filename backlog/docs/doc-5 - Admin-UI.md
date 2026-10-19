@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-09 15:12'
+updated_date: '2026-10-19 23:43'
 ---
 # Admin UI
 
@@ -179,7 +179,7 @@ What the screens make of the library:
   screen prints, so a state is never told by colour alone, and a name outside
   the map is a render error.
 - **A list screen is a table, tabs and pagination.** Posts, Pages, Tags,
-  Categories, Users, Connected apps, App activity and its entry, Media,
+  Categories, Users, Connected apps, App activity and its entry,
   Followers and Syndication draw their rows through `table`, their filters
   (the `filters` and `tabs` lists the routes hand them, each
   `{ label, url, current, count }`) through `tabs`, and their page links
@@ -193,6 +193,19 @@ What the screens make of the library:
   to saying so. Syndication's
   entries are forms, so its table lists them, offered or ignored, and a card
   per entry edits it.
+- **Media is a grid of tiles, not a table** (TASK-429). Most of what the
+  library lists is pictures, so each file is a square tile: a
+  thumbnail or the file's extension, the name under it, and a warning badge
+  (No alt text) or a neutral one (Unused) over its corner. The kind tabs carry
+  counts through `tabs`, a GET form beside them filters and sorts, and the
+  pages go through `pagination`. A tile links to the file's details screen,
+  `/admin/media/file`, which holds every per-file control: the alt-text form,
+  the copy fields, what uses the file and Delete, with Previous and Next
+  through the view it was opened from. `static/media.js` opens that screen in
+  a dialog over the grid and steps with the arrow keys; without it the links
+  and forms do the same work. The metadata sweep is not on this screen: it is
+  a card on Tools > Maintenance (TASK-430), and Media shows a one-line notice
+  only until a sweep has finished.
 - **Posts and Pages put a row's actions under its title.** There is no Actions
   column: the first cell holds the title link (and a page's role), then the
   row's Edit, Move to trash or Restore, and View on one line under it, so the
@@ -466,5 +479,4 @@ What the screens make of the library:
 ## Out of scope for phase one
 
 - Roles beyond admin.
-- Media library UI (uploads are copied into `content/uploads` by an upload endpoint used from the editor).
 - Revisions. Git on the content directory is the recommended history mechanism.

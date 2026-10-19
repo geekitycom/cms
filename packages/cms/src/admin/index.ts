@@ -146,7 +146,6 @@ export {
   MEDIA_PER_PAGE,
   MEDIA_SECTION,
   MEDIA_UPLOAD_PATH,
-  mediaPageUrl,
   mountMediaScreen,
   referencesTo,
 } from './media.ts';

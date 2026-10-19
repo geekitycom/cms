@@ -3,6 +3,7 @@
 @source '../components';
 @source '../pages';
 @source '../../editor/look.ts';
+@source '../static/media.js';
 
 @plugin 'daisyui' {
   themes:

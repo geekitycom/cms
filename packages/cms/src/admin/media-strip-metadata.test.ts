@@ -27,19 +27,23 @@ async function siteWith(uploads: Record<string, Uint8Array>): Promise<Cms> {
   return box.site({ contentDir });
 }
 
+async function maintenanceScreen(agent: Browser): Promise<string> {
+  return (await agent.get('/admin/tools/maintenance')).text();
+}
+
 async function mediaScreen(agent: Browser): Promise<string> {
   return (await agent.get('/admin/media')).text();
 }
 
 function sweepSection(html: string): string {
   const match = /<section[^>]*id="strip-metadata"[\s\S]*?<\/section>/.exec(html);
-  assert.ok(match, 'the media screen has a strip-metadata section');
+  assert.ok(match, 'the maintenance screen has a strip-metadata section');
   return match[0].replace(/\s+/g, ' ');
 }
 
 async function queueSweep(agent: Browser): Promise<Response> {
-  const token = csrfField(await mediaScreen(agent));
-  return agent.post('/admin/media/strip-metadata', { csrf_token: token ?? '' });
+  const token = csrfField(await maintenanceScreen(agent));
+  return agent.post('/admin/tools/maintenance/strip-metadata', { csrf_token: token ?? '' });
 }
 
 async function recordSweep(cms: Cms, state: JobState): Promise<void> {
@@ -52,13 +56,13 @@ async function recordSweep(cms: Cms, state: JobState): Promise<void> {
   });
 }
 
-describe('Media > strip metadata from earlier uploads', () => {
+describe('Tools > Maintenance > strip metadata from earlier uploads', () => {
   it('offers the sweep when none has run', async () => {
     const cms = await siteWith({});
-    const section = sweepSection(await mediaScreen(await signedIn(cms)));
+    const section = sweepSection(await maintenanceScreen(await signedIn(cms)));
 
     assert.match(section, /<h2[^>]*>Location and camera metadata<\/h2>/);
-    assert.match(section, /action="\/admin\/media\/strip-metadata"/);
+    assert.match(section, /action="\/admin\/tools\/maintenance\/strip-metadata"/);
     assert.match(section, /<button type="submit"[^>]*>Strip metadata from every upload<\/button>/);
   });
 
@@ -69,13 +73,13 @@ describe('Media > strip metadata from earlier uploads', () => {
     const response = await queueSweep(agent);
 
     assert.equal(response.status, 303);
-    assert.equal(response.headers.get('location'), '/admin/media#strip-metadata');
+    assert.equal(response.headers.get('location'), '/admin/tools/maintenance#strip-metadata');
     const queued = await cms.jobs.latest(STRIP_METADATA_JOB.name);
     assert.equal(queued?.state, 'queued', 'the request did not wait for the sweep');
     const file = path.join(cms.config.contentDir, 'uploads', '2025', '05', 'beach.jpg');
     assert.notDeepEqual(leakedSecrets(await readFile(file)), [], 'nothing was stripped yet');
 
-    const html = await mediaScreen(agent);
+    const html = await maintenanceScreen(agent);
     assert.ok(flashes(html).some((flash) => /Queued the sweep/.test(flash.message)));
     const section = sweepSection(html);
     assert.match(section, />Queued</);
@@ -101,7 +105,7 @@ describe('Media > strip metadata from earlier uploads', () => {
     assert.equal(again.status, 303);
     assert.equal((await cms.jobs.latest(STRIP_METADATA_JOB.name))?.id, first?.id);
     assert.ok(
-      flashes(await mediaScreen(agent)).some((flash) =>
+      flashes(await maintenanceScreen(agent)).some((flash) =>
         /already queued or running/.test(flash.message),
       ),
     );
@@ -117,7 +121,7 @@ describe('Media > strip metadata from earlier uploads', () => {
       progress: { done: 2, total: 5 },
     });
 
-    const section = sweepSection(await mediaScreen(await signedIn(cms)));
+    const section = sweepSection(await maintenanceScreen(await signedIn(cms)));
 
     assert.match(section, />Running</);
     assert.match(section, /Checked 2 of 5 files/);
@@ -144,7 +148,7 @@ describe('Media > strip metadata from earlier uploads', () => {
     assert.ok(second);
     await cms.jobs.run(second.id);
 
-    const section = sweepSection(await mediaScreen(agent));
+    const section = sweepSection(await maintenanceScreen(agent));
 
     assert.match(section, />Finished</);
     assert.match(section, /Checked 3 files: 1 stripped, 1 already clean, 1 unreadable/);
@@ -162,7 +166,7 @@ describe('Media > strip metadata from earlier uploads', () => {
       error: 'EACCES: permission denied, open <uploads>',
     });
 
-    const section = sweepSection(await mediaScreen(await signedIn(cms)));
+    const section = sweepSection(await maintenanceScreen(await signedIn(cms)));
 
     assert.match(section, />Failed</);
     assert.match(section, /EACCES: permission denied, open &lt;uploads&gt;/);
@@ -177,10 +181,51 @@ describe('Media > strip metadata from earlier uploads', () => {
       interruptedAt: '2026-10-14T09:00:03.000Z',
     });
 
-    const section = sweepSection(await mediaScreen(await signedIn(cms)));
+    const section = sweepSection(await maintenanceScreen(await signedIn(cms)));
 
     assert.match(section, />Interrupted</);
     assert.match(section, /cut it off 3 times/);
     assert.match(section, /<button type="submit"[^>]*>Run the sweep again<\/button>/);
+  });
+});
+
+describe('Media > the metadata notice', () => {
+  function notice(html: string): string | undefined {
+    return /<section[^>]*id="strip-metadata-notice"[\s\S]*?<\/section>/.exec(html)?.[0];
+  }
+
+  it('offers the sweep in one line until one has run, and links to Maintenance', async () => {
+    const cms = await siteWith({});
+    const found = notice(await mediaScreen(await signedIn(cms)));
+
+    assert.ok(found, 'the media screen carries the notice');
+    assert.match(found, /action="\/admin\/tools\/maintenance\/strip-metadata"/);
+    assert.match(found, /href="\/admin\/tools\/maintenance#strip-metadata"/);
+  });
+
+  it('keeps the notice while a sweep waits, without a second button', async () => {
+    const cms = await siteWith({});
+    const agent = await signedIn(cms);
+    await queueSweep(agent);
+
+    const found = notice(await mediaScreen(agent));
+
+    assert.ok(found);
+    assert.doesNotMatch(found, /<button type="submit"/);
+  });
+
+  it('drops the notice once a sweep has finished', async () => {
+    const cms = await siteWith({});
+    await recordSweep(cms, {
+      state: 'finished',
+      attempt: 1,
+      finishedAt: '2026-10-14T09:00:02.000Z',
+      result: { checked: 0, clean: 0, stripped: [], unreadable: [] },
+    });
+
+    const html = await mediaScreen(await signedIn(cms));
+
+    assert.equal(notice(html), undefined);
+    assert.doesNotMatch(html, /Location and camera metadata/);
   });
 });

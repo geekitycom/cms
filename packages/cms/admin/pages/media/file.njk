@@ -1,0 +1,142 @@
+{# /admin/media/file?path=…: one upload, everything that can be said about it
+   and done to it (TASK-429). The rest of the query is the library view it was
+   opened from, which previous, next and the way back keep.
+
+   Everything inside [data-media-details] is what media.js shows in its dialog
+   when a tile is opened from the library, so it is the whole screen apart
+   from the shell. #}
+{% extends "layouts/shell.njk" %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button, buttonLink %}
+{% from "components/card.njk" import card, cardActions %}
+{% from "components/copy.njk" import copyField %}
+
+{% block title %}{{ heading }} · Media{% endblock %}
+
+{% block content %}
+  <div data-media-details>
+    <div class="mb-4 flex flex-wrap items-center gap-2">
+      <a class="link link-hover text-sm" href="{{ libraryUrl }}" data-media-library>Media</a>
+      <span class="flex-1"></span>
+      <span class="text-sm">{{ position }} of {{ count }}</span>
+      <nav class="join" aria-label="Files">
+        {% if previousUrl %}
+          <a class="join-item btn btn-sm" rel="prev" href="{{ previousUrl }}" data-media-step>Previous</a>
+        {% else %}
+          <span class="join-item btn btn-sm btn-disabled" aria-disabled="true">Previous</span>
+        {% endif %}
+        {% if nextUrl %}
+          <a class="join-item btn btn-sm" rel="next" href="{{ nextUrl }}" data-media-step>Next</a>
+        {% else %}
+          <span class="join-item btn btn-sm btn-disabled" aria-disabled="true">Next</span>
+        {% endif %}
+      </nav>
+    </div>
+
+    <h1 class="mb-6 text-2xl font-bold break-all">{{ heading }}</h1>
+
+    {% if confirm %}
+      <form class="mb-6 max-w-2xl" method="post" action="{{ deleteUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="{{ fields.path }}" value="{{ file.path }}" />
+        <input type="hidden" name="{{ fields.from }}" value="{{ from }}" />
+        <input type="hidden" name="{{ fields.confirm }}" value="1" />
+        {% call card(title='Delete ' + confirm.url + '?', style='border') %}
+          <p>
+            {{ confirm.references.length }}
+            {% if confirm.references.length == 1 %}document still points{% else %}documents still point{% endif %}
+            at it. Deleting the file does not change them, so they will point at nothing.
+          </p>
+          <ul class="list-disc pl-6">
+            {% for reference in confirm.references %}
+              <li>
+                <a class="link" href="{{ reference.editUrl }}">{{ reference.title }}</a>
+                {% if reference.trashed %}{{ status('trashed', 'Trash') }}{% endif %}
+                <code>{{ reference.path }}</code>
+              </li>
+            {% endfor %}
+          </ul>
+          {% call cardActions() %}
+            {{ buttonLink('Cancel', selfUrl, style='ghost') }}
+            {{ button('Delete it anyway', type='submit', color='error') }}
+          {% endcall %}
+        {% endcall %}
+      </form>
+    {% endif %}
+
+    <div class="grid gap-6 overflow-hidden rounded-box border border-base-300 bg-base-100 lg:grid-cols-[3fr_2fr]">
+      <div class="flex min-h-64 items-center justify-center bg-base-200 p-4">
+        {% if file.kind == 'image' %}
+          <a href="{{ file.url }}"><img class="max-h-[70vh] rounded-box object-contain" src="{{ file.url }}" alt=""{% if file.width %} width="{{ file.width }}" height="{{ file.height }}"{% endif %} /></a>
+        {% elif file.kind == 'audio' %}
+          <audio class="w-full" controls preload="none" src="{{ file.url }}"></audio>
+        {% elif file.kind == 'video' %}
+          <video class="max-h-[70vh] w-full" controls preload="metadata" src="{{ file.url }}"></video>
+        {% else %}
+          <a class="flex size-40 items-center justify-center rounded-box bg-base-300 font-bold" href="{{ file.url }}">{{ file.extension | replace('.', '') | upper or 'FILE' }}</a>
+        {% endif %}
+      </div>
+
+      <div class="flex flex-col gap-5 p-4">
+        <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+          <dt>Uploaded</dt><dd>{{ file.modified | date('html') }}</dd>
+          <dt>Size</dt><dd>{{ file.bytes | fileSize }}{% if file.width %} · {{ file.width }} × {{ file.height }}{% endif %}</dd>
+          <dt>Path</dt><dd><code class="break-all">{{ file.path }}</code></dd>
+        </dl>
+
+        {% if file.kind == 'image' %}
+          <form method="post" action="{{ altUrl }}">
+            <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+            <input type="hidden" name="{{ fields.path }}" value="{{ file.path }}" />
+            <input type="hidden" name="{{ fields.from }}" value="{{ from }}" />
+            <div class="fieldset">
+              <label class="fieldset-legend" for="media-alt">Alt text</label>
+              <textarea id="media-alt" name="{{ fields.alt }}" rows="3" placeholder="Describe what the picture shows" aria-describedby="media-alt-state" class="textarea w-full">{% if file.alt and file.alt.kind == 'described' %}{{ file.alt.text }}{% endif %}</textarea>
+              <label class="label text-sm text-base-content" for="media-decorative">
+                <input id="media-decorative" name="{{ fields.decorative }}" type="checkbox" value="1"{% if file.alt and file.alt.kind == 'decorative' %} checked{% endif %} class="checkbox checkbox-sm" />
+                Decorative
+              </label>
+              <p id="media-alt-state" class="text-sm">
+                {%- if not file.alt %}{{ status('missing', 'Missing') }} Describe it, or mark it decorative.
+                {%- elif file.alt.kind == 'decorative' %}{{ status('decorative', 'Decorative') }} Inserted with an empty alt.
+                {%- else %}{{ status('described', 'Described') }} Offered when it is inserted.{% endif -%}
+              </p>
+            </div>
+            <div class="mt-2">{{ button('Save', type='submit', color='primary') }}</div>
+          </form>
+        {% endif %}
+
+        <div class="flex flex-col gap-2">
+          <h2 class="text-sm font-semibold">Link</h2>
+          {{ copyField('media-url', 'URL of ' + file.name, file.url) }}
+          {{ copyField('media-markdown', 'Markdown for ' + file.name, file.markdown) }}
+        </div>
+
+        <div>
+          <h2 class="text-sm font-semibold">Used by</h2>
+          {% if file.references.length %}
+            <ul class="text-sm">
+              {% for reference in file.references %}
+                <li>
+                  <a class="link link-hover" href="{{ reference.editUrl }}">{{ reference.title }}</a>
+                  {% if reference.trashed %}{{ status('trashed', 'Trash') }}{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-sm">Nothing links to it.</p>
+          {% endif %}
+        </div>
+
+        <form class="border-t border-base-300 pt-4 text-right" method="post" action="{{ deleteUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          <input type="hidden" name="{{ fields.path }}" value="{{ file.path }}" />
+          <input type="hidden" name="{{ fields.from }}" value="{{ from }}" />
+          {{ button('Delete', type='submit', style='ghost', color='error') }}
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script defer src="{{ assetPrefix }}copy.js"></script>
+{% endblock %}
