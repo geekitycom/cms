@@ -257,7 +257,8 @@ shows a commenter. Print the path as it is. It needs no filter.
 
 The route serves only the pictures the site shows:
 
-- a follower who has liked, boosted, quoted or answered a post
+- any follower, because the admin's follower list shows them all
+- another actor who has liked, boosted, quoted or answered a post
 - the author of an approved comment or webmention
 
 Any other URL returns 404, and the CMS fetches nothing for it.

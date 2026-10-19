@@ -10,6 +10,7 @@ import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { avatarUrl } from '../federation/actor.ts';
+import { avatarHref } from '../avatars/avatars.ts';
 import { RESEND_JOB } from '../federation/resend-job.ts';
 import { finishedResult } from '../jobs/types.ts';
 import {
@@ -718,7 +719,7 @@ export interface FollowerRow {
   readonly name: string;
   /** `@name@host`, or the id when the actor published no username. */
   readonly handle: string;
-  /** The avatar, or `null` for the initial the template draws instead. */
+  /** The avatar's same-origin cache URL, or `null` for the placeholder circle. */
   readonly iconUrl: string | null;
   /** Where a click on the row goes: the actor's profile, else its id. */
   readonly url: string;
@@ -738,7 +739,7 @@ export function followerRow(follower: Follower): FollowerRow {
     actorId: follower.actorId,
     name: follower.name ?? follower.handle ?? follower.actorId,
     handle: follower.handle ?? follower.actorId,
-    iconUrl: follower.iconUrl,
+    iconUrl: follower.iconUrl === null ? null : avatarHref(follower.iconUrl),
     url: follower.url ?? follower.actorId,
     followedAt: follower.followedAt,
   };
