@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import { isRecord, repliesKey, writeFileAtomically } from '@geekity/cms/plugin';
+import { isKey, isRecord, repliesKey, writeFileAtomically } from '@geekity/cms/plugin';
 import type {
   PluginCommandContext,
   PluginComment,
@@ -41,7 +41,6 @@ export interface ImportedComment {
   readonly label: string;
 }
 
-/** A post or page a comment can be on, at the permalink it is imported to. */
 export interface ImportedPost {
   readonly item: WordPressItem;
   readonly permalink: string;
@@ -93,7 +92,6 @@ export type Outcome =
 
 export interface ReportRow {
   readonly outcome: Outcome;
-  /** Absent for a comment on a post the export no longer has. */
   readonly item?: WordPressItem | undefined;
   readonly path?: string | undefined;
   readonly why: string;
@@ -183,7 +181,6 @@ interface ImportRecord {
   readonly files: Map<ContentPath, Sha256>;
   readonly entries: Map<ContentPath, Map<EntryKey, JsonText>>;
   readonly comments: Map<ContentPath, Map<CommentId, Sha256>>;
-  /** The post each comment file in `comments` is on. */
   readonly commentPosts: Map<ContentPath, Permalink>;
   readonly commentWordPressIds: Map<ContentPath, Map<CommentId, number>>;
 }
@@ -409,12 +406,6 @@ async function writeComments(
   return rows;
 }
 
-/**
- * Each comment the record says the import wrote that this export no longer
- * imports: deleted on WordPress, or spam or trash there. One still exactly as
- * the import wrote it, and so still migrated, is removed; one edited here is
- * kept.
- */
 async function pruneComments(
   site: PluginSite,
   imported: ReadonlyMap<Permalink, readonly ImportedComment[]>,
@@ -426,18 +417,17 @@ async function pruneComments(
   const formerIds = new Map(
     [...imported.values()].flat().map(({ comment, formerId }) => [comment.id, formerId]),
   );
-  // A record from before this version names no post for a file.
-  let postsByFile: Map<ContentPath, Permalink> | undefined;
+  let legacyPostsByFile: Map<ContentPath, Permalink> | undefined;
 
   const rows: ReportRow[] = [];
   let changed = false;
   for (const [file, recorded] of [...record.comments]) {
     let permalink = record.commentPosts.get(file);
     if (permalink === undefined) {
-      postsByFile ??= new Map(
+      legacyPostsByFile ??= new Map(
         posts.map((post) => [site.comments(post.permalink).file, post.permalink]),
       );
-      permalink = postsByFile.get(file);
+      permalink = legacyPostsByFile.get(file);
     }
     if (permalink === undefined) continue;
     const item = items.get(permalink);
@@ -451,8 +441,7 @@ async function pruneComments(
     );
 
     for (const [entry, before] of [...recorded]) {
-      // 0.2.0 recorded a comment under its former id, which a boot keyed.
-      const id = isKey(entry) ? entry : repliesKey(entry);
+      const id = keyOfRecorded(entry);
       if (kept.has(id)) continue;
       const forget = () => {
         recorded.delete(entry);
@@ -505,10 +494,6 @@ async function pruneComments(
   }
   if (changed) await saveRecord(data, record);
   return rows;
-}
-
-function isKey(id: string): boolean {
-  return /^[0-9a-f]{16}$/.test(id);
 }
 
 /**
@@ -571,4 +556,9 @@ async function readIfPresent(file: string): Promise<Buffer | undefined> {
 
 function sha256(contents: string | Uint8Array): string {
   return createHash('sha256').update(contents).digest('hex');
+}
+
+/** A record entry's comment key; plugin-wordpress 0.2.0 recorded the former id instead. */
+function keyOfRecorded(entry: string): string {
+  return isKey(entry) ? entry : repliesKey(entry);
 }

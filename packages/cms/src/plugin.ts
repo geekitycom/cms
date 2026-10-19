@@ -41,7 +41,7 @@ export type { KvStore };
  * reaction by {@link repliesKey} of its note or activity id, a webmention by
  * {@link webmentionKey} of its source and the post's permalink.
  */
-export { repliesKey } from './content/guids.ts';
+export { isKey, repliesKey } from './content/guids.ts';
 export { webmentionKey } from './content/guids.ts';
 
 /**

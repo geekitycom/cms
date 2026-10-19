@@ -46,7 +46,6 @@ interface Site {
   readonly dataDir: string;
   readonly admin: AdminStore;
   run(items: readonly TestItem[]): Promise<readonly ReportRow[]>;
-  /** Run `geekity import wordpress` over the items and answer what it printed. */
   report(items: readonly TestItem[]): Promise<string>;
   record(): Promise<SavedRecord>;
   comments(slugFile: string): Promise<CommentEntry[]>;

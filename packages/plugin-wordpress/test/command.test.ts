@@ -257,7 +257,6 @@ describe('geekity import wordpress-actor', () => {
 });
 
 describe('the wordpress-actor summary', () => {
-  /** A run whose followers step skipped the two kinds of follower. */
   const report: ImportWordPressActorReport = {
     username: 'ada',
     actorId: 'https://blog.example/?author=2',

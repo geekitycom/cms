@@ -46,12 +46,7 @@ const WELDON = 'https://mstdn.example/users/weldon';
 /** An actor the collection names and that nobody can fetch. */
 const GONE = 'https://gone.example/users/ghost';
 
-/**
- * A second collection, for the followers on servers that run Mastodon's
- * authorized fetch: one that answers a fetch signed with the imported key, and
- * one that refuses every fetch, signed or not.
- */
-const SECURE_FOLLOWERS = `${WORDPRESS_ORIGIN}/secure-followers`;
+const AUTHORIZED_FETCH_FOLLOWERS = `${WORDPRESS_ORIGIN}/secure-followers`;
 const STRICT = 'https://strict.example/users/sterling';
 const REFUSER = 'https://refuser.example/users/rhoda';
 
@@ -146,16 +141,14 @@ function serveFakeWordPress(): () => void {
         partOf: WP_FOLLOWERS,
       });
     }
-    if (request.url === SECURE_FOLLOWERS) {
+    if (request.url === AUTHORIZED_FETCH_FOLLOWERS) {
       return json({
         '@context': 'https://www.w3.org/ns/activitystreams',
-        id: SECURE_FOLLOWERS,
+        id: AUTHORIZED_FETCH_FOLLOWERS,
         type: 'OrderedCollectionPage',
         orderedItems: [MARIEN, STRICT, REFUSER],
       });
     }
-    // The actor id, served with the public key the followers have cached, so
-    // a signature is checked against what WordPress publishes.
     if (`${url.origin}${url.pathname}${url.search}` === STORED_ACTOR_ID) {
       return json({
         '@context': ['https://www.w3.org/ns/activitystreams', 'https://w3id.org/security/v1'],
@@ -187,10 +180,8 @@ function serveFakeWordPress(): () => void {
   };
 }
 
-/** The key id WordPress publishes for the actor, and the one a signature must name. */
 const MAIN_KEY_ID = `${STORED_ACTOR_ID}#main-key`;
 
-/** Fedify's document loader, answered by whatever `fetch` is at the time. */
 async function fetchDocument(
   url: string,
 ): Promise<{ contextUrl: null; documentUrl: string; document: unknown }> {
@@ -449,7 +440,9 @@ describe('importWordPressActor', () => {
   it('signs follower fetches with the imported key, so an authorized-fetch server answers', async () => {
     const where = await site();
 
-    const report = await importWordPressActor(importing(where, { followers: SECURE_FOLLOWERS }));
+    const report = await importWordPressActor(
+      importing(where, { followers: AUTHORIZED_FETCH_FOLLOWERS }),
+    );
 
     assert.deepEqual(
       readFollowers(where).map((follower) => follower.actorId),
@@ -473,7 +466,7 @@ describe('importWordPressActor', () => {
       importing(where, {
         privateKeyPem: other.privateKeyPem,
         publicKeyPem: other.publicKeyPem,
-        followers: SECURE_FOLLOWERS,
+        followers: AUTHORIZED_FETCH_FOLLOWERS,
       }),
     );
 
@@ -501,7 +494,9 @@ describe('importWordPressActor', () => {
     await importWordPressActor(importing(where, { followers: earlier }));
     const marien = readFollowers(where)[0];
 
-    const rerun = await importWordPressActor(importing(where, { followers: SECURE_FOLLOWERS }));
+    const rerun = await importWordPressActor(
+      importing(where, { followers: AUTHORIZED_FETCH_FOLLOWERS }),
+    );
 
     assert.deepEqual(rerun.followers.added, [STRICT]);
     assert.deepEqual(rerun.followers.unchanged, [MARIEN]);

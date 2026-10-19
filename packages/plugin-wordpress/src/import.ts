@@ -106,8 +106,7 @@ export interface FollowersImportReport {
    *
    * Reported rather than fatal: an instance that is down, or an account that
    * has been deleted, must not stop the other hundred followers from coming
-   * across, and the owner can run the command again once it is back. A
-   * server that refused the signed fetch is marked `refused`.
+   * across, and the owner can run the command again once it is back.
    */
   readonly failed: readonly UnreachableFollower[];
 }
@@ -376,9 +375,6 @@ const ACTIVITY_STREAMS_ACCEPT =
   'application/activity+json, application/ld+json; profile="https://www.w3.org/ns/activitystreams"';
 
 /**
- * The imported RSA key and the id WordPress publishes it under, which a
- * follower GET is signed with.
- *
  * Servers running Mastodon's authorized fetch answer an unsigned GET of an
  * actor with 401. The key id is `<actor id>#main-key`, the form the WordPress
  * plugin publishes and the form the CMS publishes once it serves the actor id,
@@ -389,17 +385,11 @@ interface Signer {
   readonly keyId: URL;
 }
 
-/** A follower's server answered a signed fetch with 401 or 403. */
 class RefusedSignedFetchError extends Error {
   override readonly name = 'RefusedSignedFetchError';
 }
 
-/**
- * One ActivityStreams document, or a thrown error naming the URL and the status.
- *
- * Signed with draft-cavage HTTP Signatures when given a {@link Signer}, which
- * is what Mastodon verifies.
- */
+/** One ActivityStreams document, or a thrown error naming the URL and the status. */
 async function fetchAs(url: string, signer?: Signer): Promise<unknown> {
   let response: Response;
   try {
@@ -632,7 +622,6 @@ async function privateJwkOf(privateKey: KeyObject): ReturnType<typeof exportJwk>
   return await exportJwk(await signingKeyOf(privateKey));
 }
 
-/** The private key as the WebCrypto key Fedify signs and exports with. */
 async function signingKeyOf(privateKey: KeyObject): Promise<CryptoKey> {
   const pkcs8 = privateKey.export({ type: 'pkcs8', format: 'der' });
   return await crypto.subtle.importKey('pkcs8', pkcs8, { name: RSA, hash: 'SHA-256' }, true, [
