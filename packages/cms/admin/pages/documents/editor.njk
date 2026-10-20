@@ -342,6 +342,46 @@
           {{ field.text('editor-event-location', eventFields.location, 'Where', value=form.event.location, error=(error if errorField == 'editor-event-location' else ''), hint='The place, or the address to join an online event at.', hintId='editor-event-location-hint') }}
           <p class="label block whitespace-normal text-xs">A post with a start is an event, named by its Title and described by its Body. Empty every box to make it a post again.</p>
         {% endcall %}
+
+        {#- An h-review (TASK-432): the item it reviews and an optional rating.
+            Every kind shares the fields; one a kind does not have is left out
+            of the file. -#}
+        {% call collapse('Review', open.review, fields=true) %}
+          {% call field.select('editor-item-kind', reviewFields.kind, 'Reviewing a', error=(error if errorField == 'editor-item-kind' else '')) %}
+            <option value=""{% if form.review.kind == "" %} selected{% endif %}>Not a review</option>
+            {% for choice in reviewKinds %}
+              <option value="{{ choice.value }}"{% if form.review.kind == choice.value %} selected{% endif %}>{{ choice.label }}</option>
+            {% endfor %}
+            {% if unrecognizedReviewKind %}
+              <option value="{{ unrecognizedReviewKind }}" selected>{{ unrecognizedReviewKind }} (not recognized)</option>
+            {% endif %}
+          {% endcall %}
+          {{ field.text('editor-item-name', reviewFields.name, 'Name', value=form.review.name, error=(error if errorField == 'editor-item-name' else '')) }}
+          {{ field.text('editor-item-category', reviewFields.category, 'What is it', value=form.review.category, hint='A place or an other only: a coffee shop, an app.', hintId='editor-item-category-hint') }}
+          {{ field.text('editor-item-by', reviewFields.by, 'By', value=form.review.by, hint='The author, director, network, artist, or whoever makes or runs it. Not for a place.', hintId='editor-item-by-hint') }}
+          {{ field.text('editor-item-year', reviewFields.year, 'Year', value=form.review.year, inputmode='numeric', error=(error if errorField == 'editor-item-year' else ''), hint='Not for a place or an other.', hintId='editor-item-year-hint') }}
+          {{ field.text('editor-item-uid', reviewFields.uid, 'ID', value=form.review.uid, placeholder='https://www.themoviedb.org/movie/693134', autocomplete='off', spellcheck='false', error=(error if errorField == 'editor-item-uid' else ''), hint='Its address on TMDb, IMDb, MusicBrainz or its own site, or isbn:… or doi:… for a book or a paper.', hintId='editor-item-uid-hint') }}
+          {{ field.text('editor-item-url', reviewFields.url, 'Address or website', value=form.review.url, type='url', error=(error if errorField == 'editor-item-url' else '')) }}
+          {{ field.text('editor-item-photo', reviewFields.photo, 'Picture', value=form.review.photo, list='editor-photo-uploads', autocomplete='off', error=(error if errorField == 'editor-item-photo' else ''), hint='The cover, poster or album art: an image in the media library or a web address. It is the item’s, not a photo for the post.', hintId='editor-item-photo-hint') }}
+          {{ field.text('editor-item-photo-alt', reviewFields.photoAlt, 'Picture alt text', value=form.review.photoAlt) }}
+          {{ field.text('editor-item-date', reviewFields.date, 'Finished, watched, listened or visited on', value=form.review.date, type='date', error=(error if errorField == 'editor-item-date' else ''), hint='Not for an other.', hintId='editor-item-date-hint') }}
+          {{ field.text('editor-item-season', reviewFields.season, 'Season', value=form.review.season, inputmode='numeric', error=(error if errorField == 'editor-item-season' else ''), hint='A TV show only. Leave Season and Episode empty to review the whole show.', hintId='editor-item-season-hint') }}
+          {{ field.text('editor-item-episode', reviewFields.episode, 'Episode', value=form.review.episode, inputmode='numeric', error=(error if errorField == 'editor-item-episode' else '')) }}
+          {{ field.text('editor-item-street-address', reviewFields.streetAddress, 'Street address', value=form.review.streetAddress, hint='A place only.', hintId='editor-item-address-hint') }}
+          {{ field.text('editor-item-locality', reviewFields.locality, 'Locality', value=form.review.locality, hintId='editor-item-address-hint') }}
+          {{ field.text('editor-item-region', reviewFields.region, 'Region', value=form.review.region, hintId='editor-item-address-hint') }}
+          {{ field.text('editor-item-country-name', reviewFields.countryName, 'Country', value=form.review.countryName, hintId='editor-item-address-hint') }}
+          {% call field.select('editor-rating', reviewFields.rating, 'Rating', error=(error if errorField == 'editor-rating' else '')) %}
+            <option value=""{% if form.review.rating == "" %} selected{% endif %}>No rating</option>
+            {% for stars in [5, 4, 3, 2, 1] %}
+              <option value="{{ stars }}"{% if form.review.rating == stars | string %} selected{% endif %}>{{ stars }} out of 5</option>
+            {% endfor %}
+            {% if form.review.rating and form.review.rating not in ["1", "2", "3", "4", "5"] %}
+              <option value="{{ form.review.rating }}" selected>{{ form.review.rating }} (not recognized)</option>
+            {% endif %}
+          {% endcall %}
+          <p class="label block whitespace-normal text-xs">A post with a name here is a review of it, and its Body is the review. Choose Not a review and empty every box to make it a post again. A place review shows the post’s photos as the author’s own.</p>
+        {% endcall %}
       {% endif %}
 
       {% call collapse('Summary and language', open.summary, fields=true) %}

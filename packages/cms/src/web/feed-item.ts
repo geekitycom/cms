@@ -3,6 +3,7 @@ import type { Document } from '../content/document.ts';
 import { enclosureOf } from '../content/enclosure.ts';
 import type { Enclosure } from '../content/enclosure.ts';
 import { photoAlt, photosOf } from '../content/photo.ts';
+import { reviewHtml, reviewOf, reviewSummary } from '../content/review.ts';
 import { RSVP_PHRASES, rsvpLine, rsvpOf } from '../content/rsvp.ts';
 import type { Photo } from '../content/photo.ts';
 import type { AltTextLibrary } from '../content/alt-text.ts';
@@ -94,14 +95,15 @@ export interface FeedItem {
   terms: readonly string[];
   /**
    * What every format prints as the summary: the description the author wrote,
-   * else an excerpt of the rendered body. Never the whole post — the content is
+   * else an excerpt of the rendered body, which a review (TASK-432) opens with
+   * what it reviews and the rating. Never the whole post — the content is
    * where that goes — and empty only for a post with nothing to summarise,
    * which is the one case a format leaves the element out.
    */
   summary: string;
   /**
-   * What every format prints as the content: the post's photos (TASK-166),
-   * then its rendered body with every relative URL in it made absolute. Each
+   * What every format prints as the content: a review's item and rating
+   * (TASK-432), the post's photos (TASK-166), then its rendered body with every relative URL in it made absolute. Each
    * photo is a plain `<img>` of the original, absolute on the site's base URL, with
    * the alt text the page gives it (decision-10: a reader cannot resolve the
    * site's variants), so a photo-only post does not read empty.
@@ -226,15 +228,21 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
   const published = document.date === undefined ? undefined : new Date(document.date);
   const author = authorName(context.users, document.author);
   const photos = photosOf(document.extra);
+  const review = reviewOf(document.extra);
+  const excerpt = feedExcerpt(document);
 
   const item: FeedItem = {
     id: feedGuid(document, baseUrl),
     link,
     terms: [...document.categories, ...document.tags],
-    summary: feedExcerpt(document),
+    summary:
+      review === undefined || document.description !== undefined
+        ? excerpt
+        : [reviewSummary(review), excerpt].filter((part) => part !== '').join(' '),
     html:
       citationLines(document, context.replyContext, baseUrl) +
       rsvpLine(rsvpOf(document.extra)) +
+      reviewHtml(review, { library: context.altTexts, baseUrl }) +
       photosHtml(photos, context.altTexts ?? new Map(), baseUrl) +
       absoluteHtmlUrls(document.html, link, baseUrl),
     markdown: document.body,

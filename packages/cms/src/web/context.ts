@@ -9,6 +9,8 @@ import type { CitedImage, CitedPicture } from '../webmention/cited-picture.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
 import { eventOf } from '../content/event.ts';
 import type { EventLocation } from '../content/event.ts';
+import { BEST_RATING, REVIEW_KIND_WORDS, reviewHtml, reviewOf } from '../content/review.ts';
+import type { Rating, ReviewedItem } from '../content/review.ts';
 import { RSVP_LABELS, rsvpLine, rsvpOf } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
 import { postLabel, postTypeOf, replyTarget, showsTitle } from '../content/post-type.ts';
@@ -51,7 +53,7 @@ export interface DocumentContext {
   /** Display title. Empty for an untitled post. */
   title: string;
   /**
-   * `event`, `rsvp`, `repost`, `like`, `reply`, `photo`, `read`, `bookmark`,
+   * `event`, `rsvp`, `repost`, `like`, `reply`, `review`, `photo`, `bookmark`,
    * `note` or `article`, discovered from the front matter, the title and the
    * body (Post Type Discovery) on every render rather than read from the file.
    */
@@ -78,6 +80,16 @@ export interface DocumentContext {
    * only on a post whose front matter has a readable `start`.
    */
   event?: { start: Date; end?: Date; location?: EventLocation } | undefined;
+  /**
+   * What a review reviews (TASK-432): its `item` as front matter has it, the
+   * words for its kind, its `rating` from 1 to 5 when it has one and `best`,
+   * always 5, and `html`, the item as a `p-item` with its picture beside its
+   * details and the rating as stars and words. Present only on a post whose
+   * front matter names an item.
+   */
+  review?:
+    | { item: ReviewedItem; kindLabel: string; rating?: Rating; best: number; html: string }
+    | undefined;
   /**
    * What the post reposts, likes or bookmarks (TASK-169): each valid
    * `repost-of`, `like-of` and `bookmark-of`, as its property and its URL, in
@@ -310,6 +322,7 @@ export function documentContext(
     ...optional('inReplyTo', replyTarget(document)),
     rsvp: rsvpContext(document),
     event: eventContext(document),
+    review: reviewContext(document, images),
     citations: citationsOf(document.extra),
     // Over the raw front-matter value the spread above put here.
     lang: documentLanguage(document),
@@ -424,6 +437,27 @@ function rsvpContext(document: Document): DocumentContext['rsvp'] {
   const value = rsvpOf(document.extra);
   if (value === undefined) return undefined;
   return { value, label: RSVP_LABELS[value], line: rsvpLine(value) };
+}
+
+function reviewContext(
+  document: Document,
+  images: ImageConfig | undefined,
+): DocumentContext['review'] {
+  const review = reviewOf(document.extra);
+  if (review === undefined) return undefined;
+  const html =
+    images === undefined
+      ? reviewHtml(review)
+      : siteImageMarkup(images, reviewHtml(review, { library: readAltTexts(images.contentDir) }), {
+          sizes: '8rem',
+        });
+  return {
+    item: review.item,
+    kindLabel: REVIEW_KIND_WORDS[review.item.kind].label,
+    ...(review.rating === undefined ? {} : { rating: review.rating }),
+    best: BEST_RATING,
+    html,
+  };
 }
 
 function eventContext(document: Document): DocumentContext['event'] {

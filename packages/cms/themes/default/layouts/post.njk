@@ -32,7 +32,7 @@
 
 {% block content %}
 {% set entryUrl = page.url or url %}
-<article class="blog-post {{ "h-event" if postType == "event" else "h-entry" }}"{{ language.attr(lang) }}>
+<article class="blog-post {{ "h-event" if postType == "event" else ("h-entry h-review" if review else "h-entry") }}"{{ language.attr(lang) }}>
   {#- A post with no name of its own (a note, or a reply without a title) is
       its words, so it opens on them in sight. Its page still needs one h1 to
       navigate by, so it gets one that says what it is, who wrote it and when,
@@ -51,7 +51,7 @@
   {% include "partials/citations.njk" %}
   {% else %}
   <h1 class="screen-reader-text">
-    {{- "RSVP" if postType == "rsvp" else (postType | capitalize if postType in ["event", "reply", "like", "repost", "bookmark"] else "Note") }}
+    {{- "RSVP" if postType == "rsvp" else (postType | capitalize if postType in ["event", "reply", "like", "repost", "bookmark", "review"] else "Note") }}
     {%- if bioAuthor.name %} by {{ bioAuthor.name }}{% endif %}
     {%- if date %}, {{ date | date("readable", none, lang) }}{% endif -%}
   </h1>
@@ -60,6 +60,10 @@
   {% include "partials/reply-context.njk" %}
   {% include "partials/citations.njk" %}
   {% endif %}
+
+  {#- The item and the rating, ahead of the photos: a place review's photos are
+      the author's own, not the item's picture. -#}
+  {% include "partials/review.njk" %}
 
   {% if enclosure %}
   {% include "partials/recording.njk" %}

@@ -1,0 +1,8 @@
+{#
+  What a review reviews (TASK-432): its `p-item`, an h-cite or for a place an
+  h-card, with its picture beside its details, and its rating as stars and as
+  words, the `p-rating` out of the `p-best`. An entry includes it with
+  `review` on the context; a listing sets it from the entry it is printing.
+  Nothing is printed for a post that is no review.
+#}
+{% if review %}<div class="review">{{ review.html | safe }}</div>{% endif %}

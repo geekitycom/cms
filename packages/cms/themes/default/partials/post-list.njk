@@ -27,7 +27,7 @@
   {% if not loop.first %}
   <hr class="feed-separator">
   {% endif %}
-  <article class="feed-item h-entry"{{ language.attr(post.lang) }}>
+  <article class="feed-item h-entry{% if post.review %} h-review{% endif %}"{{ language.attr(post.lang) }}>
     {% if post.named %}
     {{ kicker.line("RSVP" if post.postType == "rsvp" else post.postType | capitalize, post.date, false, post.categories, lang=post.lang) }}
     {% else %}
@@ -47,6 +47,8 @@
     {% if not post.named %}{{ cited | safe }}{% endif %}
     {% set rsvp = post.rsvp %}
     {% include "partials/rsvp.njk" %}
+    {% set review = post.review %}
+    {% include "partials/review.njk" %}
     {% if post.photos.length %}
     {% set photos = post.photos %}
     {% include "partials/photos.njk" %}

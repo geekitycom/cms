@@ -173,8 +173,10 @@ pictures are also `Image` attachments, each with its alt text as `name`. The
 post's photos come first, then the images in its text. Every photo is
 attached, because the photos are the post. A decorative photo has no `name`,
 and a photo from another site has no `mediaType`, since the site cannot check
-it. A text image is attached only when it is an upload the library does not
-mark decorative. One from another site is left out. See [Alt text](media.md#alt-text).
+it. A review's item picture (a cover, a poster, album art) is attached before
+the photos. A review's `content` opens with what it reviews and the rating, as
+the page and the feeds say them. A text image is attached only when it is an
+upload the library does not mark decorative. One from another site is left out. See [Alt text](media.md#alt-text).
 
 To choose the type for one post, set it in the front matter:
 

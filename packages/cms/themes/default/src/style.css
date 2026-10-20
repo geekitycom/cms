@@ -747,6 +747,40 @@
     @apply block h-auto w-full;
   }
 
+  /* A review's item (TASK-432): its picture beside its details, then the
+     rating. */
+  .review {
+    @apply my-6 font-sans text-sm;
+  }
+
+  .review-item {
+    @apply flow-root;
+  }
+
+  .review-picture {
+    @apply float-start me-4 mb-2;
+  }
+
+  .review-picture img {
+    @apply block h-auto max-h-48 w-auto max-w-32 rounded-sm;
+  }
+
+  .review-of {
+    @apply text-base;
+  }
+
+  .review-details {
+    @apply mt-1;
+  }
+
+  .review-rating {
+    @apply mt-2;
+  }
+
+  .review-stars {
+    @apply text-lg tracking-wider;
+  }
+
   /* An untitled post is its words, set larger. It is the one entry whose
      heading is the hidden one TASK-144 gave it. */
   .blog-post > .screen-reader-text ~ .e-content {

@@ -12,6 +12,7 @@ export type EditorGroup =
   | 'address'
   | 'responding'
   | 'event'
+  | 'review'
   | 'summary'
   | 'syndication'
   | 'display';
@@ -71,6 +72,10 @@ const GROUPS: Readonly<Record<EditorGroup, GroupRule>> = {
   event: {
     filled: ({ event }) => filledIn(event.start, event.end, event.location),
     fieldPrefixes: ['editor-event-'],
+  },
+  review: {
+    filled: ({ review }) => Object.values(review).some((value) => value !== ''),
+    fieldPrefixes: ['editor-item-', 'editor-rating'],
   },
   summary: {
     filled: (form) => filledIn(form.description, form.lang),

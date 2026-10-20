@@ -90,6 +90,7 @@ describe('q=config', () => {
         { type: 'repost', name: 'Repost' },
         { type: 'bookmark', name: 'Bookmark' },
         { type: 'event', name: 'Event' },
+        { type: 'review', name: 'Review' },
       ],
     );
     assert.deepEqual(config['q'], ['config', 'syndicate-to', 'category', 'source']);

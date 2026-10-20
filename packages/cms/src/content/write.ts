@@ -26,6 +26,7 @@ import { renderMarkdown } from './markdown.ts';
 import { parseDocument } from './parser.ts';
 import type { Photo } from './photo.ts';
 import { resolvePhotos } from './photo-form.ts';
+import { resolveReview } from './review-form.ts';
 import { PINNED_POST_LIMIT, pinnedAt } from './pinned.ts';
 import { discoverPostType, replyTarget } from './post-type.ts';
 import type { PostType } from './post-type.ts';
@@ -185,9 +186,12 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
   if ('error' in recording) return refused(recording.error, recording.field);
   const photos = resolvePhotos(form.photos, contentDir);
   if ('error' in photos) return refused(photos.error, photos.field);
+  const review = resolveReview(form.review, contentDir);
+  if ('error' in review) return refused(review.error, review.field);
   const media: ResolvedMedia = {
     recording: recording.enclosure,
     photos: photos.photos,
+    review: review.review,
   };
 
   const located = resolveLocation(form.location);
@@ -273,6 +277,7 @@ async function resolveIdentity(
     slugify(form.slug) ||
     slugify(form.title) ||
     (document?.slug ?? '') ||
+    slugify(form.review.name) ||
     noteSlug(form.body) ||
     (await typeSlug(kind, form, checked.media.photos, site.citedContext)) ||
     'untitled';

@@ -16,6 +16,9 @@ import type { LocationForm } from './location-form.ts';
 import type { Photo } from './photo.ts';
 import type { PhotoRow } from './photo-form.ts';
 import type { PostField } from './post-fields.ts';
+import type { Review } from './review.ts';
+import { BLANK_REVIEW_FORM } from './review-form.ts';
+import type { ReviewForm } from './review-form.ts';
 import { wallClockIn } from './time.ts';
 import { VISIBILITY_FRONT_MATTER_KEY, visibilityOf } from './visibility.ts';
 import type { StoredVisibility } from './visibility.ts';
@@ -89,6 +92,8 @@ export interface EditorForm {
   bookmarkOf: string;
   /** When and where the post's event is (TASK-200). Posts only. */
   event: EventForm;
+  /** What the post reviews and its rating, `item` and `rating` (TASK-432). Posts only. */
+  review: ReviewForm;
   /** The language it is written in, the `lang` key; empty for the site's. */
   lang: string;
   draft: boolean;
@@ -145,6 +150,7 @@ const BLANK_POST_FIELDS = {
   likeOf: '',
   bookmarkOf: '',
   event: BLANK_EVENT_FORM,
+  review: BLANK_REVIEW_FORM,
   pinned: false,
   previewHidden: false,
   citedAlt: '',
@@ -255,10 +261,11 @@ export function splitTags(value: string): string[] {
   return tags;
 }
 
-/** The post's recording and photos, as a form resolved them against the media library. */
+/** The post's recording, photos and review, as a form resolved them against the media library. */
 export interface ResolvedMedia {
   readonly recording: Enclosure | undefined;
   readonly photos: readonly Photo[];
+  readonly review: Review | undefined;
 }
 
 /**

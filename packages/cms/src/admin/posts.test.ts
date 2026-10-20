@@ -74,12 +74,12 @@ function field(html: string, name: string): string | undefined {
 function recordingFields(html: string): Record<string, string> {
   const fields: Record<string, string> = {};
   for (const [, name = '', value = ''] of html.matchAll(
-    /<input[^>]*name="((?:enclosure|alternate|photo)-[^"]+)"[^>]*value="([^"]*)"/g,
+    /<input[^>]*name="((?:enclosure|alternate|photo|item)-[^"]+)"[^>]*value="([^"]*)"/g,
   )) {
     fields[name] = value;
   }
   for (const [, name = '', options = ''] of html.matchAll(
-    /<select[^>]*name="(enclosure-[^"]+)"[^>]*>([\s\S]*?)<\/select>/g,
+    /<select[^>]*name="(enclosure-[^"]+|item-kind|rating)"[^>]*>([\s\S]*?)<\/select>/g,
   )) {
     fields[name] = /<option value="([^"]*)" selected>/.exec(options)?.[1] ?? '';
   }
@@ -614,6 +614,134 @@ describe('read-of and read-status in the editor (TASK-431)', () => {
     assert.equal(data['read-of'], 'A Book');
     assert.equal(data['read-status'], 'finished');
   });
+});
+
+describe('a review in the editor (TASK-432)', () => {
+  const FILE = ['posts', '2026-01-02-published.md'];
+
+  async function reviewed(extra: string[] = []): Promise<{ contentDir: string; agent: Browser }> {
+    const contentDir = await seeded([
+      {
+        file: 'posts/2026-01-02-published.md',
+        title: 'Out in the world',
+        date: '2026-01-02',
+        permalink: '/2026/01/published/',
+        extra,
+      },
+    ]);
+    return { contentDir, agent: await signedIn(await box.site({ contentDir })) };
+  }
+
+  async function frontMatter(contentDir: string): Promise<Record<string, unknown>> {
+    return matter(await readFile(path.join(contentDir, ...FILE), 'utf8')).data;
+  }
+
+  it('makes a post a review of a TV show, and an editor save keeps it as written', async () => {
+    const { contentDir, agent } = await reviewed();
+    const blank = await (await agent.get('/admin/posts/new')).text();
+    assert.match(blank, /<option value="" selected>Not a review<\/option>/);
+    for (const label of ['Book', 'Movie', 'TV show', 'Album', 'Place', 'Other']) {
+      assert.match(blank, new RegExp(`<option value="[a-z]+">${label}</option>`));
+    }
+
+    const saved = await submit(agent, '/admin/posts/published', {
+      'item-kind': 'tv',
+      'item-name': 'Severance',
+      'item-by': 'Apple TV+',
+      'item-year': '2022',
+      'item-uid': 'https://www.themoviedb.org/tv/95396',
+      'item-season': '2',
+      'item-episode': '3',
+      'item-date': '2026-10-12',
+      'item-locality': 'Nowhere',
+      rating: '4',
+    });
+    assert.equal(saved.status, 303);
+    assert.deepEqual(await frontMatter(contentDir), {
+      ...(await frontMatter(contentDir)),
+      rating: 4,
+      item: {
+        kind: 'tv',
+        name: 'Severance',
+        by: 'Apple TV+',
+        year: 2022,
+        uid: 'https://www.themoviedb.org/tv/95396',
+        date: '2026-10-12',
+        season: 2,
+        episode: 3,
+      },
+    });
+
+    const reloaded = await (await agent.get('/admin/posts/published')).text();
+    assert.match(reloaded, /<option value="tv" selected>TV show<\/option>/);
+    assert.match(reloaded, /<option value="4" selected>4 out of 5<\/option>/);
+    assert.equal(field(reloaded, 'item-season'), '2');
+
+    const before = await frontMatter(contentDir);
+    assert.equal((await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status, 303);
+    const after = await frontMatter(contentDir);
+    assert.deepEqual(after['item'], before['item'], 'another save keeps the item');
+    assert.equal(after['rating'], 4);
+  });
+
+  it('round-trips a hand-written place review, keeping a key it does not know', async () => {
+    const { contentDir, agent } = await reviewed([
+      'rating: 5',
+      'item:',
+      '  kind: place',
+      '  name: Blue Door Coffee',
+      '  category: Coffee shop',
+      '  street-address: 1234 Wealthy St SE',
+      '  locality: Grand Rapids',
+      '  region: MI',
+      '  country-name: USA',
+      '  url: https://bluedoor.example',
+      '  date: 2026-10-14',
+      '  osm: node/123',
+    ]);
+    const before = await frontMatter(contentDir);
+    assert.equal((await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status, 303);
+    const after = await frontMatter(contentDir);
+    assert.deepEqual(
+      { ...(after['item'] as object), date: '2026-10-14' },
+      { ...(before['item'] as object), date: '2026-10-14' },
+    );
+    assert.equal(after['rating'], 5);
+  });
+
+  it('takes the review away when every box is emptied', async () => {
+    const { contentDir, agent } = await reviewed([
+      'rating: 3',
+      'item:',
+      '  kind: book',
+      '  name: Piranesi',
+    ]);
+    const saved = await submit(agent, '/admin/posts/published', {
+      'item-kind': '',
+      'item-name': '',
+      rating: '',
+    });
+    assert.equal(saved.status, 303);
+    const data = await frontMatter(contentDir);
+    assert.equal(data['item'], undefined);
+    assert.equal(data['rating'], undefined);
+  });
+
+  for (const [changes, message] of [
+    [{ 'item-name': 'Heat', rating: '6' }, /Rating is a whole number from 1 to 5, not 6\./],
+    [{ 'item-name': 'Heat', rating: '4.5' }, /Rating is a whole number from 1 to 5, not 4\.5\./],
+    [{ 'item-kind': 'movie', rating: '4' }, /A review needs the name of what it reviews/],
+    [{ 'item-name': 'Heat', 'item-uid': 'imdb:tt0113277' }, /isbn:… or doi:…/],
+  ] as const) {
+    it(`refuses ${JSON.stringify(changes)}, and writes nothing`, async () => {
+      const { contentDir, agent } = await reviewed();
+      const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
+      const response = await submit(agent, '/admin/posts/published', changes);
+      assert.equal(response.status, 400);
+      assert.match(await response.text(), message);
+      assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+    });
+  }
 });
 
 describe('an RSVP in the editor (TASK-198 AC #3)', () => {

@@ -689,6 +689,54 @@ describe('read-of and read-status (TASK-431)', () => {
   });
 });
 
+describe('a review (TASK-432)', () => {
+  it('says what it reviews and the rating in its Note, and attaches the item picture first', async () => {
+    const instance = await site({
+      '_data/media.json': JSON.stringify({ '2026/10/dune.jpg': { alt: 'The Dune poster' } }),
+      'posts/2026-10-19-dune.md': rawPost(
+        [
+          "date: '2026-10-19T09:00:00Z'",
+          'permalink: /2026/10/dune/',
+          'rating: 4',
+          'item:',
+          '  kind: movie',
+          '  name: "Dune: Part Two"',
+          '  by: Denis Villeneuve',
+          '  photo:',
+          '    url: /uploads/2026/10/dune.jpg',
+          'photo:',
+          '  - url: /uploads/2026/10/popcorn.jpg',
+          '    alt: A tub of popcorn',
+        ],
+        'Loud and long.',
+      ),
+    });
+    const object = await articleAt(instance, '/2026/10/dune/');
+
+    assert.equal(object['type'], 'Note');
+    const text = String(object['content'])
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ');
+    assert.match(text, /Review of Dune: Part Two \(movie\), directed by Denis Villeneuve/);
+    assert.match(text, /Rated 4 out of 5/);
+    assert.match(text, /Loud and long\./);
+    assert.deepEqual(object['attachment'], [
+      {
+        type: 'Image',
+        mediaType: 'image/jpeg',
+        url: `${BASE_URL}/uploads/2026/10/dune.jpg`,
+        name: 'The Dune poster',
+      },
+      {
+        type: 'Image',
+        mediaType: 'image/jpeg',
+        url: `${BASE_URL}/uploads/2026/10/popcorn.jpg`,
+        name: 'A tub of popcorn',
+      },
+    ]);
+  });
+});
+
 describe('a titled like’s Note', () => {
   const LIKED = 'https://them.example/2026/09/their-post/';
 

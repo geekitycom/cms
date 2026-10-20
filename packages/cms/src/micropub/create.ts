@@ -62,7 +62,9 @@ export type Property =
   | 'photo'
   | 'mp-syndicate-to'
   | 'start'
-  | 'end';
+  | 'end'
+  | 'item'
+  | 'rating';
 
 const CORE_PROPERTIES: readonly string[] = [
   ...Object.keys(SINGLE_VALUED),
@@ -195,9 +197,11 @@ export function createForm(
   kind: DocumentKind = POST_KIND,
 ): CreatedForm | { readonly errors: string[] } {
   const { author, timezone, now } = site;
-  if (request.type !== 'h-entry' && request.type !== 'h-event') {
+  if (request.type !== 'h-entry' && request.type !== 'h-event' && request.type !== 'h-review') {
     const named = request.type === '' ? 'no type' : request.type;
-    return { errors: [`This endpoint creates h-entry and h-event posts, not ${named}.`] };
+    return {
+      errors: [`This endpoint creates h-entry, h-event and h-review posts, not ${named}.`],
+    };
   }
   const type: MicropubType = request.type;
 

@@ -102,6 +102,8 @@ const FILLED = {
   'enclosure-url': '/uploads/2026/10/episode.mp3',
   'alternate-url-0': '/uploads/2026/10/episode.mp4',
   'in-reply-to': 'https://example.com/a-post/',
+  'item-kind': 'book',
+  'item-name': 'A book',
   lang: 'fr',
   'syndicate-to-mastodon': '1',
   comments: 'closed',
@@ -123,6 +125,7 @@ describe('the post editor’s disclosures (TASK-245)', () => {
       ['Address', false],
       ['Responding to', false],
       ['Event', false],
+      ['Review', false],
       ['Summary and language', false],
       ['Syndicate to', false],
       ['Display and discussion', false],
@@ -159,6 +162,7 @@ describe('the post editor’s disclosures (TASK-245)', () => {
       ['Address', true],
       ['Responding to', true],
       ['Event', false],
+      ['Review', true],
       ['Summary and language', true],
       ['Syndicate to', true],
       ['Display and discussion', true],
@@ -168,6 +172,7 @@ describe('the post editor’s disclosures (TASK-245)', () => {
   const REFUSALS: { what: string; fields: Record<string, string>; field: string }[] = [
     { what: 'a language', fields: { lang: 'not a tag!' }, field: 'editor-lang' },
     { what: 'a citation', fields: { 'like-of': 'nowhere' }, field: 'editor-like-of' },
+    { what: 'a rating', fields: { 'item-name': 'Heat', rating: '9' }, field: 'editor-rating' },
     {
       what: 'an accuracy',
       fields: { 'location-accuracy': '-1' },

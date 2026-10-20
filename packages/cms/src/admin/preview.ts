@@ -6,6 +6,8 @@ import { splitTags } from '../content/document-form.ts';
 import { eventFrontMatter, resolveEvent, submittedEventForm } from '../content/event-form.ts';
 import { handleDirectory } from '../content/handles.ts';
 import { renderMarkdown } from '../content/markdown.ts';
+import { reviewFrontMatter } from '../content/review.ts';
+import { resolveReview, submittedReviewForm } from '../content/review-form.ts';
 import { RSVP_FRONT_MATTER_KEY, rsvpValue } from '../content/rsvp.ts';
 import { defaultPermalink, slugify } from '../content/slug.ts';
 import { calendarDayIn, toUtcInstant } from '../content/time.ts';
@@ -114,6 +116,7 @@ function previewDocument(
       ),
       ...previewRsvp(body),
       ...previewEvent(body, timezone),
+      ...previewReview(body, c.var.config.contentDir),
     },
     body: markdown,
     html: renderMarkdown(markdown, handleDirectory(c.var.config.contentDir)),
@@ -128,6 +131,14 @@ function previewEvent(body: Record<string, unknown>, timezone: string): Record<s
   if (!('event' in resolved)) return {};
   return Object.fromEntries(
     Object.entries(eventFrontMatter(resolved.event)).filter(([, value]) => value !== undefined),
+  );
+}
+
+function previewReview(body: Record<string, unknown>, contentDir: string): Record<string, unknown> {
+  const resolved = resolveReview(submittedReviewForm(body), contentDir);
+  if (!('review' in resolved)) return {};
+  return Object.fromEntries(
+    Object.entries(reviewFrontMatter(resolved.review)).filter(([, value]) => value !== undefined),
   );
 }
 

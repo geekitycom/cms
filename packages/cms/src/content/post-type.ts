@@ -3,6 +3,7 @@ import type { CitationProperty, CitedPageReader } from './citation.ts';
 import type { Document } from './document.ts';
 import { eventOf, instantOf } from './event.ts';
 import { photosOf } from './photo.ts';
+import { reviewOf } from './review.ts';
 import { RSVP_PHRASES, rsvpOf, rsvpValue } from './rsvp.ts';
 import { htmlToText } from './search.ts';
 
@@ -26,9 +27,22 @@ import { htmlToText } from './search.ts';
  * sits after photo, just ahead of the tail (TASK-169): every post the spec
  * types as something else keeps that type, and a bookmark claims only what
  * the spec would have called a note or an article.
+ *
+ * A review, a post with a reviewed `item` (TASK-432), is no type the spec
+ * names either. It sits after reply and before photo, so a place review that
+ * carries the author's photos is still a review.
  */
 export type PostType =
-  'event' | 'rsvp' | 'repost' | 'like' | 'reply' | 'photo' | 'bookmark' | 'note' | 'article';
+  | 'event'
+  | 'rsvp'
+  | 'repost'
+  | 'like'
+  | 'reply'
+  | 'review'
+  | 'photo'
+  | 'bookmark'
+  | 'note'
+  | 'article';
 
 /** The mf2 properties the algorithm reads, each as its plain-text value. */
 export interface PostProperties {
@@ -43,6 +57,8 @@ export interface PostProperties {
   'repost-of'?: string | undefined;
   'like-of'?: string | undefined;
   'bookmark-of'?: string | undefined;
+  /** The reviewed item's name. */
+  item?: string | undefined;
 }
 
 /** The type of a post with these properties. */
@@ -52,6 +68,7 @@ export function discoverPostType(properties: PostProperties): PostType {
   if (validUrl(properties['repost-of']) !== undefined) return 'repost';
   if (validUrl(properties['like-of']) !== undefined) return 'like';
   if (validUrl(properties['in-reply-to']) !== undefined) return 'reply';
+  if ((properties.item ?? '') !== '') return 'review';
   if ((properties.photo ?? []).length > 0) return 'photo';
   if (validUrl(properties['bookmark-of']) !== undefined) return 'bookmark';
   return isNamedPost(properties) ? 'article' : 'note';
@@ -89,6 +106,7 @@ function propertiesOf(document: PostDocument): PostProperties {
     'in-reply-to': document.inReplyTo,
     start: eventOf(document.extra)?.start,
     rsvp: rsvpOf(document.extra),
+    item: reviewOf(document.extra)?.item.name,
     // Only addresses {@link photosOf} accepts, the spec's "valid URL" for a
     // file whose uploads are site-relative.
     photo: photosOf(document.extra).map((photo) => photo.url),
@@ -145,6 +163,8 @@ function wordlessLabel(document: PostDocument, cited: CitedPageReader | undefine
     const url = citationOf(document, property);
     if (url !== undefined) return citing(CITATION_VERBS[property], url);
   }
+  const review = reviewOf(document.extra);
+  if (review !== undefined) return `Review of ${review.item.name}`;
   return 'Untitled';
 }
 

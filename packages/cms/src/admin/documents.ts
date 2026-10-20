@@ -22,6 +22,8 @@ import type { DocumentKind } from '../content/document-kind.ts';
 import { TRANSCRIPT_TYPES } from '../content/enclosure.ts';
 import { ENCLOSURE_FIELDS } from '../content/enclosure-form.ts';
 import { EVENT_FIELDS } from '../content/event-form.ts';
+import { isReviewKind, REVIEW_KIND_WORDS, REVIEW_KINDS } from '../content/review.ts';
+import { REVIEW_FIELDS } from '../content/review-form.ts';
 import type { Refusal } from '../content/form-error.ts';
 import { BLANK_LOCATION_FORM } from '../content/location-form.ts';
 import { postLocations } from '../content/locations.ts';
@@ -676,6 +678,14 @@ async function renderEditor(
             ? {}
             : { unrecognizedRsvp: form.rsvp }),
           eventFields: EVENT_FIELDS,
+          reviewFields: REVIEW_FIELDS,
+          reviewKinds: REVIEW_KINDS.map((value) => ({
+            value,
+            label: REVIEW_KIND_WORDS[value].label,
+          })),
+          ...(form.review.kind === '' || isReviewKind(form.review.kind)
+            ? {}
+            : { unrecognizedReviewKind: form.review.kind }),
           // TASK-155: one checkbox per target the site declares.
           syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
             ...target,

@@ -26,10 +26,23 @@ import {
 import { PHOTO_FRONT_MATTER_KEY, photoFrontMatter } from './photo.ts';
 import { photoRowFromMicropub, photoRows, photoToMicropub, readPhotoForm } from './photo-form.ts';
 import { PINNED_FRONT_MATTER_KEY, pinnedAt } from './pinned.ts';
+import {
+  ITEM_FRONT_MATTER_KEY,
+  ITEM_KEYS,
+  RATING_FRONT_MATTER_KEY,
+  reviewFrontMatter,
+  reviewOf,
+} from './review.ts';
+import {
+  reviewForm,
+  reviewFromMicropub,
+  reviewToMicropub,
+  submittedReviewForm,
+} from './review-form.ts';
 import { RSVP_FRONT_MATTER_KEY, rsvpOf, rsvpValue } from './rsvp.ts';
 import { toUtcInstant } from './time.ts';
 
-export type MicropubType = 'h-entry' | 'h-event';
+export type MicropubType = 'h-entry' | 'h-event' | 'h-review';
 
 export interface MicropubSite {
   readonly baseUrl: string;
@@ -205,6 +218,40 @@ function isOrWasEvent(saved: PostEvent | undefined, document: Document | undefin
   return saved !== undefined || (document !== undefined && eventOf(document.extra) !== undefined);
 }
 
+const REVIEW_FIELD: PostField = {
+  read: (document) => ({ review: reviewForm(document.extra, reviewOf(document.extra)) }),
+  submitted: (body) => ({ review: submittedReviewForm(body) }),
+  // A key somebody added to the item by hand is kept, as one beside it is.
+  write: (extra, _form, { media: { review } }) => {
+    const { item, rating } = reviewFrontMatter(review);
+    const before = extra[ITEM_FRONT_MATTER_KEY];
+    const modelled = new Set(['kind', 'name', ...Object.values(ITEM_KEYS)]);
+    const kept =
+      item !== undefined && typeof before === 'object' && before !== null && !Array.isArray(before)
+        ? Object.fromEntries(Object.entries(before).filter(([key]) => !modelled.has(key)))
+        : {};
+    setOrDelete(extra, ITEM_FRONT_MATTER_KEY, item && { ...item, ...kept });
+    setOrDelete(extra, RATING_FRONT_MATTER_KEY, rating);
+  },
+  micropub: {
+    properties: { item: ['review'], rating: ['review'] },
+    publishable: ['item'],
+    toForm: (request) => {
+      const review = reviewFromMicropub(
+        request.values('item'),
+        request.values('rating'),
+        request.refuse,
+        request.baseUrl,
+      );
+      if (request.type === 'h-review' && !request.has('item')) {
+        request.refuse('An h-review needs the item it reviews.');
+      }
+      return { review };
+    },
+    toProperties: (document, { baseUrl }) => reviewToMicropub(reviewOf(document.extra), baseUrl),
+  },
+};
+
 const PREVIEW_FIELD: PostField = {
   read: (document) => ({ previewHidden: !previewShown(document.extra) }),
   submitted: (body) => ({ previewHidden: body[PREVIEW_FRONT_MATTER_KEY] !== undefined }),
@@ -300,6 +347,7 @@ export const POST_FIELDS: readonly PostField[] = [
   citationField('bookmark-of', (bookmarkOf) => ({ bookmarkOf })),
   RSVP_FIELD,
   EVENT_FIELD,
+  REVIEW_FIELD,
   PREVIEW_FIELD,
   CITED_ALT_FIELD,
   SYNDICATE_TO_FIELD,

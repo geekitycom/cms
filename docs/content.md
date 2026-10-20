@@ -468,6 +468,129 @@ also reads the key. An unlisted post gets its page and `noindex`, and is in no
 collection. An unrecognized value builds no page. See
 [Building the same content with Eleventy](eleventy.md).
 
+## Reviews
+
+A review is a post about one item: a book, a movie, a TV show, an album, a
+place, or anything else. Its body is the review. Its title is optional. Two
+front matter keys make it one, under the names the microformats2 h-review
+uses:
+
+- `item` is what it reviews. `kind` is `book`, `movie`, `tv`, `album`,
+  `place` or `other`, and `name` is required.
+- `rating` is a whole number from 1 to 5, where 5 is best. It is optional.
+
+Every kind has the same shape, so reviews can be listed by kind and sorted by
+rating. Each kind uses these fields:
+
+| Kind                     | Fields                                                                                                          |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `book`, `movie`, `album` | `by` (author, director or artist), `year`, `uid`, `url`, `photo`, `date`                                        |
+| `tv`                     | the same, with `by` as the network, plus `season` and `episode`                                                 |
+| `place`                  | `category`, `street-address`, `locality`, `region`, `country-name`, `url` (its website), `uid`, `photo`, `date` |
+| `other`                  | `category`, `by`, `uid`, `url`, `photo`                                                                         |
+
+`uid` is the item's canonical address: its page on TMDb, IMDb or MusicBrainz
+(a release group), or its own website. A book or a paper can use `isbn:…` or
+`doi:…` instead. Other prefixes, such as `imdb:`, are refused. `photo` is the
+item's picture (a cover, a poster, album art) with an optional `alt`. It is not
+a photo on the post. `date` is the day you finished, watched, listened to or
+visited it. `category` is what a place or an other is, in your own word, such
+as `Coffee shop` or `App`.
+
+A book:
+
+```yaml
+rating: 5
+item:
+  kind: book
+  name: Piranesi
+  by: Susanna Clarke
+  year: 2020
+  uid: isbn:9781635575637
+  photo:
+    url: /uploads/2026/11/piranesi.jpg
+    alt: The cover of Piranesi
+  date: '2026-11-09'
+```
+
+A movie:
+
+```yaml
+rating: 4
+item:
+  kind: movie
+  name: 'Dune: Part Two'
+  by: Denis Villeneuve
+  year: 2024
+  uid: https://www.themoviedb.org/movie/693134
+  date: '2026-10-18'
+```
+
+One episode of a TV show. Leave out `season` and `episode` to review the whole
+show:
+
+```yaml
+item:
+  kind: tv
+  name: Severance
+  by: Apple TV+
+  year: 2022
+  uid: https://www.themoviedb.org/tv/95396
+  season: 2
+  episode: 3
+  date: '2026-10-12'
+```
+
+An album:
+
+```yaml
+rating: 5
+item:
+  kind: album
+  name: In Rainbows
+  by: Radiohead
+  year: 2007
+  uid: https://musicbrainz.org/release-group/6e335887-60ba-38f0-95af-fae7774336bf
+```
+
+A place. Its own `photo` entries are your photos, the meal or the room, and
+show as a photo post's do:
+
+```yaml
+rating: 4
+item:
+  kind: place
+  name: Blue Door Coffee
+  category: Coffee shop
+  street-address: 1234 Wealthy St SE
+  locality: Grand Rapids
+  region: MI
+  country-name: USA
+  url: https://bluedoor.coffee
+  date: '2026-10-14'
+photo:
+  - url: /uploads/2026/10/flat-white.jpg
+    alt: A flat white on a blue table
+```
+
+Anything else:
+
+```yaml
+rating: 3
+item:
+  kind: other
+  name: Tot
+  category: App
+  by: The Iconfactory
+  url: https://tot.rocks
+```
+
+The page shows the item's picture beside its details, then the rating as stars
+and as words, such as "Rated 4 out of 5". A review without a rating shows no
+stars. The feeds and the fediverse copy say the same in plain text and carry
+the picture. The editor's Review group fills in these keys, and a Micropub app
+can send them as an `h-review`. See [Micropub](micropub.md).
+
 ## The archive page
 
 A page with `archive: true` in its front matter lists every published post

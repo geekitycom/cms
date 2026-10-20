@@ -92,6 +92,7 @@ const POST_TYPES: Readonly<
     required: ['bookmark-of'],
   },
   event: { name: 'Event', properties: ['start', 'end', ...NAMED], required: ['start', 'name'] },
+  review: { name: 'Review', properties: ['item', 'rating', ...NAMED], required: ['item'] },
 };
 
 /** Each `q` the endpoint answers. */
