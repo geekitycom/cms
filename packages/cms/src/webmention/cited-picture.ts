@@ -79,10 +79,7 @@ export async function copyCitedImage(
   });
   if (!fetched.ok) return undefined;
 
-  const extension = IMAGE_EXTENSIONS.find((candidate) => {
-    const media = UPLOAD_MEDIA_TYPES.get(candidate);
-    return media !== undefined && matchesSignature(media, fetched.body);
-  });
+  const extension = imageExtensionOf(fetched.body);
   if (extension === undefined) return undefined;
 
   let bytes: Uint8Array;
@@ -112,6 +109,14 @@ export async function copyCitedImage(
   }
 
   return { src: `${CITED_PICTURE_PREFIX}${name}`, ...size };
+}
+
+/** The extension an image's bytes say it has, whatever its address or type claimed. */
+export function imageExtensionOf(bytes: Uint8Array): string | undefined {
+  return IMAGE_EXTENSIONS.find((candidate) => {
+    const media = UPLOAD_MEDIA_TYPES.get(candidate);
+    return media !== undefined && matchesSignature(media, bytes);
+  });
 }
 
 /** The size a reader sees: orientations 5 to 8 turn the picture on its side. */

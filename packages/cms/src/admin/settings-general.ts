@@ -7,6 +7,8 @@
  * user's, edited on the users screen beside the rest of their profile.
  */
 
+import type { Hono } from 'hono';
+
 import type { ResolvedConfig } from '../config.ts';
 import { userForAuthor } from '../content/authors.ts';
 import { iconSetting, siteIcons } from '../images/icons.ts';
@@ -15,7 +17,13 @@ import type { SiteSettings } from '../site/settings.ts';
 import { listUsers } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { CREATIVE_COMMONS_LICENSES } from '../content/license.ts';
+import { TMDB } from '../settings/tmdb.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
+import type { GeekityEnv } from '../web/env.ts';
+import { flash } from './flash.ts';
+import { forgetStored, setElsewhere } from './setting-overrides.ts';
 import { SETTINGS_FIELDS } from './settings-fields.ts';
+import { SETTINGS_PATH } from './settings.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -55,7 +63,8 @@ export const GENERAL_SETTINGS: SettingsPage = {
     icon: iconInEffect(settings) ?? '',
   }),
 
-  panels: (c, settings) => ({
+  panels: async (c, settings) => ({
+    ...(await tmdbPanel(c.var.settings)),
     ...baseUrlPanel(c.var.config, settings),
     ...iconPanel(c.var.config, settings),
     licenseChoices: Object.entries(CREATIVE_COMMONS_LICENSES).map(([key, license]) => ({
@@ -73,7 +82,62 @@ export const GENERAL_SETTINGS: SettingsPage = {
   reads: ({ c, body }) => ({
     author: siteAuthorUsername(c.var.config, stringOrEmpty(body[SETTINGS_FIELDS.author])),
   }),
+
+  endpoints: mountTmdb,
 };
+
+/**
+ * Where the TMDb key's form and its Remove button post (TASK-434). Its own
+ * endpoint, as the Akismet key's is: the key is the secret `tmdb.key` setting
+ * in `data/tmdb.json`, not a field of this page's form.
+ */
+export const TMDB_PATH = `${SETTINGS_PATH}/tmdb`;
+
+export const TMDB_FIELDS = { key: 'tmdb_key', action: 'action' } as const;
+
+export const TMDB_REMOVE = 'remove';
+
+function mountTmdb(app: Hono<GeekityEnv>): void {
+  const here = GENERAL_SETTINGS.path;
+
+  app.post(TMDB_PATH, async (c) => {
+    const body = await c.req.parseBody();
+    const { settings } = c.var;
+
+    if (stringOrEmpty(body[TMDB_FIELDS.action]) === TMDB_REMOVE) {
+      await forgetStored(settings, TMDB, 'admin');
+      flash(c, 'notice', 'The TMDb key is gone. Look up no longer asks TMDb.');
+      return c.redirect(here, 303);
+    }
+
+    const key = stringOrEmpty(body[TMDB_FIELDS.key]).trim();
+    if (key === '') {
+      flash(c, 'error', 'A TMDb key cannot be empty. Use Remove key to stop asking TMDb.');
+      return c.redirect(here, 303);
+    }
+    const saved = await settings.set('tmdb', new Map<string, unknown>([['key', key]]), 'admin');
+    if (!saved.ok) {
+      flash(c, 'error', `${Object.values(saved.problems).join(' ')} Nothing was saved.`);
+      return c.redirect(here, 303);
+    }
+    flash(c, 'notice', 'The TMDb key is saved. Look up reads TMDb and IMDb links through it.');
+    return c.redirect(here, 303);
+  });
+}
+
+/** What the page says about the TMDb key, which it never prints. */
+async function tmdbPanel(settings: SettingsRegistry): Promise<Record<string, unknown>> {
+  const { key } = await settings.values(TMDB);
+  const setBy = (await setElsewhere(settings, TMDB))['key'];
+  return {
+    tmdbUrl: TMDB_PATH,
+    tmdbFields: TMDB_FIELDS,
+    tmdbRemove: TMDB_REMOVE,
+    tmdbSetBy: setBy,
+    tmdbPresent: key !== '',
+    tmdbKeyHint: key === '' ? '' : setBy === undefined ? `…${key.slice(-4)}` : `set by ${setBy}`,
+  };
+}
 
 /** The username a stored or submitted author names, or empty for several authors. */
 function siteAuthorUsername(config: Pick<ResolvedConfig, 'dataDir'>, author: string): string {

@@ -76,6 +76,7 @@ import {
 import type { PostKind } from './editor-kinds.ts';
 import { editorSections, openGroups, sidebarLocation } from './editor-layout.ts';
 import { flash } from './flash.ts';
+import { ITEM_LOOKUP_BUTTON, ITEM_LOOKUP_PATH, lookUpReviewItem } from './item-lookup.ts';
 import { formatInTimezone } from './formatting.ts';
 import { allowGeolocation } from './headers.ts';
 import { PREVIEW_PATH } from './preview.ts';
@@ -272,6 +273,7 @@ export function mountDocumentScreens(
     const body = await c.req.parseBody();
     return (
       switchKind(c, { kind, render, document: undefined, body }) ??
+      lookUpItem(c, { kind, render, document: undefined, body }) ??
       saveFromForm(c, { kind, render, document: undefined, body })
     );
   });
@@ -300,6 +302,7 @@ export function mountDocumentScreens(
     }
     return (
       switchKind(c, { kind, render, document, body }) ??
+      lookUpItem(c, { kind, render, document, body }) ??
       saveFromForm(c, { kind, render, document, body })
     );
   });
@@ -376,6 +379,31 @@ function switchKind(
     form: submittedForm(kind, body, c.var.config.contentDir),
     postKind,
   });
+}
+
+/**
+ * Look up, pressed with no script: the review form as submitted with its
+ * empty item boxes filled, and what the lookup found beside the button, with
+ * nothing saved. `undefined` when the press was something else.
+ */
+function lookUpItem(
+  c: Context<GeekityEnv>,
+  options: Omit<SaveFromFormOptions, 'body'> & { body: Record<string, unknown> },
+): Promise<Response> | undefined {
+  const { kind, render, document, body } = options;
+  if (kind.type !== 'post' || body[ITEM_LOOKUP_BUTTON] === undefined) return undefined;
+  return (async () => {
+    const form = submittedForm(kind, body, c.var.config.contentDir);
+    const outcome = await lookUpReviewItem(c, form.review);
+    return renderEditor(c, {
+      kind,
+      render,
+      document,
+      form: { ...form, review: outcome.review },
+      postKind: 'review',
+      itemLookup: { message: outcome.message, failed: outcome.failed },
+    });
+  })();
 }
 
 /** "+ New": a card for each kind of post, and one for a page. */
@@ -696,6 +724,8 @@ interface RenderEditorOptions {
   /** The kind to lay a post's form out as; unset for the one its properties give it. */
   postKind?: PostKind | undefined;
   refusal?: Refusal | undefined;
+  /** What Look up found, to say beside its button. */
+  itemLookup?: { message: string; failed: boolean } | undefined;
   /** The status to answer with. Defaults to 200. */
   status?: 200 | 400 | undefined;
 }
@@ -773,6 +803,9 @@ async function renderEditor(
             : { unrecognizedRsvp: form.rsvp }),
           eventFields: EVENT_FIELDS,
           reviewFields: REVIEW_FIELDS,
+          itemLookupButton: ITEM_LOOKUP_BUTTON,
+          itemLookupUrl: ITEM_LOOKUP_PATH,
+          itemLookup: options.itemLookup,
           reviewKinds: REVIEW_KINDS.map((value) => ({
             value,
             ...REVIEW_KIND_WORDS[value],

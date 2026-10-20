@@ -161,7 +161,8 @@ its own fields:
   that item's own fields, a rating from 1 to 5 stars, and the review. The
   fields and labels change with the item kind without JavaScript. The item's
   picture (a book cover, a poster, album art) belongs to the item. A place
-  review can also carry your own photos.
+  review can also carry your own photos. Look up fills in the item from its
+  ID. See [Look up](#look-up).
 
 The sidebar holds what every kind shares: Publish (the buttons, Draft, the
 date, Visibility and Author), Tags and categories, Location, Address, Summary
@@ -177,6 +178,56 @@ kinds, such as a reply with photos. The editor shows the other kinds' fields
 under Also on this post, and a save keeps them all.
 
 Pages > Add new opens the page editor directly.
+
+### Look up
+
+On the review form, Look up sits beside the item's ID. It reads what the ID
+box holds, asks a source about the item, and fills in the boxes that are
+still empty: the title, the by field (author, director, network or artist),
+the year, the address, and for a TV episode link the season and episode. A box
+you have typed in is never changed.
+
+| ID                                           | Source                                                                                                                       |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| An ISBN, as `isbn:…` or bare                 | The Open Library Books API, and its cover by ISBN when the book names none                                                   |
+| A DOI, as `doi:…`, bare, or a `doi.org` link | The Crossref REST API. The request carries your user's email, when you have one, so it goes to Crossref's polite pool        |
+| A MusicBrainz release group or release link  | The MusicBrainz web service, and the front image from the Cover Art Archive                                                  |
+| A TMDb movie or TV link                      | The TMDb API. Needs a TMDb key                                                                                               |
+| An IMDb title link                           | The TMDb API, which finds the title by its IMDb ID, when the site has a TMDb key. Without one, the IMDb page itself          |
+| Any other link                               | The page's JSON-LD (a Book, Movie, TV series, album, game, product or other creative work), then its OpenGraph and `<title>` |
+
+When the picture box is empty, the item's cover, poster or album art is
+downloaded into the media library, not linked from the other site. Its alt
+text is filled in as the picture's name for the title, such as
+`Poster for Dune: Part Two`, and written to the library too. A picture
+already in the box is kept.
+
+Every request goes through the same guards as a cited page's preview: public
+hosts only, a 10-second deadline, a size limit, and the site's
+`Geekity/1.0` User-Agent with its contact address. MusicBrainz is asked no
+more than once a second from one site.
+
+When nothing is found, the sentence beside the button says why: no such book,
+a source that could not be reached, a TMDb link with no key, or a page that
+names nothing. The form is otherwise unchanged.
+
+Look up is a submit button. Without JavaScript it posts the form, and the
+editor comes back with the boxes filled and nothing saved, as Change type
+does. With JavaScript, `admin/static/item-lookup.js` posts the form to
+`POST /admin/item-lookup` and fills the boxes in place. Saving never looks
+anything up: the ID is saved as typed.
+
+IMDb answers a server's request for one of its pages with a challenge for a
+browser, so an IMDb link finds nothing without a TMDb key.
+
+#### The TMDb key
+
+Settings > General has a Movies and TV shows panel for the TMDb key. Get one
+from your account's API settings on themoviedb.org; the API key and the API
+read access token both work. The key is the secret `tmdb.key` setting, kept in
+`data/tmdb.json` at mode `0600`, and the page shows only its last four
+characters. A deployment can set it with `GEEKITY_TMDB__KEY` instead. TMDb's
+terms allow non-commercial use with attribution, which the panel gives.
 
 ### What JavaScript adds
 
@@ -592,7 +643,7 @@ the page again to see it change.
 To start an export:
 
 1. Select **Include credentials** to put the credential files in the archive:
-   `mail.json`, `akismet.json` and each plugin's `secrets.json`. Without it,
+   `mail.json`, `akismet.json`, `tmdb.json` and each plugin's `secrets.json`. Without it,
    they are left out, and you type them in again after an import.
 2. Type your password. Every archive holds the actor keys, the password hashes
    and personal data, so the screen asks for the password again. A wrong or

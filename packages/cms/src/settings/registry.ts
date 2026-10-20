@@ -12,6 +12,7 @@ import { AKISMET } from './akismet.ts';
 import { DEV_MODE } from './dev-mode.ts';
 import { MAIL } from './mail.ts';
 import { MAINTENANCE } from './maintenance.ts';
+import { TMDB } from './tmdb.ts';
 import { CORE_NAMESPACES, reservedNamespaceProblem, settingVariable } from './names.ts';
 import type {
   ChangeListener,
@@ -27,7 +28,7 @@ import type {
   ValuesOf,
 } from './types.ts';
 
-const CORE: readonly DeclaredNamespace[] = [MAINTENANCE, DEV_MODE, MAIL, AKISMET];
+const CORE: readonly DeclaredNamespace[] = [MAINTENANCE, DEV_MODE, MAIL, AKISMET, TMDB];
 
 export interface CreateSettingsRegistryOptions {
   readonly config: ResolvedConfig;
