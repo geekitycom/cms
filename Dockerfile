@@ -70,6 +70,10 @@ RUN pnpm --filter @geekity/cms deploy --prod --ignore-scripts /prod/cms \
 
 FROM ${NODE_IMAGE} AS runtime
 
+# ghcr.io links the package to this repository, so the image page shows its
+# README and the repository lists the package.
+LABEL org.opencontainers.image.source="https://github.com/geekitycom/cms"
+
 ENV NODE_ENV=production
 
 WORKDIR /app
