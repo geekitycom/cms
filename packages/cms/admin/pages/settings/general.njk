@@ -4,6 +4,7 @@
 {% from "components/badge.njk" import status %}
 {% from "components/button.njk" import button %}
 {% from "components/card.njk" import card, cardActions %}
+{% from "components/upload.njk" import uploadControl %}
 
 {% block settingsProblems %}
   {{ field.problem('settings-title', problems.title) }}
@@ -49,9 +50,11 @@
   {{ field.text('settings-locale', fields.locale, 'Locale', form.locale,
        error=problems.locale, hintHtml=localeHint) }}
 
-  {% set iconHint %}A square image at least 512 pixels wide, uploaded on <a href="{{ adminUrl }}/media">Media</a>: a path such as <code>/uploads/2026/10/icon.png</code>. It is the favicon, the home screen icon, <code>/favicon.ico</code> and the web app manifest's icon. Anything not square is cropped to its middle.{% endset %}
+  {% set iconHint %}A square image at least 512 pixels wide in the media library: a path such as <code>/uploads/2026/10/icon.png</code>. It is the favicon, the home screen icon, <code>/favicon.ico</code> and the web app manifest's icon. Anything not square is cropped to its middle.{% endset %}
   {{ field.text('settings-icon', fields.icon, 'Site icon', form.icon,
        error=problems.icon, hintHtml=iconHint) }}
+  {{ uploadControl('field', 'settings-icon', uploadsUrl, images=true) }}
+  <script defer src="{{ assetPrefix }}upload-drop.js"></script>
 
   <div class="flex items-center gap-4">
     {% if iconPreview %}

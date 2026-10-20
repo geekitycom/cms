@@ -88,7 +88,6 @@ import { allowGeolocation } from './headers.ts';
 import { PREVIEW_PATH } from './preview.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
-import { UPLOADS_PATH } from './uploads.ts';
 
 /**
  * Everything that differs between the posts screens and the pages screens.
@@ -840,7 +839,6 @@ async function renderEditor(
     saveUrl: document === undefined ? newEditorPath(kind) : documentEditorPath(kind, document),
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
-    uploadUrl: UPLOADS_PATH,
     viewUrl: document !== undefined && isServed(document, now) ? document.permalink : undefined,
     // Named beside the date field, because a wall clock with no zone on it is
     // exactly the ambiguity decision-11 exists to remove.

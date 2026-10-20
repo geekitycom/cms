@@ -15,6 +15,7 @@
 {% from "components/badge.njk" import badge, status %}
 {% from "components/button.njk" import button %}
 {% from "components/card.njk" import card, cardActions %}
+{% from "components/upload.njk" import uploadControl %}
 
 {% block title %}Edit {{ account.username }}{% endblock %}
 
@@ -97,6 +98,7 @@
     {% set avatarHint %}A path such as <code>/uploads/2026/09/me.jpg</code>, or a full URL.{% endset %}
     {{ field.text('profile-avatar', fields.avatar, 'Avatar', account.profile.avatar,
          hintHtml=avatarHint) }}
+    {{ uploadControl('field', 'profile-avatar', uploadsUrl, images=true) }}
 
     {{ field.text('profile-job-title', fields.jobTitle, 'Job title', account.profile.jobTitle,
          hint='What they do, printed beside the name on the archive.') }}
@@ -280,4 +282,5 @@
     {% endif %}
   {% endcall %}
   </div>
+  <script defer src="{{ assetPrefix }}upload-drop.js"></script>
 {% endblock %}
