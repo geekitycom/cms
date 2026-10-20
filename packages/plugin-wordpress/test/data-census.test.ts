@@ -525,8 +525,7 @@ describe('the data census', () => {
       assert.equal(actor.status, 200, "ada's actor was drawn, minting her keys");
       await discuss(site);
       await contact(cms);
-      cms.admin.putFollower({
-        username: ADA.username,
+      await pluginSite({ admin: cms.admin, config: cms.config }).addFollower(ADA.username, {
         actorId: 'https://remote.example/users/bob',
         inboxId: 'https://remote.example/users/bob/inbox',
         sharedInboxId: null,

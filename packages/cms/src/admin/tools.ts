@@ -112,7 +112,7 @@ export async function rebuildContentIndex(
 
   store.clear();
 
-  const federation = rebuildFederationIndexes({ admin, contentDir });
+  const federation = rebuildFederationIndexes({ admin, contentDir, dataDir });
   const comments = rebuildCommentIndexes({ admin, contentDir, dataDir });
   const scan = await rescan();
 

@@ -289,7 +289,7 @@ describe('rebuilding the content index from the admin (TASK-95)', () => {
       federation: { queue: null, allowPrivateAddress: true },
     });
     await addFollower(
-      { admin: cms.admin, contentDir: cms.config.contentDir },
+      { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir },
       FIRST_ADMIN.username,
       {
         actorId: 'https://peer.example/users/bob',

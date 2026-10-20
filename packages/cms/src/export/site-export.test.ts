@@ -79,6 +79,11 @@ async function site() {
   await put(dataDir, 'keys/ada.Ed25519.jwk', '{"kty":"OKP"}', 0o600);
   await put(dataDir, 'notification-secret', 'secret', 0o600);
   await put(dataDir, 'dev-mode.json', '{"on":true}');
+  await put(
+    dataDir,
+    'follower-history.jsonl',
+    '{"at":"2026-10-14T12:00:00.000Z","username":"ada","change":"follow","count":1}\n',
+  );
   await put(dataDir, 'mail.json', '{"brevo_api_key":"from-the-file"}', 0o600);
   await put(dataDir, 'akismet.json', '', 0o600);
   await put(dataDir, 'plugins/@acme/plugin-folder/notes.json', '{"kept":true}');
@@ -182,6 +187,7 @@ describe('a site export', () => {
       'content/posts/hello.md',
       'content/uploads/2026/10/cat.jpg',
       'data/dev-mode.json',
+      'data/follower-history.jsonl',
       'data/jobs.json',
       'data/keys/ada.Ed25519.jwk',
       'data/notification-secret',

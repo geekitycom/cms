@@ -13,6 +13,7 @@ import { messageOf } from '../util/errors.ts';
 import { nonEmptyStringOrNull } from '../util/forms.ts';
 import { isRecord } from '../util/guards.ts';
 import { uriOf } from '../store/inbox-replies.ts';
+import { recordFollowerChange } from './follower-history.ts';
 
 /**
  * The two things an ActivityPub site cannot regenerate, as files it publishes.
@@ -131,6 +132,8 @@ export interface FederationRecords {
   readonly admin: AdminStore;
   /** The content directory the files live under. */
   readonly contentDir: string;
+  /** The data directory, which holds the follower history. */
+  readonly dataDir: string;
 }
 
 /**
@@ -166,10 +169,10 @@ export async function addFollower(
   username: string,
   follower: Omit<NewFollower, 'username'>,
 ): Promise<Follower> {
-  const { admin, contentDir } = records;
+  const { admin, contentDir, dataDir } = records;
   const file = followersFile(contentDir, username);
 
-  return await withFileLock(file, () => {
+  return await withFileLock(file, async () => {
     const held = readFollowers(contentDir, username);
     const existing = held.find((entry) => entry.actorId === follower.actorId);
     const stored: Follower = {
@@ -193,6 +196,14 @@ export async function addFollower(
 
     writeFileAtomicallySync(file, followersJson(next));
     admin.putFollower(stored);
+    if (existing === undefined) {
+      await recordFollowerChange(dataDir, {
+        at: admin.now().toISOString(),
+        username,
+        change: 'follow',
+        count: admin.countFollowers(),
+      });
+    }
     return stored;
   });
 }
@@ -210,16 +221,25 @@ export async function removeFollower(
   username: string,
   actorId: string,
 ): Promise<boolean> {
-  const { admin, contentDir } = records;
+  const { admin, contentDir, dataDir } = records;
   const file = followersFile(contentDir, username);
 
-  return await withFileLock(file, () => {
+  return await withFileLock(file, async () => {
     const held = readFollowers(contentDir, username);
     const next = held.filter((entry) => entry.actorId !== actorId);
-    if (next.length !== held.length) writeFileAtomicallySync(file, followersJson(next));
+    const unfollowed = next.length !== held.length;
+    if (unfollowed) writeFileAtomicallySync(file, followersJson(next));
 
     const indexed = admin.deleteFollower(username, actorId);
-    return next.length !== held.length || indexed;
+    if (unfollowed) {
+      await recordFollowerChange(dataDir, {
+        at: admin.now().toISOString(),
+        username,
+        change: 'unfollow',
+        count: admin.countFollowers(),
+      });
+    }
+    return unfollowed || indexed;
   });
 }
 

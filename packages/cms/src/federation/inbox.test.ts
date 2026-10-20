@@ -28,6 +28,7 @@ import type { Cms } from '../index.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { seedActorKeys, testKeyPair } from './__testing__/keys.ts';
+import { readFollowerChanges } from './follower-history.ts';
 import { followersFile, inboxFile, readFollowers, readInboxLog } from './records.ts';
 
 /** The site under test. Fedify answers by origin, so every request uses this one. */
@@ -790,6 +791,32 @@ describe('the federation files', () => {
     assert.deepEqual(
       JSON.parse(readFileIfPresentSync(followersFile(contentOf(instance), LOCAL_USER)) ?? 'null'),
       [],
+    );
+  });
+
+  it('records a Follow and its Undo in the follower history', async () => {
+    const instance = await site();
+
+    await deliver(instance, follow());
+    await deliver(
+      instance,
+      new Undo({
+        id: new URL(`${REMOTE_ORIGIN}/undos/history`),
+        actor: new URL(REMOTE_ACTOR),
+        object: follow(),
+      }),
+    );
+
+    assert.deepEqual(
+      readFollowerChanges(instance.config.dataDir).map(({ username, change, count }) => [
+        username,
+        change,
+        count,
+      ]),
+      [
+        [LOCAL_USER, 'follow', 1],
+        [LOCAL_USER, 'unfollow', 0],
+      ],
     );
   });
 

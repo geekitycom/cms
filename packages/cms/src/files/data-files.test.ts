@@ -80,6 +80,7 @@ describe('the core declarations', () => {
       'plugin-changes.json': 'kept',
       'jobs.json': 'kept',
       'dev-mode.jsonl': 'kept',
+      'follower-history.jsonl': 'kept',
       'indieauth-activity.json': 'rebuildable',
       'notification-digests.json': 'rebuildable',
       'micropub-media.json': 'rebuildable',

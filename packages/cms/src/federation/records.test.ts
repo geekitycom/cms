@@ -15,6 +15,7 @@ import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
 import { deliveryTargets } from './delivery.ts';
 import { readFileIfPresentSync } from '../files/atomic.ts';
+import { readFollowerChanges } from './follower-history.ts';
 import {
   addFollower,
   appendInboxActivity,
@@ -43,10 +44,11 @@ async function temporaryDir(): Promise<string> {
 }
 
 /** A content directory and the index over it, both of this test's own. */
-async function records(): Promise<{ admin: AdminStore; contentDir: string }> {
-  const admin = openAdminStore({ dataDir: await temporaryDir() });
+async function records(): Promise<{ admin: AdminStore; contentDir: string; dataDir: string }> {
+  const dataDir = await temporaryDir();
+  const admin = openAdminStore({ dataDir });
   openStores.push(admin);
-  return { admin, contentDir: await temporaryDir() };
+  return { admin, contentDir: await temporaryDir(), dataDir };
 }
 
 const ADA = 'https://remote.example/users/ada';
@@ -254,6 +256,52 @@ function replyJson(overrides: Record<string, unknown> = {}): string {
   });
 }
 
+describe('the follower history (TASK-446)', () => {
+  const BOB = 'https://remote.example/users/bob';
+
+  it('records a follow and an unfollow with the site’s count after each', async () => {
+    const site = await records();
+    await addFollower(site, BLOG, ada({ followedAt: '2026-09-01T10:00:00.000Z' }));
+    await addFollower(site, 'second', ada({ actorId: BOB, inboxId: `${BOB}/inbox` }));
+    await removeFollower(site, BLOG, ADA);
+
+    assert.deepEqual(
+      readFollowerChanges(site.dataDir).map(({ username, change, count }) => ({
+        username,
+        change,
+        count,
+      })),
+      [
+        { username: BLOG, change: 'follow', count: 1 },
+        { username: 'second', change: 'follow', count: 2 },
+        { username: BLOG, change: 'unfollow', count: 1 },
+      ],
+    );
+  });
+
+  it('records when the change happened, not when the actor says it followed', async () => {
+    const dataDir = await temporaryDir();
+    const admin = openAdminStore({ dataDir, now: () => new Date('2026-10-20T15:00:00.000Z') });
+    openStores.push(admin);
+    const site = { admin, contentDir: await temporaryDir(), dataDir };
+    await addFollower(site, BLOG, ada({ followedAt: '2020-01-01T00:00:00.000Z' }));
+
+    assert.equal(readFollowerChanges(dataDir)[0]?.at, '2026-10-20T15:00:00.000Z');
+  });
+
+  it('records nothing for a repeated follow or an unfollow by an actor that did not follow', async () => {
+    const site = await records();
+    await addFollower(site, BLOG, ada());
+    await addFollower(site, BLOG, ada({ name: 'Ada' }));
+    await removeFollower(site, BLOG, BOB);
+
+    assert.deepEqual(
+      readFollowerChanges(site.dataDir).map((entry) => entry.change),
+      ['follow'],
+    );
+  });
+});
+
 describe('the inbox log', () => {
   it('appends the activity to the month it arrived in, one line of JSON', async () => {
     const site = await records();
@@ -414,7 +462,7 @@ describe('rebuilding the indexes from the files', () => {
     // nothing in it.
     const empty = openAdminStore({ dataDir: await temporaryDir() });
     openStores.push(empty);
-    const report = rebuildFederationIndexes({ admin: empty, contentDir: site.contentDir });
+    const report = rebuildFederationIndexes({ ...site, admin: empty });
 
     assert.deepEqual(report, { followers: 1, activities: 2 });
     assert.deepEqual(empty.listFollowers(), before.followers);
@@ -655,7 +703,7 @@ describe('a site whose database is thrown away', () => {
   it('serves the same followers collection, screen and fan-out from the files alone', async () => {
     const dirs = await federatedDirs();
     const first = await boot(dirs);
-    const site = { admin: first.admin, contentDir: dirs.contentDir };
+    const site = { admin: first.admin, contentDir: dirs.contentDir, dataDir: dirs.dataDir };
 
     await addFollower(site, BLOG, ada({ followedAt: '2026-09-01T10:00:00.000Z' }));
     await addFollower(
@@ -697,6 +745,24 @@ describe('a site whose database is thrown away', () => {
   });
 });
 
+describe('the follower history across a restart (TASK-446)', () => {
+  it('is still there after a restart that throws the database away', async () => {
+    const dirs = await federatedDirs();
+    const first = await boot(dirs);
+    const site = { admin: first.admin, contentDir: dirs.contentDir, dataDir: dirs.dataDir };
+    await addFollower(site, BLOG, ada());
+    await removeFollower(site, BLOG, ADA);
+    const before = readFollowerChanges(dirs.dataDir);
+    assert.equal(before.length, 2);
+
+    await first.close();
+    await deleteDatabase(dirs.dataDir);
+    await boot(dirs);
+
+    assert.deepEqual(readFollowerChanges(dirs.dataDir), before);
+  });
+});
+
 describe('a site whose files the database is ahead of', () => {
   it('has its inbox rows written out on the first boot', async () => {
     const dirs = await federatedDirs();
@@ -731,7 +797,11 @@ describe('followers.json edited by hand', () => {
   it('is what the collection says after a restart', async () => {
     const dirs = await federatedDirs();
     const first = await boot(dirs);
-    await addFollower({ admin: first.admin, contentDir: dirs.contentDir }, BLOG, ada());
+    await addFollower(
+      { admin: first.admin, contentDir: dirs.contentDir, dataDir: dirs.dataDir },
+      BLOG,
+      ada(),
+    );
     await first.close();
 
     await writeFile(

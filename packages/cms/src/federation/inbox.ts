@@ -355,7 +355,8 @@ export async function logActivity(
 
 /** The files this inbox writes, and the index over them. */
 function recordsOf(context: SiteInboxContext): FederationRecords {
-  return { admin: context.data.admin, contentDir: context.data.config.contentDir };
+  const { contentDir, dataDir } = context.data.config;
+  return { admin: context.data.admin, contentDir, dataDir };
 }
 
 /**
