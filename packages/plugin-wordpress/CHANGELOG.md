@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.7.0...plugin-wordpress-v0.7.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **plugin-wordpress:** name the repository so npm can verify provenance ([670d26c](https://github.com/geekitycom/cms/commit/670d26c7248cdb71d528ba697b9573ed6a6271f2))
+
 ## [0.7.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.6.1...plugin-wordpress-v0.7.0) (2026-10-20)
 
 

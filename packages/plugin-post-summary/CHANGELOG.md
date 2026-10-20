@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/geekitycom/cms/compare/plugin-post-summary-v0.6.0...plugin-post-summary-v0.6.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **plugin-post-summary:** name the repository so npm can verify provenance ([224e970](https://github.com/geekitycom/cms/commit/224e970f50cf6390e94d136a9ca769686ce88db3))
+
 ## [0.6.0](https://github.com/geekitycom/cms/compare/plugin-post-summary-v0.5.0...plugin-post-summary-v0.6.0) (2026-10-20)
 
 

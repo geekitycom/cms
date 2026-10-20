@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/geekitycom/cms/compare/plugin-llm-v0.4.0...plugin-llm-v0.4.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **plugin-llm:** name the repository so npm can verify provenance ([9d17c18](https://github.com/geekitycom/cms/commit/9d17c18c86c13f77c29ccd8506f724d8021fa543))
+
 ## [0.4.0](https://github.com/geekitycom/cms/compare/plugin-llm-v0.3.0...plugin-llm-v0.4.0) (2026-10-18)
 
 
