@@ -18,15 +18,16 @@ import type { KvStore } from '@fedify/fedify';
  * it targets in {@link Plugin.hostApi}, and one that targets a newer version
  * than this is unavailable.
  *
- * It is the gate that marks a break for plugins. A plugin accepts every core
- * from the one it was built against up to 1.0, so a core minor release does
- * not stop a plugin by itself. Raise this number in the release that changes
- * this module so a plugin written for the current version would fail on the
- * new core: a type, method or field removed or renamed, an argument or return
- * value reshaped, or a behavior a plugin relies on changed. Adding a method, an
- * optional field or a new extension point keeps the number.
+ * A core runs every plugin that targets a version from the oldest it keeps
+ * up to this one, so a plugin built against an earlier version still loads.
+ * Raise this number in the release that adds to this module, such as a new
+ * method on {@link PluginHost}, so a plugin that uses the addition is refused
+ * by a core without it. A release that changes this module so a plugin written
+ * for an earlier version would fail on the new core (a type, method or field
+ * removed or renamed, an argument or return value reshaped, or a behavior a
+ * plugin relies on changed) also raises the oldest version the core keeps.
  */
-export const HOST_API_VERSION = 2;
+export const HOST_API_VERSION = 3;
 
 /**
  * The site federation's key-value store, as Fedify defines it. A plugin that
@@ -428,6 +429,34 @@ export interface PluginScreen {
   readonly actions?: readonly PluginScreenAction[] | undefined;
 }
 
+/**
+ * An attribute of a page tag. Text is escaped when it is drawn. `true` writes
+ * the attribute bare, such as `defer`, and `false` leaves it out.
+ */
+export type PluginPageTagAttributes = Readonly<Record<string, string | boolean>>;
+
+/**
+ * One tag a plugin adds to the public pages. Core writes the markup and
+ * escapes every value, so there is no raw HTML and no inline script. An
+ * attribute name is letters, digits, `-`, `_`, `:` or `.`, starting with a
+ * letter, and never an event handler such as `onload`. A `src` or `href` is an
+ * `http:` or `https:` URL or a path that starts with `/`.
+ */
+export type PluginPageTag =
+  | {
+      readonly tag: 'script';
+      readonly src: string;
+      readonly attributes?: PluginPageTagAttributes | undefined;
+    }
+  | { readonly tag: 'link'; readonly attributes: PluginPageTagAttributes }
+  | { readonly tag: 'meta'; readonly attributes: PluginPageTagAttributes };
+
+/** The tags a plugin adds at the end of `<head>` and at the end of `<body>`. */
+export interface PluginPageTags {
+  readonly headEnd?: readonly PluginPageTag[] | undefined;
+  readonly bodyEnd?: readonly PluginPageTag[] | undefined;
+}
+
 /** What every settings field has. */
 interface PluginSettingBase {
   /**
@@ -732,6 +761,13 @@ export interface PluginHost<
    * with the page's CSRF token reaches.
    */
   editorAction(action: PluginEditorAction): void;
+  /**
+   * Add tags to the end of `<head>` and `<body>` on every public page while
+   * the plugin is enabled. `read` is called each time a page is drawn, so the
+   * tags can follow the plugin's settings; return no tags while they are
+   * unset. Left out of the editor's preview. At most once per plugin.
+   */
+  pageTags(read: () => PluginPageTags | Promise<PluginPageTags>): void;
   /** The site's base URL and its title as the settings have it when asked. */
   siteInfo(): Promise<PluginSiteInfo>;
   /**

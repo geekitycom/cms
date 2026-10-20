@@ -34,6 +34,7 @@ import type { HandleLearner } from '../federation/handles.ts';
 import type { WebmentionService } from '../webmention/service.ts';
 import type { ConversationReader } from '../comments/conversation.ts';
 import type { RedirectSource } from '../content/redirects.ts';
+import type { DrawnPageTags } from '../plugins/page-tags.ts';
 import type { Renderer } from './render.ts';
 
 /**
@@ -206,6 +207,8 @@ export interface GeekityEnv {
      * and with everything they require running.
      */
     activePlugins: ReadonlySet<string>;
+    /** What the running plugins add to the end of `<head>` and `<body>` on this request's pages. */
+    pageTags: DrawnPageTags;
     /**
      * What an IndieAuth or Micropub handler adds to the activity log's entry
      * for this request (TASK-221), beyond what its response shows.

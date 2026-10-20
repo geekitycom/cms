@@ -100,23 +100,25 @@ describe('the plugin registry', () => {
     assert.equal(registry.problem('@acme/plugin-d'), undefined);
   });
 
-  it('marks a plugin that targets a newer or an older host API unavailable', () => {
+  it('marks a plugin that targets a newer host API, or one older than the oldest it keeps, unavailable', () => {
     const registry = createPluginRegistry(
       fromConfig(
         plugin('@acme/plugin-newer', {}, { hostApi: HOST_API_VERSION + 1 }),
-        plugin('@acme/plugin-older', {}, { hostApi: HOST_API_VERSION - 1 }),
+        plugin('@acme/plugin-ancient', {}, { hostApi: 1 }),
+        plugin('@acme/plugin-older', {}, { hostApi: 2 }),
         plugin('@acme/plugin-current'),
       ),
       pluginRegistryOptions(DATA_DIR),
     );
     assert.equal(
       registry.problem('@acme/plugin-newer'),
-      `It targets host API version ${String(HOST_API_VERSION + 1)}, and this core provides version ${String(HOST_API_VERSION)}.`,
+      `It targets host API version ${String(HOST_API_VERSION + 1)}, and this core provides versions 2 to ${String(HOST_API_VERSION)}.`,
     );
     assert.equal(
-      registry.problem('@acme/plugin-older'),
-      `It targets host API version ${String(HOST_API_VERSION - 1)}, and this core provides version ${String(HOST_API_VERSION)}.`,
+      registry.problem('@acme/plugin-ancient'),
+      `It targets host API version 1, and this core provides versions 2 to ${String(HOST_API_VERSION)}.`,
     );
+    assert.equal(registry.problem('@acme/plugin-older'), undefined);
     assert.equal(registry.problem('@acme/plugin-current'), undefined);
   });
 
@@ -268,6 +270,7 @@ describe('the plugin registry', () => {
       'fetch',
       'get',
       'name',
+      'pageTags',
       'provide',
       'screen',
       'settings',

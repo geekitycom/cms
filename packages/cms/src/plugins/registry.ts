@@ -20,6 +20,7 @@ import type {
   PluginEditorAction,
   PluginFederationMiddleware,
   PluginHost,
+  PluginPageTags,
   PluginRouteHandler,
   PluginScreen,
   PluginSettingField,
@@ -31,6 +32,7 @@ import type {
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { declaredDataFolder, pluginDataFiles } from './data.ts';
+import { hostApiProblem } from './host-api.ts';
 import { pluginFetch } from './fetch.ts';
 import type { PluginFetchOptions } from './fetch.ts';
 import { pluginEnvPrefix, reservedNamespaceProblem } from '../settings/names.ts';
@@ -71,6 +73,8 @@ export interface PluginContributions {
   settingsNamespace: DeclaredNamespace | undefined;
   /** Its buttons beside editor fields, in the order it declared them. */
   editorActions: readonly PluginEditorAction[];
+  /** What it adds to every public page, read as each page is drawn. */
+  pageTags: (() => PluginPageTags | Promise<PluginPageTags>) | undefined;
   dataFiles: readonly DataFileDeclaration[];
 }
 
@@ -335,6 +339,7 @@ const NOTHING_DECLARED: PluginContributions = {
   renderedSettings: [],
   settingsNamespace: undefined,
   editorActions: [],
+  pageTags: undefined,
   dataFiles: [],
 };
 
@@ -380,11 +385,9 @@ function register(
       declared: NOTHING_DECLARED,
     };
   }
-  if (plugin.hostApi !== HOST_API_VERSION) {
-    return {
-      problem: `It targets host API version ${String(plugin.hostApi)}, and this core provides version ${String(HOST_API_VERSION)}.`,
-      declared: NOTHING_DECLARED,
-    };
+  const unsupported = hostApiProblem(plugin.hostApi);
+  if (unsupported !== undefined) {
+    return { problem: `It ${unsupported}`, declared: NOTHING_DECLARED };
   }
 
   let dataFiles: DataFileDeclaration[];
@@ -399,6 +402,7 @@ function register(
   const commands: PluginCommand[] = [];
   const editorActions: PluginEditorAction[] = [];
   let screen: PluginScreen | undefined;
+  let pageTags: PluginContributions['pageTags'];
   let renderedSettings: readonly RenderedSetting[] | undefined;
   let settingsNamespace: DeclaredNamespace | undefined;
   let service: ProvidedService | undefined;
@@ -442,6 +446,11 @@ function register(
         );
       }
       editorActions.push(declared);
+    },
+    pageTags(read) {
+      declaring('page tags');
+      if (pageTags !== undefined) throw new Error('A plugin declares its page tags once.');
+      pageTags = read;
     },
     siteInfo: () => options.siteInfo(),
     fetch: (url, init = {}) => pluginFetch(url, init, options),
@@ -498,6 +507,7 @@ function register(
         renderedSettings: renderedSettings ?? [],
         settingsNamespace,
         editorActions,
+        pageTags,
         dataFiles,
       },
       service,

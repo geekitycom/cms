@@ -170,7 +170,7 @@ export default definePlugin({
   version: '0.1.0',
   label: 'Hello',
   description: 'Says hello.',
-  hostApi: 2,
+  hostApi: 3,
   requires: {},
   register(host) {
     host.get('/hello', () => new Response('hello'));
@@ -186,6 +186,7 @@ not. It declares what the plugin adds through `host`:
 - one admin screen
 - commands
 - editor actions
+- page tags
 - settings
 - one service
 
@@ -206,7 +207,7 @@ with a range:
   "files": ["dist"],
   "geekity": {
     "plugin": true,
-    "hostApi": 2,
+    "hostApi": 3,
     "requires": { "@geekity/plugin-llm": ">=0.2.0 <1.0.0" }
   },
   "peerDependencies": {
@@ -314,6 +315,61 @@ and counts are numbers of zero or more. A block that does not follow these
 rules, for example a negative value or a time series with no days, shows "No
 data to show." instead.
 
+**Page tags.** `host.pageTags(read)` adds tags to the end of `<head>` and the
+end of `<body>` on every public HTML page while the plugin is enabled. `read`
+returns `{ headEnd, bodyEnd }`, each an array of tags, or a promise of it. A
+tag is one of these:
+
+| Tag      | Data                                                      |
+| -------- | --------------------------------------------------------- |
+| `script` | A `src` and optional `attributes`. It has no inline body. |
+| `link`   | `attributes`, such as `rel` and `href`.                   |
+| `meta`   | `attributes`, such as `name` and `content`.               |
+
+The CMS writes the markup and escapes every attribute value. An attribute
+value is text, `true` for a bare attribute such as `defer`, or `false` to
+leave it out. An attribute name starts with a letter and holds only letters,
+digits, `-`, `_`, `:` and `.`. A name that starts with `on`, such as `onload`,
+is refused. A `src` or `href` is an `http:` or `https:` URL or a path that
+starts with `/`. When a tag breaks one of these rules, or `read` throws, that
+plugin adds no tags to the page, the server logs a warning, and the rest of the
+page is drawn as normal.
+
+The CMS calls `read` each time it draws a page, so the tags follow the
+plugin's settings. Return no tags while a setting the tags need is unset:
+
+```ts
+register(host) {
+  const settings = host.settings([
+    { type: 'text', key: 'website_id', label: 'Website ID' },
+  ]);
+  host.pageTags(async () => {
+    const { website_id } = await settings.current();
+    if (website_id === '') return {};
+    return {
+      headEnd: [
+        {
+          tag: 'script',
+          src: 'https://cloud.umami.is/script.js',
+          attributes: { defer: true, 'data-website-id': website_id },
+        },
+      ],
+    };
+  });
+},
+```
+
+The default theme draws plugin tags just before the site's
+`partials/head-end.njk` and `partials/body-end.njk`, in the order the plugins
+run: a plugin after the plugins it requires, otherwise in the order they were
+installed. The partials keep working. A site theme that replaces
+`layouts/base.njk` prints `{{ pluginTags.headEnd }}` and
+`{{ pluginTags.bodyEnd }}` itself. The tags are left out of the editor's
+preview, the admin, the feeds, and the Markdown, text and JSON
+representations. A site built with Eleventy runs no plugins, so a static build
+has no plugin tags. Use the partials for a tag that a static build must carry.
+[Adding to every page](theme/adding-to-every-page.md) describes the partials.
+
 `geekity settings` reads and changes an enabled plugin's settings with the
 site stopped, as it does the core ones. The setting is the package name, a
 `.` and the key:
@@ -349,9 +405,11 @@ collection directly. A plugin inbox that registers Fedify's
 and under the same rate limit as its own inboxes.
 
 **The host API version and the peer range.** `HOST_API_VERSION` in
-`@geekity/cms/plugin` is the version of the host API this core provides. A
-plugin that targets another version is unavailable, with the reason on the
-Plugins screen. The peer range of `@geekity/cms` says which releases of core
+`@geekity/cms/plugin` is the newest version of the host API this core
+provides. The core also runs plugins that target an earlier version, back to
+the oldest version it keeps, which is 2. A plugin that targets a newer version,
+or one older than that, is unavailable, with the reason on the Plugins screen.
+Version 3 added page tags. A plugin that calls `host.pageTags` targets 3. The peer range of `@geekity/cms` says which releases of core
 the package works with. npm checks it for a site that installs with npm. The
 registry checks the copy in `plugin.json` for a folder install. Before 1.0,
 write it as `>=<the core you built against> <1.0.0`, and write the range of a

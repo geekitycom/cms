@@ -22,6 +22,7 @@ import { withTrailingSlash } from '../util/url.ts';
 import { readEnabledPlugins } from './enabled.ts';
 import { PLUGIN_ENTRY, PLUGIN_MANIFEST, readPluginManifest, scanPluginFolders } from './folder.ts';
 import type { PluginManifest } from './folder.ts';
+import { hostApiProblem } from './host-api.ts';
 import { PACKAGE_NAME } from './registry.ts';
 
 export const DEFAULT_REGISTRY = 'https://registry.npmjs.org/';
@@ -297,9 +298,10 @@ function stagedManifest(staging: string, label: string, name: string): PluginMan
   if (manifest.name !== name) {
     throw new Error(`${label} was refused: its ${PLUGIN_MANIFEST} names ${manifest.name}.`);
   }
-  if (manifest.hostApi !== HOST_API_VERSION) {
+  const unsupported = hostApiProblem(manifest.hostApi);
+  if (unsupported !== undefined) {
     throw new Error(
-      `${label} targets host API version ${String(manifest.hostApi)}, and this core provides version ${String(HOST_API_VERSION)}. ${
+      `${label} ${unsupported} ${
         manifest.hostApi > HOST_API_VERSION
           ? 'Upgrade @geekity/cms, or add an older version of the plugin.'
           : 'Add a newer version of the plugin.'

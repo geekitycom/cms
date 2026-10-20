@@ -143,7 +143,7 @@ describe('geekity plugin add', () => {
         files: pluginFiles({
           name: '@acme/plugin-past',
           version: '1.0.0',
-          hostApi: HOST_API_VERSION - 1,
+          hostApi: 1,
         }),
       },
     ]);
@@ -164,7 +164,7 @@ describe('geekity plugin add', () => {
     assert.match(
       future.stderr,
       new RegExp(
-        `targets host API version ${String(HOST_API_VERSION + 1)}, and this core provides version ${String(HOST_API_VERSION)}`,
+        `targets host API version ${String(HOST_API_VERSION + 1)}, and this core provides versions 2 to ${String(HOST_API_VERSION)}`,
       ),
     );
 
@@ -172,7 +172,7 @@ describe('geekity plugin add', () => {
     assert.equal(past.code, 1);
     assert.ok(
       past.stderr.includes(
-        `targets host API version ${String(HOST_API_VERSION - 1)}, and this core provides version ${String(HOST_API_VERSION)}. Add a newer version of the plugin.`,
+        `targets host API version 1, and this core provides versions 2 to ${String(HOST_API_VERSION)}. Add a newer version of the plugin.`,
       ),
       past.stderr,
     );

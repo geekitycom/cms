@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
+import nunjucks from 'nunjucks';
 import type { Environment } from 'nunjucks';
 
 import type { ResolvedConfig } from '../config.ts';
@@ -8,6 +9,8 @@ import type { Document } from '../content/document.ts';
 import { citationsOf, citesAnImage, previewShown } from '../content/citation.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
 import type { SharedLocation } from '../content/location.ts';
+import { NO_PAGE_TAGS } from '../plugins/page-tags.ts';
+import type { DrawnPageTags } from '../plugins/page-tags.ts';
 import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import type { ImageLoading } from '../images/markup.ts';
@@ -483,6 +486,24 @@ export function drawnWith<T>(inputs: RequestInputs, draw: () => T): T {
   return requestInputs.run(inputs, draw);
 }
 
+const pageTags = new AsyncLocalStorage<DrawnPageTags>();
+
+/** Run `draw` with the tags the running plugins add to every page it draws. */
+export function drawnWithPageTags<T>(tags: DrawnPageTags, draw: () => T): T {
+  return pageTags.run(tags, draw);
+}
+
+function pluginTagsContext(): {
+  headEnd: nunjucks.runtime.SafeString;
+  bodyEnd: nunjucks.runtime.SafeString;
+} {
+  const { headEnd, bodyEnd } = pageTags.getStore() ?? NO_PAGE_TAGS;
+  return {
+    headEnd: new nunjucks.runtime.SafeString(headEnd),
+    bodyEnd: new nunjucks.runtime.SafeString(bodyEnd),
+  };
+}
+
 function requestSite(): SiteSettings {
   return requestInputs.getStore()?.site ?? DEFAULT_SITE_SETTINGS;
 }
@@ -612,6 +633,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...licenseContext(site, context),
       devMode: requestInputs.getStore()?.devMode === true,
       signedIn: signedInReader.getStore() === true,
+      pluginTags: pluginTagsContext(),
     });
   }
 

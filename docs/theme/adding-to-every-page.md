@@ -30,6 +30,12 @@ has `editorPreview: true`, and `layouts/base.njk` leaves both partials out. If
 your theme replaces `layouts/base.njk` and includes the partials itself, test
 the same key.
 
+A plugin can also add a `script`, `link` or `meta` tag to every page with
+`host.pageTags`. The default theme draws plugin tags just before each partial,
+as `{{ pluginTags.headEnd }}` and `{{ pluginTags.bodyEnd }}`, inside the same
+`editorPreview` test. A theme that replaces `layouts/base.njk` prints both
+itself. [Plugins](../plugins.md) describes page tags.
+
 ### Example: Umami and Google Analytics 4
 
 This theme is in `themes/analytics/`:
