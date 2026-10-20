@@ -4,6 +4,11 @@
   "type": "module",
   "description": "Geekity CMS plugin for a site that moved from the WordPress ActivityPub plugin: its old inbox and collection paths, and the import that brings each person across.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/geekitycom/cms.git",
+    "directory": "packages/plugin-wordpress"
+  },
   "engines": {
     "node": ">=24"
   },
