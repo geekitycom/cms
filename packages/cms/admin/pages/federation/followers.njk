@@ -175,7 +175,7 @@
     {% endif %}
   </section>
 
-  <section id="resend" class="mb-10 max-w-2xl" aria-labelledby="resend-heading">
+  <section id="resend" class="mb-10 max-w-2xl" aria-labelledby="resend-heading" data-job-region>
     {% call card() %}
       <h2 id="resend-heading" class="card-title">Resend</h2>
       <p class="max-w-prose">
@@ -295,4 +295,5 @@
       <p>No post has been announced to the fediverse yet.</p>
     {% endif %}
   </section>
+  <script defer src="{{ assetPrefix }}job-status.js"></script>
 {% endblock %}

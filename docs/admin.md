@@ -686,9 +686,10 @@ To start an export:
 3. Select **Export**.
 
 While the job waits or runs, the screen shows its state, the number of files
-written out of the total, and the bytes written out of the total. The page
-does not reload by itself: select **Check again**. While an export is queued
-or running, the screen does not offer a second one.
+written out of the total, and the bytes written out of the total. The status
+updates every few seconds without a page load until the job ends, and the
+result then replaces it. Without JavaScript, select **Check again**. While an
+export is queued or running, the screen does not offer a second one.
 
 When the job finishes, the screen shows the number of files, the size, whether
 credentials are included, which credentials were left out, any file under

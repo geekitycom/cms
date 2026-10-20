@@ -37,9 +37,9 @@
   </div>
 
   {% if sweepNotice %}
-    <section id="strip-metadata-notice" class="mb-6 max-w-4xl" aria-label="Location and camera metadata">
+    <section id="strip-metadata-notice" class="mb-6 max-w-4xl" aria-label="Location and camera metadata"{% if sweepNotice.sweep %} data-job-status="{{ sweepNotice.sweep.name }}" data-job-state="{{ sweepNotice.sweep.state }}" data-job-label="{{ sweepNotice.sweep.label }}"{% if sweepNotice.sweep.active %} data-job-refresh="{{ sweepNotice.panelUrl }}" data-job-redraw="{{ listUrl }}"{% endif %}{% endif %}>
       {% call alert(color='info', style='soft', direction='responsive', polite=true) %}
-        <span>
+        <span data-job-message>
           {% if sweepNotice.sweep and sweepNotice.sweep.active %}
             The sweep that strips location and camera metadata from older uploads is {{ sweepNotice.sweep.label | lower }}.
           {% else %}
@@ -130,4 +130,5 @@
 
   <script defer src="{{ assetPrefix }}copy.js"></script>
   <script defer src="{{ assetPrefix }}media.js"></script>
+  <script defer src="{{ assetPrefix }}job-status.js"></script>
 {% endblock %}

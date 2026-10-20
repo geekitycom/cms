@@ -49,7 +49,7 @@
       same switch, and a running site notices either within a second.
     </p>
 
-    <section id="strip-metadata" aria-labelledby="strip-metadata-heading">
+    <section id="strip-metadata" aria-labelledby="strip-metadata-heading" data-job-region>
       {% call card() %}
         <h2 id="strip-metadata-heading" class="card-title">Location and camera metadata</h2>
         <p class="max-w-prose">
@@ -96,4 +96,5 @@
       {% endcall %}
     </section>
   </div>
+  <script defer src="{{ assetPrefix }}job-status.js"></script>
 {% endblock %}

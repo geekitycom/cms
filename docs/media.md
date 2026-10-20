@@ -228,9 +228,10 @@ The job:
 The button returns at once, and the job runs in the server. The
 **Maintenance** screen shows the latest sweep: queued, running with the files checked out of
 the total, finished with the counts and each file it stripped, failed with the
-error, or interrupted. The page does not reload itself. Select **Check again**
-to see how far it got. While a sweep is queued or running, the screen offers no
-second one.
+error, or interrupted. The panel updates every few seconds without a page load
+until the sweep ends, and so does the notice on the **Media** screen. Without
+JavaScript, select **Check again** to see how far it got. While a sweep is
+queued or running, the screen offers no second one.
 
 Until a sweep has finished, the media library shows a one-line notice with a
 **Strip it now** button and a link to the sweep on the Maintenance screen. Once
