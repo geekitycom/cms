@@ -24,6 +24,7 @@
  * one of the post's photos. `date` is the day the author finished, watched,
  * listened to or visited it.
  */
+import { isRecord } from '../util/guards.ts';
 import { decodeEntities, escapeAttribute, escapeText } from '../util/html.ts';
 import { absoluteUrl } from '../util/url.ts';
 import type { AltTextLibrary } from './alt-text.ts';
@@ -183,9 +184,8 @@ export function reviewOf(extra: Readonly<Record<string, unknown>>): Review | und
   return rating === undefined ? { item } : { item, rating };
 }
 
-function reviewedItem(value: unknown): ReviewedItem | undefined {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
-  const fields = value as Record<string, unknown>;
+function reviewedItem(fields: unknown): ReviewedItem | undefined {
+  if (!isRecord(fields)) return undefined;
   const name = word(fields['name']);
   if (name === undefined) return undefined;
   const kind = isReviewKind(fields['kind']) ? fields['kind'] : 'other';
@@ -210,7 +210,7 @@ function reviewedItem(value: unknown): ReviewedItem | undefined {
 function withoutBlanks(item: ReviewedItem): ReviewedItem {
   return Object.fromEntries(
     Object.entries(item).filter(([, value]) => value !== undefined),
-  ) as unknown as ReviewedItem;
+  ) as ReviewedItem;
 }
 
 /** The review as front matter writes it: `item` and `rating`, numbers where they are numbers. */
@@ -361,7 +361,7 @@ function picture(photo: Photo, { library, baseUrl }: ReviewHtmlOptions): string 
   );
 }
 
-export function uidLabel(uid: string): string {
+function uidLabel(uid: string): string {
   const match = /^(isbn|doi):(.*)$/i.exec(uid);
   return match === null ? uid : `${(match[1] ?? '').toUpperCase()} ${match[2] ?? ''}`;
 }

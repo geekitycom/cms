@@ -1,4 +1,5 @@
 import { stringOrEmpty, trimmedField } from '../util/forms.ts';
+import { isRecord } from '../util/guards.ts';
 import { SYNDICATE_TO_FRONT_MATTER_KEY, syndicateToOf } from './syndicate-to.ts';
 import type { SyndicationTarget } from './syndicate-to.ts';
 import {
@@ -227,7 +228,7 @@ const REVIEW_FIELD: PostField = {
     const before = extra[ITEM_FRONT_MATTER_KEY];
     const modelled = new Set(['kind', 'name', ...Object.values(ITEM_KEYS)]);
     const kept =
-      item !== undefined && typeof before === 'object' && before !== null && !Array.isArray(before)
+      item !== undefined && isRecord(before)
         ? Object.fromEntries(Object.entries(before).filter(([key]) => !modelled.has(key)))
         : {};
     setOrDelete(extra, ITEM_FRONT_MATTER_KEY, item && { ...item, ...kept });

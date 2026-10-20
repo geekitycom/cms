@@ -1,7 +1,7 @@
 /**
  * What a review item's ID names (TASK-434): an ISBN, a DOI, a page on TMDb,
- * IMDb, MusicBrainz, Open Library or OpenStreetMap, or any other page. Look up reads it to choose where to
- * ask about the item.
+ * IMDb, MusicBrainz, Open Library or OpenStreetMap, or any other page. Look
+ * up reads it to choose where to ask about the item.
  */
 
 import { webUrl } from '../webmention/fetch-public.ts';

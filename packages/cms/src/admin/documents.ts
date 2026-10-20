@@ -373,7 +373,7 @@ function withLink(form: EditorForm, body: Record<string, unknown>): EditorForm {
  */
 function switchKind(
   c: Context<GeekityEnv>,
-  options: Omit<SaveFromFormOptions, 'body'> & { body: Record<string, unknown> },
+  options: SaveFromFormOptions,
 ): Promise<Response> | undefined {
   const { kind, render, document, body } = options;
   const postKind = body['switch-kind'];
@@ -394,7 +394,7 @@ function switchKind(
  */
 function lookUpItem(
   c: Context<GeekityEnv>,
-  options: Omit<SaveFromFormOptions, 'body'> & { body: Record<string, unknown> },
+  options: SaveFromFormOptions,
 ): Promise<Response> | undefined {
   const { kind, render, document, body } = options;
   if (kind.type !== 'post' || body[ITEM_LOOKUP_BUTTON] === undefined) return undefined;
@@ -751,6 +751,7 @@ async function renderEditor(
   const { kind, document, form } = options;
   const postKind = options.postKind ?? discoveredKind(form);
   const editorKind = kind.type === 'post' ? EDITOR_KINDS[postKind] : undefined;
+  const sections = editorSections(postKind, form);
   const trashed = document !== undefined && isTrashedPath(document.path);
   const now = c.var.store.now();
   const timezone = siteTimezone(c);
@@ -795,9 +796,9 @@ async function renderEditor(
           postKind,
           editorKind,
           postKinds: POST_KINDS.map((key) => ({ key, ...EDITOR_KINDS[key] })),
-          sections: editorSections(postKind, form),
+          sections,
           sidebarLocation: sidebarLocation(postKind, form),
-          link: linkView(form, editorSections(postKind, form).shown.rsvp),
+          link: linkView(form, sections.shown.rsvp),
           photoFields: PHOTO_FIELDS,
           photos: await photoPicker(c.var.config, form.photos),
           reviewPhotoThumbnail: libraryThumbnail(c.var.config, form.review.photo),
@@ -833,7 +834,7 @@ async function renderEditor(
           // A new review starts on a book; a stored one with no kind is an other.
           reviewKindChosen:
             form.review.kind === ''
-              ? editorSections(postKind, form).filled.review
+              ? sections.filled.review
                 ? 'other'
                 : 'book'
               : form.review.kind,

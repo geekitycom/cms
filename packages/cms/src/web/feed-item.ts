@@ -103,10 +103,11 @@ export interface FeedItem {
   summary: string;
   /**
    * What every format prints as the content: a review's item and rating
-   * (TASK-432), the post's photos (TASK-166), then its rendered body with every relative URL in it made absolute. Each
-   * photo is a plain `<img>` of the original, absolute on the site's base URL, with
-   * the alt text the page gives it (decision-10: a reader cannot resolve the
-   * site's variants), so a photo-only post does not read empty.
+   * (TASK-432), the post's photos (TASK-166), then its rendered body with
+   * every relative URL in it made absolute. Each photo is a plain `<img>` of
+   * the original, absolute on the site's base URL, with the alt text the page
+   * gives it (decision-10: a reader cannot resolve the site's variants), so a
+   * photo-only post does not read empty.
    */
   html: string;
   /**

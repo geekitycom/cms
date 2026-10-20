@@ -224,7 +224,7 @@ function refusedItemField(
 }
 
 /** An item's ID: its canonical web address, or an ISBN or a DOI. */
-export function isItemId(value: string): boolean {
+function isItemId(value: string): boolean {
   return isWebUrl(value) || /^(isbn|doi):\S+$/i.test(value);
 }
 

@@ -6,9 +6,9 @@
  * only, one deadline, a byte limit. Open Library answers an ISBN, Crossref a
  * DOI, MusicBrainz a release or release group with its album art from the
  * Cover Art Archive, TMDb a movie or TV show, and an IMDb title when the
- * site has a TMDb key, and Nominatim a place on OpenStreetMap. Any other page is read the way a cited page is, through
- * its JSON-LD and its own metadata. Nothing throws: a lookup that finds nothing
- * is one sentence saying why.
+ * site has a TMDb key, and Nominatim a place on OpenStreetMap. Any other page
+ * is read the way a cited page is, through its JSON-LD and its own metadata.
+ * Nothing throws: a lookup that finds nothing is one sentence saying why.
  *
  * Find (TASK-435) asks the same sources by title, for the matches to pick
  * from, and a pick is looked up by the ID its match carries.
@@ -59,7 +59,7 @@ export interface LookUpItemOptions {
   readonly timeoutMs?: number | undefined;
 }
 
-export const ITEM_LOOKUP_TIMEOUT_MS = 10_000;
+const ITEM_LOOKUP_TIMEOUT_MS = 10_000;
 
 /** The most of an API's answer, or a page, that is read. */
 const MAX_BYTES = 1_000_000;
@@ -69,10 +69,12 @@ const ONE_A_SECOND_MS = 1_000;
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org';
 
-export const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
+const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
 
 /** Where the TMDb key is added, as a failed lookup names it. */
-export const TMDB_KEY_PLACE = 'Settings > General';
+const TMDB_KEY_PLACE = 'Settings > General';
+
+const TMDB_REFUSED = `TMDb refused the site’s API key. Check it on ${TMDB_KEY_PLACE}.`;
 
 interface Limits {
   readonly lookup: HostLookup;
@@ -348,9 +350,7 @@ async function tmdb(
   const read = await readJson(request.url, limits, request.headers);
   const noun = id.type === 'movie' ? 'movie' : 'TV show';
   if (!read.ok) {
-    if (read.status === 401) {
-      return fail(`TMDb refused the site’s API key. Check it on ${TMDB_KEY_PLACE}.`);
-    }
+    if (read.status === 401) return fail(TMDB_REFUSED);
     return unanswered(read, 'TMDb', `TMDb has no ${noun} ${id.id}.`);
   }
   const found = read.value;
@@ -396,9 +396,7 @@ async function imdb(
   const request = tmdbRequest(`/find/${id.id}?external_source=imdb_id`, key);
   const read = await readJson(request.url, limits, request.headers);
   if (!read.ok) {
-    if (read.status === 401) {
-      return fail(`TMDb refused the site’s API key. Check it on ${TMDB_KEY_PLACE}.`);
-    }
+    if (read.status === 401) return fail(TMDB_REFUSED);
     return unanswered(read, 'TMDb', `TMDb knows no IMDb title ${id.id}.`);
   }
   const first = (results: unknown): unknown => (Array.isArray(results) ? results[0] : undefined);
@@ -661,9 +659,7 @@ async function searchTmdb(
   const request = tmdbRequest(`/search/${type}?query=${encodeURIComponent(words)}`, key);
   const read = await readJson(request.url, limits, request.headers);
   if (!read.ok) {
-    return read.status === 401
-      ? { ok: false, message: `TMDb refused the site’s API key. Check it on ${TMDB_KEY_PLACE}.` }
-      : unsearched(read, 'TMDb');
+    return read.status === 401 ? { ok: false, message: TMDB_REFUSED } : unsearched(read, 'TMDb');
   }
   const found = records(read.value['results']).slice(0, SEARCH_RESULTS);
   const matches = await Promise.all(
