@@ -256,7 +256,10 @@ describe('Suggest title and Suggest description', () => {
       'Suggest title',
       'Suggest description',
     ]);
-    assert.deepEqual(await labels('/admin/posts/new'), ['Suggest title', 'Suggest description']);
+    assert.deepEqual(await labels('/admin/posts/new?kind=note'), [
+      'Suggest title',
+      'Suggest description',
+    ]);
     assert.deepEqual(await labels('/admin/pages/new'), ['Suggest title', 'Suggest description']);
   });
 
@@ -365,7 +368,7 @@ describe('Suggest title and Suggest description', () => {
 
   it('draws nothing and answers 404 while it is disabled', async () => {
     const { admin } = await site({ apiKey: KEY, enabled: false });
-    assert.deepEqual(buttonsOn(await (await admin.get('/admin/posts/new')).text()), []);
+    assert.deepEqual(buttonsOn(await (await admin.get('/admin/posts/new?kind=note')).text()), []);
     const response = await admin.post(actionUrl('suggest-title'), { type: 'post', body: 'x' });
     assert.equal(response.status, 404);
     assert.equal(provider.received.length, 0);

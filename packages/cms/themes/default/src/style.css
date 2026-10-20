@@ -747,16 +747,36 @@
     @apply block h-auto w-full;
   }
 
-  .read-line {
+  .review {
+    @apply my-6 font-sans text-sm;
+  }
+
+  .review-item {
     @apply flow-root;
   }
 
-  .read-cover {
+  .review-picture {
     @apply float-start me-4 mb-2;
   }
 
-  .read-cover img {
-    @apply block h-auto max-h-32 w-auto max-w-24 rounded-sm;
+  .review-picture img {
+    @apply block h-auto max-h-48 w-auto max-w-32 rounded-sm;
+  }
+
+  .review-of {
+    @apply text-base;
+  }
+
+  .review-details {
+    @apply mt-1;
+  }
+
+  .review-rating {
+    @apply mt-2;
+  }
+
+  .review-stars {
+    @apply text-lg tracking-wider;
   }
 
   /* An untitled post is its words, set larger. It is the one entry whose

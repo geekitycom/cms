@@ -1,9 +1,12 @@
 import { transcriptTypeFor } from '../content/enclosure-form.ts';
 import type { AlternateRow } from '../content/enclosure-form.ts';
 import type { LocationForm } from '../content/location-form.ts';
+import { isLibraryImage } from '../content/photo-form.ts';
 import type { PhotoRow } from '../content/photo-form.ts';
-import type { AltTextLibrary } from '../content/alt-text.ts';
+import { readAltTexts } from '../content/alt-text.ts';
 import { uploadPath } from '../content/image-tags.ts';
+import { thumbnailUrl } from '../images/variants.ts';
+import type { ImageConfig } from '../images/variants.ts';
 import { listUploads } from '../media/library.ts';
 import { trimmedField } from '../util/forms.ts';
 
@@ -29,28 +32,67 @@ export function readLocationForm(body: Record<string, unknown>): LocationForm {
   };
 }
 
-/** The empty row the editor adds so a form with no script can add a photo. */
-export const BLANK_PHOTO_ROW: PhotoRow = { url: '', alt: '' };
-
-/** A row as the editor prints it, with the library's alt text to show when the row has none. */
 export interface PhotoRowView extends PhotoRow {
   libraryAlt: string;
+  thumbnail: string | undefined;
 }
 
-/** The rows the editor prints: the post's photos, then a blank one to add another. */
-export function photoRowViews(rows: readonly PhotoRow[], library: AltTextLibrary): PhotoRowView[] {
-  return [...rows, BLANK_PHOTO_ROW].map((row) => {
+export interface PhotoPick {
+  url: string;
+  thumbnail: string;
+  alt: string;
+  index: number;
+}
+
+export interface PhotoPicker {
+  rows: PhotoRowView[];
+  picks: PhotoPick[];
+  blank: number;
+  choices: string[];
+}
+
+export function libraryThumbnail(
+  config: ImageConfig & { contentDir: string },
+  url: string,
+): string | undefined {
+  const source = uploadPath(url);
+  if (source === undefined || !isLibraryImage(url, config.contentDir)) return undefined;
+  return thumbnailUrl(config, source, url);
+}
+
+const PICKS = 18;
+
+export async function photoPicker(
+  config: ImageConfig & { contentDir: string },
+  rows: readonly PhotoRow[],
+): Promise<PhotoPicker> {
+  const images = (await listUploads(config.contentDir)).filter((file) => file.kind === 'image');
+  const library = readAltTexts(config.contentDir);
+  const views = rows.map((row) => {
     const source = uploadPath(row.url);
     const described = source === undefined ? undefined : library.get(source);
-    return { ...row, libraryAlt: described?.kind === 'described' ? described.text : '' };
+    return {
+      ...row,
+      libraryAlt: described?.kind === 'described' ? described.text : '',
+      thumbnail: libraryThumbnail(config, row.url),
+    };
   });
-}
-
-/** The image uploads a photo can be, newest first. */
-export async function photoChoices(contentDir: string): Promise<string[]> {
-  return (await listUploads(contentDir))
-    .filter((file) => file.kind === 'image')
-    .map((file) => file.url);
+  const taken = new Set(rows.map((row) => row.url));
+  const picks = images
+    .filter((file) => !taken.has(file.url))
+    .slice(0, PICKS)
+    .map((file, n) => ({
+      url: file.url,
+      thumbnail: thumbnailUrl(config, file.path, file.url),
+      alt: file.alt?.kind === 'described' ? file.alt.text : '',
+      index: rows.length + n,
+    }));
+  return {
+    rows: views,
+    picks,
+    blank: rows.length + picks.length,
+    choices: images.map((file) => file.url),
+  };
 }
 
 /** The empty row the editor adds so a form with no script can add a version. */

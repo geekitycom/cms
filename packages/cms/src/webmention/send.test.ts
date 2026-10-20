@@ -448,26 +448,6 @@ describe('sending a webmention for an RSVP (TASK-198 AC #2)', () => {
   });
 });
 
-describe('sending a webmention for a read (TASK-233 AC #1)', () => {
-  it('tells the page a read post’s read-of names, as it tells a citation', async () => {
-    const cms = await site();
-    const agent = await signedIn(cms);
-
-    const response = await publish(agent, '', {
-      'read-status': 'finished',
-      'read-of-name': 'A Friendly Book',
-      'read-of-url': FRIENDLY,
-    });
-    assert.equal(response.status, 303, 'the post was published');
-    await cms.webmentions.settled();
-
-    assert.deepEqual(
-      sent.map((one) => [one.source, one.target]),
-      [[`${BASE_URL}/2026/03/hello-world/`, FRIENDLY]],
-    );
-  });
-});
-
 describe('sending webmentions when a post is deleted', () => {
   it('tells the pages it linked to, which find it gone when they verify (TASK-195)', async () => {
     const cms = await site();

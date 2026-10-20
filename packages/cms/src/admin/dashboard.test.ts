@@ -49,7 +49,7 @@ async function seeded(documents: Seed[]): Promise<string> {
  * The tests below only need a post to exist and a flash to have been queued.
  */
 async function newDraft(agent: Browser, title: string): Promise<Response> {
-  const html = await (await agent.get('/admin/posts/new')).text();
+  const html = await (await agent.get('/admin/posts/new?kind=note')).text();
   const token = csrfField(html);
   assert.ok(token !== undefined, 'the editor carries a form with a CSRF token');
 
@@ -152,9 +152,9 @@ describe('the admin bar inside the admin (TASK-183)', () => {
       { label: '+ New', href: '/admin/posts/new' },
     ]);
 
-    const editor = await agent.get('/admin/posts/new');
-    assert.equal(editor.status, 200);
-    assert.match(await editor.text(), /Add post/);
+    const chooser = await agent.get('/admin/posts/new');
+    assert.equal(chooser.status, 200);
+    assert.match(await chooser.text(), /What are you posting\?/);
   });
 
   it('offers View Post or View Page on the editor of a published document, and not of a draft (AC #3)', async () => {

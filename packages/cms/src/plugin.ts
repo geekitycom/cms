@@ -525,7 +525,8 @@ export type PluginEditorField = 'title' | 'description' | 'tags';
 /**
  * What kind of post a draft is, by Post Type Discovery over what the editor
  * holds: a post with a `like-of` is a `like`, one with photos a `photo`, an
- * untitled one a `note` and a titled one an `article`.
+ * untitled one a `note` and a titled one an `article`. One with a reviewed
+ * item is a `review`.
  */
 export type PluginPostType =
   | 'event'
@@ -533,8 +534,8 @@ export type PluginPostType =
   | 'repost'
   | 'like'
   | 'reply'
+  | 'review'
   | 'photo'
-  | 'read'
   | 'bookmark'
   | 'note'
   | 'article';

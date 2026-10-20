@@ -85,7 +85,9 @@ a term came from. WordPress publishes both the same way.
 - the `description` front matter, when the post has one, because the author
   wrote it for this purpose
 - otherwise, the first paragraph of the rendered body, stripped to plain text
-  and cut at 55 words, which is WordPress's excerpt length
+  and cut at 55 words, which is WordPress's excerpt length. A review's summary
+  opens with what it reviews, its details and the rating, such as
+  `Review of Severance (TV show). Season 2. Rated 4 out of 5.`
 
 The summary is RSS's `description`, Atom's `summary`, and JSON Feed's
 `summary`. It is left out only when the post has nothing to summarise. The
@@ -123,6 +125,12 @@ channel's `language`, Atom as the feed's `xml:lang`, and JSON Feed as its
 on its own item: RSS as `dc:language`, Atom as `xml:lang` on the `entry`, and
 JSON Feed as the item's `language`. A post in the site's language, or whose
 `lang` is not a language tag, adds nothing.
+
+**Reviews.** A review's item and rating print in every format's content before
+the photos and the body: the item's picture as a plain `<img>` absolute on the
+site's base URL, a sentence saying what it reviews, and the rating as stars and
+as words such as "Rated 4 out of 5". The page prints the same block, with the
+picture responsive.
 
 **Photos.** A post's `photo` front matter prints in every format's content,
 before the body. The page prints it in the same place. Each photo is a plain

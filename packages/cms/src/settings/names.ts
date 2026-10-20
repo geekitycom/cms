@@ -1,6 +1,13 @@
 export const SETTING_NAME = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
 
-export const CORE_NAMESPACES = ['site', 'maintenance', 'dev_mode', 'mail', 'akismet'] as const;
+export const CORE_NAMESPACES = [
+  'site',
+  'maintenance',
+  'dev_mode',
+  'mail',
+  'akismet',
+  'tmdb',
+] as const;
 
 function upperSnake(text: string): string {
   return text

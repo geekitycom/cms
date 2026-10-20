@@ -49,8 +49,8 @@ const DRAFT_NOUNS: Readonly<Record<PluginPostType, string>> = {
   repost: 'a repost',
   like: 'a like',
   reply: 'a reply',
+  review: 'a review',
   photo: 'a photo',
-  read: 'a read',
   bookmark: 'a bookmark',
   note: 'a note',
   article: 'an article',
@@ -137,8 +137,7 @@ function postTypeOfForm(form: EditorForm, contentDir: string, timezone: string):
     'repost-of': form.repostOf,
     'like-of': form.likeOf,
     'bookmark-of': form.bookmarkOf,
-    'read-of': form.readOf.name,
-    'read-status': form.readStatus,
+    item: form.review.name,
   });
 }
 

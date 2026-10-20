@@ -335,7 +335,7 @@ describe('security headers', () => {
 
     const responses = [
       await agent.get('/admin'),
-      await agent.get('/admin/posts/new'),
+      await agent.get('/admin/posts/new?kind=note'),
       await agent.get('/admin/_static/admin.css'),
       await cms.app.request('/admin/settings'),
       await cms.app.request('/admin/nowhere-at-all'),
@@ -354,7 +354,9 @@ describe('security headers', () => {
     const agent = browser(cms);
     await setUpFirstAdmin(agent);
 
-    const policy = (await agent.get('/admin/posts/new')).headers.get('content-security-policy');
+    const policy = (await agent.get('/admin/posts/new?kind=note')).headers.get(
+      'content-security-policy',
+    );
     assert.ok(policy !== null);
 
     // The bundle is same-origin and there is no inline script left in the admin.
@@ -377,7 +379,7 @@ describe('security headers', () => {
     const agent = browser(cms);
     await setUpFirstAdmin(agent);
 
-    const response = await agent.get('/admin/posts/new');
+    const response = await agent.get('/admin/posts/new?kind=note');
     const policy = response.headers.get('content-security-policy') ?? '';
     const html = await response.text();
 
@@ -385,7 +387,7 @@ describe('security headers', () => {
     assert.ok(inPolicy !== undefined, 'the policy carries a nonce');
     assert.match(html, new RegExp(`<script[^>]*nonce="${inPolicy}"`), 'and so does the bundle tag');
 
-    const second = await agent.get('/admin/posts/new');
+    const second = await agent.get('/admin/posts/new?kind=note');
     const other = /'nonce-([A-Za-z0-9+/=_-]+)'/.exec(
       second.headers.get('content-security-policy') ?? '',
     )?.[1];
@@ -416,7 +418,7 @@ describe('security headers', () => {
     const agent = browser(cms);
     await setUpFirstAdmin(agent);
 
-    const html = await (await agent.get('/admin/posts/new')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=note')).text();
 
     assert.doesNotMatch(html, /<script(?![^>]*\ssrc=)[^>]*>[\s\S]*?\S/, 'every script has a src');
   });
@@ -426,7 +428,7 @@ describe('security headers', () => {
     const agent = browser(cms);
     await setUpFirstAdmin(agent);
 
-    const response = await agent.get('/admin/posts/new');
+    const response = await agent.get('/admin/posts/new?kind=note');
 
     assert.equal(response.headers.get('referrer-policy'), 'same-origin');
     assert.match(response.headers.get('content-security-policy') ?? '', /default-src 'self'/);
@@ -667,7 +669,7 @@ describe('the admin menu', () => {
     const agent = browser(cms);
     await setUpFirstAdmin(agent);
 
-    const menu = nav(await (await agent.get('/admin/posts/new')).text());
+    const menu = nav(await (await agent.get('/admin/posts/new?kind=note')).text());
 
     assert.ok(marks(menu, '/admin/posts/new'), 'Posts > Add new is marked');
     assert.doesNotMatch(menu, /<script|onclick=|<button/, 'the menu is links and lists');

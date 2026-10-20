@@ -456,3 +456,15 @@ export async function findImageVariant(
 
   return findAsset(relative, [root]);
 }
+
+const THUMBNAIL_WIDTH = 400;
+
+export function thumbnailUrl(config: ImageConfig, source: string, url: string): string {
+  const image = describeImage(config, source);
+  const thumbnail = image?.variants
+    .filter((variant) => variant.format === image.variants[0]?.format)
+    .find((variant) => variant.width >= THUMBNAIL_WIDTH);
+  return image !== undefined && thumbnail !== undefined
+    ? variantUrl(source, thumbnail, image.version)
+    : url;
+}

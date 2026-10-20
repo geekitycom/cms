@@ -1,6 +1,5 @@
 import { decodeEntities } from '../util/html.ts';
 import type { Document } from './document.ts';
-import { readLine, readOf } from './read.ts';
 
 /**
  * How many words of the rendered text an excerpt keeps when a post carries no
@@ -14,18 +13,13 @@ export const EXCERPT_WORDS = 55;
  *
  * The `description` front matter when the post has one — it is what the author
  * wrote for exactly this — and otherwise the first paragraph of the rendered
- * body, stripped to text and cut where WordPress cuts an excerpt. A read post's
- * first paragraph is its read line, so its summary says the current status. Never the
+ * body, stripped to text and cut where WordPress cuts an excerpt. Never the
  * whole post: the content element is where the whole post goes, and a reader
  * that shows both should have something to choose between.
  */
 export function feedExcerpt(document: Document): string {
   if (document.description !== undefined) return document.description;
-  return excerptFromHtml(readLine(readOf(document.extra)) + document.html);
-}
-
-export function postExcerpt(document: Document): string {
-  return document.description ?? excerptFromHtml(document.html);
+  return excerptFromHtml(document.html);
 }
 
 /**

@@ -1,5 +1,0 @@
-{#
-  An entry includes it with `read` on the context; a listing sets it from the
-  entry it is printing. Nothing is printed for a post that read nothing.
-#}
-{% if read %}{{ read.line | safe }}{% endif %}

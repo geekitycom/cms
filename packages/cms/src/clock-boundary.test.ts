@@ -19,6 +19,11 @@ const ELAPSED_WALL_TIME = 'measures elapsed wall time, which a pinned clock woul
 
 const ALLOWED: readonly Allowance[] = [
   {
+    file: 'item-lookup/lookup.ts',
+    line: 'const now = Date.now();',
+    because: ELAPSED_WALL_TIME,
+  },
+  {
     file: 'util/clock.ts',
     line: 'export const systemClock: Clock = () => new Date();',
     because: 'the system clock definition',

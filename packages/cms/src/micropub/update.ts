@@ -4,6 +4,7 @@ import type { EditorForm } from '../content/document-form.ts';
 import { POST_KIND } from '../content/document-kind.ts';
 import type { DocumentKind } from '../content/document-kind.ts';
 import { eventOf } from '../content/event.ts';
+import { reviewOf } from '../content/review.ts';
 import type { KeptProperties } from '../content/kept-properties.ts';
 import { locationToMicropub } from '../content/location.ts';
 import type { PostLocations } from '../content/locations.ts';
@@ -39,14 +40,17 @@ function updatable(kind: DocumentKind, type: MicropubType): Updatable {
   };
 }
 
-function eventProperties(kind: DocumentKind): string[] {
-  return Object.entries(updatable(kind, 'h-event'))
-    .filter(([, fields]) => fields.includes('event'))
+function propertiesSourcedOnEveryUpdate(kind: DocumentKind, type: MicropubType): string[] {
+  const field = type === 'h-event' ? 'event' : type === 'h-review' ? 'review' : undefined;
+  if (field === undefined) return [];
+  return Object.entries(updatable(kind, type))
+    .filter(([, fields]) => fields.includes(field))
     .map(([property]) => property);
 }
 
 export function micropubType(document: Document): MicropubType {
-  return eventOf(document.extra) === undefined ? 'h-entry' : 'h-event';
+  if (eventOf(document.extra) !== undefined) return 'h-event';
+  return reviewOf(document.extra) === undefined ? 'h-entry' : 'h-review';
 }
 
 export interface SourceSite extends MicropubSite {
@@ -80,7 +84,7 @@ export function sourceProperties(
   const authorLocation = site.locations.read(document.permalink);
   if (
     authorLocation !== undefined &&
-    (micropubType(document) === 'h-entry' || authorLocation.checkin === true)
+    (micropubType(document) !== 'h-event' || authorLocation.checkin === true)
   ) {
     properties[authorLocation.checkin === true ? 'checkin' : 'location'] = [
       locationToMicropub(authorLocation),
@@ -164,8 +168,7 @@ export function updateForm(
   const unknown = touched.filter((property) => !(property in owned) && !kept(property));
   if (unknown.length > 0) return { errors: [`This endpoint cannot update ${unknown.join(', ')}.`] };
 
-  const sourced =
-    type === 'h-event' ? [...new Set([...touched, ...eventProperties(kind)])] : touched;
+  const sourced = [...new Set([...touched, ...propertiesSourcedOnEveryUpdate(kind, type)])];
   const source = sourceProperties(document, site, kind);
   const properties = new Map(sourced.map((property) => [property, source[property] ?? []]));
   for (const change of changes) {

@@ -219,6 +219,68 @@ describe('a property the site does not understand (AC #1, #5)', () => {
   });
 });
 
+describe('read-of and read-status (TASK-431)', () => {
+  const READ_OF = [
+    {
+      type: ['h-cite'],
+      properties: { name: ['A Book'], author: ['An Author'], uid: ['isbn:9780000000000'] },
+    },
+  ];
+
+  it('keeps them on a create like any property the site does not understand', async () => {
+    const { cms, token } = await site();
+    const url = await created(
+      await postJson(cms, token, {
+        type: ['h-entry'],
+        properties: { content: ['Loved it.'], 'read-of': READ_OF, 'read-status': ['finished'] },
+      }),
+    );
+    const permalink = new URL(url).pathname;
+
+    assert.deepEqual(await keptFile(cms), {
+      [permalink]: { 'read-of': READ_OF, 'read-status': ['finished'] },
+    });
+    assert.deepEqual(await source(cms, token, url), {
+      content: ['Loved it.'],
+      'post-status': ['published'],
+      published: ['2026-09-20T12:00:00Z'],
+      visibility: ['public'],
+      'read-of': READ_OF,
+      'read-status': ['finished'],
+    });
+    const page = await text(cms, permalink);
+    assert.match(page, /Loved it\./);
+    assert.doesNotMatch(page, /A Book|Finished reading|read-line/);
+    for (const [file, contents] of await filesUnder(cms.config.contentDir)) {
+      assert.ok(!contents.includes('A Book'), `${file} holds the read-of`);
+    }
+  });
+
+  it('keeps one an update adds, and leaves the post’s file alone', async () => {
+    const { cms, token } = await site();
+    const url = await created(
+      await postJson(cms, token, { type: ['h-entry'], properties: { content: ['Started.'] } }),
+    );
+    await updated(cms, token, { action: 'update', url, add: { 'read-status': ['reading'] } });
+    assert.deepEqual((await keptFile(cms))[new URL(url).pathname], {
+      'read-status': ['reading'],
+    });
+  });
+
+  it('lists no read post type in q=config', async () => {
+    const { cms, token } = await site();
+    const response = await cms.app.request(`${ENDPOINT}?q=config`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const config = (await response.json()) as { 'post-types': { type: string }[] };
+    assert.ok(config['post-types'].length > 0);
+    assert.equal(
+      config['post-types'].some((entry) => entry.type === 'read'),
+      false,
+    );
+  });
+});
+
 describe('a create with nothing to publish (AC #6)', () => {
   it('refuses Quill’s weight post, which is an h-measure and a date, naming weight', async () => {
     const { cms, token } = await site();

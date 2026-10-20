@@ -3,7 +3,7 @@ id: doc-2
 title: Content Format (11ty-compatible Markdown)
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-10 10:43'
+updated_date: '2026-10-20 01:52'
 ---
 # Content Format (11ty-compatible Markdown)
 
@@ -70,7 +70,7 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | `start`, `end`, `location` | when and where an event is (TASK-200, decision-32), under their microformats2 names. A `start` that reads as a date makes the post an event under Post Type Discovery, ahead of every other type as the spec orders it; its `title` is the event's name and its body the description. `start` and `end` are UTC instants the admin writes from wall-clock time in the site's zone, and one written by hand with no offset is read as UTC; an `end` before the `start` is ignored. `location` is the event's place in words, or the http or https address to join it online. It is public by nature, unlike the author's own location, which never goes in front matter (decision-29). The theme renders the post as an `h-event` with `dt-start`, `dt-end` and `p-location` and describes it as a schema.org `Event`; it federates as an ActivityStreams `Event`. The admin editor refuses an unreadable time, an end before the start, an end or place without a start, and an event with no title, and leaves these keys alone on a post that is no event |
 | `photo` | the post's photos (TASK-166), a list in Micropub's name. Each entry is `url`, an upload's `/uploads/…` path or an http or https URL, and an optional `alt`; a bare URL string reads as an entry without `alt`. An entry with no `alt` takes the media library's alt text for that upload (TASK-141), so a library image is described once. The theme prints each as an `img.u-photo` in the h-entry, the ActivityStreams object attaches each as an `Image` named by its alt text, and the JSON-LD lists each as an `ImageObject`. A post with a photo is a photo post under Post Type Discovery unless it is a reply, which comes first. An entry whose `url` is neither is dropped when read; the admin editor refuses to save one, and refuses an upload that is not an image in the library |
 | `like-of`, `repost-of`, `bookmark-of` | the URL a post likes, reposts or bookmarks (TASK-169), each under its microformats2 name, one URL each; a list of one reads as that URL. An http or https URL makes the post a like, a repost or a bookmark under Post Type Discovery, in the order repost, like, reply, photo, bookmark: the spec's order, with bookmark, which the spec leaves to note and article, just ahead of them. The theme cites each as an embedded `u-like-of`, `u-repost-of` or `u-bookmark-of` `h-cite`, and publishing sends the URL a webmention. A like or repost of a fediverse object federates as a `Like` or `Announce` of it; anything else federates as the note it is, with a line linking the page (decision-28). Any other value is ignored; the admin editor refuses to save one |
-| `read-of`, `read-status` | what a read post read, and how far its author got (TASK-229), as indiebookclub posts it. `read-of` is a map of `name` and, when known, `author`, `uid` (`isbn:…` or `doi:…`) and `url`; a bare string reads as its `name`. `read-status` is `to-read`, `reading` or `finished`. With both, the post is a read under Post Type Discovery, placed after photo and ahead of bookmark. The theme prints a `p-read-status` and a `p-read-of` `h-cite`, and the post federates as a note opening with the same sentence, such as "Want to read: Title by Author". Either without the other is ignored; the admin editor refuses to save one |
+| `item`, `rating` | what a review reviews and how its author rates it (TASK-432), under the microformats2 h-review's names. `item` is a map: `kind` (`book`, `movie`, `tv`, `album`, `place` or `other`, and `other` when it is missing), `name`, and the fields its kind has. A book, a movie, a TV show and an album have `by` (the author, director, network or artist), `year`, `uid`, `url`, `photo` and `date`; a TV show also has `season` and `episode`. A place has `category` (what it is, in the author's word, such as `Coffee shop`), `street-address`, `locality`, `region`, `country-name`, `url` (its website), `uid`, `photo` and `date`. An other has `category`, `by`, `uid`, `url` and `photo`. A field a kind does not have is ignored. `uid` is the item's canonical address (a TMDb, IMDb or MusicBrainz release-group URL, or its own site), or `isbn:…` or `doi:…` for a book or a paper; no other prefix. `photo` is the item's picture (a cover, a poster, album art), `url` and optional `alt` as a post photo has, and is never one of the post's photos; a place review shows the author's own pictures as ordinary `photo` entries beside it. `date` is the day, `YYYY-MM-DD`, the author finished, watched, listened to or visited it. `rating` is a whole number from 1 to 5, best 5, and optional. An `item` with a `name` makes the post a review under Post Type Discovery, after reply and ahead of photo, so a place review with photos is still a review; its body is the review and its title is optional. The theme renders the post as an `h-entry h-review`: the `p-item` (an `h-cite`, an `h-card` for a place) with its picture beside a sentence saying what it is, then the rating as stars and as words such as "Rated 4 out of 5", a `p-rating` out of a `p-best` of 5. Feeds and the federated note open with the same text, carry the picture (the ActivityStreams object attaches it first), and the feed summary starts with it. A `rating` that is not a whole number from 1 to 5 is ignored when read; the admin editor refuses to save one, and refuses an item with no name, an unknown kind or an ID that is neither a web address nor `isbn:` or `doi:`. A key inside `item` the CMS does not know is kept on save |
 | `activitypub.published` | timestamp of first delivery, a UTC instant. The only key the CMS writes here: it records that the post has been announced and when, which is what decides `Create` against `Update`. A post migrated from a site that federated it carries the instant that site first delivered it, written by the importer, so its followers are never sent it as new |
 | `activitypub.id` | never written by the CMS. A post's ActivityStreams object id is its permalink (decision-13); this key is read, not minted, so a post migrated from elsewhere keeps the id its followers already hold — `https://example.com/?p=813` — and every `Update` and `Delete` names it |
 | `activitypub.type` | never written by the CMS. `Note` or `Article`, overriding the ActivityStreams type Post Type Discovery derives for the post (decision-17). Any other value is kept in the file, logged as a warning, and ignored. The `activitypub` block is everything about how a post federates, whether the author set it or the CMS wrote it back, and a save never rewrites what the author set |
@@ -78,6 +78,80 @@ Extra keys, ignored by Eleventy, prefixed to avoid collisions:
 | `canonical_href` | where the post was first published, when that is somewhere else (TASK-293), such as a Substack essay republished here. The name is the one an Eleventy site in the wild already used for it, so its files keep their values. An absolute http or https URL becomes the page's `<link rel="canonical">` and `og:url` in place of its own URL, and is on the theme's context as `original` (`{ url, label }`); the default theme prints "Originally published at" and links it as a second `u-url` of the h-entry, after the permalink's. It is no `u-syndication`, which names copies of this post, and original-post-discovery reads a copy's off-site `u-url` as its original. The JSON and Markdown representations carry it in the front matter as written. Any other value is kept in the file, named in a warning by `geekity sync` and when the watcher indexes the file, and ignored. The admin editor shows no field for it and keeps it on save |
 | `canonical_name` | the name of the publication where the post was first published (TASK-316), such as `Smarter Engineers` for a guest post on someone else's Substack, whose host alone would read `open.substack.com`. The name is the one the same Eleventy site used next to `canonical_href`, so its files keep their values. A non-empty string next to a valid `canonical_href` becomes the `label` of the theme context's `original`, and the default theme prints "Originally published at" and that name; without it the label is the original's host. Next to no valid `canonical_href` it is kept in the file, named in a warning by `geekity sync` and when the watcher indexes the file, and ignored. The admin editor shows no field for it and keeps it on save |
 | `migrated` | `true` when the post was public somewhere else before it reached this site (TASK-296, decision-36). An importer writes it on every post it brings over; nothing in the CMS writes it. Its readers have already seen the post, so its arrival is news to nobody: a file appearing, a draft published, or a date passing sends no webmention, feed ping or IndexNow submission. A real edit, a change to a version that was already public, goes out as any edit does. ActivityPub follows `activitypub.published`: with one, the followers hold the post, so it is never sent as a `Create`: its arrival sends nothing, an edit to it once public sends an `Update` and taking it down sends a `Delete`; without one, nothing about the post is ever federated, not a `Create`, an `Update`, a `Delete`, nor a revision when a cited page's context arrives, and a resend sends nothing. Either way the post is on the web at its own date and its object is served to a peer that fetches its id. Any other value is ignored. The admin editor shows no field for it and keeps it on save |
+
+
+A review of each kind:
+
+```yaml
+# A book
+rating: 5
+item:
+  kind: book
+  name: Piranesi
+  by: Susanna Clarke
+  year: 2020
+  uid: isbn:9781635575637
+  url: https://openlibrary.org/isbn/9781635575637
+  photo:
+    url: /uploads/2026/11/piranesi.jpg
+    alt: The cover of Piranesi
+  date: '2026-11-09'
+
+# A movie
+rating: 4
+item:
+  kind: movie
+  name: 'Dune: Part Two'
+  by: Denis Villeneuve
+  year: 2024
+  uid: https://www.themoviedb.org/movie/693134
+  date: '2026-10-18'
+
+# A TV show, one episode of it
+item:
+  kind: tv
+  name: Severance
+  by: Apple TV+
+  year: 2022
+  uid: https://www.themoviedb.org/tv/95396
+  season: 2
+  episode: 3
+  date: '2026-10-12'
+
+# An album
+rating: 5
+item:
+  kind: album
+  name: In Rainbows
+  by: Radiohead
+  year: 2007
+  uid: https://musicbrainz.org/release-group/6e335887-60ba-38f0-95af-fae7774336bf
+
+# A place, with the author's own photo beside it
+rating: 4
+item:
+  kind: place
+  name: Blue Door Coffee
+  category: Coffee shop
+  street-address: 1234 Wealthy St SE
+  locality: Grand Rapids
+  region: MI
+  country-name: USA
+  url: https://bluedoor.coffee
+  date: '2026-10-14'
+photo:
+  - url: /uploads/2026/10/flat-white.jpg
+    alt: A flat white on a blue table
+
+# Anything else
+rating: 3
+item:
+  kind: other
+  name: Tot
+  category: App
+  by: The Iconfactory
+  url: https://tot.rocks
+```
 
 Unknown keys are preserved on round trip. The writer emits YAML with a stable key order so diffs stay small.
 
@@ -164,7 +238,7 @@ A post created over Micropub (TASK-164) is written by the editor's own write pat
 | `in-reply-to` | `in-reply-to` |
 | `rsvp` | `rsvp` |
 | `like-of`, `repost-of`, `bookmark-of` | the key of the same name |
-| `read-of` (an h-cite), `read-status` | `read-of` as a map of `name`, `author`, `uid` and `url`, and `read-status` |
+| `item`, `rating` | `item` and `rating` (TASK-432). `item` is one h-cite, h-card, h-product or h-item, or a string that is its name. Its `name`, `author`, `published`, `uid`, `url`, `photo`, `category`, `street-address`, `locality`, `region` and `country-name` fill the item's `name`, `by`, `year`, `uid`, `url`, `photo`, `category` and address fields, and `kind`, `date`, `season` and `episode` fill the fields of the same name. Without a `kind`, an h-card or h-adr is a `place` and anything else an `other`. Any other item property is refused by name. `rating` is `1` to `5`, as text or a number; anything else is refused with "rating is a whole number from 1 to 5, not …" |
 | `published` | `date`, as a UTC instant; now when it is missing |
 | `post-status: draft` | `draft: true`; `published`, or none, is `draft: false` |
 | `mp-slug` | the slug, in the file name and the permalink |
@@ -177,9 +251,9 @@ A post created over Micropub (TASK-164) is written by the editor's own write pat
 
 `slug` and `syndicate-to`, which Quill accounts from before its renames send, are read as `mp-slug` and `mp-syndicate-to`. `p3k-content-type` (`text/plain` or `text/markdown`) is accepted and writes nothing (TASK-222); any other value is refused by name. `q=config` advertises `visibility: ["public", "unlisted"]`, and `q=source` answers every post's `visibility`.
 
-The token's user is `author`. `h-entry` and `h-event` are created (TASK-280). An `h-event` goes through the editor's event fields, so the editor's refusals apply (an unreadable time, an end before the start, no name), and one without a `start` is refused; an `h-entry` that sends `start` or `end` is refused and pointed at `h-event`. On an `h-event`, `checkin` is still the author's own location in `data/locations.json`. In JSON, a property sent as a bare value rather than a list is read as one value, as Quill's event editor sends `location`, `content` and `end`. A property outside the table is kept verbatim in the private `data/kept-properties.json` and published nowhere (TASK-237, decision-27); an `mp-*` command the site does not support, another type, a second value where one is expected, or a value that is not text is refused by name and nothing is written.
+The token's user is `author`. `h-entry`, `h-event` and `h-review` are created (TASK-280, TASK-432). An `h-review` needs an `item`; an `h-entry` that sends one is a review too. An `h-event` goes through the editor's event fields, so the editor's refusals apply (an unreadable time, an end before the start, no name), and one without a `start` is refused; an `h-entry` that sends `start` or `end` is refused and pointed at `h-event`. On an `h-event`, `checkin` is still the author's own location in `data/locations.json`. In JSON, a property sent as a bare value rather than a list is read as one value, as Quill's event editor sends `location`, `content` and `end`. A property outside the table is kept verbatim in the private `data/kept-properties.json` and published nowhere (TASK-237, decision-27); an `mp-*` command the site does not support, another type, a second value where one is expected, or a value that is not text is refused by name and nothing is written.
 
-An update (TASK-167) reads the same table backwards: `q=source` answers a post's front matter as those properties, with an upload's path as its absolute URL, and `action=update` applies `replace`, `add` and `delete` to them, fills only the editor fields the named properties own, and leaves every other key as it was. An event is read back as an `h-event` with `start`, `end` and `location` (its place); the author's own location is answered only when it is a checkin. Updating any of an event's `start`, `end` or `location` keeps the other two, and deleting its `start` is refused. A kept property outside the table is replaced, added to or deleted in `data/kept-properties.json`. `mp-slug` and unsupported `mp-*` commands are refused, so an update moves a URL only where an editor save with the same date would, which is a draft nobody has been shown. `action=delete` moves the file into `content/_trash/` as the editor's Move to trash does, and `action=undelete` moves it back. A post whose `author` is another user is refused.
+An update (TASK-167) reads the same table backwards: `q=source` answers a post's front matter as those properties, with an upload's path as its absolute URL, and `action=update` applies `replace`, `add` and `delete` to them, fills only the editor fields the named properties own, and leaves every other key as it was. An event is read back as an `h-event` with `start`, `end` and `location` (its place); the author's own location is answered only when it is a checkin. A review is read back as an `h-review` with its `item` (an h-cite, or an h-card for a place, carrying `kind`) and its `rating`, and updating either keeps the other. Updating any of an event's `start`, `end` or `location` keeps the other two, and deleting its `start` is refused. A kept property outside the table is replaced, added to or deleted in `data/kept-properties.json`. `mp-slug` and unsupported `mp-*` commands are refused, so an update moves a URL only where an editor save with the same date would, which is a draft nobody has been shown. `action=delete` moves the file into `content/_trash/` as the editor's Move to trash does, and `action=undelete` moves it back. A post whose `author` is another user is refused.
 
 ## Markdown dialect
 

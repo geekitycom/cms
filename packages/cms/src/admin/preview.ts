@@ -6,8 +6,8 @@ import { splitTags } from '../content/document-form.ts';
 import { eventFrontMatter, resolveEvent, submittedEventForm } from '../content/event-form.ts';
 import { handleDirectory } from '../content/handles.ts';
 import { renderMarkdown } from '../content/markdown.ts';
-import { READ_OF_FRONT_MATTER_KEY, READ_STATUS_FRONT_MATTER_KEY } from '../content/read.ts';
-import { READ_FIELDS, resolveRead, submittedReadOfForm } from '../content/read-form.ts';
+import { reviewFrontMatter } from '../content/review.ts';
+import { resolveReview, submittedReviewForm } from '../content/review-form.ts';
 import { RSVP_FRONT_MATTER_KEY, rsvpValue } from '../content/rsvp.ts';
 import { defaultPermalink, slugify } from '../content/slug.ts';
 import { calendarDayIn, toUtcInstant } from '../content/time.ts';
@@ -114,9 +114,9 @@ function previewDocument(
           return cited === '' ? [] : [[property, cited]];
         }),
       ),
-      ...previewRead(body, c.var.config.contentDir),
       ...previewRsvp(body),
       ...previewEvent(body, timezone),
+      ...previewReview(body, c.var.config.contentDir),
     },
     body: markdown,
     html: renderMarkdown(markdown, handleDirectory(c.var.config.contentDir)),
@@ -134,22 +134,17 @@ function previewEvent(body: Record<string, unknown>, timezone: string): Record<s
   );
 }
 
+function previewReview(body: Record<string, unknown>, contentDir: string): Record<string, unknown> {
+  const resolved = resolveReview(submittedReviewForm(body), contentDir);
+  if (!('review' in resolved)) return {};
+  return Object.fromEntries(
+    Object.entries(reviewFrontMatter(resolved.review)).filter(([, value]) => value !== undefined),
+  );
+}
+
 function previewRsvp(body: Record<string, unknown>): Record<string, unknown> {
   const rsvp = rsvpValue(body[RSVP_FRONT_MATTER_KEY]);
   return rsvp === undefined ? {} : { [RSVP_FRONT_MATTER_KEY]: rsvp };
-}
-
-function previewRead(body: Record<string, unknown>, contentDir: string): Record<string, unknown> {
-  const resolved = resolveRead(
-    stringOrEmpty(body[READ_FIELDS.status]).trim(),
-    submittedReadOfForm(body),
-    contentDir,
-  );
-  if (!('read' in resolved) || resolved.read === undefined) return {};
-  return {
-    [READ_OF_FRONT_MATTER_KEY]: resolved.read.of,
-    [READ_STATUS_FRONT_MATTER_KEY]: resolved.read.status,
-  };
 }
 
 /** The permalink to show: the one the form carried, or the one the slug implies. */

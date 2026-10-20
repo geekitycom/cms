@@ -564,6 +564,7 @@ namespace keeps its values in one file under `data/`:
 | `akismet.key`        | `data/akismet.json`     | The Akismet API key. Secret. See [Akismet](comments.md#akismet).                                           |
 | `akismet.status`     | `data/akismet.json`     | What Akismet said about the key when it was last checked: `valid`, `invalid` or `unchecked`.               |
 | `akismet.checked_at` | `data/akismet.json`     | When the key was last checked.                                                                             |
+| `tmdb.key`           | `data/tmdb.json`        | The TMDb API key or read access token that Look up uses. Secret. See [Look up](admin.md#look-up).          |
 
 The value in effect is the first of these that is set:
 
@@ -589,8 +590,8 @@ overridden by `GEEKITY_BASE_URL` and the config's `baseUrl` (see
 [The base URL setting](#the-base-url-setting)).
 
 Tools > Maintenance and Tools > Dev mode in the admin are the switches for
-the first three settings. The Email and Discussion settings pages save the
-`mail` and `akismet` settings.
+the first three settings. The Email, Discussion and General settings pages
+save the `mail`, `akismet` and `tmdb` settings.
 `data/mail.json` and `data/akismet.json` written by a version before the
 registry are read in their old shape and stored in the new one on the next
 save. `geekity settings` reads and writes every one of them:

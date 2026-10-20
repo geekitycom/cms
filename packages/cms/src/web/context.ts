@@ -7,12 +7,12 @@ import { citationsOf, shownInFull } from '../content/citation.ts';
 import { originalOf } from '../content/original.ts';
 import type { CitedImage, CitedPicture } from '../webmention/cited-picture.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
-import { READ_STATUS_LABELS, readLine, readOf, uidLabel } from '../content/read.ts';
 import { eventOf } from '../content/event.ts';
 import type { EventLocation } from '../content/event.ts';
+import { BEST_RATING, REVIEW_KIND_WORDS, reviewHtml, reviewOf } from '../content/review.ts';
+import type { Rating, ReviewedItem } from '../content/review.ts';
 import { RSVP_LABELS, rsvpLine, rsvpOf } from '../content/rsvp.ts';
 import type { RsvpValue } from '../content/rsvp.ts';
-import type { ReadOf, ReadStatus } from '../content/read.ts';
 import { postLabel, postTypeOf, replyTarget, showsTitle } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
 import { readAltTexts } from '../content/alt-text.ts';
@@ -21,7 +21,7 @@ import type { ImageLoading } from '../images/markup.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import { escapeAttribute } from '../util/html.ts';
 import type { AuthorContext } from '../site/authors.ts';
-import { feedExcerpt, postExcerpt } from '../content/excerpt.ts';
+import { feedExcerpt } from '../content/excerpt.ts';
 import { documentLanguage } from '../content/locale.ts';
 import { handSyndicationOf } from '../webmention/syndication.ts';
 
@@ -53,7 +53,7 @@ export interface DocumentContext {
   /** Display title. Empty for an untitled post. */
   title: string;
   /**
-   * `event`, `rsvp`, `repost`, `like`, `reply`, `photo`, `read`, `bookmark`,
+   * `event`, `rsvp`, `repost`, `like`, `reply`, `review`, `photo`, `bookmark`,
    * `note` or `article`, discovered from the front matter, the title and the
    * body (Post Type Discovery) on every render rather than read from the file.
    */
@@ -80,26 +80,15 @@ export interface DocumentContext {
    * only on a post whose front matter has a readable `start`.
    */
   event?: { start: Date; end?: Date; location?: EventLocation } | undefined;
+  review?:
+    | { item: ReviewedItem; kindLabel: string; rating?: Rating; best: number; html: string }
+    | undefined;
   /**
    * What the post reposts, likes or bookmarks (TASK-169): each valid
    * `repost-of`, `like-of` and `bookmark-of`, as its property and its URL, in
    * that order. Empty for a post that cites nothing.
    */
   citations: Citation[];
-  /**
-   * What a read post read (TASK-229): its `read-status` and the words for it,
-   * its `read-of` with the words a page prints for the uid, and `line`, the
-   * sentence as the HTML the feeds and the federated Note carry (TASK-233).
-   * Present only on a post whose front matter names both.
-   */
-  read?:
-    | {
-        status: ReadStatus;
-        statusLabel: string;
-        of: ReadOf & { uidLabel?: string | undefined };
-        line: string;
-      }
-    | undefined;
   /**
    * The language the document is written in, as a canonical BCP 47 tag, when
    * its front matter names one (TASK-154). A theme marks the article with it
@@ -130,11 +119,6 @@ export interface DocumentContext {
    * theme prints it without asking whether it is there.
    */
   summary: string;
-  /**
-   * The document's own words in one line: `summary` without a read post's
-   * read line, which a listing prints after the headline instead.
-   */
-  excerpt: string;
   /** The document's URL path, the same value as `page.url`. */
   url: string;
   /** Eleventy's `page`. */
@@ -331,8 +315,8 @@ export function documentContext(
     ...optional('inReplyTo', replyTarget(document)),
     rsvp: rsvpContext(document),
     event: eventContext(document),
+    review: reviewContext(document, images),
     citations: citationsOf(document.extra),
-    read: readContext(document, images),
     // Over the raw front-matter value the spread above put here.
     lang: documentLanguage(document),
     enclosure: enclosureContext(document),
@@ -356,7 +340,6 @@ export function documentContext(
     // markup above: an excerpt is text, and the `<picture>` a site's image
     // config puts in the HTML is not something to cut words out of.
     summary: feedExcerpt(document),
-    excerpt: postExcerpt(document),
     url: document.permalink,
     type: document.type,
     page: {
@@ -449,6 +432,27 @@ function rsvpContext(document: Document): DocumentContext['rsvp'] {
   return { value, label: RSVP_LABELS[value], line: rsvpLine(value) };
 }
 
+function reviewContext(
+  document: Document,
+  images: ImageConfig | undefined,
+): DocumentContext['review'] {
+  const review = reviewOf(document.extra);
+  if (review === undefined) return undefined;
+  const html =
+    images === undefined
+      ? reviewHtml(review)
+      : siteImageMarkup(images, reviewHtml(review, { library: readAltTexts(images.contentDir) }), {
+          sizes: '8rem',
+        });
+  return {
+    item: review.item,
+    kindLabel: REVIEW_KIND_WORDS[review.item.kind].label,
+    ...(review.rating === undefined ? {} : { rating: review.rating }),
+    best: BEST_RATING,
+    html,
+  };
+}
+
 function eventContext(document: Document): DocumentContext['event'] {
   const event = eventOf(document.extra);
   if (event === undefined) return undefined;
@@ -456,22 +460,5 @@ function eventContext(document: Document): DocumentContext['event'] {
     start: new Date(event.start),
     ...(event.end === undefined ? {} : { end: new Date(event.end) }),
     ...(event.location === undefined ? {} : { location: event.location }),
-  };
-}
-
-function readContext(document: Document, images: ImageConfig | undefined): DocumentContext['read'] {
-  const read = readOf(document.extra);
-  if (read === undefined) return undefined;
-  const { uid } = read.of;
-  return {
-    status: read.status,
-    statusLabel: READ_STATUS_LABELS[read.status],
-    of: { ...read.of, uidLabel: uid === undefined ? undefined : uidLabel(uid) },
-    line:
-      images === undefined
-        ? readLine(read)
-        : siteImageMarkup(images, readLine(read, { library: readAltTexts(images.contentDir) }), {
-            sizes: '6rem',
-          }),
   };
 }

@@ -27,6 +27,7 @@ export interface FetchPublicOptions {
   readonly overflow?: 'refuse' | 'truncate';
   /** The `Accept` header sent. */
   readonly accept: string;
+  readonly headers?: Readonly<Record<string, string>> & { readonly 'user-agent'?: never };
   /** The content types taken, and what to call anything else when refusing it. */
   readonly contentType: { readonly pattern: RegExp; readonly name: string };
   readonly headersOnly?: RegExp;
@@ -78,7 +79,7 @@ export async function fetchPublic(
   const answered = await requestPublic(target, {
     lookup: options.lookup,
     signal: options.signal,
-    headers: { accept: options.accept },
+    headers: { ...options.headers, accept: options.accept },
   });
   if (!answered.ok) return answered;
   const { response, url } = answered;

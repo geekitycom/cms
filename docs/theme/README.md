@@ -31,7 +31,6 @@ themes/default/
     event.njk         when and where an event is
     citations.njk     the citation of what a like, repost or bookmark cites
     cited-page.njk    the name and author both citations print
-    read.njk          what a read post read, and how far
     bio.njk           who an entry is by, as an h-card
     menu.njk          one named menu, as a nav of links
     feeds.njk         macros for the feed links in <head>

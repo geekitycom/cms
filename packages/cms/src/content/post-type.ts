@@ -3,7 +3,7 @@ import type { CitationProperty, CitedPageReader } from './citation.ts';
 import type { Document } from './document.ts';
 import { eventOf, instantOf } from './event.ts';
 import { photosOf } from './photo.ts';
-import { isReadStatus, readLine, readOf } from './read.ts';
+import { reviewOf } from './review.ts';
 import { RSVP_PHRASES, rsvpOf, rsvpValue } from './rsvp.ts';
 import { htmlToText } from './search.ts';
 
@@ -34,8 +34,8 @@ export type PostType =
   | 'repost'
   | 'like'
   | 'reply'
+  | 'review'
   | 'photo'
-  | 'read'
   | 'bookmark'
   | 'note'
   | 'article';
@@ -53,8 +53,7 @@ export interface PostProperties {
   'repost-of'?: string | undefined;
   'like-of'?: string | undefined;
   'bookmark-of'?: string | undefined;
-  'read-of'?: string | undefined;
-  'read-status'?: string | undefined;
+  item?: string | undefined;
 }
 
 /** The type of a post with these properties. */
@@ -64,10 +63,8 @@ export function discoverPostType(properties: PostProperties): PostType {
   if (validUrl(properties['repost-of']) !== undefined) return 'repost';
   if (validUrl(properties['like-of']) !== undefined) return 'like';
   if (validUrl(properties['in-reply-to']) !== undefined) return 'reply';
+  if ((properties.item ?? '') !== '') return 'review';
   if ((properties.photo ?? []).length > 0) return 'photo';
-  if ((properties['read-of'] ?? '') !== '' && isReadStatus(properties['read-status'])) {
-    return 'read';
-  }
   if (validUrl(properties['bookmark-of']) !== undefined) return 'bookmark';
   return isNamedPost(properties) ? 'article' : 'note';
 }
@@ -97,7 +94,6 @@ export function replyTarget(document: Pick<Document, 'inReplyTo'>): string | und
 type PostDocument = Pick<Document, 'title' | 'html' | 'description' | 'inReplyTo' | 'extra'>;
 
 function propertiesOf(document: PostDocument): PostProperties {
-  const read = readOf(document.extra);
   return {
     name: document.title,
     content: htmlToText(document.html),
@@ -105,6 +101,7 @@ function propertiesOf(document: PostDocument): PostProperties {
     'in-reply-to': document.inReplyTo,
     start: eventOf(document.extra)?.start,
     rsvp: rsvpOf(document.extra),
+    item: reviewOf(document.extra)?.item.name,
     // Only addresses {@link photosOf} accepts, the spec's "valid URL" for a
     // file whose uploads are site-relative.
     photo: photosOf(document.extra).map((photo) => photo.url),
@@ -114,8 +111,6 @@ function propertiesOf(document: PostDocument): PostProperties {
         url,
       ]),
     ),
-    'read-of': read?.of.name,
-    'read-status': read?.status,
   };
 }
 
@@ -129,8 +124,7 @@ const LABEL_WORDS = 10;
 export function postLabel(document: PostDocument, cited?: CitedPageReader): string {
   if (document.title !== '') return document.title;
 
-  const html = readLine(readOf(document.extra)) + document.html;
-  const text = normalize(htmlToText(html)) || normalize(document.description ?? '');
+  const text = normalize(htmlToText(document.html)) || normalize(document.description ?? '');
   if (text === '') return wordlessLabel(document, cited);
 
   return firstWords(text);
@@ -164,6 +158,8 @@ function wordlessLabel(document: PostDocument, cited: CitedPageReader | undefine
     const url = citationOf(document, property);
     if (url !== undefined) return citing(CITATION_VERBS[property], url);
   }
+  const review = reviewOf(document.extra);
+  if (review !== undefined) return `Review of ${review.item.name}`;
   return 'Untitled';
 }
 

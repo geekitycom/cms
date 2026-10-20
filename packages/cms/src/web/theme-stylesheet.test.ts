@@ -115,16 +115,6 @@ describe('the default theme stylesheet', () => {
     assert.deepEqual(offenders, []);
   });
 
-  it('shows a read’s cover as a thumbnail beside the read line, never wider than it is (TASK-394)', () => {
-    assert.equal(declared('.read-line').get('display'), 'flow-root');
-    assert.equal(declared('.read-cover').get('float'), 'inline-start');
-    const cover = declared('.read-cover img');
-    assert.equal(cover.get('width'), 'auto', 'drawn at its natural width or less');
-    assert.equal(cover.get('height'), 'auto');
-    assert.ok(cover.has('max-width') && cover.get('max-width') !== '100%', 'capped as a thumbnail');
-    assert.ok(cover.has('max-height'), 'capped as a thumbnail');
-  });
-
   it('keeps a scrollbar’s room whether or not the page scrolls', () => {
     assert.equal(declared('html').get('scrollbar-gutter'), 'stable');
   });

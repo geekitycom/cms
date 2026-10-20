@@ -1,4 +1,5 @@
 import { stringOrEmpty, trimmedField } from '../util/forms.ts';
+import { isRecord } from '../util/guards.ts';
 import { SYNDICATE_TO_FRONT_MATTER_KEY, syndicateToOf } from './syndicate-to.ts';
 import type { SyndicationTarget } from './syndicate-to.ts';
 import {
@@ -27,25 +28,22 @@ import { PHOTO_FRONT_MATTER_KEY, photoFrontMatter } from './photo.ts';
 import { photoRowFromMicropub, photoRows, photoToMicropub, readPhotoForm } from './photo-form.ts';
 import { PINNED_FRONT_MATTER_KEY, pinnedAt } from './pinned.ts';
 import {
-  isReadStatus,
-  READ_OF_FRONT_MATTER_KEY,
-  READ_STATUS_FRONT_MATTER_KEY,
-  READ_STATUSES,
-  readOf,
-  readWork,
-  readWorkFrontMatter,
-} from './read.ts';
+  ITEM_FRONT_MATTER_KEY,
+  ITEM_KEYS,
+  RATING_FRONT_MATTER_KEY,
+  reviewFrontMatter,
+  reviewOf,
+} from './review.ts';
 import {
-  READ_FIELDS,
-  readCite,
-  readOfForm,
-  readOfFromMicropub,
-  submittedReadOfForm,
-} from './read-form.ts';
+  reviewForm,
+  reviewFromMicropub,
+  reviewToMicropub,
+  submittedReviewForm,
+} from './review-form.ts';
 import { RSVP_FRONT_MATTER_KEY, rsvpOf, rsvpValue } from './rsvp.ts';
 import { toUtcInstant } from './time.ts';
 
-export type MicropubType = 'h-entry' | 'h-event';
+export type MicropubType = 'h-entry' | 'h-event' | 'h-review';
 
 export interface MicropubSite {
   readonly baseUrl: string;
@@ -221,6 +219,39 @@ function isOrWasEvent(saved: PostEvent | undefined, document: Document | undefin
   return saved !== undefined || (document !== undefined && eventOf(document.extra) !== undefined);
 }
 
+const REVIEW_FIELD: PostField = {
+  read: (document) => ({ review: reviewForm(document.extra, reviewOf(document.extra)) }),
+  submitted: (body) => ({ review: submittedReviewForm(body) }),
+  write: (extra, _form, { media: { review } }) => {
+    const { item, rating } = reviewFrontMatter(review);
+    const before = extra[ITEM_FRONT_MATTER_KEY];
+    const modelled = new Set(['kind', 'name', ...Object.values(ITEM_KEYS)]);
+    const kept =
+      item !== undefined && isRecord(before)
+        ? Object.fromEntries(Object.entries(before).filter(([key]) => !modelled.has(key)))
+        : {};
+    setOrDelete(extra, ITEM_FRONT_MATTER_KEY, item && { ...item, ...kept });
+    setOrDelete(extra, RATING_FRONT_MATTER_KEY, rating);
+  },
+  micropub: {
+    properties: { item: ['review'], rating: ['review'] },
+    publishable: ['item'],
+    toForm: (request) => {
+      const review = reviewFromMicropub(
+        request.values('item'),
+        request.values('rating'),
+        request.refuse,
+        request.baseUrl,
+      );
+      if (request.type === 'h-review' && !request.has('item')) {
+        request.refuse('An h-review needs the item it reviews.');
+      }
+      return { review };
+    },
+    toProperties: (document, { baseUrl }) => reviewToMicropub(reviewOf(document.extra), baseUrl),
+  },
+};
+
 const PREVIEW_FIELD: PostField = {
   read: (document) => ({ previewHidden: !previewShown(document.extra) }),
   submitted: (body) => ({ previewHidden: body[PREVIEW_FRONT_MATTER_KEY] !== undefined }),
@@ -238,43 +269,6 @@ const CITED_ALT_FIELD: PostField = {
       CITED_ALT_FRONT_MATTER_KEY,
       form.citedAlt === '' ? undefined : form.citedAlt,
     );
-  },
-};
-
-const READ_FIELD: PostField = {
-  read: (document) => ({
-    readStatus: stringOrEmpty(document.extra[READ_STATUS_FRONT_MATTER_KEY]),
-    readOf: readOfForm(readWork(document.extra[READ_OF_FRONT_MATTER_KEY])),
-  }),
-  submitted: (body) => ({
-    readStatus: trimmedField(body, READ_FIELDS.status),
-    readOf: submittedReadOfForm(body),
-  }),
-  write: (extra, _form, { media: { read } }) => {
-    setOrDelete(extra, READ_OF_FRONT_MATTER_KEY, read && readWorkFrontMatter(read.of));
-    setOrDelete(extra, READ_STATUS_FRONT_MATTER_KEY, read?.status);
-  },
-  micropub: {
-    properties: { 'read-of': ['readOf'], 'read-status': ['readStatus'] },
-    publishable: ['read-of'],
-    toForm: (request) => {
-      const readOfForm = readOfFromMicropub(
-        request.values('read-of'),
-        request.refuse,
-        request.baseUrl,
-      );
-      const readStatus = request.text('read-status');
-      if (readStatus !== '' && !isReadStatus(readStatus)) {
-        request.refuse(`read-status is ${READ_STATUSES.join(', ')}, not ${readStatus}.`);
-      }
-      return { readOf: readOfForm, readStatus };
-    },
-    toProperties: (document, { baseUrl }) => {
-      const read = readOf(document.extra);
-      return read === undefined
-        ? {}
-        : { 'read-of': [readCite(read.of, baseUrl)], 'read-status': [read.status] };
-    },
   },
 };
 
@@ -353,9 +347,9 @@ export const POST_FIELDS: readonly PostField[] = [
   citationField('bookmark-of', (bookmarkOf) => ({ bookmarkOf })),
   RSVP_FIELD,
   EVENT_FIELD,
+  REVIEW_FIELD,
   PREVIEW_FIELD,
   CITED_ALT_FIELD,
-  READ_FIELD,
   SYNDICATE_TO_FIELD,
   PINNED_FIELD,
 ];

@@ -43,14 +43,11 @@ const SAMPLES: Readonly<Record<string, unknown>> = {
   'repost-of': 'https://peer.example/reposted',
   'bookmark-of': 'https://peer.example/bookmarked',
   photo: 'https://peer.example/photo.jpg',
-  'read-of': {
-    type: ['h-cite'],
-    properties: { name: ['A Book'], author: ['An Author'], uid: ['isbn:9780000000000'] },
-  },
-  'read-status': 'finished',
   rsvp: 'yes',
   start: '2026-10-10T09:00:00Z',
   end: '2026-10-10T17:00:00Z',
+  item: { type: ['h-cite'], properties: { kind: ['movie'], name: ['Heat'] } },
+  rating: '4',
 };
 
 const EVENT_SAMPLES: Readonly<Record<string, unknown>> = { ...SAMPLES, location: 'The library' };
@@ -153,8 +150,11 @@ async function create(
 }
 
 async function createOf(made: Site, entry: PostTypeEntry, names: readonly string[]) {
-  return entry.type === 'event'
-    ? await create(made, names, (name) => EVENT_SAMPLES[name], 'h-event')
+  if (entry.type === 'event') {
+    return await create(made, names, (name) => EVENT_SAMPLES[name], 'h-event');
+  }
+  return entry.type === 'review'
+    ? await create(made, names, (name) => SAMPLES[name], 'h-review')
     : await create(made, names);
 }
 
@@ -206,14 +206,11 @@ describe('q=config post-types properties (AC #1, AC #2)', () => {
         like: { properties: ['like-of', 'name', ...shared], required: ['like-of'] },
         repost: { properties: ['repost-of', 'name', ...shared], required: ['repost-of'] },
         bookmark: { properties: ['bookmark-of', 'name', ...shared], required: ['bookmark-of'] },
-        read: {
-          properties: ['read-of', 'read-status', 'name', ...shared],
-          required: ['read-of', 'read-status'],
-        },
         event: {
           properties: ['start', 'end', 'name', ...shared],
           required: ['start', 'name'],
         },
+        review: { properties: ['item', 'rating', 'name', ...shared], required: ['item'] },
       },
     );
   });

@@ -1,6 +1,9 @@
 {# /admin/settings: what the site is called, where it lives, and its picture. #}
 {% extends "layouts/settings-page.njk" %}
 {% import "components/fields.njk" as field %}
+{% from "components/badge.njk" import status %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
 
 {% block settingsProblems %}
   {{ field.problem('settings-title', problems.title) }}
@@ -93,4 +96,48 @@
        error=problems.license_name, hint='What the footer calls it. Only read for a custom license.') }}
 {% endblock %}
 
-{% block settingsPanels %}{% endblock %}
+{% block settingsPanels %}
+  {% call card(title='Movies and TV shows') %}
+    <p>
+      {% if tmdbPresent %}
+        {{ status('connected', 'Connected') }} Key {{ tmdbKeyHint }}.
+      {% else %}
+        {{ status('disconnected', 'Not connected') }} This site has no TMDb key.
+      {% endif %}
+    </p>
+
+    {% if tmdbSetBy %}
+      <p class="text-sm">The key is set by <code>{{ tmdbSetBy }}</code> and cannot be changed here.</p>
+    {% else %}
+      <form method="post" action="{{ tmdbUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        {{ field.password('settings-tmdb-key', tmdbFields.key, 'TMDb API key',
+             autocomplete='off', spellcheck='false',
+             placeholder=('Replace the stored key' if tmdbPresent else 'Paste your key')) }}
+        <div class="mt-2">
+          {{ button('Replace key' if tmdbPresent else 'Save key', type='submit', color='primary') }}
+        </div>
+      </form>
+    {% endif %}
+
+    <p class="text-sm">
+      With a key from <a class="link" href="https://www.themoviedb.org/settings/api">themoviedb.org</a>,
+      Look up on a review fills in a movie or TV show from its TMDb or IMDb link:
+      its title, director or network, year and poster. Either the API key or
+      the API read access token works. It is kept in <code>data/tmdb.json</code>,
+      never in <code>site.json</code> and never on the public site. A deployment
+      can set it instead with <code>GEEKITY_TMDB__KEY</code>. This site uses TMDB
+      and the TMDB APIs but is not endorsed, certified or otherwise approved by TMDB.
+    </p>
+
+    {% if tmdbPresent and not tmdbSetBy %}
+      <form method="post" action="{{ tmdbUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        <input type="hidden" name="{{ tmdbFields.action }}" value="{{ tmdbRemove }}" />
+        {% call cardActions() %}
+          {{ button('Remove key', type='submit', color='error', style='ghost') }}
+        {% endcall %}
+      </form>
+    {% endif %}
+  {% endcall %}
+{% endblock %}

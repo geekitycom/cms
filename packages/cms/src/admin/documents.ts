@@ -22,14 +22,19 @@ import type { DocumentKind } from '../content/document-kind.ts';
 import { TRANSCRIPT_TYPES } from '../content/enclosure.ts';
 import { ENCLOSURE_FIELDS } from '../content/enclosure-form.ts';
 import { EVENT_FIELDS } from '../content/event-form.ts';
+import {
+  isReviewKind,
+  REVIEW_KIND_FIELDS,
+  REVIEW_KIND_WORDS,
+  REVIEW_KINDS,
+} from '../content/review.ts';
+import { REVIEW_FIELDS } from '../content/review-form.ts';
 import type { Refusal } from '../content/form-error.ts';
 import { BLANK_LOCATION_FORM } from '../content/location-form.ts';
 import { postLocations } from '../content/locations.ts';
 import { PHOTO_FIELDS } from '../content/photo-form.ts';
 import { syndicateToField } from '../content/post-fields.ts';
 import { postLabel } from '../content/post-type.ts';
-import { isReadStatus, READ_STATUS_LABELS, READ_STATUSES } from '../content/read.ts';
-import { READ_FIELDS } from '../content/read-form.ts';
 import { RSVP_LABELS, RSVP_VALUES, rsvpValue } from '../content/rsvp.ts';
 import { scheduledFor } from '../content/schedule.ts';
 import { isTrashedPath } from '../content/store.ts';
@@ -44,12 +49,12 @@ import { currentUsername, documentSite } from '../web/document-site.ts';
 import type { Conflict } from '../content/write.ts';
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { readAltTexts } from '../content/alt-text.ts';
 import { listUsers } from '../site/users.ts';
 import type { User } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { userForAuthor } from '../content/authors.ts';
 import { isServed } from '../content/served.ts';
+import { SEARCH_KINDS } from '../item-lookup/lookup.ts';
 import type { CitedPicture } from '../webmention/cited-picture.ts';
 import { syndicationTargetsReader } from '../webmention/syndication.ts';
 import { editorActionViews } from './editor-actions.ts';
@@ -57,12 +62,27 @@ import {
   BLANK_ALTERNATE_ROW,
   enclosureChoices,
   LOCATION_FIELDS,
-  photoChoices,
-  photoRowViews,
+  libraryThumbnail,
+  photoPicker,
   readLocationForm,
 } from './editor-fields.ts';
-import { openGroups } from './editor-layout.ts';
+import {
+  discoveredKind,
+  EDITOR_KINDS,
+  isPostKind,
+  PAGE_CHOICE,
+  POST_KINDS,
+  REVIEW_EDITOR_WORDS,
+} from './editor-kinds.ts';
+import type { PostKind } from './editor-kinds.ts';
+import { editorSections, openGroups, sidebarLocation } from './editor-layout.ts';
 import { flash } from './flash.ts';
+import {
+  ITEM_LOOKUP_BUTTON,
+  ITEM_LOOKUP_PATH,
+  ITEM_SEARCH_PATH,
+  lookUpReviewItem,
+} from './item-lookup.ts';
 import { formatInTimezone } from './formatting.ts';
 import { allowGeolocation } from './headers.ts';
 import { PREVIEW_PATH } from './preview.ts';
@@ -243,18 +263,26 @@ export function mountDocumentScreens(
 
   // Registered before the slug route, so a document can never take the URL of
   // the form that makes a new one.
-  app.get(newEditorPath(kind), (c) =>
-    renderEditor(c, {
+  app.get(newEditorPath(kind), (c) => {
+    const postKind = c.req.query('kind');
+    if (kind.type === 'post' && !isPostKind(postKind)) return renderChooser(c, kind, render);
+    return renderEditor(c, {
       kind,
       render,
       document: undefined,
       form: blankForm(kind, siteTimezone(c), c.var.store.now()),
-    }),
-  );
+      postKind: isPostKind(postKind) ? postKind : undefined,
+    });
+  });
 
-  app.post(newEditorPath(kind), async (c) =>
-    saveFromForm(c, { kind, render, document: undefined, body: await c.req.parseBody() }),
-  );
+  app.post(newEditorPath(kind), async (c) => {
+    const body = await c.req.parseBody();
+    return (
+      switchKind(c, { kind, render, document: undefined, body }) ??
+      lookUpItem(c, { kind, render, document: undefined, body }) ??
+      saveFromForm(c, { kind, render, document: undefined, body })
+    );
+  });
 
   app.get(`${kind.basePath}/:slug`, (c) => {
     const document = findEdited(c.var.store, kind, c.req.param('slug'), c.req.query('path'));
@@ -278,7 +306,11 @@ export function mountDocumentScreens(
     if (action === 'trash' || action === 'restore') {
       return moveDocument(c, { kind, document, action, returnTo: stringOrEmpty(body['return']) });
     }
-    return saveFromForm(c, { kind, render, document, body });
+    return (
+      switchKind(c, { kind, render, document, body }) ??
+      lookUpItem(c, { kind, render, document, body }) ??
+      saveFromForm(c, { kind, render, document, body })
+    );
   });
 }
 
@@ -292,7 +324,7 @@ export function submittedForm(
   contentDir: string,
 ): EditorForm {
   const declared = syndicationTargetsReader(contentDir)();
-  return {
+  const form: EditorForm = {
     title: stringOrEmpty(body['title']).trim(),
     slug: stringOrEmpty(body['slug']).trim(),
     permalink: stringOrEmpty(body['permalink']).trim(),
@@ -313,6 +345,73 @@ export function submittedForm(
     body: normalizeBody(stringOrEmpty(body['body'])),
     hash: stringOrEmpty(body['hash']),
   };
+  return kind.replies ? withLink(form, body) : form;
+}
+
+const LINK_FIELDS = { 'in-reply-to': 'inReplyTo', ...CITATION_FIELDS } as const;
+
+function withLink(form: EditorForm, body: Record<string, unknown>): EditorForm {
+  const verb = stringOrEmpty(body['link-verb']);
+  if (!Object.hasOwn(LINK_FIELDS, verb) || Object.hasOwn(body, verb)) return form;
+  return {
+    ...form,
+    [LINK_FIELDS[verb as keyof typeof LINK_FIELDS]]: stringOrEmpty(body['link-url']).trim(),
+  };
+}
+
+function switchKind(
+  c: Context<GeekityEnv>,
+  options: SaveFromFormOptions,
+): Promise<Response> | undefined {
+  const { kind, render, document, body } = options;
+  const postKind = body['switch-kind'];
+  if (kind.type !== 'post' || !isPostKind(postKind)) return undefined;
+  return renderEditor(c, {
+    kind,
+    render,
+    document,
+    form: submittedForm(kind, body, c.var.config.contentDir),
+    postKind,
+  });
+}
+
+function lookUpItem(
+  c: Context<GeekityEnv>,
+  options: SaveFromFormOptions,
+): Promise<Response> | undefined {
+  const { kind, render, document, body } = options;
+  if (kind.type !== 'post' || body[ITEM_LOOKUP_BUTTON] === undefined) return undefined;
+  return (async () => {
+    const form = submittedForm(kind, body, c.var.config.contentDir);
+    const outcome = await lookUpReviewItem(c, form.review);
+    return renderEditor(c, {
+      kind,
+      render,
+      document,
+      form: { ...form, review: outcome.review },
+      postKind: 'review',
+      itemLookup: { message: outcome.message, failed: outcome.failed },
+    });
+  })();
+}
+
+function renderChooser(
+  c: Context<GeekityEnv>,
+  kind: DocumentScreens,
+  render: AdminRender,
+): Response {
+  return render(c, ADMIN_TEMPLATES.documentChooser, {
+    section: kind.section,
+    child: 'new',
+    kinds: [
+      ...POST_KINDS.map((key) => ({
+        ...EDITOR_KINDS[key],
+        url: `${newEditorPath(kind)}?kind=${key}`,
+        page: false,
+      })),
+      { ...PAGE_CHOICE, url: newEditorPath(PAGE_SCREENS), page: true },
+    ],
+  });
 }
 
 /** What a submitted editor form asks for. */
@@ -350,6 +449,7 @@ async function saveFromForm(
       render,
       document,
       form: { ...form, draft },
+      postKind: isPostKind(body['kind']) ? body['kind'] : undefined,
       refusal,
       status: 400,
     });
@@ -609,7 +709,9 @@ interface RenderEditorOptions {
   /** The document being edited, or `undefined` when it is being written. */
   document: Document | undefined;
   form: EditorForm;
+  postKind?: PostKind | undefined;
   refusal?: Refusal | undefined;
+  itemLookup?: { message: string; failed: boolean } | undefined;
   /** The status to answer with. Defaults to 200. */
   status?: 200 | 400 | undefined;
 }
@@ -627,6 +729,9 @@ async function renderEditor(
   options: RenderEditorOptions,
 ): Promise<Response> {
   const { kind, document, form } = options;
+  const postKind = options.postKind ?? discoveredKind(form);
+  const editorKind = kind.type === 'post' ? EDITOR_KINDS[postKind] : undefined;
+  const sections = editorSections(postKind, form);
   const trashed = document !== undefined && isTrashedPath(document.path);
   const now = c.var.store.now();
   const timezone = siteTimezone(c);
@@ -668,21 +773,52 @@ async function renderEditor(
           enclosureChoices: await enclosureChoices(c.var.config.contentDir, form.enclosure.url),
           transcriptTypes: TRANSCRIPT_TYPES,
           alternateRows: [...form.enclosure.alternates, BLANK_ALTERNATE_ROW],
+          postKind,
+          editorKind,
+          postKinds: POST_KINDS.map((key) => ({ key, ...EDITOR_KINDS[key] })),
+          sections,
+          sidebarLocation: sidebarLocation(postKind, form),
+          link: linkView(form, sections.shown.rsvp),
           photoFields: PHOTO_FIELDS,
-          photoRows: photoRowViews(form.photos, readAltTexts(c.var.config.contentDir)),
-          photoChoices: await photoChoices(c.var.config.contentDir),
+          photos: await photoPicker(c.var.config, form.photos),
+          reviewPhotoThumbnail: libraryThumbnail(c.var.config, form.review.photo),
           locationFields: LOCATION_FIELDS,
           ...citedPreviews(c, form),
           rsvpChoices: RSVP_VALUES.map((value) => ({ value, label: RSVP_LABELS[value] })),
           ...(form.rsvp === '' || rsvpValue(form.rsvp) !== undefined
             ? {}
             : { unrecognizedRsvp: form.rsvp }),
-          readFields: READ_FIELDS,
           eventFields: EVENT_FIELDS,
-          readStatuses: READ_STATUSES.map((value) => ({ value, label: READ_STATUS_LABELS[value] })),
-          ...(form.readStatus === '' || isReadStatus(form.readStatus)
+          reviewFields: REVIEW_FIELDS,
+          itemLookupButton: ITEM_LOOKUP_BUTTON,
+          itemLookupUrl: ITEM_LOOKUP_PATH,
+          itemLookup: options.itemLookup,
+          itemSearchUrl: ITEM_SEARCH_PATH,
+          itemSearchKinds: SEARCH_KINDS,
+          reviewKinds: REVIEW_KINDS.map((value) => ({
+            value,
+            ...REVIEW_KIND_WORDS[value],
+            ...REVIEW_EDITOR_WORDS[value],
+          })),
+          reviewKindsWith: Object.fromEntries(
+            ['by', 'year', 'uid', 'url', 'photo', 'date', 'season', 'episode', 'category'].map(
+              (field) => [
+                field,
+                REVIEW_KINDS.filter((value) =>
+                  (REVIEW_KIND_FIELDS[value] as readonly string[]).includes(field),
+                ),
+              ],
+            ),
+          ),
+          reviewKindChosen:
+            form.review.kind === ''
+              ? sections.filled.review
+                ? 'other'
+                : 'book'
+              : form.review.kind,
+          ...(form.review.kind === '' || isReviewKind(form.review.kind)
             ? {}
-            : { unrecognizedReadStatus: form.readStatus }),
+            : { unrecognizedReviewKind: form.review.kind }),
           // TASK-155: one checkbox per target the site declares.
           syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
             ...target,
@@ -698,8 +834,9 @@ async function renderEditor(
     siteLanguage: c.var.siteAtRequestStart.language,
     heading:
       document === undefined
-        ? `Add ${kind.singular}`
-        : `Edit ${kind.singular}: ${postLabel(document, (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart))}`,
+        ? `New ${editorKind?.noun ?? kind.singular}`
+        : `Edit ${editorKind?.noun ?? kind.singular}: ${postLabel(document, (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart))}`,
+    chooserUrl: newEditorPath(kind),
     saveUrl: document === undefined ? newEditorPath(kind) : documentEditorPath(kind, document),
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
@@ -714,6 +851,32 @@ async function renderEditor(
       : { error: options.refusal.message, errorField: options.refusal.field }),
     open: openGroups(form, options.refusal?.field),
   });
+}
+
+const LINK_VERBS = [
+  { property: 'in-reply-to', label: 'Replies to', also: 'Also replies to' },
+  { property: 'like-of', label: 'Likes', also: 'Also likes' },
+  { property: 'repost-of', label: 'Reposts', also: 'Also reposts' },
+  { property: 'bookmark-of', label: 'Bookmarks', also: 'Also bookmarks' },
+] as const;
+
+const LINK_ORDER = ['repost-of', 'like-of', 'in-reply-to', 'bookmark-of'] as const;
+
+function linkView(form: EditorForm, rsvpShown: boolean) {
+  const value = (property: (typeof LINK_ORDER)[number]): string => form[LINK_FIELDS[property]];
+  const offered = LINK_VERBS.filter((verb) => !rsvpShown || verb.property !== 'in-reply-to');
+  const chosen =
+    LINK_ORDER.find(
+      (property) => value(property) !== '' && offered.some((verb) => verb.property === property),
+    ) ?? offered[0]?.property;
+  return {
+    verbs: offered,
+    chosen,
+    url: chosen === undefined ? '' : value(chosen),
+    others: offered
+      .filter((verb) => verb.property !== chosen && value(verb.property) !== '')
+      .map((verb) => ({ ...verb, url: value(verb.property) })),
+  };
 }
 
 function citedPreviews(

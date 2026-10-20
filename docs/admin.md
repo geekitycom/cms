@@ -8,6 +8,7 @@ override any public template. It must not be able to shadow the login form.
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
 | `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.                        |
 | `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                                 |
+| `/admin/posts/new`                               | Choose a kind of post. `?kind=photo` (or another kind) opens that kind's editor.              |
 | `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                             |
 | `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.                               |
 | `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                                  |
@@ -138,6 +139,132 @@ The editor at `/admin/posts/{slug}` is a plain form. The body is a
 `<textarea>`. The Preview button submits the form to `/admin/preview` in a new
 tab. Both work with JavaScript switched off, and every change below keeps
 that working.
+
+### Kinds of post
+
+"+ New" opens `/admin/posts/new`, which lists the kinds of post: Note, Photo,
+Link, RSVP, Event, Check-in, Episode and Review, and a card for a Page. Each
+card is a link to `/admin/posts/new?kind=<kind>`. That kind's form shows only
+its own fields:
+
+- Note: an optional title (a title makes the note an article) and the body.
+- Photo: the photos, each with its alt text, a grid of the newest images in
+  the media library to tick, and a box for a photo at a web address. A ticked
+  image is added when you save. Add the ticked photos adds them at once, so
+  you can write their alt text first.
+- Link: Replies to, Likes, Reposts or Bookmarks, and the address of the page.
+- RSVP: the event's address and the answer.
+- Event: when it starts and ends, and where.
+- Check-in: the place and its coordinates.
+- Episode: the audio or video file, its transcript and its other versions.
+- Review: what is reviewed (a book, movie, TV show, album, place or other),
+  that item's own fields, a rating from 1 to 5 stars, and the review. The
+  fields and labels change with the item kind without JavaScript. The item's
+  picture (a book cover, a poster, album art) belongs to the item. A place
+  review can also carry your own photos. Find searches for the item by its
+  title, and Look up fills in the item from its ID. See [Find](#find) and
+  [Look up](#look-up).
+
+The sidebar holds what every kind shares: Publish (the buttons, Draft, the
+date, Visibility and Author), Tags and categories, Location, Address, Summary
+and language, Syndicate to, and Display and discussion.
+
+Change type, beside the heading, sends the form back to be laid out as
+another kind. Nothing is saved, and every value you typed is kept. It works
+with JavaScript switched off.
+
+An existing post opens on the kind its properties give it, by Post Type
+Discovery. A Micropub app can send a post that has properties of several
+kinds, such as a reply with photos. The editor shows the other kinds' fields
+under Also on this post, and a save keeps them all.
+
+Pages > Add new opens the page editor directly.
+
+### Look up
+
+On the review form, Look up sits beside the item's ID. It reads what the ID
+box holds, asks a source about the item, and fills in the boxes that are
+still empty: the title, the by field (author, director, network or artist),
+the year, the address, and for a TV episode link the season and episode. For
+a place it fills the name, street address, locality, region, country and
+website. A box you have typed in is never changed.
+
+| ID                                           | Source                                                                                                                       |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| An ISBN, as `isbn:…` or bare                 | The Open Library Books API, and its cover by ISBN when the book names none                                                   |
+| An Open Library edition link                 | The Open Library Books API by the edition's ID, and its cover by that ID when the book names none                            |
+| A DOI, as `doi:…`, bare, or a `doi.org` link | The Crossref REST API. The request carries your user's email, when you have one, so it goes to Crossref's polite pool        |
+| A MusicBrainz release group or release link  | The MusicBrainz web service, and the front image from the Cover Art Archive                                                  |
+| A TMDb movie or TV link                      | The TMDb API. Needs a TMDb key                                                                                               |
+| An IMDb title link                           | The TMDb API, which finds the title by its IMDb ID, when the site has a TMDb key. Without one, the IMDb page itself          |
+| An OpenStreetMap node, way or relation link  | Nominatim's lookup, with the place's address and its website when OpenStreetMap has one                                      |
+| Any other link                               | The page's JSON-LD (a Book, Movie, TV series, album, game, product or other creative work), then its OpenGraph and `<title>` |
+
+When the picture box is empty, the item's cover, poster or album art is
+downloaded into the media library, not linked from the other site. Its alt
+text is filled in as the picture's name for the title, such as
+`Poster for Dune: Part Two`, and written to the library too. A picture
+already in the box is kept.
+
+Every request goes through the same guards as a cited page's preview: public
+hosts only, a 10-second deadline, a size limit, and the site's
+`Geekity/1.0` User-Agent with its contact address. MusicBrainz and Nominatim
+are each asked no more than once a second from one site.
+
+When nothing is found, the sentence beside the button says why: no such book,
+a source that could not be reached, a TMDb link with no key, or a page that
+names nothing. The form is otherwise unchanged.
+
+Look up is a submit button. Without JavaScript it posts the form, and the
+editor comes back with the boxes filled and nothing saved, as Change type
+does. With JavaScript, `admin/static/item-lookup.js` posts the form to
+`POST /admin/item-lookup` and fills the boxes in place. Saving never looks
+anything up: the ID is saved as typed.
+
+IMDb answers a server's request for one of its pages with a challenge for a
+browser, so an IMDb link finds nothing without a TMDb key.
+
+### Find
+
+Above the ID box, for every item kind but Other, a "Find the book" box (movie,
+TV show, album or place) searches the item's source by title. It searches
+when you press Enter or Search, not as you type: Nominatim's usage policy
+forbids autocomplete, and one search per press keeps every source to its
+limits. Each match shows a small picture, the title, the by field and year
+(or the address, for a place) and the source. The list ends with where to
+paste a link when the item is not there.
+
+| Kind      | Source                                                                       | A pick looks up                                            |
+| --------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Book      | Open Library's `search.json`, with each work's best edition                  | The edition's ISBN, or the edition's link when it has none |
+| Movie, TV | TMDb's movie or TV search, and each match's director or network. Needs a key | The TMDb link                                              |
+| Album     | MusicBrainz release group search, with art from the Cover Art Archive        | The release group link                                     |
+| Place     | Nominatim's search, credited to OpenStreetMap's contributors                 | The OpenStreetMap link                                     |
+
+Picking a match runs Look up on its ID, so it fills the same empty boxes and
+copies the picture the same way. The ID box is filled with the match's ID
+when it is empty.
+
+The pictures in the list are fetched by the site and sent as `data:` URIs, so
+the admin's `img-src` stays `'self' data:` and the sources never see the
+admin's address. A search answered in the last hour is answered again from
+memory rather than sent twice, as Nominatim asks.
+
+The box needs JavaScript. It is drawn hidden, and
+`admin/static/item-lookup.js` shows it and calls
+`GET /admin/item-search?kind=…&q=…`. Without JavaScript the box is not shown,
+and the ID box and Look up work as before.
+
+#### The TMDb key
+
+Settings > General has a Movies and TV shows panel for the TMDb key. Get one
+from your account's API settings on themoviedb.org; the API key and the API
+read access token both work. The key is the secret `tmdb.key` setting, kept in
+`data/tmdb.json` at mode `0600`, and the page shows only its last four
+characters. A deployment can set it with `GEEKITY_TMDB__KEY` instead. TMDb's
+terms allow non-commercial use with attribution, which the panel gives.
+
+### What JavaScript adds
 
 `packages/cms/admin/static/editor.js` upgrades the form when it loads:
 
@@ -551,7 +678,7 @@ the page again to see it change.
 To start an export:
 
 1. Select **Include credentials** to put the credential files in the archive:
-   `mail.json`, `akismet.json` and each plugin's `secrets.json`. Without it,
+   `mail.json`, `akismet.json`, `tmdb.json` and each plugin's `secrets.json`. Without it,
    they are left out, and you type them in again after an import.
 2. Type your password. Every archive holds the actor keys, the password hashes
    and personal data, so the screen asks for the password again. A wrong or
