@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { UPLOAD_MEDIA_TYPES } from '../files/upload-types.ts';
 import type { UploadKind } from '../files/upload-types.ts';
-import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY } from '../content/uploads.ts';
+import { UPLOAD_ASSET_PREFIX, UPLOAD_DIRECTORY, VARIANT_ASSET_PREFIX } from '../content/uploads.ts';
 import { readAltTexts, writeAltText } from '../content/alt-text.ts';
 import { HALF_WRITTEN_STRIP_SUFFIX } from '../content/metadata/sweep.ts';
 import type { AltText } from '../content/alt-text.ts';
@@ -155,6 +155,32 @@ export function mentionsUpload(body: string, url: string): boolean {
 
 /** Characters that could still be part of the filename a match landed in. */
 const FILENAME_CHARACTER = /[A-Za-z0-9._~-]/;
+
+/**
+ * Whether some text points at an upload, given as its path under
+ * `content/uploads/`, in any spelling the site serves it at: its URL, the URL
+ * percent-encoded, or the directory of its derived images. An absolute URL
+ * counts too, since it holds the site-relative one.
+ */
+export function usesUpload(text: string, relative: string): boolean {
+  const url = `${UPLOAD_ASSET_PREFIX}${relative}`;
+  const encoded = encodeURI(url);
+  return (
+    mentionsUpload(text, url) ||
+    mentionsUpload(text, encoded) ||
+    mentionsUpload(text, `${VARIANT_ASSET_PREFIX}${relative}`)
+  );
+}
+
+/** Every string inside a value, however deep it nests, one per line. */
+export function usageText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(usageText).join('\n');
+  if (typeof value === 'object' && value !== null) {
+    return Object.values(value).map(usageText).join('\n');
+  }
+  return '';
+}
 
 /** What {@link deleteUpload} needs to take a file away. */
 export interface DeleteUploadOptions {

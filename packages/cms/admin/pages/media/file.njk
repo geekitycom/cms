@@ -44,15 +44,15 @@
         {% call card(title='Delete ' + confirm.url + '?', style='border') %}
           <p>
             {{ confirm.references.length }}
-            {% if confirm.references.length == 1 %}document still points{% else %}documents still point{% endif %}
-            at it. Deleting the file does not change them, so they will point at nothing.
+            {% if confirm.references.length == 1 %}thing still uses{% else %}things still use{% endif %}
+            it. Deleting the file does not change them, so they will point at nothing.
           </p>
           <ul class="list-disc pl-6">
             {% for reference in confirm.references %}
               <li>
                 <a class="link" href="{{ reference.editUrl }}">{{ reference.title }}</a>
                 {% if reference.trashed %}{{ status('trashed', 'Trash') }}{% endif %}
-                <code>{{ reference.path }}</code>
+                <code>{{ reference.where }}</code>
               </li>
             {% endfor %}
           </ul>
@@ -120,11 +120,12 @@
                 <li>
                   <a class="link link-hover" href="{{ reference.editUrl }}">{{ reference.title }}</a>
                   {% if reference.trashed %}{{ status('trashed', 'Trash') }}{% endif %}
+                  <span class="text-base-content/70">{{ reference.where }}</span>
                 </li>
               {% endfor %}
             </ul>
           {% else %}
-            <p class="text-sm">Nothing links to it.</p>
+            <p class="text-sm">Nothing uses it.</p>
           {% endif %}
         </div>
 

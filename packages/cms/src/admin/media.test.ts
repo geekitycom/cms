@@ -5,7 +5,8 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import type { Cms } from '../index.ts';
-import { deleteUpload, mentionsUpload, resolveUpload } from '../media/library.ts';
+import { setUserProfile } from '../site/users.ts';
+import { deleteUpload, mentionsUpload, resolveUpload, usesUpload } from '../media/library.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import { statuses } from './__testing__/statuses.ts';
 import type { Browser } from './__testing__/harness.ts';
@@ -30,6 +31,7 @@ interface Seed {
   title: string;
   permalink: string;
   body: string;
+  frontMatter?: string | undefined;
 }
 
 /** A site whose content directory holds these uploads and these documents. */
@@ -55,7 +57,7 @@ async function seed(contentDir: string, document: Seed): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(
     file,
-    `---\ntitle: ${document.title}\ndate: 2026-01-01T00:00:00Z\npermalink: ${document.permalink}\n---\n\n${document.body}\n`,
+    `---\ntitle: ${document.title}\ndate: 2026-01-01T00:00:00Z\npermalink: ${document.permalink}\n${document.frontMatter ?? ''}---\n\n${document.body}\n`,
     'utf8',
   );
 }
@@ -236,7 +238,7 @@ describe('the media screen', () => {
     );
     // The other file is referenced by nothing, and the screen says so rather
     // than leaving the section blank.
-    assert.match(await details(agent, '2026/01/lonely.png'), /Nothing links to it\./);
+    assert.match(await details(agent, '2026/01/lonely.png'), /Nothing uses it\./);
   });
 
   it('stores a file uploaded from the screen exactly as the editor does (AC #3)', async () => {
@@ -711,6 +713,183 @@ describe('the media details screen (TASK-429)', () => {
       confirm: '1',
     });
     assert.equal(confirmed.headers.get('location'), '/admin/media?kind=image');
+  });
+});
+
+describe('what uses a file (TASK-437)', () => {
+  function usedBy(html: string): string {
+    return /<h2[^>]*>Used by<\/h2>([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
+  }
+
+  function tileMarkup(html: string, name: string): string {
+    return (
+      new RegExp(
+        `data-media-tile>((?:(?!data-media-tile)[\\s\\S])*?)>${name.replace('.', '\\.')}<`,
+      ).exec(html)?.[1] ?? ''
+    );
+  }
+
+  it('counts a photo list, a review picture and a nested value in front matter (AC #1)', async () => {
+    const cms = await siteWith(
+      [
+        { at: '2026/01/beach.png' },
+        { at: '2026/01/poster.png' },
+        { at: '2026/01/cover.png' },
+        { at: '2026/01/lonely.png' },
+      ],
+      [
+        {
+          file: 'posts/2026-01-01-beach.md',
+          title: 'Beach',
+          permalink: '/2026/01/beach/',
+          body: 'A day out.',
+          frontMatter: 'photo:\n  - url: /uploads/2026/01/beach.png\n    alt: Waves\n',
+        },
+        {
+          file: 'posts/2026-01-02-film.md',
+          title: 'A Film',
+          permalink: '/2026/01/film/',
+          body: 'Loved it.',
+          frontMatter:
+            'item:\n  type: movie\n  name: A Film\n  photo:\n    url: /uploads/2026/01/poster.png\n',
+        },
+        {
+          file: '_trash/posts/2026-01-03-book.md',
+          title: 'A Book',
+          permalink: '/2026/01/book/',
+          body: 'Read it.',
+          frontMatter: 'featured:\n  image:\n    - https://example.com/uploads/2026/01/cover.png\n',
+        },
+      ],
+    );
+    const agent = await signedIn(cms);
+
+    assert.match(
+      usedBy(await details(agent, '2026/01/beach.png')),
+      /<a\b[^>]*href="\/admin\/posts\/beach">Beach<\/a>/,
+    );
+    assert.match(
+      usedBy(await details(agent, '2026/01/poster.png')),
+      /<a\b[^>]*href="\/admin\/posts\/film">A Film<\/a>/,
+    );
+    const cover = usedBy(await details(agent, '2026/01/cover.png'));
+    assert.match(cover, /A Book/, 'an absolute URL in a nested list of a trashed post counts');
+    assert.ok(statuses(cover).includes('Trash'));
+    assert.match(await details(agent, '2026/01/lonely.png'), /Nothing uses it\./);
+  });
+
+  it('counts a derived copy of a picture as a use of the picture (AC #1)', async () => {
+    const cms = await siteWith(
+      [{ at: '2026/01/wide.png' }],
+      [
+        {
+          file: 'posts/2026-01-01-wide.md',
+          title: 'Wide',
+          permalink: '/2026/01/wide/',
+          body: '<img src="/uploads/_/2026/01/wide.png/800.webp" alt="">',
+        },
+      ],
+    );
+    const agent = await signedIn(cms);
+
+    assert.match(usedBy(await details(agent, '2026/01/wide.png')), /Wide/);
+  });
+
+  it('names the site icon and a user avatar, linked to where each is set (AC #2)', async () => {
+    const contentDir = await box.dir('geekity-media-content-');
+    const dataDir = await box.dir('geekity-media-data-');
+    await drop(contentDir, { at: '2026/01/icon.png' });
+    await drop(contentDir, { at: '2026/01/me.png' });
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({ title: 'Test', icon: '/uploads/2026/01/icon.png' }),
+    );
+    const cms = await box.site({ contentDir, dataDir });
+    const agent = await signedIn(cms);
+    await setUserProfile({ dataDir, userId: 1, profile: { avatar: '/uploads/2026/01/me.png' } });
+
+    const icon = usedBy(await details(agent, '2026/01/icon.png'));
+    assert.match(icon, /<a\b[^>]*href="\/admin\/settings">The site icon<\/a>/);
+    assert.match(icon, /Settings › General/);
+
+    const avatar = usedBy(await details(agent, '2026/01/me.png'));
+    assert.match(avatar, /<a\b[^>]*href="\/admin\/users\/1">ada’s avatar<\/a>/);
+    assert.match(avatar, /Users/);
+  });
+
+  it('keeps the Unused badge and the Not used anywhere filter to the same answer (AC #3, #5)', async () => {
+    const contentDir = await box.dir('geekity-media-content-');
+    await drop(contentDir, { at: '2026/01/icon.png' });
+    await drop(contentDir, { at: '2026/01/beach.png' });
+    await drop(contentDir, { at: '2026/01/lonely.png' });
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({ icon: '/uploads/2026/01/icon.png' }),
+    );
+    await seed(contentDir, {
+      file: 'posts/2026-01-01-beach.md',
+      title: 'Beach',
+      permalink: '/2026/01/beach/',
+      body: 'A day out.',
+      frontMatter: 'photo: /uploads/2026/01/beach.png\n',
+    });
+    const agent = await signedIn(await box.site({ contentDir }));
+
+    const { html } = await screen(agent);
+    assert.doesNotMatch(tileMarkup(html, 'icon.png'), /Unused/);
+    assert.doesNotMatch(tileMarkup(html, 'beach.png'), /Unused/);
+    assert.match(tileMarkup(html, 'lonely.png'), /Unused/);
+
+    const unused = await (await agent.get('/admin/media?unused=1')).text();
+    assert.deepEqual(tileNames(unused), ['lonely.png']);
+  });
+
+  it('asks before deleting a file used only through front matter or a setting (AC #4)', async () => {
+    const contentDir = await box.dir('geekity-media-content-');
+    await drop(contentDir, { at: '2026/01/icon.png' });
+    await drop(contentDir, { at: '2026/01/beach.png' });
+    await mkdir(path.join(contentDir, '_data'), { recursive: true });
+    await writeFile(
+      path.join(contentDir, '_data', 'site.json'),
+      JSON.stringify({ icon: '/uploads/2026/01/icon.png' }),
+    );
+    await seed(contentDir, {
+      file: 'posts/2026-01-01-beach.md',
+      title: 'Beach',
+      permalink: '/2026/01/beach/',
+      body: 'A day out.',
+      frontMatter: 'photo:\n  - url: /uploads/2026/01/beach.png\n',
+    });
+    const agent = await signedIn(await box.site({ contentDir }));
+    const { token } = await screen(agent);
+
+    for (const [upload, user] of [
+      ['2026/01/beach.png', /Beach/],
+      ['2026/01/icon.png', /The site icon/],
+    ] as const) {
+      const asked = await agent.post('/admin/media/delete', { csrf_token: token, path: upload });
+      assert.equal(asked.status, 200, `${upload} is offered rather than deleted`);
+      const question = await asked.text();
+      assert.match(question, /Delete it anyway/);
+      assert.match(question, user);
+      assert.equal(await exists(path.join(contentDir, 'uploads', ...upload.split('/'))), true);
+    }
+  });
+});
+
+describe('usesUpload', () => {
+  it('finds the URL, an absolute URL, a percent-encoded spelling and a derived copy', () => {
+    assert.equal(usesUpload('![](/uploads/2026/01/a.png)', '2026/01/a.png'), true);
+    assert.equal(usesUpload('https://example.com/uploads/2026/01/a.png', '2026/01/a.png'), true);
+    assert.equal(usesUpload('/uploads/2026/01/my%20dog.png', '2026/01/my dog.png'), true);
+    assert.equal(usesUpload('/uploads/_/2026/01/a.png/400.webp', '2026/01/a.png'), true);
+  });
+
+  it('does not mistake a longer filename or another derived copy for the file', () => {
+    assert.equal(usesUpload('/uploads/2026/01/a.png.bak', '2026/01/a.png'), false);
+    assert.equal(usesUpload('/uploads/_/2026/01/a.png2/400.webp', '2026/01/a.png'), false);
   });
 });
 

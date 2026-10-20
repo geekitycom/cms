@@ -6,6 +6,7 @@ import { flash } from './flash.ts';
 
 export interface JobStatusView {
   readonly id: string;
+  readonly name: string;
   readonly state: JobStateName;
   readonly label: string;
   readonly active: boolean;
@@ -28,6 +29,7 @@ export function jobStatusView(status: JobStatus | undefined): JobStatusView | un
   if (status === undefined) return undefined;
   const common = {
     id: status.id,
+    name: status.name,
     state: status.state,
     label: LABELS[status.state],
     active: status.state === 'queued' || status.state === 'running',

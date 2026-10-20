@@ -661,9 +661,10 @@ The Resend panel shows the latest resend job: queued, running with the posts
 sent out of the total, finished, failed with the error, or interrupted. A
 finished job lists each post with how many inboxes it reached out of how many,
 how many are queued or failed, and its webmentions when it sent them. It names
-the posts dev mode held and the slugs with nothing to resend. The page does not
-reload itself. Select **Check again** to see how far it got. While a resend is
-queued or running, the screen queues no second one and says so.
+the posts dev mode held and the slugs with nothing to resend. The panel updates
+every few seconds without a page load until the job ends. Without JavaScript,
+select **Check again** to see how far it got. While a resend is queued or
+running, the screen queues no second one and says so.
 
 When the server stops or reloads during a resend, the job stops before the next
 post and the next server runs it again from the first post. A post sent twice
