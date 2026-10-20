@@ -354,7 +354,6 @@ interface Options {
   failGate?: string;
   failPublish?: string;
   loggedOut?: boolean;
-  /** GitHub Actions offers an OIDC token, as in a job with `id-token: write`. */
   trustedPublishing?: boolean;
   /** `docker buildx build` fails. */
   buildFails?: boolean;

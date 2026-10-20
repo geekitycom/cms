@@ -7,13 +7,10 @@
 # last release. Merging that pull request tags each released package and
 # creates its GitHub release.
 #
-# When release-please reports a release, the publish job runs `pnpm release` in
-# the `release` environment, whose required reviewer approves the run. npm
-# authenticates through trusted publishing, so no npm token is stored, and the
-# image goes to ghcr.io with the workflow's GITHUB_TOKEN. `pnpm release`
-# publishes only what the registries lack, so a failed publish is retried by
-# re-running the job or by dispatching this workflow on main. See "Publishing a
-# release" in docs/development.md.
+# A created release then starts the publish job, which runs `pnpm release` once
+# a reviewer approves the `release` environment. A manual run of this workflow
+# goes straight to the publish job, to retry one. See "Publishing a release" in
+# docs/development.md.
 #
 # `apps/demo` is private and unversioned, so `release-please-config.json` tracks
 # `packages/cms` and each `packages/plugin-*`. A plugin package is versioned on
@@ -73,9 +70,6 @@ jobs:
       id-token: write
       packages: write
     steps:
-      # `pnpm release` refuses anything but the branch main level with its
-      # upstream. Checking out a branch by name gives exactly that, with every
-      # tag for the release-tag checks.
       - uses: actions/checkout@v7
         with:
           ref: main

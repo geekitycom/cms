@@ -3,11 +3,9 @@
  * version is not on npm yet, then push the image of @geekity/cms when its
  * version has none.
  *
- * Merging the release pull request runs this in the publish job of
- * .github/workflows/release-please.yml, once a reviewer approves the `release`
- * environment (decision-58). There npm authenticates through trusted publishing
- * and the job is logged in to ghcr.io. A maintainer can run it from main too:
- * `git pull --prune --tags`, then `pnpm release`.
+ * The publish job of .github/workflows/release-please.yml runs this after a
+ * release pull request merges (decision-58), with npm on trusted publishing. A
+ * maintainer can run it from main as well.
  *
  * Whether a package needs releasing is read from the registries, not from the
  * commit, so running it again after a failure carries on where the last run

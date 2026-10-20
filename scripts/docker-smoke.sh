@@ -2,9 +2,8 @@
 #
 # Boot the Docker image on empty volumes and check it serves the default theme.
 #
-# The image is published only when a release is, so without this a broken
-# Dockerfile would surface only at release time. This is the body of the `docker-smoke` job in
-# .github/workflows/ci.yml, so CI and a laptop run the same steps:
+# This is the body of the `docker-smoke` job in .github/workflows/ci.yml, so CI
+# and a laptop run the same steps:
 #
 #   scripts/docker-smoke.sh [IMAGE]
 #   pnpm docker:smoke [IMAGE]
