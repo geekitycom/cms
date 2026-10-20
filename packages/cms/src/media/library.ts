@@ -167,16 +167,12 @@ export function usesUpload(text: string, relative: string): boolean {
   const encoded = encodeURI(url);
   return (
     mentionsUpload(text, url) ||
-    (encoded !== url && mentionsUpload(text, encoded)) ||
+    mentionsUpload(text, encoded) ||
     mentionsUpload(text, `${VARIANT_ASSET_PREFIX}${relative}`)
   );
 }
 
-/**
- * Every string inside a value — front matter, a setting, a profile — on lines
- * of its own, so {@link usesUpload} can search it once however deep the
- * value nests.
- */
+/** Every string inside a value, however deep it nests, one per line. */
 export function usageText(value: unknown): string {
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) return value.map(usageText).join('\n');

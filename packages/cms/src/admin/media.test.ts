@@ -31,7 +31,6 @@ interface Seed {
   title: string;
   permalink: string;
   body: string;
-  /** More front matter, as YAML lines, after the permalink. */
   frontMatter?: string | undefined;
 }
 
@@ -718,13 +717,11 @@ describe('the media details screen (TASK-429)', () => {
 });
 
 describe('what uses a file (TASK-437)', () => {
-  /** The section of a details screen that lists what uses the file. */
   function usedBy(html: string): string {
     return /<h2[^>]*>Used by<\/h2>([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
   }
 
-  /** One tile's markup on a library page. */
-  function tile(html: string, name: string): string {
+  function tileMarkup(html: string, name: string): string {
     return (
       new RegExp(
         `data-media-tile>((?:(?!data-media-tile)[\\s\\S])*?)>${name.replace('.', '\\.')}<`,
@@ -841,9 +838,9 @@ describe('what uses a file (TASK-437)', () => {
     const agent = await signedIn(await box.site({ contentDir }));
 
     const { html } = await screen(agent);
-    assert.doesNotMatch(tile(html, 'icon.png'), /Unused/);
-    assert.doesNotMatch(tile(html, 'beach.png'), /Unused/);
-    assert.match(tile(html, 'lonely.png'), /Unused/);
+    assert.doesNotMatch(tileMarkup(html, 'icon.png'), /Unused/);
+    assert.doesNotMatch(tileMarkup(html, 'beach.png'), /Unused/);
+    assert.match(tileMarkup(html, 'lonely.png'), /Unused/);
 
     const unused = await (await agent.get('/admin/media?unused=1')).text();
     assert.deepEqual(tileNames(unused), ['lonely.png']);

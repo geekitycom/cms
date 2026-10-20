@@ -40,7 +40,6 @@ async function record(cms: Cms, name: string, state: JobState): Promise<void> {
   });
 }
 
-/** The opening tag of the element that carries `data-job-status="<name>"`. */
 function boxTag(html: string, name: string): string | undefined {
   return new RegExp(`<[a-z]+[^>]*data-job-status="${name}"[^>]*>`).exec(html)?.[0];
 }
@@ -64,8 +63,6 @@ const SCREENS = [
     job: RESEND_JOB.name,
     refresh: '/admin/federation#resend',
   },
-  // The library is costly to draw, so the notice polls Maintenance and is
-  // redrawn from the library only when the sweep's state changes.
   {
     screen: 'the media library notice',
     url: '/admin/media',

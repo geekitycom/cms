@@ -161,7 +161,6 @@ export interface MediaReference {
   trashed: boolean;
 }
 
-/** One place an upload could be used from, with every string it holds as one text. */
 interface ReferenceSource {
   reference: MediaReference;
   text: string;
@@ -170,10 +169,6 @@ interface ReferenceSource {
 /**
  * Everything that could use an upload: every document, live and trashed, and
  * the site itself — its settings and its users' profiles.
- *
- * A document counts by its body and by every front-matter value, so a photo
- * post's `photo` list, a review's `item.photo` and anything a theme reads out
- * of front matter all count, whatever shape they nest in.
  *
  * The trash counts. A trashed post can be restored tomorrow, and restoring one
  * whose picture was deleted in the meantime is a broken post nobody was warned
@@ -185,9 +180,6 @@ interface ReferenceSource {
  * that is acceptable here because the answer is a warning rather than a
  * decision, and the confirmation step is what makes an out-of-date answer
  * harmless in both directions.
- *
- * Gathered once per request, with each source's text flattened once, so the
- * library asks every file the same list rather than walking it per file.
  */
 async function referenceSources(c: Context<GeekityEnv>): Promise<ReferenceSource[]> {
   // Two queries rather than one because `listAll` shows the live tree or the
@@ -205,7 +197,6 @@ async function referenceSources(c: Context<GeekityEnv>): Promise<ReferenceSource
 }
 
 function documentSource(document: Document): ReferenceSource {
-  // The rendered HTML is the body again, and the hash and path name no upload.
   const { html: _html, hash: _hash, path: where, ...written } = document;
   return {
     reference: {
@@ -218,13 +209,11 @@ function documentSource(document: Document): ReferenceSource {
   };
 }
 
-/** What the site's own settings are called where they hold an upload. */
 const SITE_SETTING_TITLES: Readonly<Record<string, string>> = {
   icon: 'The site icon',
   avatar: 'The site’s old avatar, which the site icon falls back to',
 };
 
-/** Every setting in effect, secrets aside, each linked to the page that sets it. */
 async function settingSources(settings: SettingsRegistry): Promise<ReferenceSource[]> {
   const sources: ReferenceSource[] = [];
   for (const ref of settings.list()) {
@@ -245,16 +234,11 @@ async function settingSources(settings: SettingsRegistry): Promise<ReferenceSour
   return sources;
 }
 
-/**
- * The settings page a site setting is on. The old avatar is on none, and is
- * filed under General because that is where the icon it stands in for is set.
- */
 function settingsPageOf(key: string): SettingsPage | undefined {
   if (key === 'avatar') return GENERAL_SETTINGS;
   return ALL_SETTINGS_PAGES.find((page) => (page.fields as readonly string[]).includes(key));
 }
 
-/** Each user's avatar, and the rest of their profile, linked to their screen. */
 function userSources(dataDir: string): ReferenceSource[] {
   return listUsers(dataDir).flatMap((user) => {
     const { avatar, ...rest } = user.profile ?? {};
