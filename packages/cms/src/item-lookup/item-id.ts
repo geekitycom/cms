@@ -1,6 +1,6 @@
 /**
  * What a review item's ID names (TASK-434): an ISBN, a DOI, a page on TMDb,
- * IMDb or MusicBrainz, or any other page. Look up reads it to choose where to
+ * IMDb, MusicBrainz, Open Library or OpenStreetMap, or any other page. Look up reads it to choose where to
  * ask about the item.
  */
 
@@ -20,6 +20,12 @@ export type ItemId =
   | {
       readonly source: 'musicbrainz';
       readonly type: 'release-group' | 'release';
+      readonly id: string;
+    }
+  | { readonly source: 'openlibrary'; readonly olid: string }
+  | {
+      readonly source: 'osm';
+      readonly type: 'node' | 'way' | 'relation';
       readonly id: string;
     }
   | { readonly source: 'page'; readonly url: string };
@@ -79,6 +85,16 @@ export function parseItemId(value: string): ItemId | undefined {
         type: found[1] as 'release-group' | 'release',
         id: found[2].toLowerCase(),
       };
+    }
+  }
+  if (host === 'openlibrary.org') {
+    const edition = /^\/books\/(OL\d+M)\b/.exec(where);
+    if (edition?.[1] !== undefined) return { source: 'openlibrary', olid: edition[1] };
+  }
+  if (host === 'openstreetmap.org') {
+    const found = /^\/(node|way|relation)\/(\d+)/.exec(where);
+    if (found?.[1] !== undefined && found[2] !== undefined) {
+      return { source: 'osm', type: found[1] as 'node' | 'way' | 'relation', id: found[2] };
     }
   }
   return { source: 'page', url: url.href };

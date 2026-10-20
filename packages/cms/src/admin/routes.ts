@@ -60,7 +60,7 @@ import { mountExportScreen } from './export.ts';
 import { mountMaintenanceScreen } from './maintenance.ts';
 import { mountPersonalDataScreen } from './personal-data.ts';
 import { mountEditorActions } from './editor-actions.ts';
-import { mountItemLookup } from './item-lookup.ts';
+import { mountItemLookup, mountItemSearch } from './item-lookup.ts';
 import { mountPluginsScreen, pluginScreens } from './plugins.ts';
 import type { LoginThrottle } from '../web/throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
@@ -393,6 +393,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
   mountEditorActions(app);
   mountItemLookup(app);
+  mountItemSearch(app);
   mountPluginsScreen(app, { render });
 
   // The jobs a site runs rather than the things it sets: reading every file

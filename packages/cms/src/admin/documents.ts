@@ -54,6 +54,7 @@ import type { User } from '../site/users.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { userForAuthor } from '../content/authors.ts';
 import { isServed } from '../content/served.ts';
+import { SEARCH_KINDS } from '../item-lookup/lookup.ts';
 import type { CitedPicture } from '../webmention/cited-picture.ts';
 import { syndicationTargetsReader } from '../webmention/syndication.ts';
 import { editorActionViews } from './editor-actions.ts';
@@ -76,7 +77,12 @@ import {
 import type { PostKind } from './editor-kinds.ts';
 import { editorSections, openGroups, sidebarLocation } from './editor-layout.ts';
 import { flash } from './flash.ts';
-import { ITEM_LOOKUP_BUTTON, ITEM_LOOKUP_PATH, lookUpReviewItem } from './item-lookup.ts';
+import {
+  ITEM_LOOKUP_BUTTON,
+  ITEM_LOOKUP_PATH,
+  ITEM_SEARCH_PATH,
+  lookUpReviewItem,
+} from './item-lookup.ts';
 import { formatInTimezone } from './formatting.ts';
 import { allowGeolocation } from './headers.ts';
 import { PREVIEW_PATH } from './preview.ts';
@@ -806,6 +812,8 @@ async function renderEditor(
           itemLookupButton: ITEM_LOOKUP_BUTTON,
           itemLookupUrl: ITEM_LOOKUP_PATH,
           itemLookup: options.itemLookup,
+          itemSearchUrl: ITEM_SEARCH_PATH,
+          itemSearchKinds: SEARCH_KINDS,
           reviewKinds: REVIEW_KINDS.map((value) => ({
             value,
             ...REVIEW_KIND_WORDS[value],

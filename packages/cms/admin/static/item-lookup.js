@@ -1,9 +1,14 @@
-/* Look up on the review form (TASK-434). With no script the button posts the
-   form to the editor, which draws it again with the empty boxes filled. This
-   posts the same form to the lookup endpoint instead, which answers
-   { ok, message, fields, thumbnail }, and fills each box it names that is
-   still empty, so nothing typed while the lookup ran is lost. The sentence
+/* Look up and Find on the review form (TASK-434, TASK-435). With no script
+   Look up posts the form to the editor, which draws it again with the empty
+   boxes filled. This posts the same form to the lookup endpoint instead, which
+   answers { ok, message, fields, thumbnail }, and fills each box it names that
+   is still empty, so nothing typed while the lookup ran is lost. The sentence
    goes in the status line beside the button.
+
+   Find is drawn hidden and shown here. It searches when Enter or Search is
+   pressed, one search at a time, and lists the matches; picking one posts the
+   form to the lookup endpoint with the match's ID as `item-pick`, which fills
+   the boxes as Look up does.
 
    A file rather than an inline script, so the admin's policy stays
    `script-src 'self'` and `connect-src 'self'`. Plain ES5-shaped browser
@@ -23,44 +28,52 @@
     return fields;
   }
 
-  function say(message, failed) {
-    status.textContent = message;
-    status.classList.toggle('text-error', failed === true);
-    status.classList.toggle('text-base-content', failed !== true);
+  function tell(line, message, failed) {
+    line.textContent = message;
+    line.classList.toggle('text-error', failed === true);
+    line.classList.toggle('text-base-content', failed !== true);
   }
 
-  press.addEventListener('click', function (event) {
-    event.preventDefault();
+  function say(message, failed) {
+    tell(status, message, failed);
+  }
+
+  /* An answer from the site, or the sentence for why there is none. */
+  function answerOf(response) {
+    var type = response.headers.get('content-type') || '';
+    if (type.indexOf('application/json') === -1) {
+      throw new Error(
+        response.status === 403
+          ? 'The site refused the request because this page is out of date. Copy your changes somewhere safe, then reload the page.'
+          : response.redirected
+            ? 'You are signed out. Sign in again in another tab, then try again.'
+            : 'The site answered ' + response.status + ' instead of JSON.',
+      );
+    }
+    return response.json();
+  }
+
+  function lookUp(pick) {
+    var fields = plainForm();
+    if (pick) fields.set('item-pick', pick);
     press.disabled = true;
     say('Looking it up…');
 
-    fetch(url, {
+    return fetch(url, {
       method: 'POST',
-      body: plainForm(),
+      body: fields,
       credentials: 'same-origin',
       headers: { accept: 'application/json' },
     })
-      .then(function (response) {
-        var type = response.headers.get('content-type') || '';
-        if (type.indexOf('application/json') === -1) {
-          throw new Error(
-            response.status === 403
-              ? 'The site refused the request because this page is out of date. Copy your changes somewhere safe, then reload the page.'
-              : response.redirected
-                ? 'You are signed out. Sign in again in another tab, then try again.'
-                : 'The site answered ' + response.status + ' instead of a lookup.',
-          );
-        }
-        return response.json();
-      })
+      .then(answerOf)
       .then(function (answer) {
-        var fields = answer.fields || {};
-        Object.keys(fields).forEach(function (name) {
+        var filled = answer.fields || {};
+        Object.keys(filled).forEach(function (name) {
           var box = form.elements.namedItem(name);
-          if (box && box.value === '') box.value = String(fields[name]);
+          if (box && box.value === '') box.value = String(filled[name]);
         });
         var preview = document.getElementById('editor-item-photo-preview');
-        if (preview && answer.thumbnail && fields['item-photo']) {
+        if (preview && answer.thumbnail && filled['item-photo']) {
           preview.src = answer.thumbnail;
           preview.hidden = false;
         }
@@ -72,5 +85,111 @@
       .then(function () {
         press.disabled = false;
       });
+  }
+
+  press.addEventListener('click', function (event) {
+    event.preventDefault();
+    lookUp('');
+  });
+
+  var find = document.getElementById('editor-item-find');
+  var query = document.getElementById('editor-item-find-query');
+  var search = document.getElementById('editor-item-find-button');
+  var said = document.getElementById('editor-item-find-status');
+  var list = document.getElementById('editor-item-find-matches');
+  var credit = document.getElementById('editor-item-find-credit');
+  var shape = document.getElementById('editor-item-find-match');
+  if (!find || !query || !search || !said || !list || !credit || !shape) return;
+  find.hidden = false;
+  var searching = false;
+
+  function chosenKind() {
+    var ticked = form.querySelector('input[name="item-kind"]:checked');
+    return ticked ? ticked.value : '';
+  }
+
+  function clear() {
+    Array.prototype.slice.call(list.querySelectorAll('li[data-match]')).forEach(function (row) {
+      row.remove();
+    });
+    credit.hidden = true;
+    list.hidden = true;
+  }
+
+  function show(matches) {
+    clear();
+    matches.forEach(function (match) {
+      var row = shape.content.firstElementChild.cloneNode(true);
+      row.setAttribute('data-match', '');
+      var picture = row.querySelector('img');
+      if (match.thumbnail) {
+        picture.src = match.thumbnail;
+        picture.hidden = false;
+        row.querySelector('[data-no-picture]').hidden = true;
+      }
+      row.querySelector('[data-name]').textContent = match.name;
+      row.querySelector('[data-detail]').textContent = match.detail;
+      row.querySelector('[data-source]').textContent = match.source;
+      row.querySelector('button').addEventListener('click', function () {
+        clear();
+        tell(said, '');
+        lookUp(match.id);
+      });
+      list.insertBefore(row, credit);
+    });
+  }
+
+  function run() {
+    if (searching) return;
+    searching = true;
+    search.disabled = true;
+    tell(said, 'Searching…');
+    var address =
+      find.getAttribute('data-item-search') +
+      '?' +
+      new URLSearchParams({ kind: chosenKind(), q: query.value }).toString();
+
+    fetch(address, { credentials: 'same-origin', headers: { accept: 'application/json' } })
+      .then(answerOf)
+      .then(function (answer) {
+        var matches = answer.matches || [];
+        show(matches);
+        if (answer.credit) {
+          credit.textContent = answer.credit;
+          credit.hidden = false;
+        }
+        list.hidden = !answer.ok;
+        tell(
+          said,
+          answer.ok
+            ? matches.length === 0
+              ? 'Nothing matches “' + query.value.trim() + '”.'
+              : matches.length === 1
+                ? 'One match. Pick it to fill in the item.'
+                : matches.length + ' matches. Pick one to fill in the item.'
+            : String(answer.message || ''),
+          !answer.ok,
+        );
+      })
+      .catch(function (error) {
+        clear();
+        tell(said, error.message || 'The search failed.', true);
+      })
+      .then(function () {
+        searching = false;
+        search.disabled = false;
+      });
+  }
+
+  search.addEventListener('click', run);
+  query.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    run();
+  });
+  form.addEventListener('change', function (event) {
+    if (event.target.name !== 'item-kind') return;
+    clear();
+    tell(said, '');
   });
 })();

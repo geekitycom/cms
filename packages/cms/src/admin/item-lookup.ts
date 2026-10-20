@@ -11,6 +11,11 @@
  * The item's picture is copied into the media library rather than linked from
  * the site that has it, with its alt text written in the library and in the
  * form.
+ *
+ * Find (TASK-435) searches the item's source by title, and picking a match
+ * posts the form here with the match's ID as `item-pick`: it is looked up in
+ * place of the ID box, and fills the ID box too when that is empty. The find
+ * box needs the script, so with none it is not shown.
  */
 
 import type { Context, Hono } from 'hono';
@@ -21,12 +26,13 @@ import { isReviewKind, REVIEW_KIND_WORDS } from '../content/review.ts';
 import type { ReviewKind } from '../content/review.ts';
 import { REVIEW_FIELDS, submittedReviewForm } from '../content/review-form.ts';
 import type { ReviewForm } from '../content/review-form.ts';
-import { lookUpItem } from '../item-lookup/lookup.ts';
+import { isSearchKind, lookUpItem, searchItems } from '../item-lookup/lookup.ts';
 import type { FoundItem } from '../item-lookup/lookup.ts';
 import { refusedUpload, storeUpload } from '../media/uploads.ts';
 import { TMDB } from '../settings/tmdb.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { findUserById } from '../site/users.ts';
+import { trimmedField } from '../util/forms.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { imageExtensionOf } from '../webmention/cited-picture.ts';
 import { fetchPublic } from '../webmention/fetch-public.ts';
@@ -38,10 +44,30 @@ export const ITEM_LOOKUP_PATH = `${ADMIN_PREFIX}/item-lookup`;
 /** The editor button's name, which a form posted without a script carries. */
 export const ITEM_LOOKUP_BUTTON = 'lookup-item';
 
+/** Where the find box's script searches, with `kind` and `q`. */
+export const ITEM_SEARCH_PATH = `${ADMIN_PREFIX}/item-search`;
+
+/** The field a picked match's ID is posted in. */
+const ITEM_PICK_FIELD = 'item-pick';
+
+/** The most of a match's picture that is read for the list. */
+const THUMBNAIL_MAX_BYTES = 300_000;
+
 const PICTURE_TIMEOUT_MS = 10_000;
 
 /** The boxes a lookup can fill beside the picture, in the order a sentence names them. */
-const FILLED = ['name', 'by', 'year', 'season', 'episode', 'url'] as const;
+const FILLED = [
+  'name',
+  'by',
+  'year',
+  'season',
+  'episode',
+  'url',
+  'streetAddress',
+  'locality',
+  'region',
+  'countryName',
+] as const;
 
 /** What a lookup did to the form, and the sentence beside the button. */
 export interface ItemLookupOutcome {
@@ -52,10 +78,14 @@ export interface ItemLookupOutcome {
   readonly failed: boolean;
 }
 
-/** Look the item up and fill in what the author left empty. */
+/**
+ * Look the item up and fill in what the author left empty. `pick` is the ID
+ * of a match picked from Find, looked up in place of the ID box.
+ */
 export async function lookUpReviewItem(
   c: Context<GeekityEnv>,
   form: ReviewForm,
+  pick = '',
 ): Promise<ItemLookupOutcome> {
   const unchanged = (message: string): ItemLookupOutcome => ({
     review: form,
@@ -63,12 +93,13 @@ export async function lookUpReviewItem(
     message,
     failed: true,
   });
-  if (form.uid === '') {
+  const id = pick === '' ? form.uid : pick;
+  if (id === '') {
     return unchanged('Type an ISBN, a DOI or a link in the box first, then press Look up.');
   }
 
   const { config, settings } = c.var;
-  const found = await lookUpItem(form.uid, {
+  const found = await lookUpItem(id, {
     lookup: config.hostLookup,
     tmdbKey: (await settings.values(TMDB)).key.trim(),
     contact: signedInEmail(c),
@@ -78,6 +109,10 @@ export async function lookUpReviewItem(
   const { item } = found;
   const review: ReviewForm = { ...form };
   const filled: (keyof ReviewForm)[] = [];
+  if (form.uid === '' && pick !== '') {
+    review.uid = pick;
+    filled.push('uid');
+  }
   for (const key of FILLED) {
     const value = item[key];
     if (form[key] === '' && value !== undefined) {
@@ -107,7 +142,7 @@ export async function lookUpReviewItem(
   return {
     review,
     filled,
-    message: `${filledSentence(filled, item, kind)}${pictureNote}`,
+    message: `${filledSentence(filled, item, kind, review.uid)}${pictureNote}`,
     failed: false,
   };
 }
@@ -116,14 +151,20 @@ function filledSentence(
   filled: readonly (keyof ReviewForm)[],
   item: FoundItem,
   kind: ReviewKind,
+  uid: string,
 ): string {
   const words: Partial<Record<keyof ReviewForm, string>> = {
+    uid: uid.startsWith('isbn:') ? 'ISBN' : 'link',
     name: kind === 'place' || kind === 'other' ? 'name' : 'title',
     by: (REVIEW_KIND_WORDS[kind].by || 'maker').toLowerCase(),
     year: 'year',
     season: 'season',
     episode: 'episode',
-    url: 'address',
+    url: kind === 'place' ? 'website' : 'address',
+    streetAddress: 'street address',
+    locality: 'locality',
+    region: 'region',
+    countryName: 'country',
     photo: REVIEW_KIND_WORDS[kind].picture.toLowerCase(),
   };
   const named = filled.flatMap((key) => words[key] ?? []);
@@ -186,7 +227,11 @@ async function storePicture(
 export function mountItemLookup(app: Hono<GeekityEnv>): void {
   app.post(ITEM_LOOKUP_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const outcome = await lookUpReviewItem(c, submittedReviewForm(body));
+    const outcome = await lookUpReviewItem(
+      c,
+      submittedReviewForm(body),
+      trimmedField(body, ITEM_PICK_FIELD),
+    );
     return c.json({
       ok: !outcome.failed,
       message: outcome.message,
@@ -196,4 +241,56 @@ export function mountItemLookup(app: Hono<GeekityEnv>): void {
       thumbnail: libraryThumbnail(c.var.config, outcome.review.photo) ?? null,
     });
   });
+}
+
+/**
+ * The find box's search: the matches for a title at the source for the item
+ * kind, each with its picture read here and answered as a `data:` URI, so the
+ * admin's `img-src` never names the sources and they never see who is
+ * searching.
+ */
+export function mountItemSearch(app: Hono<GeekityEnv>): void {
+  app.get(ITEM_SEARCH_PATH, async (c) => {
+    const kind = c.req.query('kind') ?? '';
+    if (!isSearchKind(kind)) {
+      return c.json({
+        ok: false,
+        message:
+          'Find searches for books, movies, TV shows, albums and places. For anything else, paste a link in the box below and press Look up.',
+        matches: [],
+        credit: '',
+      });
+    }
+    const { config, settings } = c.var;
+    const found = await searchItems(kind, c.req.query('q') ?? '', {
+      lookup: config.hostLookup,
+      tmdbKey: (await settings.values(TMDB)).key.trim(),
+    });
+    if (!found.ok) return c.json({ ok: false, message: found.message, matches: [], credit: '' });
+    const signal = AbortSignal.timeout(PICTURE_TIMEOUT_MS);
+    const matches = await Promise.all(
+      found.matches.map(async ({ picture, ...match }) => ({
+        ...match,
+        thumbnail: picture === undefined ? null : await thumbnail(c, picture, signal),
+      })),
+    );
+    return c.json({ ok: true, message: '', matches, credit: found.credit ?? '' });
+  });
+}
+
+async function thumbnail(
+  c: Context<GeekityEnv>,
+  url: string,
+  signal: AbortSignal,
+): Promise<string | null> {
+  const fetched = await fetchPublic(url, {
+    lookup: c.var.config.hostLookup,
+    signal,
+    maxBytes: THUMBNAIL_MAX_BYTES,
+    accept: 'image/avif, image/webp, image/png, image/gif, image/jpeg;q=0.9',
+    contentType: { pattern: /^\s*image\/(?:avif|webp|png|gif|jpeg)\b/i, name: 'an image' },
+  });
+  if (!fetched.ok) return null;
+  const type = fetched.type.split(';')[0]?.trim().toLowerCase() ?? 'image/jpeg';
+  return `data:${type};base64,${Buffer.from(fetched.body).toString('base64')}`;
 }

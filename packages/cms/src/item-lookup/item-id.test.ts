@@ -54,6 +54,15 @@ describe('what an item ID names (TASK-434)', () => {
         url: 'https://musicbrainz.org/artist/a74b1b7f-71a5-4011-9441-d0b5e4122711',
       },
     );
+    assert.deepEqual(parseItemId('https://www.openstreetmap.org/way/123456#map=19/37.8/-122.2'), {
+      source: 'osm',
+      type: 'way',
+      id: '123456',
+    });
+    assert.deepEqual(parseItemId('https://openlibrary.org/books/OL18759568M/Piranesi'), {
+      source: 'openlibrary',
+      olid: 'OL18759568M',
+    });
     assert.equal(parseItemId('ftp://example.com/x'), undefined);
   });
 });
