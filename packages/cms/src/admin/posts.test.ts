@@ -11,7 +11,7 @@ import { browser, csrfField, sandbox, signedIn } from './__testing__/harness.ts'
 import { assertInOrder, titleCell } from './__testing__/markup.ts';
 import { statuses } from './__testing__/statuses.ts';
 import type { Browser } from './__testing__/harness.ts';
-import { saveUrlOf } from './__testing__/editor-form.ts';
+import { fieldsOf, saveUrlOf } from './__testing__/editor-form.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
 
 const box = sandbox();
@@ -65,25 +65,16 @@ async function seeded(documents: Seed[]): Promise<string> {
   return contentDir;
 }
 
+/** The Link form's choice and address, as a rendered editor has them. */
+function linkOf(html: string): [string, string] {
+  const fields = Object.fromEntries(fieldsOf(html));
+  return [fields['link-verb'] ?? '', fields['link-url'] ?? ''];
+}
+
 /** The value of a form field in a rendered editor. */
 function field(html: string, name: string): string | undefined {
   const match = new RegExp(`name="${name}"[^>]*value="([^"]*)"`).exec(html);
   return match?.[1];
-}
-
-function recordingFields(html: string): Record<string, string> {
-  const fields: Record<string, string> = {};
-  for (const [, name = '', value = ''] of html.matchAll(
-    /<input[^>]*name="((?:enclosure|alternate|photo|item)-[^"]+)"[^>]*value="([^"]*)"/g,
-  )) {
-    fields[name] = value;
-  }
-  for (const [, name = '', options = ''] of html.matchAll(
-    /<select[^>]*name="(enclosure-[^"]+|item-kind|rating)"[^>]*>([\s\S]*?)<\/select>/g,
-  )) {
-    fields[name] = /<option value="([^"]*)" selected>/.exec(options)?.[1] ?? '';
-  }
-  return fields;
 }
 
 /**
@@ -94,42 +85,21 @@ function recordingFields(html: string): Record<string, string> {
 async function submit(
   agent: Browser,
   url: string,
-  changes: Record<string, string>,
+  changes: Record<string, string | undefined>,
 ): Promise<Response> {
-  const html = await (await agent.get(url)).text();
+  const html = await (await agent.get(url.endsWith('/new') ? `${url}?kind=note` : url)).text();
   const token = csrfField(html);
   assert.ok(token !== undefined, `the editor at ${url} carried a CSRF token`);
 
-  const fields: Record<string, string> = {
-    csrf_token: token,
-    hash: field(html, 'hash') ?? '',
-    title: field(html, 'title') ?? '',
-    slug: field(html, 'slug') ?? '',
-    permalink: field(html, 'permalink') ?? '',
-    date: field(html, 'date') ?? '',
-    tags: field(html, 'tags') ?? '',
-    categories: field(html, 'categories') ?? '',
-    description: field(html, 'description') ?? '',
-    'in-reply-to': field(html, 'in-reply-to') ?? '',
-    rsvp:
-      /<select[^>]*name="rsvp"[^>]*>[\s\S]*?<option value="([^"]*)" selected>/.exec(html)?.[1] ??
-      '',
-    'event-start': field(html, 'event-start') ?? '',
-    'event-end': field(html, 'event-end') ?? '',
-    'event-location': field(html, 'event-location') ?? '',
-    'like-of': field(html, 'like-of') ?? '',
-    'repost-of': field(html, 'repost-of') ?? '',
-    'bookmark-of': field(html, 'bookmark-of') ?? '',
-    lang: field(html, 'lang') ?? '',
-    visibility:
-      /<select[^>]*name="visibility"[^>]*>[\s\S]*?<option value="([^"]*)" selected>/.exec(
-        html,
-      )?.[1] ?? '',
-    ...recordingFields(html),
-    body: /<textarea[^>]*name="body"[^>]*>([\s\S]*?)<\/textarea>/.exec(html)?.[1] ?? '',
-    action: 'update',
-    ...changes,
-  };
+  // A change to `undefined` unticks the box: an unticked box posts nothing.
+  const fields = Object.fromEntries(
+    Object.entries({
+      ...Object.fromEntries(fieldsOf(html)),
+      csrf_token: token,
+      action: 'update',
+      ...changes,
+    }).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
 
   const saveUrl = saveUrlOf(html);
   assert.ok(saveUrl !== undefined, 'the editor knew where to post');
@@ -365,7 +335,7 @@ describe('the post editor', () => {
     const cms = await box.site({ contentDir: await seeded([]) });
     const agent = await signedIn(cms);
 
-    const response = await agent.get('/admin/posts/new');
+    const response = await agent.get('/admin/posts/new?kind=note');
     assert.equal(response.status, 200);
 
     const html = await response.text();
@@ -509,7 +479,7 @@ describe('the reply target in the editor', () => {
     let written = await readFile(path.join(contentDir, ...FILE), 'utf8');
     assert.match(written, new RegExp(`^in-reply-to: ${TARGET}$`, 'm'));
     const reloaded = await (await agent.get('/admin/posts/published')).text();
-    assert.equal(field(reloaded, 'in-reply-to'), TARGET);
+    assert.deepEqual(linkOf(reloaded), ['in-reply-to', TARGET]);
 
     assert.equal(
       (await submit(agent, '/admin/posts/published', { 'in-reply-to': '' })).status,
@@ -554,8 +524,9 @@ describe('likes, reposts and bookmarks in the editor (TASK-169 AC #4)', () => {
     it(`sets ${property}, shows it on reload, and clears it again`, async () => {
       const { contentDir, agent } = await published();
 
-      const blank = await (await agent.get('/admin/posts/new')).text();
-      assert.equal(field(blank, property), '', `a new post offers ${property} empty`);
+      const blank = await (await agent.get('/admin/posts/new?kind=link')).text();
+      assert.match(blank, new RegExp(`name="link-verb" value="${property}"`));
+      assert.equal(field(blank, 'link-url'), '', `a new link offers its address empty`);
 
       assert.equal(
         (await submit(agent, '/admin/posts/published', { [property]: TARGET })).status,
@@ -564,7 +535,7 @@ describe('likes, reposts and bookmarks in the editor (TASK-169 AC #4)', () => {
       let written = await readFile(path.join(contentDir, ...FILE), 'utf8');
       assert.match(written, new RegExp(`^${property}: ${TARGET}$`, 'm'));
       const reloaded = await (await agent.get('/admin/posts/published')).text();
-      assert.equal(field(reloaded, property), TARGET);
+      assert.deepEqual(linkOf(reloaded), [property, TARGET]);
 
       assert.equal(
         (await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status,
@@ -638,11 +609,16 @@ describe('a review in the editor (TASK-432)', () => {
 
   it('makes a post a review of a TV show, and an editor save keeps it as written', async () => {
     const { contentDir, agent } = await reviewed();
-    const blank = await (await agent.get('/admin/posts/new')).text();
-    assert.match(blank, /<option value="" selected>Not a review<\/option>/);
+    const blank = await (await agent.get('/admin/posts/new?kind=review')).text();
     for (const label of ['Book', 'Movie', 'TV show', 'Album', 'Place', 'Other']) {
-      assert.match(blank, new RegExp(`<option value="[a-z]+">${label}</option>`));
+      assert.match(blank, new RegExp(`name="item-kind" value="[a-z]+" aria-label="${label}"`));
     }
+    assert.ok(
+      !fieldsOf(await (await agent.get('/admin/posts/new?kind=note')).text()).some(([name]) =>
+        name.startsWith('item-'),
+      ),
+      'a note offers no review',
+    );
 
     const saved = await submit(agent, '/admin/posts/published', {
       'item-kind': 'tv',
@@ -673,8 +649,8 @@ describe('a review in the editor (TASK-432)', () => {
     });
 
     const reloaded = await (await agent.get('/admin/posts/published')).text();
-    assert.match(reloaded, /<option value="tv" selected>TV show<\/option>/);
-    assert.match(reloaded, /<option value="4" selected>4 out of 5<\/option>/);
+    assert.match(reloaded, /name="item-kind" value="tv" aria-label="TV show" checked/);
+    assert.match(reloaded, /name="rating" value="4" aria-label="4 out of 5" checked/);
     assert.equal(field(reloaded, 'item-season'), '2');
 
     const before = await frontMatter(contentDir);
@@ -764,10 +740,9 @@ describe('an RSVP in the editor (TASK-198 AC #3)', () => {
   it('offers the four answers, sets rsvp, shows it on reload, and clears it again', async () => {
     const { contentDir, agent } = await published();
 
-    const blank = await (await agent.get('/admin/posts/new')).text();
-    assert.match(blank, /<option value="" selected>Not an RSVP<\/option>/);
+    const blank = await (await agent.get('/admin/posts/new?kind=rsvp')).text();
     for (const label of ['Going', 'Not going', 'Maybe', 'Interested']) {
-      assert.match(blank, new RegExp(`<option value="[a-z]+">${label}</option>`));
+      assert.match(blank, new RegExp(`name="rsvp" value="[a-z]+" aria-label="${label}" />`));
     }
 
     const saved = await submit(agent, '/admin/posts/published', {
@@ -780,7 +755,7 @@ describe('an RSVP in the editor (TASK-198 AC #3)', () => {
     assert.equal(data['in-reply-to'], EVENT);
 
     const reloaded = await (await agent.get('/admin/posts/published')).text();
-    assert.match(reloaded, /<option value="maybe" selected>Maybe<\/option>/);
+    assert.match(reloaded, /name="rsvp" value="maybe" aria-label="Maybe" checked/);
 
     assert.equal((await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status, 303);
     const kept = matter(await readFile(path.join(contentDir, ...FILE), 'utf8')).data;
@@ -809,7 +784,7 @@ describe('an RSVP in the editor (TASK-198 AC #3)', () => {
 
   it('files a new RSVP with no title or text under the event it answers', async () => {
     const { contentDir, agent } = await published();
-    const html = await (await agent.get('/admin/posts/new')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=note')).text();
     const response = await agent.post('/admin/posts/new', {
       csrf_token: csrfField(html) ?? '',
       date: '2026-01-05T09:00:00Z',
@@ -871,7 +846,7 @@ describe('the post language in the editor (TASK-154 AC #1)', () => {
   it('is offered, empty, on a new post, naming the site’s language as the default', async () => {
     const { agent } = await published();
 
-    const html = await (await agent.get('/admin/posts/new')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=note')).text();
 
     assert.equal(field(html, 'lang'), '');
     assert.match(html, /<label\b[^>]*\bfor="editor-lang"[^>]*>Language<\/label>/);
@@ -1069,7 +1044,7 @@ describe('pinning a post in the editor (TASK-207 AC #1)', () => {
     const reloaded = await (await agent.get('/admin/posts/post-1')).text();
     assert.match(reloaded, /name="pinned" type="checkbox" value="1" checked/);
 
-    assert.equal((await submit(agent, '/admin/posts/post-1', {})).status, 303);
+    assert.equal((await submit(agent, '/admin/posts/post-1', { pinned: undefined })).status, 303);
     assert.doesNotMatch(await file(contentDir, 1), /^pinned:/m, 'the key is gone, not false');
   });
 
@@ -1158,7 +1133,8 @@ describe('syndication targets in the post editor (TASK-155 AC #2)', () => {
   it('removes the key when nothing is ticked', async () => {
     const { contentDir, agent } = await post(['syndicate-to: [indienews]']);
 
-    assert.equal((await submit(agent, '/admin/posts/post', {})).status, 303);
+    const unticked = { 'syndicate-to-indienews': undefined };
+    assert.equal((await submit(agent, '/admin/posts/post', unticked)).status, 303);
     assert.equal(await syndicateTo(contentDir), undefined);
   });
 });
@@ -1211,14 +1187,18 @@ describe('photos in the post editor (TASK-166 AC #5, #7)', () => {
 
     const html = await (await agent.get('/admin/posts/beach')).text();
 
-    assert.match(html, /<summary\b[^>]*>Photos<\/summary>/);
+    assert.match(html, /<input type="hidden" name="kind" value="photo" \/>/);
     assert.equal(field(html, 'photo-url-0'), '/uploads/2026/10/beach.jpg');
     assert.equal(field(html, 'photo-alt-0'), 'Waves breaking at dusk');
     assert.equal(field(html, 'photo-url-1'), '/uploads/2026/10/dog.jpg');
     assert.equal(field(html, 'photo-alt-1'), '');
     assert.match(html, /name="photo-alt-1"[^>]*placeholder="A dog asleep on a rug"/);
-    assert.equal(field(html, 'photo-url-2'), '');
-    assert.match(html, /<summary\b[^>]*>Add a photo<\/summary>/);
+    assert.match(
+      html,
+      /<input class="peer sr-only" type="checkbox" name="photo-url-2" value="\/uploads\/2026\/10\/gull\.png" \/>/,
+      'the library photo the post lacks is a box to tick, numbered after the rows',
+    );
+    assert.equal(field(html, 'photo-url-3'), '', 'then a blank row for a web address');
     const offered = /<datalist id="editor-photo-uploads">([\s\S]*?)<\/datalist>/.exec(html)?.[1];
     assert.match(offered ?? '', /<option value="\/uploads\/2026\/10\/gull\.png">/);
     assert.doesNotMatch(offered ?? '', /episode\.mp3/, 'only images are offered');
@@ -1344,9 +1324,8 @@ describe('the recording in the post editor (TASK-213 AC #1, #2)', () => {
   it('offers the audio and video in the media library, and nothing else', async () => {
     const { agent } = await episode();
 
-    const html = await (await agent.get('/admin/posts/episode')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=episode')).text();
 
-    assert.match(html, /<summary\b[^>]*>Recording<\/summary>/);
     assert.match(html, /<option value="" selected>None<\/option>/);
     assert.match(html, /<option value="\/uploads\/2026\/10\/episode\.mp3">2026\/10\/episode\.mp3</);
     assert.match(html, /<option value="\/uploads\/2026\/10\/episode\.mp4">2026\/10\/episode\.mp4</);
@@ -1610,7 +1589,7 @@ describe('writing a post', () => {
     const cms = await box.site({ contentDir });
     const agent = await signedIn(cms);
 
-    const editor = await (await agent.get('/admin/posts/new')).text();
+    const editor = await (await agent.get('/admin/posts/new?kind=note')).text();
     assert.doesNotMatch(
       /<input id="editor-title"[^>]*>/.exec(editor)?.[0] ?? '',
       /required/,
@@ -2532,7 +2511,7 @@ describe('an event in the editor (TASK-200 AC #4)', () => {
   it('reads the times in the site’s zone, writes UTC instants, shows them again, and clears them', async () => {
     const { contentDir, agent } = await published('America/Chicago');
 
-    const blank = await (await agent.get('/admin/posts/new')).text();
+    const blank = await (await agent.get('/admin/posts/new?kind=event')).text();
     assert.match(blank, /name="event-start"/);
     assert.match(blank, /Wall-clock time in America\/Chicago/);
 
@@ -2553,8 +2532,8 @@ describe('an event in the editor (TASK-200 AC #4)', () => {
     assert.equal(field(reloaded, 'event-location'), 'Chicago Public Library');
     assert.match(
       reloaded,
-      /<details\b[^>]*\sopen\b[^>]*>\s*<summary\b[^>]*>\s*Event\s*</,
-      'the Event group opens on a post that is one',
+      /<input type="hidden" name="kind" value="event" \/>/,
+      'a post that is an event opens as one',
     );
 
     assert.equal((await submit(agent, '/admin/posts/published', { title: 'Camp' })).status, 303);
@@ -2573,7 +2552,7 @@ describe('an event in the editor (TASK-200 AC #4)', () => {
 
   it('creates a new event that renders as one', async () => {
     const { contentDir, agent } = await published();
-    const html = await (await agent.get('/admin/posts/new')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=note')).text();
     const response = await agent.post('/admin/posts/new', {
       csrf_token: csrfField(html) ?? '',
       title: 'Homebrew Website Club',

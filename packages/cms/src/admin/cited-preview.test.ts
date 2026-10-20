@@ -92,9 +92,10 @@ async function site(files: Record<string, string>): Promise<{ cms: Cms; contentD
   return { cms, contentDir };
 }
 
+/** The Link form: its choice, its address and what is under it, up to the body. */
 function respondingGroup(editor: string): string {
-  const found = /<summary\b[^>]*>Responding to<\/summary>[\s\S]*?<\/details>/.exec(editor)?.[0];
-  assert.ok(found !== undefined, 'the editor has a Responding to group');
+  const found = /name="link-verb"[\s\S]*?id="editor-body"/.exec(editor)?.[0];
+  assert.ok(found !== undefined, 'the editor has a Link form');
   return found;
 }
 
@@ -219,10 +220,10 @@ describe('the editor’s preview of a cited page', () => {
     assert.match(await frontMatter(contentDir, 'hidden'), /^preview: false$/m);
   });
 
-  it('opens the Responding to group whenever it shows a card', async () => {
+  it('opens a post that cites a page on the Link form', async () => {
     const editor = await (await agent.get('/admin/posts/gif')).text();
 
-    assert.match(editor, /<details\b[^>]*\sopen>\s*<summary\b[^>]*>Responding to<\/summary>/);
+    assert.match(editor, /<input type="hidden" name="kind" value="link" \/>/);
   });
 });
 
@@ -230,7 +231,7 @@ describe('a new post that reposts a GIF', () => {
   it('gets its picture after the save names it, and shows it until the author removes it', async () => {
     const { cms, contentDir } = await site({});
     const agent = await signedIn(cms);
-    const csrf = csrfField(await (await agent.get('/admin/posts/new')).text());
+    const csrf = csrfField(await (await agent.get('/admin/posts/new?kind=note')).text());
     assert.ok(csrf !== undefined);
 
     const response = await agent.post('/admin/posts/new', {

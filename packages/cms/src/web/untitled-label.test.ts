@@ -183,7 +183,7 @@ describe('an untitled post is labelled by what it is (TASK-261)', () => {
   });
 
   it('names a saved photo post by its alt text in the flash (TASK-264)', async () => {
-    const token = csrfField(await (await agent.get('/admin/posts/new')).text());
+    const token = csrfField(await (await agent.get('/admin/posts/new?kind=note')).text());
     assert.ok(token !== undefined);
     const response = await agent.post('/admin/posts/new', {
       csrf_token: token,
@@ -209,11 +209,11 @@ describe('an untitled post is labelled by what it is (TASK-261)', () => {
     assert.doesNotMatch(list, /<Official>/);
 
     const editor = await (await agent.get('/admin/posts/liked')).text();
-    assert.ok(editor.includes(`Edit post: ${escaped}`), 'the editor heading labels the like');
+    assert.ok(editor.includes(`Edit link: ${escaped}`), 'the editor heading labels the like');
   });
 
   it('names a saved like the same way in the flash (AC #3)', async () => {
-    const token = csrfField(await (await agent.get('/admin/posts/new')).text());
+    const token = csrfField(await (await agent.get('/admin/posts/new?kind=note')).text());
     assert.ok(token !== undefined);
     const response = await agent.post('/admin/posts/new', {
       csrf_token: token,

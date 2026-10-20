@@ -119,7 +119,7 @@ describe('hashtagKey', () => {
 describe('Suggest tags', () => {
   it('sits beside Tags only', async () => {
     const { admin } = await site();
-    const html = await (await admin.get('/admin/posts/new')).text();
+    const html = await (await admin.get('/admin/posts/new?kind=note')).text();
     assert.deepEqual(buttonsOn(html), ['Suggest tags']);
     assert.ok(html.includes(`data-editor-action="${actionUrl('suggest-tags')}"`));
   });

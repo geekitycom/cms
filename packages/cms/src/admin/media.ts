@@ -16,7 +16,7 @@ import { writeAltText } from '../content/alt-text.ts';
 import { STRIP_METADATA_JOB } from '../content/metadata/strip-job.ts';
 import type { AltText } from '../content/alt-text.ts';
 import type { UploadKind } from '../files/upload-types.ts';
-import { describeImage, removeImageVariants, variantUrl } from '../images/variants.ts';
+import { describeImage, removeImageVariants, thumbnailUrl } from '../images/variants.ts';
 import type { ImageConfig } from '../images/variants.ts';
 import { deleteUpload, listUploads, mentionsUpload, resolveUpload } from '../media/library.ts';
 import type { MediaFile, RemoveDerived } from '../media/library.ts';
@@ -195,25 +195,16 @@ interface LibraryFile extends MediaFile {
   height: number | undefined;
 }
 
-/** The narrowest variant that still fills a tile on a high-density screen. */
-const THUMBNAIL_WIDTH = 400;
-
 function libraryFile(
   config: ImageConfig,
   documents: readonly Document[],
   file: MediaFile,
 ): LibraryFile {
   const image = file.kind === 'image' ? describeImage(config, file.path) : undefined;
-  const thumbnail = image?.variants
-    .filter((variant) => variant.format === image.variants[0]?.format)
-    .find((variant) => variant.width >= THUMBNAIL_WIDTH);
   return {
     ...file,
     references: referencesAmong(documents, file.url),
-    thumbnailUrl:
-      image !== undefined && thumbnail !== undefined
-        ? variantUrl(file.path, thumbnail, image.version)
-        : file.url,
+    thumbnailUrl: file.kind === 'image' ? thumbnailUrl(config, file.path, file.url) : file.url,
     width: image?.width,
     height: image?.height,
   };

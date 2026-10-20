@@ -99,7 +99,7 @@ export async function editorSite(
   });
   const agent = await signedIn(cms);
 
-  const token = csrfField(await (await agent.get('/admin/posts/new')).text());
+  const token = csrfField(await (await agent.get('/admin/posts/new?kind=note')).text());
   assert.ok(token !== undefined, 'the editor carried a CSRF token');
   const saved = await agent.post('/admin/posts/new', {
     csrf_token: token,
@@ -122,7 +122,7 @@ export async function editorScreens(box: Sandbox): Promise<Record<EditorScreen, 
   try {
     const filled = await served(await agent.get('/admin/posts/everything'));
 
-    const newPost = await served(await agent.get('/admin/posts/new'));
+    const newPost = await served(await agent.get('/admin/posts/new?kind=note'));
     const refused = await served(
       await agent.post('/admin/posts/new', {
         csrf_token: csrfField(newPost.html) ?? '',

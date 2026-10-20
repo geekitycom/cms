@@ -21,7 +21,7 @@ function policy(response: Response): string | null {
 }
 
 async function savedPost(agent: Browser): Promise<void> {
-  const page = await (await agent.get('/admin/posts/new')).text();
+  const page = await (await agent.get('/admin/posts/new?kind=note')).text();
   const saved = await agent.post('/admin/posts/new', {
     csrf_token: csrfField(page) ?? '',
     title: 'Here',
@@ -40,7 +40,7 @@ describe('the editor’s geolocation', () => {
 
     assert.notEqual(EDITOR_POLICY, DEFAULT_POLICY);
     assert.match(EDITOR_POLICY ?? '', /(^|, )geolocation=\(self\)(,|$)/);
-    assert.equal(policy(await agent.get('/admin/posts/new')), EDITOR_POLICY);
+    assert.equal(policy(await agent.get('/admin/posts/new?kind=note')), EDITOR_POLICY);
     assert.equal(policy(await agent.get('/admin/posts/here')), EDITOR_POLICY);
 
     for (const url of ['/admin/pages/new', '/admin', '/admin/posts', '/2026/09/here/']) {
@@ -52,7 +52,7 @@ describe('the editor’s geolocation', () => {
 
   it('keeps the allowance on a refused save, which is the editor again', async () => {
     const agent = await admin();
-    const page = await (await agent.get('/admin/posts/new')).text();
+    const page = await (await agent.get('/admin/posts/new?kind=note')).text();
     const refused = await agent.post('/admin/posts/new', {
       csrf_token: csrfField(page) ?? '',
       title: 'Nowhere',
@@ -67,15 +67,15 @@ describe('the editor’s geolocation', () => {
 
   it('adds nothing to a site that removed the header, and passes a policy of its own through', async () => {
     const off = await admin({ securityHeaders: { 'permissions-policy': false } });
-    assert.equal(policy(await off.get('/admin/posts/new')), null);
+    assert.equal(policy(await off.get('/admin/posts/new?kind=note')), null);
 
     const own = await admin({ securityHeaders: { 'permissions-policy': 'camera=()' } });
-    assert.equal(policy(await own.get('/admin/posts/new')), 'camera=()');
+    assert.equal(policy(await own.get('/admin/posts/new?kind=note')), 'camera=()');
   });
 
   it('draws a hidden Use my location button and a status line, enhanced by location.js', async () => {
     const agent = await admin();
-    const html = await (await agent.get('/admin/posts/new')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=note')).text();
 
     const here = /<button\b[^>]*\bid="editor-location-here"[^>]*>Use my location<\/button>/.exec(
       html,

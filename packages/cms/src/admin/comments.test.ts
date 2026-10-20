@@ -342,7 +342,10 @@ describe('the editor’s Comments field', () => {
       comments_close_after_days: '0',
     });
     assert.equal(await label('/admin/pages/new'), 'Follow the site settings (open for pages)');
-    assert.equal(await label('/admin/posts/new'), 'Follow the site settings (open for posts)');
+    assert.equal(
+      await label('/admin/posts/new?kind=note'),
+      'Follow the site settings (open for posts)',
+    );
 
     await saveSettings(agent, 'discussion', { comments: '', comments_on_pages: '1' });
     assert.equal(

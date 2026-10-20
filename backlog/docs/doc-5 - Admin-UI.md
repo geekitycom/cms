@@ -3,7 +3,7 @@ id: doc-5
 title: Admin UI
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-19 23:43'
+updated_date: '2026-10-20 02:30'
 ---
 # Admin UI
 
@@ -81,7 +81,8 @@ faint tint.
 | `/admin/forgot`, `/admin/reset` | ask for a reset link, and set a new password with one |
 | `/admin` | dashboard: counts, recent posts, follower count |
 | `/admin/posts` | table: title, author, tags, date, status; filters for all/published/draft/trash |
-| `/admin/posts/new`, `/admin/posts/:slug` | editor |
+| `/admin/posts/new` | the kind chooser; `?kind=` opens that kind's editor |
+| `/admin/posts/:slug` | editor |
 | `/admin/pages`, `/admin/pages/new`, `/admin/pages/:slug` | same as posts, without date prefix or tags |
 | `/admin/tags`, `/admin/categories` | every term in use with its post and file counts; rename, merge, delete (under Posts in the menu) |
 | `/admin/navigation` | Navigation > Menus: the areas the active theme declares, then every other menu the site holds. `POST` saves one menu's items, `POST /admin/navigation/add` adds one by name, `POST /admin/navigation/delete` removes one the theme renders nowhere |
@@ -272,12 +273,18 @@ What the screens make of the library:
 - Save writes the file (see doc-1 sync model). The form carries the file hash it was loaded with; a mismatch on save returns the form with a warning and both versions.
 - **Author** is a select of the site's users, not a free box: doc-2's `author` names a user, and after decision-14 that decides whose archive the post lands on and, once the actors land, whose followers hear about it. A new document starts on whoever is signed in; an existing one opens on the user the file names, which for a file written before decision-14 is the one its display name reads as. A file naming somebody with no account here keeps an option of its own, marked, so opening the editor and pressing Update cannot quietly reattribute the post.
 - Buttons: Save draft, Publish, Update, Move to trash, View.
-- **Layout** (TASK-273). The form is one grid: the
-  writing column (a card holding Title, Body and the editor's tools, then the
-  post's Photos, Location and Recording groups) and the side column (a card of
-  the buttons, then the other groups), side by side from `xl` and the side
-  column under the writing one below that. Every group is the `collapse`
-  macro, opened by the server where it holds something. Publish and Update are the primary
+- **Kinds** (TASK-433). "+ New" and Posts > Add new open `/admin/posts/new`, a grid of cards, one per kind of post, each with its name and one line on what it is for: Note (a title makes it an article), Photo, Link (replies to, likes, reposts or bookmarks a page), RSVP, Event, Check-in, Episode (audio or video with an enclosure), Review, and a last card for a Page, which links to `/admin/pages/new`. Each card is a link to `/admin/posts/new?kind=<kind>`, so choosing works with no script. A kind's form shows the title box (optional, or none for an RSVP and a check-in), that kind's own fields and the body, under a label that suits it (Caption, Show notes, Your review). The kind is a layout, not something the file stores: the form carries it in a hidden `kind` field, an existing post opens on the kind Post Type Discovery gives its properties (a reply, like, repost or bookmark is a Link, an article a Note, and a note or photo with an enclosure an Episode, with a check-in location a Check-in), and a photo form saved with no photo is a note. **Change type** in the heading is a popover of submit buttons named `switch-kind`; the server lays the submitted form out as the kind pressed and saves nothing, so the title, body, tags and every other value carry over, script or no script. A block of another kind that the post holds something in (a Micropub reply with photos, say) is shown under **Also on this post**, open, and saved back with the rest, so editing never drops a property.
+- **Kind fields.** Photo: each photo as a row with a thumbnail, its alt text (the library's as the placeholder) and its address; a grid of the newest library images as tick boxes, each numbered after the rows (`photo-url-<n>`), so a ticked one is a new row on save, and **Add the ticked photos** re-renders the form with them as rows to write alt text for; a last row for a web address. Link: one choice of Replies to, Likes, Reposts or Bookmarks (`link-verb`) and one address (`link-url`), which the save puts in the chosen property; a post citing more than one page keeps a box for each other one. RSVP: the event's address and the answer as a row of buttons. Event: starts, ends and where. Check-in: the place and coordinates, with Use my location. Episode: the recording, its transcript and its other versions. Review: what is reviewed as a row of buttons (Book, Movie, TV show, Album, Place, Other); the fields and their labels (Author, Director, Network, Artist; Book cover, Poster, Album art, Picture; Finished, Watched, Listened or Visited on) follow the ticked one through Tailwind `group-has-*` variants, so the form changes with no script; then a 1 to 5 star rating with Clear, and the review text. The item's picture is the item's, never a post photo; a place review also shows the photo picker for the author's own photos.
+- **Layout** (TASK-273, TASK-433). The form is one grid: the
+  writing column (a card holding Title, the kind's fields, Body and the
+  editor's tools, then any Also on this post blocks) and the side column (a
+  Publish card with the buttons, Draft, When, Visibility and Author, then Tags
+  and categories, Location (not on a check-in, and on an event only when it
+  holds one), Address, Summary and language, Syndicate to, and Display and
+  discussion with Comments and Pinned, or Contact form and Hide from
+  collections on a page), side by side from `xl` and the side column under
+  the writing one below that. Every sidebar group is the `collapse` macro,
+  opened by the server where it holds something. Publish and Update are the primary
   button, Move to trash an error ghost button, View a ghost link; the buttons
   sit at the top of the side column, so they are in view without scrolling
   past the groups. A trashed or scheduled document says so in a `polite`

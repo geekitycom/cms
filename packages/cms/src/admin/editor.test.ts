@@ -26,7 +26,7 @@ after(() => box.cleanup());
 async function admin(config = {}): Promise<{ cms: Cms; agent: Browser; token: string }> {
   const cms = await box.site(config);
   const agent = await signedIn(cms);
-  const token = csrfField(await (await agent.get('/admin/posts/new')).text());
+  const token = csrfField(await (await agent.get('/admin/posts/new?kind=note')).text());
   assert.ok(token !== undefined, 'the editor carried a CSRF token');
   return { cms, agent, token };
 }
@@ -464,7 +464,7 @@ describe('the editor page', () => {
   it('still carries a plain textarea, so it works with no JavaScript', async () => {
     const { agent } = await admin();
 
-    const html = await (await agent.get('/admin/posts/new')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=note')).text();
 
     assert.match(html, /<textarea id="editor-body" name="body"/);
   });
@@ -472,7 +472,7 @@ describe('the editor page', () => {
   it('offers a preview that works as a plain form submission', async () => {
     const { agent } = await admin();
 
-    const html = await (await agent.get('/admin/posts/new')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=note')).text();
 
     assert.match(html, /formaction="\/admin\/preview"/);
     assert.match(html, /formtarget="_blank"/);
@@ -481,7 +481,7 @@ describe('the editor page', () => {
   it('loads the editor bundle as a module, and tells it where to post', async () => {
     const { agent } = await admin();
 
-    const html = await (await agent.get('/admin/posts/new')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=note')).text();
 
     assert.match(html, /<script\b[^>]*\btype="module"[^>]*\bsrc="\/admin\/_static\/editor\.js"/s);
     assert.match(html, /<script\b[^>]*\bsrc="\/admin\/_static\/slug\.js"/);
@@ -500,7 +500,7 @@ describe('who a post says wrote it (TASK-67 AC #2)', () => {
       password: 'a password of hers',
     });
 
-    const html = await (await agent.get('/admin/posts/new')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=note')).text();
 
     assert.match(html, /<select id="editor-author" name="author"/);
     assert.match(html, /<option value="ada"\s+selected>/);

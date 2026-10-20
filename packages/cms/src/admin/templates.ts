@@ -44,6 +44,7 @@ export const ADMIN_TEMPLATES = {
   dashboard: 'pages/dashboard/home.njk',
   placeholder: 'pages/placeholder.njk',
   documentList: 'pages/documents/list.njk',
+  documentChooser: 'pages/documents/chooser.njk',
   documentEditor: 'pages/documents/editor.njk',
   documentConflict: 'pages/documents/conflict.njk',
   taxonomy: 'pages/documents/taxonomy.njk',

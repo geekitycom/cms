@@ -110,22 +110,13 @@ const FILLED = {
 };
 
 describe('the post editor’s disclosures (TASK-245)', () => {
-  it('folds every empty block and group of a new post, leaving Publishing and Tags open', async () => {
+  it('folds every empty group of a new note, leaving Tags open', async () => {
     const agent = await site();
 
-    assert.deepEqual(states(await editor(agent, '/admin/posts/new')), [
-      ['Photos', false],
-      ['Add a photo', false],
-      ['Location', false],
-      ['Recording', false],
-      ['Other versions', false],
-      ['Add a version', false],
-      ['Publishing', true],
+    assert.deepEqual(states(await editor(agent, '/admin/posts/new?kind=note')), [
       ['Tags and categories', true],
+      ['Location', false],
       ['Address', false],
-      ['Responding to', false],
-      ['Event', false],
-      ['Review', false],
       ['Summary and language', false],
       ['Syndicate to', false],
       ['Display and discussion', false],
@@ -136,33 +127,27 @@ describe('the post editor’s disclosures (TASK-245)', () => {
     const agent = await site();
 
     assert.deepEqual(states(await editor(agent, '/admin/pages/new')), [
-      ['Publishing', true],
       ['Address', false],
       ['Summary and language', false],
       ['Display and discussion', false],
     ]);
   });
 
-  it('opens every block and group a saved post fills in, and keeps the blank rows folded', async () => {
+  it('opens every block of another kind and every group a saved post fills in, and keeps the blank rows folded', async () => {
     const agent = await site();
     const saved = await save(agent, '/admin/posts/new', FILLED);
     assert.equal(saved.status, 303, 'the filled post saved');
 
     assert.deepEqual(states(await editor(agent, '/admin/posts/everything')), [
+      ['Review', true],
       ['Photos', true],
-      ['Photo 1', true],
-      ['Add a photo', false],
-      ['Location', true],
       ['Recording', true],
       ['Other versions', true],
       ['Version 1', true],
       ['Add a version', false],
-      ['Publishing', true],
       ['Tags and categories', true],
+      ['Location', true],
       ['Address', true],
-      ['Responding to', true],
-      ['Event', false],
-      ['Review', true],
       ['Summary and language', true],
       ['Syndicate to', true],
       ['Display and discussion', true],
@@ -210,7 +195,6 @@ describe('the post editor’s disclosures (TASK-245)', () => {
       const html = await response.text();
       assert.deepEqual(tiedErrors(html).links, [refusal.field]);
       const enclosing = enclosingOutermostFirst(html, refusal.field);
-      assert.ok(enclosing.length > 0, `${refusal.field} is in a disclosure`);
       assert.deepEqual(
         enclosing.filter(({ open }) => !open).map(({ name }) => name),
         [],
@@ -223,7 +207,7 @@ describe('the post editor’s disclosures (TASK-245)', () => {
     const agent = await site();
 
     assert.doesNotMatch(
-      await editor(agent, '/admin/posts/new'),
+      await editor(agent, '/admin/posts/new?kind=note'),
       /name="read-|editor-read-|Read status/,
     );
   });
@@ -237,11 +221,11 @@ describe('which groups start open (TASK-245)', () => {
     );
     const refused = openGroups(
       blankForm(POST_KIND, 'UTC', new Date('2026-09-02T10:00:00.000Z')),
-      'editor-like-of',
+      'editor-lang',
     );
 
-    assert.equal(blank.responding, false);
-    assert.equal(refused.responding, true);
-    assert.deepEqual({ ...refused, responding: false }, blank, 'no other group moves');
+    assert.equal(blank.summary, false);
+    assert.equal(refused.summary, true);
+    assert.deepEqual({ ...refused, summary: false }, blank, 'no other group moves');
   });
 });

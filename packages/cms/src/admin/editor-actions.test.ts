@@ -127,7 +127,7 @@ async function press(
 describe('editor actions', () => {
   it('draws an enabled plugin’s button beside the title, description and tags fields', async () => {
     const { agent } = await site([suggester()], true);
-    const html = await (await agent.get('/admin/posts/new')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=note')).text();
 
     for (const [field, id, label] of [
       ['editor-title', 'suggest-title', 'Suggest title'],
@@ -152,7 +152,7 @@ describe('editor actions', () => {
   it('leaves the editor exactly as it is without the plugin when the plugin is disabled', async () => {
     const plain = await site([], false);
     const disabled = await site([suggester()], false);
-    for (const url of ['/admin/posts/new', '/admin/pages/new', '/admin/posts/liked']) {
+    for (const url of ['/admin/posts/new?kind=note', '/admin/pages/new', '/admin/posts/liked']) {
       const without = stable(await (await plain.agent.get(url)).text());
       const off = stable(await (await disabled.agent.get(url)).text());
       assert.equal(off, without, `${url} is unchanged`);
@@ -209,8 +209,8 @@ describe('editor actions', () => {
   it('reads a new untitled post as an unsaved note, a titled one as an article, a page as a page', async () => {
     const pressed: Pressed = { drafts: [] };
     const { agent } = await site([suggester(pressed)], true);
-    await press(agent, '/admin/posts/new', 'suggest-tags', { body: 'Just a thought.' });
-    await press(agent, '/admin/posts/new', 'suggest-tags', {
+    await press(agent, '/admin/posts/new?kind=note', 'suggest-tags', { body: 'Just a thought.' });
+    await press(agent, '/admin/posts/new?kind=note', 'suggest-tags', {
       title: 'A Long Read',
       body: 'Many words.',
     });
@@ -228,7 +228,7 @@ describe('editor actions', () => {
   it('withdraws a button the draft no longer qualifies for, without asking the plugin', async () => {
     const pressed: Pressed = { drafts: [] };
     const { agent } = await site([suggester(pressed)], true);
-    const response = await press(agent, '/admin/posts/new', 'suggest-title', {
+    const response = await press(agent, '/admin/posts/new?kind=note', 'suggest-title', {
       'like-of': 'https://elsewhere.example/post',
     });
     assert.equal(response.status, 200);
@@ -246,7 +246,7 @@ describe('editor actions', () => {
       true,
     );
     assert.deepEqual(
-      await (await press(failing.agent, '/admin/posts/new', 'suggest-tags')).json(),
+      await (await press(failing.agent, '/admin/posts/new?kind=note', 'suggest-tags')).json(),
       {
         ok: false,
         message: 'The model is asleep.',
@@ -261,7 +261,7 @@ describe('editor actions', () => {
       ],
       true,
     );
-    const response = await press(throwing.agent, '/admin/posts/new', 'suggest-tags');
+    const response = await press(throwing.agent, '/admin/posts/new?kind=note', 'suggest-tags');
     assert.equal(response.status, 500);
     assert.deepEqual(await response.json(), { ok: false, message: 'Suggest tags failed: kaboom' });
   });
@@ -269,10 +269,16 @@ describe('editor actions', () => {
   it('answers 404 for a disabled plugin and for an action it does not have', async () => {
     const pressed: Pressed = { drafts: [] };
     const disabled = await site([suggester(pressed)], false);
-    assert.equal((await press(disabled.agent, '/admin/posts/new', 'suggest-tags')).status, 404);
+    assert.equal(
+      (await press(disabled.agent, '/admin/posts/new?kind=note', 'suggest-tags')).status,
+      404,
+    );
 
     const enabled = await site([suggester(pressed)], true);
-    assert.equal((await press(enabled.agent, '/admin/posts/new', 'suggest-nothing')).status, 404);
+    assert.equal(
+      (await press(enabled.agent, '/admin/posts/new?kind=note', 'suggest-nothing')).status,
+      404,
+    );
     assert.deepEqual(pressed.drafts, []);
   });
 
@@ -311,7 +317,7 @@ describe('editor actions', () => {
       },
     });
     const { agent } = await site([tagger], true);
-    await press(agent, '/admin/posts/new', 'suggest-tags', { body: 'Crumb.' });
+    await press(agent, '/admin/posts/new?kind=note', 'suggest-tags', { body: 'Crumb.' });
     assert.deepEqual(seen, [['Baking', 'bread']]);
   });
 
@@ -339,7 +345,7 @@ describe('editor actions', () => {
       'crust.md':
         '---\ntitle: Crust\ndate: 2026-09-03T09:00:00Z\ntags: [baking, Bread]\n---\n\nCrisp.\n',
     });
-    await press(agent, '/admin/posts/new', 'suggest-tags', { body: 'Crumb.' });
+    await press(agent, '/admin/posts/new?kind=note', 'suggest-tags', { body: 'Crumb.' });
     assert.deepEqual(seen, [['Baking', 'bread']]);
   });
 
@@ -373,7 +379,10 @@ describe('editor actions', () => {
       ...days,
       'later.md': '---\ndate: 2026-09-30T09:00:00Z\n---\n\nAn untitled note.\n',
     });
-    await press(agent, '/admin/posts/new', 'suggest-title', { body: 'Crumb.', title: 'Day 21' });
+    await press(agent, '/admin/posts/new?kind=note', 'suggest-title', {
+      body: 'Crumb.',
+      title: 'Day 21',
+    });
     assert.deepEqual(seen, [
       [
         'Day 20',
@@ -397,14 +406,14 @@ describe('editor actions', () => {
       { value: 'oven', group: 'For reach' },
     ];
     const { agent } = await site([suggester(undefined, () => ({ ok: true, choices }))], true);
-    const response = await press(agent, '/admin/posts/new', 'suggest-tags');
+    const response = await press(agent, '/admin/posts/new?kind=note', 'suggest-tags');
     assert.deepEqual(await response.json(), { ok: true, choices });
   });
 
   it('answers choices beside the title, for the author to pick one', async () => {
     const choices = [{ value: 'Plain Bread' }, { value: 'Rye in Phoenix' }];
     const { agent } = await site([suggester(undefined, () => ({ ok: true, choices }))], true);
-    const response = await press(agent, '/admin/posts/new', 'suggest-title');
+    const response = await press(agent, '/admin/posts/new?kind=note', 'suggest-title');
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { ok: true, choices });
   });
@@ -412,7 +421,7 @@ describe('editor actions', () => {
   it('answers a note with nothing to accept, such as keeping the field as it is', async () => {
     const message = 'The model suggests keeping the current title.';
     const { agent } = await site([suggester(undefined, () => ({ ok: true, message }))], true);
-    const response = await press(agent, '/admin/posts/new', 'suggest-title');
+    const response = await press(agent, '/admin/posts/new?kind=note', 'suggest-title');
     assert.deepEqual(await response.json(), { ok: true, message });
   });
 
@@ -421,7 +430,7 @@ describe('editor actions', () => {
       [suggester(undefined, () => ({ ok: true, choices: [{ value: 'One' }] }))],
       true,
     );
-    const response = await press(agent, '/admin/posts/new', 'suggest-description');
+    const response = await press(agent, '/admin/posts/new?kind=note', 'suggest-description');
     assert.equal(response.status, 500);
     assert.deepEqual(await response.json(), {
       ok: false,
@@ -432,7 +441,10 @@ describe('editor actions', () => {
 
   it('draws a hidden list for choices beside each button, with a row to copy', async () => {
     const { agent } = await site([suggester()], true);
-    const block = actionsBeside(await (await agent.get('/admin/posts/new')).text(), 'editor-tags');
+    const block = actionsBeside(
+      await (await agent.get('/admin/posts/new?kind=note')).text(),
+      'editor-tags',
+    );
     assert.ok(block !== undefined);
     assert.match(block, /<ul[^>]*data-editor-choices[^>]*>\s*<\/ul>/);
     assert.match(
@@ -444,7 +456,7 @@ describe('editor actions', () => {
 
   it('draws a title choice as a radio button and a tags choice as a checkbox', async () => {
     const { agent } = await site([suggester()], true);
-    const html = await (await agent.get('/admin/posts/new')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=note')).text();
     const input = (fieldId: string) =>
       /<template data-editor-choice>[\s\S]*?(<input [^>]*>)/.exec(
         actionsBeside(html, fieldId) ?? '',
@@ -459,7 +471,7 @@ describe('editor actions', () => {
 
   it('gives each choice box to a form of its own, so saving the draft never posts it', async () => {
     const { agent } = await site([suggester()], true);
-    const html = await (await agent.get('/admin/posts/new')).text();
+    const html = await (await agent.get('/admin/posts/new?kind=note')).text();
     const box = /<template data-editor-choice>[\s\S]*?(<input type="checkbox"[^>]*>)/.exec(
       actionsBeside(html, 'editor-tags') ?? '',
     )?.[1];
@@ -470,7 +482,7 @@ describe('editor actions', () => {
 
   it('runs under the admin’s own policy, the script coming from the admin’s origin', async () => {
     const { agent } = await site([suggester()], true);
-    const response = await agent.get('/admin/posts/new');
+    const response = await agent.get('/admin/posts/new?kind=note');
     const html = await response.text();
     const nonce = /<script[^>]*id="editor-script"[^>]*nonce="([^"]+)"/.exec(html)?.[1] ?? '';
     assert.equal(

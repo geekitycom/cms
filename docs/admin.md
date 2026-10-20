@@ -8,6 +8,7 @@ override any public template. It must not be able to shadow the login form.
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
 | `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.                        |
 | `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                                 |
+| `/admin/posts/new`                               | Choose a kind of post. `?kind=photo` (or another kind) opens that kind's editor.              |
 | `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                             |
 | `/admin/tags/rename`, `/admin/categories/rename` | `POST` only. Renames a term, or merges it into one that exists.                               |
 | `/admin/tags/delete`, `/admin/categories/delete` | `POST` only. Takes a term out of every file.                                                  |
@@ -138,6 +139,46 @@ The editor at `/admin/posts/{slug}` is a plain form. The body is a
 `<textarea>`. The Preview button submits the form to `/admin/preview` in a new
 tab. Both work with JavaScript switched off, and every change below keeps
 that working.
+
+### Kinds of post
+
+"+ New" opens `/admin/posts/new`, which lists the kinds of post: Note, Photo,
+Link, RSVP, Event, Check-in, Episode and Review, and a card for a Page. Each
+card is a link to `/admin/posts/new?kind=<kind>`. That kind's form shows only
+its own fields:
+
+- Note: an optional title (a title makes the note an article) and the body.
+- Photo: the photos, each with its alt text, a grid of the newest images in
+  the media library to tick, and a box for a photo at a web address. A ticked
+  image is added when you save. Add the ticked photos adds them at once, so
+  you can write their alt text first.
+- Link: Replies to, Likes, Reposts or Bookmarks, and the address of the page.
+- RSVP: the event's address and the answer.
+- Event: when it starts and ends, and where.
+- Check-in: the place and its coordinates.
+- Episode: the audio or video file, its transcript and its other versions.
+- Review: what is reviewed (a book, movie, TV show, album, place or other),
+  that item's own fields, a rating from 1 to 5 stars, and the review. The
+  fields and labels change with the item kind without JavaScript. The item's
+  picture (a book cover, a poster, album art) belongs to the item. A place
+  review can also carry your own photos.
+
+The sidebar holds what every kind shares: Publish (the buttons, Draft, the
+date, Visibility and Author), Tags and categories, Location, Address, Summary
+and language, Syndicate to, and Display and discussion.
+
+Change type, beside the heading, sends the form back to be laid out as
+another kind. Nothing is saved, and every value you typed is kept. It works
+with JavaScript switched off.
+
+An existing post opens on the kind its properties give it, by Post Type
+Discovery. A Micropub app can send a post that has properties of several
+kinds, such as a reply with photos. The editor shows the other kinds' fields
+under Also on this post, and a save keeps them all.
+
+Pages > Add new opens the page editor directly.
+
+### What JavaScript adds
 
 `packages/cms/admin/static/editor.js` upgrades the form when it loads:
 
