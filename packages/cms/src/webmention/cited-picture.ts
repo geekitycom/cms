@@ -111,7 +111,6 @@ export async function copyCitedImage(
   return { src: `${CITED_PICTURE_PREFIX}${name}`, ...size };
 }
 
-/** The extension an image's bytes say it has, whatever its address or type claimed. */
 export function imageExtensionOf(bytes: Uint8Array): string | undefined {
   return IMAGE_EXTENSIONS.find((candidate) => {
     const media = UPLOAD_MEDIA_TYPES.get(candidate);

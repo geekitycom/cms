@@ -222,7 +222,6 @@ function isOrWasEvent(saved: PostEvent | undefined, document: Document | undefin
 const REVIEW_FIELD: PostField = {
   read: (document) => ({ review: reviewForm(document.extra, reviewOf(document.extra)) }),
   submitted: (body) => ({ review: submittedReviewForm(body) }),
-  // A key somebody added to the item by hand is kept, as one beside it is.
   write: (extra, _form, { media: { review } }) => {
     const { item, rating } = reviewFrontMatter(review);
     const before = extra[ITEM_FRONT_MATTER_KEY];

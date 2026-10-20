@@ -27,10 +27,6 @@ import { htmlToText } from './search.ts';
  * sits after photo, just ahead of the tail (TASK-169): every post the spec
  * types as something else keeps that type, and a bookmark claims only what
  * the spec would have called a note or an article.
- *
- * A review, a post with a reviewed `item` (TASK-432), is no type the spec
- * names either. It sits after reply and before photo, so a place review that
- * carries the author's photos is still a review.
  */
 export type PostType =
   | 'event'
@@ -57,7 +53,6 @@ export interface PostProperties {
   'repost-of'?: string | undefined;
   'like-of'?: string | undefined;
   'bookmark-of'?: string | undefined;
-  /** The reviewed item's name. */
   item?: string | undefined;
 }
 

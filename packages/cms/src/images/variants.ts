@@ -457,13 +457,8 @@ export async function findImageVariant(
   return findAsset(relative, [root]);
 }
 
-/** The narrowest variant that still fills a library tile on a high-density screen. */
 const THUMBNAIL_WIDTH = 400;
 
-/**
- * A picture of an upload small enough for a tile: a derived copy at least a
- * tile wide when one exists, otherwise the original at `url`.
- */
 export function thumbnailUrl(config: ImageConfig, source: string, url: string): string {
   const image = describeImage(config, source);
   const thumbnail = image?.variants

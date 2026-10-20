@@ -95,8 +95,7 @@ export interface FeedItem {
   terms: readonly string[];
   /**
    * What every format prints as the summary: the description the author wrote,
-   * else an excerpt of the rendered body, which a review (TASK-432) opens with
-   * what it reviews and the rating. Never the whole post — the content is
+   * else an excerpt of the rendered body. Never the whole post — the content is
    * where that goes — and empty only for a post with nothing to summarise,
    * which is the one case a format leaves the element out.
    */

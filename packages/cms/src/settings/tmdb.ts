@@ -8,7 +8,6 @@ export const TMDB_FILE = declareDataFile({
   lost: 'The TMDb API key, typed in again on Settings > General.',
 });
 
-/** The TMDb key that Look up on the review form reads movies and TV shows with (TASK-434). */
 export const TMDB = declareNamespace({
   namespace: 'tmdb',
   storage: { kind: 'file', under: 'data', file: TMDB_FILE },

@@ -1,23 +1,3 @@
-/**
- * Look up on the review form (TASK-434): the item's ID in, the empty boxes
- * filled.
- *
- * The button is a submit button, so with no script the form posts to its own
- * editor route, which fills the boxes and draws the form again with nothing
- * saved, as Change type does. `admin/static/item-lookup.js` posts the same
- * form here instead and fills the boxes in place. Either way a box the author
- * has typed in is left as it is, and a lookup that fails changes nothing.
- *
- * The item's picture is copied into the media library rather than linked from
- * the site that has it, with its alt text written in the library and in the
- * form.
- *
- * Find (TASK-435) searches the item's source by title, and picking a match
- * posts the form here with the match's ID as `item-pick`: it is looked up in
- * place of the ID box, and fills the ID box too when that is empty. The find
- * box needs the script, so with none it is not shown.
- */
-
 import type { Context, Hono } from 'hono';
 
 import { writeAltText } from '../content/alt-text.ts';
@@ -38,24 +18,18 @@ import { imageExtensionOf } from '../webmention/cited-picture.ts';
 import { fetchPublic } from '../webmention/fetch-public.ts';
 import { libraryThumbnail } from './editor-fields.ts';
 
-/** Where the editor's script posts the form for a lookup. */
 export const ITEM_LOOKUP_PATH = `${ADMIN_PREFIX}/item-lookup`;
 
-/** The editor button's name, which a form posted without a script carries. */
 export const ITEM_LOOKUP_BUTTON = 'lookup-item';
 
-/** Where the find box's script searches, with `kind` and `q`. */
 export const ITEM_SEARCH_PATH = `${ADMIN_PREFIX}/item-search`;
 
-/** The field a picked match's ID is posted in. */
 const ITEM_PICK_FIELD = 'item-pick';
 
-/** The most of a match's picture that is read for the list. */
 const THUMBNAIL_MAX_BYTES = 300_000;
 
 const PICTURE_TIMEOUT_MS = 10_000;
 
-/** The boxes a lookup can fill beside the picture, in the order a sentence names them. */
 const FILLED = [
   'name',
   'by',
@@ -69,19 +43,13 @@ const FILLED = [
   'countryName',
 ] as const;
 
-/** What a lookup did to the form, and the sentence beside the button. */
 export interface ItemLookupOutcome {
   readonly review: ReviewForm;
-  /** The boxes it filled. */
   readonly filled: readonly (keyof ReviewForm)[];
   readonly message: string;
   readonly failed: boolean;
 }
 
-/**
- * Look the item up and fill in what the author left empty. `pick` is the ID
- * of a match picked from Find, looked up in place of the ID box.
- */
 export async function lookUpReviewItem(
   c: Context<GeekityEnv>,
   form: ReviewForm,
@@ -176,7 +144,6 @@ function filledSentence(
   return `Filled in the ${list ?? ''} from ${item.source}.`;
 }
 
-/** The signed-in user's email, which Crossref's polite pool asks for. */
 function signedInEmail(c: Context<GeekityEnv>): string | undefined {
   const id = c.var.session?.userId;
   return id == null ? undefined : findUserById(c.var.config.dataDir, id)?.email;
@@ -185,7 +152,6 @@ function signedInEmail(c: Context<GeekityEnv>): string | undefined {
 type StoredPicture =
   { readonly ok: true; readonly url: string } | { readonly ok: false; readonly reason: string };
 
-/** Copy a picture into the media library under `name`, with its alt text. */
 async function storePicture(
   c: Context<GeekityEnv>,
   url: string,
@@ -219,11 +185,6 @@ async function storePicture(
   return { ok: true, url: stored.url };
 }
 
-/**
- * The endpoint the editor's script posts the form to. It answers the boxes
- * the lookup filled, by their field names, and the sentence for beside the
- * button.
- */
 export function mountItemLookup(app: Hono<GeekityEnv>): void {
   app.post(ITEM_LOOKUP_PATH, async (c) => {
     const body = await c.req.parseBody();
@@ -243,12 +204,6 @@ export function mountItemLookup(app: Hono<GeekityEnv>): void {
   });
 }
 
-/**
- * The find box's search: the matches for a title at the source for the item
- * kind, each with its picture read here and answered as a `data:` URI, so the
- * admin's `img-src` never names the sources and they never see who is
- * searching.
- */
 export function mountItemSearch(app: Hono<GeekityEnv>): void {
   app.get(ITEM_SEARCH_PATH, async (c) => {
     const kind = c.req.query('kind') ?? '';

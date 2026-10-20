@@ -97,8 +97,6 @@
 {% endblock %}
 
 {% block settingsPanels %}
-  {# The TMDb key is its own pair of forms, as the Akismet key is: it is the
-     secret tmdb.key setting in data/tmdb.json, not a setting in site.json. #}
   {% call card(title='Movies and TV shows') %}
     <p>
       {% if tmdbPresent %}

@@ -1,18 +1,3 @@
-/* Look up and Find on the review form (TASK-434, TASK-435). With no script
-   Look up posts the form to the editor, which draws it again with the empty
-   boxes filled. This posts the same form to the lookup endpoint instead, which
-   answers { ok, message, fields, thumbnail }, and fills each box it names that
-   is still empty, so nothing typed while the lookup ran is lost. The sentence
-   goes in the status line beside the button.
-
-   Find is drawn hidden and shown here. It searches when Enter or Search is
-   pressed, one search at a time, and lists the matches; picking one posts the
-   form to the lookup endpoint with the match's ID as `item-pick`, which fills
-   the boxes as Look up does.
-
-   A file rather than an inline script, so the admin's policy stays
-   `script-src 'self'` and `connect-src 'self'`. Plain ES5-shaped browser
-   JavaScript, served as it is written. */
 (function () {
   var press = document.querySelector('button[data-item-lookup]');
   var status = document.getElementById('editor-item-lookup-status');
@@ -38,7 +23,6 @@
     tell(status, message, failed);
   }
 
-  /* An answer from the site, or the sentence for why there is none. */
   function answerOf(response) {
     var type = response.headers.get('content-type') || '';
     if (type.indexOf('application/json') === -1) {

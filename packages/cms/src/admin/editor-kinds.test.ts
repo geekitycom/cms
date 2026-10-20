@@ -74,7 +74,6 @@ function names(page: string): string[] {
   return fieldsOf(page).map(([name]) => name);
 }
 
-/** The values of a form's hidden `kind` field. */
 function kindOf(page: string): string | undefined {
   return /<input type="hidden" name="kind" value="([^"]*)"/.exec(page)?.[1];
 }

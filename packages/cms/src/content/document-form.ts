@@ -92,7 +92,6 @@ export interface EditorForm {
   bookmarkOf: string;
   /** When and where the post's event is (TASK-200). Posts only. */
   event: EventForm;
-  /** What the post reviews and its rating, `item` and `rating` (TASK-432). Posts only. */
   review: ReviewForm;
   /** The language it is written in, the `lang` key; empty for the site's. */
   lang: string;
@@ -261,7 +260,6 @@ export function splitTags(value: string): string[] {
   return tags;
 }
 
-/** The post's recording, photos and review, as a form resolved them against the media library. */
 export interface ResolvedMedia {
   readonly recording: Enclosure | undefined;
   readonly photos: readonly Photo[];

@@ -1,9 +1,3 @@
-/**
- * What a review item's ID names (TASK-434): an ISBN, a DOI, a page on TMDb,
- * IMDb, MusicBrainz, Open Library or OpenStreetMap, or any other page. Look
- * up reads it to choose where to ask about the item.
- */
-
 import { webUrl } from '../webmention/fetch-public.ts';
 
 export type ItemId =
@@ -36,7 +30,6 @@ const DOI = /^10\.\d{4,9}\/\S+$/;
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
-/** The item an ID names, or `undefined` for one that is none of them. */
 export function parseItemId(value: string): ItemId | undefined {
   const given = value.trim();
   const prefixed = /^(isbn|doi):\s*(\S.*)$/i.exec(given);

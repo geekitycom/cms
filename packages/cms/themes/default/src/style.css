@@ -747,8 +747,6 @@
     @apply block h-auto w-full;
   }
 
-  /* A review's item (TASK-432): its picture beside its details, then the
-     rating. */
   .review {
     @apply my-6 font-sans text-sm;
   }

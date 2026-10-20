@@ -40,11 +40,7 @@ function updatable(kind: DocumentKind, type: MicropubType): Updatable {
   };
 }
 
-/**
- * The properties an h-event or an h-review cannot be read without, which an
- * update to any one property of it sources too.
- */
-function typeProperties(kind: DocumentKind, type: MicropubType): string[] {
+function propertiesSourcedOnEveryUpdate(kind: DocumentKind, type: MicropubType): string[] {
   const field = type === 'h-event' ? 'event' : type === 'h-review' ? 'review' : undefined;
   if (field === undefined) return [];
   return Object.entries(updatable(kind, type))
@@ -172,7 +168,7 @@ export function updateForm(
   const unknown = touched.filter((property) => !(property in owned) && !kept(property));
   if (unknown.length > 0) return { errors: [`This endpoint cannot update ${unknown.join(', ')}.`] };
 
-  const sourced = [...new Set([...touched, ...typeProperties(kind, type)])];
+  const sourced = [...new Set([...touched, ...propertiesSourcedOnEveryUpdate(kind, type)])];
   const source = sourceProperties(document, site, kind);
   const properties = new Map(sourced.map((property) => [property, source[property] ?? []]));
   for (const change of changes) {

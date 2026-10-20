@@ -86,11 +86,6 @@ export const GENERAL_SETTINGS: SettingsPage = {
   endpoints: mountTmdb,
 };
 
-/**
- * Where the TMDb key's form and its Remove button post (TASK-434). Its own
- * endpoint, as the Akismet key's is: the key is the secret `tmdb.key` setting
- * in `data/tmdb.json`, not a field of this page's form.
- */
 export const TMDB_PATH = `${SETTINGS_PATH}/tmdb`;
 
 export const TMDB_FIELDS = { key: 'tmdb_key', action: 'action' } as const;
@@ -125,7 +120,6 @@ function mountTmdb(app: Hono<GeekityEnv>): void {
   });
 }
 
-/** What the page says about the TMDb key, which it never prints. */
 async function tmdbPanel(settings: SettingsRegistry): Promise<Record<string, unknown>> {
   const { key } = await settings.values(TMDB);
   const setBy = (await setElsewhere(settings, TMDB))['key'];

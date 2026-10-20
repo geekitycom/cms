@@ -448,10 +448,6 @@ function photoAttachments(
   });
 }
 
-/**
- * A review's item picture (TASK-432), the cover or poster a timeline shows
- * first, as an `Image` named by its alt text.
- */
 function itemAttachment(
   review: Review | undefined,
   baseUrl: string,

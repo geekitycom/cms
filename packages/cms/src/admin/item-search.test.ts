@@ -18,11 +18,6 @@ interface Seen {
 
 let seen: Seen[] = [];
 
-/**
- * What each address answers. An API is keyed by its address without the
- * query, so a test reads the query it was sent from `seen`; a picture by its
- * whole address.
- */
 let answers: Map<string, () => Response>;
 
 function json(value: unknown, status = 200): () => Response {

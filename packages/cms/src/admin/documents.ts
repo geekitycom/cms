@@ -348,17 +348,10 @@ export function submittedForm(
   return kind.replies ? withLink(form, body) : form;
 }
 
-/** The field each of the Link form's choices fills. */
 const LINK_FIELDS = { 'in-reply-to': 'inReplyTo', ...CITATION_FIELDS } as const;
 
-/**
- * The Link form's one choice and one address, put in the property the choice
- * names. A post citing more than one page has a box of its own for each of
- * the others, so only the chosen property is set here.
- */
 function withLink(form: EditorForm, body: Record<string, unknown>): EditorForm {
   const verb = stringOrEmpty(body['link-verb']);
-  // A box of the property's own, as a Micropub-shaped post sends, wins.
   if (!Object.hasOwn(LINK_FIELDS, verb) || Object.hasOwn(body, verb)) return form;
   return {
     ...form,
@@ -366,11 +359,6 @@ function withLink(form: EditorForm, body: Record<string, unknown>): EditorForm {
   };
 }
 
-/**
- * Change type, pressed with or without a script: the form as submitted, on
- * the kind asked for, with nothing saved. `undefined` when the press was
- * something else.
- */
 function switchKind(
   c: Context<GeekityEnv>,
   options: SaveFromFormOptions,
@@ -387,11 +375,6 @@ function switchKind(
   });
 }
 
-/**
- * Look up, pressed with no script: the review form as submitted with its
- * empty item boxes filled, and what the lookup found beside the button, with
- * nothing saved. `undefined` when the press was something else.
- */
 function lookUpItem(
   c: Context<GeekityEnv>,
   options: SaveFromFormOptions,
@@ -412,7 +395,6 @@ function lookUpItem(
   })();
 }
 
-/** "+ New": a card for each kind of post, and one for a page. */
 function renderChooser(
   c: Context<GeekityEnv>,
   kind: DocumentScreens,
@@ -727,10 +709,8 @@ interface RenderEditorOptions {
   /** The document being edited, or `undefined` when it is being written. */
   document: Document | undefined;
   form: EditorForm;
-  /** The kind to lay a post's form out as; unset for the one its properties give it. */
   postKind?: PostKind | undefined;
   refusal?: Refusal | undefined;
-  /** What Look up found, to say beside its button. */
   itemLookup?: { message: string; failed: boolean } | undefined;
   /** The status to answer with. Defaults to 200. */
   status?: 200 | 400 | undefined;
@@ -820,7 +800,6 @@ async function renderEditor(
             ...REVIEW_KIND_WORDS[value],
             ...REVIEW_EDITOR_WORDS[value],
           })),
-          // Which item kinds have each field, which decides when it shows.
           reviewKindsWith: Object.fromEntries(
             ['by', 'year', 'uid', 'url', 'photo', 'date', 'season', 'episode', 'category'].map(
               (field) => [
@@ -831,7 +810,6 @@ async function renderEditor(
               ],
             ),
           ),
-          // A new review starts on a book; a stored one with no kind is an other.
           reviewKindChosen:
             form.review.kind === ''
               ? sections.filled.review
@@ -875,7 +853,6 @@ async function renderEditor(
   });
 }
 
-/** One of the Link form's choices. */
 const LINK_VERBS = [
   { property: 'in-reply-to', label: 'Replies to', also: 'Also replies to' },
   { property: 'like-of', label: 'Likes', also: 'Also likes' },
@@ -883,14 +860,8 @@ const LINK_VERBS = [
   { property: 'bookmark-of', label: 'Bookmarks', also: 'Also bookmarks' },
 ] as const;
 
-/** Post Type Discovery's order, which decides the choice a post with several opens on. */
 const LINK_ORDER = ['repost-of', 'like-of', 'in-reply-to', 'bookmark-of'] as const;
 
-/**
- * The Link form: the choices, the one it opens on with its address, and a box
- * of its own for every other page the post cites. An RSVP's event address is
- * its own form's, so it is no choice here while the RSVP form shows.
- */
 function linkView(form: EditorForm, rsvpShown: boolean) {
   const value = (property: (typeof LINK_ORDER)[number]): string => form[LINK_FIELDS[property]];
   const offered = LINK_VERBS.filter((verb) => !rsvpShown || verb.property !== 'in-reply-to');

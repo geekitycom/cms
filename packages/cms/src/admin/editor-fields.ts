@@ -32,36 +32,25 @@ export function readLocationForm(body: Record<string, unknown>): LocationForm {
   };
 }
 
-/** A photo row as the editor prints it: the library's alt text to show when the row has none, and a tile of it. */
 export interface PhotoRowView extends PhotoRow {
   libraryAlt: string;
-  /** A small copy of a library image; unset for a web address, which the admin's policy will not load. */
   thumbnail: string | undefined;
 }
 
-/** A library image the post does not have yet, as a tick box numbered after the rows. */
 export interface PhotoPick {
   url: string;
   thumbnail: string;
   alt: string;
-  /** The row number it submits as when ticked: `photo-url-{index}`. */
   index: number;
 }
 
-/** The Photos block: the post's photos, the library to pick from, and a row for a web address. */
 export interface PhotoPicker {
   rows: PhotoRowView[];
   picks: PhotoPick[];
-  /** The number of the empty row for a web address, after every pick. */
   blank: number;
-  /** Every image upload, newest first, for the address boxes to complete from. */
   choices: string[];
 }
 
-/**
- * A tile of an image in the media library, or `undefined` for anything else:
- * the admin's policy loads no picture from another site.
- */
 export function libraryThumbnail(
   config: ImageConfig & { contentDir: string },
   url: string,
@@ -71,14 +60,8 @@ export function libraryThumbnail(
   return thumbnailUrl(config, source, url);
 }
 
-/** How many of the newest library images the picker offers; the address box reaches the rest. */
 const PICKS = 18;
 
-/**
- * The photo picker for these rows. A ticked pick submits as one more row, so
- * a form with no script adds library photos by its own numbering, each with
- * the library's alt text until somebody writes one.
- */
 export async function photoPicker(
   config: ImageConfig & { contentDir: string },
   rows: readonly PhotoRow[],

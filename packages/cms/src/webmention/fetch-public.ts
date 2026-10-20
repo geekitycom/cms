@@ -27,7 +27,6 @@ export interface FetchPublicOptions {
   readonly overflow?: 'refuse' | 'truncate';
   /** The `Accept` header sent. */
   readonly accept: string;
-  /** Any other headers sent, such as an API's `Authorization`. */
   readonly headers?: Readonly<Record<string, string>> & { readonly 'user-agent'?: never };
   /** The content types taken, and what to call anything else when refusing it. */
   readonly contentType: { readonly pattern: RegExp; readonly name: string };

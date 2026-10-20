@@ -1,19 +1,3 @@
-/**
- * Look up (TASK-434): what the web knows about a review's item, from its ID.
- *
- * Each source is asked once, through {@link fetchPublic}, so every request
- * carries the site's User-Agent and the guards on reaching out: public hosts
- * only, one deadline, a byte limit. Open Library answers an ISBN, Crossref a
- * DOI, MusicBrainz a release or release group with its album art from the
- * Cover Art Archive, TMDb a movie or TV show, and an IMDb title when the
- * site has a TMDb key, and Nominatim a place on OpenStreetMap. Any other page
- * is read the way a cited page is, through its JSON-LD and its own metadata.
- * Nothing throws: a lookup that finds nothing is one sentence saying why.
- *
- * Find (TASK-435) asks the same sources by title, for the matches to pick
- * from, and a pick is looked up by the ID its match carries.
- */
-
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import type { ReviewKind } from '../content/review.ts';
@@ -26,11 +10,8 @@ import { plainText } from '../webmention/reply-context/source.ts';
 import { parseItemId } from './item-id.ts';
 import type { ItemId } from './item-id.ts';
 
-/** What a source says about an item. Only what it knows is set. */
 export interface FoundItem {
-  /** Who answered, as a sentence names them: "Open Library". */
   readonly source: string;
-  /** What it is, where the source says. */
   readonly kind?: ReviewKind;
   readonly name?: string;
   readonly by?: string;
@@ -42,7 +23,6 @@ export interface FoundItem {
   readonly locality?: string;
   readonly region?: string;
   readonly countryName?: string;
-  /** Where its cover, poster or album art is on the web. */
   readonly picture?: string;
 }
 
@@ -52,7 +32,6 @@ export type ItemLookup =
 
 export interface LookUpItemOptions {
   readonly lookup: HostLookup;
-  /** The site's TMDb API key or read access token; empty when it has none. */
   readonly tmdbKey: string;
   /** An email address Crossref's polite pool can reach, when there is one. */
   readonly contact?: string | undefined;
@@ -61,7 +40,6 @@ export interface LookUpItemOptions {
 
 const ITEM_LOOKUP_TIMEOUT_MS = 10_000;
 
-/** The most of an API's answer, or a page, that is read. */
 const MAX_BYTES = 1_000_000;
 
 /** MusicBrainz and Nominatim each take one request a second from a client. */
@@ -71,7 +49,6 @@ const NOMINATIM = 'https://nominatim.openstreetmap.org';
 
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
 
-/** Where the TMDb key is added, as a failed lookup names it. */
 const TMDB_KEY_PLACE = 'Settings > General';
 
 const TMDB_REFUSED = `TMDb refused the site’s API key. Check it on ${TMDB_KEY_PLACE}.`;
@@ -136,7 +113,6 @@ async function readJson(
   return { ok: false, reason: 'not a JSON object' };
 }
 
-/** An API's answer, which for Nominatim is a list. */
 async function readJsonValue(
   url: string,
   limits: Limits,
@@ -159,7 +135,6 @@ async function readJsonValue(
   }
 }
 
-/** One sentence for an API that did not answer with the item. */
 function unanswered(read: JsonRefusal, source: string, missing: string) {
   if (read.status === 404) return fail(missing);
   return fail(busy(read, source) ?? `Could not look that up on ${source}: ${read.reason}.`);
@@ -175,7 +150,6 @@ function text(value: unknown): string | undefined {
   return typeof value === 'number' ? String(value) : plainText(value);
 }
 
-/** The year at the start of a date, as the year box takes it. */
 function yearOf(value: unknown): string | undefined {
   return /^(\d{4})/.exec(text(value) ?? '')?.[1];
 }
@@ -193,10 +167,6 @@ function withDefined(found: Record<string, string | undefined> & { source: strin
   ) as unknown as FoundItem;
 }
 
-/**
- * Open Library's Books API, by an ISBN or an edition's Open Library ID, then
- * its cover by the same ID when the book names none.
- */
 async function openLibrary(
   book: { readonly key: 'ISBN' | 'OLID'; readonly id: string; readonly cover: 'isbn' | 'olid' },
   limits: Limits,
@@ -231,7 +201,6 @@ async function openLibrary(
   };
 }
 
-/** How many of a paper's authors are named before "and others". */
 const CROSSREF_AUTHORS = 3;
 
 async function crossref(
@@ -273,11 +242,6 @@ async function crossref(
   };
 }
 
-/**
- * A wait for this process's turn at a source that takes one request a second.
- * Each caller reserves the next free second before it waits, so requests made
- * together go one a second.
- */
 function oneASecond(): () => Promise<void> {
   let free = 0;
   return async () => {
@@ -290,7 +254,6 @@ function oneASecond(): () => Promise<void> {
 
 const musicBrainzTurn = oneASecond();
 
-/** Nominatim's usage policy: at most one request a second, from the whole site. */
 const nominatimTurn = oneASecond();
 
 async function musicBrainz(
@@ -318,7 +281,6 @@ async function musicBrainz(
   };
 }
 
-/** The artists MusicBrainz credits, as the album's cover names them. */
 function artistCredit(album: Record<string, unknown>): string {
   return (Array.isArray(album['artist-credit']) ? album['artist-credit'] : [])
     .map((part) =>
@@ -376,10 +338,8 @@ async function tmdb(
 }
 
 /**
- * An IMDb title, found on TMDb by its IMDb ID when the site has a key. IMDb
- * answers a site's request for one of its pages with a challenge for a
- * browser, so without a key its page is read like any other, and usually has
- * nothing to give.
+ * IMDb answers a server's request for one of its pages with a challenge for a
+ * browser, so without a TMDb key its page usually has nothing to give.
  */
 async function imdb(
   id: Extract<ItemId, { source: 'imdb' }>,
@@ -414,7 +374,6 @@ async function imdb(
   return tmdb({ source: 'tmdb', type: match.type, id: tmdbId }, key, limits);
 }
 
-/** Any other page: its JSON-LD first, then its own title, author and picture. */
 async function page(url: string, limits: Limits): Promise<ItemLookup> {
   const read = await readPage(url, {
     lookup: limits.lookup,
@@ -441,7 +400,6 @@ async function page(url: string, limits: Limits): Promise<ItemLookup> {
   };
 }
 
-/** A place on OpenStreetMap, through Nominatim's lookup by its OSM ID. */
 async function openStreetMap(
   id: Extract<ItemId, { source: 'osm' }>,
   limits: Limits,
@@ -467,7 +425,6 @@ function setNominatimDetails(url: URL): void {
   url.searchParams.set('extratags', '1');
 }
 
-/** A Nominatim result as the place boxes take it. */
 function placeOf(place: Record<string, unknown>): Record<string, string | undefined> {
   const address = isRecord(place['address']) ? place['address'] : {};
   const tags = isRecord(place['extratags']) ? place['extratags'] : {};
@@ -485,7 +442,6 @@ function placeOf(place: Record<string, unknown>): Record<string, string | undefi
   };
 }
 
-/** The item kinds Find can search for, each at its own source. */
 export const SEARCH_KINDS = ['book', 'movie', 'tv', 'album', 'place'] as const;
 
 export type SearchKind = (typeof SEARCH_KINDS)[number];
@@ -494,15 +450,11 @@ export function isSearchKind(value: string): value is SearchKind {
   return (SEARCH_KINDS as readonly string[]).includes(value);
 }
 
-/** One match for a title, as the list under the find box shows it. */
 export interface FoundMatch {
-  /** What Look up reads to fill the item when the match is picked. */
   readonly id: string;
   readonly name: string;
-  /** Who made it and when, or where a place is. */
   readonly detail: string;
   readonly source: string;
-  /** A small picture of it on the web. */
   readonly picture?: string | undefined;
 }
 
@@ -521,7 +473,6 @@ export interface SearchItemsOptions {
   readonly timeoutMs?: number | undefined;
 }
 
-/** How many matches a search lists. */
 const SEARCH_RESULTS = 6;
 
 /**
@@ -600,7 +551,6 @@ function detailOf(...parts: (string | undefined)[]): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-/** Open Library's search, which names each work's best edition and its ISBNs. */
 async function searchOpenLibrary(words: string, limits: Limits): Promise<ItemSearch> {
   const url = new URL('https://openlibrary.org/search.json');
   url.searchParams.set('q', words);
@@ -649,7 +599,7 @@ async function searchOpenLibrary(words: string, limits: Limits): Promise<ItemSea
   return { ok: true, matches };
 }
 
-/** TMDb's search, and each match's director or network, which a search leaves out. */
+/** TMDb's search leaves out each match's director or network. */
 async function searchTmdb(
   type: 'movie' | 'tv',
   words: string,
@@ -685,7 +635,6 @@ async function searchTmdb(
   return { ok: true, matches: matches.flat() };
 }
 
-/** A movie's director or a show's network, or nothing when TMDb does not say. */
 async function tmdbMaker(
   type: 'movie' | 'tv',
   id: string,
@@ -699,7 +648,6 @@ async function tmdbMaker(
   return names(records(read.value['crew']).filter((person) => person['job'] === 'Director'));
 }
 
-/** MusicBrainz's release group search, with each group's art from the Cover Art Archive. */
 async function searchMusicBrainz(words: string, limits: Limits): Promise<ItemSearch> {
   await musicBrainzTurn();
   const url = new URL('https://musicbrainz.org/ws/2/release-group');

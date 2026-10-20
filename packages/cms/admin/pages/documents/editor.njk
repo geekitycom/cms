@@ -1,15 +1,7 @@
 {# The editor behind /admin/posts/{slug} and /admin/pages/{slug}, and behind
    .../new. One template for both types: `kind` decides whether there is a
    date and the taxonomy fields, and the handler decides which buttons the
-   form carries.
-
-   A post's form is laid out as one kind (TASK-433): `editorKind` names its
-   title rule and body label, and `sections` which blocks the writing column
-   shows. A kind's own blocks sit in the card above the body; a block of
-   another kind that the post holds something in follows under Also on this
-   post, so editing never drops a property. Change type posts the form back
-   to be laid out as another kind, with nothing saved, so it works with no
-   script. #}
+   form carries. #}
 {% extends "layouts/shell.njk" %}
 
 {% block title %}{{ heading }}{% endblock %}
@@ -32,9 +24,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.6" stroke="currentColor" class="shrink-0{{ ICON_SIZES | modifier(size) }}" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="{{ path }}"/></svg>
 {%- endmacro %}
 
-{# The class that shows an element while one item kind is ticked. An item
-   kind the site does not recognize is ticked with `data-as-other`, and reads
-   as an other. #}
 {% set ITEM_KIND_SHOWS = {
   book: 'group-has-[[name=item-kind][value=book]:checked]/editor:block',
   movie: 'group-has-[[name=item-kind][value=movie]:checked]/editor:block',
@@ -44,27 +33,20 @@
   other: 'group-has-[[data-as-other]:checked]/editor:block'
 } %}
 
-{# The sentence beside Look up: what it found, or why it found nothing. #}
 {% set LOOKUP_TONES = { found: 'text-base-content', failed: 'text-error' } %}
 
-{# A block hidden unless one of these item kinds is ticked; the caller closes it. #}
 {% macro forItemKinds(kinds, id='') -%}
 <div class="hidden{% for kind in kinds %}{{ ITEM_KIND_SHOWS | modifier(kind) }}{% endfor %}"{% if id %} id="{{ id }}"{% endif %}>
 {%- endmacro %}
 
-{# A review label that changes with the item kind: one span per kind, only
-   the ticked kind's shown. #}
 {% macro itemWord(key, after='', before='') -%}
 {% for kind in reviewKinds %}{% if kind[key] %}<span class="hidden{{ ITEM_KIND_SHOWS | modifier(kind.value) }}">{{ before }}{{ kind[key] }}{{ after }}</span>{% endif %}{% endfor %}
 {%- endmacro %}
 
-{# What the first of a group of radio buttons says when the form refused the
-   group, so the summary's link lands on a control that names the message. #}
 {% macro invalidIf(id) -%}
 {% if errorField == id %} aria-invalid="true" aria-describedby="{{ id }}-error"{% endif %}
 {%- endmacro %}
 
-{# The paragraph under a group of radio buttons when the form refused it. #}
 {% macro groupError(id) %}
 {% if errorField == id %}
   <p class="text-sm text-error" id="{{ id }}-error">{{ error }}</p>
@@ -130,8 +112,6 @@
 {% endif %}
 {% endmacro %}
 
-{# Where the post was written. A check-in has it in its own form, as the
-   place it checks in at; every other post has it in the sidebar. #}
 {% macro placeFields(checkin) %}
 <div>
   {{ button('Use my location', id='editor-location-here', style='soft', hidden=true) }}
@@ -156,12 +136,8 @@
 </p>
 {% endmacro %}
 
-{# One block of the writing column. `own` is whether it is the kind's own,
-   in the card, or another kind's under Also on this post. #}
 {% macro section(name, own) %}
 {% if name == 'photos' %}
-  {#- A review's photos are the author's own, for a place; the picker shows
-      while Place is ticked, or whenever the post already has photos. -#}
   <div class="flex min-w-0 flex-col gap-3{% if postKind == 'review' and not sections.filled.photos %} hidden{{ ITEM_KIND_SHOWS | modifier('place') }}{% endif %}">
     {% if own %}<p class="fieldset-legend">{% if postKind == 'review' %}Your photos{% else %}Photos{% endif %}</p>{% endif %}
     {% for row in photos.rows %}
@@ -199,9 +175,6 @@
   </div>
 
 {% elif name == 'link' %}
-  {#- The mf2 `in-reply-to`, `like-of`, `repost-of` and `bookmark-of`
-      (TASK-169) as one choice and one address: each cites a page and sends
-      it a webmention. A post citing more than one keeps a box for each. -#}
   <fieldset class="fieldset">
     <legend class="fieldset-legend">This post</legend>
     <div class="join flex-wrap">
@@ -218,7 +191,6 @@
   {% endfor %}
 
 {% elif name == 'rsvp' %}
-  {#- An RSVP (TASK-198): the event's address, its `in-reply-to`, and the answer. -#}
   {{ field.text('editor-in-reply-to', 'in-reply-to', 'Event address', value=form.inReplyTo, type='url', error=(error if errorField == 'editor-in-reply-to' else ''), hint='The event’s page. It is sent a webmention when you publish.') }}
   {{ citedCard('in-reply-to') }}
   <fieldset class="fieldset">
@@ -298,10 +270,6 @@
   {% endcall %}
 
 {% elif name == 'review' %}
-  {#- An h-review (TASK-432): what it reviews, then the rating. The fields
-      and their labels follow the ticked item kind through `group-has`, so the
-      form changes with no script; a field a kind does not have still posts,
-      and the save leaves it out of the file. -#}
   <fieldset class="fieldset">
     <legend class="fieldset-legend">Reviewing a</legend>
     <div class="join flex-wrap">
@@ -315,11 +283,8 @@
     {{ groupError('editor-item-kind') }}
   </fieldset>
 
-  {#- Find (TASK-435) searches the item's source by title. It is drawn hidden
-      and item-lookup.js shows it, because a search needs the script; with
-      none the author pastes a link and presses Look up. It searches when
-      Enter or Search is pressed, never as the author types, since Nominatim
-      forbids autocomplete. Its input has no name, so it posts nothing. -#}
+  {#- Nominatim's usage policy forbids autocomplete, so Find searches only on
+      Enter or Search. -#}
   {{ forItemKinds(itemSearchKinds) }}
     <div id="editor-item-find" class="fieldset" data-item-search="{{ itemSearchUrl }}" hidden>
       <label class="fieldset-legend" for="editor-item-find-query">{{ itemWord('noun', before='Find the ') }}</label>
@@ -348,10 +313,6 @@
     </div>
   </div>
 
-  {#- Look up (TASK-434) reads the ID and fills the empty boxes below. It is
-      a submit button, so with no script the form comes back filled in and
-      unsaved; item-lookup.js fills them in place instead. The sentence
-      beside it says what it found or why it found nothing. -#}
   {{ forItemKinds(reviewKindsWith.uid, 'editor-item-lookup') }}
     <div class="join w-full items-end">
       <div class="w-full">
@@ -487,7 +448,6 @@
     {# Which layout the preview renders through. The save handler ignores it. #}
     <input type="hidden" name="type" value="{{ kind.type }}" />
     {% if editorKind %}
-      {# The kind this form is laid out as, so a refused save comes back the same. #}
       <input type="hidden" name="kind" value="{{ postKind }}" />
     {% endif %}
 

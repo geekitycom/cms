@@ -80,13 +80,6 @@ export interface DocumentContext {
    * only on a post whose front matter has a readable `start`.
    */
   event?: { start: Date; end?: Date; location?: EventLocation } | undefined;
-  /**
-   * What a review reviews (TASK-432): its `item` as front matter has it, the
-   * words for its kind, its `rating` from 1 to 5 when it has one and `best`,
-   * always 5, and `html`, the item as a `p-item` with its picture beside its
-   * details and the rating as stars and words. Present only on a post whose
-   * front matter names an item.
-   */
   review?:
     | { item: ReviewedItem; kindLabel: string; rating?: Rating; best: number; html: string }
     | undefined;

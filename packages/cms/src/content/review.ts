@@ -1,29 +1,3 @@
-/**
- * A review (TASK-432): a post about one item, under the mf2 h-review's own
- * property names. `item` is the thing reviewed and `rating` an optional whole
- * number from 1 to 5, best 5. The post's body is the review.
- *
- * ```yaml
- * rating: 4
- * item:
- *   kind: movie
- *   name: 'Dune: Part Two'
- *   by: Denis Villeneuve
- *   year: 2024
- *   uid: https://www.themoviedb.org/movie/693134
- *   photo:
- *     url: /uploads/2026/10/dune.jpg
- *     alt: The poster for Dune Part Two
- *   date: 2026-10-18
- * ```
- *
- * Every kind shares the one shape, so reviews can be listed by kind and
- * sorted by rating; {@link REVIEW_KIND_FIELDS} says which fields a kind has.
- * `uid` is the item's canonical address, or `isbn:` or `doi:` for a book or a
- * paper. `photo` is the item's picture (a cover, a poster, album art), never
- * one of the post's photos. `date` is the day the author finished, watched,
- * listened to or visited it.
- */
 import { isRecord } from '../util/guards.ts';
 import { decodeEntities, escapeAttribute, escapeText } from '../util/html.ts';
 import { absoluteUrl } from '../util/url.ts';
@@ -45,18 +19,14 @@ export type Rating = 1 | 2 | 3 | 4 | 5;
 export interface ReviewedItem {
   readonly kind: ReviewKind;
   readonly name: string;
-  /** The author, director, network, artist, or whoever made or runs it. */
   readonly by?: string | undefined;
   readonly year?: string | undefined;
   readonly uid?: string | undefined;
-  /** Where to find it: a page about it, or a place's website. */
   readonly url?: string | undefined;
   readonly photo?: Photo | undefined;
-  /** A calendar day, `YYYY-MM-DD`. */
   readonly date?: string | undefined;
   readonly season?: string | undefined;
   readonly episode?: string | undefined;
-  /** What it is, in the author's word: a coffee shop, an app. */
   readonly category?: string | undefined;
   readonly streetAddress?: string | undefined;
   readonly locality?: string | undefined;
@@ -75,7 +45,6 @@ const ADDRESS_FIELDS = ['streetAddress', 'locality', 'region', 'countryName'] as
 
 const WORK_FIELDS = ['by', 'year', 'uid', 'url', 'photo', 'date'] as const;
 
-/** The fields each kind has beyond its kind and name. */
 export const REVIEW_KIND_FIELDS: Readonly<Record<ReviewKind, readonly ItemField[]>> = {
   book: WORK_FIELDS,
   movie: WORK_FIELDS,
@@ -85,7 +54,6 @@ export const REVIEW_KIND_FIELDS: Readonly<Record<ReviewKind, readonly ItemField[
   other: ['category', 'by', 'uid', 'url', 'photo'],
 };
 
-/** What the page and the editor call each kind and its fields. */
 export const REVIEW_KIND_WORDS: Readonly<
   Record<
     ReviewKind,
@@ -142,7 +110,6 @@ export const REVIEW_KIND_WORDS: Readonly<
   },
 };
 
-/** The front matter key each field is written under. */
 export const ITEM_KEYS: Readonly<Record<ItemField, string>> = {
   by: 'by',
   year: 'year',
@@ -163,7 +130,6 @@ export function isReviewKind(value: unknown): value is ReviewKind {
   return REVIEW_KINDS.includes(value as ReviewKind);
 }
 
-/** A rating as written, when it is a whole number from 1 to 5. */
 export function ratingValue(value: unknown): Rating | undefined {
   const written = typeof value === 'string' ? value.trim() : value;
   const number =
@@ -206,14 +172,12 @@ function reviewedItem(fields: unknown): ReviewedItem | undefined {
   return withoutBlanks({ kind, name, ...read } as ReviewedItem);
 }
 
-/** The item without the fields nobody gave. */
 function withoutBlanks(item: ReviewedItem): ReviewedItem {
   return Object.fromEntries(
     Object.entries(item).filter(([, value]) => value !== undefined),
   ) as ReviewedItem;
 }
 
-/** The review as front matter writes it: `item` and `rating`, numbers where they are numbers. */
 export function reviewFrontMatter(review: Review | undefined): {
   item: Record<string, unknown> | undefined;
   rating: Rating | undefined;
@@ -238,16 +202,9 @@ export function reviewFrontMatter(review: Review | undefined): {
 
 export interface ReviewHtmlOptions {
   readonly library?: AltTextLibrary | undefined;
-  /** Given, the picture's address is written absolute on it. */
   readonly baseUrl?: string | undefined;
 }
 
-/**
- * The review's item and rating as HTML: the `p-item`, an `h-cite` or for a
- * place an `h-card`, with its picture beside a sentence saying what it is,
- * then the rating as stars and as words. The page, the feeds and the
- * federated post all print this, so each says the same thing in plain text.
- */
 export function reviewHtml(review: Review | undefined, options: ReviewHtmlOptions = {}): string {
   if (review === undefined) return '';
   const { item, rating } = review;
@@ -300,10 +257,6 @@ export function reviewHtml(review: Review | undefined, options: ReviewHtmlOption
   );
 }
 
-/**
- * What {@link reviewHtml} says, as plain text without the stars: what was
- * reviewed, its details and the rating, each a sentence.
- */
 export function reviewSummary(review: Review): string {
   const html = reviewHtml({ ...review, item: { ...review.item, photo: undefined } }).replace(
     /<span class="review-stars"[^>]*>[^<]*<\/span>/,
@@ -372,10 +325,7 @@ function readableDay(day: string): string {
   return DAY_FORMAT.format(new Date(`${day}T00:00:00Z`));
 }
 
-/**
- * A calendar day as written, or as YAML read an unquoted one: a midnight UTC
- * `Date`, which the index keeps as its ISO string.
- */
+/** YAML reads an unquoted day as a midnight UTC `Date`. */
 export function calendarDay(value: unknown): string | undefined {
   const written = value instanceof Date ? value.toISOString() : word(value);
   const day =

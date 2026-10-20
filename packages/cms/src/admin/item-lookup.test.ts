@@ -23,10 +23,8 @@ interface Seen {
   readonly at: number;
 }
 
-/** Every request a test's lookups made, in order. */
 let seen: Seen[] = [];
 
-/** What each address answers; a test adds or replaces entries. */
 let answers: Map<string, () => Response>;
 
 function json(value: unknown, status = 200): () => Response {
@@ -199,7 +197,6 @@ async function site(): Promise<Site> {
 
 let token = '';
 
-/** Press Look up the way the editor's script does, and read its answer. */
 async function lookUp(
   agent: Browser,
   fields: Record<string, string>,

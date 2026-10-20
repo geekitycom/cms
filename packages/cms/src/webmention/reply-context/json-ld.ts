@@ -87,17 +87,14 @@ function imageUrl(value: unknown): string | undefined {
 const WORK_TYPE =
   /^(Book|Movie|TVSeries|TVSeason|TVEpisode|MusicAlbum|MusicRecording|VideoGame|SoftwareApplication|Product|CreativeWork)$/;
 
-/** What a page's JSON-LD says about the work or product it is about. */
 export interface JsonLdWork {
   readonly name?: string;
-  /** Its author, director, artist, creator or brand. */
   readonly by?: string;
   readonly published?: string;
   readonly url?: string;
   readonly picture?: string;
 }
 
-/** The first book, film, show, album or other work a page's JSON-LD describes. */
 export function jsonLdWork(root: HtmlElement, base: string): JsonLdWork | undefined {
   const node = jsonLdNodes(root).find((candidate) =>
     [candidate['@type']].flat().some((type) => typeof type === 'string' && WORK_TYPE.test(type)),

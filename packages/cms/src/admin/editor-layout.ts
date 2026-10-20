@@ -63,11 +63,6 @@ export function openGroups(
   );
 }
 
-/**
- * Whether a form holds something in a section. A check-in's place is the
- * sidebar's Location on every other kind, so it is never shown twice. A
- * review's item kind alone is the radio's default, not something written.
- */
 const SECTION_FILLED: Readonly<Record<EditorSection, (form: EditorForm) => boolean>> = {
   photos: (form) => form.photos.length > 0,
   link: (form) =>
@@ -87,18 +82,10 @@ const SECTION_FILLED: Readonly<Record<EditorSection, (form: EditorForm) => boole
     Object.values(rest).some((value) => value !== ''),
 };
 
-/** What the writing column shows for a kind. */
 export interface EditorSections {
-  /** The kind's own blocks, in its order. */
   own: EditorSection[];
-  /**
-   * Blocks of other kinds the form holds something in, so a post with
-   * properties from several kinds shows, and saves back, every one of them.
-   */
   also: EditorSection[];
-  /** Every block shown, own or not, by name. */
   shown: Record<EditorSection, boolean>;
-  /** Which shown blocks hold something. */
   filled: Record<EditorSection, boolean>;
 }
 
@@ -124,7 +111,6 @@ export function editorSections(kind: PostKind, form: EditorForm): EditorSections
   return { own, also, shown, filled };
 }
 
-/** Whether the sidebar carries Location: the check-in and the event have their own place. */
 export function sidebarLocation(kind: PostKind, form: EditorForm): boolean {
   if (kind === 'checkin') return false;
   return kind !== 'event' || locationFilled(form);

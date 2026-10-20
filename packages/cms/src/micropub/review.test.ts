@@ -1,7 +1,3 @@
-/**
- * Micropub reviews (TASK-432): a client creates an h-review, reads it back
- * with q=source, and has a bad rating refused by name.
- */
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';

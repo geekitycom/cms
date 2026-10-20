@@ -1,13 +1,3 @@
-/**
- * The kinds of post the editor offers (TASK-433): what "+ New" lists, which
- * fields each kind's form shows, and which kind an existing post opens on.
- *
- * A kind is how the editor is laid out, not something the file stores. The
- * file stays the only thing that decides what a post is (decision-1): a post
- * opens on the kind Post Type Discovery gives it, and saving a photo form
- * with no photo in it makes a note.
- */
-
 import type { EditorForm } from '../content/document-form.ts';
 import { discoverPostType } from '../content/post-type.ts';
 import type { PostType } from '../content/post-type.ts';
@@ -26,23 +16,17 @@ export const POST_KINDS = [
 
 export type PostKind = (typeof POST_KINDS)[number];
 
-/** A block of the writing column that belongs to one or more kinds. */
 export type EditorSection = 'photos' | 'link' | 'rsvp' | 'event' | 'checkin' | 'episode' | 'review';
 
-/** Whether a kind shows a Title box, and whether it reads as optional. */
 type TitleRule = 'optional' | 'named' | 'none';
 
 export interface EditorKind {
   readonly label: string;
-  /** How the heading names one: "New check-in". */
   readonly noun: string;
-  /** One line on the chooser saying what the kind is for. */
   readonly blurb: string;
-  /** An SVG path, drawn on a 24 by 24 grid with a stroke. */
   readonly icon: string;
   readonly title: TitleRule;
   readonly body: string;
-  /** The writing column's blocks, in order, ahead of the body. */
   readonly sections: readonly EditorSection[];
 }
 
@@ -117,13 +101,10 @@ export const EDITOR_KINDS: Readonly<Record<PostKind, EditorKind>> = {
     icon: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z',
     title: 'optional',
     body: 'Your review',
-    // A place review's photos are the author's own; the form shows the
-    // picker only while Place is the item kind.
     sections: ['review', 'photos'],
   },
 };
 
-/** The chooser's last card, which is the page editor rather than a post kind. */
 export const PAGE_CHOICE = {
   label: 'Page',
   blurb: 'A standing page like About or Now. No date, not in the feed.',
@@ -147,12 +128,6 @@ const KIND_OF_TYPE: Readonly<Record<PostType, PostKind>> = {
   article: 'note',
 };
 
-/**
- * The kind a form opens on: the one Post Type Discovery gives its properties.
- * The spec has no recording or check-in, so a note or photo carrying an
- * enclosure is an episode, and one whose location a Micropub app sent as a
- * check-in is a check-in.
- */
 export function discoveredKind(form: EditorForm): PostKind {
   const kind =
     KIND_OF_TYPE[
@@ -176,7 +151,6 @@ export function discoveredKind(form: EditorForm): PostKind {
   return kind;
 }
 
-/** The review form's words that change with what is reviewed, beside REVIEW_KIND_WORDS. */
 export const REVIEW_EDITOR_WORDS: Readonly<
   Record<ReviewKind, { name: string; uid: string; url: string }>
 > = {

@@ -14,7 +14,6 @@ import {
 } from './review.ts';
 import type { Review, ReviewedItem, ReviewKind } from './review.ts';
 
-/** The editor's review fields (TASK-432), as strings, which is what a form has. */
 export interface ReviewForm {
   kind: string;
   name: string;
@@ -81,11 +80,6 @@ export function submittedReviewForm(body: Readonly<Record<string, unknown>>): Re
   ) as unknown as ReviewForm;
 }
 
-/**
- * The form for the review a file holds. The kind and the rating are as the
- * file spells them, so one the site does not recognize is offered back
- * rather than lost to a save.
- */
 export function reviewForm(
   extra: Readonly<Record<string, unknown>>,
   review: Review | undefined,
@@ -114,7 +108,6 @@ function field(key: keyof ReviewForm): EditorField {
 
 const WHOLE_NUMBER = /^\d+$/;
 
-/** The review a form describes, or why it cannot be one. */
 export function resolveReview(
   form: ReviewForm,
   contentDir: string,
@@ -223,12 +216,10 @@ function refusedItemField(
   return undefined;
 }
 
-/** An item's ID: its canonical web address, or an ISBN or a DOI. */
 function isItemId(value: string): boolean {
   return isWebUrl(value) || /^(isbn|doi):\S+$/i.test(value);
 }
 
-/** The mf2 name of each item field Micropub carries, beside the h-review's own. */
 const MICROPUB_ITEM_PROPERTIES = {
   kind: 'kind',
   name: 'name',
@@ -251,12 +242,6 @@ const ITEM_TYPES = ['h-cite', 'h-card', 'h-product', 'h-item', 'h-adr'];
 const ITEM_REFUSAL =
   'item is one h-cite, h-card, h-product or h-item, { "type": ["h-cite"], "properties": { "name": ["…"] } }, or its name.';
 
-/**
- * The review a Micropub create names, as the editor's form: its `item`, an
- * h-cite for most things and an h-card for a place, and its `rating`. An
- * item's `kind` says what it is; without one an h-card or h-adr is a place
- * and anything else an other.
- */
 export function reviewFromMicropub(
   items: readonly unknown[],
   ratings: readonly unknown[],
@@ -335,7 +320,6 @@ export function reviewFromMicropub(
   return form;
 }
 
-/** The review as Micropub reads it back: `item` and `rating`. */
 export function reviewToMicropub(
   review: Review | undefined,
   baseUrl: string,

@@ -65,7 +65,6 @@ async function seeded(documents: Seed[]): Promise<string> {
   return contentDir;
 }
 
-/** The Link form's choice and address, as a rendered editor has them. */
 function linkOf(html: string): [string, string] {
   const fields = Object.fromEntries(fieldsOf(html));
   return [fields['link-verb'] ?? '', fields['link-url'] ?? ''];
@@ -91,7 +90,6 @@ async function submit(
   const token = csrfField(html);
   assert.ok(token !== undefined, `the editor at ${url} carried a CSRF token`);
 
-  // A change to `undefined` unticks the box: an unticked box posts nothing.
   const fields = Object.fromEntries(
     Object.entries({
       ...Object.fromEntries(fieldsOf(html)),

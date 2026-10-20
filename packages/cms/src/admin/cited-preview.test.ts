@@ -92,7 +92,6 @@ async function site(files: Record<string, string>): Promise<{ cms: Cms; contentD
   return { cms, contentDir };
 }
 
-/** The Link form: its choice, its address and what is under it, up to the body. */
 function respondingGroup(editor: string): string {
   const found = /name="link-verb"[\s\S]*?id="editor-body"/.exec(editor)?.[0];
   assert.ok(found !== undefined, 'the editor has a Link form');
