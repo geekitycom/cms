@@ -50,11 +50,6 @@ export function offersTitle(draft: PluginEditorDraft): boolean {
   return !UNTITLED.has(draft.postType);
 }
 
-/** A read post is described by its read line, which the editor asks to leave alone. */
-export function offersDescription(draft: PluginEditorDraft): boolean {
-  return draft.postType !== 'read';
-}
-
 /**
  * A description within both limits. A model that runs long is cut after its
  * last whole sentence that fits, or at a word with an ellipsis when none does.
@@ -241,7 +236,6 @@ export default definePlugin({
       id: 'suggest-description',
       field: 'description',
       label: 'Suggest description',
-      offers: offersDescription,
       suggest: (context) => suggestDescription(host.use(LLM), context),
     });
   },

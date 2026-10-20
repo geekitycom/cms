@@ -55,8 +55,7 @@ Accepting saves nothing. Only the editor's own buttons save the post.
 Suggest title is not offered for a like, a reply, a repost, an RSVP, a photo
 post, or a note saved without a title, because those posts show no title. It
 is offered for a new post with no title yet. Adding a title makes that post an
-article. Suggest description is not offered for a read post, because its read
-line describes it.
+article.
 
 Suggest title asks for three titles, each about 60 characters at most, in the
 author's style: one plain, one specific and one with more voice. It sends the
