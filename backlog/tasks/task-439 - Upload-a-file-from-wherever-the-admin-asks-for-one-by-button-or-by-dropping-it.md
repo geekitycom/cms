@@ -7,6 +7,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-20 15:53'
+updated_date: '2026-10-20 16:12'
 labels:
   - admin
   - media
@@ -40,3 +41,9 @@ Today the only places to upload are the media library page and the post body edi
 3. Each template marks its target and renders a hidden upload control the script reveals; the photo grid renders even when empty.
 4. Tailwind @source for the script; markup and refusal tests; verify in a browser.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built on branch inline-uploads (3c480aa0, 1c110ce9), PR #211. Full suite, lint and typecheck pass; Playwright run against the demo covered photo grid, review picture, recording, transcript, site icon, library and no-JS.
+<!-- SECTION:NOTES:END -->
