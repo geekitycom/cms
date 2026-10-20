@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.1](https://github.com/geekitycom/cms/compare/v0.36.0...v0.36.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **cms:** name the repository so npm can verify provenance ([7a2eedc](https://github.com/geekitycom/cms/commit/7a2eedcc0fe56fd187fa9a95b0cf2e496e39aaed))
+
 ## [0.36.0](https://github.com/geekitycom/cms/compare/v0.35.0...v0.36.0) (2026-10-20)
 
 

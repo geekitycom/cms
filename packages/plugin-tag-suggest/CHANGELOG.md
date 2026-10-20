@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/geekitycom/cms/compare/plugin-tag-suggest-v0.5.0...plugin-tag-suggest-v0.5.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **plugin-tag-suggest:** name the repository so npm can verify provenance ([c171ecd](https://github.com/geekitycom/cms/commit/c171ecda5e72778252f3eadbb2e4864c7958e047))
+
 ## [0.5.0](https://github.com/geekitycom/cms/compare/plugin-tag-suggest-v0.4.0...plugin-tag-suggest-v0.5.0) (2026-10-20)
 
 
