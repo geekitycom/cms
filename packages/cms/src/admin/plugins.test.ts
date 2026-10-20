@@ -332,6 +332,14 @@ describe('a plugin screen (TASK-282)', () => {
                     ' to add one.',
                   ],
                 },
+                {
+                  timeSeries: {
+                    caption: 'Asked for',
+                    days: ['2026-09-01', '2026-09-02'],
+                    series: [{ name: 'Requests', values: [3, 5] }],
+                  },
+                },
+                { ranked: { caption: 'Busiest', items: [{ label: '/old/inbox', value: -1 }] } },
               ],
             },
           ],
@@ -355,6 +363,12 @@ describe('a plugin screen (TASK-282)', () => {
     assert.match(html, /2026/, 'an instant is drawn as a date');
     assert.match(html, /Never/, 'and a null one as never');
     assert.match(html, /1 users\. Run <code>geekity old import<\/code> to add one\./);
+    assert.match(html, /<svg role="img" aria-labelledby="chart-[^"]+"/, 'a chart is drawn as SVG');
+    assert.match(
+      html,
+      /Busiest<\/p>\s*<p[^>]*>No data to show\./,
+      'and a block it cannot draw as none',
+    );
     assert.match(
       html,
       new RegExp(`href="${screenPath}"[^>]*aria-current="page"[^>]*>\\s*Old paths`),

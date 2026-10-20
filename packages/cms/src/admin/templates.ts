@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { Environment, FileSystemLoader } from 'nunjucks';
 
 import { formatDate } from '../theme/templates.ts';
+import { drawBlock } from './blocks.ts';
 import { formatFileSize } from './formatting.ts';
 
 /**
@@ -136,6 +137,7 @@ export function createAdminTemplateEnvironment(
     typeof value === 'number' ? formatFileSize(value) : '',
   );
   environment.addFilter('modifier', modifierClass);
+  environment.addFilter('drawn', drawBlock);
 
   return environment;
 }

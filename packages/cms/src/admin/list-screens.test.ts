@@ -241,6 +241,9 @@ describe('rows that stack on a narrow screen (TASK-277)', async () => {
   });
 });
 
+/** Templates drawn only inside a card: the blocks a plugin screen's card holds. */
+const DRAWN_IN_A_CARD: ReadonlySet<string> = new Set([path.join('components', 'blocks.njk')]);
+
 async function tableCalls(): Promise<
   { template: string; inCard: boolean; passesInCard: boolean }[]
 > {
@@ -264,7 +267,7 @@ async function tableCalls(): Promise<
       if (name === 'table') {
         calls.push({
           template,
-          inCard: open.includes('card'),
+          inCard: open.includes('card') || DRAWN_IN_A_CARD.has(template),
           passesInCard: /\binCard=true\b/.test(args ?? ''),
         });
       }

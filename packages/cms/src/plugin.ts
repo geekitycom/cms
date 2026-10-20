@@ -333,7 +333,12 @@ export type PluginScreenText = string | { readonly code: string };
 /** A table cell: text, or an instant drawn as a date, `null` for never. */
 export type PluginScreenCell = PluginScreenText | { readonly time: string | null };
 
-/** One block of a plugin screen's card. */
+/**
+ * One block of a plugin screen's card. Core draws each kind, charts as SVG,
+ * and draws input it cannot use (no points, a negative or non-numeric value)
+ * as "No data to show." Counts and values are whole or decimal numbers of
+ * zero or more; days are `YYYY-MM-DD`.
+ */
 export type PluginScreenBlock =
   | { readonly paragraph: readonly PluginScreenText[] }
   | {
@@ -341,6 +346,45 @@ export type PluginScreenBlock =
         readonly caption: string;
         readonly columns: readonly string[];
         readonly rows: readonly (readonly PluginScreenCell[])[];
+      };
+    }
+  | {
+      /**
+       * Numbers in a row. Given `previous`, the value for the period before,
+       * a stat says its change in words; `better` says which way is good,
+       * `up` when left out.
+       */
+      readonly stats: readonly {
+        readonly label: string;
+        readonly value: number;
+        readonly previous?: number;
+        readonly better?: 'up' | 'down';
+      }[];
+    }
+  | {
+      /** Up to four named series, each with one value for every day in `days`. */
+      readonly timeSeries: {
+        readonly caption: string;
+        readonly days: readonly string[];
+        readonly series: readonly { readonly name: string; readonly values: readonly number[] }[];
+      };
+    }
+  | {
+      /** Labels drawn largest value first, each linked when `href` is a path or a web address. */
+      readonly ranked: {
+        readonly caption: string;
+        readonly items: readonly {
+          readonly label: string;
+          readonly value: number;
+          readonly href?: string;
+        }[];
+      };
+    }
+  | {
+      /** A count for each day; days between the first and the last that are left out count none. */
+      readonly calendar: {
+        readonly caption: string;
+        readonly days: readonly { readonly day: string; readonly count: number }[];
       };
     };
 

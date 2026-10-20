@@ -296,6 +296,24 @@ host.get(
 
 A screen's `render` may also return a promise, so it can await the settings.
 
+**Screen blocks.** `render` returns cards, and each card holds blocks. A block
+is plain data, and the CMS writes the markup:
+
+| Block        | Data                                                                                                                                                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `paragraph`  | An array of strings and `{ code }` parts.                                                                                                                                                                    |
+| `table`      | A `caption`, the `columns` and the `rows`. A cell is text, `{ code }`, or `{ time }` (an ISO instant, or `null` for never).                                                                                  |
+| `stats`      | An array of `{ label, value, previous?, better? }`. With `previous`, the stat shows its change in words, such as `+20%, up from 100`. Set `better` to `down` when a fall is good, such as for a bounce rate. |
+| `timeSeries` | A `caption`, consecutive `days` (`YYYY-MM-DD`) and up to four `series`, each a `name` and one value per day.                                                                                                 |
+| `ranked`     | A `caption` and `items` of `{ label, value, href? }`, drawn largest first. `href` must be a path that starts with `/` or an `http(s)` address.                                                               |
+| `calendar`   | A `caption` and `days` of `{ day, count }`, at most 366 days from the first to the last. A day between them that is not listed counts as zero.                                                               |
+
+The charts are SVG drawn on the server in the admin theme's colours. Each
+chart has a description and a table of its numbers for screen readers. Values
+and counts are numbers of zero or more. A block that does not follow these
+rules, for example a negative value or a time series with no days, shows "No
+data to show." instead.
+
 `geekity settings` reads and changes an enabled plugin's settings with the
 site stopped, as it does the core ones. The setting is the package name, a
 `.` and the key:
