@@ -10,7 +10,6 @@
    chart follows the admin theme. Each series also has its own dash and
    marker, which the legend repeats, and each chart has a description for a
    screen reader and a table of its numbers. #}
-{% from "components/stat.njk" import stats %}
 {% from "components/table.njk" import table %}
 
 {% set SERIES = [
@@ -165,9 +164,9 @@
       </tbody>
     {% endcall %}
   {% elif view.kind == 'stats' %}
-    {% call stats() %}
+    <div class="stats flex flex-wrap gap-px bg-base-content/10 shadow">
       {% for stat in view.stats %}
-        <div class="stat">
+        <div class="stat w-auto flex-auto border-0 bg-base-100">
           <div class="stat-title">{{ stat.label }}</div>
           <div class="stat-value">{{ stat.value }}</div>
           {% if stat.change %}
@@ -175,7 +174,7 @@
           {% endif %}
         </div>
       {% endfor %}
-    {% endcall %}
+    </div>
   {% elif view.kind == 'timeSeries' %}
     {{ timeSeries(view) }}
   {% elif view.kind == 'ranked' %}

@@ -161,6 +161,21 @@ describe('stats', () => {
     assert.doesNotMatch(html, /stat-desc/);
   });
 
+  it('wraps its stats onto more rows when a narrow card cannot fit them side by side', () => {
+    const html = draw({
+      stats: [
+        { label: 'Visitors', value: 1234, previous: 1000 },
+        { label: 'Bounce rate', value: 41, previous: 45, better: 'down' },
+      ],
+    });
+    assert.match(html, /^<div class="stats flex flex-wrap [^"]*">/);
+    assert.equal(all(html, /<div class="stat ([^"]*)">/g).length, 2);
+    for (const classes of all(html, /<div class="stat ([^"]*)">/g)) {
+      assert.match(classes, /\bflex-auto\b/);
+      assert.match(classes, /\bw-auto\b/);
+    }
+  });
+
   it('says a rise from the previous period in words and a sign, not only colour', () => {
     const html = draw({ stats: [{ label: 'Visitors', value: 120, previous: 100 }] });
     assert.match(html, /<span aria-hidden="true">▲<\/span> \+20%, up from 100/);
