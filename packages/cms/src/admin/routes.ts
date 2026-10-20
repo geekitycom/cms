@@ -2,7 +2,6 @@ import type { Context, Hono, MiddlewareHandler } from 'hono';
 import type { Environment } from 'nunjucks';
 
 import type { ResolvedConfig } from '../config.ts';
-import { postLabel } from '../content/post-type.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { mountAppActivity } from './app-activity.ts';
 import { mountConnectedApps } from './connected-apps.ts';
@@ -70,9 +69,6 @@ import { mountUsers } from './users.ts';
 export const SETUP_PATH = `${ADMIN_PREFIX}/setup`;
 /** Where the logout form posts. */
 export const LOGOUT_PATH = `${ADMIN_PREFIX}/logout`;
-
-/** How many recent posts the dashboard lists. */
-export const DASHBOARD_RECENT_POSTS = 5;
 
 /** Where the editor for a post lives. */
 export function postEditorPath(slug: string): string {
@@ -321,20 +317,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   });
 
   app.get(ADMIN_PREFIX, (c) => {
-    const store = c.var.store;
     return render(c, ADMIN_TEMPLATES.dashboard, {
       section: 'dashboard',
       child: 'home',
-      counts: store.counts(),
-      recent: store.listAll({ type: 'post', limit: DASHBOARD_RECENT_POSTS }).map((document) => ({
-        title: postLabel(document, (url) =>
-          c.var.replyContexts.read(url, c.var.siteAtRequestStart),
-        ),
-        slug: document.slug,
-        date: document.date,
-        draft: document.draft,
-        editUrl: postEditorPath(document.slug),
-      })),
+      counts: c.var.store.counts(),
       // The one number on the dashboard that is not about the content
       // directory: it is what says whether publishing is reaching anybody.
       followers: c.var.admin.countFollowers(),

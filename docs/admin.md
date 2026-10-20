@@ -6,7 +6,7 @@ override any public template. It must not be able to shadow the login form.
 
 | Route                                            | What it does                                                                                  |
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `/admin`                                         | The dashboard: counts, the five most recent posts, the follower count.                        |
+| `/admin`                                         | The dashboard: post, draft and page counts, followers, comments waiting and unread messages.  |
 | `/admin/posts`, `/admin/pages`                   | The listings and the editors.                                                                 |
 | `/admin/posts/new`                               | Choose a kind of post. `?kind=photo` (or another kind) opens that kind's editor.              |
 | `/admin/tags`, `/admin/categories`               | Every term in use, with rename, merge and delete.                                             |

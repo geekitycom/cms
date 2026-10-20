@@ -315,7 +315,7 @@ describe('the dashboard', async () => {
   const dashboards = await Promise.all(
     [COUNTED, RECENT, []].map(async (seeds) => dashboardOver(await seeded(seeds))),
   );
-  const [counted = '', recent = '', empty = ''] = dashboards;
+  const [counted = ''] = dashboards;
 
   it('counts what the index holds, each number under its label', () => {
     assert.deepEqual(counts(counted), [
@@ -328,41 +328,27 @@ describe('the dashboard', async () => {
     ]);
   });
 
-  it('lists the five most recent posts, newest first, with their date and status', () => {
-    const screen = recent.slice(recent.indexOf('<main'));
-    const listed = [
-      ...screen.matchAll(/<a\b[^>]*\bhref="\/admin\/posts\/([^"]+)"[^>]*>([^<]+)<\/a>/g),
-    ];
-
-    assert.deepEqual(
-      listed.map((match) => match[1]),
-      ['post-7', 'post-6', 'post-5', 'post-4', 'post-3'],
-      'each linking to its editor',
-    );
-    assert.deepEqual(rowTexts(recent), [
-      'Title Date Status',
-      'Post 7 2026-02-07 Draft',
-      'Post 6 2026-02-06 Published',
-      'Post 5 2026-02-05 Published',
-      'Post 4 2026-02-04 Published',
-      'Post 3 2026-02-03 Published',
-    ]);
+  it('draws no Recent posts card, with posts or without (TASK-441 AC #1)', () => {
+    for (const html of dashboards) {
+      assert.doesNotMatch(screenOf(html), /Recent posts/);
+      assert.deepEqual(rowTexts(html), [], 'and no table of posts');
+    }
   });
 
-  it('says so when there is nothing written yet', () => {
-    assert.match(empty, /Nothing written yet/);
-    assert.deepEqual(rowTexts(empty), [], 'and draws no empty table');
-  });
+  it('does not ask the store for recent posts (TASK-441 AC #1)', async () => {
+    const cms = await box.site({ contentDir: await seeded(RECENT) });
+    const agent = await signedIn(cms);
+    const asked: unknown[] = [];
+    const listAll = cms.store.listAll.bind(cms.store);
+    cms.store.listAll = (options) => {
+      asked.push(options);
+      return listAll(options);
+    };
 
-  it('draws Recent posts as a card around its table, and no second surface inside it (TASK-276 AC #1)', () => {
-    const card =
-      /<div class="card bg-base-100 shadow-sm">\s*<div class="card-body">\s*<h2 class="card-title">Recent posts<\/h2>([\s\S]*?)<\/div>\s*<\/div>\s*<\/main>/;
+    const response = await agent.get('/admin');
 
-    assert.match(
-      card.exec(recent)?.[1] ?? '',
-      /<div class="max-w-full overflow-x-auto contain-inline-size">\s*<table class="table table-sm">/,
-    );
-    assert.match(card.exec(empty)?.[1] ?? '', /Nothing written yet/);
+    assert.equal(response.status, 200);
+    assert.deepEqual(asked, []);
   });
 
   it('carries no admin-* class outside the bar', () => {
@@ -401,7 +387,7 @@ describe('flash messages', () => {
     await newDraft(agent, 'Mine alone');
 
     const stranger = await signIn(cms);
-    const html = await (await stranger.get('/admin')).text();
+    const html = await (await stranger.get('/admin/posts')).text();
 
     assert.match(html, /Mine alone/, 'the stranger sees the draft in the listing');
     assert.deepEqual(flashes(html), [], 'but not the message queued for someone else');

@@ -1,8 +1,5 @@
 {% extends "layouts/shell.njk" %}
 {% from "components/stat.njk" import stats, stat %}
-{% from "components/card.njk" import card %}
-{% from "components/table.njk" import table %}
-{% from "components/badge.njk" import status %}
 
 {% block title %}Dashboard{% endblock %}
 
@@ -26,35 +23,4 @@
       {% endfor %}
     </div>
   </section>
-
-  {% call card(title='Recent posts') %}
-    {% if recent.length %}
-      {% call table('Recent posts', inCard=true) %}
-        <thead>
-          <tr>
-            <th scope="col">Title</th>
-            <th scope="col">Date</th>
-            <th scope="col">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for post in recent %}
-            <tr>
-              <td><a class="link link-hover" href="{{ post.editUrl }}">{{ post.title }}</a></td>
-              <td class="whitespace-nowrap">{{ post.date | date('html') }}</td>
-              <td>
-                {% if post.draft %}
-                  {{ status('draft', 'Draft') }}
-                {% else %}
-                  {{ status('published', 'Published') }}
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      {% endcall %}
-    {% else %}
-      <p>Nothing written yet.</p>
-    {% endif %}
-  {% endcall %}
 {% endblock %}

@@ -170,14 +170,7 @@ export {
 export type { LoginThrottle, LoginThrottleOptions } from '../web/throttle.ts';
 export { mountPreview, PREVIEW_PATH } from './preview.ts';
 export { ARGON2_PARAMETERS, hashPassword, verifyPasswordHash } from '../site/passwords.ts';
-export {
-  DASHBOARD_RECENT_POSTS,
-  guard,
-  LOGOUT_PATH,
-  mountAdmin,
-  postEditorPath,
-  SETUP_PATH,
-} from './routes.ts';
+export { guard, LOGOUT_PATH, mountAdmin, postEditorPath, SETUP_PATH } from './routes.ts';
 export { LOGIN_PATH } from '../site/admin-paths.ts';
 export { ADMIN_SECTIONS, adminMenu, UnknownAdminScreenError } from './menu.ts';
 export type {

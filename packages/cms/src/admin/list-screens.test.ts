@@ -278,7 +278,7 @@ describe('a table inside a card', async () => {
   const calls = await tableCalls();
 
   it('is found by reading the templates', () => {
-    assert.ok(calls.filter(({ inCard }) => inCard).length >= 5);
+    assert.ok(calls.filter(({ inCard }) => inCard).length >= 4);
     assert.ok(calls.filter(({ inCard }) => !inCard).length >= 10);
   });
 
