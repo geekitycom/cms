@@ -21,6 +21,7 @@ import type {
   PluginFederationMiddleware,
   PluginHost,
   PluginPageTags,
+  PluginPageTagsContext,
   PluginRouteHandler,
   PluginScreen,
   PluginSettingField,
@@ -74,7 +75,8 @@ export interface PluginContributions {
   /** Its buttons beside editor fields, in the order it declared them. */
   editorActions: readonly PluginEditorAction[];
   /** What it adds to every public page, read as each page is drawn. */
-  pageTags: (() => PluginPageTags | Promise<PluginPageTags>) | undefined;
+  pageTags:
+    ((context: PluginPageTagsContext) => PluginPageTags | Promise<PluginPageTags>) | undefined;
   dataFiles: readonly DataFileDeclaration[];
 }
 

@@ -457,6 +457,14 @@ export interface PluginPageTags {
   readonly bodyEnd?: readonly PluginPageTag[] | undefined;
 }
 
+/** Who a public page is drawn for, as a plugin's page tags see it. */
+export interface PluginPageTagsContext {
+  /** The reader's session names a user of the site, so the page carries the admin bar. */
+  readonly signedIn: boolean;
+  /** The site is in dev mode, holding every outbound side effect. */
+  readonly devMode: boolean;
+}
+
 /** What every settings field has. */
 interface PluginSettingBase {
   /**
@@ -764,10 +772,13 @@ export interface PluginHost<
   /**
    * Add tags to the end of `<head>` and `<body>` on every public page while
    * the plugin is enabled. `read` is called each time a page is drawn, so the
-   * tags can follow the plugin's settings; return no tags while they are
-   * unset. Left out of the editor's preview. At most once per plugin.
+   * tags can follow the plugin's settings and the reader `context` names;
+   * return no tags while they are unset. Left out of the editor's preview. At
+   * most once per plugin.
    */
-  pageTags(read: () => PluginPageTags | Promise<PluginPageTags>): void;
+  pageTags(
+    read: (context: PluginPageTagsContext) => PluginPageTags | Promise<PluginPageTags>,
+  ): void;
   /** The site's base URL and its title as the settings have it when asked. */
   siteInfo(): Promise<PluginSiteInfo>;
   /**

@@ -152,7 +152,8 @@ export interface UploadedFile {
  * assertion would bury what is being tested.
  */
 export interface Browser {
-  get(url: string): Promise<Response>;
+  /** `extra` adds request headers, such as a validator to revalidate with. */
+  get(url: string, extra?: Record<string, string>): Promise<Response>;
   /** Post a form. `extra` adds request headers, such as the Fetch Metadata a browser sends. */
   post(
     url: string,
@@ -194,8 +195,8 @@ export function browser(cms: Cms): Browser {
   }
 
   return {
-    async get(url) {
-      return remember(await cms.app.request(url, { headers: headers() }));
+    async get(url, extra = {}) {
+      return remember(await cms.app.request(url, { headers: headers(extra) }));
     },
     async post(url, fields, extra = {}) {
       const body = new URLSearchParams(fields).toString();

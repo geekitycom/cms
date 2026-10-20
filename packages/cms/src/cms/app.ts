@@ -162,8 +162,7 @@ export function createApp(
   // The admin goes on before the public site, for the same reason.
   mountAdmin(app);
   mountPluginRoutes(app, plugins);
-  app.use('*', pluginPageTags);
-  mountPublicSite(app, { adminBar: publicAdminBar });
+  mountPublicSite(app, { adminBar: publicAdminBar, pageTags: pluginPageTags });
 
   return { app, writes };
 }

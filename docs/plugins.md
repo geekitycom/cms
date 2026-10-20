@@ -336,14 +336,29 @@ plugin adds no tags to the page, the server logs a warning, and the rest of the
 page is drawn as normal.
 
 The CMS calls `read` each time it draws a page, so the tags follow the
-plugin's settings. Return no tags while a setting the tags need is unset:
+plugin's settings. `read` gets one argument, the page's context:
+
+| Field      | Value                                                                     |
+| ---------- | ------------------------------------------------------------------------- |
+| `signedIn` | `true` when the reader is signed in to the site and sees the admin bar.   |
+| `devMode`  | `true` when the site is in dev mode and holds every outbound side effect. |
+
+These are the same values a theme reads as `signedIn` and `devMode`. A page
+drawn for a signed-in reader is never cached or answered with `304`, and the
+`ETag` of a listing changes when its tags change, so a reader never gets a copy
+that carries another reader's tags.
+
+Return no tags while a setting the tags need is unset. An analytics plugin also
+returns none for a signed-in reader and in dev mode, so the site's own visits
+are not counted:
 
 ```ts
 register(host) {
   const settings = host.settings([
     { type: 'text', key: 'website_id', label: 'Website ID' },
   ]);
-  host.pageTags(async () => {
+  host.pageTags(async ({ signedIn, devMode }) => {
+    if (signedIn || devMode) return {};
     const { website_id } = await settings.current();
     if (website_id === '') return {};
     return {

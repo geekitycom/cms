@@ -10,9 +10,11 @@ import { requestPath } from './request.ts';
 
 /**
  * Read the page tags of every running plugin, in the order they run, and draw
- * the public pages of this request with them (decision-59). A plugin whose
- * `pageTags` throws, or returns a tag that breaks a rule, adds nothing and is
- * logged. The admin draws none.
+ * the public pages of this request with them (decision-59). Each is told
+ * whether the reader is signed in, which the admin bar in front of this has
+ * settled, and whether the site is in dev mode. A plugin whose `pageTags`
+ * throws, or returns a tag that breaks a rule, adds nothing and is logged. The
+ * admin draws none.
  */
 export const pluginPageTags: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   const pathname = requestPath(c);
@@ -29,10 +31,11 @@ export const pluginPageTags: MiddlewareHandler<GeekityEnv> = async (c, next) => 
     return await next();
   }
 
+  const context = { signedIn: c.var.signedIn !== undefined, devMode: c.var.devMode };
   const drawn: DrawnPageTags[] = [];
   for (const { name, read } of tagging) {
     try {
-      drawn.push(drawPageTags(await read()));
+      drawn.push(drawPageTags(await read(context)));
     } catch (error) {
       console.warn(`The ${name} plugin's page tags were left out: ${messageOf(error)}`);
     }

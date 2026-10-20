@@ -12,7 +12,7 @@ import { after, describe, it } from 'node:test';
 import { csrfField, sandbox, signedIn } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
-import type { Plugin, PluginHost, PluginPageTags } from '../plugin.ts';
+import type { Plugin, PluginHost, PluginPageTags, PluginPageTagsContext } from '../plugin.ts';
 import { pluginRegistryOptions } from '../__testing__/plugin-registry-options.ts';
 import { createPluginRegistry } from '../plugins/registry.ts';
 
@@ -33,7 +33,9 @@ const PAGES = [
 
 function tagger(
   name: string,
-  tags: (host: PluginHost) => () => PluginPageTags | Promise<PluginPageTags>,
+  tags: (
+    host: PluginHost,
+  ) => (context: PluginPageTagsContext) => PluginPageTags | Promise<PluginPageTags>,
   hostApi = HOST_API_VERSION,
 ): Plugin {
   return definePlugin({
@@ -371,6 +373,67 @@ describe('plugin page tags (TASK-443)', () => {
       pluginRegistryOptions(DATA_DIR),
     );
     assert.match(registry.problem(twice.name) ?? '', /page tags once/);
+  });
+});
+
+describe('the reader a page tag is drawn for (TASK-459)', () => {
+  const ANALYTICS = tagger(
+    '@test/plugin-analytics',
+    () =>
+      ({ signedIn, devMode }) =>
+        signedIn || devMode ? {} : { headEnd: [{ tag: 'script', src: '/count.js' }] },
+  );
+
+  it('tells read() whether the reader is signed in and whether the site is in dev mode (AC #1)', async () => {
+    const seen: PluginPageTagsContext[] = [];
+    const { cms } = await site([
+      tagger('@test/plugin-seer', () => (context) => {
+        seen.push(context);
+        return {};
+      }),
+    ]);
+
+    await page(cms, '/about/');
+    const agent = await signedIn(cms);
+    await agent.get('/about/');
+    await cms.settings.set('dev_mode', new Map([['on', true]]), 'cli');
+    await page(cms, '/about/');
+
+    assert.deepEqual(seen, [
+      { signedIn: false, devMode: false },
+      { signedIn: true, devMode: false },
+      { signedIn: false, devMode: true },
+    ]);
+  });
+
+  it('draws none for a signed-in reader and its tags for an anonymous one on the same page (AC #2)', async () => {
+    const { cms } = await site([ANALYTICS]);
+    const agent = await signedIn(cms);
+
+    for (const pathname of PAGES) {
+      const mine = await (await agent.get(pathname)).text();
+      assert.ok(mine.includes('geekity-admin-bar'), `${pathname} was not drawn for the owner`);
+      assert.equal(mine.includes('/count.js'), false, `${pathname} counts the owner`);
+      assert.ok((await page(cms, pathname)).includes('/count.js'), `${pathname} counts nobody`);
+    }
+  });
+
+  it('never answers 304 with the other reader’s tags (AC #3)', async () => {
+    const { cms } = await site([ANALYTICS]);
+    const anonymous = await cms.app.request('/tag/notes/');
+    const etag = anonymous.headers.get('etag');
+    assert.ok(etag !== null);
+
+    const agent = await signedIn(cms);
+    const mine = await agent.get('/tag/notes/', { 'if-none-match': etag });
+    assert.equal(mine.status, 200, 'the owner kept the copy that counts them');
+    assert.equal((await mine.text()).includes('/count.js'), false);
+    assert.equal(mine.headers.get('etag'), null, 'the owner’s copy carries a validator');
+
+    await cms.settings.set('dev_mode', new Map([['on', true]]), 'cli');
+    const dev = await cms.app.request('/tag/notes/', { headers: { 'if-none-match': etag } });
+    assert.equal(dev.status, 200, 'dev mode kept the copy with the tags');
+    assert.equal((await dev.text()).includes('/count.js'), false);
   });
 });
 
