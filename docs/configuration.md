@@ -299,7 +299,7 @@ proxy cannot time them out. A job is a registered name and a JSON payload of at
 most 64 KB. The admin and the CLI queue jobs on `cms.jobs`, and the admin reads
 a job's progress and result from there. The CMS registers two jobs of its own:
 
-- `strip-metadata`, which the **Media** screen and `geekity strip-metadata`
+- `strip-metadata`, which **Tools > Maintenance** and `geekity strip-metadata`
   queue (see
   [Location and camera metadata](media.md#location-and-camera-metadata))
 - `resend`, which the federation screen and `geekity resend` queue (see

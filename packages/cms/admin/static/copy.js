@@ -1,4 +1,4 @@
-/* The media screen's copy buttons, and nothing else.
+/* The copy buttons beside readonly fields, and nothing else.
 
    Every URL and every ready-made Markdown line is already a readonly text
    input, which selects and copies like any other text, so the screen is
@@ -17,29 +17,36 @@
      button appears. */
   if (!navigator.clipboard) return;
 
-  var buttons = document.querySelectorAll('button[data-copy]');
-  if (!buttons.length) return;
+  enhance(document);
 
-  Array.prototype.forEach.call(buttons, function (button) {
-    var field = document.getElementById(button.getAttribute('data-copy'));
-    if (!field) return;
-
-    button.hidden = false;
-    button.addEventListener('click', function () {
-      navigator.clipboard.writeText(field.value).then(
-        function () {
-          said(button, 'Copied');
-        },
-        function () {
-          /* Refused, usually because the document was not focused. Selecting
-             the text is then the useful thing to do: the keyboard shortcut
-             everybody already knows takes it from there. */
-          field.select();
-          said(button, 'Press ⌘C');
-        },
-      );
-    });
+  /* media.js shows a details screen in a dialog after this has run, and
+     announces the content it inserted. */
+  document.addEventListener('geekity:inserted', function (event) {
+    enhance(event.target);
   });
+
+  function enhance(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('button[data-copy]'), function (button) {
+      var field = document.getElementById(button.getAttribute('data-copy'));
+      if (!field) return;
+
+      button.hidden = false;
+      button.addEventListener('click', function () {
+        navigator.clipboard.writeText(field.value).then(
+          function () {
+            said(button, 'Copied');
+          },
+          function () {
+            /* Refused, usually because the document was not focused. Selecting
+               the text is then the useful thing to do: the keyboard shortcut
+               everybody already knows takes it from there. */
+            field.select();
+            said(button, 'Press ⌘C');
+          },
+        );
+      });
+    });
+  }
 
   /* Say something on the button for a moment, then put its label back. */
   function said(button, message) {

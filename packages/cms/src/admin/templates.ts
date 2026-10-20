@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { Environment, FileSystemLoader } from 'nunjucks';
 
 import { formatDate } from '../theme/templates.ts';
+import { formatFileSize } from './formatting.ts';
 
 /**
  * The admin's templates, resolved from this module rather than the working
@@ -49,6 +50,7 @@ export const ADMIN_TEMPLATES = {
   syndication: 'pages/documents/syndication.njk',
   navigation: 'pages/navigation/menus.njk',
   media: 'pages/media/library.njk',
+  mediaFile: 'pages/media/file.njk',
   themes: 'pages/appearance/themes.njk',
   plugins: 'pages/plugins/installed.njk',
   pluginScreen: 'pages/plugins/screen.njk',
@@ -128,6 +130,9 @@ export function createAdminTemplateEnvironment(
   // date reads identically on the public site and in the admin listing.
   environment.addFilter('date', (value: unknown, format: unknown = 'readable') =>
     formatDate(value, typeof format === 'string' ? format : 'readable'),
+  );
+  environment.addFilter('fileSize', (value: unknown) =>
+    typeof value === 'number' ? formatFileSize(value) : '',
   );
   environment.addFilter('modifier', modifierClass);
 

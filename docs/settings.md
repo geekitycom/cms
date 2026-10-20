@@ -467,7 +467,7 @@ always gets the whole location back from `q=source`, whatever the setting.
 
 The same page says that the server always removes location and camera metadata
 from uploads. For files uploaded before that change, it links to the sweep on
-the **Media** screen and names `geekity strip-metadata`.
+**Tools > Maintenance** and names `geekity strip-metadata`.
 
 ## The front page
 

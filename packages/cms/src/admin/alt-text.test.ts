@@ -31,10 +31,12 @@ async function siteWithPhoto(
   return { cms, agent: await signedIn(cms), contentDir };
 }
 
-async function mediaScreen(agent: Browser): Promise<{ html: string; token: string }> {
-  const html = await (await agent.get('/admin/media')).text();
+async function photoDetails(agent: Browser): Promise<{ html: string; token: string }> {
+  const html = await (
+    await agent.get(`/admin/media/file?path=${encodeURIComponent(PHOTO)}`)
+  ).text();
   const token = csrfField(html);
-  assert.ok(token !== undefined, 'the media screen carried a CSRF token');
+  assert.ok(token !== undefined, 'the details screen carried a CSRF token');
   return { html, token };
 }
 
@@ -44,7 +46,7 @@ async function mediaFile(contentDir: string): Promise<unknown> {
 
 /** The Markdown the media screen offers for the photo. */
 function offeredMarkdown(html: string): string | undefined {
-  return /id="media-markdown-1"[^>]*value="([^"]*)"/.exec(html)?.[1];
+  return /id="media-markdown"[^>]*value="([^"]*)"/.exec(html)?.[1];
 }
 
 /** Publish a new post with this body, and follow the redirect to the editor. */
@@ -70,8 +72,8 @@ async function publish(
 describe('alt text in the media library (TASK-141)', () => {
   it('stores what the admin types in content/_data/media.json and shows it back (AC #1)', async () => {
     const { agent, contentDir } = await siteWithPhoto();
-    const { html, token } = await mediaScreen(agent);
-    assert.match(html, /name="alt"/, 'an image row has an alt-text field');
+    const { html, token } = await photoDetails(agent);
+    assert.match(html, /name="alt"/, 'an image has an alt-text field');
 
     const response = await agent.post('/admin/media/alt', {
       csrf_token: token,
@@ -81,32 +83,35 @@ describe('alt text in the media library (TASK-141)', () => {
 
     assert.equal(response.status, 303);
     assert.deepEqual(await mediaFile(contentDir), { [PHOTO]: { alt: 'A dog asleep on a rug' } });
-    const after = (await mediaScreen(agent)).html;
-    assert.match(after, /name="alt"[^>]*value="A dog asleep on a rug"/);
+    const after = (await photoDetails(agent)).html;
+    assert.match(after, /name="alt"[^>]*>A dog asleep on a rug<\/textarea>/);
   });
 
   it('reads alt text a person wrote into the file by hand (AC #1)', async () => {
     const { agent } = await siteWithPhoto({ [PHOTO]: { alt: 'Written in an editor' } });
 
-    const { html } = await mediaScreen(agent);
+    const { html } = await photoDetails(agent);
 
-    assert.match(html, /name="alt"[^>]*value="Written in an editor"/);
+    assert.match(html, /name="alt"[^>]*>Written in an editor<\/textarea>/);
   });
 
   it('offers the item’s alt text as the Markdown to insert, never its file name (AC #2)', async () => {
     const described = await siteWithPhoto({ [PHOTO]: { alt: 'A dog asleep on a rug' } });
     assert.equal(
-      offeredMarkdown((await mediaScreen(described.agent)).html),
+      offeredMarkdown((await photoDetails(described.agent)).html),
       `![A dog asleep on a rug](${PHOTO_URL})`,
     );
 
     const undescribed = await siteWithPhoto();
-    assert.equal(offeredMarkdown((await mediaScreen(undescribed.agent)).html), `![](${PHOTO_URL})`);
+    assert.equal(
+      offeredMarkdown((await photoDetails(undescribed.agent)).html),
+      `![](${PHOTO_URL})`,
+    );
   });
 
   it('marks an image decorative, which renders alt="" and publishes without a warning (AC #3)', async () => {
     const { cms, agent, contentDir } = await siteWithPhoto();
-    const { token } = await mediaScreen(agent);
+    const { token } = await photoDetails(agent);
 
     await agent.post('/admin/media/alt', {
       csrf_token: token,
@@ -116,7 +121,7 @@ describe('alt text in the media library (TASK-141)', () => {
     });
 
     assert.deepEqual(await mediaFile(contentDir), { [PHOTO]: { decorative: true } });
-    const { html: screen } = await mediaScreen(agent);
+    const { html: screen } = await photoDetails(agent);
     assert.equal(offeredMarkdown(screen), `![](${PHOTO_URL})`);
     assert.match(screen, /name="decorative"[^>]*checked/);
 
@@ -135,7 +140,7 @@ describe('alt text in the media library (TASK-141)', () => {
 
   it('forgets an item’s alt text when the file is deleted', async () => {
     const { agent, contentDir } = await siteWithPhoto({ [PHOTO]: { alt: 'Gone soon' } });
-    const { token } = await mediaScreen(agent);
+    const { token } = await photoDetails(agent);
 
     await agent.post('/admin/media/delete', { csrf_token: token, path: PHOTO });
 

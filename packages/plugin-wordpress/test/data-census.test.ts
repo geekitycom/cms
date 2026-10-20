@@ -540,7 +540,7 @@ describe('the data census', () => {
       );
       assert.equal(avatar.status, 200, 'the avatar was fetched');
       assert.equal(
-        (await admin.post('/admin/media/strip-metadata', {})).status,
+        (await admin.post('/admin/tools/maintenance/strip-metadata', {})).status,
         303,
         'the metadata sweep was queued',
       );
