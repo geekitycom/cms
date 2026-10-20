@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/geekitycom/cms/compare/plugin-post-summary-v0.5.0...plugin-post-summary-v0.6.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **plugin-post-summary:** offersDescription is no longer exported.
+
+### Features
+
+* **cms:** start a post by choosing its kind and show only that kind's fields ([eae19d6](https://github.com/geekitycom/cms/commit/eae19d6266199b2f29afa682af3d0d50f2ede9d7))
+* **plugin-post-summary:** offer suggest description on every post type ([8ebf586](https://github.com/geekitycom/cms/commit/8ebf5863983940e8d35a2c8d34894ea87eadd7fe))
+
 ## [0.5.0](https://github.com/geekitycom/cms/compare/plugin-post-summary-v0.4.0...plugin-post-summary-v0.5.0) (2026-10-18)
 
 

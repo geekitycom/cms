@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.35.0](https://github.com/geekitycom/cms/compare/v0.34.0...v0.35.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cms:** read-of and read-status are no longer understood. There is no read post type, editor section, read line or q=config entry, and the template context loses read and excerpt (listings use summary).
+* **plugin-post-summary:** offersDescription is no longer exported.
+
+### Features
+
+* **cms:** add review posts with an item and a rating ([89a7606](https://github.com/geekitycom/cms/commit/89a76063a130efdfea66a088c1e6896795303d4a))
+* **cms:** find a review item by searching its title ([f612a98](https://github.com/geekitycom/cms/commit/f612a98eee03ed1063bacd233d54fb90d244099c))
+* **cms:** log inbox deliveries refused for their signature ([21b2ce9](https://github.com/geekitycom/cms/commit/21b2ce99e1a0cb7c5a0b11fbc13d5b0149a4f839))
+* **cms:** look up a review item from its ISBN, DOI or link ([29652f4](https://github.com/geekitycom/cms/commit/29652f4e07aedb75a34b9705c26fdffae413095a))
+* **cms:** remove read posts ([e4de744](https://github.com/geekitycom/cms/commit/e4de74401ec3459f3a58246b70dde692921c7a50))
+* **cms:** show the media library as a grid with a details screen per file ([cef1eba](https://github.com/geekitycom/cms/commit/cef1ebaba946203271a1419ce1723467367ce150))
+* **cms:** start a post by choosing its kind and show only that kind's fields ([eae19d6](https://github.com/geekitycom/cms/commit/eae19d6266199b2f29afa682af3d0d50f2ede9d7))
+* **plugin-post-summary:** offer suggest description on every post type ([8ebf586](https://github.com/geekitycom/cms/commit/8ebf5863983940e8d35a2c8d34894ea87eadd7fe))
+
+
+### Bug Fixes
+
+* **cms:** show follower avatars in the admin through the avatar cache ([6ff9dcd](https://github.com/geekitycom/cms/commit/6ff9dcdfa9217fc5d950184ce9f73f885707ea3b))
+
 ## [0.34.0](https://github.com/geekitycom/cms/compare/v0.33.0...v0.34.0) (2026-10-19)
 
 

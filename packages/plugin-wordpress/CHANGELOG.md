@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.6.1...plugin-wordpress-v0.7.0) (2026-10-20)
+
+
+### Features
+
+* **cms:** look up a review item from its ISBN, DOI or link ([29652f4](https://github.com/geekitycom/cms/commit/29652f4e07aedb75a34b9705c26fdffae413095a))
+* **plugin-wordpress:** log refused deliveries at the compatibility inboxes ([933875c](https://github.com/geekitycom/cms/commit/933875c6406eb6190b4637fcae897ace2d3c03ad))
+
 ## [0.6.1](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.6.0...plugin-wordpress-v0.6.1) (2026-10-19)
 
 

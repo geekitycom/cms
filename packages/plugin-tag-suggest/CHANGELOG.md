@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/geekitycom/cms/compare/plugin-tag-suggest-v0.4.0...plugin-tag-suggest-v0.5.0) (2026-10-20)
+
+
+### Features
+
+* **cms:** start a post by choosing its kind and show only that kind's fields ([eae19d6](https://github.com/geekitycom/cms/commit/eae19d6266199b2f29afa682af3d0d50f2ede9d7))
+
 ## [0.4.0](https://github.com/geekitycom/cms/compare/plugin-tag-suggest-v0.3.0...plugin-tag-suggest-v0.4.0) (2026-10-18)
 
 
