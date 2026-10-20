@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.36.0](https://github.com/geekitycom/cms/compare/v0.35.0...v0.36.0) (2026-10-20)
+
+
+### Features
+
+* **cms:** let an upload ask to be refused unless it is an image ([3c480aa](https://github.com/geekitycom/cms/commit/3c480aa0edaf9a9d2aa742b1105b7806b9eb583a))
+* **cms:** upload by button or drop wherever the admin asks for a file ([1c110ce](https://github.com/geekitycom/cms/commit/1c110ce9a8bc8491cb4cf33c3af585e504ca813c))
+
+
+### Bug Fixes
+
+* **cms:** count front matter, settings and profiles as uses of an upload ([5d31369](https://github.com/geekitycom/cms/commit/5d31369b999ba2d1fc042220ba0b257a0085dda9))
+* **cms:** refresh a running job's status box until the job ends ([5c363b2](https://github.com/geekitycom/cms/commit/5c363b29765e4cb3448a65400c0bb8addd3cf407))
+
 ## [0.35.0](https://github.com/geekitycom/cms/compare/v0.34.0...v0.35.0) (2026-10-20)
 
 
