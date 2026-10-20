@@ -92,6 +92,19 @@ export type NewInboxActivity = Omit<
   recipient?: string | null | undefined;
 };
 
+/** A like, boost or reply the inbox was sent, as the dashboard counts them. */
+export interface InboxInteraction {
+  readonly kind: 'like' | 'boost' | 'reply';
+  /** When it arrived, as an ISO 8601 instant. */
+  readonly receivedAt: string;
+}
+
+const INTERACTION_KINDS: Readonly<Record<string, InboxInteraction['kind']>> = {
+  Like: 'like',
+  Announce: 'boost',
+  [REPLY_ACTIVITY_TYPE]: 'reply',
+};
+
 export interface InboxStore {
   /** How many activities the inbound log holds. */
   countInboxActivities(): number;
@@ -143,6 +156,15 @@ export interface InboxStore {
 
   /** The logged replies whose note's id has this `/replies/` key (TASK-327). */
   listRepliesByKey(key: string): InboxActivity[];
+
+  /**
+   * The likes, boosts and replies that arrived at or after an instant, oldest
+   * first, each counted once: one like or boost per actor and object, one
+   * reply per note, at its earliest arrival. A like or boost its actor undid
+   * and a reply its actor deleted are left out, as a conversation leaves them
+   * out.
+   */
+  listInteractionsSince(since: string): InboxInteraction[];
 }
 
 export function openInboxStore(
@@ -194,6 +216,24 @@ export function openInboxStore(
 
     repliesByKey: db.prepare(`
       SELECT * FROM ap_inbox WHERE ${IS_REPLY} AND reply_key = ? ORDER BY received_at, id
+    `),
+    interactionsSince: db.prepare(`
+      SELECT activity_type, MIN(received_at) AS received_at FROM ap_inbox AS said
+      WHERE received_at >= ?
+        AND (activity_type IN ('Like', 'Announce') OR (${IS_REPLY}))
+        AND NOT EXISTS (
+          SELECT 1 FROM ap_inbox AS taken
+          WHERE taken.actor_id = said.actor_id
+            AND (
+              (taken.activity_type = 'Undo' AND taken.object_id = said.activity_id)
+              OR (taken.activity_type = 'Delete' AND said.activity_type = '${REPLY_ACTIVITY_TYPE}'
+                AND taken.object_id = said.object_id)
+            )
+        )
+      GROUP BY activity_type,
+        CASE WHEN activity_type = '${REPLY_ACTIVITY_TYPE}' THEN NULL ELSE actor_id END,
+        object_id
+      ORDER BY received_at
     `),
   };
   return {
@@ -310,6 +350,14 @@ export function openInboxStore(
 
     listRepliesByKey(key) {
       return (statements.repliesByKey.all(key) as Record<string, unknown>[]).map(toInboxActivity);
+    },
+
+    listInteractionsSince(since) {
+      const rows = statements.interactionsSince.all(since) as Record<string, unknown>[];
+      return rows.flatMap((row) => {
+        const kind = INTERACTION_KINDS[String(row['activity_type'])];
+        return kind === undefined ? [] : [{ kind, receivedAt: String(row['received_at']) }];
+      });
     },
   };
 }

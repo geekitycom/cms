@@ -3,6 +3,7 @@
 {% from "components/card.njk" import card %}
 {% from "components/badge.njk" import badge %}
 {% from "components/blocks.njk" import block %}
+{% from "components/tabs.njk" import tabs %}
 
 {% block title %}Dashboard{% endblock %}
 
@@ -32,6 +33,10 @@
      one spans the row. #}
   {% if widgets.length %}
     <div class="@container">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-lg font-semibold">Activity</h2>
+        {{ tabs(periods, 'Period', size='sm') }}
+      </div>
       <div class="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
         {% for widget in widgets %}
           <div class="min-w-0{% if widget.width == 'full' %} @3xl:col-span-2{% endif %}">

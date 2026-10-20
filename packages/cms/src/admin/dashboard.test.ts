@@ -265,18 +265,21 @@ interface Count {
 
 /** The counts: a stat each, the whole stat a link when it leads somewhere. */
 function counts(html: string): Count[] {
+  const glance = /<h2[^>]*>At a glance<\/h2>[\s\S]*?<\/section>/.exec(html)?.[0] ?? '';
   return [
-    ...html.matchAll(
+    ...glance.matchAll(
       /<(?:div|a) class="stat\b[^"]*"(?: href="([^"]*)")?>\s*<div class="stat-title">([^<]*)<\/div>\s*<div class="stat-value\b[^"]*">([^<]*)<\/div>/g,
     ),
   ].map(([, href, label, value]) => ({ label: label ?? '', value: value ?? '', href }));
 }
 
-/** The rows of the screen's tables as text, one string a row, the head first. */
+/**
+ * The rows of the screen's tables as text, one string a row, the head first,
+ * leaving out the tables of numbers behind a widget's charts.
+ */
 function rowTexts(html: string): string[] {
-  return [...screenOf(html).matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].map(([, row]) =>
-    text(row ?? ''),
-  );
+  const tables = screenOf(html).replace(/<details\b[\s\S]*?<\/details>/g, '');
+  return [...tables.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].map(([, row]) => text(row ?? ''));
 }
 
 const COUNTED: Seed[] = [

@@ -17,7 +17,7 @@ import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { PluginBlock } from '../plugin.ts';
 import { createPluginRegistry } from '../plugins/registry.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { createWidgetBoard, dashboardWidgets } from './widgets.ts';
+import { createWidgetBoard, dashboardPeriod, dashboardWidgets } from './widgets.ts';
 import type { CoreWidget, WidgetLoad } from './widgets.ts';
 
 const STATS: readonly PluginBlock[] = [{ stats: [{ label: 'Visits', value: 3 }] }];
@@ -25,10 +25,16 @@ const STATS: readonly PluginBlock[] = [{ stats: [{ label: 'Visits', value: 3 }] 
 function widget(
   id: string,
   load: () => readonly PluginBlock[] | Promise<readonly PluginBlock[]>,
-  options: { refreshSeconds?: number; width?: 'full' | 'half'; owner?: string } = {},
+  options: {
+    refreshSeconds?: number;
+    width?: 'full' | 'half';
+    owner?: string;
+    period?: 7 | 30;
+  } = {},
 ): WidgetLoad {
   return {
     owner: options.owner ?? '@acme/plugin-stats',
+    period: options.period ?? 7,
     widget: {
       id,
       title: `The ${id} widget`,
@@ -190,6 +196,17 @@ describe('the widget board', () => {
     assert.deepEqual(other[0]?.blocks, [{ paragraph: ['B'] }]);
   });
 
+  it('keeps a widget’s result for one period apart from its result for another (TASK-445)', async () => {
+    const board = createWidgetBoard({ timeLimitMs: 1000 });
+    const now = clockAt('2026-10-20T12:00:00Z').now;
+    await board.load([widget('visits', () => STATS, { period: 7 })], now);
+    const month = await board.load(
+      [widget('visits', () => [{ paragraph: ['30 days'] }], { period: 30 })],
+      now,
+    );
+    assert.deepEqual(month[0]?.blocks, [{ paragraph: ['30 days'] }]);
+  });
+
   it('draws the last good result marked stale, with when it was loaded, when a later load fails', async () => {
     const board = createWidgetBoard({ timeLimitMs: 20 });
     const clock = clockAt('2026-10-20T12:00:00Z');
@@ -262,7 +279,9 @@ describe('the dashboard’s widgets', () => {
             title: id,
             width: 'half',
             refreshSeconds: 60,
-            load: ({ timezone }) => [{ paragraph: [`${id} in ${timezone}`] }],
+            load: ({ timezone, period }) => [
+              { paragraph: [`${id} in ${timezone} over ${String(period)}`] },
+            ],
           });
         }
       },
@@ -281,7 +300,9 @@ describe('the dashboard’s widgets', () => {
       title: 'core-only',
       width: 'full',
       refreshSeconds: 60,
-      load: (vars) => [{ paragraph: [`core in ${vars.siteAtRequestStart.timezone}`] }],
+      load: (vars, period) => [
+        { paragraph: [`core in ${vars.siteAtRequestStart.timezone} over ${String(period)}`] },
+      ],
     };
     const vars = {
       plugins: registry,
@@ -290,7 +311,7 @@ describe('the dashboard’s widgets', () => {
       config: resolveConfig({ contentDir: dataDir, dataDir }, { env: {}, cwd: dataDir }),
     } as unknown as GeekityEnv['Variables'];
 
-    const loads = dashboardWidgets(vars, [core]);
+    const loads = dashboardWidgets(vars, [core], 30);
     const drawn = await createWidgetBoard({ timeLimitMs: 1000 }).load(loads, () => new Date());
 
     assert.deepEqual(
@@ -300,17 +321,27 @@ describe('the dashboard’s widgets', () => {
     assert.deepEqual(
       drawn.map((entry) => entry.blocks),
       [
-        [{ paragraph: ['core in Europe/London'] }],
-        [{ paragraph: ['b-one in Europe/London'] }],
-        [{ paragraph: ['b-two in Europe/London'] }],
-        [{ paragraph: ['a-one in Europe/London'] }],
+        [{ paragraph: ['core in Europe/London over 30'] }],
+        [{ paragraph: ['b-one in Europe/London over 30'] }],
+        [{ paragraph: ['b-two in Europe/London over 30'] }],
+        [{ paragraph: ['a-one in Europe/London over 30'] }],
       ],
     );
 
     const onlyA = { ...vars, activePlugins: registry.active(new Set(['@acme/plugin-a'])) };
     assert.deepEqual(
-      dashboardWidgets(onlyA, [core]).map((entry) => entry.widget.id),
+      dashboardWidgets(onlyA, [core], 7).map((entry) => entry.widget.id),
       ['core-only', 'a-one'],
     );
+  });
+});
+
+describe('the dashboard’s period (TASK-445)', () => {
+  it('is 30 days when the query asks for 30, and 7 days for anything else', () => {
+    assert.equal(dashboardPeriod('30'), 30);
+    assert.equal(dashboardPeriod('7'), 7);
+    assert.equal(dashboardPeriod(undefined), 7);
+    assert.equal(dashboardPeriod('90'), 7);
+    assert.equal(dashboardPeriod('30abc'), 7);
   });
 });

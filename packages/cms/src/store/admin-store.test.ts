@@ -683,6 +683,156 @@ describe('the reply index', () => {
   });
 });
 
+describe('the likes, boosts and replies a site received (TASK-445)', () => {
+  const POST = 'https://blog.example/2026/03/hello/';
+  const ADA_ACTOR = 'https://remote.example/users/ada';
+  const BOB_ACTOR = 'https://remote.example/users/bob';
+
+  function reaction(
+    activityType: 'Like' | 'Announce',
+    id: string,
+    receivedAt: string,
+    actorId = ADA_ACTOR,
+  ): NewInboxActivity {
+    return {
+      activityId: id,
+      activityType,
+      actorId,
+      objectId: POST,
+      receivedAt,
+      json: JSON.stringify({ id, type: activityType, actor: actorId, object: POST }),
+    };
+  }
+
+  function replyNote(note: string, activityId: string, receivedAt: string): NewInboxActivity {
+    return {
+      activityId,
+      activityType: 'Create',
+      actorId: ADA_ACTOR,
+      objectId: note,
+      receivedAt,
+      json: JSON.stringify({
+        id: activityId,
+        type: 'Create',
+        actor: ADA_ACTOR,
+        object: { id: note, type: 'Note', inReplyTo: POST },
+      }),
+    };
+  }
+
+  function taken(
+    activityType: 'Undo' | 'Delete',
+    of: string,
+    receivedAt: string,
+    actorId = ADA_ACTOR,
+  ): NewInboxActivity {
+    const id = `${of}#${activityType.toLowerCase()}`;
+    return {
+      activityId: id,
+      activityType,
+      actorId,
+      objectId: of,
+      receivedAt,
+      json: JSON.stringify({ id, type: activityType, actor: actorId, object: of }),
+    };
+  }
+
+  it('lists each like, boost and reply received since an instant, oldest first', async () => {
+    const admin = await store();
+    admin.logInboxActivity(
+      reaction('Like', 'https://remote.example/likes/old', '2026-10-01T00:00:00.000Z'),
+    );
+    admin.logInboxActivity(
+      reaction('Like', 'https://remote.example/likes/1', '2026-10-10T09:00:00.000Z'),
+    );
+    admin.logInboxActivity(
+      reaction('Announce', 'https://remote.example/boosts/1', '2026-10-10T08:00:00.000Z'),
+    );
+    admin.logInboxActivity(
+      replyNote(
+        'https://remote.example/notes/1',
+        'https://remote.example/creates/1',
+        '2026-10-11T12:00:00.000Z',
+      ),
+    );
+    admin.logInboxActivity({
+      activityId: 'https://remote.example/follows/1',
+      activityType: 'Follow',
+      actorId: BOB_ACTOR,
+      objectId: 'https://blog.example/ap/users/ada',
+      receivedAt: '2026-10-10T10:00:00.000Z',
+      json: '{"type":"Follow"}',
+    });
+
+    assert.deepEqual(admin.listInteractionsSince('2026-10-05T00:00:00.000Z'), [
+      { kind: 'boost', receivedAt: '2026-10-10T08:00:00.000Z' },
+      { kind: 'like', receivedAt: '2026-10-10T09:00:00.000Z' },
+      { kind: 'reply', receivedAt: '2026-10-11T12:00:00.000Z' },
+    ]);
+  });
+
+  it('leaves out a like or boost its actor undid, and a reply its actor deleted', async () => {
+    const admin = await store();
+    const at = '2026-10-10T09:00:00.000Z';
+    admin.logInboxActivity(reaction('Like', 'https://remote.example/likes/1', at));
+    admin.logInboxActivity(reaction('Announce', 'https://remote.example/boosts/1', at));
+    admin.logInboxActivity(reaction('Like', 'https://remote.example/likes/2', at, BOB_ACTOR));
+    admin.logInboxActivity(
+      replyNote('https://remote.example/notes/1', 'https://remote.example/creates/1', at),
+    );
+    admin.logInboxActivity(
+      taken('Undo', 'https://remote.example/likes/1', '2026-10-11T00:00:00.000Z'),
+    );
+    admin.logInboxActivity(
+      taken('Undo', 'https://remote.example/boosts/1', '2026-10-11T00:00:00.000Z'),
+    );
+    admin.logInboxActivity(
+      taken('Delete', 'https://remote.example/notes/1', '2026-10-11T00:00:00.000Z'),
+    );
+    // Somebody else cannot take back Bob's like.
+    admin.logInboxActivity(
+      taken('Undo', 'https://remote.example/likes/2', '2026-10-11T00:00:00.000Z'),
+    );
+
+    assert.deepEqual(admin.listInteractionsSince('2026-10-01T00:00:00.000Z'), [
+      { kind: 'like', receivedAt: at },
+    ]);
+  });
+
+  it('counts a redelivered activity once, and one person’s like of one post once', async () => {
+    const admin = await store();
+    admin.logInboxActivity(
+      reaction('Like', 'https://remote.example/likes/1', '2026-10-10T09:00:00.000Z'),
+    );
+    admin.logInboxActivity(
+      reaction('Like', 'https://remote.example/likes/1', '2026-10-10T09:05:00.000Z'),
+    );
+    admin.logInboxActivity({
+      ...reaction('Like', 'unused', '2026-10-10T10:00:00.000Z'),
+      activityId: null,
+    });
+    admin.logInboxActivity(
+      replyNote(
+        'https://remote.example/notes/1',
+        'https://remote.example/creates/1',
+        '2026-10-11T12:00:00.000Z',
+      ),
+    );
+    admin.logInboxActivity(
+      replyNote(
+        'https://remote.example/notes/1',
+        'https://remote.example/creates/1-again',
+        '2026-10-11T13:00:00.000Z',
+      ),
+    );
+
+    assert.deepEqual(admin.listInteractionsSince('2026-10-01T00:00:00.000Z'), [
+      { kind: 'like', receivedAt: '2026-10-10T09:05:00.000Z' },
+      { kind: 'reply', receivedAt: '2026-10-11T12:00:00.000Z' },
+    ]);
+  });
+});
+
 describe('replacing an index from the files it is derived from', () => {
   const REPLY_TARGET = 'https://blog.example/2026/03/hello/';
 

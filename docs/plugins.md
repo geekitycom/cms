@@ -399,9 +399,14 @@ widget has these fields:
 | `refreshSeconds` | How long the dashboard shows a result again before it calls `load` again. Zero or more.                       |
 | `load`           | Returns the card's blocks, or a promise of them.                                                              |
 
-`load` gets one argument with two fields: `site`, the same `PluginSite` a
-screen's `render` gets, and `timezone`, the site's time zone, such as
-`Europe/London`. Use it to decide where a day starts. A widget with an id that
+`load` gets one argument with three fields: `site`, the same `PluginSite` a
+screen's `render` gets; `timezone`, the site's time zone, such as
+`Europe/London`, which decides where a day starts; and `period`, the number of
+days the dashboard covers, ending today. `period` is `7` unless the owner
+chooses 30 days on the dashboard (`/admin?period=30`), when it is `30`. A
+widget that shows a period covers that many days and compares totals with the
+same number of days before them. A widget that does not show a period ignores
+it. The dashboard keeps a result for each period apart. A widget with an id that
 breaks the rule, a duplicate id, an unknown width or a negative
 `refreshSeconds` fails the plugin's `register`, and the Plugins screen shows
 why.
@@ -434,11 +439,11 @@ register(host) {
     title: 'Visits',
     width: 'full',
     refreshSeconds: 300,
-    async load({ timezone }) {
+    async load({ timezone, period }) {
       const { api_key } = await settings.current();
       if (api_key === '') return [];
       const response = await host.fetch(
-        `https://stats.example/api/daily?tz=${encodeURIComponent(timezone)}`,
+        `https://stats.example/api/daily?tz=${encodeURIComponent(timezone)}&days=${String(period)}`,
         { headers: { authorization: `Bearer ${api_key}` } },
       );
       if (!response.ok) throw new Error(`The stats API answered ${String(response.status)}.`);

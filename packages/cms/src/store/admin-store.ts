@@ -51,7 +51,7 @@ export type { ConversationWrite } from './conversation.ts';
 export { DELIVERY_STATUSES } from './deliveries.ts';
 export type { Delivery, DeliveryStatus, NewDelivery } from './deliveries.ts';
 export type { Follower, NewFollower } from './followers.ts';
-export type { InboxActivity, NewInboxActivity } from './inbox.ts';
+export type { InboxActivity, InboxInteraction, NewInboxActivity } from './inbox.ts';
 export type { ActorProfile, StoredActorProfile } from './profiles.ts';
 export { RELAY_STATES } from './relays.ts';
 export type { NewRelay, Relay, RelayState } from './relays.ts';

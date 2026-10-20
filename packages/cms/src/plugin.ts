@@ -432,11 +432,20 @@ export interface PluginScreen {
   readonly actions?: readonly PluginScreenAction[] | undefined;
 }
 
+/** How many days, ending today, the dashboard's widgets cover. The owner picks one. */
+export type DashboardPeriod = 7 | 30;
+
 /** What a dashboard widget's `load` is handed. */
 export interface PluginWidgetContext {
   readonly site: PluginSite;
   /** The site's time zone, an IANA name such as `Europe/London`, which days follow. */
   readonly timezone: string;
+  /**
+   * The days the dashboard covers, ending today: 7 unless the owner chose 30.
+   * A widget that does not cover a period ignores it. A result is kept for
+   * each period apart.
+   */
+  readonly period: DashboardPeriod;
 }
 
 /**

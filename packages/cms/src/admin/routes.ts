@@ -66,7 +66,13 @@ import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts'
 import { mountUsers } from './users.ts';
 import { CORE_WIDGETS } from './core-widgets.ts';
 import { formatInTimezone } from './formatting.ts';
-import { createWidgetBoard, dashboardWidgets, WIDGET_TIME_LIMIT_MS } from './widgets.ts';
+import {
+  createWidgetBoard,
+  DASHBOARD_PERIODS,
+  dashboardPeriod,
+  dashboardWidgets,
+  WIDGET_TIME_LIMIT_MS,
+} from './widgets.ts';
 
 /** Where the first-run form lives. */
 export const SETUP_PATH = `${ADMIN_PREFIX}/setup`;
@@ -323,10 +329,19 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
 
   app.get(ADMIN_PREFIX, async (c) => {
     const timezone = c.var.siteAtRequestStart.timezone;
-    const widgets = await widgetBoard.load(dashboardWidgets(c.var, CORE_WIDGETS), c.var.config.now);
+    const period = dashboardPeriod(c.req.query('period'));
+    const widgets = await widgetBoard.load(
+      dashboardWidgets(c.var, CORE_WIDGETS, period),
+      c.var.config.now,
+    );
     return render(c, ADMIN_TEMPLATES.dashboard, {
       section: 'dashboard',
       child: 'home',
+      periods: DASHBOARD_PERIODS.map((days) => ({
+        label: `${String(days)} days`,
+        url: days === 7 ? ADMIN_PREFIX : `${ADMIN_PREFIX}?period=${String(days)}`,
+        current: days === period,
+      })),
       counts: c.var.store.counts(),
       // The one number on the dashboard that is not about the content
       // directory: it is what says whether publishing is reaching anybody.
