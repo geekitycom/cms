@@ -12,8 +12,10 @@ import {
 } from '../media/uploads.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 
-/** Where the editor posts a file it wants stored. */
+/** Where the editor, and every upload control in the admin, posts a file it wants stored. */
 export const UPLOADS_PATH = `${ADMIN_PREFIX}/uploads`;
+
+export const IMAGES_ONLY_FIELD = 'images';
 
 /** What the editor gets back when a file has landed. */
 export interface UploadResult {
@@ -73,7 +75,9 @@ function submittedFromABrowser(accept: string | undefined): boolean {
 export function mountUploads(app: Hono<GeekityEnv>): void {
   app.post(UPLOADS_PATH, async (c) => {
     const body = await c.req.parseBody();
-    const outcome = await storeUpload(body[UPLOAD_FIELD], c.var.config);
+    const outcome = await storeUpload(body[UPLOAD_FIELD], c.var.config, {
+      imagesOnly: body[IMAGES_ONLY_FIELD] === '1',
+    });
 
     if (refusedUpload(outcome)) {
       return c.json({ error: outcome.error }, outcome.status);
