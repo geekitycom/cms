@@ -329,7 +329,7 @@ done
 echo "ok  GET /admin/plugins/@geekity/plugin-llm"
 
 log "pressing Suggest title in the editor with no API key set"
-editor="$(curl -fsS -b "${jar}" "${BASE}/admin/posts/new")"
+editor="$(curl -fsS -b "${jar}" "${BASE}/admin/posts/new?kind=note")"
 for expected in '>Suggest title</button>' '>Suggest description</button>' '>Suggest tags</button>' 'editor-actions.js'; do
   if ! grep -qF -- "${expected}" <<<"${editor}"; then
     echo "the editor did not contain \"${expected}\"" >&2
