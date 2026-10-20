@@ -276,6 +276,7 @@ describe('the plugin registry', () => {
       'settings',
       'siteInfo',
       'use',
+      'widget',
     ]);
   });
 
@@ -313,6 +314,80 @@ describe('the plugin registry', () => {
       registry.problem('@acme/plugin-twice') ?? '',
       /two editor actions with the id "suggest"/,
     );
+  });
+
+  it('keeps a plugin’s widgets in the order it declared them', () => {
+    const load = () => [];
+    const registry = createPluginRegistry(
+      fromConfig(
+        plugin(
+          '@acme/plugin-stats',
+          {},
+          {
+            register(host: PluginHost) {
+              host.widget({
+                id: 'visits',
+                title: 'Visits',
+                width: 'full',
+                refreshSeconds: 60,
+                load,
+              });
+              host.widget({ id: 'pages', title: 'Pages', width: 'half', refreshSeconds: 0, load });
+            },
+          },
+        ),
+      ),
+      pluginRegistryOptions(DATA_DIR),
+    );
+    assert.deepEqual(
+      registry.find('@acme/plugin-stats')?.widgets.map((widget) => widget.id),
+      ['visits', 'pages'],
+    );
+  });
+
+  it('fails the register of a plugin whose widgets are not usable', () => {
+    const load = () => [];
+    const widget = { title: 'W', width: 'half', refreshSeconds: 60, load } as const;
+    const registry = createPluginRegistry(
+      fromConfig(
+        plugin(
+          '@acme/plugin-shouting',
+          {},
+          { register: (host: PluginHost) => host.widget({ ...widget, id: 'Top Pages' }) },
+        ),
+        plugin(
+          '@acme/plugin-twice',
+          {},
+          {
+            register(host: PluginHost) {
+              host.widget({ ...widget, id: 'visits' });
+              host.widget({ ...widget, id: 'visits' });
+            },
+          },
+        ),
+        plugin(
+          '@acme/plugin-wide',
+          {},
+          {
+            register: (host: PluginHost) =>
+              host.widget({ ...widget, id: 'visits', width: 'third' as 'half' }),
+          },
+        ),
+        plugin(
+          '@acme/plugin-hasty',
+          {},
+          {
+            register: (host: PluginHost) =>
+              host.widget({ ...widget, id: 'visits', refreshSeconds: -1 }),
+          },
+        ),
+      ),
+      pluginRegistryOptions(DATA_DIR),
+    );
+    assert.match(registry.problem('@acme/plugin-shouting') ?? '', /"Top Pages" is not a widget id/);
+    assert.match(registry.problem('@acme/plugin-twice') ?? '', /two widgets with the id "visits"/);
+    assert.match(registry.problem('@acme/plugin-wide') ?? '', /width "third" is not full or half/);
+    assert.match(registry.problem('@acme/plugin-hasty') ?? '', /refreshSeconds -1 is not/);
   });
 
   it('refuses two packages whose names make one variable prefix, naming both', () => {

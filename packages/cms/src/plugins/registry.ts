@@ -29,6 +29,7 @@ import type {
   PluginService,
   PluginSettingValues,
   PluginSiteInfo,
+  PluginWidget,
 } from '../plugin.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
@@ -77,6 +78,8 @@ export interface PluginContributions {
   /** What it adds to every public page, read as each page is drawn. */
   pageTags:
     ((context: PluginPageTagsContext) => PluginPageTags | Promise<PluginPageTags>) | undefined;
+  /** Its dashboard widgets, in the order it declared them. */
+  widgets: readonly PluginWidget[];
   dataFiles: readonly DataFileDeclaration[];
 }
 
@@ -342,6 +345,7 @@ const NOTHING_DECLARED: PluginContributions = {
   settingsNamespace: undefined,
   editorActions: [],
   pageTags: undefined,
+  widgets: [],
   dataFiles: [],
 };
 
@@ -403,6 +407,7 @@ function register(
   const federation: PluginFederationMiddleware[] = [];
   const commands: PluginCommand[] = [];
   const editorActions: PluginEditorAction[] = [];
+  const widgets: PluginWidget[] = [];
   let screen: PluginScreen | undefined;
   let pageTags: PluginContributions['pageTags'];
   let renderedSettings: readonly RenderedSetting[] | undefined;
@@ -437,7 +442,7 @@ function register(
     },
     editorAction(declared) {
       declaring('an editor action');
-      if (!EDITOR_ACTION_ID.test(declared.id)) {
+      if (!DECLARED_ID.test(declared.id)) {
         throw new Error(
           `${JSON.stringify(declared.id)} is not an editor action id: use lower case words joined by -.`,
         );
@@ -453,6 +458,28 @@ function register(
       declaring('page tags');
       if (pageTags !== undefined) throw new Error('A plugin declares its page tags once.');
       pageTags = read;
+    },
+    widget(declared) {
+      declaring('a widget');
+      if (!DECLARED_ID.test(declared.id)) {
+        throw new Error(
+          `${JSON.stringify(declared.id)} is not a widget id: use lower case words joined by -.`,
+        );
+      }
+      if (widgets.some((entry) => entry.id === declared.id)) {
+        throw new Error(`${name} declares two widgets with the id ${JSON.stringify(declared.id)}.`);
+      }
+      if (declared.width !== 'full' && declared.width !== 'half') {
+        throw new Error(
+          `The ${declared.id} widget's width ${JSON.stringify(declared.width)} is not full or half.`,
+        );
+      }
+      if (!Number.isFinite(declared.refreshSeconds) || declared.refreshSeconds < 0) {
+        throw new Error(
+          `The ${declared.id} widget's refreshSeconds ${String(declared.refreshSeconds)} is not a number of zero or more.`,
+        );
+      }
+      widgets.push(declared);
     },
     siteInfo: () => options.siteInfo(),
     fetch: (url, init = {}) => pluginFetch(url, init, options),
@@ -510,6 +537,7 @@ function register(
         settingsNamespace,
         editorActions,
         pageTags,
+        widgets,
         dataFiles,
       },
       service,
@@ -525,8 +553,8 @@ function register(
   }
 }
 
-/** An editor action's id, which is the last segment of its endpoint's path. */
-const EDITOR_ACTION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** An editor action's or a widget's id: an editor action's is the last segment of its endpoint's path. */
+const DECLARED_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 async function lifecycle(plugin: Plugin, hook: 'start' | 'stop'): Promise<void> {
   try {

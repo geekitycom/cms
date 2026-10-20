@@ -187,6 +187,7 @@ not. It declares what the plugin adds through `host`:
 - commands
 - editor actions
 - page tags
+- dashboard widgets
 - settings
 - one service
 
@@ -297,8 +298,9 @@ host.get(
 
 A screen's `render` may also return a promise, so it can await the settings.
 
-**Screen blocks.** `render` returns cards, and each card holds blocks. A block
-is plain data, and the CMS writes the markup:
+**Blocks.** A screen's `render` returns cards, and each card holds blocks. A
+dashboard widget's `load` returns blocks too. A block is plain data, of type
+`PluginBlock`, and the CMS writes the markup:
 
 | Block        | Data                                                                                                                                                                                                         |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -385,6 +387,82 @@ representations. A site built with Eleventy runs no plugins, so a static build
 has no plugin tags. Use the partials for a tag that a static build must carry.
 [Adding to every page](theme/adding-to-every-page.md) describes the partials.
 
+**Dashboard widgets.** `host.widget(widget)` adds a card to the admin
+dashboard while the plugin is enabled. A plugin may declare more than one. A
+widget has these fields:
+
+| Field            | Value                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| `id`             | Lower case words joined by `-`, unique among the plugin's widgets.                                            |
+| `title`          | The card's heading.                                                                                           |
+| `width`          | `half` or `full`. Two `half` widgets sit side by side when the screen is wide. A `full` widget spans the row. |
+| `refreshSeconds` | How long the dashboard shows a result again before it calls `load` again. Zero or more.                       |
+| `load`           | Returns the card's blocks, or a promise of them.                                                              |
+
+`load` gets one argument with two fields: `site`, the same `PluginSite` a
+screen's `render` gets, and `timezone`, the site's time zone, such as
+`Europe/London`. Use it to decide where a day starts. A widget with an id that
+breaks the rule, a duplicate id, an unknown width or a negative
+`refreshSeconds` fails the plugin's `register`, and the Plugins screen shows
+why.
+
+The dashboard draws the stat tiles first, then the core's own widgets, then
+each enabled plugin's widgets in the order the plugins run. Within one plugin,
+the widgets keep the order they were declared in. When a plugin is disabled,
+its widgets are gone from the next dashboard request. No restart is needed.
+
+The dashboard loads every widget at the same time and waits at most 3 seconds
+for each. A good result is kept in memory for `refreshSeconds`, so a dashboard
+request in that time does not call `load`. While a load is still running,
+another request waits for that load and does not start a second one. A result
+that arrives after the time limit is kept for the next request. When `load`
+throws, rejects, returns something other than an array, or runs out of time,
+the server logs a warning and the card shows the last good result with a
+Stale badge and the time it was loaded. If there is no earlier result, the card
+says the stats are unavailable. The rest of the dashboard draws as normal. A
+`load` that returns an empty array draws no card. Use this for a widget that
+only has something to say some of the time. Results are not kept across a
+restart.
+
+```ts
+register(host) {
+  const settings = host.settings([
+    { type: 'secret', key: 'api_key', label: 'API key' },
+  ]);
+  host.widget({
+    id: 'visits',
+    title: 'Visits',
+    width: 'full',
+    refreshSeconds: 300,
+    async load({ timezone }) {
+      const { api_key } = await settings.current();
+      if (api_key === '') return [];
+      const response = await host.fetch(
+        `https://stats.example/api/daily?tz=${encodeURIComponent(timezone)}`,
+        { headers: { authorization: `Bearer ${api_key}` } },
+      );
+      if (!response.ok) throw new Error(`The stats API answered ${String(response.status)}.`);
+      const { days, visitors, total, previousTotal } = (await response.json()) as {
+        days: string[];
+        visitors: number[];
+        total: number;
+        previousTotal: number;
+      };
+      return [
+        { stats: [{ label: 'Visitors', value: total, previous: previousTotal }] },
+        {
+          timeSeries: {
+            caption: 'Visitors per day',
+            days,
+            series: [{ name: 'Visitors', values: visitors }],
+          },
+        },
+      ];
+    },
+  });
+},
+```
+
 `geekity settings` reads and changes an enabled plugin's settings with the
 site stopped, as it does the core ones. The setting is the package name, a
 `.` and the key:
@@ -424,7 +502,8 @@ and under the same rate limit as its own inboxes.
 provides. The core also runs plugins that target an earlier version, back to
 the oldest version it keeps, which is 2. A plugin that targets a newer version,
 or one older than that, is unavailable, with the reason on the Plugins screen.
-Version 3 added page tags. A plugin that calls `host.pageTags` targets 3. The peer range of `@geekity/cms` says which releases of core
+Version 3 added page tags and dashboard widgets. A plugin that calls
+`host.pageTags` or `host.widget` targets 3. The peer range of `@geekity/cms` says which releases of core
 the package works with. npm checks it for a site that installs with npm. The
 registry checks the copy in `plugin.json` for a folder install. Before 1.0,
 write it as `>=<the core you built against> <1.0.0`, and write the range of a

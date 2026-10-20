@@ -1,5 +1,8 @@
 {% extends "layouts/shell.njk" %}
 {% from "components/stat.njk" import stats, stat %}
+{% from "components/card.njk" import card %}
+{% from "components/badge.njk" import badge %}
+{% from "components/blocks.njk" import block %}
 
 {% block title %}Dashboard{% endblock %}
 
@@ -23,4 +26,26 @@
       {% endfor %}
     </div>
   </section>
+
+  {# The core's widgets, then each running plugin's (src/admin/widgets.ts). A
+     half widget sits beside another once the main area is wide enough; a full
+     one spans the row. #}
+  {% if widgets.length %}
+    <div class="@container">
+      <div class="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
+        {% for widget in widgets %}
+          <div class="min-w-0{% if widget.width == 'full' %} @3xl:col-span-2{% endif %}">
+            {% call card(title=widget.title) %}
+              {% if widget.status == 'stale' %}
+                <p class="text-sm">{{ badge('Stale', color='warning') }} The latest load failed. These figures are from {{ widget.loadedAt }}.</p>
+              {% elif widget.status == 'unavailable' %}
+                <p>These stats are unavailable right now.</p>
+              {% endif %}
+              {% for data in widget.blocks %}{{ block(data) }}{% endfor %}
+            {% endcall %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
 {% endblock %}

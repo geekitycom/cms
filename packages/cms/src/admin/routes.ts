@@ -64,6 +64,9 @@ import { mountPluginsScreen, pluginScreens } from './plugins.ts';
 import type { LoginThrottle } from '../web/throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
 import { mountUsers } from './users.ts';
+import { CORE_WIDGETS } from './core-widgets.ts';
+import { formatInTimezone } from './formatting.ts';
+import { createWidgetBoard, dashboardWidgets, WIDGET_TIME_LIMIT_MS } from './widgets.ts';
 
 /** Where the first-run form lives. */
 export const SETUP_PATH = `${ADMIN_PREFIX}/setup`;
@@ -129,6 +132,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     });
     return recoveryThrottled;
   }
+
+  const widgetBoard = createWidgetBoard({ timeLimitMs: WIDGET_TIME_LIMIT_MS });
 
   /**
    * Render one admin template.
@@ -316,7 +321,9 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     return c.redirect(LOGIN_PATH, 303);
   });
 
-  app.get(ADMIN_PREFIX, (c) => {
+  app.get(ADMIN_PREFIX, async (c) => {
+    const timezone = c.var.siteAtRequestStart.timezone;
+    const widgets = await widgetBoard.load(dashboardWidgets(c.var, CORE_WIDGETS), c.var.config.now);
     return render(c, ADMIN_TEMPLATES.dashboard, {
       section: 'dashboard',
       child: 'home',
@@ -334,6 +341,13 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       // number for the same reason (TASK-56).
       unreadMessages: unreadMessages(c.var.config.dataDir),
       messagesUrl: MESSAGES_PATH,
+      widgets: widgets.map((widget) => ({
+        ...widget,
+        loadedAt:
+          widget.loadedAt === undefined
+            ? undefined
+            : formatInTimezone(widget.loadedAt.toISOString(), timezone),
+      })),
     });
   });
 

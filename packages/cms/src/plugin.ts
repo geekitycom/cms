@@ -335,12 +335,12 @@ export type PluginScreenText = string | { readonly code: string };
 export type PluginScreenCell = PluginScreenText | { readonly time: string | null };
 
 /**
- * One block of a plugin screen's card. Core draws each kind, charts as SVG,
- * and draws input it cannot use (no points, a negative or non-numeric value)
- * as "No data to show." Counts and values are whole or decimal numbers of
- * zero or more; days are `YYYY-MM-DD`.
+ * One block of a plugin screen's card or a dashboard widget. Core draws each
+ * kind, charts as SVG, and draws input it cannot use (no points, a negative or
+ * non-numeric value) as "No data to show." Counts and values are whole or
+ * decimal numbers of zero or more; days are `YYYY-MM-DD`.
  */
-export type PluginScreenBlock =
+export type PluginBlock =
   | { readonly paragraph: readonly PluginScreenText[] }
   | {
       readonly table: {
@@ -389,10 +389,13 @@ export type PluginScreenBlock =
       };
     };
 
+/** One block of a plugin screen's card, the same blocks a widget draws. */
+export type PluginScreenBlock = PluginBlock;
+
 /** One card on a plugin screen. */
 export interface PluginScreenCard {
   readonly title: string;
-  readonly blocks: readonly PluginScreenBlock[];
+  readonly blocks: readonly PluginBlock[];
 }
 
 /** What a plugin screen's render and its actions are handed. */
@@ -427,6 +430,31 @@ export interface PluginScreen {
   ): readonly PluginScreenCard[] | Promise<readonly PluginScreenCard[]>;
   /** Buttons core draws under the settings, each run when pressed. */
   readonly actions?: readonly PluginScreenAction[] | undefined;
+}
+
+/** What a dashboard widget's `load` is handed. */
+export interface PluginWidgetContext {
+  readonly site: PluginSite;
+  /** The site's time zone, an IANA name such as `Europe/London`, which days follow. */
+  readonly timezone: string;
+}
+
+/**
+ * A card on the admin dashboard, drawn after the core's own while the plugin
+ * is enabled. Core loads every widget at once under a time limit and keeps a
+ * good result for `refreshSeconds`. A load that throws or runs out of time
+ * shows the last good result marked stale, or says the stats are unavailable.
+ * A load that returns no blocks draws no card.
+ */
+export interface PluginWidget {
+  /** Lower case words joined by `-`, unique among the plugin's widgets. */
+  readonly id: string;
+  readonly title: string;
+  /** `half` sits beside another half widget on a wide screen; `full` spans the row. */
+  readonly width: 'full' | 'half';
+  /** How long a good result is drawn again before `load` is called again, zero or more. */
+  readonly refreshSeconds: number;
+  load(context: PluginWidgetContext): readonly PluginBlock[] | Promise<readonly PluginBlock[]>;
 }
 
 /**
@@ -779,6 +807,8 @@ export interface PluginHost<
   pageTags(
     read: (context: PluginPageTagsContext) => PluginPageTags | Promise<PluginPageTags>,
   ): void;
+  /** Add a card to the admin dashboard, drawn while the plugin is enabled. */
+  widget(widget: PluginWidget): void;
   /** The site's base URL and its title as the settings have it when asked. */
   siteInfo(): Promise<PluginSiteInfo>;
   /**
