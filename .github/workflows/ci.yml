@@ -171,9 +171,8 @@ jobs:
         # install cannot see this repository's workspace.
         run: bash scripts/pack-install-smoke.sh "$RUNNER_TEMP"
 
-  # The Docker image. It is published by hand with scripts/docker-build-push.sh,
-  # so without this a broken Dockerfile would surface only at release time on a
-  # maintainer's workstation. The image is built for linux/amd64 and loaded into
+  # The Docker image. It is published only when a release is, so without this a
+  # broken Dockerfile would surface only at release time. The image is built for linux/amd64 and loaded into
   # the runner's Docker; then scripts/docker-smoke.sh boots it on empty content,
   # data and plugins volumes, waits for /healthz to answer 200, checks the home
   # page is the seeded starter site in the packaged default theme, and installs

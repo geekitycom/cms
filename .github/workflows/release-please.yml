@@ -1,4 +1,5 @@
-# Releasing @geekity/cms and the plugin packages (decision-7, decision-33).
+# Releasing @geekity/cms and the plugin packages (decision-7, decision-33,
+# decision-58).
 #
 # Runs on every push to `main` and keeps one release pull request open for
 # every package with releasable changes, each package's version and
@@ -6,8 +7,13 @@
 # last release. Merging that pull request tags each released package and
 # creates its GitHub release.
 #
-# Publishing is deliberately not automated: a maintainer runs `pnpm release`
-# on main when they choose to. See "Publishing a release" in docs/development.md.
+# When release-please reports a release, the publish job runs `pnpm release` in
+# the `release` environment, whose required reviewer approves the run. npm
+# authenticates through trusted publishing, so no npm token is stored, and the
+# image goes to ghcr.io with the workflow's GITHUB_TOKEN. `pnpm release`
+# publishes only what the registries lack, so a failed publish is retried by
+# re-running the job or by dispatching this workflow on main. See "Publishing a
+# release" in docs/development.md.
 #
 # `apps/demo` is private and unversioned, so `release-please-config.json` tracks
 # `packages/cms` and each `packages/plugin-*`. A plugin package is versioned on
@@ -18,6 +24,7 @@ name: release-please
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -30,13 +37,17 @@ concurrency:
 jobs:
   release-please:
     name: release-please
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
     permissions:
       contents: write
       pull-requests: write
       issues: write
     steps:
-      - uses: googleapis/release-please-action@v5
+      - id: release
+        uses: googleapis/release-please-action@v5
         with:
           # The default GITHUB_TOKEN cannot trigger other workflows, so a
           # release pull request opened with it gets no CI. Add a
@@ -46,3 +57,38 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # A dispatch skips release-please, so `!cancelled()` lets this job run after a
+  # skipped dependency.
+  publish:
+    name: publish
+    needs: release-please
+    if: >-
+      ${{ !cancelled() && (needs.release-please.outputs.releases_created == 'true'
+      || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    steps:
+      # `pnpm release` refuses anything but the branch main level with its
+      # upstream. Checking out a branch by name gives exactly that, with every
+      # tag for the release-tag checks.
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@^11.5.1
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm release
