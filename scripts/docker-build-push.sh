@@ -3,19 +3,13 @@
 # Build the Geekity CMS image for linux/amd64 and linux/arm64 and push it to
 # the GitHub Container Registry as ghcr.io/geekitycom/cms.
 #
-# This is the only way an image gets published. Nothing in CI pushes one, on
-# purpose: GitHub's runners are amd64 only and the box a site runs on may be
-# arm64, so an automated publish could only ship half of what is needed. buildx
-# builds both platforms here and pushes them as one manifest list.
-#
 # The version tag comes from packages/cms/package.json, which release-please
-# bumps when its release pull request is merged. The usual order is: merge the
-# release pull request, `git pull` on main, then run this. `latest` is pushed
-# alongside the version, and so is a custom tag when one is given.
+# bumps when its release pull request is merged. `latest` is pushed alongside
+# the version, and so is a custom tag when one is given.
 #
-# A release normally pushes the image as the last step of scripts/release.ts,
-# with the quality gates run once. This script on its own is for pushing only
-# an image, or for finishing a release whose image push failed.
+# A release pushes the image as the last step of scripts/release.ts, with the
+# quality gates run once. This script on its own is for pushing only an image,
+# or for finishing a release whose image push failed.
 #
 # Usage (from the repository root):
 #

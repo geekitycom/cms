@@ -354,6 +354,7 @@ interface Options {
   failGate?: string;
   failPublish?: string;
   loggedOut?: boolean;
+  trustedPublishing?: boolean;
   /** `docker buildx build` fails. */
   buildFails?: boolean;
 }
@@ -469,6 +470,9 @@ function release(repo: string, args: string[] = [], options: Options = {}): Run 
       STUB_FAIL_GATE: options.failGate ?? '',
       STUB_FAIL_PUBLISH: options.failPublish ?? '',
       STUB_LOGGED_OUT: options.loggedOut === true ? '1' : '',
+      ...(options.trustedPublishing === true
+        ? { ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.example.test' }
+        : {}),
       STUB_BUILD_FAILS: options.buildFails === true ? '1' : '',
     },
     encoding: 'utf8',
@@ -526,6 +530,20 @@ describe('release.ts real run', () => {
     assert.ok(Math.max(...uploads) < index(calls, 'docker buildx build'), 'image after npm');
     const tags = [...(builds(calls)[0] ?? '').matchAll(/--tag (\S+)/g)].map((m) => m[1]);
     assert.deepEqual(tags, [`${IMAGE}:1.1.0`, `${IMAGE}:latest`]);
+  });
+
+  it('publishes with nobody logged in to npm when GitHub Actions offers trusted publishing', () => {
+    const repo = repository(BUMPED);
+    const { status, output, calls } = release(repo, [], {
+      images: [],
+      loggedOut: true,
+      trustedPublishing: true,
+    });
+
+    assert.equal(status, 0, output);
+    assert.match(output, /trusted publishing/);
+    assert.deepEqual(publishes(calls), ['cms', 'plugin-a', 'plugin-b']);
+    assert.equal(builds(calls).length, 1, calls.join('\n'));
   });
 
   it('pushes no image and asks nothing of Docker for a release of plugins alone', () => {

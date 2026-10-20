@@ -4,6 +4,11 @@
   "type": "module",
   "description": "Geekity CMS plugin that suggests tags for a post in the editor, from a language model, ranked by how many people follow each tag on tags.pub.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/geekitycom/cms.git",
+    "directory": "packages/plugin-tag-suggest"
+  },
   "engines": {
     "node": ">=24"
   },

@@ -3,10 +3,9 @@
  * version is not on npm yet, then push the image of @geekity/cms when its
  * version has none.
  *
- * Nothing in CI publishes, on purpose: a release reaches npm when a maintainer
- * decides it should, and GitHub's runners are amd64 only, so they could build
- * only half of the image a site may need. The usual order is: merge the
- * release pull request, `git pull --prune --tags` on main, then run this.
+ * The publish job of .github/workflows/release-please.yml runs this after a
+ * release pull request merges (decision-58), with npm on trusted publishing. A
+ * maintainer can run it from main as well.
  *
  * Whether a package needs releasing is read from the registries, not from the
  * commit, so running it again after a failure carries on where the last run
@@ -302,7 +301,9 @@ function printSteps(plan: ReleasePlan, dockerArgs: readonly string[]): void {
   const tag = dockerArgs.length > 0 ? ` ${dockerArgs.join(' ')}` : '';
   log('Dry run: nothing was checked, built, published or pushed');
   console.log('A real run would, stopping at the first failure:');
-  console.log(`  1. Check HEAD is ${BRANCH}, clean and level with its upstream, and npm whoami`);
+  console.log(
+    `  1. Check HEAD is ${BRANCH}, clean and level with its upstream, and npm whoami unless npm can use trusted publishing`,
+  );
   if (plan.image.push) console.log(`     ${DOCKER_SCRIPT} --check-only${tag}`);
   console.log(`  2. Run the quality gates once: ${GATES.join(' ')}`);
   console.log('  3. Pack each package and check each tarball');
@@ -329,11 +330,15 @@ function preflight(plan: ReleasePlan, dockerArgs: readonly string[]): void {
     );
   }
 
-  log('Checking who is logged in to npm');
-  const who = capture('npm', ['whoami']);
-  if (!who.ok || who.stdout === '')
-    fail("nobody is logged in to npm; run 'npm login' and try again");
-  console.log(`Logged in as ${who.stdout}`);
+  if (process.env.ACTIONS_ID_TOKEN_REQUEST_URL !== undefined) {
+    log('npm will authenticate through trusted publishing with the GitHub Actions OIDC token');
+  } else {
+    log('Checking who is logged in to npm');
+    const who = capture('npm', ['whoami']);
+    if (!who.ok || who.stdout === '')
+      fail("nobody is logged in to npm; run 'npm login' and try again");
+    console.log(`Logged in as ${who.stdout}`);
+  }
 
   if (plan.image.push && !step('bash', [DOCKER_SCRIPT, '--check-only', ...dockerArgs])) {
     fail('the Docker preflight checks failed; nothing was published or pushed');
