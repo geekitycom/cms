@@ -8,7 +8,8 @@ picture, or the file's extension for anything else, and the file name under
 it. Two badges mark what needs doing:
 
 - **No alt text** on a picture with neither alt text nor a decorative flag
-- **Unused** on a file that no document, live or in the trash, mentions
+- **Unused** on a file that nothing uses: no document, live or in the trash,
+  and no setting or user profile (see [What uses a file](#what-uses-a-file))
 
 A thumbnail is the narrowest derived copy, in the first configured format, that
 is at least 400 pixels wide. A picture with no variants yet shows the original.
@@ -31,7 +32,8 @@ shows:
   path under `content/uploads`
 - the alt-text form, for a picture
 - the public URL and the ready-made Markdown
-- the documents that point at the file
+- what uses the file: documents, settings and user profiles, each linked to
+  where it is changed
 - **Delete**
 
 **Previous** and **Next** step through the view the screen was opened from. The
@@ -52,6 +54,30 @@ appears without a restart. A file removed the same way disappears. The library
 asks the index one question: which documents mention a URL. A directory walk
 cannot answer that.
 
+### What uses a file
+
+One answer serves the Used by list, the Unused badge, the "not used anywhere"
+filter and the Delete confirmation. A file is used by:
+
+- a document, live or in the trash, whose body or front matter names it. Every
+  front-matter value counts, however deeply it nests: a photo post's `photo`
+  list, a review's `item.photo.url`, or a key a theme reads.
+- a setting that names it. The site icon (`icon`) links to Settings > General.
+  The old site `avatar`, which the icon falls back to, is also listed under
+  General. A setting on another settings page links to that page. A plugin's
+  setting links to Settings. Secret settings are not read.
+- a user's avatar, or any other field of their profile, which links to that
+  user's screen under Users.
+
+A value names a file when it contains the file's URL (`/uploads/2026/10/a.jpg`),
+the same URL percent-encoded, or the directory of its derived images
+(`/uploads/_/2026/10/a.jpg/…`). An absolute URL on the site's host contains the
+site-relative one, so it counts too. The match stops at the end of the
+filename, so `a.jpg` is not matched by `a.jpg.bak` or `a-2.jpg`.
+
+The server gathers documents, settings and profiles once per request and
+checks every file against that one list.
+
 The public URL and the Markdown are readonly text fields, which select and copy
 on their own. The Markdown is:
 
@@ -71,13 +97,14 @@ shows a refusal as a flash message on the next page, not as the editor's JSON.
 
 ### Delete a file
 
-If no document mentions a file, the first click on Delete deletes it.
+If nothing uses a file, the first click on Delete deletes it.
 
-If a document mentions the file anywhere in its body, as Markdown, as HTML or
-in prose, Delete shows a confirmation. The confirmation names every such
-document, links each one to its editor, and marks the ones in the trash. Only a
-form that carries `confirm` deletes the file. Deleting the bytes does not
-change the documents.
+If anything uses the file (see [What uses a file](#what-uses-a-file)), Delete
+shows a confirmation. A mention in a body counts whether it is Markdown, HTML
+or prose. The confirmation names everything that uses the file, links each one
+to where it is changed, and marks documents in the trash. Only a form that
+carries `confirm` deletes the file. Deleting the bytes does not change the
+documents, settings or profiles.
 
 Documents in the trash count because a trashed post can be restored. A
 restored post whose picture was deleted is broken. The confirmation warns the

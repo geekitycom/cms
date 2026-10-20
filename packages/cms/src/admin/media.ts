@@ -8,7 +8,6 @@ import type { Context, Hono } from 'hono';
 
 import { postLabel } from '../content/post-type.ts';
 import { isTrashedPath } from '../content/store.ts';
-import type { CatalogReader } from '../content/store.ts';
 import type { Document } from '../content/document.ts';
 import { UPLOAD_ASSET_PREFIX } from '../content/uploads.ts';
 import type { GeekityEnv } from '../web/env.ts';
@@ -18,9 +17,18 @@ import type { AltText } from '../content/alt-text.ts';
 import type { UploadKind } from '../files/upload-types.ts';
 import { describeImage, removeImageVariants, thumbnailUrl } from '../images/variants.ts';
 import type { ImageConfig } from '../images/variants.ts';
-import { deleteUpload, listUploads, mentionsUpload, resolveUpload } from '../media/library.ts';
+import {
+  deleteUpload,
+  listUploads,
+  resolveUpload,
+  usageText,
+  usesUpload,
+} from '../media/library.ts';
 import type { MediaFile, RemoveDerived } from '../media/library.ts';
 import { refusedUpload, storeUpload } from '../media/uploads.ts';
+import type { SettingsRegistry } from '../settings/types.ts';
+import { SITE } from '../site/settings.ts';
+import { listUsers } from '../site/users.ts';
 import { isFile } from '../util/files.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { pageCount } from '../web/pagination.ts';
@@ -29,7 +37,11 @@ import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { jobStatusView } from './job-status.ts';
 import { STRIP_METADATA_PANEL, STRIP_METADATA_PATH } from './maintenance.ts';
-import { ADMIN_PREFIX } from '../site/admin-paths.ts';
+import { ADMIN_PREFIX, editUserPath } from '../site/admin-paths.ts';
+import { SETTINGS_PATH } from './settings.ts';
+import { GENERAL_SETTINGS } from './settings-general.ts';
+import type { SettingsPage } from './settings-page.ts';
+import { ALL_SETTINGS_PAGES } from './settings-pages.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
 
 /** Where the media screen lives. */
@@ -137,53 +149,128 @@ export function mediaFileUrl(path: string, view: MediaView): string {
   return `${MEDIA_FILE_PATH}?path=${encodeURIComponent(path)}${query === '' ? '' : `&${query}`}`;
 }
 
-/** One document that mentions an upload, as the screens name it. */
+/** One thing that uses an upload — a document, a setting, a profile — as the screens name it. */
 export interface MediaReference {
-  /** Path relative to the content directory: what identifies the document. */
-  path: string;
-  /** Its title, or its path when it has none worth showing. */
+  /** A document's title, or what the site uses the file as: "The site icon". */
   title: string;
-  /** Where to edit it. */
+  /** Where to change it: the document's editor, the settings page, the user's screen. */
   editUrl: string;
-  /** Whether it is in the trash rather than the live tree. */
+  /** Where it is: a document's path relative to the content directory, or the screen that sets it. */
+  where: string;
+  /** Whether it is a document in the trash rather than the live tree. */
   trashed: boolean;
 }
 
+/** One place an upload could be used from, with every string it holds as one text. */
+interface ReferenceSource {
+  reference: MediaReference;
+  text: string;
+}
+
 /**
- * Every document, live and trashed, that a reference could come from.
+ * Everything that could use an upload: every document, live and trashed, and
+ * the site itself — its settings and its users' profiles.
+ *
+ * A document counts by its body and by every front-matter value, so a photo
+ * post's `photo` list, a review's `item.photo` and anything a theme reads out
+ * of front matter all count, whatever shape they nest in.
  *
  * The trash counts. A trashed post can be restored tomorrow, and restoring one
  * whose picture was deleted in the meantime is a broken post nobody was warned
  * about — so a file the trash still points at asks for confirmation exactly as
  * a published one does.
  *
- * This is the one thing on the screens that comes out of the index rather than
- * off the disk. The index is a cache of the files (decision-1), so it may be a
- * moment behind a hand edit; that is acceptable here because the answer is a
- * warning rather than a decision, and the confirmation step is what makes an
- * out-of-date answer harmless in both directions.
+ * The documents come out of the index rather than off the disk. The index is
+ * a cache of the files (decision-1), so it may be a moment behind a hand edit;
+ * that is acceptable here because the answer is a warning rather than a
+ * decision, and the confirmation step is what makes an out-of-date answer
+ * harmless in both directions.
+ *
+ * Gathered once per request, with each source's text flattened once, so the
+ * library asks every file the same list rather than walking it per file.
  */
-function referenceSources(store: CatalogReader): Document[] {
+async function referenceSources(c: Context<GeekityEnv>): Promise<ReferenceSource[]> {
   // Two queries rather than one because `listAll` shows the live tree or the
   // trash and never both, which is the same reason the taxonomy screens ask
   // twice.
-  return [...store.listAll({ trashed: false }), ...store.listAll({ trashed: true })];
+  const documents = [
+    ...c.var.store.listAll({ trashed: false }),
+    ...c.var.store.listAll({ trashed: true }),
+  ];
+  return [
+    ...documents.map(documentSource),
+    ...(await settingSources(c.var.settings)),
+    ...userSources(c.var.config.dataDir),
+  ];
 }
 
-function referencesAmong(documents: readonly Document[], url: string): MediaReference[] {
-  return documents
-    .filter((document) => mentionsUpload(document.body, url))
-    .map((document) => ({
-      path: document.path,
+function documentSource(document: Document): ReferenceSource {
+  // The rendered HTML is the body again, and the hash and path name no upload.
+  const { html: _html, hash: _hash, path: where, ...written } = document;
+  return {
+    reference: {
       title: postLabel(document),
       editUrl: documentEditorPath(document.type === 'page' ? PAGE_SCREENS : POST_SCREENS, document),
+      where,
       trashed: isTrashedPath(document.path),
-    }));
+    },
+    text: usageText(written),
+  };
 }
 
-/** Every document whose body mentions an upload's URL, trash included. */
-export function referencesTo(store: CatalogReader, url: string): MediaReference[] {
-  return referencesAmong(referenceSources(store), url);
+/** What the site's own settings are called where they hold an upload. */
+const SITE_SETTING_TITLES: Readonly<Record<string, string>> = {
+  icon: 'The site icon',
+  avatar: 'The site’s old avatar, which the site icon falls back to',
+};
+
+/** Every setting in effect, secrets aside, each linked to the page that sets it. */
+async function settingSources(settings: SettingsRegistry): Promise<ReferenceSource[]> {
+  const sources: ReferenceSource[] = [];
+  for (const ref of settings.list()) {
+    if (ref.declaration.secret === true) continue;
+    const text = usageText(await settings.get(ref));
+    if (!text.includes(UPLOAD_ASSET_PREFIX)) continue;
+    const page = ref.namespace === SITE.declaration.namespace ? settingsPageOf(ref.key) : undefined;
+    sources.push({
+      reference: {
+        title: SITE_SETTING_TITLES[ref.key] ?? `The ${ref.namespace} setting ${ref.key}`,
+        editUrl: page?.path ?? SETTINGS_PATH,
+        where: page === undefined ? 'Settings' : (page.heading ?? `Settings › ${page.label}`),
+        trashed: false,
+      },
+      text,
+    });
+  }
+  return sources;
+}
+
+/**
+ * The settings page a site setting is on. The old avatar is on none, and is
+ * filed under General because that is where the icon it stands in for is set.
+ */
+function settingsPageOf(key: string): SettingsPage | undefined {
+  if (key === 'avatar') return GENERAL_SETTINGS;
+  return ALL_SETTINGS_PAGES.find((page) => (page.fields as readonly string[]).includes(key));
+}
+
+/** Each user's avatar, and the rest of their profile, linked to their screen. */
+function userSources(dataDir: string): ReferenceSource[] {
+  return listUsers(dataDir).flatMap((user) => {
+    const { avatar, ...rest } = user.profile ?? {};
+    const name = user.profile?.displayName ?? user.username;
+    const reference = { editUrl: editUserPath(user.id), where: 'Users', trashed: false };
+    return [
+      { reference: { ...reference, title: `${name}’s avatar` }, text: avatar ?? '' },
+      { reference: { ...reference, title: `${name}’s profile` }, text: usageText(rest) },
+    ];
+  });
+}
+
+function referencesAmong(sources: readonly ReferenceSource[], relative: string): MediaReference[] {
+  return sources
+    .filter((source) => usesUpload(source.text, relative))
+    .map((source) => source.reference);
 }
 
 /** A file with what the screens add to it: who uses it, and a picture small enough for a tile. */
@@ -197,13 +284,13 @@ interface LibraryFile extends MediaFile {
 
 function libraryFile(
   config: ImageConfig,
-  documents: readonly Document[],
+  sources: readonly ReferenceSource[],
   file: MediaFile,
 ): LibraryFile {
   const image = file.kind === 'image' ? describeImage(config, file.path) : undefined;
   return {
     ...file,
-    references: referencesAmong(documents, file.url),
+    references: referencesAmong(sources, file.path),
     thumbnailUrl: file.kind === 'image' ? thumbnailUrl(config, file.path, file.url) : file.url,
     width: image?.width,
     height: image?.height,
@@ -320,7 +407,7 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
     }
 
     const url = `${UPLOAD_ASSET_PREFIX}${relative}`;
-    const references = referencesTo(c.var.store, url);
+    const references = referencesAmong(await referenceSources(c), relative);
 
     // A file something still points at is offered rather than deleted: the
     // bytes do not come back, and the documents naming them are the whole
@@ -353,9 +440,9 @@ export function mountMediaScreen(app: Hono<GeekityEnv>, options: MountMediaScree
   });
 
   async function libraryFiles(c: Context<GeekityEnv>): Promise<LibraryFile[]> {
-    const documents = referenceSources(c.var.store);
+    const sources = await referenceSources(c);
     return (await listUploads(c.var.config.contentDir)).map((file) =>
-      libraryFile(c.var.config, documents, file),
+      libraryFile(c.var.config, sources, file),
     );
   }
 

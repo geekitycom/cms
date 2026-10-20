@@ -147,7 +147,6 @@ export {
   MEDIA_SECTION,
   MEDIA_UPLOAD_PATH,
   mountMediaScreen,
-  referencesTo,
 } from './media.ts';
 export type { DeleteUploadOptions, MediaFile, RemoveDerived } from '../media/library.ts';
 export type { MediaReference, MountMediaScreenOptions } from './media.ts';
