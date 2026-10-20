@@ -7,6 +7,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-10-20 18:53'
+updated_date: '2026-10-20 19:02'
 labels:
   - release
   - ci
@@ -31,3 +32,9 @@ Publishing was manual (decision-7): a maintainer ran pnpm release on main after 
 - [ ] #6 docs/development.md and the comments in release-please.yml and scripts/release.ts describe the automated publish
 - [ ] #7 A release reaches npm with provenance and ghcr.io with both platforms from Actions before 2026-10-22
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built on branch release-from-actions (7a2eedcc..d1d18ca8). lint, format:check, typecheck, 47 release tests and actionlint pass; checkout git sequence replayed locally. Awaiting the first real run on the 0.36.1 release.
+<!-- SECTION:NOTES:END -->
