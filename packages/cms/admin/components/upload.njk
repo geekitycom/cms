@@ -1,0 +1,26 @@
+{# An upload in place: a file picker beside a box, grid or menu that wants a
+   file, so nobody has to leave a post for the media library and come back
+   with an address (TASK-439).
+
+   `uploadControl(kind, target, url)` emits a `hidden` block that
+   `static/upload-drop.js` reveals, so a page with no script shows nothing that
+   does nothing. The script posts each file to `url` and hands the answer to
+   the `kind`'s handler, which fills the element whose id is `target`:
+
+     photos   adds a ticked tile to the photo grid; `name` is the prefix of
+              the grid's checkbox names
+     field    sets the text box's value; `preview` names an <img> to show it
+     select   adds the file to the menu and chooses it
+     library  reloads the page once the files have landed
+
+   Dropping files on the target, or on the field around it, does the same.
+   `images` asks the server to refuse anything that is not an image. #}
+
+{% macro uploadControl(kind, target, url, images=false, accept='', name='', preview='') -%}
+<div class="mt-1 flex flex-wrap items-center gap-2" data-upload-drop="{{ kind }}" data-upload-url="{{ url }}" data-upload-target="{{ target }}"{% if images %} data-upload-images{% endif %}{% if name %} data-upload-name="{{ name }}"{% endif %}{% if preview %} data-upload-preview="{{ preview }}"{% endif %} hidden>
+  <label class="text-xs" for="{{ target }}-upload">Upload</label>
+  <input id="{{ target }}-upload" type="file" class="file-input file-input-xs w-auto max-w-full"{% if images %} accept="image/*"{% elif accept %} accept="{{ accept }}"{% endif %}{% if kind == 'photos' or kind == 'library' %} multiple{% endif %} data-upload-input />
+  <span class="text-xs text-base-content/70">or drop {% if kind == 'photos' or kind == 'library' %}files{% else %}a file{% endif %} here</span>
+  <p class="w-full text-xs empty:hidden" role="status" aria-live="polite" data-upload-status></p>
+</div>
+{%- endmacro %}

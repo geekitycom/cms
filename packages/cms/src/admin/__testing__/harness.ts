@@ -165,7 +165,13 @@ export interface Browser {
    * it out of the multipart body exactly as it does out of a urlencoded one.
    * The field name defaults to the editor's; the avatar form uses its own.
    */
-  upload(url: string, csrfToken: string, file: UploadedFile, field?: string): Promise<Response>;
+  upload(
+    url: string,
+    csrfToken: string,
+    file: UploadedFile,
+    field?: string,
+    fields?: Record<string, string>,
+  ): Promise<Response>;
   /** The session cookie value currently held, or `undefined`. */
   session(): string | undefined;
   /** Force the held cookie, for the tests about a stale or planted one. */
@@ -201,9 +207,10 @@ export function browser(cms: Cms): Browser {
         }),
       );
     },
-    async upload(url, csrfToken, file, field = 'file') {
+    async upload(url, csrfToken, file, field = 'file', fields = {}) {
       const form = new FormData();
       form.set('csrf_token', csrfToken);
+      for (const [name, value] of Object.entries(fields)) form.set(name, value);
       form.set(field, new File([new Uint8Array(file.bytes)], file.name, { type: file.type }));
       return remember(
         await cms.app.request(url, { method: 'POST', headers: headers(), body: form }),

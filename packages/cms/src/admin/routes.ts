@@ -159,6 +159,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       adminUrl: ADMIN_PREFIX,
       siteUrl: '/',
       newPostUrl: newEditorPath(POST_SCREENS),
+      uploadsUrl: UPLOADS_PATH,
       assetPrefix: ADMIN_ASSET_PREFIX,
       navigation: adminMenu(
         { section: name(context['section']), child: name(context['child']) },

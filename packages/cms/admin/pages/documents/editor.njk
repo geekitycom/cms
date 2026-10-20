@@ -13,12 +13,21 @@
 {% from "components/card.njk" import card, cardActions %}
 {% from "components/collapse.njk" import collapse %}
 {% from "components/dropdown.njk" import dropdown %}
+{% from "components/upload.njk" import uploadControl %}
 
 {% set ACTION_COLORS = { 'publish': 'primary', 'update': 'primary', 'trash': 'error' } %}
 {% set ACTION_STYLES = { 'trash': 'ghost' } %}
 {% set SECTION_TITLES = { photos: 'Photos', link: 'Link', rsvp: 'RSVP', event: 'Event', episode: 'Recording', review: 'Review', checkin: 'Check-in' } %}
 
 {% set ICON_SIZES = { md: 'size-6', sm: 'size-4' } %}
+
+{% macro photoTile(name, url, thumbnail, alt) -%}
+<label class="relative cursor-pointer">
+  <input class="peer sr-only" type="checkbox" name="{{ name }}" value="{{ url }}" />
+  <img class="aspect-square w-full rounded-box object-cover ring-primary ring-offset-2 ring-offset-base-100 peer-checked:ring-2 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-base-content" src="{{ thumbnail }}" alt="{{ alt }}" loading="lazy" />
+  <span class="badge badge-primary badge-xs absolute end-1 top-1 hidden peer-checked:inline-flex" aria-hidden="true">✓</span>
+</label>
+{%- endmacro %}
 
 {% macro icon(path, size='md') -%}
 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.6" stroke="currentColor" class="shrink-0{{ ICON_SIZES | modifier(size) }}" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="{{ path }}"/></svg>
@@ -152,22 +161,21 @@
         </div>
       </div>
     {% endfor %}
-    {% if photos.picks | length %}
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">Add from the media library</legend>
-        <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
-          {% for pick in photos.picks %}
-            <label class="relative cursor-pointer">
-              <input class="peer sr-only" type="checkbox" name="{{ photoFields.url }}{{ pick.index }}" value="{{ pick.url }}" />
-              <img class="aspect-square w-full rounded-box object-cover ring-primary ring-offset-2 ring-offset-base-100 peer-checked:ring-2 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-base-content" src="{{ pick.thumbnail }}" alt="{{ pick.alt or pick.url }}" loading="lazy" />
-              <span class="badge badge-primary badge-xs absolute end-1 top-1 hidden peer-checked:inline-flex" aria-hidden="true">✓</span>
-            </label>
-          {% endfor %}
-        </div>
-        <p class="label block whitespace-normal">A ticked photo is added when you save, with the media library’s alt text. Add them now to write alt text of your own first.</p>
-        <div>{{ button('Add the ticked photos', type='submit', name='switch-kind', value=postKind, style='soft', formnovalidate=true) }}</div>
-      </fieldset>
-    {% endif %}
+    <fieldset class="fieldset rounded-box">
+      <legend class="fieldset-legend">Add from the media library</legend>
+      <div class="grid grid-cols-3 gap-2 sm:grid-cols-6" id="editor-photo-picks">
+        {% for pick in photos.picks %}
+          {{ photoTile(photoFields.url + pick.index, pick.url, pick.thumbnail, pick.alt or pick.url) }}
+        {% endfor %}
+      </div>
+      <template data-upload-tile="editor-photo-picks">{{ photoTile('', '', '', '') }}</template>
+      {% if not photos.picks | length %}
+        <p class="text-sm" data-upload-empty>The media library has no images yet.</p>
+      {% endif %}
+      {{ uploadControl('photos', 'editor-photo-picks', uploadsUrl, images=true, name=photoFields.url) }}
+      <p class="label block whitespace-normal">A ticked photo is added when you save, with the media library’s alt text. Add them now to write alt text of your own first.</p>
+      <div{% if not photos.picks | length %} hidden data-upload-reveal{% endif %}>{{ button('Add the ticked photos', type='submit', name='switch-kind', value=postKind, style='soft', formnovalidate=true) }}</div>
+    </fieldset>
     <div class="grid gap-x-4 sm:grid-cols-2">
       {{ field.text('editor-photo-url-' + photos.blank, photoFields.url + photos.blank, 'Or a web address', value='', list='editor-photo-uploads', autocomplete='off', error=(error if errorField == ('editor-photo-url-' + photos.blank) else '')) }}
       {{ field.text('editor-photo-alt-' + photos.blank, photoFields.alt + photos.blank, 'Its alt text', value='') }}
@@ -224,15 +232,19 @@
   {{ placeFields(true) }}
 
 {% elif name == 'episode' %}
-  {% call field.select('editor-enclosure-url', enclosureFields.url, 'Audio or video file', error=(error if errorField == 'editor-enclosure-url' else ''), hint='Upload the file to the media library first. Feeds carry it as the post’s enclosure and the post page plays it. None removes the recording, its transcript and its other versions.', hintId='editor-enclosure-url-hint') %}
+  {% call field.select('editor-enclosure-url', enclosureFields.url, 'Audio or video file', error=(error if errorField == 'editor-enclosure-url' else ''), hint='Feeds carry it as the post’s enclosure and the post page plays it. None removes the recording, its transcript and its other versions.', hintId='editor-enclosure-url-hint') %}
     <option value=""{% if form.enclosure.url == "" %} selected{% endif %}>None</option>
     {% for choice in enclosureChoices.media %}
       <option value="{{ choice.url }}"{% if choice.url == form.enclosure.url %} selected{% endif %}>{{ choice.label }}</option>
     {% endfor %}
   {% endcall %}
+  {{ uploadControl('select', 'editor-enclosure-url', uploadsUrl, accept='audio/*,video/*') }}
   <div class="grid gap-x-4 sm:grid-cols-2">
     {{ field.text('editor-enclosure-duration', enclosureFields.duration, 'Duration', value=form.enclosure.duration, inputmode='numeric', autocomplete='off', error=(error if errorField == 'editor-enclosure-duration' else ''), hint='Seconds, or 30:34, or 1:02:03. Leave it empty if you do not know.', hintId='editor-enclosure-duration-hint') }}
-    {{ field.text('editor-enclosure-transcript', enclosureFields.transcriptUrl, 'Transcript or captions', value=form.enclosure.transcriptUrl, list='editor-transcript-uploads', autocomplete='off', error=(error if errorField == 'editor-enclosure-transcript' else ''), hintId='editor-enclosure-transcript-hint') }}
+    <div>
+      {{ field.text('editor-enclosure-transcript', enclosureFields.transcriptUrl, 'Transcript or captions', value=form.enclosure.transcriptUrl, list='editor-transcript-uploads', autocomplete='off', error=(error if errorField == 'editor-enclosure-transcript' else ''), hintId='editor-enclosure-transcript-hint') }}
+      {{ uploadControl('field', 'editor-enclosure-transcript', uploadsUrl, accept='.vtt,.srt,.txt') }}
+    </div>
   </div>
   <datalist id="editor-transcript-uploads">
     {% for url in enclosureChoices.transcripts %}
@@ -256,6 +268,7 @@
       {% set n = loop.index0 %}
       {% call collapse(('Version ' + loop.index) if row.url else 'Add a version', row.url, fields=true) %}
         {{ field.text('editor-alternate-url-' + n, enclosureFields.alternate.url + n, 'Address', value=row.url, list='editor-media-uploads', autocomplete='off', error=(error if errorField == ('editor-alternate-url-' + n) else '')) }}
+        {{ uploadControl('field', 'editor-alternate-url-' + n, uploadsUrl, accept='audio/*,video/*') }}
         {{ field.text('editor-alternate-type-' + n, enclosureFields.alternate.type + n, 'Type', value=row.type, placeholder='video/mp4', autocomplete='off', spellcheck='false', error=(error if errorField == ('editor-alternate-type-' + n) else '')) }}
         {{ field.text('editor-alternate-title-' + n, enclosureFields.alternate.title + n, 'Title', value=row.title, maxlength='32', error=(error if errorField == ('editor-alternate-title-' + n) else '')) }}
         {{ field.text('editor-alternate-height-' + n, enclosureFields.alternate.height + n, 'Height', value=row.height, inputmode='numeric', autocomplete='off', error=(error if errorField == ('editor-alternate-height-' + n) else '')) }}
@@ -364,6 +377,7 @@
       <img class="h-24 w-16 shrink-0 rounded-box object-cover" id="editor-item-photo-preview"{% if reviewPhotoThumbnail %} src="{{ reviewPhotoThumbnail }}"{% else %} hidden{% endif %} alt="" loading="lazy" />
       <div class="flex min-w-0 flex-1 flex-col">
         {{ field.text('editor-item-photo', reviewFields.photo, '', labelHtml=itemWord('picture'), value=form.review.photo, list='editor-photo-uploads', autocomplete='off', error=(error if errorField == 'editor-item-photo' else ''), hint='An image in the media library or a web address. It is the item’s picture, not a photo for the post: it shows beside the item’s details.', hintId='editor-item-photo-hint') }}
+        {{ uploadControl('field', 'editor-item-photo', uploadsUrl, images=true, preview='editor-item-photo-preview') }}
         {{ field.text('editor-item-photo-alt', reviewFields.photoAlt, '', labelHtml=itemWord('picture', ' alt text'), value=form.review.photoAlt) }}
       </div>
     </div>
@@ -478,7 +492,7 @@
           class="flex flex-wrap items-center gap-2"
           id="editor-enhance"
           data-preview-url="{{ previewUrl }}"
-          data-upload-url="{{ uploadUrl }}"
+          data-upload-url="{{ uploadsUrl }}"
           data-kind="{{ kind.type }}"
         >
           {{ button('Preview', type='submit', id='editor-preview-fallback', style='soft', formaction=previewUrl, formtarget='_blank', formnovalidate=true) }}
@@ -667,6 +681,7 @@
   {# The slug and permalink auto-fill, in a file of its own so the policy never
      has to allow an inline script. #}
   <script defer src="{{ assetPrefix }}slug.js"></script>
+  <script defer src="{{ assetPrefix }}upload-drop.js"></script>
   {% if kind.type == 'post' %}
     <script defer src="{{ assetPrefix }}location.js"></script>
   {% endif %}

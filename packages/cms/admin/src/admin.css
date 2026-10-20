@@ -4,6 +4,7 @@
 @source '../pages';
 @source '../../editor/look.ts';
 @source '../static/media.js';
+@source '../static/upload-drop.js';
 
 @plugin 'daisyui' {
   themes:

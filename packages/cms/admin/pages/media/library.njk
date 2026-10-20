@@ -5,13 +5,14 @@
    Everything works with JavaScript switched off: the upload form opens from a
    <details>, the filters are a GET form, and a tile is a link. media.js opens
    a tile's details in a dialog instead and steps through them with the arrow
-   keys. #}
+   keys, and upload-drop.js takes files dropped anywhere on the page. #}
 {% extends "layouts/shell.njk" %}
 {% from "components/alert.njk" import alert %}
 {% from "components/badge.njk" import badge %}
 {% from "components/button.njk" import button, buttonLink %}
 {% from "components/pagination.njk" import pagination %}
 {% from "components/tabs.njk" import tabs %}
+{% from "components/upload.njk" import uploadControl %}
 
 {% block title %}{{ heading }}{% endblock %}
 
@@ -34,6 +35,7 @@
         <div class="mt-2">{{ button('Upload', type='submit', color='primary') }}</div>
       </form>
     </details>
+    {{ uploadControl('library', 'main', uploadsUrl) }}
   </div>
 
   {% if sweepNotice %}
@@ -129,6 +131,7 @@
   {% endif %}
 
   <script defer src="{{ assetPrefix }}copy.js"></script>
+  <script defer src="{{ assetPrefix }}upload-drop.js"></script>
   <script defer src="{{ assetPrefix }}media.js"></script>
   <script defer src="{{ assetPrefix }}job-status.js"></script>
 {% endblock %}
