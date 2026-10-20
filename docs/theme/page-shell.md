@@ -471,37 +471,6 @@ citation says "a page on" and its host.
 The feeds open the HTML of each post that cites something with the same
 citation, as a `p.cite-line`. The picture follows it, with an absolute `src`.
 
-**A read says what was read** (TASK-229) with `partials/read.njk`. The partial
-prints a `p.read-line` at the top of the `e-content`, modelled on
-indiebookclub's own. The line holds:
-
-- A `data.p-read-status`. Its value is `to-read`, `reading` or `finished`, and
-  its text is Want to read, Currently reading or Finished reading.
-- A `span.p-read-of.h-cite`. It holds the title as a `cite.p-name` (linked as
-  its `u-url` when the post gives one), the author as a `p-author`, and the
-  identifier as a `data.p-uid` whose value is the `isbn:` or `doi:` uid.
-  When the read has a cover (TASK-394), the `h-cite` opens with a
-  `span.read-cover` holding an `img.u-photo` with the cover's alt text. The
-  cover is the book's photo, so the entry has no `u-photo` from it.
-
-The stylesheet floats the cover at the start of the read line as a thumbnail.
-It is drawn at its natural size or smaller, at most 6rem wide and 8rem tall,
-and never stretched to the column the way a post photo is. An uploaded cover is
-served as a responsive `<picture>`, like the body's images. The feeds and the
-federated Note carry the same `img`, with an absolute `src`. The cover is not
-the feed item's `image`. An uploaded cover is also an `Image` attachment on the
-federated Note, because Mastodon strips `img` from content and shows only
-attachments. The read stays a Note and its page is unchanged.
-
-The read's kicker and hidden `h1` say Read. A listing prints each entry's read
-line from the same partial: an untitled read prints it above its words, and a
-titled read prints it under its headline and before its `excerpt`, in the order
-its own page uses. The feeds' `summary` of a read opens with the
-line; the listing's `excerpt` leaves it out, so it is not printed twice. The partial prints `read.line`, the same HTML that
-the feeds and the federated Note open with (TASK-233). `read.status`,
-`read.statusLabel` and `read.of` are available for a theme that marks up the
-line differently.
-
 The tags print under the words and inside the article, as one
 `p.post-categories` from `partials/tags.njk`. Each link is then a `p-category`
 of this entry. The stylesheet draws the `#` in front of each tag, so the

@@ -12,7 +12,6 @@ export type EditorGroup =
   | 'address'
   | 'responding'
   | 'event'
-  | 'read'
   | 'summary'
   | 'syndication'
   | 'display';
@@ -72,11 +71,6 @@ const GROUPS: Readonly<Record<EditorGroup, GroupRule>> = {
   event: {
     filled: ({ event }) => filledIn(event.start, event.end, event.location),
     fieldPrefixes: ['editor-event-'],
-  },
-  read: {
-    filled: ({ readStatus, readOf: of }) =>
-      filledIn(readStatus, of.name, of.author, of.uid, of.url, of.photo, of.photoAlt),
-    fieldPrefixes: ['editor-read-'],
   },
   summary: {
     filled: (form) => filledIn(form.description, form.lang),

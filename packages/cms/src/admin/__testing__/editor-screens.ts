@@ -28,8 +28,6 @@ export const FILLED: Readonly<Record<string, string>> = {
   'enclosure-url': '/uploads/2026/10/episode.mp3',
   'alternate-url-0': '/uploads/2026/10/episode.mp4',
   'repost-of': IMAGE,
-  'read-status': 'finished',
-  'read-of-name': 'A book',
   lang: 'fr',
   'syndicate-to-mastodon': '1',
   comments: 'closed',

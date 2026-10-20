@@ -83,7 +83,7 @@ export function resolvePhotos(
   return { photos };
 }
 
-export function isLibraryImage(url: string, contentDir: string): boolean {
+function isLibraryImage(url: string, contentDir: string): boolean {
   const media = UPLOAD_MEDIA_TYPES.get(path.extname(url).toLowerCase());
   return (
     media?.kind === 'image' &&

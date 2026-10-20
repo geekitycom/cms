@@ -747,18 +747,6 @@
     @apply block h-auto w-full;
   }
 
-  .read-line {
-    @apply flow-root;
-  }
-
-  .read-cover {
-    @apply float-start me-4 mb-2;
-  }
-
-  .read-cover img {
-    @apply block h-auto max-h-32 w-auto max-w-24 rounded-sm;
-  }
-
   /* An untitled post is its words, set larger. It is the one entry whose
      heading is the hidden one TASK-144 gave it. */
   .blog-post > .screen-reader-text ~ .e-content {

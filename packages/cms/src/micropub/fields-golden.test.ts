@@ -109,24 +109,6 @@ const CREATES: Readonly<Record<string, object>> = {
       'x-kept': ['kept as sent'],
     },
   },
-  read: {
-    type: ['h-entry'],
-    properties: {
-      'read-status': ['finished'],
-      'read-of': [
-        {
-          type: ['h-cite'],
-          properties: {
-            name: ['A Book'],
-            author: ['An Author'],
-            uid: ['isbn:9780000000000'],
-            url: ['https://books.example/a-book'],
-          },
-        },
-      ],
-      'post-status': ['draft'],
-    },
-  },
   event: {
     type: ['h-event'],
     properties: {
@@ -154,14 +136,6 @@ const UPDATES: Readonly<Record<string, readonly object[]>> = {
     { delete: ['photo', 'location'] },
     { replace: { 'x-kept': ['changed'] } },
   ],
-  read: [
-    { replace: { 'read-status': ['reading'] } },
-    {
-      replace: {
-        'read-of': [{ type: ['h-cite'], properties: { name: ['Another Book'] } }],
-      },
-    },
-  ],
   event: [{ replace: { end: ['2026-10-01 23:30'] } }, { replace: { location: ['The park'] } }],
 };
 
@@ -170,11 +144,6 @@ const REFUSED: Readonly<Record<string, object>> = {
   'repost-of': { 'repost-of': ['not a url'] },
   'like-of': { 'like-of': ['not a url'] },
   'bookmark-of': { 'bookmark-of': ['not a url'] },
-  'read-status': {
-    'read-status': ['skimmed'],
-    'read-of': [{ type: ['h-cite'], properties: { name: ['A Book'] } }],
-  },
-  'read-of': { 'read-of': ['A Book'] },
   photo: { photo: ['not a url'] },
   'mp-syndicate-to': { content: ['Hi'], 'mp-syndicate-to': ['nowhere'] },
   'event-only': { content: ['Hi'], start: ['2026-10-01 18:00'] },

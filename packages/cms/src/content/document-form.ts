@@ -16,9 +16,6 @@ import type { LocationForm } from './location-form.ts';
 import type { Photo } from './photo.ts';
 import type { PhotoRow } from './photo-form.ts';
 import type { PostField } from './post-fields.ts';
-import { BLANK_READ_OF_FORM } from './read-form.ts';
-import type { ReadOfForm } from './read-form.ts';
-import type { Read } from './read.ts';
 import { wallClockIn } from './time.ts';
 import { VISIBILITY_FRONT_MATTER_KEY, visibilityOf } from './visibility.ts';
 import type { StoredVisibility } from './visibility.ts';
@@ -90,13 +87,6 @@ export interface EditorForm {
   likeOf: string;
   /** The page this one bookmarks, the mf2 `bookmark-of` (TASK-169). Posts only. */
   bookmarkOf: string;
-  /**
-   * How far the post's author got with what they read, the mf2 `read-status`
-   * (TASK-229), as the file or the form spells it. Posts only.
-   */
-  readStatus: string;
-  /** What was read, the mf2 `read-of` (TASK-229). Posts only. */
-  readOf: ReadOfForm;
   /** When and where the post's event is (TASK-200). Posts only. */
   event: EventForm;
   /** The language it is written in, the `lang` key; empty for the site's. */
@@ -154,8 +144,6 @@ const BLANK_POST_FIELDS = {
   repostOf: '',
   likeOf: '',
   bookmarkOf: '',
-  readStatus: '',
-  readOf: BLANK_READ_OF_FORM,
   event: BLANK_EVENT_FORM,
   pinned: false,
   previewHidden: false,
@@ -267,11 +255,10 @@ export function splitTags(value: string): string[] {
   return tags;
 }
 
-/** The post's recording, photos and read, as a form resolved them against the media library. */
+/** The post's recording and photos, as a form resolved them against the media library. */
 export interface ResolvedMedia {
   readonly recording: Enclosure | undefined;
   readonly photos: readonly Photo[];
-  readonly read: Read | undefined;
 }
 
 /**

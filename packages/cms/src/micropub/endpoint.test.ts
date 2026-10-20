@@ -89,7 +89,6 @@ describe('q=config', () => {
         { type: 'like', name: 'Like' },
         { type: 'repost', name: 'Repost' },
         { type: 'bookmark', name: 'Bookmark' },
-        { type: 'read', name: 'Read' },
         { type: 'event', name: 'Event' },
       ],
     );

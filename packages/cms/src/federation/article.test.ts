@@ -664,8 +664,8 @@ function archive(count: number): Record<string, string> {
 }
 
 /** Follow a link the collection published, and read it as ActivityStreams. */
-describe('a read’s cover (TASK-394 AC #6)', () => {
-  it('rides on the read line’s h-cite in content, absolute', async () => {
+describe('read-of and read-status (TASK-431)', () => {
+  it('federate no read line and attach no cover', async () => {
     const instance = await site({
       '_data/media.json': JSON.stringify({ '2026/10/peregrine.jpg': { alt: 'A girl floating' } }),
       'posts/2026-10-02-peregrine.md': rawPost(
@@ -684,150 +684,8 @@ describe('a read’s cover (TASK-394 AC #6)', () => {
     const object = await articleAt(instance, '/2026/10/peregrine/');
 
     assert.equal(object['type'], 'Note');
-    assert.match(
-      String(object['content']),
-      new RegExp(
-        '<span class="p-read-of h-cite"><span class="read-cover"><img class="u-photo" ' +
-          `src="${BASE_URL}/uploads/2026/10/peregrine.jpg" alt="A girl floating"></span>`,
-      ),
-    );
-  });
-});
-
-describe('a read’s cover as an attachment (TASK-420)', () => {
-  async function readWithCover(
-    photo: string[],
-    media: Record<string, unknown> = {},
-  ): Promise<Record<string, unknown>> {
-    const instance = await site({
-      '_data/media.json': JSON.stringify(media),
-      'posts/2026-10-02-peregrine.md': rawPost(
-        [
-          "date: '2026-10-02T09:00:00Z'",
-          'permalink: /2026/10/peregrine/',
-          'read-status: finished',
-          'read-of:',
-          '  name: Miss Peregrine’s Home for Peculiar Children',
-          '  photo:',
-          ...photo,
-        ],
-        'Strange and lovely.',
-      ),
-    });
-    return articleAt(instance, '/2026/10/peregrine/');
-  }
-
-  it('attaches an uploaded cover as an Image named for its alt text, and stays a Note', async () => {
-    const object = await readWithCover(['    url: /uploads/2026/10/peregrine.jpg'], {
-      '2026/10/peregrine.jpg': { alt: 'A girl floating' },
-    });
-
-    assert.equal(object['type'], 'Note');
-    assert.deepEqual(object['attachment'], {
-      type: 'Image',
-      mediaType: 'image/jpeg',
-      url: `${BASE_URL}/uploads/2026/10/peregrine.jpg`,
-      name: 'A girl floating',
-    });
-    assert.match(
-      String(object['content']),
-      new RegExp(`<img class="u-photo" src="${BASE_URL}/uploads/2026/10/peregrine.jpg"`),
-    );
-  });
-
-  it('names the attachment with the front matter’s alt over the library’s', async () => {
-    const object = await readWithCover(
-      ['    url: /uploads/2026/10/peregrine.webp', '    alt: The cover, a floating girl'],
-      { '2026/10/peregrine.webp': { alt: 'A girl floating' } },
-    );
-
-    assert.deepEqual(object['attachment'], {
-      type: 'Image',
-      mediaType: 'image/webp',
-      url: `${BASE_URL}/uploads/2026/10/peregrine.webp`,
-      name: 'The cover, a floating girl',
-    });
-  });
-
-  it('attaches nothing for a cover on another site, which stays in content', async () => {
-    const object = await readWithCover(['    url: https://covers.example/peregrine.jpg']);
-
     assert.equal(object['attachment'], undefined);
-    assert.match(String(object['content']), /src="https:\/\/covers\.example\/peregrine\.jpg"/);
-  });
-
-  it('attaches nothing for a cover the library marks decorative', async () => {
-    const object = await readWithCover(['    url: /uploads/2026/10/peregrine.jpg'], {
-      '2026/10/peregrine.jpg': { decorative: true },
-    });
-
-    assert.equal(object['attachment'], undefined);
-  });
-
-  it('attaches a cover the body shows again only once', async () => {
-    const instance = await site({
-      'posts/2026-10-02-peregrine.md': rawPost(
-        [
-          "date: '2026-10-02T09:00:00Z'",
-          'permalink: /2026/10/peregrine/',
-          'read-status: finished',
-          'read-of:',
-          '  name: Miss Peregrine’s Home for Peculiar Children',
-          '  photo:',
-          '    url: /uploads/2026/10/peregrine.jpg',
-          '    alt: A girl floating',
-        ],
-        '![A girl floating](/uploads/2026/10/peregrine.jpg)',
-      ),
-    });
-    const object = await articleAt(instance, '/2026/10/peregrine/');
-
-    assert.deepEqual(object['attachment'], {
-      type: 'Image',
-      mediaType: 'image/jpeg',
-      url: `${BASE_URL}/uploads/2026/10/peregrine.jpg`,
-      name: 'A girl floating',
-    });
-  });
-});
-
-describe('a titled read post’s Note (TASK-416)', () => {
-  const BOOK = 'Miss Peregrine’s Home for Peculiar Children';
-  const WORDS = 'Strange and lovely.';
-
-  async function readNote(title: string): Promise<string> {
-    const instance = await site({
-      'posts/2026-10-02-peregrine.md': rawPost(
-        [
-          `title: ${JSON.stringify(title)}`,
-          "date: '2026-10-02T09:00:00Z'",
-          'permalink: /2026/10/peregrine/',
-          'read-status: finished',
-          'read-of:',
-          `  name: ${BOOK}`,
-          '  author: Ransom Riggs',
-        ],
-        WORDS,
-      ),
-    });
-    const note = await articleAt(instance, '/2026/10/peregrine/');
-    assert.equal(note['type'], 'Note');
-    return String(note['content']);
-  }
-
-  it('opens with its title, then the read line, then its words, as its page does', async () => {
-    const content = await readNote('A peculiar book & a good one');
-
-    assert.match(content, /^<p>A peculiar book &amp; a good one<\/p>\n<p class="read-line">/);
-    assert.ok(content.endsWith(renderMarkdown(WORDS)), content);
-  });
-
-  it('leaves out a title that is only the book’s name, ignoring case and spacing', async () => {
-    const content = await readNote('  miss peregrine’s   HOME for peculiar children ');
-
-    assert.match(content, /^<p class="read-line">/);
-    assert.doesNotMatch(content, /<p>miss peregrine/i);
-    assert.ok(content.endsWith(renderMarkdown(WORDS)), content);
+    assert.equal(String(object['content']), renderMarkdown('Strange and lovely.'));
   });
 });
 

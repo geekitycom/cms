@@ -120,16 +120,6 @@ async function submit(
     'like-of': field(html, 'like-of') ?? '',
     'repost-of': field(html, 'repost-of') ?? '',
     'bookmark-of': field(html, 'bookmark-of') ?? '',
-    'read-status':
-      /<select[^>]*name="read-status"[^>]*>[\s\S]*?<option value="([^"]*)" selected>/.exec(
-        html,
-      )?.[1] ?? '',
-    'read-of-name': field(html, 'read-of-name') ?? '',
-    'read-of-author': field(html, 'read-of-author') ?? '',
-    'read-of-uid': field(html, 'read-of-uid') ?? '',
-    'read-of-url': field(html, 'read-of-url') ?? '',
-    'read-of-photo': field(html, 'read-of-photo') ?? '',
-    'read-of-photo-alt': field(html, 'read-of-photo-alt') ?? '',
     lang: field(html, 'lang') ?? '',
     visibility:
       /<select[^>]*name="visibility"[^>]*>[\s\S]*?<option value="([^"]*)" selected>/.exec(
@@ -601,191 +591,28 @@ describe('likes, reposts and bookmarks in the editor (TASK-169 AC #4)', () => {
   });
 });
 
-describe('a read in the editor (TASK-229 AC #2)', () => {
-  const FILE = ['posts', '2026-01-02-published.md'];
-  const BOOK = {
-    'read-status': 'finished',
-    'read-of-name': 'The Left Hand of Darkness',
-    'read-of-author': 'Ursula K. Le Guin',
-    'read-of-uid': 'isbn:9780441478125',
-    'read-of-url': 'https://books.example/left-hand/',
-  };
-
-  async function published(): Promise<{ contentDir: string; agent: Browser }> {
+describe('read-of and read-status in the editor (TASK-431)', () => {
+  it('offers no fields for them, and an editor save keeps them in the file as written', async () => {
     const contentDir = await seeded([
       {
         file: 'posts/2026-01-02-published.md',
         title: 'Out in the world',
         date: '2026-01-02',
         permalink: '/2026/01/published/',
-      },
-    ]);
-    const cms = await box.site({ contentDir });
-    return { contentDir, agent: await signedIn(cms) };
-  }
-
-  it('sets read-of and read-status, shows them on reload, and clears them again', async () => {
-    const { contentDir, agent } = await published();
-
-    const blank = await (await agent.get('/admin/posts/new')).text();
-    assert.equal(field(blank, 'read-of-name'), '', 'a new post offers read-of empty');
-
-    assert.equal((await submit(agent, '/admin/posts/published', BOOK)).status, 303);
-    const { data } = matter(await readFile(path.join(contentDir, ...FILE), 'utf8'));
-    assert.equal(data['read-status'], 'finished');
-    assert.deepEqual(data['read-of'], {
-      name: 'The Left Hand of Darkness',
-      author: 'Ursula K. Le Guin',
-      uid: 'isbn:9780441478125',
-      url: 'https://books.example/left-hand/',
-    });
-
-    const reloaded = await (await agent.get('/admin/posts/published')).text();
-    assert.equal(field(reloaded, 'read-of-name'), 'The Left Hand of Darkness');
-    assert.equal(field(reloaded, 'read-of-uid'), 'isbn:9780441478125');
-    assert.match(reloaded, /<option value="finished" selected>/);
-
-    assert.equal((await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status, 303);
-    const kept = matter(await readFile(path.join(contentDir, ...FILE), 'utf8')).data;
-    assert.equal(kept['read-status'], 'finished', 'another save keeps it');
-    assert.equal((kept['read-of'] as Record<string, string>)['name'], 'The Left Hand of Darkness');
-
-    const cleared = Object.fromEntries(Object.keys(BOOK).map((name) => [name, '']));
-    assert.equal((await submit(agent, '/admin/posts/published', cleared)).status, 303);
-    const written = await readFile(path.join(contentDir, ...FILE), 'utf8');
-    assert.doesNotMatch(written, /read-/, 'both keys are gone, not left empty');
-  });
-
-  it('refuses a description on a read rather than dropping it', async () => {
-    const { contentDir, agent } = await published();
-    const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
-
-    const response = await submit(agent, '/admin/posts/published', {
-      ...BOOK,
-      description: 'My notes on it',
-    });
-    assert.equal(response.status, 400);
-    assert.match(await response.text(), /Description/, 'the refusal names the field');
-    assert.equal(
-      await readFile(path.join(contentDir, ...FILE), 'utf8'),
-      before,
-      'nothing is written',
-    );
-  });
-
-  it('offers a read-status it does not recognize back as the file spells it', async () => {
-    const contentDir = await seeded([
-      {
-        file: 'posts/2026-01-02-published.md',
-        title: 'Out in the world',
-        date: '2026-01-02',
-        permalink: '/2026/01/published/',
-        extra: ['read-of: A Book', 'read-status: abandoned'],
+        extra: ['read-of: A Book', 'read-status: finished'],
       },
     ]);
     const agent = await signedIn(await box.site({ contentDir }));
     const html = await (await agent.get('/admin/posts/published')).text();
-    assert.match(html, /<option value="abandoned" selected>abandoned \(not recognized\)/);
-    assert.equal(field(html, 'read-of-name'), 'A Book');
-  });
+    assert.doesNotMatch(html, /name="read-/);
 
-  for (const [changes, message] of [
-    [{ 'read-of-name': 'A Book' }, /read status/i],
-    [{ 'read-status': 'reading' }, /title of what was read/],
-    [{ ...BOOK, 'read-of-url': 'a book' }, /has to be a web address/],
-  ] as const) {
-    it(`refuses ${JSON.stringify(changes)}, and writes nothing`, async () => {
-      const { contentDir, agent } = await published();
-      const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
-
-      const response = await submit(agent, '/admin/posts/published', changes);
-
-      assert.equal(response.status, 400);
-      assert.match(await response.text(), message);
-      assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
-    });
-  }
-});
-
-describe('a read’s cover in the editor (TASK-394 AC #2)', () => {
-  const FILE = ['posts', '2026-01-02-published.md'];
-  const BOOK = { 'read-status': 'finished', 'read-of-name': 'Dune' };
-
-  async function published(): Promise<{ contentDir: string; agent: Browser }> {
-    const contentDir = await seeded([
-      {
-        file: 'posts/2026-01-02-published.md',
-        title: 'Out in the world',
-        date: '2026-01-02',
-        permalink: '/2026/01/published/',
-      },
-    ]);
-    const uploads = path.join(contentDir, 'uploads', '2026', '10');
-    await mkdir(uploads, { recursive: true });
-    for (const name of ['dune.jpg', 'episode.mp3']) {
-      await writeFile(path.join(uploads, name), new Uint8Array(8));
-    }
-    const cms = await box.site({ contentDir });
-    return { contentDir, agent: await signedIn(cms) };
-  }
-
-  async function readOf(contentDir: string): Promise<unknown> {
-    return matter(await readFile(path.join(contentDir, ...FILE), 'utf8')).data['read-of'];
-  }
-
-  it('chooses a cover, changes it and removes it, keeping the read', async () => {
-    const { contentDir, agent } = await published();
-
-    const blank = await (await agent.get('/admin/posts/published')).text();
-    assert.equal(field(blank, 'read-of-photo'), '', 'the cover is offered empty');
-    assert.match(blank, /name="read-of-photo"[^>]*list="editor-photo-uploads"/);
-
-    let response = await submit(agent, '/admin/posts/published', {
-      ...BOOK,
-      'read-of-photo': '/uploads/2026/10/dune.jpg',
-      'read-of-photo-alt': 'A desert under two moons',
-    });
-    assert.equal(response.status, 303);
-    assert.deepEqual(await readOf(contentDir), {
-      name: 'Dune',
-      photo: { url: '/uploads/2026/10/dune.jpg', alt: 'A desert under two moons' },
-    });
-    const reloaded = await (await agent.get('/admin/posts/published')).text();
-    assert.equal(field(reloaded, 'read-of-photo'), '/uploads/2026/10/dune.jpg');
-    assert.equal(field(reloaded, 'read-of-photo-alt'), 'A desert under two moons');
-
-    response = await submit(agent, '/admin/posts/published', {
-      'read-of-photo': 'https://covers.example/dune.jpg',
-      'read-of-photo-alt': '',
-    });
-    assert.equal(response.status, 303);
-    assert.deepEqual(await readOf(contentDir), {
-      name: 'Dune',
-      photo: { url: 'https://covers.example/dune.jpg' },
-    });
-
-    response = await submit(agent, '/admin/posts/published', { 'read-of-photo': '' });
-    assert.equal(response.status, 303);
-    assert.deepEqual(await readOf(contentDir), { name: 'Dune' });
-  });
-
-  it('refuses a cover that is not an image in the media library or a web address', async () => {
-    const { contentDir, agent } = await published();
-    const before = await readFile(path.join(contentDir, ...FILE), 'utf8');
-
-    for (const url of [
-      '/uploads/2026/10/episode.mp3',
-      '/uploads/2026/10/missing.jpg',
-      'dune.jpg',
-    ]) {
-      const response = await submit(agent, '/admin/posts/published', {
-        ...BOOK,
-        'read-of-photo': url,
-      });
-      assert.equal(response.status, 400, url);
-      assert.match(await response.text(), /cover/i, url);
-    }
-    assert.equal(await readFile(path.join(contentDir, ...FILE), 'utf8'), before);
+    assert.equal((await submit(agent, '/admin/posts/published', { title: 'Renamed' })).status, 303);
+    const { data } = matter(
+      await readFile(path.join(contentDir, 'posts', '2026-01-02-published.md'), 'utf8'),
+    );
+    assert.equal(data['title'], 'Renamed');
+    assert.equal(data['read-of'], 'A Book');
+    assert.equal(data['read-status'], 'finished');
   });
 });
 

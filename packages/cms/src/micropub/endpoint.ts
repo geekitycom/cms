@@ -91,11 +91,6 @@ const POST_TYPES: Readonly<
     properties: ['bookmark-of', ...NAMED],
     required: ['bookmark-of'],
   },
-  read: {
-    name: 'Read',
-    properties: ['read-of', 'read-status', ...NAMED],
-    required: ['read-of', 'read-status'],
-  },
   event: { name: 'Event', properties: ['start', 'end', ...NAMED], required: ['start', 'name'] },
 };
 
@@ -377,7 +372,7 @@ const ACTIONS: {
       kind: POST_KIND,
       document: undefined,
       ...created,
-      form: withoutClientReadSummary(photos.form),
+      form: photos.form,
     });
     if (written.outcome === 'refused') {
       await removeUploads(photos.stored, config);
@@ -411,7 +406,7 @@ const ACTIONS: {
       kind: POST_KIND,
       document,
       ...updated,
-      form: withoutClientReadSummary(updated.form),
+      form: updated.form,
     });
     if (written.outcome === 'refused') return invalid(written.message).answer(c);
     if (written.outcome === 'conflict') {
@@ -509,8 +504,4 @@ export function mountMicropub(app: Hono<GeekityEnv>): void {
     c.header('cache-control', 'no-store');
     return c.json(answer);
   });
-}
-
-function withoutClientReadSummary(form: EditorForm): EditorForm {
-  return form.readStatus === '' ? form : { ...form, description: '' };
 }

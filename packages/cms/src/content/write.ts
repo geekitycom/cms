@@ -29,7 +29,6 @@ import { resolvePhotos } from './photo-form.ts';
 import { PINNED_POST_LIMIT, pinnedAt } from './pinned.ts';
 import { discoverPostType, replyTarget } from './post-type.ts';
 import type { PostType } from './post-type.ts';
-import { resolveRead } from './read-form.ts';
 import { RSVP_VALUES, rsvpValue } from './rsvp.ts';
 import { contentFilePath, freeSlug, saveDocument } from './save.ts';
 import { htmlToText } from './search.ts';
@@ -174,15 +173,6 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
       );
     }
   }
-  const read = resolveRead(form.readStatus, form.readOf, contentDir);
-  if ('error' in read) return refused(read.error, read.field);
-  if (read.read !== undefined && form.description !== '') {
-    return refused(
-      'A read is described by what it says, so it keeps no Description. Empty Description to save it.',
-      'editor-description',
-    );
-  }
-
   if (form.lang !== '' && !LANGUAGE_TAG_PATTERN.test(form.lang)) {
     return refused('That is not a language tag, such as en, fr or pt-BR.', 'editor-lang');
   }
@@ -198,7 +188,6 @@ async function checkForm(site: DocumentSite, write: DocumentWrite): Promise<Chec
   const media: ResolvedMedia = {
     recording: recording.enclosure,
     photos: photos.photos,
-    read: read.read,
   };
 
   const located = resolveLocation(form.location);
@@ -285,7 +274,6 @@ async function resolveIdentity(
     slugify(form.title) ||
     (document?.slug ?? '') ||
     noteSlug(form.body) ||
-    slugify(form.readOf.name) ||
     (await typeSlug(kind, form, checked.media.photos, site.citedContext)) ||
     'untitled';
   const trashed = document !== undefined && isTrashedPath(document.path);

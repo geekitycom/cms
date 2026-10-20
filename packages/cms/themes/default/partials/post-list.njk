@@ -3,17 +3,15 @@
 
   Expects `posts`. Every entry opens on a kicker naming its kind and its date.
   An article is the only entry with a headline: its title as a linked
-  `p-name`, its `excerpt` (the feeds' summary, less a read post's read line)
-  as a `p-summary` cut to about 280 characters, and a Continue reading link,
-  with the categories it is filed under in its kicker. A note, which has no
-  title, is printed whole as its `e-content`, and its date in the kicker is the
-  link to it. A reply is a note that first cites what it answers, and a reply
-  with a title is an article that cites it after its title and summary; a
-  like, a repost and a bookmark cite theirs the same way. A titled read prints
-  its read line under its title, before its summary, as its own page does.
-  Tags are deliberately not here: an entry's tags belong under the entry, and
-  a feed of twenty posts listing everyone's would be a wall of links rather
-  than a list of writing.
+  `p-name`, its `summary` (the very line the feeds publish) as a `p-summary`
+  cut to about 280 characters, and a Continue reading link, with the
+  categories it is filed under in its kicker. A note, which has no title, is
+  printed whole as its `e-content`, and its date in the kicker is the link to
+  it. A reply is a note that first cites what it answers, and a reply with a
+  title is an article that cites it after its title and summary; a like, a
+  repost and a bookmark cite theirs the same way. Tags are deliberately not
+  here: an entry's tags belong under the entry, and a feed of twenty posts
+  listing everyone's would be a wall of links rather than a list of writing.
 
   `feedHeading` is the heading level, which belongs to the layout rather than
   to the list: a listing is a page of entries and heads each one at 2, and a
@@ -46,11 +44,7 @@
     {% set citations = post.citations %}
     {% include "partials/citations.njk" %}
     {% endset %}
-    {% set readLine %}
-    {% set read = post.read %}
-    {% include "partials/read.njk" %}
-    {% endset %}
-    {% if not post.named %}{{ cited | safe }}{{ readLine | safe }}{% endif %}
+    {% if not post.named %}{{ cited | safe }}{% endif %}
     {% set rsvp = post.rsvp %}
     {% include "partials/rsvp.njk" %}
     {% if post.photos.length %}
@@ -63,13 +57,12 @@
     <{{ feedTitleTag }} class="feed-title p-name">
       <a href="{{ post.url | url }}" class="u-url">{{ post.title }}</a>
     </{{ feedTitleTag }}>
-    {{ readLine | safe }}
-    {% if post.excerpt %}
+    {% if post.summary %}
     <div class="feed-excerpt p-summary">
       {#- `truncate` cuts at the last space before the length and adds an
           ellipsis, so a description short enough is printed whole and a long
           one never breaks a word. -#}
-      <p>{{ post.excerpt | truncate(280) }}</p>
+      <p>{{ post.summary | truncate(280) }}</p>
     </div>
     {% endif %}
     {{ cited | safe }}

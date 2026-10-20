@@ -61,8 +61,6 @@ export type Property =
   | 'bookmark-of'
   | 'photo'
   | 'mp-syndicate-to'
-  | 'read-of'
-  | 'read-status'
   | 'start'
   | 'end';
 

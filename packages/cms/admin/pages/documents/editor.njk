@@ -342,25 +342,6 @@
           {{ field.text('editor-event-location', eventFields.location, 'Where', value=form.event.location, error=(error if errorField == 'editor-event-location' else ''), hint='The place, or the address to join an online event at.', hintId='editor-event-location-hint') }}
           <p class="label block whitespace-normal text-xs">A post with a start is an event, named by its Title and described by its Body. Empty every box to make it a post again.</p>
         {% endcall %}
-
-        {% call collapse('Read', open.read, fields=true) %}
-          {% call field.select('editor-read-status', readFields.status, 'Read status', error=(error if errorField == 'editor-read-status' else '')) %}
-            <option value=""{% if form.readStatus == "" %} selected{% endif %}>Not a read post</option>
-            {% for status in readStatuses %}
-              <option value="{{ status.value }}"{% if form.readStatus == status.value %} selected{% endif %}>{{ status.label }}</option>
-            {% endfor %}
-            {% if unrecognizedReadStatus %}
-              <option value="{{ unrecognizedReadStatus }}" selected>{{ unrecognizedReadStatus }} (not recognized)</option>
-            {% endif %}
-          {% endcall %}
-          {{ field.text('editor-read-of-name', readFields.name, 'Title', value=form.readOf.name, error=(error if errorField == 'editor-read-of-name' else '')) }}
-          {{ field.text('editor-read-of-author', readFields.author, 'Author', value=form.readOf.author) }}
-          {{ field.text('editor-read-of-uid', readFields.uid, 'Identifier', value=form.readOf.uid, placeholder='isbn:9780441478125', autocomplete='off', spellcheck='false') }}
-          {{ field.text('editor-read-of-url', readFields.url, 'Address', value=form.readOf.url, type='url', error=(error if errorField == 'editor-read-of-url' else '')) }}
-          {{ field.text('editor-read-of-photo', readFields.photo, 'Cover', value=form.readOf.photo, list='editor-photo-uploads', autocomplete='off', error=(error if errorField == 'editor-read-of-photo' else ''), hint='An image in the media library or a web address. Empty it to remove the cover.', hintId='editor-read-of-photo-hint') }}
-          {{ field.text('editor-read-of-photo-alt', readFields.photoAlt, 'Cover alt text', value=form.readOf.photoAlt) }}
-          <p class="label block whitespace-normal text-xs">A book or paper this post says its author read. An identifier is an ISBN or a DOI, written isbn:… or doi:…. Choose Not a read post and empty every box to remove it. A read is described by what it says, so leave its Description empty.</p>
-        {% endcall %}
       {% endif %}
 
       {% call collapse('Summary and language', open.summary, fields=true) %}

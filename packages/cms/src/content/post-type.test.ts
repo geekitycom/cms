@@ -354,40 +354,23 @@ describe('postLabel of a post with no title and no words (TASK-261)', () => {
   });
 });
 
-describe('a read (TASK-229)', () => {
+describe('read-of and read-status (TASK-431)', () => {
   const target = 'https://them.example/2026/09/their-post/';
+  const read: Readonly<Record<string, string>> = { 'read-of': 'A Book', 'read-status': 'finished' };
 
-  it('calls a post with read-of and a known read-status a read', () => {
-    assert.equal(
-      discoverPostType({ 'read-of': 'The Left Hand of Darkness', 'read-status': 'to-read' }),
-      'read',
-    );
-    assert.equal(discoverPostType({ 'read-of': 'A Book', 'read-status': 'abandoned' }), 'note');
-    assert.equal(discoverPostType({ 'read-status': 'finished', content: 'Done.' }), 'note');
+  it('are not a post type: the post is whatever its other properties make it', () => {
+    assert.equal(discoverPostType({ ...read, content: 'Loved it.' }), 'note');
+    assert.equal(discoverPostType({ ...read, 'bookmark-of': target }), 'bookmark');
+    assert.equal(discoverPostType({ ...read, name: 'On books', content: 'Pages.' }), 'article');
   });
 
-  it('puts read after photo and ahead of bookmark and the tail', () => {
-    const read = { 'read-of': 'A Book', 'read-status': 'reading' } as const;
-    assert.equal(discoverPostType({ ...read, photo: ['/uploads/a.jpg'] }), 'photo');
-    assert.equal(discoverPostType({ ...read, 'in-reply-to': target }), 'reply');
-    assert.equal(discoverPostType({ ...read, 'bookmark-of': target }), 'read');
-    assert.equal(discoverPostType({ ...read, name: 'On books', content: 'Pages.' }), 'read');
-  });
-
-  it('reads both from the front matter', () => {
-    assert.equal(
-      postTypeOf(post('read-of:\n  name: A Book\n  author: Someone\nread-status: finished\n', '')),
-      'read',
-    );
-  });
-
-  it('calls a read with a cover and no post photos a read, since the cover is the book’s (TASK-394)', () => {
+  it('leave the label to the post’s own words', () => {
     const covered = post(
       'read-of:\n  name: A Book\n  photo:\n    url: /uploads/a.jpg\n    alt: A cover\nread-status: finished\n',
       'Loved it.',
     );
-    assert.equal(postTypeOf(covered), 'read');
-    assert.equal(postLabel(covered), 'Finished reading: A Book Loved it.');
+    assert.equal(postTypeOf(covered), 'note');
+    assert.equal(postLabel(covered), 'Loved it.');
   });
 });
 

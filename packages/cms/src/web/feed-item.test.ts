@@ -190,29 +190,19 @@ describe('a feed item', () => {
     assert.equal('title' in item, false);
   });
 
-  it('opens a read post with the read line the page prints, and summarises with its words (TASK-233)', () => {
-    const read = post({
-      title: '',
-      body: 'Loved it.',
-      html: '<p>Loved it.</p>\n',
-      extra: {
-        'read-status': 'finished',
-        'read-of': { name: 'Dune', author: 'Frank Herbert', uid: 'isbn:9780441013593' },
-        photo: ['/uploads/2026/10/cover.jpg'],
-      },
-    });
-    const item = feedItem(read, CONTEXT);
-
-    assert.equal(
-      item.html,
-      '<p class="read-line"><data class="p-read-status" value="finished">Finished reading</data>: ' +
-        '<span class="p-read-of h-cite"><cite class="p-name">Dune</cite> by ' +
-        '<span class="p-author">Frank Herbert</span>, ' +
-        '<data class="p-uid" value="isbn:9780441013593">ISBN: 9780441013593</data></span></p>\n' +
-        '<figure><img src="https://example.com/uploads/2026/10/cover.jpg" alt=""></figure>' +
-        '<p>Loved it.</p>\n',
+  it('prints nothing for read-of and read-status, which are no longer understood (TASK-431)', () => {
+    const item = feedItem(
+      post({
+        title: '',
+        body: 'Loved it.',
+        html: '<p>Loved it.</p>\n',
+        extra: { 'read-status': 'finished', 'read-of': { name: 'Dune' } },
+      }),
+      CONTEXT,
     );
-    assert.equal(item.summary, 'Finished reading: Dune by Frank Herbert, ISBN: 9780441013593');
+
+    assert.equal(item.html, '<p>Loved it.</p>\n');
+    assert.equal(item.summary, 'Loved it.');
   });
 
   it('names the post’s language when it differs from the feed’s (TASK-154 AC #3)', () => {

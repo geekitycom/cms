@@ -107,8 +107,6 @@ otherwise.
 | `like-of`              | Makes the post a like of that URL. Needs no content. A like of a fediverse status federates as a `Like` of it (decision-28).                                                                                                                                                                                                                                 |
 | `repost-of`            | Makes the post a repost of that URL. Needs no content. A repost of a fediverse status federates as an `Announce` of it (decision-28).                                                                                                                                                                                                                        |
 | `bookmark-of`          | Makes the post a bookmark of that URL. Needs no content.                                                                                                                                                                                                                                                                                                     |
-| `read-of`              | What was read: an h-cite, `{"type": ["h-cite"], "properties": {"name": ["…"]}}` with `author`, `uid` (`isbn:…` or `doi:…`), `url` and a cover as `photo` (an address, or `{"value": "…", "alt": "…"}`) when known. With `read-status`, makes the post a read. Needs no content.                                                                              |
-| `read-status`          | `to-read`, `reading` or `finished`. Sent with `read-of`, and refused without it.                                                                                                                                                                                                                                                                             |
 | `photo`                | A photo on the post. Several values. A value is a URL, `{"value": "…", "alt": "…"}` in JSON, or a file part in a multipart request. A post with a photo and no reply target is a photo post.                                                                                                                                                                 |
 | `start`                | When an event starts. A time without an offset is in the site's time zone. Sent only with `h=event`, and refused on an `h=entry`.                                                                                                                                                                                                                            |
 | `end`                  | When an event ends, with `h=event` only. An end before the start is refused.                                                                                                                                                                                                                                                                                 |
@@ -145,15 +143,6 @@ owner and are not cleaned.
 
 A like, repost or bookmark cites its URL on the post's page. When the post is
 published, the site sends that URL a webmention, as it does for a reply.
-
-A read prints what was read on its page, such as "Want to read: The Left Hand
-of Darkness by Ursula K. Le Guin, ISBN: 9780441478125". Its feed items start
-with the same line, and it federates as a note with the same text. The site
-sends a webmention to a `read-of` with a `url`, as it does for a citation. A
-read stores no `summary`. That line is its summary, so a change to
-`read-status` changes the line everywhere.
-[indiebookclub](https://indiebookclub.biz/) posts reads this way. A test
-replays the request that its documentation shows.
 
 A photo file part must be an image. The site stores it in the media library,
 as the media endpoint stores a file. A photo URL that points at this site's own
@@ -239,7 +228,7 @@ no `q`, or one the endpoint does not answer, gets 400 `invalid_request`.
   - The media endpoint.
   - The syndication targets, under `syndicate-to`.
   - The post types the site accepts: note, article, reply, RSVP, photo, like,
-    repost, bookmark, read and event.
+    repost, bookmark and event.
   - The queries it answers.
   - The visibility values a post can take,
     `"visibility": ["public", "unlisted"]`.

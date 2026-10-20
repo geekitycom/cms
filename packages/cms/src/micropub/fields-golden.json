@@ -192,75 +192,6 @@
       }
     }
   },
-  "read created": {
-    "path": "posts/2026-09-20-a-book.md",
-    "file": "---\ndate: '2026-09-20T12:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/a-book/\ndraft: true\nauthor: ada\nread-of:\n  name: A Book\n  author: An Author\n  uid: isbn:9780000000000\n  url: https://books.example/a-book\nread-status: finished\n---\n",
-    "source": {
-      "type": ["h-entry"],
-      "properties": {
-        "post-status": ["draft"],
-        "published": ["2026-09-20T12:00:00Z"],
-        "read-of": [
-          {
-            "type": ["h-cite"],
-            "properties": {
-              "name": ["A Book"],
-              "author": ["An Author"],
-              "uid": ["isbn:9780000000000"],
-              "url": ["https://books.example/a-book"]
-            }
-          }
-        ],
-        "read-status": ["finished"],
-        "visibility": ["public"]
-      }
-    }
-  },
-  "read update 0": {
-    "path": "posts/2026-09-20-a-book.md",
-    "file": "---\ndate: '2026-09-20T12:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/a-book/\ndraft: true\nauthor: ada\nread-of:\n  name: A Book\n  author: An Author\n  uid: isbn:9780000000000\n  url: https://books.example/a-book\nread-status: reading\n---\n",
-    "source": {
-      "type": ["h-entry"],
-      "properties": {
-        "post-status": ["draft"],
-        "published": ["2026-09-20T12:00:00Z"],
-        "read-of": [
-          {
-            "type": ["h-cite"],
-            "properties": {
-              "name": ["A Book"],
-              "author": ["An Author"],
-              "uid": ["isbn:9780000000000"],
-              "url": ["https://books.example/a-book"]
-            }
-          }
-        ],
-        "read-status": ["reading"],
-        "visibility": ["public"]
-      }
-    }
-  },
-  "read update 1": {
-    "path": "posts/2026-09-20-a-book.md",
-    "file": "---\ndate: '2026-09-20T12:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/a-book/\ndraft: true\nauthor: ada\nread-of:\n  name: Another Book\nread-status: reading\n---\n",
-    "source": {
-      "type": ["h-entry"],
-      "properties": {
-        "post-status": ["draft"],
-        "published": ["2026-09-20T12:00:00Z"],
-        "read-of": [
-          {
-            "type": ["h-cite"],
-            "properties": {
-              "name": ["Another Book"]
-            }
-          }
-        ],
-        "read-status": ["reading"],
-        "visibility": ["public"]
-      }
-    }
-  },
   "event created": {
     "path": "posts/2026-09-20-a-party.md",
     "file": "---\ntitle: A party\ndate: '2026-09-20T12:00:00Z'\nupdated: '2026-09-20T12:00:00Z'\npermalink: /2026/09/a-party/\ndraft: true\nauthor: ada\nstart: '2026-10-01T18:00:00Z'\nend: '2026-10-01T22:00:00Z'\nlocation: The hall\n---\n",
@@ -362,20 +293,6 @@
     "body": {
       "error": "invalid_request",
       "error_description": "Bookmark of has to be a web address, like https://example.com/a-post/."
-    }
-  },
-  "read-status refused": {
-    "status": 400,
-    "body": {
-      "error": "invalid_request",
-      "error_description": "read-status is to-read, reading, finished, not skimmed."
-    }
-  },
-  "read-of refused": {
-    "status": 400,
-    "body": {
-      "error": "invalid_request",
-      "error_description": "read-of is an h-cite, { \"type\": [\"h-cite\"], \"properties\": { \"name\": [\"…\"] } }."
     }
   },
   "photo refused": {

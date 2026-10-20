@@ -17,7 +17,6 @@ import { SITE } from '../site/namespace.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import { citationsOf } from '../content/citation.ts';
 import { isMigrated, isMigratedArrival } from '../content/migrated.ts';
-import { readOf } from '../content/read.ts';
 import { replyTarget } from '../content/post-type.ts';
 import type { CatalogReader, DocumentLookup } from '../content/store.ts';
 import type { DocumentChange } from '../content/sync.ts';
@@ -585,11 +584,7 @@ function targetsOf(
       const original = externalTarget(originalOf(reply), baseUrl);
       if (original !== undefined) targets.add(original);
     }
-    const cites = [
-      ...citationsOf(document.extra).map(({ url }) => url),
-      readOf(document.extra)?.of.url,
-    ];
-    for (const url of cites) {
+    for (const { url } of citationsOf(document.extra)) {
       const cited = externalTarget(url, baseUrl);
       if (cited !== undefined) targets.add(cited);
     }

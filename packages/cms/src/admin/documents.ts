@@ -28,8 +28,6 @@ import { postLocations } from '../content/locations.ts';
 import { PHOTO_FIELDS } from '../content/photo-form.ts';
 import { syndicateToField } from '../content/post-fields.ts';
 import { postLabel } from '../content/post-type.ts';
-import { isReadStatus, READ_STATUS_LABELS, READ_STATUSES } from '../content/read.ts';
-import { READ_FIELDS } from '../content/read-form.ts';
 import { RSVP_LABELS, RSVP_VALUES, rsvpValue } from '../content/rsvp.ts';
 import { scheduledFor } from '../content/schedule.ts';
 import { isTrashedPath } from '../content/store.ts';
@@ -677,12 +675,7 @@ async function renderEditor(
           ...(form.rsvp === '' || rsvpValue(form.rsvp) !== undefined
             ? {}
             : { unrecognizedRsvp: form.rsvp }),
-          readFields: READ_FIELDS,
           eventFields: EVENT_FIELDS,
-          readStatuses: READ_STATUSES.map((value) => ({ value, label: READ_STATUS_LABELS[value] })),
-          ...(form.readStatus === '' || isReadStatus(form.readStatus)
-            ? {}
-            : { unrecognizedReadStatus: form.readStatus }),
           // TASK-155: one checkbox per target the site declares.
           syndicationTargets: syndicationTargetsReader(c.var.config.contentDir)().map((target) => ({
             ...target,

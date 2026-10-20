@@ -26,8 +26,6 @@ import path from 'node:path';
 
 import { CITATION_VERBS, citationsOf, citedPageName } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
-import { readLine, readOf } from '../content/read.ts';
-import type { Read } from '../content/read.ts';
 import { RSVP_PHRASES, rsvpOf } from '../content/rsvp.ts';
 import type { Document } from '../content/document.ts';
 import { eventOf } from '../content/event.ts';
@@ -209,7 +207,6 @@ const OBJECT_TYPE_OF: Record<PostType, PostObjectType> = {
   repost: 'Note',
   like: 'Note',
   bookmark: 'Note',
-  read: 'Note',
   reply: 'Note',
   photo: 'Note',
   note: 'Note',
@@ -288,7 +285,6 @@ export function postObject(
   const mentioned = mentionedAccounts(document.body, context.data.config.contentDir);
   let library: AltTextLibrary | undefined;
   const altTexts = (): AltTextLibrary => (library ??= readAltTexts(context.data.config.contentDir));
-  const read = readOf(document.extra);
   const common = {
     id: articleObjectId(context, document),
     // On either type, so an activitypub.type override never breaks a thread.
@@ -307,8 +303,7 @@ export function postObject(
     attachments: [
       ...recordingAttachment(document, baseUrl, context.data.cited),
       ...photoAttachments(document, context.data.config.baseUrl, altTexts),
-      ...coverAttachment(document, read, context.data.config.baseUrl, altTexts),
-      ...imageAttachments(document, read, context.data.config.baseUrl, altTexts),
+      ...imageAttachments(document, context.data.config.baseUrl, altTexts),
     ],
     location: place(
       shareLocation(
@@ -328,19 +323,11 @@ export function postObject(
     ],
   };
 
-  const readLineHtml = readLine(read, {
-    library: read?.of.photo === undefined ? undefined : altTexts(),
-    baseUrl,
-  });
   if (postObjectType(document) === 'Note') {
-    const heading = noteHeading(document, read);
-    const lead = citing(document, context.data.cited) + readLineHtml;
     return new Note({
       ...common,
       contents: inLanguage(
-        read === undefined
-          ? lead + headed(heading, document.html)
-          : headed(heading, lead + document.html),
+        citing(document, context.data.cited) + headed(noteHeading(document), document.html),
         language,
       ),
     });
@@ -364,10 +351,7 @@ export function postObject(
     ...common,
     name: document.title === '' ? null : document.title,
     summaries: summary === '' ? [] : inLanguage(escapeText(summary), language),
-    contents: inLanguage(
-      citing(document, context.data.cited) + readLineHtml + document.html,
-      language,
-    ),
+    contents: inLanguage(citing(document, context.data.cited) + document.html, language),
   });
 }
 
@@ -454,18 +438,6 @@ function photoAttachments(
   });
 }
 
-function coverAttachment(
-  document: Document,
-  read: Read | undefined,
-  baseUrl: string,
-  altTexts: () => AltTextLibrary,
-): Image[] {
-  const cover = read?.of.photo;
-  if (cover === undefined) return [];
-  if (photosOf(document.extra).some((photo) => photo.url === cover.url)) return [];
-  return uploadedImage(cover.url, photoAlt(cover, altTexts()), baseUrl, altTexts);
-}
-
 /**
  * Each image the post shows from the site's own uploads, as an `Image` whose
  * `name` is its alt text (TASK-141).
@@ -476,12 +448,10 @@ function coverAttachment(
  */
 function imageAttachments(
   document: Document,
-  read: Read | undefined,
   baseUrl: string,
   altTexts: () => AltTextLibrary,
 ): Image[] {
   const attached = new Set(photosOf(document.extra).map((photo) => photo.url));
-  if (read?.of.photo !== undefined) attached.add(read.of.photo.url);
   return imagesIn(document.html)
     .filter((image) => !attached.has(image.src))
     .flatMap((image) => uploadedImage(image.src, image.alt, baseUrl, altTexts));
@@ -542,13 +512,9 @@ function citing(document: Document, cited: CitedPageReader): string {
     .join('');
 }
 
-function noteHeading(document: Document, read: Read | undefined): string {
+function noteHeading(document: Document): string {
   const title = document.title.trim();
-  if (
-    title === '' ||
-    collapse(htmlToText(document.html)).startsWith(collapse(title)) ||
-    (read !== undefined && sameWords(title, read.of.name))
-  ) {
+  if (title === '' || collapse(htmlToText(document.html)).startsWith(collapse(title))) {
     return '';
   }
   return `<p>${escapeText(title)}</p>`;
@@ -557,10 +523,6 @@ function noteHeading(document: Document, read: Read | undefined): string {
 function headed(heading: string, html: string): string {
   if (heading === '') return html;
   return html === '' ? heading : `${heading}\n${html}`;
-}
-
-function sameWords(left: string, right: string): boolean {
-  return collapse(left).toLowerCase() === collapse(right).toLowerCase();
 }
 
 function collapse(value: string): string {

@@ -70,7 +70,7 @@ export function photoAlt(photo: Photo, library: AltTextLibrary): string | undefi
   return described.kind === 'described' ? described.text : '';
 }
 
-export function photoOf(value: unknown): Photo | undefined {
+function photoOf(value: unknown): Photo | undefined {
   if (typeof value === 'string') {
     const url = value.trim();
     return isPhotoUrl(url) ? { url } : undefined;

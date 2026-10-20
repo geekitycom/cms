@@ -102,8 +102,6 @@ const FILLED = {
   'enclosure-url': '/uploads/2026/10/episode.mp3',
   'alternate-url-0': '/uploads/2026/10/episode.mp4',
   'in-reply-to': 'https://example.com/a-post/',
-  'read-status': 'finished',
-  'read-of-name': 'A book',
   lang: 'fr',
   'syndicate-to-mastodon': '1',
   comments: 'closed',
@@ -125,7 +123,6 @@ describe('the post editor’s disclosures (TASK-245)', () => {
       ['Address', false],
       ['Responding to', false],
       ['Event', false],
-      ['Read', false],
       ['Summary and language', false],
       ['Syndicate to', false],
       ['Display and discussion', false],
@@ -162,7 +159,6 @@ describe('the post editor’s disclosures (TASK-245)', () => {
       ['Address', true],
       ['Responding to', true],
       ['Event', false],
-      ['Read', true],
       ['Summary and language', true],
       ['Syndicate to', true],
       ['Display and discussion', true],
@@ -177,7 +173,6 @@ describe('the post editor’s disclosures (TASK-245)', () => {
       fields: { 'location-accuracy': '-1' },
       field: 'editor-location-accuracy',
     },
-    { what: 'a read', fields: { 'read-status': 'finished' }, field: 'editor-read-of-name' },
     { what: 'a photo', fields: { 'photo-url-0': 'nowhere' }, field: 'editor-photo-url-0' },
     {
       what: 'a duration',
@@ -194,11 +189,6 @@ describe('the post editor’s disclosures (TASK-245)', () => {
       field: 'editor-alternate-height-0',
     },
     { what: 'a date', fields: { date: 'yesterday' }, field: 'editor-date' },
-    {
-      what: 'a described read',
-      fields: { 'read-status': 'finished', 'read-of-name': 'A book', description: 'Read it.' },
-      field: 'editor-description',
-    },
   ];
 
   for (const refusal of REFUSALS) {
@@ -224,12 +214,12 @@ describe('the post editor’s disclosures (TASK-245)', () => {
     });
   }
 
-  it('names a post that is not a read a post that is not a read', async () => {
+  it('has no read fields (TASK-431)', async () => {
     const agent = await site();
 
-    assert.match(
+    assert.doesNotMatch(
       await editor(agent, '/admin/posts/new'),
-      /<option value="" selected>Not a read post<\/option>/,
+      /name="read-|editor-read-|Read status/,
     );
   });
 });

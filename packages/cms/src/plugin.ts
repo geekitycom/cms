@@ -528,16 +528,7 @@ export type PluginEditorField = 'title' | 'description' | 'tags';
  * untitled one a `note` and a titled one an `article`.
  */
 export type PluginPostType =
-  | 'event'
-  | 'rsvp'
-  | 'repost'
-  | 'like'
-  | 'reply'
-  | 'photo'
-  | 'read'
-  | 'bookmark'
-  | 'note'
-  | 'article';
+  'event' | 'rsvp' | 'repost' | 'like' | 'reply' | 'photo' | 'bookmark' | 'note' | 'article';
 
 /** The document in the editor as it stands when a button is pressed, saved or not. */
 export interface PluginEditorDraft {

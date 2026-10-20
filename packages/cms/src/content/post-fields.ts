@@ -26,22 +26,6 @@ import {
 import { PHOTO_FRONT_MATTER_KEY, photoFrontMatter } from './photo.ts';
 import { photoRowFromMicropub, photoRows, photoToMicropub, readPhotoForm } from './photo-form.ts';
 import { PINNED_FRONT_MATTER_KEY, pinnedAt } from './pinned.ts';
-import {
-  isReadStatus,
-  READ_OF_FRONT_MATTER_KEY,
-  READ_STATUS_FRONT_MATTER_KEY,
-  READ_STATUSES,
-  readOf,
-  readWork,
-  readWorkFrontMatter,
-} from './read.ts';
-import {
-  READ_FIELDS,
-  readCite,
-  readOfForm,
-  readOfFromMicropub,
-  submittedReadOfForm,
-} from './read-form.ts';
 import { RSVP_FRONT_MATTER_KEY, rsvpOf, rsvpValue } from './rsvp.ts';
 import { toUtcInstant } from './time.ts';
 
@@ -241,43 +225,6 @@ const CITED_ALT_FIELD: PostField = {
   },
 };
 
-const READ_FIELD: PostField = {
-  read: (document) => ({
-    readStatus: stringOrEmpty(document.extra[READ_STATUS_FRONT_MATTER_KEY]),
-    readOf: readOfForm(readWork(document.extra[READ_OF_FRONT_MATTER_KEY])),
-  }),
-  submitted: (body) => ({
-    readStatus: trimmedField(body, READ_FIELDS.status),
-    readOf: submittedReadOfForm(body),
-  }),
-  write: (extra, _form, { media: { read } }) => {
-    setOrDelete(extra, READ_OF_FRONT_MATTER_KEY, read && readWorkFrontMatter(read.of));
-    setOrDelete(extra, READ_STATUS_FRONT_MATTER_KEY, read?.status);
-  },
-  micropub: {
-    properties: { 'read-of': ['readOf'], 'read-status': ['readStatus'] },
-    publishable: ['read-of'],
-    toForm: (request) => {
-      const readOfForm = readOfFromMicropub(
-        request.values('read-of'),
-        request.refuse,
-        request.baseUrl,
-      );
-      const readStatus = request.text('read-status');
-      if (readStatus !== '' && !isReadStatus(readStatus)) {
-        request.refuse(`read-status is ${READ_STATUSES.join(', ')}, not ${readStatus}.`);
-      }
-      return { readOf: readOfForm, readStatus };
-    },
-    toProperties: (document, { baseUrl }) => {
-      const read = readOf(document.extra);
-      return read === undefined
-        ? {}
-        : { 'read-of': [readCite(read.of, baseUrl)], 'read-status': [read.status] };
-    },
-  },
-};
-
 /** The editor checkbox that selects one syndication target. */
 export function syndicateToField(target: SyndicationTarget): string {
   return `${SYNDICATE_TO_FRONT_MATTER_KEY}-${target.id}`;
@@ -355,7 +302,6 @@ export const POST_FIELDS: readonly PostField[] = [
   EVENT_FIELD,
   PREVIEW_FIELD,
   CITED_ALT_FIELD,
-  READ_FIELD,
   SYNDICATE_TO_FIELD,
   PINNED_FIELD,
 ];
