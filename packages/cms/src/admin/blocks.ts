@@ -19,10 +19,16 @@ export type DrawnBlock =
     }
   | ({ readonly kind: 'calendar' } & DrawnCalendar);
 
+/** A table cell, with a link cell's `href` dropped when it may not be a link. */
+type DrawnCell =
+  | PluginScreenText
+  | { readonly time: string | null }
+  | { readonly text: string; readonly href: string | undefined };
+
 interface DrawnTable {
   readonly caption: string;
   readonly columns: readonly string[];
-  readonly rows: readonly (readonly PluginScreenCell[])[];
+  readonly rows: readonly (readonly DrawnCell[])[];
 }
 
 interface DrawnChange {
@@ -132,8 +138,17 @@ function isText(value: unknown): value is PluginScreenText {
 function isCell(value: unknown): value is PluginScreenCell {
   return (
     isText(value) ||
-    (isRecord(value) && (typeof value['time'] === 'string' || value['time'] === null))
+    (isRecord(value) &&
+      (typeof value['time'] === 'string' ||
+        value['time'] === null ||
+        (typeof value['text'] === 'string' && typeof value['href'] === 'string')))
   );
+}
+
+function drawCell(cell: PluginScreenCell): DrawnCell {
+  return typeof cell === 'object' && 'href' in cell
+    ? { text: cell.text, href: safeHref(cell.href) }
+    : cell;
 }
 
 /** The UTC midnight of a `YYYY-MM-DD` day, or `undefined` for anything else. */
@@ -183,7 +198,7 @@ function drawTable(data: unknown): DrawnBlock {
     table: {
       caption,
       columns: columns as string[],
-      rows: rows as PluginScreenCell[][],
+      rows: (rows as PluginScreenCell[][]).map((row) => row.map(drawCell)),
     },
   };
 }

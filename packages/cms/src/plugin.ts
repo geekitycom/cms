@@ -331,8 +331,15 @@ export type PluginFederationMiddleware = (
 /** Text on a plugin screen: plain, or set as code. */
 export type PluginScreenText = string | { readonly code: string };
 
-/** A table cell: text, or an instant drawn as a date, `null` for never. */
-export type PluginScreenCell = PluginScreenText | { readonly time: string | null };
+/**
+ * A table cell: text, an instant drawn as a date (`null` for never), or text
+ * linked to `href`, which is drawn as a link only when it is a path on this
+ * site or a web address.
+ */
+export type PluginScreenCell =
+  | PluginScreenText
+  | { readonly time: string | null }
+  | { readonly text: string; readonly href: string };
 
 /**
  * One block of a plugin screen's card or a dashboard widget. Core draws each

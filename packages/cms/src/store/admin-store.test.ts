@@ -831,6 +831,45 @@ describe('the likes, boosts and replies a site received (TASK-445)', () => {
       { kind: 'reply', receivedAt: '2026-10-11T12:00:00.000Z' },
     ]);
   });
+
+  it('lists the newest likes, boosts and replies with who sent each and what it is about', async () => {
+    const admin = await store();
+    admin.logInboxActivity(
+      reaction('Like', 'https://remote.example/likes/1', '2026-10-10T09:00:00.000Z'),
+    );
+    admin.logInboxActivity(
+      reaction(
+        'Announce',
+        'https://remote.example/boosts/1',
+        '2026-10-10T08:00:00.000Z',
+        BOB_ACTOR,
+      ),
+    );
+    admin.logInboxActivity(
+      replyNote(
+        'https://remote.example/notes/1',
+        'https://remote.example/creates/1',
+        '2026-10-11T12:00:00.000Z',
+      ),
+    );
+    admin.logInboxActivity(
+      reaction('Like', 'https://remote.example/likes/2', '2026-10-12T09:00:00.000Z', BOB_ACTOR),
+    );
+    admin.logInboxActivity(
+      taken('Undo', 'https://remote.example/likes/2', '2026-10-12T10:00:00.000Z', BOB_ACTOR),
+    );
+
+    assert.deepEqual(admin.listLatestInteractions(2), [
+      {
+        kind: 'reply',
+        actorId: ADA_ACTOR,
+        about: POST,
+        receivedAt: '2026-10-11T12:00:00.000Z',
+      },
+      { kind: 'like', actorId: ADA_ACTOR, about: POST, receivedAt: '2026-10-10T09:00:00.000Z' },
+    ]);
+    assert.equal(admin.listLatestInteractions(10).length, 3);
+  });
 });
 
 describe('replacing an index from the files it is derived from', () => {

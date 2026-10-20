@@ -254,6 +254,12 @@ export interface CommentStore {
    * page of them. What the moderation screen and the site-wide feed read.
    */
   listComments(options: ListCommentsOptions): PostComment[];
+  /**
+   * The newest comments that are not spam, newest first, leaving out the
+   * fediverse ones imported from before the site ran Geekity: the fediverse
+   * since then is in the inbox log. What the dashboard lists.
+   */
+  listLatestComments(limit: number): PostComment[];
   /** One comment by id, or `undefined`. */
   getComment(id: string): PostComment | undefined;
   /** The comments whose `url` is this one, whatever their status (TASK-300). */
@@ -291,6 +297,11 @@ export function openCommentStore(
   const statements = {
     listCommentsFor: db.prepare(`
       SELECT * FROM comments WHERE slug = ? ORDER BY submitted_at, id
+    `),
+    latestComments: db.prepare(`
+      SELECT * FROM comments WHERE status != 'spam' AND source != 'activitypub'
+      ORDER BY submitted_at DESC, id DESC
+      LIMIT ?
     `),
     commentById: db.prepare('SELECT * FROM comments WHERE id = ?'),
     commentsAt: db.prepare('SELECT * FROM comments WHERE url = ? ORDER BY submitted_at'),
@@ -366,6 +377,10 @@ export function openCommentStore(
     getComment(id) {
       const row = statements.commentById.get(id) as Record<string, unknown> | undefined;
       return row === undefined ? undefined : toComment(row);
+    },
+
+    listLatestComments(limit) {
+      return (statements.latestComments.all(limit) as Record<string, unknown>[]).map(toComment);
     },
 
     listCommentsAt(url) {

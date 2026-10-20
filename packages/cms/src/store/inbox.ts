@@ -99,6 +99,39 @@ export interface InboxInteraction {
   readonly receivedAt: string;
 }
 
+/** An {@link InboxInteraction} with who sent it and what it is about. */
+export interface LatestInteraction extends InboxInteraction {
+  readonly actorId: string;
+  /** The object liked or boosted, or the one a reply answers, `null` when it named none. */
+  readonly about: string | null;
+}
+
+/**
+ * The likes, boosts and replies received at or after the instant bound first,
+ * each once, leaving out what its actor took back. Shared by
+ * {@link InboxStore.listInteractionsSince} and
+ * {@link InboxStore.listLatestInteractions}, which order it differently.
+ */
+const INTERACTIONS = `
+  SELECT activity_type, actor_id,
+    CASE WHEN activity_type = '${REPLY_ACTIVITY_TYPE}' THEN in_reply_to ELSE object_id END AS about,
+    MIN(received_at) AS received_at
+  FROM ap_inbox AS said
+  WHERE received_at >= ?
+    AND (activity_type IN ('Like', 'Announce') OR (${IS_REPLY}))
+    AND NOT EXISTS (
+      SELECT 1 FROM ap_inbox AS taken
+      WHERE taken.actor_id = said.actor_id
+        AND (
+          (taken.activity_type = 'Undo' AND taken.object_id = said.activity_id)
+          OR (taken.activity_type = 'Delete' AND said.activity_type = '${REPLY_ACTIVITY_TYPE}'
+            AND taken.object_id = said.object_id)
+        )
+    )
+  GROUP BY activity_type,
+    CASE WHEN activity_type = '${REPLY_ACTIVITY_TYPE}' THEN NULL ELSE actor_id END,
+    object_id`;
+
 const INTERACTION_KINDS: Readonly<Record<string, InboxInteraction['kind']>> = {
   Like: 'like',
   Announce: 'boost',
@@ -165,6 +198,12 @@ export interface InboxStore {
    * out.
    */
   listInteractionsSince(since: string): InboxInteraction[];
+
+  /**
+   * The newest likes, boosts and replies, newest first, counted and left out
+   * as {@link InboxStore.listInteractionsSince} counts and leaves them out.
+   */
+  listLatestInteractions(limit: number): LatestInteraction[];
 }
 
 export function openInboxStore(
@@ -217,24 +256,8 @@ export function openInboxStore(
     repliesByKey: db.prepare(`
       SELECT * FROM ap_inbox WHERE ${IS_REPLY} AND reply_key = ? ORDER BY received_at, id
     `),
-    interactionsSince: db.prepare(`
-      SELECT activity_type, MIN(received_at) AS received_at FROM ap_inbox AS said
-      WHERE received_at >= ?
-        AND (activity_type IN ('Like', 'Announce') OR (${IS_REPLY}))
-        AND NOT EXISTS (
-          SELECT 1 FROM ap_inbox AS taken
-          WHERE taken.actor_id = said.actor_id
-            AND (
-              (taken.activity_type = 'Undo' AND taken.object_id = said.activity_id)
-              OR (taken.activity_type = 'Delete' AND said.activity_type = '${REPLY_ACTIVITY_TYPE}'
-                AND taken.object_id = said.object_id)
-            )
-        )
-      GROUP BY activity_type,
-        CASE WHEN activity_type = '${REPLY_ACTIVITY_TYPE}' THEN NULL ELSE actor_id END,
-        object_id
-      ORDER BY received_at
-    `),
+    interactionsSince: db.prepare(`${INTERACTIONS} ORDER BY received_at`),
+    latestInteractions: db.prepare(`${INTERACTIONS} ORDER BY received_at DESC LIMIT ?`),
   };
   return {
     countInboxActivities() {
@@ -357,6 +380,23 @@ export function openInboxStore(
       return rows.flatMap((row) => {
         const kind = INTERACTION_KINDS[String(row['activity_type'])];
         return kind === undefined ? [] : [{ kind, receivedAt: String(row['received_at']) }];
+      });
+    },
+
+    listLatestInteractions(limit) {
+      const rows = statements.latestInteractions.all('', limit) as Record<string, unknown>[];
+      return rows.flatMap((row) => {
+        const kind = INTERACTION_KINDS[String(row['activity_type'])];
+        return kind === undefined
+          ? []
+          : [
+              {
+                kind,
+                actorId: String(row['actor_id']),
+                about: nullableText(row['about']),
+                receivedAt: String(row['received_at']),
+              },
+            ];
       });
     },
   };

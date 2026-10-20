@@ -155,8 +155,10 @@
             {% for cell in row %}
               {% if cell.time is defined %}
                 <td class="whitespace-nowrap">{% if cell.time %}{{ cell.time | date('readable') }}{% else %}Never{% endif %}</td>
+              {% elif cell.text is defined %}
+                <td class="wrap-anywhere">{% if cell.href %}<a class="link" href="{{ cell.href }}">{{ cell.text }}</a>{% else %}{{ cell.text }}{% endif %}</td>
               {% else %}
-                <td>{{ text([cell]) }}</td>
+                <td class="wrap-anywhere">{{ text([cell]) }}</td>
               {% endif %}
             {% endfor %}
           </tr>

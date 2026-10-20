@@ -147,7 +147,36 @@ describe('a paragraph and a table', () => {
     });
     assert.match(html, /<caption class="sr-only">Paths<\/caption>/);
     assert.deepEqual(all(html, /<th scope="col">([^<]*)<\/th>/g), ['Path', 'Last asked for']);
-    assert.match(html, /<td><code>\/old<\/code><\/td><td class="whitespace-nowrap">Never<\/td>/);
+    assert.match(
+      html,
+      /<td class="wrap-anywhere"><code>\/old<\/code><\/td><td class="whitespace-nowrap">Never<\/td>/,
+    );
+  });
+
+  it('draws a link cell as a link when it goes to a path or a web address, and as text otherwise', () => {
+    const html = draw({
+      table: {
+        caption: 'Links',
+        columns: ['Where'],
+        rows: [
+          [{ text: 'Comments', href: '/admin/comments?status=pending#comment-1' }],
+          [{ text: 'Elsewhere <b>', href: 'https://example.com/' }],
+          [{ text: 'Script', href: 'javascript:alert(1)' }],
+          [{ text: 'Protocol-relative', href: '//evil.example/' }],
+        ],
+      },
+    });
+    assert.match(
+      html,
+      /<td class="wrap-anywhere"><a class="link" href="\/admin\/comments\?status=pending#comment-1">Comments<\/a><\/td>/,
+    );
+    assert.match(
+      html,
+      /<td class="wrap-anywhere"><a class="link" href="https:\/\/example.com\/">Elsewhere &lt;b&gt;<\/a><\/td>/,
+    );
+    assert.match(html, /<td class="wrap-anywhere">Script<\/td>/);
+    assert.match(html, /<td class="wrap-anywhere">Protocol-relative<\/td>/);
+    assert.doesNotMatch(html, /javascript:|evil\.example/);
   });
 });
 
