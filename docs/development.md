@@ -344,8 +344,8 @@ plugin's tags include its component, for example `plugin-llm-v0.2.0`.
 `apps/demo` is private and unversioned, so release-please does not track it.
 
 release-please writes the versions, the changelogs and the tags (decision-7).
-One command, run by a maintainer from main, publishes to npm and pushes the
-image. CI never publishes.
+`pnpm release` publishes to npm and pushes the image. Merging the release pull
+request runs it in GitHub Actions, after a reviewer approves (decision-58).
 
 `packages/cms` publishes only `dist`, `admin`, `themes`, `templates`,
 `README.md` and `LICENSE`. A plugin package publishes only `dist`, `README.md`
@@ -372,8 +372,9 @@ pnpm --filter @geekity/cms pack
 3. Merging the release pull request pushes the version bumps to `main`.
    release-please runs again, sees its own release commit, and creates a git
    tag and a GitHub release for every package the pull request bumped.
-4. The maintainer pulls main and runs `pnpm release`, as
-   [Publishing a release](#publishing-a-release) describes.
+4. The `publish` job waits for approval in the `release` environment, then
+   runs `pnpm release`, as [Publishing a release](#publishing-a-release)
+   describes.
 
 The bumps are the pre-1.0 rules of decision-7, configured in
 `release-please-config.json`:
@@ -441,9 +442,48 @@ gh pr edit <release pull request> --remove-label "autorelease: pending" --add-la
 
 ### Publishing a release
 
-`pnpm release` publishes every package whose version is not on npm yet. Then
-it pushes the image of `@geekity/cms` if its version has no image yet. Run it
-on main after you merge the release pull request:
+Merging the release pull request publishes it (decision-58). release-please
+tags the release and reports it, and the `publish` job in
+`.github/workflows/release-please.yml` starts. The job waits in the `release`
+environment until a required reviewer approves it. Then it runs
+`pnpm release`:
+
+- npm authenticates through trusted publishing. The job's OIDC token proves
+  which repository, workflow and environment it runs in, so no npm token is
+  stored anywhere. npm attaches provenance to every package it publishes.
+- The image goes to `ghcr.io/geekitycom/cms` with the workflow's
+  `GITHUB_TOKEN`. QEMU lets the amd64 runner build `linux/arm64` as well as
+  `linux/amd64`.
+
+The job checks out the branch `main`, so HEAD is `main` and level with its
+upstream, with every tag fetched. It installs the workspace as the CI jobs do,
+upgrades npm to 11.5.1 or later, which trusted publishing needs, and logs in to
+ghcr.io.
+
+To retry a failed publish, re-run the `publish` job, or run the
+`release-please` workflow from the Actions tab on `main`. A manual run skips
+release-please and goes straight to the `publish` job. `pnpm release` publishes
+only what npm and the registry do not have yet, so a retry carries on where the
+failed run stopped.
+
+#### One-time setup
+
+- On npmjs.com, each of the five packages has a trusted publisher: repository
+  `geekitycom/cms`, workflow file `release-please.yml`, environment `release`.
+  npm checks the `repository` field of the published `package.json` against
+  that repository, so every package names `geekitycom/cms` with its folder as
+  `directory`.
+- In the repository settings, the environment `release` has a required
+  reviewer. Limit its deployment branches to `main`.
+- In the settings of the ghcr.io package `cms`, **Manage Actions access**
+  grants this repository the **Write** role. The `Dockerfile` labels the image
+  with `org.opencontainers.image.source`, so ghcr.io links the package to this
+  repository.
+
+#### Run it from your machine
+
+`pnpm release` still works from a maintainer's machine. Use it when Actions is
+unavailable. Run it on `main` after the release pull request merges:
 
 ```sh
 git checkout main
@@ -452,6 +492,11 @@ pnpm release:dry-run   # the plan, and why
 pnpm release           # npm, then <version> and latest on ghcr.io
 pnpm release beta      # the same, plus a custom image tag
 ```
+
+From your machine, the script needs `npm login` and a ghcr.io login. A package
+published this way has no provenance.
+
+#### What `pnpm release` does
 
 `scripts/release.ts` first builds the plan. It reads the packages from
 `release-please-config.json` and asks npm whether each one's version is
@@ -464,7 +509,7 @@ and exits 0.
 For every version it will publish, and for core when it will push the image,
 the plan requires the version's release tag to:
 
-- exist. The `git pull --prune --tags` step fetches tags for this check.
+- exist. Locally, `git pull --prune --tags` fetches tags for this check.
 - be in the history of HEAD
 - show no change to the package's folder between the tag and HEAD
   (`git diff <tag> HEAD -- packages/<package>` is empty)
@@ -478,8 +523,10 @@ login, runs no gate, and exits non-zero if the plan refuses a package.
 
 A real run then goes through these steps and stops at the first failure:
 
-1. Preflight checks: HEAD is `main`, the working tree is clean, `main` is level
-   with its upstream, and `npm whoami` names a user. The script does not run
+1. Preflight checks: HEAD is `main`, the working tree is clean, and `main` is
+   level with its upstream. When GitHub Actions offers an OIDC token
+   (`ACTIONS_ID_TOKEN_REQUEST_URL` is set), npm authenticates through trusted
+   publishing. Otherwise `npm whoami` must name a user. The script does not run
    `npm login`. Run it yourself. When the image is due,
    `docker-build-push.sh --check-only` checks that Docker is running and that
    you are logged in to ghcr.io.
@@ -569,11 +616,9 @@ grouped release pull request.
 ### Publishing the Docker image
 
 The image is `ghcr.io/geekitycom/cms`, built from the `Dockerfile` at the
-repository root for `linux/amd64` and `linux/arm64`. CI never pushes it.
-GitHub's runners are amd64 only, and the machine a site runs on may be arm64.
-A CI publish could ship only one of the two platforms. A maintainer publishes
-the image from a workstation as the last step of `pnpm release`. To push only
-an image, or to finish a release whose image push failed, use
+repository root for `linux/amd64` and `linux/arm64`. `pnpm release` pushes it
+as its last step, in the `publish` job or from a maintainer's machine. To push
+only an image, or to finish a release whose image push failed, use
 `scripts/docker-build-push.sh`. CI builds the amd64 image on every pull request
 and boots it (the `docker-smoke` job). A broken Dockerfile fails on its pull
 request, not at release.
@@ -622,7 +667,8 @@ The output lists a manifest for `linux/amd64` and one for `linux/arm64`.
 | ---------------------- | --------- | ----------------------------------------------------------- |
 | `RELEASE_PLEASE_TOKEN` | optional  | A fine-grained PAT, so CI runs on the release pull request. |
 
-No npm credential lives in the repository, because CI never publishes.
+No npm credential lives in the repository. The `publish` job authenticates to
+npm through trusted publishing and to ghcr.io with `GITHUB_TOKEN`.
 
 **`RELEASE_PLEASE_TOKEN` is optional.** GitHub does not trigger workflows from
 events raised with the default `GITHUB_TOKEN`. A release pull request that
