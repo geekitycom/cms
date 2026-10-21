@@ -178,11 +178,11 @@ function seed() {
 }
 
 describe('the recent posts widget', () => {
-  it('is a full-width card that refreshes every half hour', () => {
+  it('is a half-width card that refreshes every half hour', () => {
     const widget = recentPostsWidget(clientWith(), sources().sources);
     assert.equal(widget.id, 'recent-posts');
     assert.equal(widget.title, 'Umami: recent posts');
-    assert.equal(widget.width, 'full');
+    assert.equal(widget.width, 'half');
     assert.equal(widget.refreshSeconds, 1800);
   });
 

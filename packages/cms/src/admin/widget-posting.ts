@@ -9,7 +9,7 @@ const WEEKS = 52;
 export const POSTING_WIDGET: CoreWidget = {
   id: 'posting-activity',
   title: 'Posting activity',
-  width: 'full',
+  width: 'half',
   refreshSeconds: 900,
   load(vars) {
     const timezone = vars.siteAtRequestStart.timezone;

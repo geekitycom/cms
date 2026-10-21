@@ -10,7 +10,7 @@ export function trafficWidget(
   return {
     id: 'traffic',
     title: 'Umami: views and visitors',
-    width: 'full',
+    width: 'half',
     refreshSeconds: 300,
     async load({ timezone, period, signal }) {
       if (!(await client.configured())) return [];

@@ -24,7 +24,7 @@ function breakdown(post: PostEngagement): string {
 export const TOP_POSTS_WIDGET: CoreWidget = {
   id: 'top-posts',
   title: 'Top posts',
-  width: 'full',
+  width: 'half',
   refreshSeconds: 300,
   load(vars, period) {
     const since = toUtcInstant(

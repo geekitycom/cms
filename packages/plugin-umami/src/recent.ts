@@ -65,7 +65,7 @@ export function recentPostsWidget(
   return {
     id: 'recent-posts',
     title: 'Umami: recent posts',
-    width: 'full',
+    width: 'half',
     refreshSeconds: 1800,
     async load({ site, timezone, signal }) {
       if (!(await client.configured())) return [];

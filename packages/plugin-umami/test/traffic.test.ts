@@ -87,11 +87,11 @@ describe('the views and visitors widget', () => {
     assert.ok(Date.now() - started < 800, 'the load gave up at the signal');
   });
 
-  it('is a full-width card that refreshes every five minutes', () => {
+  it('is a half-width card that refreshes every five minutes', () => {
     const traffic = widget();
     assert.equal(traffic.id, 'traffic');
     assert.equal(traffic.title, 'Umami: views and visitors');
-    assert.equal(traffic.width, 'full');
+    assert.equal(traffic.width, 'half');
     assert.equal(traffic.refreshSeconds, 300);
   });
 
