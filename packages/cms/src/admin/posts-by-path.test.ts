@@ -4,7 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
-import type { Plugin, PostAtPath } from '../plugin.ts';
+import type { Plugin, PostAtPath, PublishedPost } from '../plugin.ts';
 import { TEN_AM_20_OCTOBER_IN_CHICAGO } from './__testing__/chicago-clock.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 
@@ -128,6 +128,76 @@ describe('the posts core service', () => {
     assert.deepEqual(
       posts.map(({ path: asked, permalink }) => [asked, permalink]),
       [['/blog/2026/10/alpha/', '/2026/10/alpha/']],
+    );
+  });
+});
+
+async function publishedSince(since: string) {
+  const reached: (readonly PublishedPost[])[] = [];
+  const plugin = definePlugin({
+    name: '@acme/plugin-recent',
+    version: '1.0.0',
+    label: 'Recent',
+    description: 'Lists the recent posts.',
+    hostApi: HOST_API_VERSION,
+    register(host) {
+      host.widget({
+        id: 'recent',
+        title: 'Recent',
+        width: 'half',
+        refreshSeconds: 0,
+        async load() {
+          reached.push(await host.use('@geekity/cms/posts').publishedSince({ since }));
+          return [];
+        },
+      });
+    },
+  });
+  const contentDir = await box.dir('geekity-posts-published-since-');
+  await mkdir(path.join(contentDir, '_data'), { recursive: true });
+  await mkdir(path.join(contentDir, 'posts'), { recursive: true });
+  await writeFile(
+    path.join(contentDir, '_data', 'site.json'),
+    JSON.stringify({ title: 'A Site', plugins: { [plugin.name]: { enabled: true } } }),
+  );
+  for (const [file, body] of Object.entries(POSTS)) {
+    await writeFile(path.join(contentDir, 'posts', file), body);
+  }
+  const cms = await box.site({
+    contentDir,
+    baseUrl: 'https://blog.example',
+    now: () => TEN_AM_20_OCTOBER_IN_CHICAGO,
+    plugins: [plugin],
+  });
+  assert.equal((await (await signedIn(cms)).get('/admin')).status, 200);
+  const [posts] = reached;
+  assert.ok(posts !== undefined, 'the widget asked for the posts');
+  return posts;
+}
+
+describe('the posts core service: published since', () => {
+  it('lists the published posts dated at or after the instant, newest first', async () => {
+    assert.deepEqual(await publishedSince('2026-10-02T09:00:00.000Z'), [
+      {
+        permalink: '/2026/10/note/',
+        title: 'A short note.',
+        editUrl: '/admin/posts/note',
+        published: '2026-10-03T09:00:00.000Z',
+      },
+      {
+        permalink: '/2026/10/bravo/',
+        title: 'Bravo',
+        editUrl: '/admin/posts/bravo',
+        published: '2026-10-02T09:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('leaves out drafts and posts not yet published', async () => {
+    const posts = await publishedSince('2026-10-01T00:00:00.000Z');
+    assert.deepEqual(
+      posts.map((post) => post.permalink),
+      ['/2026/10/note/', '/2026/10/bravo/', '/2026/10/alpha/'],
     );
   });
 });

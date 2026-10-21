@@ -326,6 +326,24 @@ const posts = await host
 // [{ path: '/2026/10/hello', permalink: '/2026/10/hello/', title: 'Hello', editUrl: '/admin/posts/hello' }]
 ```
 
+Its `publishedSince({ since })` method takes an ISO 8601 instant and resolves
+to the posts a reader can open, public or unlisted, dated at or after it,
+newest first:
+
+| Field       | What it holds                                                    |
+| ----------- | ---------------------------------------------------------------- |
+| `permalink` | The post's permalink, such as `/2026/10/hello/`.                 |
+| `title`     | The post's title, or the label the admin gives an untitled post. |
+| `editUrl`   | The admin path of the post's editor.                             |
+| `published` | The post's date, an ISO 8601 instant.                            |
+
+Drafts, trashed posts and posts dated in the future are not in the list.
+
+```ts
+const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+const recent = await host.use('@geekity/cms/posts').publishedSince({ since });
+```
+
 **Settings and secrets.** `host.settings([...])` declares fields of type
 `text`, `url`, `select`, `checkbox` and `secret`, each with a `label` and an
 optional `hint`. They become a settings namespace named by the package name.

@@ -709,6 +709,18 @@ export interface PostAtPath {
   readonly editUrl: string;
 }
 
+/** A published post, which {@link PostsService.publishedSince} lists. */
+export interface PublishedPost {
+  /** The post's permalink, such as `/2026/10/hello/`. */
+  readonly permalink: string;
+  /** The post's title, or what the admin calls an untitled one. */
+  readonly title: string;
+  /** Where its editor is in the admin. */
+  readonly editUrl: string;
+  /** The post's date, an ISO 8601 instant. */
+  readonly published: string;
+}
+
 /** The site's posts, which `host.use('@geekity/cms/posts')` returns. */
 export interface PostsService {
   /**
@@ -719,6 +731,11 @@ export interface PostsService {
    * path that leads to no published post is not listed.
    */
   byPath(paths: readonly string[]): Promise<readonly PostAtPath[]>;
+  /**
+   * The posts a reader can open, public or unlisted, dated at or after
+   * `since`, an ISO 8601 instant, newest first.
+   */
+  publishedSince(options: { readonly since: string }): Promise<readonly PublishedPost[]>;
 }
 
 /**

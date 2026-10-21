@@ -204,7 +204,10 @@ describe('services between plugins', () => {
     const engagement = { posts: () => Promise.resolve([]) };
     plugins.provideCore({
       '@geekity/cms/engagement': engagement,
-      '@geekity/cms/posts': { byPath: () => Promise.resolve([]) },
+      '@geekity/cms/posts': {
+        byPath: () => Promise.resolve([]),
+        publishedSince: () => Promise.resolve([]),
+      },
     });
 
     assert.equal(held?.use('@geekity/cms/engagement'), engagement);

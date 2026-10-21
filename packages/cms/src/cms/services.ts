@@ -3,7 +3,7 @@ import type { KvStore } from '@fedify/fedify';
 
 import { listUsers } from '../admin/index.ts';
 import { postEngagement } from '../admin/engagement.ts';
-import { postsByPath } from '../admin/posts-by-path.ts';
+import { postsByPath, postsPublishedSince } from '../admin/posts-by-path.ts';
 import { readObjectIds } from '../federation/object-ids.ts';
 import type { ConversationWrite } from '../store/admin-store.ts';
 import { createAvatarService } from '../avatars/index.ts';
@@ -235,6 +235,8 @@ export function createServices({
     '@geekity/cms/posts': {
       byPath: async (paths) =>
         postsByPath({ store, baseUrl: resolved.baseUrl, cited: await cited() }, paths),
+      publishedSince: async ({ since }) =>
+        postsPublishedSince({ store, baseUrl: resolved.baseUrl, cited: await cited() }, since),
     },
   });
 
