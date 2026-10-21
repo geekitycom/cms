@@ -1,10 +1,11 @@
 # @geekity/plugin-umami
 
 A [Geekity CMS](https://github.com/geekitycom/cms/blob/main/packages/cms/README.md) plugin that adds the
-[Umami](https://umami.is) analytics tracker to every public page. It works
-with Umami Cloud and with a self-hosted Umami. The tracker is a `<script>` tag
-at the end of `<head>`, which the CMS draws from the plugin's settings. The
-site needs no theme of its own for it.
+[Umami](https://umami.is) analytics tracker to every public page and shows
+the site's views and visitors on the admin dashboard. It works with Umami
+Cloud and with a self-hosted Umami. The tracker is a `<script>` tag at the end
+of `<head>`, which the CMS draws from the plugin's settings. The site needs no
+theme of its own for it.
 
 ## Installing it
 
@@ -105,6 +106,28 @@ The plugin is written against the Umami 3 API: `GET /websites/:id`, and its
 `stats`, `pageviews`, `metrics` and `active` endpoints. It also reads the
 Umami 2 answers to `stats` and `active`, which have a different shape. Umami 2
 calls the `path` metric `url`, so the top pages need Umami 3.
+
+## On the dashboard
+
+The **Umami: views and visitors** card spans the dashboard. It covers the
+dashboard's period, 7 days unless 30 is chosen, ending today in the site's
+time zone. It shows:
+
+- Visitors, views, bounce rate and average visit time, each with the change
+  from the same number of days before. Bounce rate is the share of visits that
+  saw one page. Average visit time is the total visit time over the number of
+  visits. A fall in bounce rate counts as better. These follow Umami's own
+  dashboard.
+- Views and visitors for each day as a chart with two lines, and a table of
+  the same numbers. A day Umami has no count for shows 0.
+
+Views are Umami's page views. Visitors are Umami's unique visitors (its
+`sessions` per day and its `visitors` total), not its visits.
+
+The card is drawn again from Umami at most every 5 minutes. While the
+settings for the stats are incomplete, the card is not drawn. When Umami does
+not answer, the card shows the last figures it had marked Stale, or says the
+stats are unavailable, and the rest of the dashboard draws as normal.
 
 ## Where the tracker is drawn
 

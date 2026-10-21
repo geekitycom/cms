@@ -33,6 +33,10 @@ export interface SiteOptions {
   /** The plugin's secrets, as `secrets.json` holds them. */
   secrets?: Record<string, string>;
   devMode?: boolean;
+  /** The site's IANA time zone, `UTC` when left out. */
+  timezone?: string;
+  /** The site's clock, which decides when a dashboard widget loads again. */
+  now?: () => Date;
 }
 
 const opened: Cms[] = [];
@@ -57,6 +61,7 @@ export async function umamiSite(plugin: Plugin, options: SiteOptions = {}): Prom
       title: 'Geekity',
       language: 'en',
       notifyServer: '',
+      ...(options.timezone === undefined ? {} : { timezone: options.timezone }),
       plugins: { [UMAMI]: { enabled: true } },
     }),
   );
@@ -85,6 +90,7 @@ export async function umamiSite(plugin: Plugin, options: SiteOptions = {}): Prom
     contentDir,
     watch: false,
     devMode: options.devMode ?? false,
+    ...(options.now === undefined ? {} : { now: options.now }),
     plugins: [plugin],
     federation: { allowPrivateAddress: true },
     hostLookup: (hostname) => Promise.reject(new Error(`a test resolves no names: ${hostname}`)),

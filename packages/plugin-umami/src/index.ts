@@ -1,7 +1,7 @@
 /**
  * `@geekity/plugin-umami`: the Umami analytics tracker on every public page,
- * through page tags (decision-59), and a client for the Umami API that reads
- * the stats from Umami Cloud or a self-hosted Umami.
+ * through page tags (decision-59), and dashboard widgets that read the stats
+ * from Umami Cloud or a self-hosted Umami.
  */
 
 import { definePlugin } from '@geekity/cms/plugin';
@@ -10,6 +10,7 @@ import { umamiClient } from './client.ts';
 import { umamiScreen } from './screen.ts';
 import { SETTINGS } from './settings.ts';
 import { trackerTags } from './tracker.ts';
+import { trafficWidget } from './traffic.ts';
 import { VERSION } from './version.ts';
 
 export default definePlugin({
@@ -17,8 +18,8 @@ export default definePlugin({
   version: VERSION,
   label: 'Umami',
   description:
-    'Adds the Umami analytics tracker to every public page, from Umami Cloud or a ' +
-    'self-hosted Umami.',
+    'Adds the Umami analytics tracker to every public page and shows views and visitors ' +
+    'on the dashboard, from Umami Cloud or a self-hosted Umami.',
   hostApi: 3,
   register(host) {
     const settings = host.settings(SETTINGS);
@@ -28,5 +29,6 @@ export default definePlugin({
       settings: () => settings.current(),
     });
     host.screen(umamiScreen(() => settings.current(), client));
+    host.widget(trafficWidget(client));
   },
 });
