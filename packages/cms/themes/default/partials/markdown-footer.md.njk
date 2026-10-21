@@ -1,5 +1,12 @@
 {#
-  The end of every page's Markdown: a heading, then link lists.
+  The end of every page's Markdown: the archive on a page that asked for one,
+  then a heading and link lists.
+
+  `archiveMonths` is on the context only of a page whose front matter says
+  `archive: true`: every published post as `{ month, posts }`, newest month
+  first. Each post is a `label`, a `url`, a `date` (`YYYY-MM-DD`) and a
+  `description` already on one line, written here in the shape a listing's
+  Markdown has.
 
   `byline` is a post's author, a `label` and the `url` of their archive.
   `navigation` is every item of every menu the site stores, each URL once,
@@ -11,6 +18,14 @@
   written as a Gemini link line. Nothing is printed when there is nothing to
   link.
 #}
+{% for group in archiveMonths %}
+## {{ group.month | escapeMarkdown }}
+
+{% for entry in group.posts %}
+- [{{ (((entry.date + " ") if entry.date) + entry.label) | escapeMarkdown }}]({{ entry.url | markdownUrl }}){{ (": " + entry.description) if entry.description }}
+{% endfor %}
+
+{% endfor %}
 {% if byline or navigation.length %}
 ## {{ site.title | escapeMarkdown }}
 

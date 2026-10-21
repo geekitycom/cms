@@ -5,6 +5,7 @@
 @source '../../editor/look.ts';
 @source '../static/media.js';
 @source '../static/upload-drop.js';
+@source '../static/dashboard.js';
 
 @plugin 'daisyui' {
   themes:

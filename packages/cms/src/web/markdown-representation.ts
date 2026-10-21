@@ -54,7 +54,7 @@ export function documentMarkdown(c: Context<GeekityEnv>, document: Document): st
     namedAuthor(documentFrontMatter(document), writer),
     chrome,
     [rewriteMarkdownLinks(body, markdownHrefFor(c, document.permalink))],
-    document.permalink === '/' ? document : undefined,
+    { frontPage: document.permalink === '/' ? document : undefined, document },
   );
 }
 
@@ -100,12 +100,12 @@ function markdownPage(
   frontMatter: Record<string, unknown>,
   chrome: MarkdownChrome,
   blocks: readonly string[],
-  frontPage?: Document,
+  pages: { frontPage?: Document | undefined; document?: Document | undefined } = {},
 ): string {
   const markdownUrl = markdownUrlFor(c, chrome.url);
   const { header, footer } = c.var.renderer.renderMarkdownChrome(chrome, {
     markdownUrl,
-    frontPage,
+    ...pages,
   });
   return markdownFile({ ...frontMatter, ...navigationFrontMatter(chrome, markdownUrl) }, [
     header,

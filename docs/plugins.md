@@ -538,6 +538,13 @@ each enabled plugin's widgets in the order the plugins run. Within one plugin,
 the widgets keep the order they were declared in. When a plugin is disabled,
 its widgets are gone from the next dashboard request. No restart is needed.
 
+This is the default order. Each user can reorder, collapse and remove cards,
+plugin cards included, and the dashboard keeps that arrangement for them. A
+collapsed or removed card's `load` is not called. A widget is named in the
+arrangement by the plugin's name and the widget's `id`, so changing a widget's
+`id` puts it back in its default place for everybody. See
+[The dashboard](admin.md#the-dashboard).
+
 The dashboard loads every widget at the same time and waits at most 3 seconds
 for each. A good result is kept in memory for `refreshSeconds`, so a dashboard
 request in that time does not call `load`. While a load is still running,

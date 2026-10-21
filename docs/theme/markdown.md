@@ -58,10 +58,17 @@ format, such as a Gemini page:
 | `soloAuthor`      | The site's author, on a site whose author is a user. The same object the HTML has.                                         |
 | `newestPosts`     | On the homepage, when it is a page: the function the front page layout has. See [Template context](template-context.md).   |
 | `staticFrontPage` | True on the homepage when it is a page, false everywhere else.                                                             |
+| `archiveMonths`   | On a page whose front matter says `archive: true`: every published post as `{ month, posts }`, newest month first.         |
 
 `home`, `previous`, `next` and `byline` are each a `label` and a `url`. So is
 each of `bio.links` and each `navigation` item. The front matter carries
 `home`, `previous` and `next` already, for a Markdown browser.
+
+Each post in `archiveMonths` is a `label`, a `url`, a `date` and a
+`description`. The `date` is the post's calendar day in the site's timezone,
+as `YYYY-MM-DD`. The `description` is already on one line, and is absent when
+the post has none. The months and their posts are the same ones the HTML
+archive page lists. See [An archive page](page-shell.md#an-archive-page).
 
 ## The default partials
 
@@ -71,9 +78,19 @@ leaves the bio out and prints only the page, as the HTML front page does
 (decision-45). A site theme that wants the bio there tests `bio` without
 `staticFrontPage`.
 
-The default footer writes nothing when there is no byline and no navigation.
-Otherwise it writes the site's title as a level-two heading, the byline as a
-link line, and the navigation as a list:
+The default footer starts with the archive, when the context has
+`archiveMonths`. It writes each month as a level-two heading over a list of
+that month's posts, one line each, in the shape a listing's Markdown has:
+
+```markdown
+## September 2026
+
+- [2026-09-03 Third post](/third/index.md): The third post's description.
+```
+
+After the archive, the footer writes nothing more when there is no byline and
+no navigation. Otherwise it writes the site's title as a level-two heading,
+the byline as a link line, and the navigation as a list:
 
 ```markdown
 ## Field Notes
