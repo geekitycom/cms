@@ -67,10 +67,10 @@ function cardOf(html: string): string {
 }
 
 describe('the Umami card on the dashboard', () => {
-  it('spans the row and draws views and visitors per day in the site time zone (AC #1)', async () => {
+  it('sits in a half-width column and draws views and visitors per day in the site time zone (AC #1)', async () => {
     const html = await (await dashboard(cloudOn(fake)))();
     const card = cardOf(html);
-    assert.match(card, /^<div class="min-w-0 @3xl:col-span-2"[ >]/);
+    assert.match(card, /^<div class="min-w-0"[ >]/);
     assert.match(card, /<svg[^>]*role="img"/);
     assert.match(words(card), /Day Views Visitors/);
     const today = dayIn(new Date(), 'America/Chicago');
@@ -253,16 +253,13 @@ describe('the Umami audience and visitors right now cards on the dashboard', () 
 });
 
 describe('the Umami recent posts card on the dashboard', () => {
-  it('spans the row after the visitors right now card', async () => {
+  it('sits in a half-width column after the visitors right now card', async () => {
     const html = await (await dashboard(cloudOn(fake)))();
     assert.ok(
       html.indexOf('Umami: visitors right now') < html.indexOf('Umami: recent posts'),
       'right now, then recent posts',
     );
-    assert.match(
-      cardTitled(html, 'Umami: recent posts'),
-      /^<div class="min-w-0 @3xl:col-span-2"[ >]/,
-    );
+    assert.match(cardTitled(html, 'Umami: recent posts'), /^<div class="min-w-0"[ >]/);
   });
 
   it('sets a recent post views beside its engagement, read through the core services', async () => {

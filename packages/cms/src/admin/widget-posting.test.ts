@@ -26,10 +26,7 @@ function post(date: string, front = '', fields: Partial<Post> = {}): Post {
   return { slug: `post-${String(sequence)}`, date, front, ...fields };
 }
 
-async function site(
-  posts: readonly Post[],
-  locations: Record<string, unknown> = {},
-): Promise<Browser> {
+async function site(posts: readonly Post[]): Promise<Browser> {
   const contentDir = await box.dir('geekity-posting-content-');
   await mkdir(path.join(contentDir, '_data'), { recursive: true });
   await mkdir(path.join(contentDir, 'posts'), { recursive: true });
@@ -47,7 +44,7 @@ async function site(
     );
   }
   const dataDir = await box.dir('geekity-posting-data-');
-  await writeFile(path.join(dataDir, 'locations.json'), JSON.stringify(locations), 'utf8');
+  await writeFile(path.join(dataDir, 'locations.json'), '{}', 'utf8');
   const cms = await box.site({ contentDir, dataDir, now: () => TEN_AM_20_OCTOBER_IN_CHICAGO });
   return signedIn(cms);
 }
@@ -72,8 +69,6 @@ function rows(html: string): string[] {
 }
 
 const PHOTO = "photo:\n  - url: '/uploads/a.jpg'\n";
-const REVIEW = "item:\n  name: 'A Book'\n  kind: book\n";
-const REPLY = "in-reply-to: 'https://elsewhere.example/a'\n";
 
 describe('the posting activity widget (TASK-449)', () => {
   it('draws a calendar of posts per day over the last 52 weeks, with a text equivalent (AC #1)', async () => {
@@ -96,62 +91,13 @@ describe('the posting activity widget (TASK-449)', () => {
     assert.deepEqual(rows(calendar), ['2 Mar 2026 1', '19 Oct 2026 2']);
   });
 
-  it('splits posts per month over the last 12 months by kind (AC #2)', async () => {
-    const agent = await site([
-      post('2026-10-02T12:00:00Z'),
-      post('2026-10-03T12:00:00Z', '', { title: 'A Long Read' }),
-      post('2026-10-04T12:00:00Z', PHOTO),
-      post('2026-09-04T12:00:00Z', REVIEW),
-      post('2026-09-05T12:00:00Z'),
-      post('2025-11-01T12:00:00Z'),
-      post('2025-10-30T12:00:00Z'),
-    ]);
+  it('draws no posts-per-month bar chart (TASK-471)', async () => {
+    const agent = await site([post('2026-10-02T12:00:00Z'), post('2026-10-04T12:00:00Z', PHOTO)]);
 
-    const bars = figure(await card(agent), 'Posts per month by kind');
+    const html = await card(agent);
 
-    assert.match(
-      bars,
-      /^Posts per month by kind, Nov 2025 to Oct 2026: 6 in all, most in Oct 2026 \(3\)\.<\/p>/,
-    );
-    assert.match(text(bars), /Notes Articles Photos Reviews/);
-    assert.match(text(bars), /Month Notes Articles Photos Reviews Total/);
-    const table = rows(bars);
-    assert.equal(table.length, 12);
-    assert.equal(table[0], 'Nov 2025 1 0 0 0 1');
-    assert.equal(table[10], 'Sept 2026 1 0 0 1 2');
-    assert.equal(table[11], 'Oct 2026 1 1 1 0 3');
-  });
-
-  it('keeps the three busiest kinds and folds the rest into Other (AC #2)', async () => {
-    const agent = await site(
-      [
-        post('2026-10-02T12:00:00Z'),
-        post('2026-10-02T13:00:00Z'),
-        post('2026-10-02T14:00:00Z'),
-        post('2026-10-03T12:00:00Z', PHOTO),
-        post('2026-10-03T13:00:00Z', PHOTO),
-        post('2026-10-04T12:00:00Z', REVIEW),
-        post('2026-10-04T13:00:00Z', REVIEW),
-        post('2026-10-05T12:00:00Z', REPLY),
-        post('2026-10-06T12:00:00Z', '', { slug: 'checked-in' }),
-      ],
-      { '/checked-in/': { locality: 'Paris', checkin: true } },
-    );
-
-    const bars = figure(await card(agent), 'Posts per month by kind');
-
-    assert.match(text(bars), /Month Notes Photos Reviews Other Total/);
-    assert.equal(rows(bars)[11], 'Oct 2026 3 2 2 2 9');
-    assert.match(bars, /<title>Oct 2026: Other 2 of 9<\/title>/);
-  });
-
-  it('counts a check-in as a check-in', async () => {
-    const agent = await site(
-      [post('2026-10-06T12:00:00Z', '', { slug: 'at-the-cafe' }), post('2026-10-07T12:00:00Z')],
-      { '/at-the-cafe/': { locality: 'Paris', checkin: true } },
-    );
-
-    assert.match(text(figure(await card(agent), 'Posts per month by kind')), /Notes Check-ins/);
+    assert.match(html, /Posts per day/);
+    assert.doesNotMatch(html, /Posts per month/);
   });
 
   it('leaves out drafts, trashed and scheduled posts and counts days in the site time zone (AC #3)', async () => {
@@ -164,15 +110,11 @@ describe('the posting activity widget (TASK-449)', () => {
       post('2025-11-01T04:00:00Z'),
     ]);
 
-    const html = await card(agent);
-    const calendar = figure(html, 'Posts per day');
+    const calendar = figure(await card(agent), 'Posts per day');
 
     assert.match(calendar, /<title>19 Oct 2026: 1<\/title>/);
     assert.match(calendar, /<title>20 Oct 2026: 0<\/title>/);
     assert.deepEqual(rows(calendar), ['31 Oct 2025 1', '19 Oct 2026 1']);
-    const bars = figure(html, 'Posts per month by kind');
-    assert.equal(rows(bars)[0], 'Nov 2025 0 0');
-    assert.equal(rows(bars)[11], 'Oct 2026 1 1');
   });
 
   it('draws the same year whatever the dashboard period', async () => {

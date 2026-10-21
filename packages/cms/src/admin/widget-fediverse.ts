@@ -12,7 +12,7 @@ const SERIES: readonly { kind: InboxInteraction['kind']; name: string }[] = [
 export const FEDIVERSE_WIDGET: CoreWidget = {
   id: 'fediverse-activity',
   title: 'Fediverse',
-  width: 'full',
+  width: 'half',
   refreshSeconds: 300,
   load(vars, period) {
     const timezone = vars.siteAtRequestStart.timezone;

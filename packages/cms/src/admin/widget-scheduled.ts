@@ -8,7 +8,7 @@ export const SCHEDULED_POSTS = 5;
 export const SCHEDULED_WIDGET: CoreWidget = {
   id: 'scheduled-posts',
   title: 'Scheduled posts',
-  width: 'full',
+  width: 'half',
   refreshSeconds: 60,
   load(vars) {
     const posts = vars.store.listScheduledPosts(SCHEDULED_POSTS);
