@@ -345,7 +345,7 @@ plugin's tags include its component, for example `plugin-llm-v0.2.0`.
 
 release-please writes the versions, the changelogs and the tags (decision-7).
 `pnpm release` publishes to npm and pushes the image. Merging the release pull
-request runs it in GitHub Actions, after a reviewer approves (decision-58).
+request runs it in GitHub Actions (decision-58).
 
 `packages/cms` publishes only `dist`, `admin`, `themes`, `templates`,
 `README.md` and `LICENSE`. A plugin package publishes only `dist`, `README.md`
@@ -372,9 +372,8 @@ pnpm --filter @geekity/cms pack
 3. Merging the release pull request pushes the version bumps to `main`.
    release-please runs again, sees its own release commit, and creates a git
    tag and a GitHub release for every package the pull request bumped.
-4. The `publish` job waits for approval in the `release` environment, then
-   runs `pnpm release`, as [Publishing a release](#publishing-a-release)
-   describes.
+4. The `publish` job runs `pnpm release` in the `release` environment, as
+   [Publishing a release](#publishing-a-release) describes.
 
 The bumps are the pre-1.0 rules of decision-7, configured in
 `release-please-config.json`:
@@ -444,9 +443,8 @@ gh pr edit <release pull request> --remove-label "autorelease: pending" --add-la
 
 Merging the release pull request publishes it (decision-58). release-please
 tags the release and reports it, and the `publish` job in
-`.github/workflows/release-please.yml` starts. The job waits in the `release`
-environment until a required reviewer approves it. Then it runs
-`pnpm release`:
+`.github/workflows/release-please.yml` starts. It runs `pnpm release` in the
+`release` environment:
 
 - npm authenticates through trusted publishing. The job's OIDC token proves
   which repository, workflow and environment it runs in, so no npm token is
@@ -468,17 +466,36 @@ failed run stopped.
 
 #### One-time setup
 
-- On npmjs.com, each of the five packages has a trusted publisher: repository
+- On npmjs.com, each package has a trusted publisher: repository
   `geekitycom/cms`, workflow file `release-please.yml`, environment `release`.
   npm checks the `repository` field of the published `package.json` against
   that repository, so every package names `geekitycom/cms` with its folder as
   `directory`.
-- In the repository settings, the environment `release` has a required
-  reviewer. Limit its deployment branches to `main`.
+- In the repository settings, limit the deployment branches of the
+  environment `release` to `main`.
 - In the settings of the ghcr.io package `cms`, **Manage Actions access**
   grants this repository the **Write** role. The `Dockerfile` labels the image
   with `org.opencontainers.image.source`, so ghcr.io links the package to this
   repository.
+
+#### A new package
+
+npm can add a trusted publisher only to a package that exists, so the first
+version of a new package cannot be published from Actions. Its publish fails
+with `ENEEDAUTH`, after the packages before it in the release are published.
+Publish it from your machine:
+
+```sh
+git checkout main && git pull --prune --tags
+npm login
+pnpm release
+```
+
+`pnpm release` publishes only what npm does not have, so it publishes the new
+package and pushes the image if the failed run did not. npm may hold the first
+version of a new package for review, and shows a placeholder version until it
+releases the real one. Once the version is on npm, add the package's trusted
+publisher as [One-time setup](#one-time-setup) describes.
 
 #### Run it from your machine
 
