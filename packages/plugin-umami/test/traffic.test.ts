@@ -5,7 +5,8 @@ import type { PluginBlock, PluginWidgetContext } from '@geekity/cms/plugin';
 
 import { umamiClient } from '../src/client.ts';
 import type { UmamiSettings } from '../src/settings.ts';
-import { midnightIn, trafficWidget } from '../src/traffic.ts';
+import { midnightIn } from '../src/period.ts';
+import { trafficWidget } from '../src/traffic.ts';
 import { defaultData, fakeUmami, WEBSITE } from './fake-umami.ts';
 import type { FakeUmami } from './fake-umami.ts';
 

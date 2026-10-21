@@ -28,6 +28,8 @@ export interface FakeData {
   stats: unknown;
   pageviews: unknown;
   metrics: Record<string, unknown>;
+  /** What `metrics/expanded` answers, by its `type`. */
+  expanded: Record<string, unknown>;
   active: unknown;
 }
 
@@ -94,6 +96,19 @@ export function defaultData(): FakeData {
       browser: [{ x: 'firefox', y: 15 }],
       device: [{ x: 'desktop', y: 25 }],
     },
+    expanded: {
+      path: [
+        { name: '/', pageviews: 60, visitors: 30, visits: 35, bounces: 0, totaltime: 0 },
+        {
+          name: '/2026/10/hello/',
+          pageviews: 30,
+          visitors: 12,
+          visits: 14,
+          bounces: 0,
+          totaltime: 0,
+        },
+      ],
+    },
     active: { visitors: 3 },
   };
 }
@@ -143,6 +158,8 @@ const ROUTES: Record<string, (exchange: Exchange) => Answer> = {
   'websites/:id/pageviews': (exchange) => withRange(exchange, () => exchange.fake.data.pageviews),
   'websites/:id/metrics': (exchange) =>
     withRange(exchange, () => exchange.fake.data.metrics[exchange.query.get('type') ?? ''] ?? []),
+  'websites/:id/metrics/expanded': (exchange) =>
+    withRange(exchange, () => exchange.fake.data.expanded[exchange.query.get('type') ?? ''] ?? []),
   'websites/:id/active': (exchange) =>
     website(exchange) === undefined
       ? UNAUTHORIZED

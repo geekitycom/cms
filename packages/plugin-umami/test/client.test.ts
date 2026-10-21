@@ -330,6 +330,40 @@ describe('what the Umami client reads', () => {
     assert.equal(query.get('limit'), '10');
   });
 
+  it('reads views and visitors for the top values of a metric, with a limit', async () => {
+    const umami = client(cloud());
+    fake.data.expanded['path'] = [
+      { name: '/', pageviews: 60, visitors: 20, visits: 25, bounces: 0, totaltime: 0 },
+      {
+        name: '/2026/10/hello/',
+        pageviews: '90',
+        visitors: '10',
+        visits: 12,
+        bounces: 0,
+        totaltime: 0,
+      },
+    ];
+    assert.deepEqual(await umami.expandedMetrics('path', WEEK, { limit: 50 }), [
+      { value: '/', pageviews: 60, visitors: 20 },
+      { value: '/2026/10/hello/', pageviews: 90, visitors: 10 },
+    ]);
+    const [sent] = fake.requestsTo(`/websites/${WEBSITE.id}/metrics/expanded`);
+    const query = new URL(sent?.path ?? '', 'http://x').searchParams;
+    assert.equal(query.get('type'), 'path');
+    assert.equal(query.get('limit'), '50');
+    assert.ok(query.get('startAt') !== null && query.get('endAt') !== null);
+  });
+
+  it('calls an expanded metric answer without views and visitors invalid', async () => {
+    const umami = client(cloud());
+    fake.data.expanded['path'] = [{ x: '/', y: 3 }];
+    await assert.rejects(umami.expandedMetrics('path', WEEK), (error: unknown) => {
+      assert.ok(error instanceof UmamiError);
+      assert.equal(error.failure.kind, 'invalid-answer');
+      return true;
+    });
+  });
+
   it('reads the visitors right now, in the Umami 3 and Umami 2 shapes', async () => {
     const umami = client(cloud());
     assert.equal(await umami.active(), 3);

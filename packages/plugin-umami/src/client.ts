@@ -96,6 +96,13 @@ export interface UmamiMetric {
   readonly count: number;
 }
 
+/** A metric's value with its views and visitors, from `metrics/expanded`. */
+export interface UmamiExpandedMetric {
+  readonly value: string;
+  readonly pageviews: number;
+  readonly visitors: number;
+}
+
 export interface UmamiClient {
   /** Whether the settings name everything a call needs. */
   configured(): Promise<boolean>;
@@ -115,6 +122,16 @@ export interface UmamiClient {
     range: UmamiRange,
     options?: UmamiCallOptions & { readonly limit?: number },
   ): Promise<readonly UmamiMetric[]>;
+  /**
+   * The top values of a metric with their views and visitors, most visitors
+   * first. Umami 3's `metrics` counts visitors for every type, the path too;
+   * this is where it counts views.
+   */
+  expandedMetrics(
+    type: UmamiMetricType,
+    range: UmamiRange,
+    options?: UmamiCallOptions & { readonly limit?: number },
+  ): Promise<readonly UmamiExpandedMetric[]>;
   /** Visitors on the site in the last few minutes. */
   active(options?: UmamiCallOptions): Promise<number>;
 }
@@ -374,6 +391,18 @@ export function umamiClient(options: UmamiClientOptions): UmamiClient {
         `the ${type} metrics`,
         parseMetrics,
       ),
+    expandedMetrics: (type, range, call = {}) =>
+      read(
+        (id) => `/websites/${id}/metrics/expanded`,
+        {
+          ...between(range),
+          type,
+          ...(call.limit === undefined ? {} : { limit: String(call.limit) }),
+        },
+        call,
+        `the ${type} views and visitors`,
+        parseExpandedMetrics,
+      ),
     active: (call = {}) =>
       read((id) => `/websites/${id}/active`, {}, call, 'the visitors right now', parseActive),
   };
@@ -461,6 +490,22 @@ function parseMetrics(body: unknown): UmamiMetric[] | undefined {
     const y = isRecord(entry) ? count(entry['y']) : undefined;
     if ((typeof x !== 'string' && x !== null) || y === undefined) return undefined;
     metrics.push({ value: x ?? '', count: y });
+  }
+  return metrics;
+}
+
+function parseExpandedMetrics(body: unknown): UmamiExpandedMetric[] | undefined {
+  if (!Array.isArray(body)) return undefined;
+  const metrics: UmamiExpandedMetric[] = [];
+  for (const entry of body) {
+    if (!isRecord(entry)) return undefined;
+    const { name } = entry;
+    const pageviews = count(entry['pageviews']);
+    const visitors = count(entry['visitors']);
+    if (typeof name !== 'string' || pageviews === undefined || visitors === undefined) {
+      return undefined;
+    }
+    metrics.push({ value: name, pageviews, visitors });
   }
   return metrics;
 }

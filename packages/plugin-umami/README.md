@@ -2,7 +2,8 @@
 
 A [Geekity CMS](https://github.com/geekitycom/cms/blob/main/packages/cms/README.md) plugin that adds the
 [Umami](https://umami.is) analytics tracker to every public page and shows
-the site's views and visitors on the admin dashboard. It works with Umami
+the site's views, visitors, top pages and top referrers on the admin
+dashboard. It works with Umami
 Cloud and with a self-hosted Umami. The tracker is a `<script>` tag at the end
 of `<head>`, which the CMS draws from the plugin's settings. The site needs no
 theme of its own for it.
@@ -103,9 +104,9 @@ reports whether Umami answered, and whether it has a website with the
 configured ID that the account can see.
 
 The plugin is written against the Umami 3 API: `GET /websites/:id`, and its
-`stats`, `pageviews`, `metrics` and `active` endpoints. It also reads the
-Umami 2 answers to `stats` and `active`, which have a different shape. Umami 2
-calls the `path` metric `url`, so the top pages need Umami 3.
+`stats`, `pageviews`, `metrics`, `metrics/expanded` and `active` endpoints. It
+also reads the Umami 2 answers to `stats` and `active`, which have a different
+shape. Umami 2 has no `metrics/expanded`, so the top pages need Umami 3.
 
 ## On the dashboard
 
@@ -124,10 +125,30 @@ time zone. It shows:
 Views are Umami's page views. Visitors are Umami's unique visitors (its
 `sessions` per day and its `visitors` total), not its visits.
 
-The card is drawn again from Umami at most every 5 minutes. While the
-settings for the stats are incomplete, the card is not drawn. When Umami does
-not answer, the card shows the last figures it had marked Stale, or says the
-stats are unavailable, and the rest of the dashboard draws as normal.
+Two half-width cards sit side by side below it, over the same days:
+
+- **Umami: top pages** lists the ten paths with the most views. A path that
+  leads to one of the site's published posts shows the post's title and links
+  to its editor. The match ignores a query string and a missing trailing
+  slash, and the views of every path that leads to the same post are added
+  up. Other paths, such as the front page or a tag listing, show the path.
+  Umami's `metrics` endpoint counts visitors for a path, so the card reads
+  `metrics/expanded`, which counts views. That endpoint lists paths with the
+  most visitors first, so the card reads the top 100 and keeps the ten with
+  the most views.
+- **Umami: top referrers** lists the ten referring domains with the most
+  visitors. Umami records the domain of the referring page, not its full
+  address, and counts the unique visitors who came from it. The site's own
+  domain is left out: the host of the site URL and each of Domains, each with
+  or without `www.`.
+
+When the period has no views, or no visitor came from another site, the card
+says so.
+
+Each card is drawn again from Umami at most every 5 minutes. While the
+settings for the stats are incomplete, the cards are not drawn. When Umami
+does not answer, a card shows the last figures it had marked Stale, or says
+the stats are unavailable, and the rest of the dashboard draws as normal.
 
 ## Where the tracker is drawn
 

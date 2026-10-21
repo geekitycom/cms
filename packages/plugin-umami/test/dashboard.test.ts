@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 
 import umami from '../src/index.ts';
-import { dayIn } from '../src/traffic.ts';
+import { dayIn } from '../src/period.ts';
 import { defaultData, fakeUmami, WEBSITE } from './fake-umami.ts';
 import type { FakeUmami } from './fake-umami.ts';
 import { closeSites, signIn, umamiSite } from './site.ts';
@@ -132,5 +132,68 @@ describe('the Umami card on the dashboard', () => {
   it('covers 30 days when the dashboard shows 30', async () => {
     const card = cardOf(await (await dashboard(cloudOn(fake)))('?period=30'));
     assert.match(card, /Views and visitors per day, 30 days from/);
+  });
+});
+
+function cardTitled(html: string, title: string): string {
+  const start = html.indexOf(title);
+  assert.ok(start >= 0, `the ${title} card is on the dashboard`);
+  return html.slice(
+    html.lastIndexOf('<div class="min-w-0', start),
+    html.indexOf('</section>', start),
+  );
+}
+
+describe('the Umami top pages and top referrers cards on the dashboard', () => {
+  it('sit side by side after the views and visitors card', async () => {
+    const html = await (await dashboard(cloudOn(fake)))();
+    const traffic = html.indexOf(TITLE);
+    const pages = html.indexOf('Umami: top pages');
+    const referrers = html.indexOf('Umami: top referrers');
+    assert.ok(traffic < pages && pages < referrers, 'traffic, then pages, then referrers');
+    assert.match(cardTitled(html, 'Umami: top pages'), /^<div class="min-w-0">/);
+    assert.match(cardTitled(html, 'Umami: top referrers'), /^<div class="min-w-0">/);
+  });
+
+  it('lists views per page, with a post shown by its title and linked to its editor (AC #1)', async () => {
+    fake.data.expanded['path'] = [
+      { name: '/', pageviews: 60, visitors: 30, visits: 35, bounces: 0, totaltime: 0 },
+      { name: '/2026/10/hello', pageviews: 30, visitors: 12, visits: 14, bounces: 0, totaltime: 0 },
+      { name: '/about/', pageviews: 8, visitors: 6, visits: 6, bounces: 0, totaltime: 0 },
+    ];
+    const card = cardTitled(await (await dashboard(cloudOn(fake)))(), 'Umami: top pages');
+    assert.match(card, /<a class="link" href="\/admin\/posts\/hello">Hello<\/a>/);
+    assert.match(words(card), /\/ 60 Hello 30 \/about\/ 8/);
+  });
+
+  it('lists visitors per referring domain without the site own domain (AC #2)', async () => {
+    fake.data.metrics['referrer'] = [
+      { x: 'localhost', y: 50 },
+      { x: 'www.example.org', y: 40 },
+      { x: 'news.ycombinator.com', y: 12 },
+    ];
+    const options = cloudOn(fake);
+    const card = cardTitled(
+      await (
+        await dashboard({
+          ...options,
+          settings: { ...options.settings, domains: 'example.org' },
+        })
+      )(),
+      'Umami: top referrers',
+    );
+    assert.match(words(card), /news\.ycombinator\.com 12/);
+    assert.doesNotMatch(card, /localhost|example\.org/);
+  });
+
+  it('says so in each card when the period has no data (AC #3)', async () => {
+    fake.data.expanded['path'] = [];
+    fake.data.metrics['referrer'] = [];
+    const html = await (await dashboard(cloudOn(fake)))();
+    assert.match(words(cardTitled(html, 'Umami: top pages')), /No page views in this period\./);
+    assert.match(
+      words(cardTitled(html, 'Umami: top referrers')),
+      /No visitors came from another site in this period\./,
+    );
   });
 });

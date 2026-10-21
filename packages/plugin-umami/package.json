@@ -2,7 +2,7 @@
   "name": "@geekity/plugin-umami",
   "version": "0.0.0",
   "type": "module",
-  "description": "Geekity CMS plugin that adds the Umami analytics tracker to every public page and shows views and visitors on the dashboard.",
+  "description": "Geekity CMS plugin that adds the Umami analytics tracker to every public page and shows views, visitors, top pages and top referrers on the dashboard.",
   "license": "MIT",
   "repository": {
     "type": "git",
