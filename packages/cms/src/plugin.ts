@@ -389,6 +389,19 @@ export type PluginBlock =
       };
     }
   | {
+      /**
+       * A stacked bar for each labelled group, such as a month, with a segment
+       * for each of up to four named series, each with one value per group.
+       */
+      readonly bars: {
+        readonly caption: string;
+        readonly groups: readonly string[];
+        /** What a group is, such as `Month`: the heading of the table's first column. `Group` when left out. */
+        readonly groupName?: string;
+        readonly series: readonly { readonly name: string; readonly values: readonly number[] }[];
+      };
+    }
+  | {
       /** A count for each day; days between the first and the last that are left out count none. */
       readonly calendar: {
         readonly caption: string;

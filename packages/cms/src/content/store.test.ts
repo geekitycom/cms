@@ -1289,6 +1289,41 @@ describe('scheduled documents', () => {
   });
 });
 
+describe('listPostsPublishedSince', () => {
+  it('lists the posts a reader can open dated from an instant on, oldest first', async () => {
+    const index = openContentStore({
+      dataDir: await dataDir(),
+      now: () => new Date('2026-10-20T12:00:00Z'),
+    });
+    openStores.push(index);
+    const dated = (slug: string, date: string, overrides: Partial<Document> = {}): Document =>
+      post({
+        path: `posts/${slug}.md`,
+        slug,
+        permalink: `/${slug}/`,
+        title: slug,
+        date,
+        ...overrides,
+      });
+    index.upsertAll([
+      dated('before', '2026-09-30T23:59:59Z'),
+      dated('at-the-start', '2026-10-01T00:00:00Z'),
+      dated('later', '2026-10-10T09:00:00Z'),
+      dated('unlisted', '2026-10-09T09:00:00Z', { extra: { visibility: 'unlisted' } }),
+      dated('draft', '2026-10-05T09:00:00Z', { draft: true }),
+      dated('scheduled', '2026-10-21T09:00:00Z'),
+      dated('trashed', '2026-10-06T09:00:00Z', { path: '_trash/posts/trashed.md' }),
+      dated('page', '2026-10-07T09:00:00Z', { type: 'page' }),
+    ]);
+
+    assert.deepEqual(titles(index.listPostsPublishedSince('2026-10-01T00:00:00.000Z')), [
+      'at-the-start',
+      'unlisted',
+      'later',
+    ]);
+  });
+});
+
 describe('permalinks', () => {
   it('are unique: a second document at the same URL fails with both paths named', async () => {
     const index = await store();

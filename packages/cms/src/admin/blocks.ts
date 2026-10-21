@@ -17,6 +17,7 @@ export type DrawnBlock =
       readonly caption: string;
       readonly items: readonly DrawnRankedItem[];
     }
+  | ({ readonly kind: 'bars' } & DrawnBars)
   | ({ readonly kind: 'calendar' } & DrawnCalendar);
 
 /** A table cell, with a link cell's `href` dropped when it may not be a link. */
@@ -83,6 +84,28 @@ interface DrawnRankedItem {
   readonly width: number;
 }
 
+interface DrawnBars extends DrawnFigure {
+  readonly plot: DrawnTimeSeries['plot'];
+  readonly yTicks: DrawnTimeSeries['yTicks'];
+  /** In order; the template gives the series at each index its colour and texture. */
+  readonly series: readonly string[];
+  readonly bars: readonly {
+    /** The group's label under the bar, left out when labels would collide. */
+    readonly tick: string | undefined;
+    /** The middle of the bar, where its label and total sit. */
+    readonly x: number;
+    readonly total: { readonly y: number; readonly text: string } | undefined;
+    readonly segments: readonly {
+      readonly series: number;
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+      readonly title: string;
+    }[];
+  }[];
+}
+
 interface DrawnCalendar extends DrawnFigure {
   readonly cells: readonly {
     readonly x: number;
@@ -98,6 +121,12 @@ interface DrawnCalendar extends DrawnFigure {
 
 /** The most series a time series draws, one per colour, dash and marker the template has. */
 const MAX_SERIES = 4;
+
+/** The most groups bars draw, two years of months. */
+const MAX_GROUPS = 24;
+
+/** The gap left between two segments of one bar, in the surface colour. */
+const SEGMENT_GAP = 2;
 
 /** The longest calendar drawn, a year and a leap day. */
 const MAX_CALENDAR_DAYS = 366;
@@ -257,19 +286,13 @@ function spanText(first: number, last: number): string {
     : `${String(length)} days from ${shortDay.format(first)} to ${shortDay.format(last)}`;
 }
 
-function drawTimeSeries(data: unknown): DrawnBlock {
-  if (!isRecord(data) || typeof data['caption'] !== 'string') return EMPTY;
-  const caption = data['caption'];
-  const empty: DrawnBlock = { kind: 'empty', caption };
-  const times = consecutiveDays(data['days']);
-  const series = data['series'];
-  if (
-    times === undefined ||
-    !Array.isArray(series) ||
-    series.length === 0 ||
-    series.length > MAX_SERIES
-  ) {
-    return empty;
+/** `series` as named values, one per point, or `undefined` when it cannot be drawn. */
+function namedSeries(
+  series: unknown,
+  points: number,
+): { name: string; values: number[] }[] | undefined {
+  if (!Array.isArray(series) || series.length === 0 || series.length > MAX_SERIES) {
+    return undefined;
   }
   const named: { name: string; values: number[] }[] = [];
   for (const entry of series) {
@@ -277,31 +300,50 @@ function drawTimeSeries(data: unknown): DrawnBlock {
       !isRecord(entry) ||
       typeof entry['name'] !== 'string' ||
       !Array.isArray(entry['values']) ||
-      entry['values'].length !== times.length ||
+      entry['values'].length !== points ||
       !entry['values'].every(isAmount)
     ) {
-      return empty;
+      return undefined;
     }
     named.push({ name: entry['name'], values: entry['values'] as number[] });
   }
+  return named;
+}
 
-  const width = 480;
-  const height = 220;
-  const plot = { left: 44, right: width - 24, top: 12, bottom: height - 28 };
-  const peak = Math.max(...named.flatMap((entry) => entry.values));
+const CHART_WIDTH = 480;
+const CHART_HEIGHT = 220;
+const PLOT = { left: 44, right: CHART_WIDTH - 24, top: 12, bottom: CHART_HEIGHT - 28 };
+
+/** A value axis from 0 to a round number at or above `peak`, with its ticks. */
+function valueAxis(peak: number): {
+  y: (value: number) => number;
+  ticks: DrawnTimeSeries['yTicks'][number][];
+} {
   const step = niceStep(peak > 0 ? peak : 1);
   const top = Math.max(step, Math.ceil(peak / step) * step);
+  const y = (value: number): number =>
+    round(PLOT.bottom - (value / top) * (PLOT.bottom - PLOT.top));
+  const ticks: DrawnTimeSeries['yTicks'][number][] = [];
+  for (let tick = 0; tick <= top + step / 2; tick += step) {
+    ticks.push({ y: y(tick), label: compact.format(tick) });
+  }
+  return { y, ticks };
+}
+
+function drawTimeSeries(data: unknown): DrawnBlock {
+  if (!isRecord(data) || typeof data['caption'] !== 'string') return EMPTY;
+  const caption = data['caption'];
+  const empty: DrawnBlock = { kind: 'empty', caption };
+  const times = consecutiveDays(data['days']);
+  const named = times === undefined ? undefined : namedSeries(data['series'], times.length);
+  if (times === undefined || named === undefined) return empty;
+
+  const plot = PLOT;
+  const { y, ticks: yTicks } = valueAxis(Math.max(...named.flatMap((entry) => entry.values)));
   const count = times.length;
   const span = (plot.right - plot.left) / Math.max(count - 1, 1);
   const x = (index: number): number =>
     round(count === 1 ? (plot.left + plot.right) / 2 : plot.left + index * span);
-  const y = (value: number): number =>
-    round(plot.bottom - (value / top) * (plot.bottom - plot.top));
-
-  const yTicks: DrawnTimeSeries['yTicks'][number][] = [];
-  for (let tick = 0; tick <= top + step / 2; tick += step) {
-    yTicks.push({ y: y(tick), label: compact.format(tick) });
-  }
 
   const every = Math.ceil(count / 7);
   const xTicks: DrawnTimeSeries['xTicks'][number][] = [];
@@ -313,8 +355,8 @@ function drawTimeSeries(data: unknown): DrawnBlock {
     kind: 'timeSeries',
     id: nextFigureId(),
     description: `${caption}, ${spanText(times[0] ?? 0, times.at(-1) ?? 0)}.`,
-    width,
-    height,
+    width: CHART_WIDTH,
+    height: CHART_HEIGHT,
     plot,
     yTicks,
     xTicks,
@@ -374,6 +416,93 @@ function drawRanked(data: unknown): DrawnBlock {
       value: whole.format(item.value),
       href: safeHref(item.href),
       width: most > 0 ? Math.round((item.value / most) * 1000) / 10 : 0,
+    })),
+  };
+}
+
+function drawBars(data: unknown): DrawnBlock {
+  if (!isRecord(data) || typeof data['caption'] !== 'string') return EMPTY;
+  const caption = data['caption'];
+  const empty: DrawnBlock = { kind: 'empty', caption };
+  const groups = data['groups'];
+  if (
+    !Array.isArray(groups) ||
+    groups.length === 0 ||
+    groups.length > MAX_GROUPS ||
+    !groups.every((group) => typeof group === 'string')
+  ) {
+    return empty;
+  }
+  const labels = groups as string[];
+  const named = namedSeries(data['series'], labels.length);
+  if (named === undefined) return empty;
+
+  const totals = labels.map((_, index) =>
+    named.reduce((sum, entry) => sum + (entry.values[index] ?? 0), 0),
+  );
+  const most = Math.max(...totals);
+  const { y, ticks: yTicks } = valueAxis(most);
+  const band = (PLOT.right - PLOT.left) / labels.length;
+  const barWidth = round(Math.min(32, band * 0.6));
+  const longest = Math.max(...labels.map((label) => label.length));
+  const every = Math.max(1, Math.ceil((longest * 6.6 + 6) / band));
+
+  const bars = labels.map((label, index) => {
+    const middle = round(PLOT.left + (index + 0.5) * band);
+    const left = round(middle - barWidth / 2);
+    const total = totals[index] ?? 0;
+    const segments: DrawnBars['bars'][number]['segments'][number][] = [];
+    let below = 0;
+    named.forEach((entry, series) => {
+      const value = entry.values[index] ?? 0;
+      if (value === 0) return;
+      const bottom = y(below) - (segments.length === 0 ? 0 : SEGMENT_GAP);
+      const top = y(below + value);
+      below += value;
+      segments.push({
+        series,
+        x: left,
+        y: top,
+        width: barWidth,
+        height: round(Math.max(bottom - top, 1)),
+        title: `${label}: ${entry.name} ${whole.format(value)} of ${whole.format(total)}`,
+      });
+    });
+    return {
+      tick: (labels.length - 1 - index) % every === 0 ? label : undefined,
+      x: middle,
+      total: total === 0 ? undefined : { y: round(y(total) - 4), text: whole.format(total) },
+      segments,
+    };
+  });
+
+  const sum = totals.reduce((all, total) => all + total, 0);
+  const busiest = labels[totals.indexOf(most)] ?? '';
+  const span = labels.length === 1 ? labels[0] : `${labels[0] ?? ''} to ${labels.at(-1) ?? ''}`;
+  const summary =
+    sum === 0 ? 'none' : `${whole.format(sum)} in all, most in ${busiest} (${whole.format(most)})`;
+
+  return {
+    kind: 'bars',
+    id: nextFigureId(),
+    description: `${caption}, ${span ?? ''}: ${summary}.`,
+    width: CHART_WIDTH,
+    height: CHART_HEIGHT,
+    plot: PLOT,
+    yTicks,
+    series: named.map((entry) => entry.name),
+    bars,
+    columns: [
+      typeof data['groupName'] === 'string' ? data['groupName'] : 'Group',
+      ...named.map((entry) => entry.name),
+      'Total',
+    ],
+    rows: labels.map((label, index) => ({
+      heading: label,
+      cells: [
+        ...named.map((entry) => whole.format(entry.values[index] ?? 0)),
+        whole.format(totals[index] ?? 0),
+      ],
     })),
   };
 }
@@ -471,6 +600,7 @@ export function drawBlock(block: unknown): DrawnBlock {
   if ('stats' in block) return drawStats(block['stats']);
   if ('timeSeries' in block) return drawTimeSeries(block['timeSeries']);
   if ('ranked' in block) return drawRanked(block['ranked']);
+  if ('bars' in block) return drawBars(block['bars']);
   if ('calendar' in block) return drawCalendar(block['calendar']);
   return EMPTY;
 }

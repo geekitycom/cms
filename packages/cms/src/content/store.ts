@@ -245,6 +245,11 @@ export interface CatalogReader {
    * which is the same thing as whether a follower holds a copy.
    */
   listFederated(options?: ListOptions): Document[];
+  /**
+   * Posts a reader can open — not drafts, not trashed, already due, public or
+   * unlisted — dated at or after `since`, a UTC instant, oldest first.
+   */
+  listPostsPublishedSince(since: string): Document[];
   /** Every indexed path, sorted. What a sync compares the content tree against. */
   listPaths(): string[];
   /** How many documents there are of each kind. */

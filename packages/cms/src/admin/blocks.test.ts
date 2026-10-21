@@ -106,6 +106,31 @@ describe('a block, given input it cannot draw', () => {
       'a ranked item below zero',
       { ranked: { caption: 'Pages', items: [{ label: '/', value: -3 }] } },
     ],
+    ['bars of no groups', { bars: { caption: 'Posts', groups: [], series: [] } }],
+    [
+      'bars whose values miss a group',
+      {
+        bars: {
+          caption: 'Posts',
+          groups: ['Sep', 'Oct'],
+          series: [{ name: 'Notes', values: [1] }],
+        },
+      },
+    ],
+    [
+      'bars with a negative value',
+      {
+        bars: {
+          caption: 'Posts',
+          groups: ['Oct'],
+          series: [{ name: 'Notes', values: [-1] }],
+        },
+      },
+    ],
+    [
+      'bars with a group that is not text',
+      { bars: { caption: 'Posts', groups: [10], series: [{ name: 'Notes', values: [1] }] } },
+    ],
     ['a calendar of no days', { calendar: { caption: 'Posts', days: [] } }],
     [
       'a calendar with a count that is not a number',
@@ -407,6 +432,100 @@ describe('a calendar', () => {
   });
 });
 
+describe('bars', () => {
+  const bars = {
+    bars: {
+      caption: 'Posts per month',
+      groups: ['Aug', 'Sep', 'Oct'],
+      series: [
+        { name: 'Notes', values: [2, 0, 3] },
+        { name: 'Photos', values: [1, 0, 1] },
+      ],
+    },
+  };
+
+  /** Each bar segment's height and hover title, left to right, bottom up. */
+  function segments(html: string): { height: number; title: string }[] {
+    return [
+      ...html.matchAll(
+        /<rect x="[\d.]+" y="[\d.]+" width="[\d.]+" height="([\d.]+)"><title>([^<]*)<\/title>/g,
+      ),
+    ].map(([, height, title]) => ({ height: Number(height), title: title ?? '' }));
+  }
+
+  it('stacks a segment for every series with a value, taller for more, each with a hover title', () => {
+    const drawn = segments(draw(bars));
+    assert.deepEqual(
+      drawn.map(({ title }) => title),
+      ['Aug: Notes 2 of 3', 'Aug: Photos 1 of 3', 'Oct: Notes 3 of 4', 'Oct: Photos 1 of 4'],
+    );
+    const [augNotes, augPhotos, octNotes] = drawn;
+    assert.ok((octNotes?.height ?? 0) > (augNotes?.height ?? 0));
+    assert.ok((augNotes?.height ?? 0) > (augPhotos?.height ?? 0));
+  });
+
+  it('labels every group, and each bar with its total', () => {
+    const html = draw(bars);
+    assert.deepEqual(
+      all(
+        html,
+        /<text class="fill-base-content\/70"[^>]*text-anchor="middle"[^>]*>([^<]*)<\/text>/g,
+      ),
+      ['Aug', 'Sep', 'Oct'],
+    );
+    assert.deepEqual(
+      all(html, /<text class="fill-base-content font-semibold"[^>]*>([^<]*)<\/text>/g),
+      ['3', '4'],
+    );
+  });
+
+  it('marks each series with its own texture as well as its colour, repeated in the legend', () => {
+    const html = draw(bars);
+    const legend = legendOf(html);
+    assert.match(legend, /Notes/);
+    assert.match(legend, /Photos/);
+    assert.match(legend, /fill-primary/);
+    assert.match(legend, /fill-secondary/);
+    assert.match(legend, /fill="url\(#chart-\d+-texture-1\)"/);
+    assert.match(html, /<pattern id="chart-\d+-texture-1"/);
+  });
+
+  it('says what it shows in words and a table with a total column', () => {
+    const html = draw(bars);
+    assert.match(
+      html,
+      /<p id="chart-[^"]+" class="sr-only">Posts per month, Aug to Oct: 7 in all, most in Oct \(4\)\.<\/p>/,
+    );
+    const table = /<table[^>]*>(.*?)<\/table>/.exec(html)?.[1] ?? '';
+    assert.match(
+      table,
+      /<th scope="col">Notes<\/th><th scope="col">Photos<\/th><th scope="col">Total<\/th>/,
+    );
+    assert.match(table, /<th scope="row">Sep<\/th><td>0<\/td><td>0<\/td><td>0<\/td>/);
+  });
+
+  it('draws a single series with no legend', () => {
+    const html = draw({
+      bars: { caption: 'Posts', groups: ['Oct'], series: [{ name: 'Posts', values: [2] }] },
+    });
+    assert.equal(legendOf(html), '');
+    assert.equal(segments(html).length, 1);
+  });
+
+  it('draws groups that all hold nothing as bars of nothing, not an empty state', () => {
+    const html = draw({
+      bars: {
+        caption: 'Posts',
+        groups: ['Sep', 'Oct'],
+        series: [{ name: 'Posts', values: [0, 0] }],
+      },
+    });
+    assert.doesNotMatch(html, EMPTY);
+    assert.equal(segments(html).length, 0);
+    assert.match(html, /Posts, Sep to Oct: none\./);
+  });
+});
+
 describe('every chart', () => {
   const charts: unknown[] = [
     {
@@ -423,6 +542,13 @@ describe('every chart', () => {
     },
     { ranked: { caption: 'Pages', items: [{ label: '/', value: 1 }] } },
     { calendar: { caption: 'Posts', days: [{ day: '2026-10-05', count: 1 }] } },
+    {
+      bars: {
+        caption: 'Posts',
+        groups: ['Sep', 'Oct'],
+        series: ['A', 'B', 'C', 'D'].map((name) => ({ name, values: [1, 2] })),
+      },
+    },
     { stats: [{ label: 'Visitors', value: 9, previous: 5 }] },
   ];
 
@@ -431,7 +557,7 @@ describe('every chart', () => {
       const html = draw(chart);
       assert.doesNotMatch(
         html,
-        /#[0-9a-f]{3,8}\b|rgb\(|hsl\(|oklch\(|(?:fill|stroke)="(?!none)[a-z]/i,
+        /#[0-9a-f]{3,8}\b|rgb\(|hsl\(|oklch\(|(?:fill|stroke)="(?!none|url\(#)[a-z]/i,
       );
       assert.doesNotMatch(html, /style=/);
     }
@@ -459,5 +585,6 @@ describe('every chart', () => {
   it('draws a fifth series as no chart rather than a colour it does not have', () => {
     const series = ['A', 'B', 'C', 'D', 'E'].map((name) => ({ name, values: [1] }));
     assert.match(draw({ timeSeries: { caption: 'Views', days: ['2026-10-14'], series } }), EMPTY);
+    assert.match(draw({ bars: { caption: 'Posts', groups: ['Oct'], series } }), EMPTY);
   });
 });

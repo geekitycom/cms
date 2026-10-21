@@ -1,5 +1,5 @@
 {# Blocks a plugin hands over as data: a paragraph, a table, stats, a time
-   series, a ranked list or a calendar (TASK-442, decision-59).
+   series, bars, a ranked list or a calendar (TASK-442, decision-59).
 
    `block(data)` draws one. The `drawn` filter (src/admin/blocks.ts) checks
    the data and works out every number and coordinate; this writes the
@@ -7,9 +7,10 @@
    says "No data to show." under its caption.
 
    Charts are SVG with no script. Colour comes only from DaisyUI tokens, so a
-   chart follows the admin theme. Each series also has its own dash and
-   marker, which the legend repeats, and each chart has a description for a
-   screen reader and a table of its numbers. #}
+   chart follows the admin theme. Each line also has its own dash and
+   marker, and each bar series its own texture, which the legend repeats;
+   each chart has a description for a screen reader and a table of its
+   numbers. #}
 {% from "components/table.njk" import table %}
 
 {% set SERIES = [
@@ -43,6 +44,29 @@
   {%- else -%}
     <polygon class="stroke-base-100" stroke-width="2" points="{{ x }},{{ y - 5 }} {{ x + 5 }},{{ y }} {{ x }},{{ y + 5 }} {{ x - 5 }},{{ y }}" />
   {%- endif -%}
+{%- endmacro %}
+
+{# The textures that tell bar series apart without colour, in the surface
+   colour over the series colour: the first series is solid, then hatching,
+   dots and hatching the other way. #}
+{% macro textures(id, count) -%}
+  <defs>
+    {% if count > 1 %}
+      <pattern id="{{ id }}-texture-1" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <line class="stroke-base-100" x1="0" y1="0" x2="0" y2="6" stroke-width="2" />
+      </pattern>
+    {% endif %}
+    {% if count > 2 %}
+      <pattern id="{{ id }}-texture-2" width="5" height="5" patternUnits="userSpaceOnUse">
+        <circle class="fill-base-100" cx="2.5" cy="2.5" r="1.25" />
+      </pattern>
+    {% endif %}
+    {% if count > 3 %}
+      <pattern id="{{ id }}-texture-3" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+        <line class="stroke-base-100" x1="0" y1="0" x2="0" y2="6" stroke-width="2" />
+      </pattern>
+    {% endif %}
+  </defs>
 {%- endmacro %}
 
 {% macro numbers(view) -%}
@@ -101,6 +125,44 @@
       {% endfor %}
       {% for band in view.bands %}
         <rect class="fill-transparent" x="{{ band.x }}" y="{{ view.plot.top }}" width="{{ band.width }}" height="{{ view.plot.bottom - view.plot.top }}" pointer-events="all"><title>{{ band.title }}</title></rect>
+      {% endfor %}
+    </svg>
+    {{ numbers(view) }}
+  </div>
+{%- endmacro %}
+
+{% macro bars(view) -%}
+  <div class="grid gap-3">
+    <p id="{{ view.id }}" class="sr-only">{{ view.description }}</p>
+    {% if view.series.length > 1 %}
+      <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-hidden="true">
+        {% for name in view.series %}
+          <li class="flex items-center gap-2">
+            <svg class="size-3" viewBox="0 0 12 12">
+              {{ tinted(loop.index0) }}<rect width="12" height="12" rx="2" /></g>
+              {% if not loop.first %}<rect width="12" height="12" rx="2" fill="url(#{{ view.id }}-texture-{{ loop.index0 }})" />{% endif %}
+            </svg>
+            <span>{{ name }}</span></li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+    <svg role="img" aria-labelledby="{{ view.id }}" viewBox="0 0 {{ view.width }} {{ view.height }}" class="h-auto w-full max-w-xl">
+      {{ textures(view.id, view.series.length) }}
+      {% for tick in view.yTicks %}
+        <line class="{{ 'stroke-base-content/30' if loop.first else 'stroke-base-content/10' }}" x1="{{ view.plot.left }}" x2="{{ view.plot.right }}" y1="{{ tick.y }}" y2="{{ tick.y }}" stroke-width="1" />
+        <text class="fill-base-content/70" x="{{ view.plot.left - 6 }}" y="{{ tick.y + 4 }}" text-anchor="end" font-size="12">{{ tick.label }}</text>
+      {% endfor %}
+      {% for bar in view.bars %}
+        {% for segment in bar.segments %}
+          {{ tinted(segment.series) }}<rect x="{{ segment.x }}" y="{{ segment.y }}" width="{{ segment.width }}" height="{{ segment.height }}"><title>{{ segment.title }}</title></rect></g>
+          {% if segment.series > 0 %}<rect x="{{ segment.x }}" y="{{ segment.y }}" width="{{ segment.width }}" height="{{ segment.height }}" fill="url(#{{ view.id }}-texture-{{ segment.series }})" pointer-events="none" />{% endif %}
+        {% endfor %}
+        {% if bar.total %}
+          <text class="fill-base-content font-semibold" x="{{ bar.x }}" y="{{ bar.total.y }}" text-anchor="middle" font-size="11">{{ bar.total.text }}</text>
+        {% endif %}
+        {% if bar.tick %}
+          <text class="fill-base-content/70" x="{{ bar.x }}" y="{{ view.height - 8 }}" text-anchor="middle" font-size="12">{{ bar.tick }}</text>
+        {% endif %}
       {% endfor %}
     </svg>
     {{ numbers(view) }}
@@ -192,6 +254,8 @@
         </li>
       {% endfor %}
     </ol>
+  {% elif view.kind == 'bars' %}
+    {{ bars(view) }}
   {% elif view.kind == 'calendar' %}
     {{ calendar(view) }}
   {% else %}
