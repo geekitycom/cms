@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/geekitycom/cms/compare/plugin-umami-v0.2.0...plugin-umami-v0.3.0) (2026-10-21)
+
+
+### Features
+
+* **cms:** let each user arrange their dashboard cards ([6172377](https://github.com/geekitycom/cms/commit/6172377089366b6b21d87484f3ba46a91c523d2e))
+
 ## [0.2.0](https://github.com/geekitycom/cms/compare/plugin-umami-v0.1.0...plugin-umami-v0.2.0) (2026-10-21)
 
 
