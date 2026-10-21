@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.38.0](https://github.com/geekitycom/cms/compare/v0.37.0...v0.38.0) (2026-10-21)
+
+
+### Features
+
+* **cms:** give add plugin its own page under plugins ([8b20900](https://github.com/geekitycom/cms/commit/8b209000c50e31293521f01f291897cd0ee8b359))
+
+
+### Bug Fixes
+
+* **cms:** space admin card actions from the last field ([b04313f](https://github.com/geekitycom/cms/commit/b04313f8fc7e3cfa2d4ff841a08da03019b35c13))
+* **cms:** version admin asset URLs so an upgrade loads fresh CSS and JS ([8247ea1](https://github.com/geekitycom/cms/commit/8247ea1aabf609ddda8ba896bfa4133a2a31f853))
+
 ## [0.37.0](https://github.com/geekitycom/cms/compare/v0.36.1...v0.37.0) (2026-10-21)
 
 
