@@ -13,7 +13,7 @@ import { PACKAGE_ROOT } from '../__testing__/cli.ts';
 import { THEMES_PATH } from './appearance.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { classesOutsideTheBar } from './__testing__/markup.ts';
-import { PACKAGED_ADMIN_DIR } from './templates.ts';
+import { adminAssetUrl, PACKAGED_ADMIN_DIR } from './templates.ts';
 
 const execFile = promisify(execFileCallback);
 
@@ -48,7 +48,7 @@ describe('the admin, over HTTP', async () => {
       const sheets = [...html.matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*>/g)].map(
         ([tag]) => tag,
       );
-      assert.deepEqual(sheets, ['<link rel="stylesheet" href="/admin/_static/admin.css" />']);
+      assert.deepEqual(sheets, [`<link rel="stylesheet" href="${adminAssetUrl('admin.css')}" />`]);
     });
   }
 

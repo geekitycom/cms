@@ -8,7 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{% block title %}Admin{% endblock %}{% if site.title %} · {{ site.title }}{% endif %}</title>
     <meta name="robots" content="noindex, nofollow" />
-    <link rel="stylesheet" href="{{ assetPrefix }}admin.css" />
+    <link rel="stylesheet" href="{{ adminAsset('admin.css') }}" />
   </head>
   <body class="min-h-screen bg-base-200 text-base-content">
     {# First on every screen, so a keyboard gets past the bar and the menu in

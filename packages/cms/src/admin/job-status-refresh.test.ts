@@ -86,7 +86,10 @@ describe('a job status box that refreshes itself', () => {
       assert.ok(tag.includes(`data-job-refresh="${refresh}"`), tag);
       if (redraw === undefined) assert.doesNotMatch(tag, /data-job-redraw/);
       else assert.ok(tag.includes(`data-job-redraw="${redraw}"`), tag);
-      assert.match(html, /<script defer src="\/admin\/_static\/job-status\.js"><\/script>/);
+      assert.match(
+        html,
+        /<script defer src="\/admin\/_static\/job-status\.js\?v=[^"]+"><\/script>/,
+      );
     });
   }
 

@@ -146,7 +146,10 @@ describe('editor actions', () => {
         `the ${label} block comes after its field`,
       );
     }
-    assert.match(html, /<script defer src="\/admin\/_static\/editor-actions\.js"><\/script>/);
+    assert.match(
+      html,
+      /<script defer src="\/admin\/_static\/editor-actions\.js\?v=[^"]+"><\/script>/,
+    );
   });
 
   it('leaves the editor exactly as it is without the plugin when the plugin is disabled', async () => {

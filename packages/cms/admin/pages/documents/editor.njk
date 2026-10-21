@@ -674,21 +674,21 @@
   <script
     type="module"
     id="editor-script"
-    src="{{ assetPrefix }}editor.js"
+    src="{{ adminAsset('editor.js') }}"
     nonce="{{ cspNonce }}"
   ></script>
 
   {# The slug and permalink auto-fill, in a file of its own so the policy never
      has to allow an inline script. #}
-  <script defer src="{{ assetPrefix }}slug.js"></script>
-  <script defer src="{{ assetPrefix }}upload-drop.js"></script>
+  <script defer src="{{ adminAsset('slug.js') }}"></script>
+  <script defer src="{{ adminAsset('upload-drop.js') }}"></script>
   {% if kind.type == 'post' %}
-    <script defer src="{{ assetPrefix }}location.js"></script>
+    <script defer src="{{ adminAsset('location.js') }}"></script>
   {% endif %}
   {% if editorActions | length %}
-    <script defer src="{{ assetPrefix }}editor-actions.js"></script>
+    <script defer src="{{ adminAsset('editor-actions.js') }}"></script>
   {% endif %}
   {% if sections and sections.shown.review %}
-    <script defer src="{{ assetPrefix }}item-lookup.js"></script>
+    <script defer src="{{ adminAsset('item-lookup.js') }}"></script>
   {% endif %}
 {% endblock %}

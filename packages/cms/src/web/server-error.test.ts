@@ -216,7 +216,7 @@ describe('an exception in the admin', () => {
     assert.equal(response.status, 500);
     assert.match(response.headers.get('content-type') ?? '', /^text\/html/);
     assert.equal(response.headers.get('cache-control'), 'no-store');
-    assert.match(body, /<link rel="stylesheet" href="\/admin\/_static\/admin\.css"/);
+    assert.match(body, /<link rel="stylesheet" href="\/admin\/_static\/admin\.css\?v=[^"]+"/);
     assert.match(body, /<meta name="robots" content="noindex, nofollow"/);
     assert.match(body, /Something went wrong/);
     assert.match(body, /<a\b[^>]*href="\/admin">/);

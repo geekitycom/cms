@@ -7,7 +7,7 @@ import { findUser, setUserAdminTheme } from '../site/users.ts';
 import type { AdminTheme } from '../site/admin-theme.ts';
 import { FIRST_ADMIN, sandbox, signedIn } from './__testing__/harness.ts';
 import { adminContentSecurityPolicy } from './headers.ts';
-import { PACKAGED_ADMIN_DIR } from './templates.ts';
+import { adminAssetUrl, PACKAGED_ADMIN_DIR } from './templates.ts';
 
 const STATIC = path.join(PACKAGED_ADMIN_DIR, 'static');
 
@@ -121,7 +121,7 @@ describe('the admin bar', async () => {
     const sheets = [...system.admin.matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*>/g)].map(
       ([tag]) => tag,
     );
-    assert.deepEqual(sheets, ['<link rel="stylesheet" href="/admin/_static/admin.css" />']);
+    assert.deepEqual(sheets, [`<link rel="stylesheet" href="${adminAssetUrl('admin.css')}" />`]);
     assert.doesNotMatch(compiled, /admin-bar\.css/);
     assert.doesNotMatch(compiled, /var\(--admin-/, 'no token of the bar is read from admin.css');
   });
@@ -175,7 +175,7 @@ describe('the admin bar', async () => {
   ] as const) {
     it(`loads ${side}'s bar script from admin/static/ and inlines none (AC #3)`, () => {
       const scripts = [...barIn(html).matchAll(/<script\b[^>]*>/g)].map(([tag]) => tag);
-      assert.deepEqual(scripts, ['<script src="/admin/_static/admin-bar.js" defer>']);
+      assert.deepEqual(scripts, [`<script src="${adminAssetUrl('admin-bar.js')}" defer>`]);
       assert.doesNotMatch(barIn(html), /<script\b[^>]*>[^<]/, 'no script has a body');
     });
   }

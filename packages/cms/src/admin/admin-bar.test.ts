@@ -391,7 +391,7 @@ describe('the admin bar for a signed-in user', () => {
     assert.match(html, /<html class="geekity-admin-bar" lang="en">/, 'a class for the theme');
     assert.match(
       barIn(html) ?? '',
-      /<script src="\/admin\/_static\/admin-bar\.js" defer><\/script>/,
+      /<script src="\/admin\/_static\/admin-bar\.js\?v=[^"]+" defer><\/script>/,
     );
     const script = await (await cms.app.request('/admin/_static/admin-bar.js')).text();
     assert.match(script, /setProperty\('--geekity-admin-bar-height'/, 'the bar measures itself');
