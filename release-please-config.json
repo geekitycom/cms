@@ -38,6 +38,13 @@
       "include-component-in-tag": true,
       "changelog-path": "CHANGELOG.md",
       "extra-files": ["src/version.ts"]
+    },
+    "packages/plugin-umami": {
+      "package-name": "@geekity/plugin-umami",
+      "component": "plugin-umami",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": ["src/version.ts"]
     }
   }
 }

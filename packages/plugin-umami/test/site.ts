@@ -1,0 +1,142 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+import { createCms, createUser } from '@geekity/cms';
+import type { Cms, Plugin } from '@geekity/cms';
+
+const ADA = { username: 'ada', password: 'correct horse battery' };
+export const UMAMI = '@geekity/plugin-umami';
+export const SCREEN = `/admin/plugins/${UMAMI}`;
+
+export const PAGES = ['/', '/2026/10/hello/', '/about/', '/tag/notes/', '/nothing-here/'];
+
+export interface Admin {
+  get(url: string): Promise<Response>;
+  post(url: string, fields: Record<string, string>): Promise<Response>;
+}
+
+export interface SiteOptions {
+  settings?: Record<string, string | boolean>;
+  secrets?: Record<string, string>;
+  devMode?: boolean;
+  timezone?: string;
+  now?: () => Date;
+  posts?: Record<string, string>;
+}
+
+const opened: Cms[] = [];
+const dataDirs = new WeakMap<Cms, string>();
+const dirs: string[] = [];
+
+export async function closeSites(): Promise<void> {
+  for (const cms of opened) await cms.close();
+  await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
+}
+
+export async function umamiSite(plugin: Plugin, options: SiteOptions = {}): Promise<Cms> {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'geekity-umami-data-'));
+  const contentDir = await mkdtemp(path.join(tmpdir(), 'geekity-umami-content-'));
+  dirs.push(dataDir, contentDir);
+  mkdirSync(path.join(contentDir, '_data'), { recursive: true });
+  mkdirSync(path.join(contentDir, 'posts'), { recursive: true });
+  mkdirSync(path.join(contentDir, 'pages'), { recursive: true });
+  writeFileSync(
+    path.join(contentDir, '_data', 'site.json'),
+    JSON.stringify({
+      title: 'Geekity',
+      language: 'en',
+      notifyServer: '',
+      ...(options.timezone === undefined ? {} : { timezone: options.timezone }),
+      plugins: { [UMAMI]: { enabled: true } },
+    }),
+  );
+  writeFileSync(
+    path.join(contentDir, 'posts', 'hello.md'),
+    "---\ntitle: Hello\ndate: '2026-10-02T09:00:00Z'\npermalink: /2026/10/hello/\ntags:\n  - notes\n---\n\nBody.\n",
+  );
+  for (const [file, body] of Object.entries(options.posts ?? {})) {
+    writeFileSync(path.join(contentDir, 'posts', file), body);
+  }
+  writeFileSync(
+    path.join(contentDir, 'pages', 'about.md'),
+    '---\ntitle: About\npermalink: /about/\n---\n\nAbout us.\n',
+  );
+  const folder = path.join(dataDir, 'plugins', UMAMI);
+  if (options.settings !== undefined) {
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(path.join(folder, 'settings.json'), JSON.stringify(options.settings));
+  }
+  if (options.secrets !== undefined) {
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(path.join(folder, 'secrets.json'), JSON.stringify(options.secrets), {
+      mode: 0o600,
+    });
+  }
+  await createUser({ dataDir, ...ADA });
+  const cms = createCms({
+    dataDir,
+    contentDir,
+    watch: false,
+    devMode: options.devMode ?? false,
+    ...(options.now === undefined ? {} : { now: options.now }),
+    plugins: [plugin],
+    federation: { allowPrivateAddress: true },
+    hostLookup: (hostname) => Promise.reject(new Error(`a test resolves no names: ${hostname}`)),
+  });
+  opened.push(cms);
+  dataDirs.set(cms, dataDir);
+  await cms.sync();
+  return cms;
+}
+
+export function pluginFolder(cms: Cms): string {
+  return path.join(dataDirs.get(cms) ?? '', 'plugins', UMAMI);
+}
+
+export function flashes(html: string): string[] {
+  return [
+    ...html.matchAll(/<div role="status" class="alert alert-\w+">\s*<span>([\s\S]*?)<\/span>/g),
+  ].map(([, message]) => message ?? '');
+}
+
+export async function signIn(cms: Cms): Promise<Admin> {
+  let cookie = '';
+  const remember = (response: Response): Response => {
+    const set = response.headers.get('set-cookie');
+    if (set !== null) cookie = set.split(';')[0] ?? '';
+    return response;
+  };
+  const tokenIn = (html: string) => /name="csrf_token"\s+value="([^"]+)"/.exec(html)?.[1] ?? '';
+  const send = async (url: string, fields: Record<string, string>) =>
+    remember(
+      await cms.app.request(url, {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(fields).toString(),
+      }),
+    );
+
+  const login = await remember(await cms.app.request('/admin/login')).text();
+  const response = await send('/admin/login', { csrf_token: tokenIn(login), ...ADA });
+  if (response.status !== 303) throw new Error(`Sign-in answered ${String(response.status)}.`);
+
+  const admin: Admin = {
+    get: async (url) => remember(await cms.app.request(url, { headers: { cookie } })),
+    post: async (url, fields) =>
+      send(url, {
+        csrf_token: tokenIn(await (await admin.get('/admin/posts/new')).text()),
+        ...fields,
+      }),
+  };
+  return admin;
+}
+
+export async function anonymous(cms: Cms, pathname: string): Promise<string> {
+  return await (await cms.app.request(pathname)).text();
+}
+
+export function trackersOn(html: string): string[] {
+  return [...html.matchAll(/<script src="[^"]*\/script\.js"[^>]*><\/script>/g)].map(([tag]) => tag);
+}

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, beforeEach, describe, it, mock } from 'node:test';
 
+import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -358,6 +359,48 @@ describe('the dashboard’s widgets', () => {
       drawn.map((entry) => `${entry.title} ${entry.placement}`),
       ['alert alerts', 'plain activity', 'a-one activity'],
     );
+  });
+
+  it('hands a plugin widget a signal that aborts when its time limit runs out', async () => {
+    let aborted: Promise<unknown> | undefined;
+    const waiting = definePlugin({
+      name: '@acme/plugin-slow',
+      version: '1.0.0',
+      label: 'Slow',
+      description: 'Slow stats.',
+      hostApi: HOST_API_VERSION,
+      register(host) {
+        host.widget({
+          id: 'slow',
+          title: 'slow',
+          width: 'half',
+          refreshSeconds: 60,
+          load: ({ signal }) => {
+            aborted = signal === undefined ? undefined : once(signal, 'abort');
+            return never();
+          },
+        });
+      },
+    });
+    const registry = createPluginRegistry(
+      [{ plugin: waiting, source: 'site config' }],
+      pluginRegistryOptions(dataDir),
+    );
+    const vars = {
+      plugins: registry,
+      activePlugins: registry.active(new Set(['@acme/plugin-slow'])),
+      siteAtRequestStart: { timezone: 'UTC' },
+      config: resolveConfig({ contentDir: dataDir, dataDir }, { env: {}, cwd: dataDir }),
+    } as unknown as GeekityEnv['Variables'];
+
+    const drawn = await createWidgetBoard({ timeLimitMs: 20 }).load(
+      dashboardWidgets(vars, [], 7),
+      () => new Date(),
+    );
+
+    assert.equal(drawn[0]?.status, 'unavailable');
+    assert.ok(aborted, 'the widget was handed a signal');
+    await aborted;
   });
 });
 

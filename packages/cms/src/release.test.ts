@@ -119,7 +119,8 @@ describe('readWorkspace', () => {
 
     const names = readWorkspace(root).map((p) => p.name);
 
-    assert.equal(plugins.length, 4);
+    assert.equal(plugins.length, 5);
+    assert.ok(plugins.includes('@geekity/plugin-umami'));
     assert.deepEqual(new Set(names), new Set([CORE, ...plugins]));
   });
 

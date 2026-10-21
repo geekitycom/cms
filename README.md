@@ -56,13 +56,14 @@ these:
 
 ## Packages
 
-| Package                                                                  | What it is                                                       |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| [`@geekity/cms`](packages/cms/README.md)                                 | The CMS, its admin, the default theme and the `geekity` command. |
-| [`@geekity/plugin-wordpress`](packages/plugin-wordpress/README.md)       | Imports a WordPress site and its ActivityPub followers.          |
-| [`@geekity/plugin-llm`](packages/plugin-llm/README.md)                   | A language model connection that other plugins call.             |
-| [`@geekity/plugin-post-summary`](packages/plugin-post-summary/README.md) | Suggests a post's title and description in the editor.           |
-| [`@geekity/plugin-tag-suggest`](packages/plugin-tag-suggest/README.md)   | Suggests tags for a post in the editor.                          |
+| Package                                                                  | What it is                                                         |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| [`@geekity/cms`](packages/cms/README.md)                                 | The CMS, its admin, the default theme and the `geekity` command.   |
+| [`@geekity/plugin-wordpress`](packages/plugin-wordpress/README.md)       | Imports a WordPress site and its ActivityPub followers.            |
+| [`@geekity/plugin-llm`](packages/plugin-llm/README.md)                   | A language model connection that other plugins call.               |
+| [`@geekity/plugin-post-summary`](packages/plugin-post-summary/README.md) | Suggests a post's title and description in the editor.             |
+| [`@geekity/plugin-tag-suggest`](packages/plugin-tag-suggest/README.md)   | Suggests tags for a post in the editor.                            |
+| [`@geekity/plugin-umami`](packages/plugin-umami/README.md)               | Adds the Umami tracker to public pages and stats to the dashboard. |
 
 ## License
 

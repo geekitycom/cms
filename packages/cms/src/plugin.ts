@@ -360,13 +360,16 @@ export type PluginBlock =
       /**
        * Numbers in a row. Given `previous`, the value for the period before,
        * a stat says its change in words; `better` says which way is good,
-       * `up` when left out.
+       * `up` when left out. `format` says how `value` and `previous` are
+       * written: `number` when left out, `percent` for a percentage from 0 to
+       * 100 (`41.5` is 41.5%), or `duration` for a number of seconds.
        */
       readonly stats: readonly {
         readonly label: string;
         readonly value: number;
         readonly previous?: number;
         readonly better?: 'up' | 'down';
+        readonly format?: 'number' | 'percent' | 'duration';
       }[];
     }
   | {
@@ -378,9 +381,14 @@ export type PluginBlock =
       };
     }
   | {
-      /** Labels drawn largest value first, each linked when `href` is a path or a web address. */
+      /**
+       * Labels drawn largest value first, each linked when `href` is a path
+       * or a web address. `format` says how every value is written, as for
+       * stats.
+       */
       readonly ranked: {
         readonly caption: string;
+        readonly format?: 'number' | 'percent' | 'duration';
         readonly items: readonly {
           readonly label: string;
           readonly value: number;
@@ -466,6 +474,11 @@ export interface PluginWidgetContext {
    * each period apart.
    */
   readonly period: DashboardPeriod;
+  /**
+   * Aborts when the widget's time limit runs out. Pass it to
+   * {@link PluginHost.fetch} so a request stops when core stops waiting.
+   */
+  readonly signal?: AbortSignal | undefined;
 }
 
 /**
@@ -689,6 +702,47 @@ export interface EngagementService {
   posts(options: { readonly since: string }): Promise<readonly PostEngagement[]>;
 }
 
+/** The post a path on the site leads to, which {@link PostsService.byPath} finds. */
+export interface PostAtPath {
+  /** The path as it was asked for. */
+  readonly path: string;
+  /** The post's permalink, such as `/2026/10/hello/`. */
+  readonly permalink: string;
+  /** The post's title, or what the admin calls an untitled one. */
+  readonly title: string;
+  /** Where its editor is in the admin. */
+  readonly editUrl: string;
+}
+
+/** A published post, which {@link PostsService.publishedSince} lists. */
+export interface PublishedPost {
+  /** The post's permalink, such as `/2026/10/hello/`. */
+  readonly permalink: string;
+  /** The post's title, or what the admin calls an untitled one. */
+  readonly title: string;
+  /** Where its editor is in the admin. */
+  readonly editUrl: string;
+  /** The post's date, an ISO 8601 instant. */
+  readonly published: string;
+}
+
+/** The site's posts, which `host.use('@geekity/cms/posts')` returns. */
+export interface PostsService {
+  /**
+   * The published post each path leads to, in the order asked. A path is a
+   * URL's path on the site, such as an analytics tool records: its query
+   * string and fragment are dropped, the base URL's directory is taken off,
+   * and one without a trailing slash also matches the permalink with one. A
+   * path that leads to no published post is not listed.
+   */
+  byPath(paths: readonly string[]): Promise<readonly PostAtPath[]>;
+  /**
+   * The posts a reader can open, public or unlisted, dated at or after
+   * `since`, an ISO 8601 instant, newest first.
+   */
+  publishedSince(options: { readonly since: string }): Promise<readonly PublishedPost[]>;
+}
+
 /**
  * The services the core provides, which any plugin may `use` without naming
  * them in `requires`. Their names are not npm package names, so no plugin's
@@ -696,6 +750,7 @@ export interface EngagementService {
  */
 export interface CoreServices {
   '@geekity/cms/engagement': EngagementService;
+  '@geekity/cms/posts': PostsService;
 }
 
 /** What `host.use` returns for a name: a core service, or the service a plugin provides. */
@@ -807,6 +862,10 @@ export interface PluginEditorAction {
 
 /** What a plugin's {@link PluginHost.fetch} sends besides the URL. */
 export interface PluginFetchInit {
+  /** `GET` when absent. */
+  readonly method?: 'GET' | 'POST' | undefined;
+  /** Sent with `POST` as `JSON.stringify(json)`, with `content-type: application/json`. */
+  readonly json?: unknown;
   readonly headers?: Readonly<Record<string, string>> | undefined;
   /** Ends the request, and any redirect it leads to, when it aborts. */
   readonly signal?: AbortSignal | undefined;
@@ -887,11 +946,16 @@ export interface PluginHost<
   /** The site's base URL and its title as the settings have it when asked. */
   siteInfo(): Promise<PluginSiteInfo>;
   /**
-   * `GET` another site's URL. Redirects are followed, at most five, and every
-   * address on the way must be public: a loopback, private or link-local
-   * address, or a name that resolves to one, rejects with an error, unless
-   * the site lets its federation reach private addresses. Rejects as `fetch`
-   * does when the host cannot be reached; any status is answered as it came.
+   * `GET` another site's URL, or `POST` it a JSON body. Redirects are
+   * followed, at most five, and every address on the way must be public: a
+   * loopback, private or link-local address, or a name that resolves to one,
+   * rejects with an error, unless the site lets its federation reach private
+   * addresses. After a `POST`, a 301, 302 or 303 is followed as a `GET`
+   * without the body, and a 307 or 308 resends the body only to the same
+   * origin; one to another origin rejects. The plugin's headers go only to
+   * the origin of `url`; a hop to another origin carries just its `accept`,
+   * `accept-language` and `user-agent`. Rejects as `fetch` does when the
+   * host cannot be reached; any status is answered as it came.
    */
   fetch(url: string, init?: PluginFetchInit): Promise<Response>;
   /**

@@ -38,6 +38,11 @@ itself. [Plugins](../plugins.md) describes page tags.
 
 ### Example: Umami and Google Analytics 4
 
+For Umami alone, the [`@geekity/plugin-umami`](../../packages/plugin-umami/README.md)
+plugin draws the tracker from its settings, with no theme. When a site moves
+to the plugin, delete the Umami `<script>` from its partial, or each visit is
+counted twice.
+
 This theme is in `themes/analytics/`:
 
 ```

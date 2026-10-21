@@ -55,6 +55,10 @@ describe('a block, given input it cannot draw', () => {
       'a stat whose previous is not a number',
       { stats: [{ label: 'Views', value: 3, previous: NaN }] },
     ],
+    [
+      'a stat in a format it does not know',
+      { stats: [{ label: 'Views', value: 3, format: 'money' }] },
+    ],
     ['a time series of no days', { timeSeries: { caption: 'Views', days: [], series: [] } }],
     [
       'a time series with a negative value',
@@ -100,6 +104,10 @@ describe('a block, given input it cannot draw', () => {
     [
       'a ranked item below zero',
       { ranked: { caption: 'Pages', items: [{ label: '/', value: -3 }] } },
+    ],
+    [
+      'a ranked list in a format it does not know',
+      { ranked: { caption: 'Pages', format: 'money', items: [{ label: '/', value: 3 }] } },
     ],
     ['bars of no groups', { bars: { caption: 'Posts', groups: [], series: [] } }],
     [
@@ -261,6 +269,57 @@ describe('stats', () => {
   });
 });
 
+describe('a stat format', () => {
+  it('draws a percent as the percentage it is, to one decimal place', () => {
+    const html = draw({ stats: [{ label: 'Bounce rate', value: 41.66, format: 'percent' }] });
+    assert.match(html, /<div class="stat-value">41\.7%<\/div>/);
+  });
+
+  it('draws a duration in seconds as minutes and seconds', () => {
+    const html = draw({ stats: [{ label: 'Average visit', value: 90, format: 'duration' }] });
+    assert.match(html, /<div class="stat-value">1m 30s<\/div>/);
+  });
+
+  it('draws a duration under a minute in seconds and one over an hour in hours and minutes', () => {
+    const html = draw({
+      stats: [
+        { label: 'Short', value: 42.4, format: 'duration' },
+        { label: 'Long', value: 3 * 3600 + 5 * 60 + 9, format: 'duration' },
+        { label: 'None', value: 0, format: 'duration' },
+      ],
+    });
+    assert.deepEqual(all(html, /<div class="stat-value">([^<]*)<\/div>/g), ['42s', '3h 5m', '0s']);
+  });
+
+  it('draws a number as a number when the format is left out or is number', () => {
+    const html = draw({ stats: [{ label: 'Views', value: 1284, format: 'number' }] });
+    assert.match(html, /<div class="stat-value">1,284<\/div>/);
+  });
+
+  it('writes the previous value in the same format as the value', () => {
+    assert.match(
+      draw({
+        stats: [
+          { label: 'Bounce rate', value: 45, previous: 40, format: 'percent', better: 'down' },
+        ],
+      }),
+      /\+13%, up from 40%/,
+    );
+    assert.match(
+      draw({ stats: [{ label: 'Average visit', value: 60, previous: 120, format: 'duration' }] }),
+      /−50%, down from 2m 0s/,
+    );
+    assert.match(
+      draw({ stats: [{ label: 'Average visit', value: 60, previous: 60, format: 'duration' }] }),
+      /No change from 1m 0s/,
+    );
+    assert.match(
+      draw({ stats: [{ label: 'Bounce rate', value: 5, previous: 0, format: 'percent' }] }),
+      /Up from 0%/,
+    );
+  });
+});
+
 describe('a time series', () => {
   const week = {
     timeSeries: {
@@ -383,6 +442,26 @@ describe('a ranked list', () => {
     assert.deepEqual(all(html, /<span class="truncate">(?:<a [^>]*>)?([^<]*)</g), ['/', '/about']);
     assert.match(html, /<a class="link" href="\/admin\/posts">\/<\/a>/);
     assert.deepEqual(all(html, /<rect class="fill-primary" [^>]*width="([^"]*)"/g), ['100', '25']);
+  });
+
+  it('writes each value in the list format, a number when it is left out', () => {
+    const value = /<span class="tabular-nums">([^<]*)</g;
+    const items = [
+      { label: 'US', value: 41.66 },
+      { label: 'DE', value: 1284 },
+    ];
+    assert.deepEqual(all(draw({ ranked: { caption: 'Countries', items } }), value), [
+      '1,284',
+      '41.66',
+    ]);
+    assert.deepEqual(
+      all(draw({ ranked: { caption: 'Countries', format: 'percent', items } }), value),
+      ['1,284%', '41.7%'],
+    );
+    assert.deepEqual(
+      all(draw({ ranked: { caption: 'Pages', format: 'duration', items } }), value),
+      ['21m 24s', '42s'],
+    );
   });
 
   it('drops a link that is not a web address or a path', () => {

@@ -17,6 +17,27 @@ Docker, install a plugin into the plugins folder with `geekity plugin add`.
 > site can, including every file under `data/`: the accounts, the actor key
 > pairs and other plugins' secrets. Install only plugins you trust.
 
+### The plugins in this repository
+
+These plugins are published from this repository with each release. Each
+package's README describes its settings.
+
+| Package                                                                     | What it does                                                       |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [`@geekity/plugin-wordpress`](../packages/plugin-wordpress/README.md)       | Imports a WordPress site and its ActivityPub followers.            |
+| [`@geekity/plugin-llm`](../packages/plugin-llm/README.md)                   | A language model connection that other plugins call.               |
+| [`@geekity/plugin-post-summary`](../packages/plugin-post-summary/README.md) | Suggests a post's title and description in the editor.             |
+| [`@geekity/plugin-tag-suggest`](../packages/plugin-tag-suggest/README.md)   | Suggests tags for a post in the editor.                            |
+| [`@geekity/plugin-umami`](../packages/plugin-umami/README.md)               | Adds the Umami tracker to public pages and stats to the dashboard. |
+
+The Umami plugin replaces an Umami snippet in a site theme's
+`partials/head-end.njk`. Install it on Docker with
+`geekity plugin add @geekity/plugin-umami`, or with **Add plugin** on Admin >
+Plugins. Enable it and set its Umami URL and website ID on its screen. Then
+delete the old `<script>` from the theme, or each visit is counted twice. Its
+[README](../packages/plugin-umami/README.md#moving-from-a-theme-snippet)
+gives the steps.
+
 ### Installing a plugin on Docker
 
 The image sets `GEEKITY_PLUGINS_DIR` to `/site/plugins`, and
@@ -280,6 +301,49 @@ host.widget({
 });
 ```
 
+`host.use('@geekity/cms/posts')` returns the posts service. Its
+`byPath(paths)` method takes paths on the site, such as the paths an
+analytics tool records, and resolves to the published post each one leads to,
+in the order asked:
+
+| Field       | What it holds                                                    |
+| ----------- | ---------------------------------------------------------------- |
+| `path`      | The path as it was asked for.                                    |
+| `permalink` | The post's permalink, such as `/2026/10/hello/`.                 |
+| `title`     | The post's title, or the label the admin gives an untitled post. |
+| `editUrl`   | The admin path of the post's editor.                             |
+
+`byPath` drops a path's query string and fragment. On a site served from a
+directory, such as `https://example.com/blog/`, it removes the directory from
+the front of the path. A path without a trailing slash also matches the permalink
+with one. A path that leads to a page, a draft, a post not yet published or
+nothing at all is not in the list.
+
+```ts
+const posts = await host
+  .use('@geekity/cms/posts')
+  .byPath(['/2026/10/hello', '/about/']);
+// [{ path: '/2026/10/hello', permalink: '/2026/10/hello/', title: 'Hello', editUrl: '/admin/posts/hello' }]
+```
+
+Its `publishedSince({ since })` method takes an ISO 8601 instant and resolves
+to the posts a reader can open, public or unlisted, dated at or after it,
+newest first:
+
+| Field       | What it holds                                                    |
+| ----------- | ---------------------------------------------------------------- |
+| `permalink` | The post's permalink, such as `/2026/10/hello/`.                 |
+| `title`     | The post's title, or the label the admin gives an untitled post. |
+| `editUrl`   | The admin path of the post's editor.                             |
+| `published` | The post's date, an ISO 8601 instant.                            |
+
+Drafts, trashed posts and posts dated in the future are not in the list.
+
+```ts
+const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+const recent = await host.use('@geekity/cms/posts').publishedSince({ since });
+```
+
 **Settings and secrets.** `host.settings([...])` declares fields of type
 `text`, `url`, `select`, `checkbox` and `secret`, each with a `label` and an
 optional `hint`. They become a settings namespace named by the package name.
@@ -354,15 +418,15 @@ A screen's `render` may also return a promise, so it can await the settings.
 dashboard widget's `load` returns blocks too. A block is plain data, of type
 `PluginBlock`, and the CMS writes the markup:
 
-| Block        | Data                                                                                                                                                                                                                                                                                                       |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `paragraph`  | An array of strings and `{ code }` parts.                                                                                                                                                                                                                                                                  |
-| `table`      | A `caption`, the `columns` and the `rows`. A cell is text, `{ code }`, `{ time }` (an ISO instant, or `null` for never), or `{ text, href }`, a link when `href` is a path or a web address and text otherwise.                                                                                            |
-| `stats`      | An array of `{ label, value, previous?, better? }`. With `previous`, the stat shows its change in words, such as `+20%, up from 100`. Set `better` to `down` when a fall is good, such as for a bounce rate.                                                                                               |
-| `timeSeries` | A `caption`, consecutive `days` (`YYYY-MM-DD`) and up to four `series`, each a `name` and one value per day.                                                                                                                                                                                               |
-| `bars`       | A `caption`, up to 24 `groups` (labels such as month names), an optional `groupName` for the table's first column (`Group` when left out) and up to four `series`, each a `name` and one value per group. Each group is a stacked bar with its total above it; each series has its own colour and texture. |
-| `ranked`     | A `caption` and `items` of `{ label, value, href? }`, drawn largest first. `href` must be a path that starts with `/` or an `http(s)` address.                                                                                                                                                             |
-| `calendar`   | A `caption` and `days` of `{ day, count }`, at most 366 days from the first to the last. A day between them that is not listed counts as zero.                                                                                                                                                             |
+| Block        | Data                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `paragraph`  | An array of strings and `{ code }` parts.                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `table`      | A `caption`, the `columns` and the `rows`. A cell is text, `{ code }`, `{ time }` (an ISO instant, or `null` for never), or `{ text, href }`, a link when `href` is a path or a web address and text otherwise.                                                                                                                                                                                                                                                   |
+| `stats`      | An array of `{ label, value, previous?, better?, format? }`. With `previous`, the stat shows its change in words, such as `+20%, up from 100`. Set `better` to `down` when a fall is good, such as for a bounce rate. `format` is `number` (the default), `percent` for a percentage from 0 to 100, so `41.5` shows as `41.5%`, or `duration` for a number of seconds, so `90` shows as `1m 30s`. The previous value in the change is written in the same format. |
+| `timeSeries` | A `caption`, consecutive `days` (`YYYY-MM-DD`) and up to four `series`, each a `name` and one value per day.                                                                                                                                                                                                                                                                                                                                                      |
+| `bars`       | A `caption`, up to 24 `groups` (labels such as month names), an optional `groupName` for the table's first column (`Group` when left out) and up to four `series`, each a `name` and one value per group. Each group is a stacked bar with its total above it; each series has its own colour and texture.                                                                                                                                                        |
+| `ranked`     | A `caption`, an optional `format` and `items` of `{ label, value, href? }`, drawn largest first. `href` must be a path that starts with `/` or an `http(s)` address. `format` writes every value as the stats `format` does.                                                                                                                                                                                                                                      |
+| `calendar`   | A `caption` and `days` of `{ day, count }`, at most 366 days from the first to the last. A day between them that is not listed counts as zero.                                                                                                                                                                                                                                                                                                                    |
 
 The charts are SVG drawn on the server in the admin theme's colours. Each
 chart has a description and a table of its numbers for screen readers. Values
@@ -452,11 +516,13 @@ widget has these fields:
 | `refreshSeconds` | How many seconds the dashboard reuses a result before it calls `load` again. Zero or more.                    |
 | `load`           | Returns the card's blocks, or a promise of them.                                                              |
 
-`load` gets one argument with three fields: `site`, the same `PluginSite` a
+`load` gets one argument with four fields: `site`, the same `PluginSite` a
 screen's `render` gets; `timezone`, the site's time zone, such as
-`Europe/London`, which decides where a day starts; and `period`, the number of
-days the dashboard covers, ending today. `period` is `7` unless the owner
-chooses 30 days on the dashboard (`/admin?period=30`), when it is `30`. A
+`Europe/London`, which decides where a day starts; `period`, the number of
+days the dashboard covers, ending today; and `signal`, an `AbortSignal` that
+aborts when the widget's time limit runs out. Pass `signal` to `host.fetch` so
+a request stops when the dashboard stops waiting for it. `period` is `7` unless
+the owner chooses 30 days on the dashboard (`/admin?period=30`), when it is `30`. A
 widget that shows a period covers that many days and compares totals with the
 same number of days before them. A widget that does not show a period ignores
 it. The dashboard keeps a separate result for each period. A widget with an id that
@@ -472,9 +538,10 @@ its widgets are gone from the next dashboard request. No restart is needed.
 The dashboard loads every widget at the same time and waits at most 3 seconds
 for each. A good result is kept in memory for `refreshSeconds`, so a dashboard
 request in that time does not call `load`. While a load is still running,
-another request waits for that load and does not start a second one. A result
-that arrives after the time limit is kept for the next request. When `load`
-throws, rejects, returns something other than an array, or runs out of time,
+another request waits for that load and does not start a second one. The time
+limit counts from the start of the load, and `signal` aborts when it runs out.
+When a load ignores `signal` and finishes after the time limit, its result is
+kept for the next request. When `load` throws, rejects, returns something other than an array, or runs out of time,
 the server logs a warning and the card shows the last good result with a
 Stale badge and the time it was loaded. If there is no earlier result, the card
 says the stats are unavailable. The rest of the dashboard draws as normal. A
@@ -544,6 +611,36 @@ name, the command says so and works on the core settings.
 title as the settings have it at that moment. It reads the settings, so it
 returns a promise; call it when the plugin handles a request, a command or a
 job rather than once in `register`.
+
+**Outbound requests.** `host.fetch(url, init)` asks another site and resolves
+to its `Response`, whatever the status. `init` takes `headers`, `signal`,
+`method` and `json`. `method` is `GET` when absent, or `POST`. `json` is sent
+with `POST` as `JSON.stringify(json)` with `content-type: application/json`;
+a `json` without `method: 'POST'` rejects.
+
+```ts
+const response = await host.fetch('https://stats.example/api/auth/login', {
+  method: 'POST',
+  json: { username, password },
+  signal: AbortSignal.timeout(3_000),
+});
+```
+
+Redirects are followed, at most five. Every address on the way must be
+public: a loopback, private or link-local address, or a name that resolves to
+one, rejects with an error before it is asked, unless the site lets its
+federation reach private addresses. After a `POST`, a 301, 302 or 303 is
+followed as a `GET` without the body. A 307 or 308 resends the method and
+body to the same origin. A 307 or 308 to another origin rejects, and that
+origin is not asked. The headers the plugin passes go only to the origin of
+the URL it asked for, meaning the same scheme, host and port. A hop to any
+other origin carries only the plugin's `accept`, `accept-language` and
+`user-agent` headers, and drops the rest, such as `authorization`, `cookie`
+or an API-key header. A redirect from `http` to `https` on the same host is
+another origin, so it drops them too. A later hop back to the first origin
+sends them again. A core release before `method` and `json` sends every
+request as a `GET`, so a plugin that posts sets its `@geekity/cms` peer range
+to start at a release that has them.
 
 **Federation middleware.** A federation middleware is handed a
 `PluginFederationContext` for each request. Its `outbox(username)` and

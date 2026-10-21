@@ -1,0 +1,53 @@
+{
+  "name": "@geekity/plugin-umami",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Geekity CMS plugin that adds the Umami analytics tracker to every public page and shows views, visitors, top pages, top referrers, countries, browsers, devices, the visitors right now and the views of recent posts beside their engagement on the dashboard.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/geekitycom/cms.git",
+    "directory": "packages/plugin-umami"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "geekity": {
+    "plugin": true,
+    "hostApi": 3
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node ../../scripts/build-plugin-bundle.js",
+    "test": "tsx --import ../cms/src/__testing__/offline.ts --test \"test/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "peerDependencies": {
+    "@geekity/cms": "workspace:^"
+  },
+  "devDependencies": {
+    "@geekity/cms": "workspace:*",
+    "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

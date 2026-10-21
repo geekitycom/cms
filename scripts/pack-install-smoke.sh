@@ -123,6 +123,8 @@ pack_plugin plugin-post-summary
 summary_tarball="${packed}"
 pack_plugin plugin-tag-suggest
 tags_tarball="${packed}"
+pack_plugin plugin-umami
+umami_tarball="${packed}"
 
 log "geekity init ${site}"
 # The bin is run from dist/ rather than through a workspace link, so this is
@@ -132,27 +134,28 @@ node "${ROOT}/packages/cms/dist/cli.js" init "${site}"
 log "pointing the new site at the tarballs"
 node --input-type=commonjs -e '
   const { readFileSync, writeFileSync } = require("node:fs");
-  const [manifestPath, tarball, wordpress, llm, summary, tags] = process.argv.slice(1);
+  const [manifestPath, tarball, wordpress, llm, summary, tags, umami] = process.argv.slice(1);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   manifest.dependencies["@geekity/cms"] = "file:" + tarball;
   manifest.dependencies["@geekity/plugin-wordpress"] = "file:" + wordpress;
   manifest.dependencies["@geekity/plugin-llm"] = "file:" + llm;
   manifest.dependencies["@geekity/plugin-post-summary"] = "file:" + summary;
   manifest.dependencies["@geekity/plugin-tag-suggest"] = "file:" + tags;
+  manifest.dependencies["@geekity/plugin-umami"] = "file:" + umami;
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-' "${site}/package.json" "${tarball}" "${wordpress_tarball}" "${llm_tarball}" "${summary_tarball}" "${tags_tarball}"
+' "${site}/package.json" "${tarball}" "${wordpress_tarball}" "${llm_tarball}" "${summary_tarball}" "${tags_tarball}" "${umami_tarball}"
 grep '@geekity/' "${site}/package.json"
 
-log "installing the WordPress, LLM, post summary and tag suggestion plugins in the site config"
+log "installing the WordPress, LLM, post summary, tag suggestion and Umami plugins in the site config"
 node --input-type=commonjs -e '
   const { readFileSync, writeFileSync } = require("node:fs");
   const [configPath] = process.argv.slice(1);
   const config = readFileSync(configPath, "utf8")
-    .replace(/^/, "import wordpress from \"@geekity/plugin-wordpress\";\nimport llm from \"@geekity/plugin-llm\";\nimport postSummary from \"@geekity/plugin-post-summary\";\nimport tagSuggest from \"@geekity/plugin-tag-suggest\";\n")
-    .replace("export default defineConfig({", "export default defineConfig({\n  plugins: [wordpress, llm, postSummary, tagSuggest],");
+    .replace(/^/, "import wordpress from \"@geekity/plugin-wordpress\";\nimport llm from \"@geekity/plugin-llm\";\nimport postSummary from \"@geekity/plugin-post-summary\";\nimport tagSuggest from \"@geekity/plugin-tag-suggest\";\nimport umami from \"@geekity/plugin-umami\";\n")
+    .replace("export default defineConfig({", "export default defineConfig({\n  plugins: [wordpress, llm, postSummary, tagSuggest, umami],");
   writeFileSync(configPath, config);
 ' "${site}/geekity.config.ts"
-grep -n 'wordpress\|llm\|postSummary\|tagSuggest' "${site}/geekity.config.ts"
+grep -n 'wordpress\|llm\|postSummary\|tagSuggest\|umami' "${site}/geekity.config.ts"
 
 log "installing"
 pnpm --dir "${site}" install
@@ -188,9 +191,10 @@ import type { Plugin, PluginHost } from '@geekity/cms/plugin';
 import llm from '@geekity/plugin-llm';
 import postSummary from '@geekity/plugin-post-summary';
 import tagSuggest from '@geekity/plugin-tag-suggest';
+import umami from '@geekity/plugin-umami';
 import wordpress from '@geekity/plugin-wordpress';
 
-export const installed: readonly Plugin[] = [wordpress, llm, postSummary, tagSuggest];
+export const installed: readonly Plugin[] = [wordpress, llm, postSummary, tagSuggest, umami];
 
 export const check: Plugin = definePlugin({
   name: '@scratch/plugin-check',
@@ -223,7 +227,7 @@ log "running the plugin's command through the installed bin"
   pnpm exec geekity import wordpress-actor ada --actor-id 'http://localhost:3000/?author=2' \
     --wordpress-id 2 --private-key ada.private.pem --followers none
   node --input-type=commonjs -e '
-    const { readFileSync, writeFileSync } = require("node:fs");
+    const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
     const file = "content/_data/site.json";
     const site = JSON.parse(readFileSync(file, "utf8"));
     site.plugins = {
@@ -231,13 +235,19 @@ log "running the plugin's command through the installed bin"
       "@geekity/plugin-llm": { enabled: true },
       "@geekity/plugin-post-summary": { enabled: true },
       "@geekity/plugin-tag-suggest": { enabled: true },
+      "@geekity/plugin-umami": { enabled: true },
     };
     writeFileSync(file, JSON.stringify(site, null, 2) + "\n");
+    mkdirSync("data/plugins/@geekity/plugin-umami", { recursive: true });
+    writeFileSync(
+      "data/plugins/@geekity/plugin-umami/settings.json",
+      JSON.stringify({ umami_url: "https://cloud.umami.is", website_id: "smoke-site" }) + "\n",
+    );
   '
 )
 
 log "loading each plugin's bundle with no node_modules beside it"
-for package in plugin-wordpress plugin-llm plugin-post-summary plugin-tag-suggest; do
+for package in plugin-wordpress plugin-llm plugin-post-summary plugin-tag-suggest plugin-umami; do
   bundle_dir="${scratch}/bundle-only-${package}"
   mkdir -p "${bundle_dir}"
   cp "${site}/node_modules/@geekity/${package}/dist/bundle/index.js" "${bundle_dir}/index.js"
@@ -302,6 +312,9 @@ log "asking the installed site for three URLs"
 check "/" "Hello, world"
 check "/2026/01/hello-world/" "Hello, world"
 check "/hello/" "a route of my own"
+
+log "asking for the Umami tracker on the home page"
+check "/" '<script src="https://cloud.umami.is/script.js" defer data-website-id="smoke-site"></script>'
 
 log "asking the enabled WordPress plugin for its old actor path"
 actor="$(curl -fsS -H 'accept: application/activity+json' "${BASE}/wp-json/activitypub/1.0/actors/2")"
