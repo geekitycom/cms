@@ -170,7 +170,7 @@ export default definePlugin({
   version: '0.1.0',
   label: 'Hello',
   description: 'Says hello.',
-  hostApi: 2,
+  hostApi: 3,
   requires: {},
   register(host) {
     host.get('/hello', () => new Response('hello'));
@@ -186,6 +186,8 @@ not. It declares what the plugin adds through `host`:
 - one admin screen
 - commands
 - editor actions
+- page tags
+- dashboard widgets
 - settings
 - one service
 
@@ -206,7 +208,7 @@ with a range:
   "files": ["dist"],
   "geekity": {
     "plugin": true,
-    "hostApi": 2,
+    "hostApi": 3,
     "requires": { "@geekity/plugin-llm": ">=0.2.0 <1.0.0" }
   },
   "peerDependencies": {
@@ -225,6 +227,58 @@ when it handles a request, a command or a job. `use` throws during `register`.
 A plugin cannot be enabled until everything it requires is installed, in range
 and enabled. Pass plain data across a service, never an object built by a
 library. Each bundle carries its own copy of its dependencies.
+
+**Core services.** The core provides services of its own. Any plugin reaches
+them with `host.use` and does not list them in `requires`. A core service is
+available while the site runs: in a route, a widget, an editor action or a
+job. A command run from the command line cannot reach one, and `use` throws
+there.
+
+`host.use('@geekity/cms/engagement')` returns the engagement service. Its
+`posts({ since })` method takes an ISO 8601 instant and resolves to the posts
+that drew any engagement at or after it, highest `total` first:
+
+| Field         | What it holds                                                    |
+| ------------- | ---------------------------------------------------------------- |
+| `slug`        | The post's slug.                                                 |
+| `title`       | The post's title, or the label the admin gives an untitled post. |
+| `path`        | The post's permalink, such as `/2026/10/hello/`.                 |
+| `editUrl`     | The admin path of the post's editor.                             |
+| `likes`       | Fediverse likes. A like its actor undid is not counted.          |
+| `boosts`      | Fediverse boosts. A boost its actor undid is not counted.        |
+| `replies`     | Fediverse replies in the post's thread, without deleted ones.    |
+| `webmentions` | Approved webmentions of any kind.                                |
+| `comments`    | Approved comments from the comment form.                         |
+| `total`       | The five counts added up.                                        |
+
+A post that drew nothing is not in the list. Fediverse comments imported from
+another system are not counted, because the inbox counts what arrives after
+the import. These are the numbers the dashboard's Top posts card shows.
+
+```ts
+host.widget({
+  id: 'engagement',
+  title: 'Engagement',
+  width: 'half',
+  refreshSeconds: 300,
+  async load({ period }) {
+    const since = new Date(Date.now() - period * 86_400_000).toISOString();
+    const posts = await host.use('@geekity/cms/engagement').posts({ since });
+    return [
+      {
+        ranked: {
+          caption: 'Most engaged posts',
+          items: posts.map((post) => ({
+            label: post.title,
+            value: post.total,
+            href: post.editUrl,
+          })),
+        },
+      },
+    ];
+  },
+});
+```
 
 **Settings and secrets.** `host.settings([...])` declares fields of type
 `text`, `url`, `select`, `checkbox` and `secret`, each with a `label` and an
@@ -296,6 +350,177 @@ host.get(
 
 A screen's `render` may also return a promise, so it can await the settings.
 
+**Blocks.** A screen's `render` returns cards, and each card holds blocks. A
+dashboard widget's `load` returns blocks too. A block is plain data, of type
+`PluginBlock`, and the CMS writes the markup:
+
+| Block        | Data                                                                                                                                                                                                                                                                                                       |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `paragraph`  | An array of strings and `{ code }` parts.                                                                                                                                                                                                                                                                  |
+| `table`      | A `caption`, the `columns` and the `rows`. A cell is text, `{ code }`, `{ time }` (an ISO instant, or `null` for never), or `{ text, href }`, a link when `href` is a path or a web address and text otherwise.                                                                                            |
+| `stats`      | An array of `{ label, value, previous?, better? }`. With `previous`, the stat shows its change in words, such as `+20%, up from 100`. Set `better` to `down` when a fall is good, such as for a bounce rate.                                                                                               |
+| `timeSeries` | A `caption`, consecutive `days` (`YYYY-MM-DD`) and up to four `series`, each a `name` and one value per day.                                                                                                                                                                                               |
+| `bars`       | A `caption`, up to 24 `groups` (labels such as month names), an optional `groupName` for the table's first column (`Group` when left out) and up to four `series`, each a `name` and one value per group. Each group is a stacked bar with its total above it; each series has its own colour and texture. |
+| `ranked`     | A `caption` and `items` of `{ label, value, href? }`, drawn largest first. `href` must be a path that starts with `/` or an `http(s)` address.                                                                                                                                                             |
+| `calendar`   | A `caption` and `days` of `{ day, count }`, at most 366 days from the first to the last. A day between them that is not listed counts as zero.                                                                                                                                                             |
+
+The charts are SVG drawn on the server in the admin theme's colours. Each
+chart has a description and a table of its numbers for screen readers. Values
+and counts are numbers of zero or more. A block that does not follow these
+rules, for example a negative value or a time series with no days, shows "No
+data to show." instead.
+
+**Page tags.** `host.pageTags(read)` adds tags to the end of `<head>` and the
+end of `<body>` on every public HTML page while the plugin is enabled. `read`
+returns `{ headEnd, bodyEnd }`, each an array of tags, or a promise of it. A
+tag is one of these:
+
+| Tag      | Data                                                      |
+| -------- | --------------------------------------------------------- |
+| `script` | A `src` and optional `attributes`. It has no inline body. |
+| `link`   | `attributes`, such as `rel` and `href`.                   |
+| `meta`   | `attributes`, such as `name` and `content`.               |
+
+The CMS writes the markup and escapes every attribute value. An attribute
+value is text, `true` for a bare attribute such as `defer`, or `false` to
+leave it out. An attribute name starts with a letter and holds only letters,
+digits, `-`, `_`, `:` and `.`. A name that starts with `on`, such as `onload`,
+is refused. A `src` or `href` is an `http:` or `https:` URL or a path that
+starts with `/`. When a tag breaks one of these rules, or `read` throws, that
+plugin adds no tags to the page, the server logs a warning, and the rest of the
+page is drawn as normal.
+
+The CMS calls `read` each time it draws a page, so the tags follow the
+plugin's settings. `read` gets one argument, the page's context:
+
+| Field      | Value                                                                     |
+| ---------- | ------------------------------------------------------------------------- |
+| `signedIn` | `true` when the reader is signed in to the site and sees the admin bar.   |
+| `devMode`  | `true` when the site is in dev mode and holds every outbound side effect. |
+
+These are the same values a theme reads as `signedIn` and `devMode`. A page
+drawn for a signed-in reader is never cached or answered with `304`, and the
+`ETag` of a listing changes when its tags change, so a reader never gets a copy
+that carries another reader's tags.
+
+Return no tags while a setting the tags need is unset. An analytics plugin also
+returns none for a signed-in reader and in dev mode, so the site's own visits
+are not counted:
+
+```ts
+register(host) {
+  const settings = host.settings([
+    { type: 'text', key: 'website_id', label: 'Website ID' },
+  ]);
+  host.pageTags(async ({ signedIn, devMode }) => {
+    if (signedIn || devMode) return {};
+    const { website_id } = await settings.current();
+    if (website_id === '') return {};
+    return {
+      headEnd: [
+        {
+          tag: 'script',
+          src: 'https://cloud.umami.is/script.js',
+          attributes: { defer: true, 'data-website-id': website_id },
+        },
+      ],
+    };
+  });
+},
+```
+
+The default theme draws plugin tags just before the site's
+`partials/head-end.njk` and `partials/body-end.njk`, in the order the plugins
+run: a plugin after the plugins it requires, otherwise in the order they were
+installed. The partials keep working. A site theme that replaces
+`layouts/base.njk` prints `{{ pluginTags.headEnd }}` and
+`{{ pluginTags.bodyEnd }}` itself. The tags are left out of the editor's
+preview, the admin, the feeds, and the Markdown, text and JSON
+representations. A site built with Eleventy runs no plugins, so a static build
+has no plugin tags. Use the partials for a tag that a static build must carry.
+[Adding to every page](theme/adding-to-every-page.md) describes the partials.
+
+**Dashboard widgets.** `host.widget(widget)` adds a card to the admin
+dashboard while the plugin is enabled. A plugin may declare more than one. A
+widget has these fields:
+
+| Field            | Value                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| `id`             | Lower case words joined by `-`, unique among the plugin's widgets.                                            |
+| `title`          | The card's heading.                                                                                           |
+| `width`          | `half` or `full`. Two `half` widgets sit side by side when the screen is wide. A `full` widget spans the row. |
+| `refreshSeconds` | How many seconds the dashboard reuses a result before it calls `load` again. Zero or more.                    |
+| `load`           | Returns the card's blocks, or a promise of them.                                                              |
+
+`load` gets one argument with three fields: `site`, the same `PluginSite` a
+screen's `render` gets; `timezone`, the site's time zone, such as
+`Europe/London`, which decides where a day starts; and `period`, the number of
+days the dashboard covers, ending today. `period` is `7` unless the owner
+chooses 30 days on the dashboard (`/admin?period=30`), when it is `30`. A
+widget that shows a period covers that many days and compares totals with the
+same number of days before them. A widget that does not show a period ignores
+it. The dashboard keeps a separate result for each period. A widget with an id that
+breaks the rule, a duplicate id, an unknown width or a negative
+`refreshSeconds` fails the plugin's `register`, and the Plugins screen shows
+why.
+
+The dashboard draws the stat tiles first, then the core's own widgets, then
+each enabled plugin's widgets in the order the plugins run. Within one plugin,
+the widgets keep the order they were declared in. When a plugin is disabled,
+its widgets are gone from the next dashboard request. No restart is needed.
+
+The dashboard loads every widget at the same time and waits at most 3 seconds
+for each. A good result is kept in memory for `refreshSeconds`, so a dashboard
+request in that time does not call `load`. While a load is still running,
+another request waits for that load and does not start a second one. A result
+that arrives after the time limit is kept for the next request. When `load`
+throws, rejects, returns something other than an array, or runs out of time,
+the server logs a warning and the card shows the last good result with a
+Stale badge and the time it was loaded. If there is no earlier result, the card
+says the stats are unavailable. The rest of the dashboard draws as normal. A
+`load` that returns an empty array draws no card. Use this for a widget that
+has content only some of the time. Results are not kept across a
+restart.
+
+```ts
+register(host) {
+  const settings = host.settings([
+    { type: 'secret', key: 'api_key', label: 'API key' },
+  ]);
+  host.widget({
+    id: 'visits',
+    title: 'Visits',
+    width: 'full',
+    refreshSeconds: 300,
+    async load({ timezone, period }) {
+      const { api_key } = await settings.current();
+      if (api_key === '') return [];
+      const response = await host.fetch(
+        `https://stats.example/api/daily?tz=${encodeURIComponent(timezone)}&days=${String(period)}`,
+        { headers: { authorization: `Bearer ${api_key}` } },
+      );
+      if (!response.ok) throw new Error(`The stats API answered ${String(response.status)}.`);
+      const { days, visitors, total, previousTotal } = (await response.json()) as {
+        days: string[];
+        visitors: number[];
+        total: number;
+        previousTotal: number;
+      };
+      return [
+        { stats: [{ label: 'Visitors', value: total, previous: previousTotal }] },
+        {
+          timeSeries: {
+            caption: 'Visitors per day',
+            days,
+            series: [{ name: 'Visitors', values: visitors }],
+          },
+        },
+      ];
+    },
+  });
+},
+```
+
 `geekity settings` reads and changes an enabled plugin's settings with the
 site stopped, as it does the core ones. The setting is the package name, a
 `.` and the key:
@@ -331,9 +556,12 @@ collection directly. A plugin inbox that registers Fedify's
 and under the same rate limit as its own inboxes.
 
 **The host API version and the peer range.** `HOST_API_VERSION` in
-`@geekity/cms/plugin` is the version of the host API this core provides. A
-plugin that targets another version is unavailable, with the reason on the
-Plugins screen. The peer range of `@geekity/cms` says which releases of core
+`@geekity/cms/plugin` is the newest version of the host API this core
+provides. The core also runs plugins that target an earlier version, back to
+the oldest version it keeps, which is 2. A plugin that targets a newer version,
+or one older than that, is unavailable, with the reason on the Plugins screen.
+Version 3 added page tags and dashboard widgets. A plugin that calls
+`host.pageTags` or `host.widget` targets 3. The peer range of `@geekity/cms` says which releases of core
 the package works with. npm checks it for a site that installs with npm. The
 registry checks the copy in `plugin.json` for a folder install. Before 1.0,
 write it as `>=<the core you built against> <1.0.0`, and write the range of a

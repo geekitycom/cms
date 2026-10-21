@@ -1,0 +1,250 @@
+{% from "components/table.njk" import table %}
+
+{% set SERIES = [
+  { dash: 'none', marker: 'circle' },
+  { dash: '6 4', marker: 'square' },
+  { dash: '2 3', marker: 'triangle' },
+  { dash: '10 3 2 3', marker: 'diamond' }
+] %}
+
+{% set TINTS = {
+  '0': 'fill-primary stroke-primary',
+  '1': 'fill-secondary stroke-secondary',
+  '2': 'fill-accent stroke-accent',
+  '3': 'fill-info stroke-info'
+} %}
+
+{% set TONES = { better: 'text-success', worse: 'text-error', 'none': '' } %}
+
+{% macro text(parts) -%}
+  {%- for part in parts -%}
+    {%- if part.code is defined -%}<code>{{ part.code }}</code>{%- else -%}{{ part }}{%- endif -%}
+  {%- endfor -%}
+{%- endmacro %}
+
+{% macro marker(shape, x, y) -%}
+  {%- if shape == 'circle' -%}
+    <circle class="stroke-base-100" stroke-width="2" cx="{{ x }}" cy="{{ y }}" r="4" />
+  {%- elif shape == 'square' -%}
+    <rect class="stroke-base-100" stroke-width="2" x="{{ x - 4 }}" y="{{ y - 4 }}" width="8" height="8" />
+  {%- elif shape == 'triangle' -%}
+    <polygon class="stroke-base-100" stroke-width="2" points="{{ x }},{{ y - 5 }} {{ x + 5 }},{{ y + 4 }} {{ x - 5 }},{{ y + 4 }}" />
+  {%- else -%}
+    <polygon class="stroke-base-100" stroke-width="2" points="{{ x }},{{ y - 5 }} {{ x + 5 }},{{ y }} {{ x }},{{ y + 5 }} {{ x - 5 }},{{ y }}" />
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro textures(id, count) -%}
+  <defs>
+    {% if count > 1 %}
+      <pattern id="{{ id }}-texture-1" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <line class="stroke-base-100" x1="0" y1="0" x2="0" y2="6" stroke-width="2" />
+      </pattern>
+    {% endif %}
+    {% if count > 2 %}
+      <pattern id="{{ id }}-texture-2" width="5" height="5" patternUnits="userSpaceOnUse">
+        <circle class="fill-base-100" cx="2.5" cy="2.5" r="1.25" />
+      </pattern>
+    {% endif %}
+    {% if count > 3 %}
+      <pattern id="{{ id }}-texture-3" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+        <line class="stroke-base-100" x1="0" y1="0" x2="0" y2="6" stroke-width="2" />
+      </pattern>
+    {% endif %}
+  </defs>
+{%- endmacro %}
+
+{% macro numbers(view) -%}
+  {% if view.rows.length %}
+    <details class="text-sm">
+      <summary class="cursor-pointer text-base-content/70">Show the numbers</summary>
+      {% call table(view.description, inCard=true) %}
+        <thead>
+          <tr>{% for column in view.columns %}<th scope="col">{{ column }}</th>{% endfor %}</tr>
+        </thead>
+        <tbody>
+          {% for row in view.rows %}
+            <tr><th scope="row">{{ row.heading }}</th>{% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      {% endcall %}
+    </details>
+  {% endif %}
+{%- endmacro %}
+
+{% macro timeSeries(view) -%}
+  <div class="grid gap-3">
+    <p id="{{ view.id }}" class="sr-only">{{ view.description }}</p>
+    {% if view.series.length > 1 %}
+      <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-hidden="true">
+        {% for entry in view.series %}
+          {% set look = SERIES[loop.index0] %}
+          <li class="flex items-center gap-2">
+            <svg class="h-3 w-7" viewBox="0 0 28 12">
+              <g class="{{ TINTS | modifier(loop.index0 | string) | trim }}">
+                <line x1="0" y1="6" x2="28" y2="6" stroke-width="2" stroke-dasharray="{{ look.dash }}" />
+                {{ marker(look.marker, 14, 6) }}
+              </g>
+            </svg>
+            <span>{{ entry.name }}</span></li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+    <svg role="img" aria-labelledby="{{ view.id }}" viewBox="0 0 {{ view.width }} {{ view.height }}" class="h-auto w-full max-w-xl">
+      {% for tick in view.yTicks %}
+        <line class="{{ 'stroke-base-content/30' if loop.first else 'stroke-base-content/10' }}" x1="{{ view.plot.left }}" x2="{{ view.plot.right }}" y1="{{ tick.y }}" y2="{{ tick.y }}" stroke-width="1" />
+        <text class="fill-base-content/70" x="{{ view.plot.left - 6 }}" y="{{ tick.y + 4 }}" text-anchor="end" font-size="12">{{ tick.label }}</text>
+      {% endfor %}
+      {% for tick in view.xTicks %}
+        <text class="fill-base-content/70" x="{{ tick.x }}" y="{{ view.height - 8 }}" text-anchor="middle" font-size="12">{{ tick.label }}</text>
+      {% endfor %}
+      {% for entry in view.series %}
+        {% set look = SERIES[loop.index0] %}
+        <g class="{{ TINTS | modifier(loop.index0 | string) | trim }}">
+          <path class="fill-none" stroke-dasharray="{{ look.dash }}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" d="{{ entry.path }}" />
+        </g>
+      {% endfor %}
+      {% for entry in view.series %}
+        {% set look = SERIES[loop.index0] %}
+        <g class="{{ TINTS | modifier(loop.index0 | string) | trim }}">{{ marker(look.marker, entry.end.x, entry.end.y) }}</g>
+      {% endfor %}
+      {% for band in view.bands %}
+        <rect class="fill-transparent" x="{{ band.x }}" y="{{ view.plot.top }}" width="{{ band.width }}" height="{{ view.plot.bottom - view.plot.top }}" pointer-events="all"><title>{{ band.title }}</title></rect>
+      {% endfor %}
+    </svg>
+    {{ numbers(view) }}
+  </div>
+{%- endmacro %}
+
+{% macro bars(view) -%}
+  <div class="grid gap-3">
+    <p id="{{ view.id }}" class="sr-only">{{ view.description }}</p>
+    {% if view.series.length > 1 %}
+      <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-hidden="true">
+        {% for name in view.series %}
+          <li class="flex items-center gap-2">
+            <svg class="size-3" viewBox="0 0 12 12">
+              <g class="{{ TINTS | modifier(loop.index0 | string) | trim }}"><rect width="12" height="12" rx="2" /></g>
+              {% if not loop.first %}<rect width="12" height="12" rx="2" fill="url(#{{ view.id }}-texture-{{ loop.index0 }})" />{% endif %}
+            </svg>
+            <span>{{ name }}</span></li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+    <svg role="img" aria-labelledby="{{ view.id }}" viewBox="0 0 {{ view.width }} {{ view.height }}" class="h-auto w-full max-w-xl">
+      {{ textures(view.id, view.series.length) }}
+      {% for tick in view.yTicks %}
+        <line class="{{ 'stroke-base-content/30' if loop.first else 'stroke-base-content/10' }}" x1="{{ view.plot.left }}" x2="{{ view.plot.right }}" y1="{{ tick.y }}" y2="{{ tick.y }}" stroke-width="1" />
+        <text class="fill-base-content/70" x="{{ view.plot.left - 6 }}" y="{{ tick.y + 4 }}" text-anchor="end" font-size="12">{{ tick.label }}</text>
+      {% endfor %}
+      {% for bar in view.bars %}
+        {% for segment in bar.segments %}
+          <g class="{{ TINTS | modifier(segment.series | string) | trim }}"><rect x="{{ segment.x }}" y="{{ segment.y }}" width="{{ segment.width }}" height="{{ segment.height }}"><title>{{ segment.title }}</title></rect></g>
+          {% if segment.series > 0 %}<rect x="{{ segment.x }}" y="{{ segment.y }}" width="{{ segment.width }}" height="{{ segment.height }}" fill="url(#{{ view.id }}-texture-{{ segment.series }})" pointer-events="none" />{% endif %}
+        {% endfor %}
+        {% if bar.total %}
+          <text class="fill-base-content font-semibold" x="{{ bar.centerX }}" y="{{ bar.total.y }}" text-anchor="middle" font-size="11">{{ bar.total.text }}</text>
+        {% endif %}
+        {% if bar.tick %}
+          <text class="fill-base-content/70" x="{{ bar.centerX }}" y="{{ view.height - 8 }}" text-anchor="middle" font-size="12">{{ bar.tick }}</text>
+        {% endif %}
+      {% endfor %}
+    </svg>
+    {{ numbers(view) }}
+  </div>
+{%- endmacro %}
+
+{% macro calendar(view) -%}
+  <div class="grid gap-3">
+    <p id="{{ view.id }}" class="sr-only">{{ view.description }}</p>
+    <div class="flex flex-row-reverse overflow-x-auto">
+      <svg role="img" aria-labelledby="{{ view.id }}" viewBox="0 0 {{ view.width }} {{ view.height }}" width="{{ view.width * 1.25 }}" height="{{ view.height * 1.25 }}" class="mr-auto h-auto{% if view.width * 1.25 > 640 %} max-w-full min-w-160{% endif %} shrink-0">
+        {% for month in view.months %}
+          <text class="fill-base-content/70" x="{{ month.x }}" y="11" text-anchor="start" font-size="10">{{ month.label }}</text>
+        {% endfor %}
+        {% for day in view.weekdays %}
+          <text class="fill-base-content/70" x="24" y="{{ day.y }}" text-anchor="end" font-size="9">{{ day.label }}</text>
+        {% endfor %}
+        {% for cell in view.cells %}
+          <rect class="{% if cell.level == 0 %}fill-base-content/10{% elif cell.level == 1 %}fill-primary/25{% elif cell.level == 2 %}fill-primary/50{% elif cell.level == 3 %}fill-primary/75{% else %}fill-primary{% endif %}" x="{{ cell.x }}" y="{{ cell.y }}" width="{{ view.cell }}" height="{{ view.cell }}" rx="2"><title>{{ cell.title }}</title></rect>
+        {% endfor %}
+      </svg>
+    </div>
+    <div class="flex items-center gap-1 text-xs text-base-content/70" aria-hidden="true">
+      <span>Less</span>
+      <svg class="h-3 w-[4.25rem]" viewBox="0 0 68 12">
+        <rect class="fill-base-content/10" x="0" y="0" width="12" height="12" rx="2" />
+        <rect class="fill-primary/25" x="14" y="0" width="12" height="12" rx="2" />
+        <rect class="fill-primary/50" x="28" y="0" width="12" height="12" rx="2" />
+        <rect class="fill-primary/75" x="42" y="0" width="12" height="12" rx="2" />
+        <rect class="fill-primary" x="56" y="0" width="12" height="12" rx="2" />
+      </svg>
+      <span>More</span>
+    </div>
+    {{ numbers(view) }}
+  </div>
+{%- endmacro %}
+
+{% macro block(data) -%}
+  {% set view = data | drawn %}
+  {% if view.kind == 'paragraph' %}
+    <p class="text-sm">{{ text(view.parts) }}</p>
+  {% elif view.kind == 'table' %}
+    {% call table(view.table.caption, inCard=true) %}
+      <thead>
+        <tr>
+          {% for column in view.table.columns %}<th scope="col">{{ column }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in view.table.rows %}
+          <tr>
+            {% for cell in row %}
+              {% if cell.time is defined %}
+                <td class="whitespace-nowrap">{% if cell.time %}{{ cell.time | date('readable') }}{% else %}Never{% endif %}</td>
+              {% elif cell.text is defined %}
+                <td class="wrap-anywhere">{% if cell.href %}<a class="link" href="{{ cell.href }}">{{ cell.text }}</a>{% else %}{{ cell.text }}{% endif %}</td>
+              {% else %}
+                <td class="wrap-anywhere">{{ text([cell]) }}</td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    {% endcall %}
+  {% elif view.kind == 'stats' %}
+    <div class="stats flex flex-wrap gap-px bg-base-content/10 shadow">
+      {% for stat in view.stats %}
+        <div class="stat w-auto flex-auto border-0 bg-base-100">
+          <div class="stat-title">{{ stat.label }}</div>
+          <div class="stat-value">{{ stat.value }}</div>
+          {% if stat.change %}
+            <div class="stat-desc{{ TONES | modifier(stat.change.tone) }}">{% if stat.change.arrow %}<span aria-hidden="true">{{ stat.change.arrow }}</span> {% endif %}{{ stat.change.text }}</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% elif view.kind == 'timeSeries' %}
+    {{ timeSeries(view) }}
+  {% elif view.kind == 'ranked' %}
+    <ol aria-label="{{ view.caption }}" class="grid gap-3 text-sm">
+      {% for item in view.items %}
+        <li class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
+          <span class="truncate">{% if item.href %}<a class="link" href="{{ item.href }}">{{ item.label }}</a>{% else %}{{ item.label }}{% endif %}</span>
+          <span class="tabular-nums">{{ item.value }}</span>
+          <svg class="col-span-2 h-1.5 w-full" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
+            <rect class="fill-base-content/10" width="100" height="6" />
+            <rect class="fill-primary" width="{{ item.widthPercent }}" height="6" />
+          </svg>
+        </li>
+      {% endfor %}
+    </ol>
+  {% elif view.kind == 'bars' %}
+    {{ bars(view) }}
+  {% elif view.kind == 'calendar' %}
+    {{ calendar(view) }}
+  {% else %}
+    {% if view.caption %}<p class="text-sm font-semibold">{{ view.caption }}</p>{% endif %}
+    <p class="text-sm text-base-content/70">No data to show.</p>
+  {% endif %}
+{%- endmacro %}

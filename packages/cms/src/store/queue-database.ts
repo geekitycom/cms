@@ -25,6 +25,25 @@ export function openQueueDatabase(dataDir: string): DatabaseSync {
 }
 
 export function countWaitingMessages(dataDir: string): number {
+  return countMessages(dataDir, '', []);
+}
+
+/**
+ * How many deliveries first tried at or after `since` wait in the queue for a
+ * retry: Fedify puts an outbox message back with its attempt raised after a
+ * failure, and takes it out for good once the inbox accepts it.
+ */
+export function countRetryingDeliveries(dataDir: string, since: string): number {
+  return countMessages(
+    dataDir,
+    `WHERE json_extract(message, '$.type') = 'outbox'
+       AND json_extract(message, '$.attempt') >= 1
+       AND json_extract(message, '$.started') >= ?`,
+    [since],
+  );
+}
+
+function countMessages(dataDir: string, where: string, values: readonly string[]): number {
   const file = queueFile(dataDir);
   if (!existsSync(file)) return 0;
   const db = new DatabaseSync(file, { readOnly: true, timeout: BUSY_TIMEOUT_MS });
@@ -33,7 +52,9 @@ export function countWaitingMessages(dataDir: string): number {
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
       .get(FEDERATION_QUEUE_TABLE);
     if (table === undefined) return 0;
-    const row = db.prepare(`SELECT count(*) AS waiting FROM ${FEDERATION_QUEUE_TABLE}`).get();
+    const row = db
+      .prepare(`SELECT count(*) AS waiting FROM ${FEDERATION_QUEUE_TABLE} ${where}`)
+      .get(...values);
     return Number(row?.['waiting'] ?? 0);
   } finally {
     db.close();

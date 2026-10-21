@@ -526,7 +526,7 @@ describe('the demo example plugins (decision-33)', () => {
     await enable([HELLO, GREETINGS]);
     assert.equal(
       await text('/plugin-hello/'),
-      'Hello from a plugin, on host API version 2.\n',
+      'Hello from a plugin, on host API version 3.\n',
       'the route is served on the next request, with no restart',
     );
 

@@ -740,7 +740,7 @@ function answerCreate(id: string): Record<string, unknown> {
 }
 
 function recordsOf(cms: Cms): FederationRecords {
-  return { admin: cms.admin, contentDir: cms.config.contentDir };
+  return { admin: cms.admin, contentDir: cms.config.contentDir, dataDir: cms.config.dataDir };
 }
 
 /** The one recent-activity row that links `url`. */

@@ -265,7 +265,7 @@ async function main(): Promise<void> {
     // `Follow` from that actor would have written — through the same
     // `addFollower` the inbox handler calls, so the followers file is the one
     // thing that decides who is delivered to here as well.
-    await addFollower({ admin: cms.admin, contentDir }, USERNAME, {
+    await addFollower({ admin: cms.admin, contentDir, dataDir: cms.config.dataDir }, USERNAME, {
       actorId: cliActor,
       inboxId: cliInbox,
       sharedInboxId: null,
@@ -516,15 +516,19 @@ async function main(): Promise<void> {
     // to verify at a peer that has never heard of this site. The peer
     // dereferences the key id in the signature, which is the stored URL, and
     // refuses the delivery with a 401 if what it finds does not own the key.
-    await addFollower({ admin: cms.admin, contentDir }, MIGRATED_USERNAME, {
-      actorId: peer.actorId,
-      inboxId: peer.inboxId,
-      sharedInboxId: peer.sharedInboxId,
-      handle: null,
-      name: 'Smoke Test Peer',
-      iconUrl: null,
-      url: null,
-    });
+    await addFollower(
+      { admin: cms.admin, contentDir, dataDir: cms.config.dataDir },
+      MIGRATED_USERNAME,
+      {
+        actorId: peer.actorId,
+        inboxId: peer.inboxId,
+        sharedInboxId: peer.sharedInboxId,
+        handle: null,
+        name: 'Smoke Test Peer',
+        iconUrl: null,
+        url: null,
+      },
+    );
     const migratedUser = listUsers(dataDir).find((user) => user.username === MIGRATED_USERNAME);
     assert.ok(migratedUser !== undefined, 'the migrated account is in the users file');
 

@@ -5,12 +5,13 @@ import {
   FEDERATED_CLAUSE,
   LISTED_CLAUSE,
   SCHEDULED_CLAUSE,
+  SERVED_CLAUSE,
   TERM_TABLES,
   termFilter,
 } from './clauses.ts';
 import { nowKey, cachedStatement } from './database.ts';
 import type { IndexDatabase, Row } from './database.ts';
-import { selectNewestFirst } from './documents.ts';
+import { hydrateAll, selectNewestFirst } from './documents.ts';
 
 const COUNTS_SQL = `
   SELECT
@@ -23,11 +24,34 @@ const COUNTS_SQL = `
   FROM documents
 `;
 
+const PUBLISHED_SINCE_SQL = `
+  SELECT * FROM documents
+  WHERE type = 'post' AND ${SERVED_CLAUSE} AND date_sort >= ?
+  ORDER BY date_sort ASC, path ASC
+`;
+
+const SCHEDULED_POSTS_SQL = `
+  SELECT * FROM documents
+  WHERE type = 'post' AND draft = 0 AND trashed = 0 AND ${SCHEDULED_CLAUSE}
+  ORDER BY date_sort ASC, path ASC
+  LIMIT ?
+`;
+
 export function catalogReader(index: IndexDatabase): CatalogReader {
   return {
     listAll: (options = {}) => listAll(index, options),
     listFederated: (options = {}) =>
       selectNewestFirst(index, [`type = 'post'`, FEDERATED_CLAUSE], [], options),
+    listPostsPublishedSince: (since) =>
+      hydrateAll(
+        index,
+        cachedStatement(index, PUBLISHED_SINCE_SQL).all(nowKey(index), since) as Row[],
+      ),
+    listScheduledPosts: (limit) =>
+      hydrateAll(
+        index,
+        cachedStatement(index, SCHEDULED_POSTS_SQL).all(nowKey(index), limit) as Row[],
+      ),
     listPaths: () =>
       cachedStatement(index, 'SELECT path FROM documents ORDER BY path')
         .all()

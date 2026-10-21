@@ -176,6 +176,38 @@ describe('start-up recovery', () => {
   });
 });
 
+describe('a job list', () => {
+  it('reads every job in the states asked for, a cut-off one as queued again once started', async () => {
+    const file = await recordsFile();
+    const records = createFileRecords(file);
+    const queue = queueOn(file);
+    const done = await queue.enqueue(count, { to: 1 });
+    await queue.run(done);
+    const cutOff = await queue.enqueue(count, { to: 1 });
+    await records.transition(
+      cutOff,
+      { state: 'queued', attempt: 1 },
+      { state: 'running', attempt: 1, owner: 'old', startedAt: '2026-10-14T00:00:00.000Z' },
+    );
+
+    assert.deepEqual(
+      (await queue.list(['finished', 'running'])).map((job) => [job.id, job.state]),
+      [
+        [done, 'finished'],
+        [cutOff, 'running'],
+      ],
+    );
+
+    const server = queueOn(file, []);
+    await server.start();
+    assert.deepEqual(
+      (await server.list(['running'])).map((job) => job.id),
+      [],
+    );
+    await server.close();
+  });
+});
+
 describe('a started queue', () => {
   it('runs a queued job whose message no transport here carries once it has nothing running', async () => {
     const file = await recordsFile();

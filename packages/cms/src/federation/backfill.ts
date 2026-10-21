@@ -235,7 +235,7 @@ export interface CreateReplyBackfillOptions {
   readonly admin: AdminStore;
   readonly store: CatalogReader;
   readonly conversation: Pick<ConversationReader, 'thread'>;
-  readonly config: Pick<ResolvedConfig, 'now' | 'contentDir'>;
+  readonly config: Pick<ResolvedConfig, 'now' | 'contentDir' | 'dataDir'>;
   readonly settings: Pick<SettingsRegistry, 'values'>;
   readonly load: RepliesLoader;
   /** Told the author of every reply logged, so the thread can name them. */
@@ -263,7 +263,11 @@ export function createReplyBackfill(options: CreateReplyBackfillOptions): ReplyB
   const { admin, store, conversation, config, settings, load } = options;
   const timers = options.timers ?? systemNotificationTimers;
   const logger = options.logger ?? console;
-  const records: FederationRecords = { admin, contentDir: config.contentDir };
+  const records: FederationRecords = {
+    admin,
+    contentDir: config.contentDir,
+    dataDir: config.dataDir,
+  };
 
   const sweeps = createSerialQueue();
   let handle: unknown;

@@ -646,7 +646,11 @@ function recordOutboundRequests(): { restore: () => void } {
 async function federatingSite(): Promise<Site> {
   const made = await site(ALL, { federation: { queue: null, allowPrivateAddress: true } });
   await addFollower(
-    { admin: made.cms.admin, contentDir: made.cms.config.contentDir },
+    {
+      admin: made.cms.admin,
+      contentDir: made.cms.config.contentDir,
+      dataDir: made.cms.config.dataDir,
+    },
     FIRST_ADMIN.username,
     {
       actorId: 'https://peer.example/users/bob',

@@ -31,7 +31,7 @@
   {% else %}
     <ul class="mb-6 flex max-w-3xl flex-col gap-4">
       {% for row in rows %}
-        <li>
+        <li id="comment-{{ row.id }}">
           {% call card() %}
             <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span class="font-semibold">{{ row.author }}</span>

@@ -67,7 +67,7 @@ export function pluginSite(options: { admin: AdminStore; config: ResolvedConfig 
       })),
 
     async addFollower(username, follower) {
-      await addFollower({ admin, contentDir }, username, follower);
+      await addFollower({ admin, contentDir, dataDir }, username, follower);
     },
 
     checkUpload(name, bytes) {

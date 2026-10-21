@@ -444,9 +444,13 @@ describe('a reply held once and dropped when the remote drops it (AC #3)', () =>
     const delivered = JSON.parse(deliveredLine(B, BOB, A)) as Record<string, unknown>;
     delete delivered['receivedAt'];
     delete delivered['recipient'];
-    await appendInboxActivity({ admin: cms.admin, contentDir }, JSON.stringify(delivered), {
-      receivedAt: '2026-09-29T13:00:00.000Z',
-    });
+    await appendInboxActivity(
+      { admin: cms.admin, contentDir, dataDir: cms.config.dataDir },
+      JSON.stringify(delivered),
+      {
+        receivedAt: '2026-09-29T13:00:00.000Z',
+      },
+    );
 
     assert.equal(creates(cms, B).length, 1);
     assert.equal(creates(cms, B)[0]?.fetched, false);

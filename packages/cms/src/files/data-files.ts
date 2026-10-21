@@ -250,6 +250,12 @@ export const DEV_MODE_RECORD = declareDataFile({
   lost: 'The record that proves a migration was silent.',
 });
 
+export const FOLLOWER_HISTORY = declareDataFile({
+  pattern: 'follower-history.jsonl',
+  dataClass: KEPT,
+  lost: 'Every follow and unfollow with the follower count after it, which the dashboard charts. The followers file holds only who follows now.',
+});
+
 export const INDIEAUTH_ACTIVITY = declareDataFile({
   pattern: 'indieauth-activity.json',
   dataClass: REBUILDABLE,
@@ -325,6 +331,7 @@ export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   PLUGIN_CHANGES,
   JOBS,
   DEV_MODE_RECORD,
+  FOLLOWER_HISTORY,
   INDIEAUTH_ACTIVITY,
   NOTIFICATION_DIGESTS,
   MICROPUB_MEDIA,

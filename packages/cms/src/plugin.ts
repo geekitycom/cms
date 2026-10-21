@@ -18,15 +18,16 @@ import type { KvStore } from '@fedify/fedify';
  * it targets in {@link Plugin.hostApi}, and one that targets a newer version
  * than this is unavailable.
  *
- * It is the gate that marks a break for plugins. A plugin accepts every core
- * from the one it was built against up to 1.0, so a core minor release does
- * not stop a plugin by itself. Raise this number in the release that changes
- * this module so a plugin written for the current version would fail on the
- * new core: a type, method or field removed or renamed, an argument or return
- * value reshaped, or a behavior a plugin relies on changed. Adding a method, an
- * optional field or a new extension point keeps the number.
+ * A core runs every plugin that targets a version from the oldest it keeps
+ * up to this one, so a plugin built against an earlier version still loads.
+ * Raise this number in the release that adds to this module, such as a new
+ * method on {@link PluginHost}, so a plugin that uses the addition is refused
+ * by a core without it. A release that changes this module so a plugin written
+ * for an earlier version would fail on the new core (a type, method or field
+ * removed or renamed, an argument or return value reshaped, or a behavior a
+ * plugin relies on changed) also raises the oldest version the core keeps.
  */
-export const HOST_API_VERSION = 2;
+export const HOST_API_VERSION = 3;
 
 /**
  * The site federation's key-value store, as Fedify defines it. A plugin that
@@ -330,11 +331,23 @@ export type PluginFederationMiddleware = (
 /** Text on a plugin screen: plain, or set as code. */
 export type PluginScreenText = string | { readonly code: string };
 
-/** A table cell: text, or an instant drawn as a date, `null` for never. */
-export type PluginScreenCell = PluginScreenText | { readonly time: string | null };
+/**
+ * A table cell: text, an instant drawn as a date (`null` for never), or text
+ * linked to `href`, which is drawn as a link only when it is a path on this
+ * site or a web address.
+ */
+export type PluginScreenCell =
+  | PluginScreenText
+  | { readonly time: string | null }
+  | { readonly text: string; readonly href: string };
 
-/** One block of a plugin screen's card. */
-export type PluginScreenBlock =
+/**
+ * One block of a plugin screen's card or a dashboard widget. Core draws each
+ * kind, charts as SVG, and draws input it cannot use (no points, a negative or
+ * non-numeric value) as "No data to show." Counts and values are whole or
+ * decimal numbers of zero or more; days are `YYYY-MM-DD`.
+ */
+export type PluginBlock =
   | { readonly paragraph: readonly PluginScreenText[] }
   | {
       readonly table: {
@@ -342,12 +355,67 @@ export type PluginScreenBlock =
         readonly columns: readonly string[];
         readonly rows: readonly (readonly PluginScreenCell[])[];
       };
+    }
+  | {
+      /**
+       * Numbers in a row. Given `previous`, the value for the period before,
+       * a stat says its change in words; `better` says which way is good,
+       * `up` when left out.
+       */
+      readonly stats: readonly {
+        readonly label: string;
+        readonly value: number;
+        readonly previous?: number;
+        readonly better?: 'up' | 'down';
+      }[];
+    }
+  | {
+      /** Up to four named series, each with one value for every day in `days`. */
+      readonly timeSeries: {
+        readonly caption: string;
+        readonly days: readonly string[];
+        readonly series: readonly { readonly name: string; readonly values: readonly number[] }[];
+      };
+    }
+  | {
+      /** Labels drawn largest value first, each linked when `href` is a path or a web address. */
+      readonly ranked: {
+        readonly caption: string;
+        readonly items: readonly {
+          readonly label: string;
+          readonly value: number;
+          readonly href?: string;
+        }[];
+      };
+    }
+  | {
+      /**
+       * A stacked bar for each labelled group, such as a month, with a segment
+       * for each of up to four named series, each with one value per group.
+       */
+      readonly bars: {
+        readonly caption: string;
+        readonly groups: readonly string[];
+        /** What a group is, such as `Month`: the heading of the table's first column. `Group` when left out. */
+        readonly groupName?: string;
+        readonly series: readonly { readonly name: string; readonly values: readonly number[] }[];
+      };
+    }
+  | {
+      /** A count for each day; days between the first and the last that are left out count none. */
+      readonly calendar: {
+        readonly caption: string;
+        readonly days: readonly { readonly day: string; readonly count: number }[];
+      };
     };
+
+/** One block of a plugin screen's card, the same blocks a widget draws. */
+export type PluginScreenBlock = PluginBlock;
 
 /** One card on a plugin screen. */
 export interface PluginScreenCard {
   readonly title: string;
-  readonly blocks: readonly PluginScreenBlock[];
+  readonly blocks: readonly PluginBlock[];
 }
 
 /** What a plugin screen's render and its actions are handed. */
@@ -382,6 +450,76 @@ export interface PluginScreen {
   ): readonly PluginScreenCard[] | Promise<readonly PluginScreenCard[]>;
   /** Buttons core draws under the settings, each run when pressed. */
   readonly actions?: readonly PluginScreenAction[] | undefined;
+}
+
+/** How many days, ending today, the dashboard's widgets cover. The owner picks one. */
+export type DashboardPeriod = 7 | 30;
+
+/** What a dashboard widget's `load` is handed. */
+export interface PluginWidgetContext {
+  readonly site: PluginSite;
+  /** The site's time zone, an IANA name such as `Europe/London`, which days follow. */
+  readonly timezone: string;
+  /**
+   * The days the dashboard covers, ending today: 7 unless the owner chose 30.
+   * A widget that does not cover a period ignores it. A result is kept for
+   * each period apart.
+   */
+  readonly period: DashboardPeriod;
+}
+
+/**
+ * A card on the admin dashboard, drawn after the core's own while the plugin
+ * is enabled. Core loads every widget at once under a time limit and keeps a
+ * good result for `refreshSeconds`. A load that throws or runs out of time
+ * shows the last good result marked stale, or says the stats are unavailable.
+ * A load that returns no blocks draws no card.
+ */
+export interface PluginWidget {
+  /** Lower case words joined by `-`, unique among the plugin's widgets. */
+  readonly id: string;
+  readonly title: string;
+  /** `half` sits beside another half widget on a wide screen; `full` spans the row. */
+  readonly width: 'full' | 'half';
+  /** How long a good result is drawn again before `load` is called again, zero or more. */
+  readonly refreshSeconds: number;
+  load(context: PluginWidgetContext): readonly PluginBlock[] | Promise<readonly PluginBlock[]>;
+}
+
+/**
+ * An attribute of a page tag. Text is escaped when it is drawn. `true` writes
+ * the attribute bare, such as `defer`, and `false` leaves it out.
+ */
+export type PluginPageTagAttributes = Readonly<Record<string, string | boolean>>;
+
+/**
+ * One tag a plugin adds to the public pages. Core writes the markup and
+ * escapes every value, so there is no raw HTML and no inline script. An
+ * attribute name is letters, digits, `-`, `_`, `:` or `.`, starting with a
+ * letter, and never an event handler such as `onload`. A `src` or `href` is an
+ * `http:` or `https:` URL or a path that starts with `/`.
+ */
+export type PluginPageTag =
+  | {
+      readonly tag: 'script';
+      readonly src: string;
+      readonly attributes?: PluginPageTagAttributes | undefined;
+    }
+  | { readonly tag: 'link'; readonly attributes: PluginPageTagAttributes }
+  | { readonly tag: 'meta'; readonly attributes: PluginPageTagAttributes };
+
+/** The tags a plugin adds at the end of `<head>` and at the end of `<body>`. */
+export interface PluginPageTags {
+  readonly headEnd?: readonly PluginPageTag[] | undefined;
+  readonly bodyEnd?: readonly PluginPageTag[] | undefined;
+}
+
+/** Who a public page is drawn for, as a plugin's page tags see it. */
+export interface PluginPageTagsContext {
+  /** The reader's session names a user of the site, so the page carries the admin bar. */
+  readonly signedIn: boolean;
+  /** The site is in dev mode, holding every outbound side effect. */
+  readonly devMode: boolean;
 }
 
 /** What every settings field has. */
@@ -518,6 +656,52 @@ export interface PluginServices {}
 export type PluginService<Name extends string> = Name extends keyof PluginServices
   ? PluginServices[Name]
   : unknown;
+
+/** One post's likes, boosts, replies, webmentions and approved comments over a span of time. */
+export interface PostEngagement {
+  readonly slug: string;
+  /** The post's title, or what the admin calls an untitled one. */
+  readonly title: string;
+  /** The post's permalink, a path on the site such as `/2026/10/hello/`. */
+  readonly path: string;
+  /** Where its editor is in the admin. */
+  readonly editUrl: string;
+  /** Fediverse likes, leaving out any its actor undid. */
+  readonly likes: number;
+  /** Fediverse boosts, leaving out any its actor undid. */
+  readonly boosts: number;
+  /** Fediverse replies, in the post's thread, leaving out any deleted. */
+  readonly replies: number;
+  /** Approved webmentions, whatever kind. */
+  readonly webmentions: number;
+  /** Approved comments from the form. */
+  readonly comments: number;
+  /** All five added up. */
+  readonly total: number;
+}
+
+/** The core's per-post engagement, which `host.use('@geekity/cms/engagement')` returns. */
+export interface EngagementService {
+  /**
+   * Each post that drew anything at or after `since`, an ISO 8601 instant,
+   * most first. A post that drew nothing is not listed.
+   */
+  posts(options: { readonly since: string }): Promise<readonly PostEngagement[]>;
+}
+
+/**
+ * The services the core provides, which any plugin may `use` without naming
+ * them in `requires`. Their names are not npm package names, so no plugin's
+ * can be mistaken for one.
+ */
+export interface CoreServices {
+  '@geekity/cms/engagement': EngagementService;
+}
+
+/** What `host.use` returns for a name: a core service, or the service a plugin provides. */
+export type UsedService<Name extends string> = Name extends keyof CoreServices
+  ? CoreServices[Name]
+  : PluginService<Name>;
 
 /** A field of the post and page editor that a plugin's button can sit beside. */
 export type PluginEditorField = 'title' | 'description' | 'tags';
@@ -688,6 +872,18 @@ export interface PluginHost<
    * with the page's CSRF token reaches.
    */
   editorAction(action: PluginEditorAction): void;
+  /**
+   * Add tags to the end of `<head>` and `<body>` on every public page while
+   * the plugin is enabled. `read` is called each time a page is drawn, so the
+   * tags can follow the plugin's settings and the reader `context` names;
+   * return no tags while they are unset. Left out of the editor's preview. At
+   * most once per plugin.
+   */
+  pageTags(
+    read: (context: PluginPageTagsContext) => PluginPageTags | Promise<PluginPageTags>,
+  ): void;
+  /** Add a card to the admin dashboard, drawn while the plugin is enabled. */
+  widget(widget: PluginWidget): void;
   /** The site's base URL and its title as the settings have it when asked. */
   siteInfo(): Promise<PluginSiteInfo>;
   /**
@@ -706,11 +902,15 @@ export interface PluginHost<
    */
   provide(service: PluginService<Name>): void;
   /**
-   * The service a required plugin provides. Only a name in `requires` is
-   * accepted, and only once every plugin has registered: call it when
-   * handling a request, a command or a job, never in `register`.
+   * The service a required plugin provides, or one of {@link CoreServices}.
+   * Only a name in `requires` or a core service's name is accepted, and only
+   * once every plugin has registered: call it when handling a request, a
+   * command or a job, never in `register`. A core service is there while the
+   * site runs, not in a command run from the command line.
    */
-  use<Dependency extends keyof Requires & string>(name: Dependency): PluginService<Dependency>;
+  use<Dependency extends (keyof Requires & string) | keyof CoreServices>(
+    name: Dependency,
+  ): UsedService<Dependency>;
 }
 
 /**

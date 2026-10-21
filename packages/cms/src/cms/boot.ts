@@ -98,8 +98,9 @@ export function boot(
   // once. The site actor's followers are not migrated: decision-14 replaced it
   // with one actor per user, and nobody inherits a follow made with somebody
   // who no longer exists.
-  migrateFederationToFiles({ admin, contentDir: resolved.contentDir });
-  rebuildFederationIndexes({ admin, contentDir: resolved.contentDir });
+  const federation = { admin, contentDir: resolved.contentDir, dataDir: resolved.dataDir };
+  migrateFederationToFiles(federation);
+  rebuildFederationIndexes(federation);
 
   // And the Deletes sent before objectIds.json kept them, so a post they
   // tombstoned comes back under a fresh id. The delivery log is a cache a

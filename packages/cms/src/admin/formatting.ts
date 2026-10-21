@@ -73,6 +73,23 @@ function partsIn(date: Date, timezone: string): Record<string, string> | undefin
   return parts;
 }
 
+export function formatShortTime(instant: string, timezone: string): string {
+  const date = new Date(instant);
+  if (Number.isNaN(date.getTime())) return '';
+  const options: Intl.DateTimeFormatOptions = {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  };
+  try {
+    return new Intl.DateTimeFormat('en-GB', { ...options, timeZone: timezone }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat('en-GB', { ...options, timeZone: 'UTC' }).format(date);
+  }
+}
+
 /** A file's size as a person reads it: `8 bytes`, `920 KB`, `1.8 MB`. */
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${String(bytes)} ${bytes === 1 ? 'byte' : 'bytes'}`;

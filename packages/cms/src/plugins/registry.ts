@@ -15,22 +15,27 @@ import semver from 'semver';
 import type { DataFileDeclaration } from '../files/data-files.ts';
 import { HOST_API_VERSION } from '../plugin.ts';
 import type {
+  CoreServices,
   Plugin,
   PluginCommand,
   PluginEditorAction,
   PluginFederationMiddleware,
   PluginHost,
+  PluginPageTags,
+  PluginPageTagsContext,
   PluginRouteHandler,
   PluginScreen,
   PluginSettingField,
   PluginSettings,
-  PluginService,
   PluginSettingValues,
   PluginSiteInfo,
+  PluginWidget,
+  UsedService,
 } from '../plugin.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
 import { declaredDataFolder, pluginDataFiles } from './data.ts';
+import { hostApiProblem } from './host-api.ts';
 import { pluginFetch } from './fetch.ts';
 import type { PluginFetchOptions } from './fetch.ts';
 import { pluginEnvPrefix, reservedNamespaceProblem } from '../settings/names.ts';
@@ -71,6 +76,9 @@ export interface PluginContributions {
   settingsNamespace: DeclaredNamespace | undefined;
   /** Its buttons beside editor fields, in the order it declared them. */
   editorActions: readonly PluginEditorAction[];
+  pageTags:
+    ((context: PluginPageTagsContext) => PluginPageTags | Promise<PluginPageTags>) | undefined;
+  widgets: readonly PluginWidget[];
   dataFiles: readonly DataFileDeclaration[];
 }
 
@@ -123,6 +131,7 @@ export interface PluginRegistry {
   reconcile(enabled: ReadonlySet<string>): Promise<void>;
   /** Stop every running plugin, dependents first. Nothing starts after. */
   close(): Promise<void>;
+  provideCore(services: CoreServices): void;
 }
 
 /** Two installed plugins with one name. */
@@ -134,6 +143,10 @@ export class DuplicatePluginError extends Error {
 }
 
 const CORE_PACKAGE = '@geekity/cms';
+
+const CORE_SERVICES: Readonly<Record<keyof CoreServices, true>> = {
+  '@geekity/cms/engagement': true,
+};
 const CORE_VERSION = (createRequire(import.meta.url)('../../package.json') as { version: string })
   .version;
 
@@ -162,13 +175,15 @@ export function createPluginRegistry(
   const own = new Map<string, string | undefined>();
   const contributions = new Map<string, PluginContributions>();
   const services = new Map<string, unknown>();
+  let core: CoreServices | undefined;
   let registered = false;
 
   const serviceFor = <Dependency extends string>(
     consumer: Plugin,
     dependency: Dependency,
-  ): PluginService<Dependency> => {
-    if (!Object.hasOwn(consumer.requires ?? {}, dependency)) {
+  ): UsedService<Dependency> => {
+    const coreService = Object.hasOwn(CORE_SERVICES, dependency);
+    if (!coreService && !Object.hasOwn(consumer.requires ?? {}, dependency)) {
       throw new Error(`${consumer.name} uses ${dependency}, which is not in its requires.`);
     }
     if (!registered) {
@@ -176,8 +191,16 @@ export function createPluginRegistry(
         `${consumer.name} called use(${JSON.stringify(dependency)}) in its register. Call it when handling a request, a command or a job, once every plugin has registered.`,
       );
     }
+    if (coreService) {
+      if (core === undefined) {
+        throw new Error(
+          `${dependency} is provided while the site runs, not from the command line.`,
+        );
+      }
+      return core[dependency as keyof CoreServices] as UsedService<Dependency>;
+    }
     if (!services.has(dependency)) throw new Error(`${dependency} provides no service.`);
-    return services.get(dependency) as PluginService<Dependency>;
+    return services.get(dependency) as UsedService<Dependency>;
   };
 
   const sharedPrefixes = prefixCollisions(installed.map((entry) => entry.plugin.name));
@@ -313,6 +336,10 @@ export function createPluginRegistry(
         await stopFrom(() => true);
       });
     },
+
+    provideCore(services) {
+      core = services;
+    },
   };
 
   function requirementState(
@@ -335,6 +362,8 @@ const NOTHING_DECLARED: PluginContributions = {
   renderedSettings: [],
   settingsNamespace: undefined,
   editorActions: [],
+  pageTags: undefined,
+  widgets: [],
   dataFiles: [],
 };
 
@@ -371,7 +400,7 @@ function register(
   serviceFor: <Dependency extends string>(
     consumer: Plugin,
     dependency: Dependency,
-  ) => PluginService<Dependency>,
+  ) => UsedService<Dependency>,
 ): Registration {
   const { name } = plugin;
   if (name.length > PACKAGE_NAME_MAX || !PACKAGE_NAME.test(name)) {
@@ -380,11 +409,9 @@ function register(
       declared: NOTHING_DECLARED,
     };
   }
-  if (plugin.hostApi !== HOST_API_VERSION) {
-    return {
-      problem: `It targets host API version ${String(plugin.hostApi)}, and this core provides version ${String(HOST_API_VERSION)}.`,
-      declared: NOTHING_DECLARED,
-    };
+  const unsupported = hostApiProblem(plugin.hostApi);
+  if (unsupported !== undefined) {
+    return { problem: `It ${unsupported}`, declared: NOTHING_DECLARED };
   }
 
   let dataFiles: DataFileDeclaration[];
@@ -398,7 +425,9 @@ function register(
   const federation: PluginFederationMiddleware[] = [];
   const commands: PluginCommand[] = [];
   const editorActions: PluginEditorAction[] = [];
+  const widgets: PluginWidget[] = [];
   let screen: PluginScreen | undefined;
+  let pageTags: PluginContributions['pageTags'];
   let renderedSettings: readonly RenderedSetting[] | undefined;
   let settingsNamespace: DeclaredNamespace | undefined;
   let service: ProvidedService | undefined;
@@ -431,7 +460,7 @@ function register(
     },
     editorAction(declared) {
       declaring('an editor action');
-      if (!EDITOR_ACTION_ID.test(declared.id)) {
+      if (!DECLARED_ID.test(declared.id)) {
         throw new Error(
           `${JSON.stringify(declared.id)} is not an editor action id: use lower case words joined by -.`,
         );
@@ -442,6 +471,33 @@ function register(
         );
       }
       editorActions.push(declared);
+    },
+    pageTags(read) {
+      declaring('page tags');
+      if (pageTags !== undefined) throw new Error('A plugin declares its page tags once.');
+      pageTags = read;
+    },
+    widget(declared) {
+      declaring('a widget');
+      if (!DECLARED_ID.test(declared.id)) {
+        throw new Error(
+          `${JSON.stringify(declared.id)} is not a widget id: use lower case words joined by -.`,
+        );
+      }
+      if (widgets.some((entry) => entry.id === declared.id)) {
+        throw new Error(`${name} declares two widgets with the id ${JSON.stringify(declared.id)}.`);
+      }
+      if (declared.width !== 'full' && declared.width !== 'half') {
+        throw new Error(
+          `The ${declared.id} widget's width ${JSON.stringify(declared.width)} is not full or half.`,
+        );
+      }
+      if (!Number.isFinite(declared.refreshSeconds) || declared.refreshSeconds < 0) {
+        throw new Error(
+          `The ${declared.id} widget's refreshSeconds ${String(declared.refreshSeconds)} is not a number of zero or more.`,
+        );
+      }
+      widgets.push(declared);
     },
     siteInfo: () => options.siteInfo(),
     fetch: (url, init = {}) => pluginFetch(url, init, options),
@@ -498,6 +554,8 @@ function register(
         renderedSettings: renderedSettings ?? [],
         settingsNamespace,
         editorActions,
+        pageTags,
+        widgets,
         dataFiles,
       },
       service,
@@ -513,8 +571,7 @@ function register(
   }
 }
 
-/** An editor action's id, which is the last segment of its endpoint's path. */
-const EDITOR_ACTION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const DECLARED_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 async function lifecycle(plugin: Plugin, hook: 'start' | 'stop'): Promise<void> {
   try {

@@ -597,18 +597,26 @@ is. The bundle build refuses a peer range that differs from `geekity.requires`.
 Raise the lower bound when the plugin starts to use something that a later
 release of the required plugin added.
 
-The host API version marks a breaking change. `HOST_API_VERSION` in
-`packages/cms/src/plugin.ts` goes up in the core release that changes
-`@geekity/cms/plugin` in a way that breaks a plugin written for the current
-version:
+`HOST_API_VERSION` in `packages/cms/src/plugin.ts` is the newest host API
+version the core provides, and `OLDEST_HOST_API_VERSION` in
+`packages/cms/src/plugins/host-api.ts` is the oldest it still runs. A plugin
+runs on a core whose range holds the version it targets.
+
+Raise `HOST_API_VERSION` in the core release that adds to
+`@geekity/cms/plugin`, such as a new method on the host or a new kind of
+contribution. A plugin that uses the addition targets the new version, and a
+core without it refuses the plugin. Plugins that target an earlier version
+keep working, and need no release.
+
+Raise `OLDEST_HOST_API_VERSION` too, to the new version, in the core release
+that changes `@geekity/cms/plugin` in a way that breaks a plugin written for
+an earlier version:
 
 - a type, method or field removed or renamed
 - an argument or return value with a new shape
 - a change to a behavior a plugin relies on
 
-Adding a method, an optional field or an extension point keeps the number. A
-plugin runs only on a core that provides exactly the host API version it
-targets. A release that raises the number needs a release of every plugin,
+A release that raises the oldest version needs a release of every plugin,
 built against the new host API. Land a commit in each plugin's folder before
 you merge the release pull request, so that all of them go out in the same
 grouped release pull request.

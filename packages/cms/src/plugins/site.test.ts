@@ -5,6 +5,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import { leakedSecrets, pngWithMetadata } from '../__testing__/metadata.ts';
+import { readFollowerChanges } from '../federation/follower-history.ts';
 import { openAdminStore } from '../store/admin-store.ts';
 import type { AdminStore } from '../store/admin-store.ts';
 import { addComment } from '../comments/records.ts';
@@ -41,6 +42,27 @@ async function site(
     admin,
   };
 }
+
+describe('PluginSite.addFollower', () => {
+  it('records an imported follower in the follower history', async () => {
+    const { site: plugin, dataDir } = await site();
+
+    await plugin.addFollower('ada', {
+      actorId: 'https://remote.example/users/bob',
+      inboxId: 'https://remote.example/users/bob/inbox',
+      sharedInboxId: null,
+      handle: null,
+      name: null,
+      iconUrl: null,
+      url: null,
+    });
+
+    assert.deepEqual(
+      readFollowerChanges(dataDir).map(({ username, change, count }) => [username, change, count]),
+      [['ada', 'follow', 1]],
+    );
+  });
+});
 
 describe('PluginSite.checkUpload', () => {
   it('answers the bytes the editor would store, metadata stripped, and writes nothing', async () => {

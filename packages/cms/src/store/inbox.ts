@@ -92,6 +92,48 @@ export type NewInboxActivity = Omit<
   recipient?: string | null | undefined;
 };
 
+export interface InboxInteraction {
+  readonly kind: 'like' | 'boost' | 'reply';
+  readonly receivedAt: string;
+}
+
+export interface LatestInteraction extends InboxInteraction {
+  readonly actorId: string;
+  readonly about: string | null;
+}
+
+const INTERACTIONS = `
+  SELECT activity_type, actor_id,
+    CASE WHEN activity_type = '${REPLY_ACTIVITY_TYPE}' THEN in_reply_to ELSE object_id END AS about,
+    MIN(received_at) AS received_at
+  FROM ap_inbox AS said
+  WHERE received_at >= ?
+    AND (activity_type IN ('Like', 'Announce') OR (${IS_REPLY}))
+    AND NOT EXISTS (
+      SELECT 1 FROM ap_inbox AS taken
+      WHERE taken.actor_id = said.actor_id
+        AND (
+          (taken.activity_type = 'Undo' AND taken.object_id = said.activity_id)
+          OR (taken.activity_type = 'Delete' AND said.activity_type = '${REPLY_ACTIVITY_TYPE}'
+            AND taken.object_id = said.object_id)
+        )
+    )
+  GROUP BY activity_type,
+    CASE WHEN activity_type = '${REPLY_ACTIVITY_TYPE}' THEN NULL ELSE actor_id END,
+    object_id`;
+
+export interface InteractionCount {
+  readonly kind: InboxInteraction['kind'];
+  readonly about: string | null;
+  readonly count: number;
+}
+
+const INTERACTION_KINDS: Readonly<Record<string, InboxInteraction['kind']>> = {
+  Like: 'like',
+  Announce: 'boost',
+  [REPLY_ACTIVITY_TYPE]: 'reply',
+};
+
 export interface InboxStore {
   /** How many activities the inbound log holds. */
   countInboxActivities(): number;
@@ -143,6 +185,12 @@ export interface InboxStore {
 
   /** The logged replies whose note's id has this `/replies/` key (TASK-327). */
   listRepliesByKey(key: string): InboxActivity[];
+
+  listInteractionsSince(since: string): InboxInteraction[];
+
+  listLatestInteractions(limit: number): LatestInteraction[];
+
+  countInteractionsSince(since: string): InteractionCount[];
 }
 
 export function openInboxStore(
@@ -194,6 +242,12 @@ export function openInboxStore(
 
     repliesByKey: db.prepare(`
       SELECT * FROM ap_inbox WHERE ${IS_REPLY} AND reply_key = ? ORDER BY received_at, id
+    `),
+    interactionsSince: db.prepare(`${INTERACTIONS} ORDER BY received_at`),
+    latestInteractions: db.prepare(`${INTERACTIONS} ORDER BY received_at DESC LIMIT ?`),
+    interactionCounts: db.prepare(`
+      SELECT activity_type, about, COUNT(*) AS count FROM (${INTERACTIONS})
+      GROUP BY activity_type, about
     `),
   };
   return {
@@ -310,6 +364,41 @@ export function openInboxStore(
 
     listRepliesByKey(key) {
       return (statements.repliesByKey.all(key) as Record<string, unknown>[]).map(toInboxActivity);
+    },
+
+    listInteractionsSince(since) {
+      const rows = statements.interactionsSince.all(since) as Record<string, unknown>[];
+      return rows.flatMap((row) => {
+        const kind = INTERACTION_KINDS[String(row['activity_type'])];
+        return kind === undefined ? [] : [{ kind, receivedAt: String(row['received_at']) }];
+      });
+    },
+
+    listLatestInteractions(limit) {
+      const rows = statements.latestInteractions.all('', limit) as Record<string, unknown>[];
+      return rows.flatMap((row) => {
+        const kind = INTERACTION_KINDS[String(row['activity_type'])];
+        return kind === undefined
+          ? []
+          : [
+              {
+                kind,
+                actorId: String(row['actor_id']),
+                about: nullableText(row['about']),
+                receivedAt: String(row['received_at']),
+              },
+            ];
+      });
+    },
+
+    countInteractionsSince(since) {
+      const rows = statements.interactionCounts.all(since) as Record<string, unknown>[];
+      return rows.flatMap((row) => {
+        const kind = INTERACTION_KINDS[String(row['activity_type'])];
+        return kind === undefined
+          ? []
+          : [{ kind, about: nullableText(row['about']), count: Number(row['count']) }];
+      });
     },
   };
 }

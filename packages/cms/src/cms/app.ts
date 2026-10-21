@@ -13,6 +13,7 @@ import { mountTokenEndpoint, mountTokenInfoEndpoints } from '../web/indieauth-to
 import { mountMicropub } from '../micropub/endpoint.ts';
 import { mountMicropubMedia } from '../micropub/media.ts';
 import { pluginFederation } from '../web/plugin-federation.ts';
+import { pluginPageTags } from '../web/page-tags.ts';
 import { mountPluginRoutes, pluginLifecycle } from '../web/plugin-routes.ts';
 import { leavingWriteGate } from '../supervisor/supervision.ts';
 import type { Supervision } from '../supervisor/supervision.ts';
@@ -161,7 +162,7 @@ export function createApp(
   // The admin goes on before the public site, for the same reason.
   mountAdmin(app);
   mountPluginRoutes(app, plugins);
-  mountPublicSite(app, { adminBar: publicAdminBar });
+  mountPublicSite(app, { adminBar: publicAdminBar, pageTags: pluginPageTags });
 
   return { app, writes };
 }

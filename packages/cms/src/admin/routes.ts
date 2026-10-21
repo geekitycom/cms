@@ -2,7 +2,6 @@ import type { Context, Hono, MiddlewareHandler } from 'hono';
 import type { Environment } from 'nunjucks';
 
 import type { ResolvedConfig } from '../config.ts';
-import { postLabel } from '../content/post-type.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { mountAppActivity } from './app-activity.ts';
 import { mountConnectedApps } from './connected-apps.ts';
@@ -65,14 +64,21 @@ import { mountPluginsScreen, pluginScreens } from './plugins.ts';
 import type { LoginThrottle } from '../web/throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
 import { mountUsers } from './users.ts';
+import { CORE_WIDGETS } from './core-widgets.ts';
+import { formatInTimezone } from './formatting.ts';
+import {
+  createWidgetBoard,
+  DASHBOARD_PERIODS,
+  dashboardPeriod,
+  dashboardWidgets,
+  WIDGET_TIME_LIMIT_MS,
+} from './widgets.ts';
+import type { WidgetPlacement } from './widgets.ts';
 
 /** Where the first-run form lives. */
 export const SETUP_PATH = `${ADMIN_PREFIX}/setup`;
 /** Where the logout form posts. */
 export const LOGOUT_PATH = `${ADMIN_PREFIX}/logout`;
-
-/** How many recent posts the dashboard lists. */
-export const DASHBOARD_RECENT_POSTS = 5;
 
 /** Where the editor for a post lives. */
 export function postEditorPath(slug: string): string {
@@ -133,6 +139,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     });
     return recoveryThrottled;
   }
+
+  const widgetBoard = createWidgetBoard({ timeLimitMs: WIDGET_TIME_LIMIT_MS });
 
   /**
    * Render one admin template.
@@ -320,21 +328,32 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     return c.redirect(LOGIN_PATH, 303);
   });
 
-  app.get(ADMIN_PREFIX, (c) => {
-    const store = c.var.store;
+  app.get(ADMIN_PREFIX, async (c) => {
+    const timezone = c.var.siteAtRequestStart.timezone;
+    const period = dashboardPeriod(c.req.query('period'));
+    const loaded = await widgetBoard.load(
+      dashboardWidgets(c.var, CORE_WIDGETS, period),
+      c.var.config.now,
+    );
+    const drawn = (placement: WidgetPlacement) =>
+      loaded
+        .filter((widget) => widget.placement === placement)
+        .map((widget) => ({
+          ...widget,
+          loadedAt:
+            widget.loadedAt === undefined
+              ? undefined
+              : formatInTimezone(widget.loadedAt.toISOString(), timezone),
+        }));
     return render(c, ADMIN_TEMPLATES.dashboard, {
       section: 'dashboard',
       child: 'home',
-      counts: store.counts(),
-      recent: store.listAll({ type: 'post', limit: DASHBOARD_RECENT_POSTS }).map((document) => ({
-        title: postLabel(document, (url) =>
-          c.var.replyContexts.read(url, c.var.siteAtRequestStart),
-        ),
-        slug: document.slug,
-        date: document.date,
-        draft: document.draft,
-        editUrl: postEditorPath(document.slug),
+      periods: DASHBOARD_PERIODS.map((days) => ({
+        label: `${String(days)} days`,
+        url: days === 7 ? ADMIN_PREFIX : `${ADMIN_PREFIX}?period=${String(days)}`,
+        current: days === period,
       })),
+      counts: c.var.store.counts(),
       // The one number on the dashboard that is not about the content
       // directory: it is what says whether publishing is reaching anybody.
       followers: c.var.admin.countFollowers(),
@@ -348,6 +367,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       // number for the same reason (TASK-56).
       unreadMessages: unreadMessages(c.var.config.dataDir),
       messagesUrl: MESSAGES_PATH,
+      alerts: drawn('alerts'),
+      widgets: drawn('activity'),
     });
   });
 

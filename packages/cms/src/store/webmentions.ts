@@ -69,6 +69,7 @@ export interface WebmentionStore {
    * target, the later attempt is the one kept.
    */
   moveSentWebmentions(from: Pick<SentWebmention, 'slug' | 'source'>, to: string): void;
+  countFailedWebmentionsSince(since: string): number;
 }
 
 export function openWebmentionStore(db: DatabaseSync, clock: Clock): WebmentionStore {
@@ -111,6 +112,9 @@ export function openWebmentionStore(db: DatabaseSync, clock: Clock): WebmentionS
     countSentWebmentionsByStatus: db.prepare(`
       SELECT status, COUNT(*) AS count FROM webmentions_sent WHERE slug = ? GROUP BY status
     `),
+    countFailedWebmentionsSince: db.prepare(`
+      SELECT COUNT(*) AS count FROM webmentions_sent WHERE status = 'failed' AND attempted_at >= ?
+    `),
   };
   return {
     recordSentWebmention(sent) {
@@ -150,6 +154,10 @@ export function openWebmentionStore(db: DatabaseSync, clock: Clock): WebmentionS
     countSentWebmentionsByStatus(slug) {
       const rows = statements.countSentWebmentionsByStatus.all(slug) as Record<string, unknown>[];
       return countByStatus(rows, WEBMENTION_SEND_STATUSES, webmentionSendStatus);
+    },
+
+    countFailedWebmentionsSince(since) {
+      return Number(statements.countFailedWebmentionsSince.get(since)?.['count'] ?? 0);
     },
   };
 }

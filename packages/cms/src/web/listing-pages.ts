@@ -36,6 +36,8 @@ import {
   SEARCH_QUERY_PARAM,
 } from './search.ts';
 import { siteView } from './site-view.ts';
+import { NO_PAGE_TAGS } from '../plugins/page-tags.ts';
+import type { DrawnPageTags } from '../plugins/page-tags.ts';
 
 interface OpenPage {
   pagination: Pagination;
@@ -86,7 +88,10 @@ function pagedResponse(
   const sendsValidators = representation !== 'html' || !c.var.config.watch;
   const fingerprint =
     options.fingerprint ??
-    listingFingerprint(href, pagination, documents, options.full ?? false, c.var.devMode);
+    listingFingerprint(href, pagination, documents, options.full ?? false, {
+      devMode: c.var.devMode,
+      pageTags: c.var.pageTags,
+    });
 
   return representationResponse({
     body: options.body,
@@ -117,11 +122,12 @@ function listingFingerprint(
   pagination: Pagination,
   documents: readonly Document[],
   full: boolean,
-  devMode: boolean,
+  { devMode, pageTags }: { devMode: boolean; pageTags: DrawnPageTags },
 ): string {
   return [
     href,
     ...(devMode ? ['dev mode'] : []),
+    ...(pageTags === NO_PAGE_TAGS ? [] : [pageTags.headEnd, pageTags.bodyEnd]),
     `${String(pagination.pageNumber)}/${String(pagination.totalPages)}/${String(pagination.total)}`,
     full ? 'full' : 'summary',
     ...documents.map((document) => document.hash),

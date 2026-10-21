@@ -83,15 +83,19 @@ async function devSite(): Promise<DevSite> {
     indexNow: { batchMs: 0, backoffMs: () => 0 },
   });
   const agent = await signedIn(cms);
-  await addFollower({ admin: cms.admin, contentDir }, FIRST_ADMIN.username, {
-    actorId: FOLLOWER,
-    inboxId: FOLLOWER_INBOX,
-    sharedInboxId: SHARED_INBOX,
-    handle: '@bob@remote.example',
-    name: 'Bob',
-    iconUrl: null,
-    url: null,
-  });
+  await addFollower(
+    { admin: cms.admin, contentDir, dataDir: cms.config.dataDir },
+    FIRST_ADMIN.username,
+    {
+      actorId: FOLLOWER,
+      inboxId: FOLLOWER_INBOX,
+      sharedInboxId: SHARED_INBOX,
+      handle: '@bob@remote.example',
+      name: 'Bob',
+      iconUrl: null,
+      url: null,
+    },
+  );
   await cms.scheduler.start();
   return {
     cms,

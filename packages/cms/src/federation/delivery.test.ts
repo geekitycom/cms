@@ -373,7 +373,7 @@ async function site(
   // index is emptied and read back from `followers.json` on every boot, so a
   // row written only to SQLite would vanish the next time a test reboots the
   // same directories.
-  const records = { admin: cms.admin, contentDir };
+  const records = { admin: cms.admin, contentDir, dataDir: cms.config.dataDir };
   await addFollower(records, ADA, {
     actorId: REMOTE_ACTOR,
     inboxId: REMOTE_INBOX,
@@ -2155,7 +2155,7 @@ describe('two users', () => {
       { username: 'grace', id: 2 },
     ]);
     seedActorKeys(cms.config.dataDir, 'grace');
-    await addFollower({ admin: cms.admin, contentDir }, 'grace', {
+    await addFollower({ admin: cms.admin, contentDir, dataDir: cms.config.dataDir }, 'grace', {
       actorId: OTHER_ACTOR,
       inboxId: OTHER_INBOX,
       sharedInboxId: null,

@@ -1,10 +1,22 @@
 {% extends "layouts/shell.njk" %}
 {% from "components/stat.njk" import stats, stat %}
 {% from "components/card.njk" import card %}
-{% from "components/table.njk" import table %}
-{% from "components/badge.njk" import status %}
+{% from "components/badge.njk" import badge %}
+{% from "components/blocks.njk" import block %}
+{% from "components/tabs.njk" import tabs %}
 
 {% block title %}Dashboard{% endblock %}
+
+{% macro widgetCard(widget, tone=none) -%}
+  {% call card(title=widget.title, tone=tone) %}
+    {% if widget.status == 'stale' %}
+      <p class="text-sm">{{ badge('Stale', color='warning') }} The latest load failed. These figures are from {{ widget.loadedAt }}.</p>
+    {% elif widget.status == 'unavailable' %}
+      <p>These stats are unavailable right now.</p>
+    {% endif %}
+    {% for data in widget.blocks %}{{ block(data) }}{% endfor %}
+  {% endcall %}
+{%- endmacro %}
 
 {% block content %}
   <h1 class="mb-6 text-2xl font-bold">Dashboard</h1>
@@ -27,34 +39,23 @@
     </div>
   </section>
 
-  {% call card(title='Recent posts') %}
-    {% if recent.length %}
-      {% call table('Recent posts', inCard=true) %}
-        <thead>
-          <tr>
-            <th scope="col">Title</th>
-            <th scope="col">Date</th>
-            <th scope="col">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for post in recent %}
-            <tr>
-              <td><a class="link link-hover" href="{{ post.editUrl }}">{{ post.title }}</a></td>
-              <td class="whitespace-nowrap">{{ post.date | date('html') }}</td>
-              <td>
-                {% if post.draft %}
-                  {{ status('draft', 'Draft') }}
-                {% else %}
-                  {{ status('published', 'Published') }}
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      {% endcall %}
-    {% else %}
-      <p>Nothing written yet.</p>
-    {% endif %}
-  {% endcall %}
+  {% for widget in alerts %}
+    <section class="mb-8">{{ widgetCard(widget, tone='warning') }}</section>
+  {% endfor %}
+
+  {% if widgets.length %}
+    <div class="@container">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-lg font-semibold">Activity</h2>
+        {{ tabs(periods, 'Period', size='sm') }}
+      </div>
+      <div class="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
+        {% for widget in widgets %}
+          <div class="min-w-0{% if widget.width == 'full' %} @3xl:col-span-2{% endif %}">
+            {{ widgetCard(widget) }}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
 {% endblock %}

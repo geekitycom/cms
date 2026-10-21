@@ -72,9 +72,13 @@ import type { TaxonomyTerm } from '../content/taxonomy.ts';
  */
 export function mountPublicSite(
   app: Hono<GeekityEnv>,
-  { adminBar }: { adminBar?: MiddlewareHandler<GeekityEnv> } = {},
+  {
+    adminBar,
+    pageTags,
+  }: { adminBar?: MiddlewareHandler<GeekityEnv>; pageTags?: MiddlewareHandler<GeekityEnv> } = {},
 ): void {
   if (adminBar !== undefined) app.use('*', adminBar);
+  if (pageTags !== undefined) app.use('*', pageTags);
   app.use('*', advertiseIdentityEndpoints);
   app.use('*', declaredQueryRedirect);
 

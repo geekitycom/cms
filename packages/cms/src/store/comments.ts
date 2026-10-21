@@ -240,6 +240,12 @@ export interface PostComment extends CommentRecord {
   permalink: string;
 }
 
+export interface CommentCount {
+  readonly slug: string;
+  readonly source: Exclude<CommentSource, 'activitypub'>;
+  readonly count: number;
+}
+
 /** How {@link CommentStore.listComments} narrows and pages. */
 export interface ListCommentsOptions extends ListPageOptions {
   /** Only comments at this status. Every status when it is not given. */
@@ -254,6 +260,8 @@ export interface CommentStore {
    * page of them. What the moderation screen and the site-wide feed read.
    */
   listComments(options: ListCommentsOptions): PostComment[];
+  listLatestCommentsExceptImportedFediverse(limit: number): PostComment[];
+  countApprovedCommentsExceptImportedFediverseSince(since: string): CommentCount[];
   /** One comment by id, or `undefined`. */
   getComment(id: string): PostComment | undefined;
   /** The comments whose `url` is this one, whatever their status (TASK-300). */
@@ -291,6 +299,16 @@ export function openCommentStore(
   const statements = {
     listCommentsFor: db.prepare(`
       SELECT * FROM comments WHERE slug = ? ORDER BY submitted_at, id
+    `),
+    latestComments: db.prepare(`
+      SELECT * FROM comments WHERE status != 'spam' AND source != 'activitypub'
+      ORDER BY submitted_at DESC, id DESC
+      LIMIT ?
+    `),
+    approvedCommentCounts: db.prepare(`
+      SELECT slug, source, COUNT(*) AS count FROM comments
+      WHERE status = 'approved' AND source != 'activitypub' AND submitted_at >= ?
+      GROUP BY slug, source
     `),
     commentById: db.prepare('SELECT * FROM comments WHERE id = ?'),
     commentsAt: db.prepare('SELECT * FROM comments WHERE url = ? ORDER BY submitted_at'),
@@ -366,6 +384,19 @@ export function openCommentStore(
     getComment(id) {
       const row = statements.commentById.get(id) as Record<string, unknown> | undefined;
       return row === undefined ? undefined : toComment(row);
+    },
+
+    listLatestCommentsExceptImportedFediverse(limit) {
+      return (statements.latestComments.all(limit) as Record<string, unknown>[]).map(toComment);
+    },
+
+    countApprovedCommentsExceptImportedFediverseSince(since) {
+      const rows = statements.approvedCommentCounts.all(since) as Record<string, unknown>[];
+      return rows.map((row) => ({
+        slug: String(row['slug']),
+        source: row['source'] === 'webmention' ? 'webmention' : 'comment',
+        count: Number(row['count']),
+      }));
     },
 
     listCommentsAt(url) {
