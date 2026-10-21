@@ -4,7 +4,7 @@ import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts'
 import { photoAlt } from './photo.ts';
 import type { Photo } from './photo.ts';
 import { isRecord } from '../util/guards.ts';
-import { imagesIn } from './image-tags.ts';
+import { imagesIn, uploadPath } from './image-tags.ts';
 import type { ShownImage } from './image-tags.ts';
 
 /**
@@ -61,6 +61,34 @@ export async function writeAltText(
     const all = current === undefined ? {} : parseObject(current);
     if (alt === undefined) delete all[source];
     else all[source] = alt.kind === 'decorative' ? { decorative: true } : { alt: alt.text };
+    return `${JSON.stringify(all, null, 2)}\n`;
+  });
+}
+
+export async function fillAltTexts(
+  contentDir: string,
+  photos: readonly Photo[],
+  html: string,
+): Promise<void> {
+  const library = readAltTexts(contentDir);
+  const missing = new Map<string, string>();
+  const shown = [
+    ...photos.map((photo) => ({ source: uploadPath(photo.url), alt: photo.alt })),
+    ...imagesIn(html),
+  ];
+  for (const { source, alt } of shown) {
+    const text = alt?.trim() ?? '';
+    if (source === undefined || text === '' || library.has(source) || missing.has(source)) continue;
+    missing.set(source, text);
+  }
+  if (missing.size === 0) return;
+
+  await updateFileAtomically(mediaFile(contentDir), (current) => {
+    const all = current === undefined ? {} : parseObject(current);
+    const described = current === undefined ? new Map() : parseLibrary(current);
+    for (const [source, text] of missing) {
+      if (!described.has(source)) all[source] = { alt: text };
+    }
     return `${JSON.stringify(all, null, 2)}\n`;
   });
 }
