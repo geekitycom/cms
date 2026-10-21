@@ -115,7 +115,7 @@ const MAX_CALENDAR_DAYS = 366;
 const DAY_MS = 86_400_000;
 
 const whole = new Intl.NumberFormat('en', { maximumFractionDigits: 2 });
-const percent = new Intl.NumberFormat('en', { maximumFractionDigits: 1 });
+const tenths = new Intl.NumberFormat('en', { maximumFractionDigits: 1 });
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 const shortDay = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
@@ -224,7 +224,7 @@ function duration(seconds: number): string {
 }
 
 function formatted(value: number, format: ValueFormat): string {
-  if (format === 'percent') return `${percent.format(value)}%`;
+  if (format === 'percent') return `${tenths.format(value)}%`;
   if (format === 'duration') return duration(value);
   return whole.format(value);
 }

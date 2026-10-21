@@ -1,7 +1,7 @@
 import type { PluginBlock, PluginWidget } from '@geekity/cms/plugin';
 
-import type { UmamiClient, UmamiDayCount, UmamiTotals } from './client.ts';
-import { dayIn, daysEnding, rangeOf } from './period.ts';
+import type { UmamiClient, UmamiDailyCounts, UmamiDayCount, UmamiTotals } from './client.ts';
+import { lastDays } from './period.ts';
 
 /**
  * The dashboard's main Umami card: visitors, views, bounce rate and average
@@ -19,8 +19,7 @@ export function trafficWidget(
     refreshSeconds: 300,
     async load({ timezone, period }) {
       if (!(await client.configured())) return [];
-      const days = daysEnding(dayIn(now(), timezone), period);
-      const range = rangeOf(days, timezone);
+      const { days, range } = lastDays(now(), timezone, period);
       const [stats, daily] = await Promise.all([
         client.stats(range),
         client.pageviews(range, { timezone }),
@@ -61,10 +60,7 @@ function averageVisit(totals: UmamiTotals): number {
   return totals.visits === 0 ? 0 : totals.totaltime / totals.visits;
 }
 
-function seriesBlock(
-  days: readonly string[],
-  daily: { pageviews: readonly UmamiDayCount[]; sessions: readonly UmamiDayCount[] },
-): PluginBlock {
+function seriesBlock(days: readonly string[], daily: UmamiDailyCounts): PluginBlock {
   const perDay = (counts: readonly UmamiDayCount[]) => {
     const byDay = new Map(counts.map((entry) => [entry.day, entry.count]));
     return days.map((day) => byDay.get(day) ?? 0);

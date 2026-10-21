@@ -1,7 +1,7 @@
 import type { PluginWidget, PostAtPath } from '@geekity/cms/plugin';
 
 import type { UmamiClient } from './client.ts';
-import { dayIn, daysEnding, rangeOf } from './period.ts';
+import { lastDays } from './period.ts';
 import type { UmamiSettings } from './settings.ts';
 
 const LISTED = 10;
@@ -32,7 +32,7 @@ export function topPagesWidget(
     refreshSeconds: 300,
     async load({ timezone, period }) {
       if (!(await client.configured())) return [];
-      const range = rangeOf(daysEnding(dayIn(now(), timezone), period), timezone);
+      const { range } = lastDays(now(), timezone, period);
       const read = (await client.expandedMetrics('path', range, { limit: PATHS_READ })).filter(
         (entry) => entry.value !== '' && entry.pageviews > 0,
       );
@@ -82,7 +82,7 @@ export function topReferrersWidget(
     refreshSeconds: 300,
     async load({ site, timezone, period }) {
       if (!(await client.configured())) return [];
-      const range = rangeOf(daysEnding(dayIn(now(), timezone), period), timezone);
+      const { range } = lastDays(now(), timezone, period);
       const own = new Set(
         [new URL(site.baseUrl).hostname, ...(await settings()).domains.split(',')].map(bareHost),
       );

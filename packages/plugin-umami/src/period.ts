@@ -16,11 +16,6 @@ function addDays(day: string, count: number): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + count * DAY_MS).toISOString().slice(0, 10);
 }
 
-/** The `count` days that end with `today`, oldest first. */
-export function daysEnding(today: string, count: number): string[] {
-  return Array.from({ length: count }, (_, index) => addDays(today, index - count + 1));
-}
-
 /** How far the time zone's wall clock is ahead of UTC at the instant. */
 function offsetAt(instant: number, timezone: string): number {
   const parts = Object.fromEntries(
@@ -55,10 +50,22 @@ export function midnightIn(day: string, timezone: string): Date {
   return new Date(wall - offsetAt(guess, timezone));
 }
 
-/** From the start of the first day to the end of the last, so Umami compares whole days. */
-export function rangeOf(days: readonly string[], timezone: string): UmamiRange {
+/**
+ * The `count` days that end with the instant's day in the time zone, oldest
+ * first, and the range from the start of the first to the end of the last, so
+ * Umami compares whole days.
+ */
+export function lastDays(
+  instant: Date,
+  timezone: string,
+  count: number,
+): { readonly days: string[]; readonly range: UmamiRange } {
+  const today = dayIn(instant, timezone);
   return {
-    start: midnightIn(days[0] ?? '', timezone),
-    end: new Date(midnightIn(addDays(days.at(-1) ?? '', 1), timezone).getTime() - 1),
+    days: Array.from({ length: count }, (_, index) => addDays(today, index - count + 1)),
+    range: {
+      start: midnightIn(addDays(today, 1 - count), timezone),
+      end: new Date(midnightIn(addDays(today, 1), timezone).getTime() - 1),
+    },
   };
 }

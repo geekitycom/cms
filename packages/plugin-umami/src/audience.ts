@@ -1,7 +1,7 @@
 import type { PluginWidget } from '@geekity/cms/plugin';
 
 import type { UmamiClient } from './client.ts';
-import { dayIn, daysEnding, rangeOf } from './period.ts';
+import { lastDays } from './period.ts';
 
 const LISTED = 5;
 
@@ -79,7 +79,7 @@ export function audienceWidget(
     refreshSeconds: 300,
     async load({ timezone, period }) {
       if (!(await client.configured())) return [];
-      const range = rangeOf(daysEnding(dayIn(now(), timezone), period), timezone);
+      const { range } = lastDays(now(), timezone, period);
       const [stats, top] = await Promise.all([
         client.stats(range),
         client.metrics(type, range, { limit: LISTED }),

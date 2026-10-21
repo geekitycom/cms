@@ -343,11 +343,6 @@ export function umamiClient(options: UmamiClientOptions): UmamiClient {
     return value;
   }
 
-  const between = (range: UmamiRange) => ({
-    startAt: String(range.start.getTime()),
-    endAt: String(range.end.getTime()),
-  });
-
   return {
     async configured() {
       return !('missing' in connectionFrom(await options.settings()));
@@ -392,11 +387,7 @@ export function umamiClient(options: UmamiClientOptions): UmamiClient {
     metrics: (type, range, call = {}) =>
       read(
         (id) => `/websites/${id}/metrics`,
-        {
-          ...between(range),
-          type,
-          ...(call.limit === undefined ? {} : { limit: String(call.limit) }),
-        },
+        metricQuery(type, range, call.limit),
         call,
         `the ${type} metrics`,
         parseMetrics,
@@ -404,11 +395,7 @@ export function umamiClient(options: UmamiClientOptions): UmamiClient {
     expandedMetrics: (type, range, call = {}) =>
       read(
         (id) => `/websites/${id}/metrics/expanded`,
-        {
-          ...between(range),
-          type,
-          ...(call.limit === undefined ? {} : { limit: String(call.limit) }),
-        },
+        metricQuery(type, range, call.limit),
         call,
         `the ${type} views and visitors`,
         parseExpandedMetrics,
@@ -419,6 +406,18 @@ export function umamiClient(options: UmamiClientOptions): UmamiClient {
 }
 
 type Send = (url: string, init: PluginFetchInit) => Promise<Response>;
+
+function between(range: UmamiRange): Record<string, string> {
+  return { startAt: String(range.start.getTime()), endAt: String(range.end.getTime()) };
+}
+
+function metricQuery(
+  type: UmamiMetricType,
+  range: UmamiRange,
+  limit: number | undefined,
+): Record<string, string> {
+  return { ...between(range), type, ...(limit === undefined ? {} : { limit: String(limit) }) };
+}
 
 function fail(failure: UmamiFailure, connection: Connection): UmamiError {
   return new UmamiError(failure, describe(failure, connection));
@@ -440,15 +439,25 @@ function count(value: unknown): number | undefined {
   return undefined;
 }
 
-const TOTALS = ['pageviews', 'visitors', 'visits', 'bounces', 'totaltime'] as const;
-
 function totals(
   record: Record<string, unknown>,
   pick: (value: unknown) => unknown,
 ): UmamiTotals | undefined {
-  const entries = TOTALS.map((key) => [key, count(pick(record[key]))] as const);
-  if (entries.some(([, value]) => value === undefined)) return undefined;
-  return Object.fromEntries(entries) as unknown as UmamiTotals;
+  const pageviews = count(pick(record['pageviews']));
+  const visitors = count(pick(record['visitors']));
+  const visits = count(pick(record['visits']));
+  const bounces = count(pick(record['bounces']));
+  const totaltime = count(pick(record['totaltime']));
+  if (
+    pageviews === undefined ||
+    visitors === undefined ||
+    visits === undefined ||
+    bounces === undefined ||
+    totaltime === undefined
+  ) {
+    return undefined;
+  }
+  return { pageviews, visitors, visits, bounces, totaltime };
 }
 
 /** Umami 3: numbers and a `comparison` of the same; Umami 2: `{ value, prev }` for each. */

@@ -8,7 +8,7 @@ import type {
 } from '@geekity/cms/plugin';
 
 import type { UmamiClient } from './client.ts';
-import { dayIn, daysEnding, rangeOf } from './period.ts';
+import { lastDays } from './period.ts';
 
 const DAYS = 30;
 const LISTED = 10;
@@ -75,7 +75,7 @@ export function recentPostsWidget(
     refreshSeconds: 1800,
     async load({ site, timezone }) {
       if (!(await client.configured())) return [];
-      const range = rangeOf(daysEnding(dayIn(now(), timezone), DAYS), timezone);
+      const { range } = lastDays(now(), timezone, DAYS);
       const since = range.start.toISOString();
       const posts = await sources.publishedSince(since);
       if (posts.length === 0) {
