@@ -8,8 +8,8 @@ const box = sandbox();
 after(() => box.cleanup());
 
 const VERSION = ownManifest().version;
+const VERSION_PATTERN = VERSION.replaceAll('.', '\\.');
 
-/** Every URL under /admin/_static/ that a page links. */
 function adminAssetLinks(html: string): string[] {
   return [...html.matchAll(/(?:href|src)="(\/admin\/_static\/[^"]*)"/g)].map(
     ([, url]) => url ?? '',
@@ -110,9 +110,7 @@ describe('the admin stylesheet', () => {
       const html = await response.text();
       assert.match(
         html,
-        new RegExp(
-          `<link[^>]+href="/admin/_static/admin\\.css\\?v=${VERSION.replaceAll('.', '\\.')}"`,
-        ),
+        new RegExp(`<link[^>]+href="/admin/_static/admin\\.css\\?v=${VERSION_PATTERN}"`),
       );
       assert.deepEqual(
         strayStyles(html, response.headers.get('content-security-policy') ?? ''),
@@ -138,11 +136,7 @@ describe('the admin stylesheet', () => {
       const links = adminAssetLinks(await response.text());
       assert.ok(links.length > 0, `${url} links admin assets`);
       for (const link of links) {
-        assert.match(
-          link,
-          new RegExp(`\\?v=${VERSION.replaceAll('.', '\\.')}$`),
-          `${url}: ${link}`,
-        );
+        assert.match(link, new RegExp(`\\?v=${VERSION_PATTERN}$`), `${url}: ${link}`);
         linked.add(link.replace(/\?.*$/, ''));
       }
     }

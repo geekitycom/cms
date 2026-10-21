@@ -89,7 +89,6 @@ export const ADMIN_TEMPLATES = {
 const CMS_VERSION = ownManifest().version;
 
 /**
- * The URL of a file in the admin's `static/` folder, `{{ adminAsset('admin.css') }}`.
  * The query names the running CMS version, so an upgrade changes every URL and
  * a browser does not keep the last release's file for the hour it may cache it.
  */
