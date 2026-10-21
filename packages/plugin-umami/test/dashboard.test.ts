@@ -197,3 +197,62 @@ describe('the Umami top pages and top referrers cards on the dashboard', () => {
     );
   });
 });
+
+describe('the Umami audience and visitors right now cards on the dashboard', () => {
+  const TITLES = [
+    'Umami: top referrers',
+    'Umami: countries',
+    'Umami: browsers',
+    'Umami: devices',
+    'Umami: visitors right now',
+  ];
+
+  it('sit in pairs after the top referrers card, so no half card sits alone', async () => {
+    const html = await (await dashboard(cloudOn(fake)))();
+    const at = TITLES.map((title) => html.indexOf(title));
+    assert.deepEqual(
+      at.toSorted((a, b) => a - b),
+      at,
+      'referrers, countries, browsers, devices, then right now',
+    );
+    for (const title of TITLES.slice(1)) {
+      assert.match(cardTitled(html, title), /^<div class="min-w-0">/);
+    }
+  });
+
+  it('lists the share of visitors per country, browser and device (AC #1)', async () => {
+    fake.data.metrics['country'] = [
+      { x: 'US', y: 20 },
+      { x: 'DE', y: 8 },
+    ];
+    fake.data.metrics['browser'] = [{ x: 'chrome', y: 30 }];
+    fake.data.metrics['device'] = [
+      { x: 'desktop', y: 25 },
+      { x: 'mobile', y: 15 },
+    ];
+    const html = await (await dashboard(cloudOn(fake)))();
+    assert.match(words(cardTitled(html, 'Umami: countries')), /United States 50% Germany 20%/);
+    assert.match(words(cardTitled(html, 'Umami: browsers')), /Chrome 75%/);
+    assert.match(words(cardTitled(html, 'Umami: devices')), /Desktop 62\.5% Mobile 37\.5%/);
+  });
+
+  it('shows the visitors right now as a stat, read again after 30 seconds (AC #2)', async () => {
+    let clock = new Date();
+    const load = await dashboard(cloudOn(fake, { now: () => clock }));
+    fake.data.active = { visitors: 3 };
+    assert.match(
+      words(cardTitled(await load(), 'Umami: visitors right now')),
+      /Visitors right now 3/,
+    );
+    fake.data.active = { visitors: 5 };
+    clock = new Date(clock.getTime() + 10_000);
+    assert.match(
+      words(cardTitled(await load(), 'Umami: visitors right now')),
+      /Visitors right now 3/,
+    );
+    clock = new Date(clock.getTime() + 30_000);
+    const html = await load();
+    assert.match(words(cardTitled(html, 'Umami: visitors right now')), /Visitors right now 5/);
+    assert.match(words(cardTitled(html, 'Umami: countries')), /United States 50%/);
+  });
+});

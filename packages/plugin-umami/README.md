@@ -2,8 +2,8 @@
 
 A [Geekity CMS](https://github.com/geekitycom/cms/blob/main/packages/cms/README.md) plugin that adds the
 [Umami](https://umami.is) analytics tracker to every public page and shows
-the site's views, visitors, top pages and top referrers on the admin
-dashboard. It works with Umami
+the site's views, visitors, top pages, top referrers, countries, browsers,
+devices and the visitors right now on the admin dashboard. It works with Umami
 Cloud and with a self-hosted Umami. The tracker is a `<script>` tag at the end
 of `<head>`, which the CMS draws from the plugin's settings. The site needs no
 theme of its own for it.
@@ -145,9 +145,26 @@ Two half-width cards sit side by side below it, over the same days:
 When the period has no views, or no visitor came from another site, the card
 says so.
 
-Each card is drawn again from Umami at most every 5 minutes. While the
-settings for the stats are incomplete, the cards are not drawn. When Umami
-does not answer, a card shows the last figures it had marked Stale, or says
+Four more half-width cards follow in two rows:
+
+- **Umami: countries**, **Umami: browsers** and **Umami: devices** cover the
+  same days. Each lists the five values with the most visitors, as a share
+  of all the period's visitors. Umami's `metrics` endpoint counts each visitor once for a value,
+  and a visitor has one country, browser and device, so the shares in one
+  card add up to at most 100%. The rest of the visitors have values outside
+  the top five. A country shows its English name, or its code when it has
+  none. A browser or device shows the name Umami's own dashboard gives it,
+  such as `Chrome (iOS)` for `crios`, or Umami's value when the plugin does
+  not know it. A visitor Umami recorded no value for shows as Unknown. When
+  the period has no visitors, the card says so.
+- **Umami: visitors right now** shows the number of visitors Umami's `active`
+  endpoint reports: those seen on the site in the last 5 minutes. It does not
+  depend on the dashboard's period, and it is read again at most every 30
+  seconds when the dashboard is loaded.
+
+Each card other than the visitors right now is drawn again from Umami at
+most every 5 minutes. While the settings for the stats are incomplete, the
+cards are not drawn. When Umami does not answer, a card shows the last figures it had marked Stale, or says
 the stats are unavailable, and the rest of the dashboard draws as normal.
 
 ## Where the tracker is drawn
