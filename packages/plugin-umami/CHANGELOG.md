@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/geekitycom/cms/compare/plugin-umami-v0.1.0...plugin-umami-v0.2.0) (2026-10-21)
+
+
+### Features
+
+* **plugin-umami:** default the umami url to umami cloud ([0dcf569](https://github.com/geekitycom/cms/commit/0dcf5693a833e08a2526dc11ed9a61e14d09466b))
+
 ## 0.1.0 (2026-10-21)
 
 
