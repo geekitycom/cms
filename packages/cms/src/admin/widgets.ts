@@ -37,7 +37,7 @@ export interface WidgetLoad {
   readonly widget: Omit<PluginWidget, 'load'>;
   readonly placement: WidgetPlacement;
   readonly period: DashboardPeriod;
-  load(): readonly PluginBlock[] | Promise<readonly PluginBlock[]>;
+  load(signal: AbortSignal): readonly PluginBlock[] | Promise<readonly PluginBlock[]>;
 }
 
 export interface LoadedWidget {
@@ -66,8 +66,9 @@ export function createWidgetBoard(options: { timeLimitMs: number }): WidgetBoard
   function started(key: string, entry: WidgetLoad, now: Clock): Promise<Result> {
     const already = running.get(key);
     if (already !== undefined) return already;
+    const signal = AbortSignal.timeout(timeLimitMs);
     const loading = Promise.resolve()
-      .then(() => entry.load())
+      .then(() => entry.load(signal))
       .then((blocks: unknown) => {
         if (!Array.isArray(blocks)) {
           throw new Error('It returned something that is not a list of blocks.');
@@ -140,7 +141,7 @@ export function dashboardWidgets(
         widget,
         placement: 'activity' as const,
         period,
-        load: () => widget.load(context),
+        load: (signal: AbortSignal) => widget.load({ ...context, signal }),
       })),
     ),
   ];

@@ -516,10 +516,12 @@ widget has these fields:
 | `refreshSeconds` | How many seconds the dashboard reuses a result before it calls `load` again. Zero or more.                    |
 | `load`           | Returns the card's blocks, or a promise of them.                                                              |
 
-`load` gets one argument with three fields: `site`, the same `PluginSite` a
+`load` gets one argument with four fields: `site`, the same `PluginSite` a
 screen's `render` gets; `timezone`, the site's time zone, such as
-`Europe/London`, which decides where a day starts; and `period`, the number of
-days the dashboard covers, ending today. `period` is `7` unless the owner
+`Europe/London`, which decides where a day starts; `period`, the number of
+days the dashboard covers, ending today; and `signal`, an `AbortSignal` that
+aborts when the widget's time limit runs out. Pass `signal` to `host.fetch` so
+a request stops when the dashboard stops waiting for it. `period` is `7` unless the owner
 chooses 30 days on the dashboard (`/admin?period=30`), when it is `30`. A
 widget that shows a period covers that many days and compares totals with the
 same number of days before them. A widget that does not show a period ignores
@@ -536,8 +538,10 @@ its widgets are gone from the next dashboard request. No restart is needed.
 The dashboard loads every widget at the same time and waits at most 3 seconds
 for each. A good result is kept in memory for `refreshSeconds`, so a dashboard
 request in that time does not call `load`. While a load is still running,
-another request waits for that load and does not start a second one. A result
-that arrives after the time limit is kept for the next request. When `load`
+another request waits for that load and does not start a second one. The time
+limit counts from the start of the load, and `signal` aborts when it runs out.
+A load that ignores `signal` and finishes after the time limit has its result
+kept for the next request. When `load`
 throws, rejects, returns something other than an array, or runs out of time,
 the server logs a warning and the card shows the last good result with a
 Stale badge and the time it was loaded. If there is no earlier result, the card

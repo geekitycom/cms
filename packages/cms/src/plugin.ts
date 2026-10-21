@@ -474,6 +474,11 @@ export interface PluginWidgetContext {
    * each period apart.
    */
   readonly period: DashboardPeriod;
+  /**
+   * Aborts when the widget's time limit runs out. Pass it to
+   * {@link PluginHost.fetch} so a request stops when core stops waiting.
+   */
+  readonly signal?: AbortSignal | undefined;
 }
 
 /**
