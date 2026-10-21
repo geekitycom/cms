@@ -745,6 +745,9 @@ describe('a photo post (TASK-166 AC #1)', () => {
     assert.deepEqual(await photosAt(cms, response.headers.get('location')), [
       { url: '/uploads/2026/09/beach.jpg', alt: 'Waves breaking at dusk' },
     ]);
+    assert.deepEqual(JSON.parse(await fileAt(cms, '_data/media.json')), {
+      '2026/09/beach.jpg': { alt: 'Waves breaking at dusk' },
+    });
   });
 
   it('stores form-encoded photo[] URLs', async () => {

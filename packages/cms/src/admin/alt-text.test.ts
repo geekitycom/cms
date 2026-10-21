@@ -220,3 +220,54 @@ describe('publishing an image with no alt text (TASK-141 AC #4)', () => {
     assert.equal(cms.store.getBySlug('still-working')?.draft, true);
   });
 });
+
+describe('alt text a post gives fills the media library (TASK-463)', () => {
+  async function publishPhoto(agent: Browser, url: string, alt: string): Promise<Response> {
+    const editor = await (await agent.get('/admin/posts/new')).text();
+    return await agent.post('/admin/posts/new', {
+      csrf_token: csrfField(editor) ?? '',
+      title: 'A photo',
+      date: '2026-03-04T10:00:00Z',
+      body: '',
+      'photo-url-0': url,
+      'photo-alt-0': alt,
+      action: 'publish',
+    });
+  }
+
+  it('writes a photo’s alt text for an upload the library does not describe', async () => {
+    const { agent, contentDir } = await siteWithPhoto();
+
+    assert.equal((await publishPhoto(agent, PHOTO_URL, 'A dog asleep on a rug')).status, 303);
+
+    assert.deepEqual(await mediaFile(contentDir), { [PHOTO]: { alt: 'A dog asleep on a rug' } });
+  });
+
+  it('writes the alt text of an image in the body', async () => {
+    const { agent, contentDir } = await siteWithPhoto();
+
+    await publish(agent, `![A dog asleep on a rug](${PHOTO_URL})`);
+
+    assert.deepEqual(await mediaFile(contentDir), { [PHOTO]: { alt: 'A dog asleep on a rug' } });
+  });
+
+  it('never changes what the library already says', async () => {
+    for (const entry of [{ alt: 'Described in Media' }, { decorative: true }]) {
+      const { agent, contentDir } = await siteWithPhoto({ [PHOTO]: entry });
+
+      await publishPhoto(agent, PHOTO_URL, 'Described in the post');
+      await publish(agent, `![Described in the body](${PHOTO_URL})`);
+
+      assert.deepEqual(await mediaFile(contentDir), { [PHOTO]: entry });
+    }
+  });
+
+  it('writes nothing for an image elsewhere or with empty alt text', async () => {
+    const { agent, contentDir } = await siteWithPhoto();
+
+    await publishPhoto(agent, 'https://example.com/elsewhere.jpg', 'Somebody else’s picture');
+    await publish(agent, `![](${PHOTO_URL})`);
+
+    await assert.rejects(mediaFile(contentDir), { code: 'ENOENT' });
+  });
+});

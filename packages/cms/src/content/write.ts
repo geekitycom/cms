@@ -1,7 +1,7 @@
 import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 
-import { readAltTexts, undescribedImages, undescribedPhotos } from './alt-text.ts';
+import { fillAltTexts, readAltTexts, undescribedImages, undescribedPhotos } from './alt-text.ts';
 import type { UndescribedImage } from './alt-text.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorNames, userForAuthor } from './authors.ts';
@@ -24,6 +24,7 @@ import { resolveLocation } from './location-form.ts';
 import { postLocations } from './locations.ts';
 import { renderMarkdown } from './markdown.ts';
 import { parseDocument } from './parser.ts';
+import { photosOf } from './photo.ts';
 import type { Photo } from './photo.ts';
 import { resolvePhotos } from './photo-form.ts';
 import { resolveReview } from './review-form.ts';
@@ -374,6 +375,7 @@ async function persist(
 
   const saved = await replaceFile(site, { previous: document, target, content, timezone });
   if ('outcome' in saved) return saved;
+  await fillAltTexts(contentDir, photosOf(saved.extra), saved.html);
 
   const moved = document !== undefined && document.permalink !== saved.permalink;
   if (kind.located) {
