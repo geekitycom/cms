@@ -147,7 +147,18 @@ describe('card', () => {
         'card, cardActions',
         `{% call card(title='Recent posts', size='sm', style='border') %}<p>Body</p>{% call cardActions() %}<a href="/x">All</a>{% endcall %}{% endcall %}`,
       ),
-      '<div class="card bg-base-100 shadow-sm card-sm card-border"><div class="card-body"><h2 class="card-title">Recent posts</h2><p>Body</p><div class="card-actions justify-end"><a href="/x">All</a></div></div></div>',
+      '<div class="card bg-base-100 shadow-sm card-sm card-border"><div class="card-body"><h2 class="card-title">Recent posts</h2><p>Body</p><div class="card-actions mt-2 justify-end"><a href="/x">All</a></div></div></div>',
+    );
+  });
+
+  it('spaces its actions row from a field inside a form, where card-body leaves no gap', () => {
+    assert.match(
+      render(
+        'card',
+        'card, cardActions',
+        `{% call card() %}<form><div class="fieldset"></div>{% call cardActions() %}<button>Save</button>{% endcall %}</form>{% endcall %}`,
+      ),
+      /<div class="fieldset"><\/div><div class="card-actions mt-2 justify-end"><button>Save<\/button><\/div>/,
     );
   });
 

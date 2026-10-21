@@ -136,9 +136,11 @@ run with `docker compose exec` the same way as core's.
 Admin > Plugins does the same as `geekity plugin add`, `upgrade` and `remove`
 on a site with a plugins folder:
 
-- **Add plugin** takes a package name and, optionally, a version, a range or a
-  dist-tag. It installs the same way as `plugin add`, with the same checks, and
-  names each requirement that is missing or out of range.
+- **Add plugin** at the top of the screen opens `/admin/plugins/add`. It takes
+  a package name and, optionally, a version, a range or a dist-tag. It installs
+  the same way as `plugin add`, with the same checks, then returns to Plugins
+  and names each requirement that is missing or out of range. A refused or
+  failed install stays on the Add plugin page with what you typed.
 - **Check for updates** asks the registry for newer versions. A plugin with
   one shows **Update to** that version on its row.
 - **Update all** brings every folder plugin up to date, the same way as

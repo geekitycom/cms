@@ -222,7 +222,8 @@ describe('a change on a supervised site reloads at once (TASK-309)', () => {
     assert.equal(current.reloads, 0);
 
     const refused = await submit(agent, PLUGINS_ADD_PATH, { package: SHAKY, password: PASSWORD });
-    assert.ok(refused.flash.some((message) => /integrity hash does not match/.test(message)));
+    assert.equal(refused.status, 400);
+    assert.match(refused.html, /integrity hash does not match/);
     assert.equal(current.reloads, 0);
   });
 
@@ -306,7 +307,13 @@ describe('Add plugin (TASK-306)', () => {
     const { agent, pluginsDir, dataDir } = await site();
     const result = await submit(agent, PLUGINS_ADD_PATH, { package: SHAKY, password: PASSWORD });
     assert.equal(await folderVersion(pluginsDir, SHAKY), undefined);
-    assert.ok(result.flash.some((message) => /integrity hash does not match/.test(message)));
+    assert.equal(result.status, 400);
+    assert.match(result.html, /integrity hash does not match/);
+    assert.match(
+      result.html,
+      new RegExp(`<form id="plugin-add" method="post" action="${PLUGINS_ADD_PATH}"`),
+    );
+    assert.match(result.html, new RegExp(`value="${SHAKY}"`));
     assert.deepEqual(await record(dataDir), []);
   });
 
@@ -342,6 +349,79 @@ describe('Add plugin (TASK-306)', () => {
     });
     assert.equal(result.status, 400);
     assert.match(result.html, /is not a package/);
+  });
+});
+
+describe('Add plugin page (TASK-466)', () => {
+  it('is linked from the Plugins screen, which draws no install form', async () => {
+    const { agent } = await site();
+    const html = await screen(agent);
+    assert.match(html, new RegExp(`<a\\b[^>]*href="${PLUGINS_ADD_PATH}"[^>]*>Add plugin</a>`));
+    assert.ok(!html.includes('id="plugin-add"'), 'the list has no install form');
+    assert.ok(!html.includes('name="package"'), 'the list has no package field');
+    assert.match(html, /Check for updates/);
+  });
+
+  it('holds the package, version and password fields and the trust warning', async () => {
+    const { agent } = await site();
+    const html = await screen(agent, PLUGINS_ADD_PATH);
+    assert.match(html, /<h1[^>]*>Add plugin<\/h1>/);
+    assert.match(
+      html,
+      new RegExp(`<form id="plugin-add" method="post" action="${PLUGINS_ADD_PATH}"`),
+    );
+    for (const name of ['package', 'version', 'password']) {
+      assert.match(html, new RegExp(`name="${name}"`), name);
+    }
+    assert.match(html, /A plugin runs as the site/);
+    assert.match(html, /Add only plugins you trust/);
+    assert.match(html, new RegExp(`<a\\b[^>]*href="${PLUGINS_PATH}"[^>]*>Back to Plugins</a>`));
+    assert.match(
+      html,
+      new RegExp(`<a\\b[^>]*href="${PLUGINS_PATH}" aria-current="page">Installed plugins</a>`),
+    );
+  });
+
+  it('redraws itself with what was typed when the password or the name is refused', async () => {
+    const { agent } = await site();
+    const wrong = await submit(agent, PLUGINS_ADD_PATH, {
+      package: LLM,
+      version: '1.0.0',
+      password: 'nope',
+    });
+    assert.equal(wrong.status, 400);
+    assert.match(wrong.html, /<h1[^>]*>Add plugin<\/h1>/);
+    assert.match(wrong.html, /value="1\.0\.0"/);
+    assert.ok(!wrong.html.includes('Recent changes'));
+
+    const named = await submit(agent, PLUGINS_ADD_PATH, {
+      package: 'Not A Package',
+      password: PASSWORD,
+    });
+    assert.equal(named.status, 400);
+    assert.match(named.html, /<h1[^>]*>Add plugin<\/h1>/);
+    assert.match(named.html, /value="Not A Package"/);
+  });
+
+  it('lands on the Plugins screen after an install, as before', async () => {
+    const { agent } = await site();
+    const response = await agent.post(PLUGINS_ADD_PATH, {
+      csrf_token: await token(agent),
+      package: LLM,
+      password: PASSWORD,
+    });
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), PLUGINS_PATH);
+  });
+
+  it('is refused when installing from the admin is turned off', async () => {
+    const { agent } = await site({ config: { pluginInstall: false } });
+    const response = await agent.get(PLUGINS_ADD_PATH);
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), PLUGINS_PATH);
+    assert.ok(
+      flashes(await screen(agent)).some((entry) => /turned off on this site/.test(entry.message)),
+    );
   });
 });
 

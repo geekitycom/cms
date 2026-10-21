@@ -8,16 +8,17 @@
    (TASK-288). #}
 {% extends "layouts/shell.njk" %}
 {% from "components/badge.njk" import status %}
-{% from "components/button.njk" import button %}
+{% from "components/button.njk" import button, buttonLink %}
 {% from "components/card.njk" import card, cardActions %}
-{% from "components/button.njk" import buttonLink %}
-{% import "components/fields.njk" as fields %}
 {% from "components/table.njk" import table %}
 
 {% block title %}Plugins{% endblock %}
 
 {% block content %}
-  <h1 class="mb-6 text-2xl font-bold">Plugins</h1>
+  <div class="mb-6 flex flex-wrap items-center gap-4">
+    <h1 class="text-2xl font-bold">Plugins</h1>
+    {% if installer == 'on' %}{{ buttonLink('Add plugin', addUrl, color='primary') }}{% endif %}
+  </div>
 
   {% if reloaded %}
     <div role="status" class="alert alert-success mb-6"><span>Plugins reloaded.</span></div>
@@ -55,34 +56,6 @@
 
   {% if installer == 'on' %}
     <div class="mb-8 grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
-      {% call card(title="Add plugin") %}
-        <p class="text-sm">
-          A plugin runs as the site, with access to everything under <code>data/</code>,
-          the accounts and keys and other plugins' secrets. Add only plugins you trust.
-        </p>
-        {% if addProblems.package or addProblems.password %}
-          {% call fields.summary('Nothing was installed. Fix the fields marked below and try again.') %}
-            {{ fields.problem('plugin-package', addProblems.package) }}
-            {{ fields.problem('plugin-add-password', addProblems.password) }}
-          {% endcall %}
-        {% endif %}
-        <form id="plugin-add" method="post" action="{{ add.url }}">
-          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
-          {{ fields.text('plugin-package', 'package', 'Package', value=add.package,
-               hint='An npm package name, such as @geekity/plugin-llm.', error=addProblems.package,
-               required=true,
-               spellcheck='false', autocomplete='off') }}
-          {{ fields.text('plugin-version', 'version', 'Version (optional)', value=add.version,
-               hint='A version, a range or a dist-tag. Empty takes latest.', spellcheck='false',
-               autocomplete='off') }}
-          {{ fields.password('plugin-add-password', 'password', 'Your password',
-               error=addProblems.password, autocomplete='current-password', required=true) }}
-          {% call cardActions() %}
-            {{ button('Add plugin', type='submit', color='primary') }}
-          {% endcall %}
-        </form>
-      {% endcall %}
-
       {% call card(title="Updates") %}
         <p class="text-sm">
           {% if checkedAt %}Last checked {{ checkedAt }}.{% else %}Not checked since this server started.{% endif %}

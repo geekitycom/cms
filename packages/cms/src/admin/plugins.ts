@@ -144,13 +144,9 @@ export function pluginScreenPath(name: string): string {
 export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: AdminRender }): void {
   const { render } = options;
 
-  app.get(PLUGINS_PATH, (c) => drawPluginsScreen(c, {}));
+  app.get(PLUGINS_PATH, (c) => drawPluginsScreen(c));
 
-  function drawPluginsScreen(
-    c: Context<GeekityEnv>,
-    addForm: { package?: string; version?: string; problems?: AddProblems },
-    status: 200 | 400 = 200,
-  ): Response {
+  function drawPluginsScreen(c: Context<GeekityEnv>): Response {
     const registry = c.var.plugins;
     const { config } = c.var;
     const enabled = readEnabledPlugins(config.contentDir);
@@ -170,7 +166,6 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
         ? undefined
         : pluginFolderChanges(supervision.loaded, scanPluginFolders(config.pluginsDir));
 
-    c.status(status);
     return render(c, ADMIN_TEMPLATES.plugins, {
       section: PLUGINS_SECTION,
       child: PLUGINS_CHILD,
@@ -184,12 +179,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
       disableUrl: PLUGINS_DISABLE_PATH,
       field: PLUGIN_FIELD,
       installer: installer.state,
-      add: {
-        url: PLUGINS_ADD_PATH,
-        package: addForm.package ?? '',
-        version: addForm.version ?? '',
-      },
-      addProblems: addForm.problems ?? {},
+      addUrl: PLUGINS_ADD_PATH,
       checkUrl: PLUGINS_CHECK_PATH,
       checkedAt:
         check === undefined ? undefined : formatInTimezone(check.at.toISOString(), timezone),
@@ -246,6 +236,29 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     });
   }
 
+  app.get(PLUGINS_ADD_PATH, (c) => {
+    const installer = pluginInstaller(c.var.config);
+    if (installer.state !== 'on') return refuse(c, INSTALLER_REFUSALS[installer.state]);
+    return drawAddPage(c, { package: '', version: '' });
+  });
+
+  function drawAddPage(
+    c: Context<GeekityEnv>,
+    form: { package: string; version: string; problems?: AddProblems },
+    status: 200 | 400 = 200,
+  ): Response {
+    c.status(status);
+    return render(c, ADMIN_TEMPLATES.pluginAdd, {
+      section: PLUGINS_SECTION,
+      child: PLUGINS_CHILD,
+      addUrl: PLUGINS_ADD_PATH,
+      backUrl: PLUGINS_PATH,
+      package: form.package,
+      version: form.version,
+      problems: form.problems ?? {},
+    });
+  }
+
   app.post(PLUGINS_ADD_PATH, async (c) => {
     const installer = pluginInstaller(c.var.config);
     if (installer.state !== 'on') return refuse(c, INSTALLER_REFUSALS[installer.state]);
@@ -255,7 +268,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     const typed = { package: name, version };
     const user = confirmedUser(c, stringOrEmpty(body[PASSWORD_FIELD]));
     if (user === undefined) {
-      return drawPluginsScreen(
+      return drawAddPage(
         c,
         { ...typed, problems: { password: `${WRONG_PASSWORD} installed.` } },
         400,
@@ -265,9 +278,15 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     try {
       parsePackageSpec(spec);
     } catch (error) {
-      return drawPluginsScreen(c, { ...typed, problems: { package: messageOf(error) } }, 400);
+      return drawAddPage(c, { ...typed, problems: { package: messageOf(error) } }, 400);
     }
-    return await manage(c, installer.pluginsDir, user, (options) => installPlugin(options, spec));
+    return await manage(
+      c,
+      installer.pluginsDir,
+      user,
+      (options) => installPlugin(options, spec),
+      (message) => drawAddPage(c, { ...typed, problems: { package: message } }, 400),
+    );
   });
 
   app.post(PLUGINS_CHECK_PATH, async (c) => {
@@ -383,6 +402,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
     pluginsDir: string,
     user: string,
     change: (options: ManageOptions) => Promise<ManageResult>,
+    failed?: (message: string) => Response,
   ): Promise<Response> {
     let changed = false;
     try {
@@ -395,6 +415,7 @@ export function mountPluginsScreen(app: Hono<GeekityEnv>, options: { render: Adm
       changed = result.changed;
       for (const outcome of result.outcomes) flash(c, outcome.kind, outcome.message);
     } catch (error) {
+      if (failed !== undefined) return failed(messageOf(error));
       flash(c, 'error', messageOf(error));
     }
     const supervision = c.var.supervision;

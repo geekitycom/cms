@@ -20,7 +20,9 @@
    A value outside its set is a render error.
 
    `{% call cardActions() %}…{% endcall %}`, inside a card's body, is the row
-   of buttons at its foot: `<div class="card-actions justify-end">`. #}
+   of buttons at its foot: `<div class="card-actions mt-2 justify-end">`. The
+   margin is there because card-body's gap spaces only its own children, and
+   the row usually sits inside a form, under the last field. #}
 
 {% set SIZES = { xs: 'card-xs', sm: 'card-sm', md: 'card-md', lg: 'card-lg', xl: 'card-xl' } %}
 {% set STYLES = { border: 'card-border', dash: 'card-dash' } %}
@@ -38,5 +40,5 @@
 {%- endmacro %}
 
 {% macro cardActions() -%}
-<div class="card-actions justify-end">{{ caller() }}</div>
+<div class="card-actions mt-2 justify-end">{{ caller() }}</div>
 {%- endmacro %}
