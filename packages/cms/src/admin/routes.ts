@@ -26,13 +26,13 @@ import {
   PAGE_SCREENS,
   POST_SCREENS,
 } from './documents.ts';
-import { FEDERATION_PATH, mountFederationScreen } from './federation.ts';
+import { mountFederationScreen } from './federation.ts';
 import { takeFlash } from './flash.ts';
 import { adminSecurityHeaders } from './headers.ts';
-import { COMMENTS_PATH, mountCommentsScreen, pendingComments } from './comments.ts';
+import { mountCommentsScreen } from './comments.ts';
 import { MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
 import { adminMenu } from './menu.ts';
-import { MESSAGES_PATH, mountMessagesScreen, unreadMessages } from './messages.ts';
+import { mountMessagesScreen } from './messages.ts';
 import { mountNavigationScreen } from './navigation.ts';
 import { mountPreview } from './preview.ts';
 import { FORGOT_PATH, mountRecovery, RESET_PATH } from './recovery.ts';
@@ -64,16 +64,7 @@ import { mountPluginsScreen, pluginScreens } from './plugins.ts';
 import type { LoginThrottle } from '../web/throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
 import { mountUsers } from './users.ts';
-import { CORE_WIDGETS } from './core-widgets.ts';
-import { formatInTimezone } from './formatting.ts';
-import {
-  createWidgetBoard,
-  DASHBOARD_PERIODS,
-  dashboardPeriod,
-  dashboardWidgets,
-  WIDGET_TIME_LIMIT_MS,
-} from './widgets.ts';
-import type { WidgetPlacement } from './widgets.ts';
+import { mountDashboard } from './dashboard.ts';
 
 /** Where the first-run form lives. */
 export const SETUP_PATH = `${ADMIN_PREFIX}/setup`;
@@ -139,8 +130,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     });
     return recoveryThrottled;
   }
-
-  const widgetBoard = createWidgetBoard({ timeLimitMs: WIDGET_TIME_LIMIT_MS });
 
   /**
    * Render one admin template.
@@ -327,49 +316,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     return c.redirect(LOGIN_PATH, 303);
   });
 
-  app.get(ADMIN_PREFIX, async (c) => {
-    const timezone = c.var.siteAtRequestStart.timezone;
-    const period = dashboardPeriod(c.req.query('period'));
-    const loaded = await widgetBoard.load(
-      dashboardWidgets(c.var, CORE_WIDGETS, period),
-      c.var.config.now,
-    );
-    const drawn = (placement: WidgetPlacement) =>
-      loaded
-        .filter((widget) => widget.placement === placement)
-        .map((widget) => ({
-          ...widget,
-          loadedAt:
-            widget.loadedAt === undefined
-              ? undefined
-              : formatInTimezone(widget.loadedAt.toISOString(), timezone),
-        }));
-    return render(c, ADMIN_TEMPLATES.dashboard, {
-      section: 'dashboard',
-      child: 'home',
-      periods: DASHBOARD_PERIODS.map((days) => ({
-        label: `${String(days)} days`,
-        url: days === 7 ? ADMIN_PREFIX : `${ADMIN_PREFIX}?period=${String(days)}`,
-        current: days === period,
-      })),
-      counts: c.var.store.counts(),
-      // The one number on the dashboard that is not about the content
-      // directory: it is what says whether publishing is reaching anybody.
-      followers: c.var.admin.countFollowers(),
-      federationUrl: FEDERATION_PATH,
-      // The other number that is not about the content directory: with no
-      // email in this milestone, the dashboard is how a moderator finds out
-      // that somebody is waiting (TASK-50).
-      pendingComments: pendingComments(c.var.admin),
-      commentsUrl: COMMENTS_PATH,
-      // And what the contact form has left waiting, which is the same kind of
-      // number for the same reason (TASK-56).
-      unreadMessages: unreadMessages(c.var.config.dataDir),
-      messagesUrl: MESSAGES_PATH,
-      alerts: drawn('alerts'),
-      widgets: drawn('activity'),
-    });
-  });
+  // The stat tiles and the widget cards, arranged by whoever is signed in.
+  mountDashboard(app, { render });
 
   // The listing and the editor. Posts and pages are the same screens over the
   // same store; the kind decides what a file is called and which fields the

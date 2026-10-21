@@ -14,7 +14,7 @@
    A value outside its set is a render error.
    `button` also takes `type` (button, unless it submits), `id`, `name`,
    `value`, `formaction`, `formtarget`, `formnovalidate`, `popovertarget`,
-   `disabled` and `hidden`. The label is escaped. #}
+   `ariaLabel`, `disabled` and `hidden`. The label is escaped. #}
 
 {% set COLORS = {
   neutral: 'btn-neutral',
@@ -45,10 +45,11 @@
   formtarget='',
   formnovalidate=false,
   popovertarget='',
+  ariaLabel='',
   disabled=false,
   hidden=false
 ) -%}
-<button type="{{ type }}"{% if id %} id="{{ id }}"{% endif %} class="btn{{ COLORS | modifier(color) }}{{ STYLES | modifier(style) }}{{ SIZES | modifier(size) }}{{ SHAPES | modifier(shape) }}{% if active %} btn-active {%- endif %}"{% if name %} name="{{ name }}"{% endif %}{% if value %} value="{{ value }}"{% endif %}{% if formaction %} formaction="{{ formaction }}"{% endif %}{% if formtarget %} formtarget="{{ formtarget }}"{% endif %}{% if formnovalidate %} formnovalidate{% endif %}{% if popovertarget %} popovertarget="{{ popovertarget }}"{% endif %}{% if disabled %} disabled{% endif %}{% if hidden %} hidden{% endif %}>{{ label }}</button>
+<button type="{{ type }}"{% if id %} id="{{ id }}"{% endif %} class="btn{{ COLORS | modifier(color) }}{{ STYLES | modifier(style) }}{{ SIZES | modifier(size) }}{{ SHAPES | modifier(shape) }}{% if active %} btn-active {%- endif %}"{% if name %} name="{{ name }}"{% endif %}{% if value %} value="{{ value }}"{% endif %}{% if formaction %} formaction="{{ formaction }}"{% endif %}{% if formtarget %} formtarget="{{ formtarget }}"{% endif %}{% if formnovalidate %} formnovalidate{% endif %}{% if popovertarget %} popovertarget="{{ popovertarget }}"{% endif %}{% if ariaLabel %} aria-label="{{ ariaLabel }}"{% endif %}{% if disabled %} disabled{% endif %}{% if hidden %} hidden{% endif %}>{{ label }}</button>
 {%- endmacro %}
 
 {% macro buttonLink(label, href, color=none, style=none, size='sm', shape=none, active=false) -%}

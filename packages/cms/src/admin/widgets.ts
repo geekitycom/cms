@@ -32,6 +32,11 @@ export interface CoreWidget extends Omit<PluginWidget, 'load'> {
 
 export type WidgetPlacement = 'alerts' | 'activity';
 
+/** What names a widget in a user's dashboard layout: `core:id` or `plugin-name:id`. */
+export function widgetKey(owner: string, id: string): string {
+  return `${owner}:${id}`;
+}
+
 export interface WidgetLoad {
   readonly owner: string;
   readonly widget: Omit<PluginWidget, 'load'>;
@@ -41,6 +46,7 @@ export interface WidgetLoad {
 }
 
 export interface LoadedWidget {
+  readonly key: string;
   readonly title: string;
   readonly width: PluginWidget['width'];
   readonly placement: WidgetPlacement;
@@ -87,6 +93,7 @@ export function createWidgetBoard(options: { timeLimitMs: number }): WidgetBoard
     const key = `${entry.owner}\u0000${widget.id}\u0000${String(entry.period)}`;
     const last = kept.get(key);
     const drawn = (status: LoadedWidget['status'], result: Result | undefined): LoadedWidget => ({
+      key: widgetKey(entry.owner, widget.id),
       title: widget.title,
       width: widget.width,
       placement: entry.placement,

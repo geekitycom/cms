@@ -10,7 +10,7 @@
    `id` must be unique on the page. The body is markup. The label is escaped.
 
    The trigger is `button` from `components/button.njk` and takes its
-   `color`, `style` and `size` (sm by default). `placement` is start, center,
+   `color`, `style`, `size` (sm by default) and `ariaLabel`. `placement` is start, center,
    end, top, bottom, left or right, each mapping to its `dropdown-*` class. A
    value outside its set is a render error. #}
 
@@ -26,7 +26,7 @@
   right: 'dropdown-right'
 } %}
 
-{% macro dropdown(id, label, color=none, style=none, size='sm', placement=none) -%}
-{{ button(label, color=color, style=style, size=size, popovertarget=id) }}
+{% macro dropdown(id, label, color=none, style=none, size='sm', placement=none, ariaLabel='') -%}
+{{ button(label, color=color, style=style, size=size, popovertarget=id, ariaLabel=ariaLabel) }}
 <div class="dropdown rounded-box bg-base-100 z-1 w-52 shadow-sm{{ PLACEMENTS | modifier(placement) }}" popover id="{{ id }}">{{ caller() }}</div>
 {%- endmacro %}

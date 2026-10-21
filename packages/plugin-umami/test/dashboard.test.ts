@@ -70,7 +70,7 @@ describe('the Umami card on the dashboard', () => {
   it('spans the row and draws views and visitors per day in the site time zone (AC #1)', async () => {
     const html = await (await dashboard(cloudOn(fake)))();
     const card = cardOf(html);
-    assert.match(card, /^<div class="min-w-0 @3xl:col-span-2">/);
+    assert.match(card, /^<div class="min-w-0 @3xl:col-span-2"[ >]/);
     assert.match(card, /<svg[^>]*role="img"/);
     assert.match(words(card), /Day Views Visitors/);
     const today = dayIn(new Date(), 'America/Chicago');
@@ -146,8 +146,8 @@ describe('the Umami top pages and top referrers cards on the dashboard', () => {
     const pages = html.indexOf('Umami: top pages');
     const referrers = html.indexOf('Umami: top referrers');
     assert.ok(traffic < pages && pages < referrers, 'traffic, then pages, then referrers');
-    assert.match(cardTitled(html, 'Umami: top pages'), /^<div class="min-w-0">/);
-    assert.match(cardTitled(html, 'Umami: top referrers'), /^<div class="min-w-0">/);
+    assert.match(cardTitled(html, 'Umami: top pages'), /^<div class="min-w-0"[ >]/);
+    assert.match(cardTitled(html, 'Umami: top referrers'), /^<div class="min-w-0"[ >]/);
   });
 
   it('lists views per page, with a post shown by its title and linked to its editor (AC #1)', async () => {
@@ -211,7 +211,7 @@ describe('the Umami audience and visitors right now cards on the dashboard', () 
       'referrers, countries, browsers, devices, then right now',
     );
     for (const title of TITLES.slice(1)) {
-      assert.match(cardTitled(html, title), /^<div class="min-w-0">/);
+      assert.match(cardTitled(html, title), /^<div class="min-w-0"[ >]/);
     }
   });
 
@@ -259,7 +259,10 @@ describe('the Umami recent posts card on the dashboard', () => {
       html.indexOf('Umami: visitors right now') < html.indexOf('Umami: recent posts'),
       'right now, then recent posts',
     );
-    assert.match(cardTitled(html, 'Umami: recent posts'), /^<div class="min-w-0 @3xl:col-span-2">/);
+    assert.match(
+      cardTitled(html, 'Umami: recent posts'),
+      /^<div class="min-w-0 @3xl:col-span-2"[ >]/,
+    );
   });
 
   it('sets a recent post views beside its engagement, read through the core services', async () => {
