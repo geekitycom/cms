@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.39.0](https://github.com/geekitycom/cms/compare/v0.38.0...v0.39.0) (2026-10-21)
+
+
+### Features
+
+* **cms:** let each user arrange their dashboard cards ([6172377](https://github.com/geekitycom/cms/commit/6172377089366b6b21d87484f3ba46a91c523d2e))
+* **cms:** list an archive page's posts in its markdown ([adc86a6](https://github.com/geekitycom/cms/commit/adc86a6b9ee568ac3d0777f8f7be83151473f627))
+
 ## [0.38.0](https://github.com/geekitycom/cms/compare/v0.37.0...v0.38.0) (2026-10-21)
 
 
