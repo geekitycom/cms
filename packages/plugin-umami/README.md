@@ -1,13 +1,14 @@
 # @geekity/plugin-umami
 
-A [Geekity CMS](https://github.com/geekitycom/cms/blob/main/packages/cms/README.md) plugin that adds the
-[Umami](https://umami.is) analytics tracker to every public page and shows
-the site's views, visitors, top pages, top referrers, countries, browsers,
-devices, the visitors right now and the views of recent posts beside their
-engagement on the admin dashboard. It works with Umami
-Cloud and with a self-hosted Umami. The tracker is a `<script>` tag at the end
-of `<head>`, which the CMS draws from the plugin's settings. The site needs no
-theme of its own for it.
+A [Geekity CMS](https://github.com/geekitycom/cms/blob/main/packages/cms/README.md)
+plugin that adds the [Umami](https://umami.is) analytics tracker to every
+public page. It also shows the site's Umami stats on the admin dashboard:
+views, visitors, top pages, top referrers, countries, browsers, devices, the
+visitors right now, and the views of recent posts beside their engagement.
+
+It works with Umami Cloud and with a self-hosted Umami. The tracker is a
+`<script>` tag at the end of `<head>`, which the CMS draws from the plugin's
+settings. The site needs no theme of its own for it.
 
 ## Installing it
 
@@ -89,16 +90,17 @@ The API key and the password are secrets. They are kept in `secrets.json` in
 the plugin's data folder at mode 0600, or set by their environment variables
 `GEEKITY_PLUGIN_UMAMI__API_KEY` and `GEEKITY_PLUGIN_UMAMI__PASSWORD`. They are
 never drawn on a page and never logged. The plugin sends them only to the API
-URL's origin: a redirect to another origin carries no credential.
+URL's origin. A redirect to another origin carries no credential.
 
-A self-hosted Umami is signed in with `POST /api/auth/login`. The plugin keeps
-the token it answers in memory and sends it as `Authorization: Bearer`. When
-Umami refuses the token, the plugin signs in once more and repeats the request.
-A user who signs in with two-factor authentication cannot be used; name a user
-without it.
+The plugin signs in to a self-hosted Umami with `POST /api/auth/login`. It
+keeps the token Umami returns in memory and sends it as
+`Authorization: Bearer`. When Umami refuses the token, the plugin signs in
+once more and repeats the request. The plugin cannot sign in as a user who has
+two-factor authentication turned on, so name a user without it.
 
-Each request gives up after 2.5 seconds, sign-in included, so a slow Umami
-cannot hold up the dashboard.
+A request for a dashboard card, sign-in included, stops when the card's time
+limit runs out, so a slow Umami cannot hold up the dashboard. Any other
+request gives up after 2.5 seconds.
 
 **Check connection** on the plugin's screen asks Umami for the website. It
 reports whether Umami answered, and whether it has a website with the
@@ -140,9 +142,9 @@ Two half-width cards sit side by side below it, over the same days:
   the most views.
 - **Umami: top referrers** lists the ten referring domains with the most
   visitors. Umami records the domain of the referring page, not its full
-  address, and counts the unique visitors who came from it. The site's own
-  domain is left out: the host of the site URL and each of Domains, each with
-  or without `www.`.
+  address, and counts the unique visitors who came from it. The card leaves
+  out the site's own domains, which are the host of the site URL and each host
+  in Domains, with or without `www.`.
 
 When the period has no views, or no visitor came from another site, the card
 says so.
@@ -151,10 +153,10 @@ Four more half-width cards follow in two rows:
 
 - **Umami: countries**, **Umami: browsers** and **Umami: devices** cover the
   same days. Each lists the five values with the most visitors, as a share
-  of all the period's visitors. Umami's `metrics` endpoint counts each visitor once for a value,
-  and a visitor has one country, browser and device, so the shares in one
-  card add up to at most 100%. The rest of the visitors have values outside
-  the top five. A country shows its English name, or its code when it has
+  of all the period's visitors. Umami's `metrics` endpoint counts each visitor
+  once for a value, and a visitor has one country, browser and device, so the
+  shares in one card add up to at most 100%. The rest of the visitors have
+  values outside the top five. A country shows its English name, or its code when it has
   none. A browser or device shows the name Umami's own dashboard gives it,
   such as `Chrome (iOS)` for `crios`, or Umami's value when the plugin does
   not know it. A visitor Umami recorded no value for shows as Unknown. When
@@ -176,17 +178,17 @@ A full-width card ends the Umami cards:
   none shows 0. Week 1 is the post's views from the moment it was published
   to 7 days after. For a post less than a week old it reads, for example,
   `12 so far`. A post Umami recorded no view of since it was published shows
-  no data in Views and Week 1, not 0: most often the tracker did not run for
+  no data in Views and Week 1, not 0. Most often the tracker did not run for
   it, so 0 would claim more than Umami knows. Once a post has any views, a
   Week 1 of 0 is shown as 0. Week 1 asks Umami for one post's views at a time
   with the `path` filter of its `stats` endpoint, at most four at once, and
   keeps a week that is over in memory, since it no longer changes. The card
   is drawn again at most every 30 minutes.
 
-The cards other than the visitors right now and recent posts are drawn again
-from Umami at most every 5 minutes. While the settings for the stats are incomplete, the
-cards are not drawn. When Umami does not answer, a card shows the last figures it had marked Stale, or says
-the stats are unavailable, and the rest of the dashboard draws as normal.
+The other cards are drawn again from Umami at most every 5 minutes. While the
+settings for the stats are incomplete, the cards are not drawn. When Umami
+does not answer, a card shows the last figures it had, marked Stale, or says
+the stats are unavailable. The rest of the dashboard draws as normal.
 
 ## Where the tracker is drawn
 

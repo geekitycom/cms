@@ -302,9 +302,9 @@ host.widget({
 ```
 
 `host.use('@geekity/cms/posts')` returns the posts service. Its
-`byPath(paths)` method takes paths on the site, such as an analytics tool
-records, and resolves to the published post each one leads to, in the order
-asked:
+`byPath(paths)` method takes paths on the site, such as the paths an
+analytics tool records, and resolves to the published post each one leads to,
+in the order asked:
 
 | Field       | What it holds                                                    |
 | ----------- | ---------------------------------------------------------------- |
@@ -313,9 +313,9 @@ asked:
 | `title`     | The post's title, or the label the admin gives an untitled post. |
 | `editUrl`   | The admin path of the post's editor.                             |
 
-A path's query string and fragment are dropped. On a site served from a
-directory, such as `https://example.com/blog/`, the directory is taken off the
-front of the path. A path without a trailing slash also matches the permalink
+`byPath` drops a path's query string and fragment. On a site served from a
+directory, such as `https://example.com/blog/`, it removes the directory from
+the front of the path. A path without a trailing slash also matches the permalink
 with one. A path that leads to a page, a draft, a post not yet published or
 nothing at all is not in the list.
 
@@ -521,8 +521,8 @@ screen's `render` gets; `timezone`, the site's time zone, such as
 `Europe/London`, which decides where a day starts; `period`, the number of
 days the dashboard covers, ending today; and `signal`, an `AbortSignal` that
 aborts when the widget's time limit runs out. Pass `signal` to `host.fetch` so
-a request stops when the dashboard stops waiting for it. `period` is `7` unless the owner
-chooses 30 days on the dashboard (`/admin?period=30`), when it is `30`. A
+a request stops when the dashboard stops waiting for it. `period` is `7` unless
+the owner chooses 30 days on the dashboard (`/admin?period=30`), when it is `30`. A
 widget that shows a period covers that many days and compares totals with the
 same number of days before them. A widget that does not show a period ignores
 it. The dashboard keeps a separate result for each period. A widget with an id that
@@ -540,9 +540,8 @@ for each. A good result is kept in memory for `refreshSeconds`, so a dashboard
 request in that time does not call `load`. While a load is still running,
 another request waits for that load and does not start a second one. The time
 limit counts from the start of the load, and `signal` aborts when it runs out.
-A load that ignores `signal` and finishes after the time limit has its result
-kept for the next request. When `load`
-throws, rejects, returns something other than an array, or runs out of time,
+When a load ignores `signal` and finishes after the time limit, its result is
+kept for the next request. When `load` throws, rejects, returns something other than an array, or runs out of time,
 the server logs a warning and the card shows the last good result with a
 Stale badge and the time it was loaded. If there is no earlier result, the card
 says the stats are unavailable. The rest of the dashboard draws as normal. A
@@ -639,10 +638,9 @@ other origin carries only the plugin's `accept`, `accept-language` and
 `user-agent` headers, and drops the rest, such as `authorization`, `cookie`
 or an API-key header. A redirect from `http` to `https` on the same host is
 another origin, so it drops them too. A later hop back to the first origin
-sends them again. A core
-release before `method` and `json` sends every request as a `GET`, so a
-plugin that posts sets its `@geekity/cms` peer range to start at a release
-that has them.
+sends them again. A core release before `method` and `json` sends every
+request as a `GET`, so a plugin that posts sets its `@geekity/cms` peer range
+to start at a release that has them.
 
 **Federation middleware.** A federation middleware is handed a
 `PluginFederationContext` for each request. Its `outbox(username)` and
