@@ -33,17 +33,27 @@ export function dashboardPeriod(query: string | undefined): DashboardPeriod {
  * dashboard's period.
  */
 export interface CoreWidget extends Omit<PluginWidget, 'load'> {
+  /**
+   * `alerts` draws it between the stat tiles and the Activity heading, for a
+   * card that shows only when something needs attention. Every plugin widget,
+   * and a core one with no placement, goes under Activity.
+   */
+  readonly placement?: WidgetPlacement;
   load(
     context: Readonly<GeekityEnv['Variables']>,
     period: DashboardPeriod,
   ): readonly PluginBlock[] | Promise<readonly PluginBlock[]>;
 }
 
+/** Where on the dashboard a widget's card goes. */
+export type WidgetPlacement = 'alerts' | 'activity';
+
 /** One widget to load: who declared it, what it is, and its load with its context bound. */
 export interface WidgetLoad {
   /** `core`, or the package name of the plugin that declared it. */
   readonly owner: string;
   readonly widget: Omit<PluginWidget, 'load'>;
+  readonly placement: WidgetPlacement;
   /** The period it is loaded for, which its kept result is kept by. */
   readonly period: DashboardPeriod;
   load(): readonly PluginBlock[] | Promise<readonly PluginBlock[]>;
@@ -53,6 +63,7 @@ export interface WidgetLoad {
 export interface LoadedWidget {
   readonly title: string;
   readonly width: PluginWidget['width'];
+  readonly placement: WidgetPlacement;
   /**
    * `fresh` is a result from within its refresh interval, `stale` the last
    * good result after a load failed, `unavailable` a failed load with no
@@ -113,6 +124,7 @@ export function createWidgetBoard(options: { timeLimitMs: number }): WidgetBoard
     const drawn = (status: LoadedWidget['status'], result: Result | undefined): LoadedWidget => ({
       title: widget.title,
       width: widget.width,
+      placement: entry.placement,
       status,
       blocks: result?.blocks ?? [],
       loadedAt: result?.loadedAt,
@@ -158,6 +170,7 @@ export function dashboardWidgets(
     ...core.map((widget) => ({
       owner: 'core',
       widget,
+      placement: widget.placement ?? 'activity',
       period,
       load: () => widget.load(vars, period),
     })),
@@ -165,6 +178,7 @@ export function dashboardWidgets(
       (vars.plugins.find(name)?.widgets ?? []).map((widget) => ({
         owner: name,
         widget,
+        placement: 'activity' as const,
         period,
         load: () => widget.load(context),
       })),

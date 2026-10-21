@@ -73,6 +73,7 @@ import {
   dashboardWidgets,
   WIDGET_TIME_LIMIT_MS,
 } from './widgets.ts';
+import type { WidgetPlacement } from './widgets.ts';
 
 /** Where the first-run form lives. */
 export const SETUP_PATH = `${ADMIN_PREFIX}/setup`;
@@ -330,10 +331,20 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   app.get(ADMIN_PREFIX, async (c) => {
     const timezone = c.var.siteAtRequestStart.timezone;
     const period = dashboardPeriod(c.req.query('period'));
-    const widgets = await widgetBoard.load(
+    const loaded = await widgetBoard.load(
       dashboardWidgets(c.var, CORE_WIDGETS, period),
       c.var.config.now,
     );
+    const drawn = (placement: WidgetPlacement) =>
+      loaded
+        .filter((widget) => widget.placement === placement)
+        .map((widget) => ({
+          ...widget,
+          loadedAt:
+            widget.loadedAt === undefined
+              ? undefined
+              : formatInTimezone(widget.loadedAt.toISOString(), timezone),
+        }));
     return render(c, ADMIN_TEMPLATES.dashboard, {
       section: 'dashboard',
       child: 'home',
@@ -356,13 +367,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
       // number for the same reason (TASK-56).
       unreadMessages: unreadMessages(c.var.config.dataDir),
       messagesUrl: MESSAGES_PATH,
-      widgets: widgets.map((widget) => ({
-        ...widget,
-        loadedAt:
-          widget.loadedAt === undefined
-            ? undefined
-            : formatInTimezone(widget.loadedAt.toISOString(), timezone),
-      })),
+      alerts: drawn('alerts'),
+      widgets: drawn('activity'),
     });
   });
 

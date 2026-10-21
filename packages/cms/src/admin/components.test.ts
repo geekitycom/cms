@@ -157,6 +157,13 @@ describe('card', () => {
       '<div class="card bg-base-100 shadow-sm"><div class="card-body"><p>Body</p></div></div>',
     );
   });
+
+  it('draws a warning tone as a warning-coloured border', () => {
+    assert.equal(
+      render('card', 'card', `{% call card(tone='warning') %}<p>Body</p>{% endcall %}`),
+      '<div class="card bg-base-100 shadow-sm border-2 border-warning"><div class="card-body"><p>Body</p></div></div>',
+    );
+  });
 });
 
 describe('stats and stat', () => {

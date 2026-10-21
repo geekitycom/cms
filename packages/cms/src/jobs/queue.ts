@@ -194,6 +194,11 @@ export function createJobQueue(options: JobQueueOptions): JobQueue {
       return latest !== undefined && isActive(latest) ? latest : undefined;
     },
 
+    async list(states) {
+      if (started) await reconcile();
+      return records.list(states);
+    },
+
     async run(id) {
       await claimAndRun(id, stopping.signal);
       for (;;) {

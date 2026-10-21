@@ -126,6 +126,13 @@ export interface JobQueue {
    */
   active(name: string): Promise<JobStatus | undefined>;
   /**
+   * Every recorded job in these states, of every name. A started queue first
+   * takes back the jobs a dead or discarded worker left, as for
+   * {@link JobQueue.latest}. The record store keeps only the newest few
+   * finished, failed and interrupted jobs of each name.
+   */
+  list(states: readonly JobStateName[]): Promise<JobStatus[]>;
+  /**
    * Run one queued job in this process and resolve with its final status,
    * with no transport and no start-up recovery: what a CLI command does
    * beside a server that may be running. A job another process claimed first

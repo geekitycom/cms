@@ -97,6 +97,12 @@ export interface DeliveryStore {
   lastDeliveryToObject(objectId: string): Delivery | undefined;
   /** Every object id a `Delete` was ever recorded going out for. */
   listDeletedObjectIds(): string[];
+  /**
+   * How many deliveries stand failed from an attempt at or after `since`. A
+   * resend that reaches the follower replaces the failure, so it stops
+   * counting.
+   */
+  countFailedDeliveriesSince(since: string): number;
 }
 
 export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore {
@@ -135,6 +141,9 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
     `),
     listDeletedObjectIds: db.prepare(`
       SELECT DISTINCT object_id FROM ap_deliveries WHERE activity_type = 'Delete' ORDER BY object_id
+    `),
+    countFailedDeliveriesSince: db.prepare(`
+      SELECT COUNT(*) AS count FROM ap_deliveries WHERE status = 'failed' AND attempted_at >= ?
     `),
   };
   return {
@@ -183,6 +192,10 @@ export function openDeliveryStore(db: DatabaseSync, clock: Clock): DeliveryStore
     listDeletedObjectIds() {
       const rows = statements.listDeletedObjectIds.all() as { object_id: string }[];
       return rows.map((row) => row.object_id);
+    },
+
+    countFailedDeliveriesSince(since) {
+      return Number(statements.countFailedDeliveriesSince.get(since)?.['count'] ?? 0);
     },
   };
 }

@@ -15,6 +15,7 @@
 
      size   xs, sm, md, lg, xl
      style  border, dash
+     tone   warning, a warning-coloured border for a card that flags a problem
 
    A value outside its set is a render error.
 
@@ -23,9 +24,10 @@
 
 {% set SIZES = { xs: 'card-xs', sm: 'card-sm', md: 'card-md', lg: 'card-lg', xl: 'card-xl' } %}
 {% set STYLES = { border: 'card-border', dash: 'card-dash' } %}
+{% set TONES = { warning: 'border-2 border-warning' } %}
 
-{% macro card(title='', size=none, style=none) -%}
-<div class="card bg-base-100 shadow-sm{{ SIZES | modifier(size) }}{{ STYLES | modifier(style) }}">
+{% macro card(title='', size=none, style=none, tone=none) -%}
+<div class="card bg-base-100 shadow-sm{{ SIZES | modifier(size) }}{{ STYLES | modifier(style) }}{{ TONES | modifier(tone) }}">
   <div class="card-body">
     {% if title %}
     <h2 class="card-title">{{ title }}</h2>

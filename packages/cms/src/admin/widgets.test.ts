@@ -34,6 +34,7 @@ function widget(
 ): WidgetLoad {
   return {
     owner: options.owner ?? '@acme/plugin-stats',
+    placement: 'activity',
     period: options.period ?? 7,
     widget: {
       id,
@@ -332,6 +333,36 @@ describe('the dashboard’s widgets', () => {
     assert.deepEqual(
       dashboardWidgets(onlyA, [core], 7).map((entry) => entry.widget.id),
       ['core-only', 'a-one'],
+    );
+  });
+
+  it('places a core widget that asks for it among the alerts, and every other widget under Activity', async () => {
+    const registry = createPluginRegistry(
+      [{ plugin: stats('@acme/plugin-a', ['a-one']), source: 'site config' }],
+      pluginRegistryOptions(dataDir),
+    );
+    const widget = (id: string): CoreWidget => ({
+      id,
+      title: id,
+      width: 'full',
+      refreshSeconds: 60,
+      load: () => [{ paragraph: [id] }],
+    });
+    const vars = {
+      plugins: registry,
+      activePlugins: registry.active(new Set(['@acme/plugin-a'])),
+      siteAtRequestStart: { timezone: 'UTC' },
+      config: resolveConfig({ contentDir: dataDir, dataDir }, { env: {}, cwd: dataDir }),
+    } as unknown as GeekityEnv['Variables'];
+
+    const drawn = await createWidgetBoard({ timeLimitMs: 1000 }).load(
+      dashboardWidgets(vars, [{ ...widget('alert'), placement: 'alerts' }, widget('plain')], 7),
+      () => new Date(),
+    );
+
+    assert.deepEqual(
+      drawn.map((entry) => `${entry.title} ${entry.placement}`),
+      ['alert alerts', 'plain activity', 'a-one activity'],
     );
   });
 });

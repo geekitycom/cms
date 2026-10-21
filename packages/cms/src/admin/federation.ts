@@ -65,7 +65,10 @@ export const RESEND_PATH = `${FEDERATION_PATH}/resend`;
 
 export const RESEND_ALL_PATH = `${FEDERATION_PATH}/resend-all`;
 
-const RESEND_PANEL = `${FEDERATION_PATH}#resend`;
+export const RESEND_PANEL = `${FEDERATION_PATH}#resend`;
+
+/** The table of each post's deliveries and webmentions. */
+export const DELIVERY_PANEL = `${FEDERATION_PATH}#delivery`;
 
 const RESEND_BUSY = 'A resend is already queued or running. Nothing new was queued.';
 
