@@ -360,13 +360,16 @@ export type PluginBlock =
       /**
        * Numbers in a row. Given `previous`, the value for the period before,
        * a stat says its change in words; `better` says which way is good,
-       * `up` when left out.
+       * `up` when left out. `format` says how `value` and `previous` are
+       * written: `number` when left out, `percent` for a percentage from 0 to
+       * 100 (`41.5` is 41.5%), or `duration` for a number of seconds.
        */
       readonly stats: readonly {
         readonly label: string;
         readonly value: number;
         readonly previous?: number;
         readonly better?: 'up' | 'down';
+        readonly format?: 'number' | 'percent' | 'duration';
       }[];
     }
   | {

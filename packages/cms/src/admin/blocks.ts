@@ -115,6 +115,7 @@ const MAX_CALENDAR_DAYS = 366;
 const DAY_MS = 86_400_000;
 
 const whole = new Intl.NumberFormat('en', { maximumFractionDigits: 2 });
+const percent = new Intl.NumberFormat('en', { maximumFractionDigits: 1 });
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 const shortDay = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
@@ -207,12 +208,33 @@ function drawTable(data: unknown): DrawnBlock {
   };
 }
 
-function drawChange(value: number, previous: number, better: 'up' | 'down'): DrawnChange {
-  if (value === previous)
-    return { arrow: '', text: `No change from ${whole.format(previous)}`, tone: 'none' };
+type StatFormat = 'number' | 'percent' | 'duration';
+
+function duration(seconds: number): string {
+  const total = Math.round(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (hours > 0) return `${whole.format(hours)}h ${String(minutes)}m`;
+  if (minutes > 0) return `${String(minutes)}m ${String(total % 60)}s`;
+  return `${String(total)}s`;
+}
+
+function formatted(value: number, format: StatFormat): string {
+  if (format === 'percent') return `${percent.format(value)}%`;
+  if (format === 'duration') return duration(value);
+  return whole.format(value);
+}
+
+function drawChange(
+  value: number,
+  previous: number,
+  better: 'up' | 'down',
+  format: StatFormat,
+): DrawnChange {
+  const from = formatted(previous, format);
+  if (value === previous) return { arrow: '', text: `No change from ${from}`, tone: 'none' };
   const up = value > previous;
   const tone = up === (better === 'up') ? 'better' : 'worse';
-  const from = whole.format(previous);
   if (previous === 0) return { arrow: '▲', text: `Up from ${from}`, tone };
   const percent = Math.round((Math.abs(value - previous) / previous) * 100);
   return up
@@ -227,14 +249,15 @@ function drawStats(data: unknown): DrawnBlock {
     if (!isRecord(stat) || typeof stat['label'] !== 'string' || !isAmount(stat['value'])) {
       return EMPTY;
     }
-    const { previous, better = 'up' } = stat;
+    const { previous, better = 'up', format = 'number' } = stat;
     if (previous !== undefined && !isAmount(previous)) return EMPTY;
     if (better !== 'up' && better !== 'down') return EMPTY;
+    if (format !== 'number' && format !== 'percent' && format !== 'duration') return EMPTY;
     const value = stat['value'];
     stats.push({
       label: stat['label'],
-      value: whole.format(value),
-      ...(previous === undefined ? {} : { change: drawChange(value, previous, better) }),
+      value: formatted(value, format),
+      ...(previous === undefined ? {} : { change: drawChange(value, previous, better, format) }),
     });
   }
   return { kind: 'stats', stats };
