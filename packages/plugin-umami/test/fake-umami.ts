@@ -31,6 +31,8 @@ export interface FakeData {
   /** What `metrics/expanded` answers, by its `type`. */
   expanded: Record<string, unknown>;
   active: unknown;
+  /** The views `stats` counts for a `path` filter, by path; a path not named has none. */
+  pathViews: Record<string, number>;
 }
 
 export interface FakeUmami {
@@ -110,6 +112,7 @@ export function defaultData(): FakeData {
       ],
     },
     active: { visitors: 3 },
+    pathViews: {},
   };
 }
 
@@ -154,7 +157,13 @@ const ROUTES: Record<string, (exchange: Exchange) => Answer> = {
     const found = website(exchange);
     return found === undefined ? UNAUTHORIZED : { status: 200, body: found };
   },
-  'websites/:id/stats': (exchange) => withRange(exchange, () => exchange.fake.data.stats),
+  'websites/:id/stats': (exchange) =>
+    withRange(exchange, () => {
+      const filter = exchange.query.get('path');
+      if (filter === null) return exchange.fake.data.stats;
+      const views = exchange.fake.data.pathViews[filter.replace(/^eq\./, '')] ?? 0;
+      return { pageviews: views, visitors: views, visits: views, bounces: 0, totaltime: 0 };
+    }),
   'websites/:id/pageviews': (exchange) => withRange(exchange, () => exchange.fake.data.pageviews),
   'websites/:id/metrics': (exchange) =>
     withRange(exchange, () => exchange.fake.data.metrics[exchange.query.get('type') ?? ''] ?? []),

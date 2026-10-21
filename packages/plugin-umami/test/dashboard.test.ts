@@ -256,3 +256,34 @@ describe('the Umami audience and visitors right now cards on the dashboard', () 
     assert.match(words(cardTitled(html, 'Umami: countries')), /United States 50%/);
   });
 });
+
+describe('the Umami recent posts card on the dashboard', () => {
+  it('spans the row after the visitors right now card', async () => {
+    const html = await (await dashboard(cloudOn(fake)))();
+    assert.ok(
+      html.indexOf('Umami: visitors right now') < html.indexOf('Umami: recent posts'),
+      'right now, then recent posts',
+    );
+    assert.match(cardTitled(html, 'Umami: recent posts'), /^<div class="min-w-0 @3xl:col-span-2">/);
+  });
+
+  it('sets a recent post views beside its engagement, read through the core services', async () => {
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString();
+    fake.data.expanded['path'] = [
+      { name: '/2026/10/fresh/', pageviews: 9, visitors: 5, visits: 5, bounces: 0, totaltime: 0 },
+    ];
+    fake.data.pathViews = { '/2026/10/fresh/': 9 };
+    const html = await (
+      await dashboard(
+        cloudOn(fake, {
+          posts: {
+            'fresh.md': `---\ntitle: Fresh\ndate: '${yesterday}'\npermalink: /2026/10/fresh/\n---\n\nNew.\n`,
+          },
+        }),
+      )
+    )();
+    const card = cardTitled(html, 'Umami: recent posts');
+    assert.match(card, /<a class="link" href="\/admin\/posts\/fresh">Fresh<\/a>/);
+    assert.match(words(card), /Most read [^]*?Post Views Engaged Week 1 Fresh 9 0 9 so far/);
+  });
+});

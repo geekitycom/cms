@@ -112,7 +112,11 @@ export interface UmamiClient {
    * account's websites: `not-found` when that answers, `unauthorized` when not.
    */
   website(options?: UmamiCallOptions): Promise<UmamiWebsite>;
-  stats(range: UmamiRange, options?: UmamiCallOptions): Promise<UmamiStats>;
+  /** The totals for the range, or for one path on the site with Umami 3's `path` filter. */
+  stats(
+    range: UmamiRange,
+    options?: UmamiCallOptions & { readonly path?: string },
+  ): Promise<UmamiStats>;
   pageviews(
     range: UmamiRange,
     options: UmamiCallOptions & { readonly timezone: string },
@@ -370,7 +374,13 @@ export function umamiClient(options: UmamiClientOptions): UmamiClient {
       return website;
     },
     stats: (range, call = {}) =>
-      read((id) => `/websites/${id}/stats`, between(range), call, 'the stats', parseStats),
+      read(
+        (id) => `/websites/${id}/stats`,
+        { ...between(range), ...(call.path === undefined ? {} : { path: `eq.${call.path}` }) },
+        call,
+        'the stats',
+        parseStats,
+      ),
     pageviews: (range, call) =>
       read(
         (id) => `/websites/${id}/pageviews`,

@@ -119,6 +119,16 @@ describe('the Umami client on Umami Cloud', () => {
     assert.equal(fake.requestsTo('/auth/login').length, 0);
   });
 
+  it('reads the views of one path through Umami 3 path filter', async () => {
+    fake.data.pathViews['/2026/10/hello/'] = 7;
+    const stats = await client(cloud()).stats(WEEK, { path: '/2026/10/hello/' });
+
+    assert.equal(stats.current.pageviews, 7);
+    const [sent] = fake.requestsTo(`/websites/${WEBSITE.id}/stats`);
+    const query = new URL(sent?.path ?? '', 'http://x').searchParams;
+    assert.equal(query.get('path'), 'eq./2026/10/hello/');
+  });
+
   it('goes to api.umami.is unless an API URL is set', async () => {
     const seen: string[] = [];
     const recording = umamiClient({

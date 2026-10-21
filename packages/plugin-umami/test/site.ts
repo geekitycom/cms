@@ -37,6 +37,8 @@ export interface SiteOptions {
   timezone?: string;
   /** The site's clock, which decides when a dashboard widget loads again. */
   now?: () => Date;
+  /** More posts, by file name under `posts/`. */
+  posts?: Record<string, string>;
 }
 
 const opened: Cms[] = [];
@@ -69,6 +71,9 @@ export async function umamiSite(plugin: Plugin, options: SiteOptions = {}): Prom
     path.join(contentDir, 'posts', 'hello.md'),
     "---\ntitle: Hello\ndate: '2026-10-02T09:00:00Z'\npermalink: /2026/10/hello/\ntags:\n  - notes\n---\n\nBody.\n",
   );
+  for (const [file, body] of Object.entries(options.posts ?? {})) {
+    writeFileSync(path.join(contentDir, 'posts', file), body);
+  }
   writeFileSync(
     path.join(contentDir, 'pages', 'about.md'),
     '---\ntitle: About\npermalink: /about/\n---\n\nAbout us.\n',

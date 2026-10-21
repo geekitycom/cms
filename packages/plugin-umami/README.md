@@ -3,7 +3,8 @@
 A [Geekity CMS](https://github.com/geekitycom/cms/blob/main/packages/cms/README.md) plugin that adds the
 [Umami](https://umami.is) analytics tracker to every public page and shows
 the site's views, visitors, top pages, top referrers, countries, browsers,
-devices and the visitors right now on the admin dashboard. It works with Umami
+devices, the visitors right now and the views of recent posts beside their
+engagement on the admin dashboard. It works with Umami
 Cloud and with a self-hosted Umami. The tracker is a `<script>` tag at the end
 of `<head>`, which the CMS draws from the plugin's settings. The site needs no
 theme of its own for it.
@@ -106,7 +107,8 @@ configured ID that the account can see.
 The plugin is written against the Umami 3 API: `GET /websites/:id`, and its
 `stats`, `pageviews`, `metrics`, `metrics/expanded` and `active` endpoints. It
 also reads the Umami 2 answers to `stats` and `active`, which have a different
-shape. Umami 2 has no `metrics/expanded`, so the top pages need Umami 3.
+shape. Umami 2 has no `metrics/expanded` and calls the `path` filter `url`, so
+the top pages and recent posts need Umami 3.
 
 ## On the dashboard
 
@@ -162,8 +164,27 @@ Four more half-width cards follow in two rows:
   depend on the dashboard's period, and it is read again at most every 30
   seconds when the dashboard is loaded.
 
-Each card other than the visitors right now is drawn again from Umami at
-most every 5 minutes. While the settings for the stats are incomplete, the
+A full-width card ends the Umami cards:
+
+- **Umami: recent posts** covers the posts published in the last 30 days,
+  whatever period the dashboard shows. It has two tables with the same
+  columns, Most read and Most engaged, each listing ten posts in that order.
+  Views is the post's views since it was published, read as the top pages
+  card reads them, from the top 500 paths. Engaged is the post's total of
+  fediverse likes, boosts and replies, approved webmentions and approved
+  comments over the same days, from the core engagement service; a post with
+  none shows 0. Week 1 is the post's views from the moment it was published
+  to 7 days after. For a post less than a week old it reads, for example,
+  `12 so far`. A post Umami recorded no view of since it was published shows
+  no data in Views and Week 1, not 0: most often the tracker did not run for
+  it, so 0 would claim more than Umami knows. Once a post has any views, a
+  Week 1 of 0 is shown as 0. Week 1 asks Umami for one post's views at a time
+  with the `path` filter of its `stats` endpoint, at most four at once, and
+  keeps a week that is over in memory, since it no longer changes. The card
+  is drawn again at most every 30 minutes.
+
+The cards other than the visitors right now and recent posts are drawn again
+from Umami at most every 5 minutes. While the settings for the stats are incomplete, the
 cards are not drawn. When Umami does not answer, a card shows the last figures it had marked Stale, or says
 the stats are unavailable, and the rest of the dashboard draws as normal.
 
