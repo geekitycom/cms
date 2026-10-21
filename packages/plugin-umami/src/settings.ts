@@ -6,6 +6,7 @@ export const SETTINGS = [
     key: 'umami_url',
     label: 'Umami URL',
     hint: 'Where Umami runs: https://cloud.umami.is for Umami Cloud, or the address of your own Umami. The tracker loads script.js from here.',
+    default: 'https://cloud.umami.is',
   },
   {
     type: 'text',
