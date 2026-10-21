@@ -22,6 +22,7 @@ export default {
      * - `plugin-llm` the published @geekity/plugin-llm package
      * - `plugin-post-summary` the published @geekity/plugin-post-summary package
      * - `plugin-tag-suggest` the published @geekity/plugin-tag-suggest package
+     * - `plugin-umami` the published @geekity/plugin-umami package
      */
     'scope-enum': [
       2,
@@ -37,6 +38,7 @@ export default {
         'plugin-llm',
         'plugin-post-summary',
         'plugin-tag-suggest',
+        'plugin-umami',
       ],
     ],
   },

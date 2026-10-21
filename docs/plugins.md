@@ -17,6 +17,27 @@ Docker, install a plugin into the plugins folder with `geekity plugin add`.
 > site can, including every file under `data/`: the accounts, the actor key
 > pairs and other plugins' secrets. Install only plugins you trust.
 
+### The plugins in this repository
+
+These plugins are published from this repository with each release. Each
+package's README describes its settings.
+
+| Package                                                                     | What it does                                            |
+| --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [`@geekity/plugin-wordpress`](../packages/plugin-wordpress/README.md)       | Imports a WordPress site and its ActivityPub followers. |
+| [`@geekity/plugin-llm`](../packages/plugin-llm/README.md)                   | A language model connection that other plugins call.    |
+| [`@geekity/plugin-post-summary`](../packages/plugin-post-summary/README.md) | Suggests a post's title and description in the editor.  |
+| [`@geekity/plugin-tag-suggest`](../packages/plugin-tag-suggest/README.md)   | Suggests tags for a post in the editor.                 |
+| [`@geekity/plugin-umami`](../packages/plugin-umami/README.md)               | Adds the Umami analytics tracker to every public page.  |
+
+The Umami plugin replaces an Umami snippet in a site theme's
+`partials/head-end.njk`. Install it on Docker with
+`geekity plugin add @geekity/plugin-umami`, or with **Add plugin** on Admin >
+Plugins. Enable it and set its Umami URL and website ID on its screen. Then
+delete the old `<script>` from the theme, or each visit is counted twice. Its
+[README](../packages/plugin-umami/README.md#moving-from-a-theme-snippet)
+gives the steps.
+
 ### Installing a plugin on Docker
 
 The image sets `GEEKITY_PLUGINS_DIR` to `/site/plugins`, and

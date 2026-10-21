@@ -63,6 +63,7 @@ these:
 | [`@geekity/plugin-llm`](packages/plugin-llm/README.md)                   | A language model connection that other plugins call.             |
 | [`@geekity/plugin-post-summary`](packages/plugin-post-summary/README.md) | Suggests a post's title and description in the editor.           |
 | [`@geekity/plugin-tag-suggest`](packages/plugin-tag-suggest/README.md)   | Suggests tags for a post in the editor.                          |
+| [`@geekity/plugin-umami`](packages/plugin-umami/README.md)               | Adds the Umami analytics tracker to every public page.           |
 
 ## License
 
