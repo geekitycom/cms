@@ -15,6 +15,7 @@ import semver from 'semver';
 import type { DataFileDeclaration } from '../files/data-files.ts';
 import { HOST_API_VERSION } from '../plugin.ts';
 import type {
+  CoreServices,
   Plugin,
   PluginCommand,
   PluginEditorAction,
@@ -26,10 +27,10 @@ import type {
   PluginScreen,
   PluginSettingField,
   PluginSettings,
-  PluginService,
   PluginSettingValues,
   PluginSiteInfo,
   PluginWidget,
+  UsedService,
 } from '../plugin.ts';
 import { messageOf } from '../util/errors.ts';
 import { createSerialQueue } from '../util/queue.ts';
@@ -132,6 +133,8 @@ export interface PluginRegistry {
   reconcile(enabled: ReadonlySet<string>): Promise<void>;
   /** Stop every running plugin, dependents first. Nothing starts after. */
   close(): Promise<void>;
+  /** Hand plugins the core's services, once the CMS has built them. */
+  provideCore(services: CoreServices): void;
 }
 
 /** Two installed plugins with one name. */
@@ -143,6 +146,11 @@ export class DuplicatePluginError extends Error {
 }
 
 const CORE_PACKAGE = '@geekity/cms';
+
+/** The names in {@link CoreServices}, which a plugin may `use` without requiring anything. */
+const CORE_SERVICES: Readonly<Record<keyof CoreServices, true>> = {
+  '@geekity/cms/engagement': true,
+};
 const CORE_VERSION = (createRequire(import.meta.url)('../../package.json') as { version: string })
   .version;
 
@@ -171,13 +179,15 @@ export function createPluginRegistry(
   const own = new Map<string, string | undefined>();
   const contributions = new Map<string, PluginContributions>();
   const services = new Map<string, unknown>();
+  let core: CoreServices | undefined;
   let registered = false;
 
   const serviceFor = <Dependency extends string>(
     consumer: Plugin,
     dependency: Dependency,
-  ): PluginService<Dependency> => {
-    if (!Object.hasOwn(consumer.requires ?? {}, dependency)) {
+  ): UsedService<Dependency> => {
+    const coreService = Object.hasOwn(CORE_SERVICES, dependency);
+    if (!coreService && !Object.hasOwn(consumer.requires ?? {}, dependency)) {
       throw new Error(`${consumer.name} uses ${dependency}, which is not in its requires.`);
     }
     if (!registered) {
@@ -185,8 +195,16 @@ export function createPluginRegistry(
         `${consumer.name} called use(${JSON.stringify(dependency)}) in its register. Call it when handling a request, a command or a job, once every plugin has registered.`,
       );
     }
+    if (coreService) {
+      if (core === undefined) {
+        throw new Error(
+          `${dependency} is provided while the site runs, not from the command line.`,
+        );
+      }
+      return core[dependency as keyof CoreServices] as UsedService<Dependency>;
+    }
     if (!services.has(dependency)) throw new Error(`${dependency} provides no service.`);
-    return services.get(dependency) as PluginService<Dependency>;
+    return services.get(dependency) as UsedService<Dependency>;
   };
 
   const sharedPrefixes = prefixCollisions(installed.map((entry) => entry.plugin.name));
@@ -322,6 +340,10 @@ export function createPluginRegistry(
         await stopFrom(() => true);
       });
     },
+
+    provideCore(services) {
+      core = services;
+    },
   };
 
   function requirementState(
@@ -382,7 +404,7 @@ function register(
   serviceFor: <Dependency extends string>(
     consumer: Plugin,
     dependency: Dependency,
-  ) => PluginService<Dependency>,
+  ) => UsedService<Dependency>,
 ): Registration {
   const { name } = plugin;
   if (name.length > PACKAGE_NAME_MAX || !PACKAGE_NAME.test(name)) {

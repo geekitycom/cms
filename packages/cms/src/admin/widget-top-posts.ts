@@ -1,0 +1,78 @@
+import { Temporal } from '@js-temporal/polyfill';
+
+import { calendarDayIn, toUtcInstant } from '../content/time.ts';
+import { readObjectIds } from '../federation/object-ids.ts';
+import type { PostEngagement } from '../plugin.ts';
+import { postEngagement } from './engagement.ts';
+import type { CoreWidget } from './widgets.ts';
+
+/** How many posts the widget lists. */
+export const TOP_POSTS = 5;
+
+const KINDS = [
+  ['likes', 'like', 'likes'],
+  ['boosts', 'boost', 'boosts'],
+  ['replies', 'reply', 'replies'],
+  ['webmentions', 'webmention', 'webmentions'],
+  ['comments', 'comment', 'comments'],
+] as const;
+
+/** Each kind a post drew, such as `2 likes, 1 reply`. */
+function breakdown(post: PostEngagement): string {
+  return KINDS.filter(([kind]) => post[kind] > 0)
+    .map(([kind, one, many]) => `${String(post[kind])} ${post[kind] === 1 ? one : many}`)
+    .join(', ');
+}
+
+/**
+ * The five posts that drew the most likes, boosts, replies, webmentions and
+ * approved comments over the dashboard's period, in the site's time zone,
+ * each with its total and what it is made of.
+ */
+export const TOP_POSTS_WIDGET: CoreWidget = {
+  id: 'top-posts',
+  title: 'Top posts',
+  width: 'full',
+  refreshSeconds: 300,
+  load(vars, period) {
+    const timezone = vars.siteAtRequestStart.timezone;
+    const today = calendarDayIn(vars.config.now(), timezone);
+    if (today === undefined) throw new Error('The clock does not read as a date.');
+    const first = Temporal.PlainDate.from(today)
+      .subtract({ days: period - 1 })
+      .toString();
+    const since = toUtcInstant(first, timezone);
+    if (since === undefined) throw new Error('The period does not start on a date.');
+
+    const posts = postEngagement(
+      {
+        store: vars.store,
+        admin: vars.admin,
+        baseUrl: vars.config.baseUrl,
+        objectIds: readObjectIds(vars.config.contentDir),
+        cited: (url) => vars.replyContexts.read(url, vars.siteAtRequestStart),
+        threadOf: (url) => vars.conversation.documentOf(url),
+      },
+      since,
+    ).slice(0, TOP_POSTS);
+
+    if (posts.length === 0) {
+      return [
+        { paragraph: ['No likes, boosts, replies, webmentions or comments in this period.'] },
+      ];
+    }
+    return [
+      {
+        table: {
+          caption: `The posts with the most engagement over ${String(period)} days`,
+          columns: ['Post', 'Total', 'Breakdown'],
+          rows: posts.map((post) => [
+            { text: post.title, href: post.editUrl },
+            String(post.total),
+            breakdown(post),
+          ]),
+        },
+      },
+    ];
+  },
+};

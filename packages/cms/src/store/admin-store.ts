@@ -39,6 +39,7 @@ export {
 export type {
   CommentAuthor,
   CommentContent,
+  CommentCount,
   CommentKind,
   CommentRecord,
   CommentSource,
@@ -54,6 +55,7 @@ export type { Follower, NewFollower } from './followers.ts';
 export type {
   InboxActivity,
   InboxInteraction,
+  InteractionCount,
   LatestInteraction,
   NewInboxActivity,
 } from './inbox.ts';

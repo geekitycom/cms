@@ -2,6 +2,8 @@ import { MemoryKvStore } from '@fedify/fedify';
 import type { KvStore } from '@fedify/fedify';
 
 import { listUsers } from '../admin/index.ts';
+import { postEngagement } from '../admin/engagement.ts';
+import { readObjectIds } from '../federation/object-ids.ts';
 import type { ConversationWrite } from '../store/admin-store.ts';
 import { createAvatarService } from '../avatars/index.ts';
 import type { AvatarService } from '../avatars/index.ts';
@@ -213,6 +215,23 @@ export function createServices({
     (url) =>
       replyContexts.read(url, site);
   const cited = async (): Promise<CitedPageReader> => citedWith(await settings.values(SITE));
+
+  plugins.provideCore({
+    '@geekity/cms/engagement': {
+      posts: async ({ since }) =>
+        postEngagement(
+          {
+            store,
+            admin,
+            baseUrl: resolved.baseUrl,
+            objectIds: readObjectIds(resolved.contentDir),
+            cited: await cited(),
+            threadOf: (url) => conversation.documentOf(url),
+          },
+          since,
+        ),
+    },
+  });
 
   // The faces in a conversation, fetched here and served from here so a
   // reader's address never reaches the servers they live on (TASK-134).

@@ -184,6 +184,30 @@ describe('services between plugins', () => {
     });
   });
 
+  it('hands any plugin a core service without a requires entry, once the core provides it', async () => {
+    let held: PluginHost | undefined;
+    const plugins = registry(
+      definePlugin({
+        ...META,
+        name: '@acme/plugin-views',
+        label: 'Views',
+        register(host) {
+          held = host;
+        },
+      }),
+    );
+    assert.throws(
+      () => held?.use('@geekity/cms/engagement'),
+      /@geekity\/cms\/engagement is provided while the site runs, not from the command line/,
+    );
+
+    const engagement = { posts: () => Promise.resolve([]) };
+    plugins.provideCore({ '@geekity/cms/engagement': engagement });
+
+    assert.equal(held?.use('@geekity/cms/engagement'), engagement);
+    assert.deepEqual(await held?.use('@geekity/cms/engagement').posts({ since: '' }), []);
+  });
+
   it('hands register the site base URL and title, read when asked', async () => {
     let info: Promise<unknown> | undefined;
     registry(

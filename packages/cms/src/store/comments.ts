@@ -240,6 +240,13 @@ export interface PostComment extends CommentRecord {
   permalink: string;
 }
 
+/** How many approved comments of one source a post has. */
+export interface CommentCount {
+  readonly slug: string;
+  readonly source: Exclude<CommentSource, 'activitypub'>;
+  readonly count: number;
+}
+
 /** How {@link CommentStore.listComments} narrows and pages. */
 export interface ListCommentsOptions extends ListPageOptions {
   /** Only comments at this status. Every status when it is not given. */
@@ -260,6 +267,12 @@ export interface CommentStore {
    * since then is in the inbox log. What the dashboard lists.
    */
   listLatestComments(limit: number): PostComment[];
+  /**
+   * The approved comments submitted at or after an instant, counted per post
+   * and source, leaving out the imported fediverse ones as
+   * {@link CommentStore.listLatestComments} does.
+   */
+  countApprovedCommentsSince(since: string): CommentCount[];
   /** One comment by id, or `undefined`. */
   getComment(id: string): PostComment | undefined;
   /** The comments whose `url` is this one, whatever their status (TASK-300). */
@@ -302,6 +315,11 @@ export function openCommentStore(
       SELECT * FROM comments WHERE status != 'spam' AND source != 'activitypub'
       ORDER BY submitted_at DESC, id DESC
       LIMIT ?
+    `),
+    approvedCommentCounts: db.prepare(`
+      SELECT slug, source, COUNT(*) AS count FROM comments
+      WHERE status = 'approved' AND source != 'activitypub' AND submitted_at >= ?
+      GROUP BY slug, source
     `),
     commentById: db.prepare('SELECT * FROM comments WHERE id = ?'),
     commentsAt: db.prepare('SELECT * FROM comments WHERE url = ? ORDER BY submitted_at'),
@@ -381,6 +399,15 @@ export function openCommentStore(
 
     listLatestComments(limit) {
       return (statements.latestComments.all(limit) as Record<string, unknown>[]).map(toComment);
+    },
+
+    countApprovedCommentsSince(since) {
+      const rows = statements.approvedCommentCounts.all(since) as Record<string, unknown>[];
+      return rows.map((row) => ({
+        slug: String(row['slug']),
+        source: row['source'] === 'webmention' ? 'webmention' : 'comment',
+        count: Number(row['count']),
+      }));
     },
 
     listCommentsAt(url) {

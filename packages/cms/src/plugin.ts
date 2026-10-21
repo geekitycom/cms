@@ -644,6 +644,52 @@ export type PluginService<Name extends string> = Name extends keyof PluginServic
   ? PluginServices[Name]
   : unknown;
 
+/** One post's likes, boosts, replies, webmentions and approved comments over a span of time. */
+export interface PostEngagement {
+  readonly slug: string;
+  /** The post's title, or what the admin calls an untitled one. */
+  readonly title: string;
+  /** The post's permalink, a path on the site such as `/2026/10/hello/`. */
+  readonly path: string;
+  /** Where its editor is in the admin. */
+  readonly editUrl: string;
+  /** Fediverse likes, leaving out any its actor undid. */
+  readonly likes: number;
+  /** Fediverse boosts, leaving out any its actor undid. */
+  readonly boosts: number;
+  /** Fediverse replies, in the post's thread, leaving out any deleted. */
+  readonly replies: number;
+  /** Approved webmentions, whatever kind. */
+  readonly webmentions: number;
+  /** Approved comments from the form. */
+  readonly comments: number;
+  /** All five added up. */
+  readonly total: number;
+}
+
+/** The core's per-post engagement, which `host.use('@geekity/cms/engagement')` returns. */
+export interface EngagementService {
+  /**
+   * Each post that drew anything at or after `since`, an ISO 8601 instant,
+   * most first. A post that drew nothing is not listed.
+   */
+  posts(options: { readonly since: string }): Promise<readonly PostEngagement[]>;
+}
+
+/**
+ * The services the core provides, which any plugin may `use` without naming
+ * them in `requires`. Their names are not npm package names, so no plugin's
+ * can be mistaken for one.
+ */
+export interface CoreServices {
+  '@geekity/cms/engagement': EngagementService;
+}
+
+/** What `host.use` returns for a name: a core service, or the service a plugin provides. */
+export type UsedService<Name extends string> = Name extends keyof CoreServices
+  ? CoreServices[Name]
+  : PluginService<Name>;
+
 /** A field of the post and page editor that a plugin's button can sit beside. */
 export type PluginEditorField = 'title' | 'description' | 'tags';
 
@@ -843,11 +889,15 @@ export interface PluginHost<
    */
   provide(service: PluginService<Name>): void;
   /**
-   * The service a required plugin provides. Only a name in `requires` is
-   * accepted, and only once every plugin has registered: call it when
-   * handling a request, a command or a job, never in `register`.
+   * The service a required plugin provides, or one of {@link CoreServices}.
+   * Only a name in `requires` or a core service's name is accepted, and only
+   * once every plugin has registered: call it when handling a request, a
+   * command or a job, never in `register`. A core service is there while the
+   * site runs, not in a command run from the command line.
    */
-  use<Dependency extends keyof Requires & string>(name: Dependency): PluginService<Dependency>;
+  use<Dependency extends (keyof Requires & string) | keyof CoreServices>(
+    name: Dependency,
+  ): UsedService<Dependency>;
 }
 
 /**

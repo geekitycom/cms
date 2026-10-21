@@ -132,6 +132,14 @@ const INTERACTIONS = `
     CASE WHEN activity_type = '${REPLY_ACTIVITY_TYPE}' THEN NULL ELSE actor_id END,
     object_id`;
 
+/** How many {@link InboxInteraction}s of one kind name one object. */
+export interface InteractionCount {
+  readonly kind: InboxInteraction['kind'];
+  /** The object liked or boosted, or the one a reply answers, `null` when it named none. */
+  readonly about: string | null;
+  readonly count: number;
+}
+
 const INTERACTION_KINDS: Readonly<Record<string, InboxInteraction['kind']>> = {
   Like: 'like',
   Announce: 'boost',
@@ -204,6 +212,13 @@ export interface InboxStore {
    * as {@link InboxStore.listInteractionsSince} counts and leaves them out.
    */
   listLatestInteractions(limit: number): LatestInteraction[];
+
+  /**
+   * The likes, boosts and replies that arrived at or after an instant,
+   * counted per object and kind as {@link InboxStore.listInteractionsSince}
+   * counts them.
+   */
+  countInteractionsSince(since: string): InteractionCount[];
 }
 
 export function openInboxStore(
@@ -258,6 +273,10 @@ export function openInboxStore(
     `),
     interactionsSince: db.prepare(`${INTERACTIONS} ORDER BY received_at`),
     latestInteractions: db.prepare(`${INTERACTIONS} ORDER BY received_at DESC LIMIT ?`),
+    interactionCounts: db.prepare(`
+      SELECT activity_type, about, COUNT(*) AS count FROM (${INTERACTIONS})
+      GROUP BY activity_type, about
+    `),
   };
   return {
     countInboxActivities() {
@@ -397,6 +416,16 @@ export function openInboxStore(
                 receivedAt: String(row['received_at']),
               },
             ];
+      });
+    },
+
+    countInteractionsSince(since) {
+      const rows = statements.interactionCounts.all(since) as Record<string, unknown>[];
+      return rows.flatMap((row) => {
+        const kind = INTERACTION_KINDS[String(row['activity_type'])];
+        return kind === undefined
+          ? []
+          : [{ kind, about: nullableText(row['about']), count: Number(row['count']) }];
       });
     },
   };

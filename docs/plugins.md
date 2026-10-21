@@ -228,6 +228,58 @@ A plugin cannot be enabled until everything it requires is installed, in range
 and enabled. Pass plain data across a service, never an object built by a
 library. Each bundle carries its own copy of its dependencies.
 
+**Core services.** The core provides services of its own. Any plugin reaches
+them with `host.use` and does not list them in `requires`. A core service is
+available while the site runs: in a route, a widget, an editor action or a
+job. A command run from the command line cannot reach one, and `use` throws
+there.
+
+`host.use('@geekity/cms/engagement')` returns the engagement service. Its
+`posts({ since })` method takes an ISO 8601 instant and resolves to the posts
+that drew anything at or after it, most first:
+
+| Field         | What it holds                                                    |
+| ------------- | ---------------------------------------------------------------- |
+| `slug`        | The post's slug.                                                 |
+| `title`       | The post's title, or the label the admin gives an untitled post. |
+| `path`        | The post's permalink, such as `/2026/10/hello/`.                 |
+| `editUrl`     | The admin path of the post's editor.                             |
+| `likes`       | Fediverse likes. A like its actor undid is not counted.          |
+| `boosts`      | Fediverse boosts. A boost its actor undid is not counted.        |
+| `replies`     | Fediverse replies in the post's thread, without deleted ones.    |
+| `webmentions` | Approved webmentions of any kind.                                |
+| `comments`    | Approved comments from the comment form.                         |
+| `total`       | The five counts added up.                                        |
+
+A post that drew nothing is not in the list. Fediverse comments imported from
+another system are not counted, because the inbox counts what arrives after
+the import. These are the numbers the dashboard's Top posts card shows.
+
+```ts
+host.widget({
+  id: 'engagement',
+  title: 'Engagement',
+  width: 'half',
+  refreshSeconds: 300,
+  async load({ period }) {
+    const since = new Date(Date.now() - period * 86_400_000).toISOString();
+    const posts = await host.use('@geekity/cms/engagement').posts({ since });
+    return [
+      {
+        ranked: {
+          caption: 'Most engaged posts',
+          items: posts.map((post) => ({
+            label: post.title,
+            value: post.total,
+            href: post.editUrl,
+          })),
+        },
+      },
+    ];
+  },
+});
+```
+
 **Settings and secrets.** `host.settings([...])` declares fields of type
 `text`, `url`, `select`, `checkbox` and `secret`, each with a `label` and an
 optional `hint`. They become a settings namespace named by the package name.
