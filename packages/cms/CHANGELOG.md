@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.37.0](https://github.com/geekitycom/cms/compare/v0.36.1...v0.37.0) (2026-10-21)
+
+
+### Features
+
+* **cms:** chart fediverse likes, boosts and replies per day on the dashboard ([022e966](https://github.com/geekitycom/cms/commit/022e9667cf692b11eafbd58997ac3379c86f96b2))
+* **cms:** chart posting activity over the year on the dashboard ([2235dde](https://github.com/geekitycom/cms/commit/2235ddec9e22e7a085a0f1fe0a3c0a9523ce732b))
+* **cms:** draw stats, time series, ranked lists and calendars as server-rendered blocks ([68e40cb](https://github.com/geekitycom/cms/commit/68e40cb2dfd2792bc94cd8c8d8b579725761cb6b))
+* **cms:** drop the recent posts card from the dashboard ([f1a970e](https://github.com/geekitycom/cms/commit/f1a970e616df6a7896b068042feaa22ab4647dd8))
+* **cms:** fill the media library with alt text a post gives an upload ([ddf1966](https://github.com/geekitycom/cms/commit/ddf19669c1768c6d4b77f1f4e51fae4f1042e976))
+* **cms:** format a dashboard stat as a percent or a duration ([89b9ead](https://github.com/geekitycom/cms/commit/89b9eadc3c5b8fa499a581e5699936a42fdcbbf4))
+* **cms:** format the values of a ranked list ([919e09d](https://github.com/geekitycom/cms/commit/919e09d5188b1f214f5906d75c4814fd5986ca65))
+* **cms:** hand dashboard widgets a signal that aborts at the time limit ([e52df21](https://github.com/geekitycom/cms/commit/e52df21dab28a19ec488c24f9853306f3b6060fa))
+* **cms:** let host.fetch post a JSON body ([c6ace8e](https://github.com/geekitycom/cms/commit/c6ace8e3c092f25a02846bf6ad00c9f0f880d078))
+* **cms:** let plugins add script, link and meta tags to every public page ([c908d13](https://github.com/geekitycom/cms/commit/c908d13328d60b46841f09af4d5776ebb1bab0ba))
+* **cms:** let plugins and the core add widgets to the dashboard ([d3947f5](https://github.com/geekitycom/cms/commit/d3947f56de508adb2c52f6486eae4ddb5d10258e))
+* **cms:** let plugins list the posts published since a time ([07f987f](https://github.com/geekitycom/cms/commit/07f987f601b0e6556c25c8a1f8695bda5ffafaa8))
+* **cms:** let plugins look up the post at a path ([7d626f9](https://github.com/geekitycom/cms/commit/7d626f9e0ba918c5ed4726c0f1e25f5c6ed49e5f))
+* **cms:** list recent interactions on the dashboard ([6fdc560](https://github.com/geekitycom/cms/commit/6fdc560685e538f24519c8eaaf26b337d250b85d))
+* **cms:** list scheduled posts on the dashboard ([5571731](https://github.com/geekitycom/cms/commit/5571731938870cc6cd0db1ad6c82908d8ce993c0))
+* **cms:** rank posts by engagement on the dashboard and offer per-post totals to plugins ([3b37422](https://github.com/geekitycom/cms/commit/3b374221a180841965b00cbb6b988849d58fb211))
+* **cms:** record follower changes and chart followers on the dashboard ([c707988](https://github.com/geekitycom/cms/commit/c7079886806383db1616ef18354d1d8ab4398fcb))
+* **cms:** tell plugin page tags whether the reader is signed in and the site is in dev mode ([729c265](https://github.com/geekitycom/cms/commit/729c2653fd2fe1c1a4113c297815b95df26cac02))
+* **cms:** warn on the dashboard when jobs, deliveries or webmentions fail ([a3c9e04](https://github.com/geekitycom/cms/commit/a3c9e041fad8c57274d51cdacd18ed9899aa4bcc))
+* **plugin-umami:** add the umami tracker to every public page ([1ce8dd6](https://github.com/geekitycom/cms/commit/1ce8dd677f4db5410d4633c177f17ae893745a1b))
+
+
+### Bug Fixes
+
+* **cms:** fit the calendar block to its card and open it on the newest weeks ([abf4cf2](https://github.com/geekitycom/cms/commit/abf4cf2f803e5d9058a33c0dc9930be393060cff))
+* **cms:** keep a plugin's credentials off a cross-origin redirect ([3e62d4c](https://github.com/geekitycom/cms/commit/3e62d4c7d4006c7a26853e3437b73270a39894b1))
+* **cms:** let stats blocks wrap on narrow cards instead of scrolling sideways ([3166264](https://github.com/geekitycom/cms/commit/316626443bdc435c760e7e3bf32017a83526ae09))
+* **cms:** summarise a photo-only post by its alt text in the feeds ([6d7856e](https://github.com/geekitycom/cms/commit/6d7856e781c40a97fb317966575bb7bae5b51a7f))
+
 ## [0.36.1](https://github.com/geekitycom/cms/compare/v0.36.0...v0.36.1) (2026-10-20)
 
 

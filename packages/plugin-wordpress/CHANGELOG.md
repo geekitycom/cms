@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.7.1...plugin-wordpress-v0.8.0) (2026-10-21)
+
+
+### Features
+
+* **cms:** record follower changes and chart followers on the dashboard ([c707988](https://github.com/geekitycom/cms/commit/c7079886806383db1616ef18354d1d8ab4398fcb))
+
 ## [0.7.1](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.7.0...plugin-wordpress-v0.7.1) (2026-10-20)
 
 
