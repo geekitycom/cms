@@ -301,6 +301,31 @@ host.widget({
 });
 ```
 
+`host.use('@geekity/cms/posts')` returns the posts service. Its
+`byPath(paths)` method takes paths on the site, such as an analytics tool
+records, and resolves to the published post each one leads to, in the order
+asked:
+
+| Field       | What it holds                                                    |
+| ----------- | ---------------------------------------------------------------- |
+| `path`      | The path as it was asked for.                                    |
+| `permalink` | The post's permalink, such as `/2026/10/hello/`.                 |
+| `title`     | The post's title, or the label the admin gives an untitled post. |
+| `editUrl`   | The admin path of the post's editor.                             |
+
+A path's query string and fragment are dropped. On a site served from a
+directory, such as `https://example.com/blog/`, the directory is taken off the
+front of the path. A path without a trailing slash also matches the permalink
+with one. A path that leads to a page, a draft, a post not yet published or
+nothing at all is not in the list.
+
+```ts
+const posts = await host
+  .use('@geekity/cms/posts')
+  .byPath(['/2026/10/hello', '/about/']);
+// [{ path: '/2026/10/hello', permalink: '/2026/10/hello/', title: 'Hello', editUrl: '/admin/posts/hello' }]
+```
+
 **Settings and secrets.** `host.settings([...])` declares fields of type
 `text`, `url`, `select`, `checkbox` and `secret`, each with a `label` and an
 optional `hint`. They become a settings namespace named by the package name.

@@ -692,6 +692,30 @@ export interface EngagementService {
   posts(options: { readonly since: string }): Promise<readonly PostEngagement[]>;
 }
 
+/** The post a path on the site leads to, which {@link PostsService.byPath} finds. */
+export interface PostAtPath {
+  /** The path as it was asked for. */
+  readonly path: string;
+  /** The post's permalink, such as `/2026/10/hello/`. */
+  readonly permalink: string;
+  /** The post's title, or what the admin calls an untitled one. */
+  readonly title: string;
+  /** Where its editor is in the admin. */
+  readonly editUrl: string;
+}
+
+/** The site's posts, which `host.use('@geekity/cms/posts')` returns. */
+export interface PostsService {
+  /**
+   * The published post each path leads to, in the order asked. A path is a
+   * URL's path on the site, such as an analytics tool records: its query
+   * string and fragment are dropped, the base URL's directory is taken off,
+   * and one without a trailing slash also matches the permalink with one. A
+   * path that leads to no published post is not listed.
+   */
+  byPath(paths: readonly string[]): Promise<readonly PostAtPath[]>;
+}
+
 /**
  * The services the core provides, which any plugin may `use` without naming
  * them in `requires`. Their names are not npm package names, so no plugin's
@@ -699,6 +723,7 @@ export interface EngagementService {
  */
 export interface CoreServices {
   '@geekity/cms/engagement': EngagementService;
+  '@geekity/cms/posts': PostsService;
 }
 
 /** What `host.use` returns for a name: a core service, or the service a plugin provides. */

@@ -202,7 +202,10 @@ describe('services between plugins', () => {
     );
 
     const engagement = { posts: () => Promise.resolve([]) };
-    plugins.provideCore({ '@geekity/cms/engagement': engagement });
+    plugins.provideCore({
+      '@geekity/cms/engagement': engagement,
+      '@geekity/cms/posts': { byPath: () => Promise.resolve([]) },
+    });
 
     assert.equal(held?.use('@geekity/cms/engagement'), engagement);
     assert.deepEqual(await held?.use('@geekity/cms/engagement').posts({ since: '' }), []);

@@ -146,6 +146,7 @@ const CORE_PACKAGE = '@geekity/cms';
 
 const CORE_SERVICES: Readonly<Record<keyof CoreServices, true>> = {
   '@geekity/cms/engagement': true,
+  '@geekity/cms/posts': true,
 };
 const CORE_VERSION = (createRequire(import.meta.url)('../../package.json') as { version: string })
   .version;
