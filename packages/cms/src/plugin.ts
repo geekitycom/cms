@@ -807,6 +807,10 @@ export interface PluginEditorAction {
 
 /** What a plugin's {@link PluginHost.fetch} sends besides the URL. */
 export interface PluginFetchInit {
+  /** `GET` when absent. */
+  readonly method?: 'GET' | 'POST' | undefined;
+  /** Sent with `POST` as `JSON.stringify(json)`, with `content-type: application/json`. */
+  readonly json?: unknown;
   readonly headers?: Readonly<Record<string, string>> | undefined;
   /** Ends the request, and any redirect it leads to, when it aborts. */
   readonly signal?: AbortSignal | undefined;
@@ -887,11 +891,14 @@ export interface PluginHost<
   /** The site's base URL and its title as the settings have it when asked. */
   siteInfo(): Promise<PluginSiteInfo>;
   /**
-   * `GET` another site's URL. Redirects are followed, at most five, and every
-   * address on the way must be public: a loopback, private or link-local
-   * address, or a name that resolves to one, rejects with an error, unless
-   * the site lets its federation reach private addresses. Rejects as `fetch`
-   * does when the host cannot be reached; any status is answered as it came.
+   * `GET` another site's URL, or `POST` it a JSON body. Redirects are
+   * followed, at most five, and every address on the way must be public: a
+   * loopback, private or link-local address, or a name that resolves to one,
+   * rejects with an error, unless the site lets its federation reach private
+   * addresses. After a `POST`, a 301, 302 or 303 is followed as a `GET`
+   * without the body, and a 307 or 308 resends the body only to the same
+   * origin; one to another origin rejects. Rejects as `fetch` does when the
+   * host cannot be reached; any status is answered as it came.
    */
   fetch(url: string, init?: PluginFetchInit): Promise<Response>;
   /**

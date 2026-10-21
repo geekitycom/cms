@@ -35,13 +35,25 @@ before(async () => {
   inside = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}/secret`;
   globalThis.fetch = (input, init) => {
     const request = new Request(input, init);
-    if (new URL(request.url).hostname !== 'public.example') return offline(input, init);
+    const { hostname, pathname } = new URL(request.url);
+    if (hostname !== 'public.example' && hostname !== 'other.example') {
+      return offline(input, init);
+    }
     sent.push(request);
-    return Promise.resolve(
-      request.url === PUBLIC
-        ? new Response(null, { status: 302, headers: { location: inside } })
-        : new Response('public', { headers: { 'content-type': 'text/plain' } }),
-    );
+    if (request.url === PUBLIC) {
+      return Promise.resolve(new Response(null, { status: 302, headers: { location: inside } }));
+    }
+    const moved = /^\/moved-(\d+)$/.exec(pathname);
+    if (moved !== null) {
+      const location = new URL(request.url).searchParams.get('to') ?? '/landing';
+      return Promise.resolve(
+        new Response(null, { status: Number(moved[1]), headers: { location } }),
+      );
+    }
+    if (pathname === '/loop') {
+      return Promise.resolve(new Response(null, { status: 307, headers: { location: '/loop' } }));
+    }
+    return Promise.resolve(new Response('public', { headers: { 'content-type': 'text/plain' } }));
   };
 });
 afterEach(() => {
@@ -76,7 +88,11 @@ function hostFor(allowPrivateAddress: boolean): PluginHost {
       ...pluginRegistryOptions(DATA_DIR),
       allowPrivateAddress,
       lookup: (hostname) =>
-        Promise.resolve(hostname === 'public.example' ? ['93.184.216.34'] : ['10.0.0.8']),
+        Promise.resolve(
+          hostname === 'public.example' || hostname === 'other.example'
+            ? ['93.184.216.34']
+            : ['10.0.0.8'],
+        ),
     },
   );
   assert.ok(captured !== undefined);
@@ -115,5 +131,88 @@ describe('a plugin’s fetch', () => {
 
   it('refuses anything but http and https', async () => {
     await assert.rejects(hostFor(true).fetch('file:///etc/passwd'), /not an http or https URL/);
+  });
+});
+
+describe('a plugin’s POST', () => {
+  const sign = { method: 'POST', json: { username: 'admin', password: 'umami' } } as const;
+
+  it('sends the JSON body with content-type application/json', async () => {
+    const response = await hostFor(false).fetch('https://public.example/api/auth/login', {
+      ...sign,
+      headers: { accept: 'application/json' },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(sent[0]?.method, 'POST');
+    assert.equal(sent[0]?.headers.get('content-type'), 'application/json');
+    assert.equal(sent[0]?.headers.get('accept'), 'application/json');
+    assert.deepEqual(await sent[0]?.json(), { username: 'admin', password: 'umami' });
+  });
+
+  for (const status of [301, 302, 303]) {
+    it(`follows a ${String(status)} as a GET without the body`, async () => {
+      await hostFor(false).fetch(`https://public.example/moved-${String(status)}`, sign);
+      assert.equal(sent.length, 2);
+      assert.equal(sent[1]?.url, 'https://public.example/landing');
+      assert.equal(sent[1]?.method, 'GET');
+      assert.equal(sent[1]?.body, null);
+      assert.equal(sent[1]?.headers.get('content-type'), null);
+    });
+  }
+
+  for (const status of [307, 308]) {
+    it(`resends the body on a ${String(status)} to the same origin`, async () => {
+      await hostFor(false).fetch(`https://public.example/moved-${String(status)}`, sign);
+      assert.equal(sent.length, 2);
+      assert.equal(sent[1]?.method, 'POST');
+      assert.equal(sent[1]?.headers.get('content-type'), 'application/json');
+      assert.deepEqual(await sent[1]?.json(), { username: 'admin', password: 'umami' });
+    });
+
+    it(`refuses a ${String(status)} to another origin without sending it the body`, async () => {
+      await assert.rejects(
+        hostFor(false).fetch(
+          `https://public.example/moved-${String(status)}?to=https://other.example/steal`,
+          sign,
+        ),
+        /redirected a POST to https:\/\/other\.example/,
+      );
+      assert.deepEqual(
+        sent.map((request) => request.url),
+        [`https://public.example/moved-${String(status)}?to=https://other.example/steal`],
+      );
+    });
+  }
+
+  it('refuses a redirect after POST to a private address, without reaching it', async () => {
+    await assert.rejects(
+      hostFor(false).fetch(
+        `https://public.example/moved-303?to=${encodeURIComponent(inside)}`,
+        sign,
+      ),
+      /not a public address/,
+    );
+    assert.deepEqual(reached, []);
+  });
+
+  it('refuses a private address before posting', async () => {
+    await assert.rejects(hostFor(false).fetch(inside, sign), /not a public address/);
+    assert.deepEqual(reached, []);
+  });
+
+  it('stops after five redirects', async () => {
+    await assert.rejects(
+      hostFor(false).fetch('https://public.example/loop', sign),
+      /redirected too many times/,
+    );
+    assert.equal(sent.length, 6);
+  });
+
+  it('refuses a JSON body on a GET', async () => {
+    await assert.rejects(
+      hostFor(false).fetch('https://public.example/plain', { json: { a: 1 } }),
+      /JSON body needs method POST/,
+    );
+    assert.equal(sent.length, 0);
   });
 });

@@ -545,6 +545,31 @@ title as the settings have it at that moment. It reads the settings, so it
 returns a promise; call it when the plugin handles a request, a command or a
 job rather than once in `register`.
 
+**Outbound requests.** `host.fetch(url, init)` asks another site and resolves
+to its `Response`, whatever the status. `init` takes `headers`, `signal`,
+`method` and `json`. `method` is `GET` when absent, or `POST`. `json` is sent
+with `POST` as `JSON.stringify(json)` with `content-type: application/json`;
+a `json` without `method: 'POST'` rejects.
+
+```ts
+const response = await host.fetch('https://stats.example/api/auth/login', {
+  method: 'POST',
+  json: { username, password },
+  signal: AbortSignal.timeout(3_000),
+});
+```
+
+Redirects are followed, at most five. Every address on the way must be
+public: a loopback, private or link-local address, or a name that resolves to
+one, rejects with an error before it is asked, unless the site lets its
+federation reach private addresses. After a `POST`, a 301, 302 or 303 is
+followed as a `GET` without the body. A 307 or 308 resends the method and
+body to the same origin. A 307 or 308 to another origin rejects, and that
+origin is not asked. Headers the plugin passes go on every hop. A core
+release before `method` and `json` sends every request as a `GET`, so a
+plugin that posts sets its `@geekity/cms` peer range to start at a release
+that has them.
+
 **Federation middleware.** A federation middleware is handed a
 `PluginFederationContext` for each request. Its `outbox(username)` and
 `followers(username)` return promises of the collection, or of `undefined`
