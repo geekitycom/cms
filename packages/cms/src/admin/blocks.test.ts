@@ -105,6 +105,10 @@ describe('a block, given input it cannot draw', () => {
       'a ranked item below zero',
       { ranked: { caption: 'Pages', items: [{ label: '/', value: -3 }] } },
     ],
+    [
+      'a ranked list in a format it does not know',
+      { ranked: { caption: 'Pages', format: 'money', items: [{ label: '/', value: 3 }] } },
+    ],
     ['bars of no groups', { bars: { caption: 'Posts', groups: [], series: [] } }],
     [
       'bars whose values miss a group',
@@ -438,6 +442,26 @@ describe('a ranked list', () => {
     assert.deepEqual(all(html, /<span class="truncate">(?:<a [^>]*>)?([^<]*)</g), ['/', '/about']);
     assert.match(html, /<a class="link" href="\/admin\/posts">\/<\/a>/);
     assert.deepEqual(all(html, /<rect class="fill-primary" [^>]*width="([^"]*)"/g), ['100', '25']);
+  });
+
+  it('writes each value in the list format, a number when it is left out', () => {
+    const value = /<span class="tabular-nums">([^<]*)</g;
+    const items = [
+      { label: 'US', value: 41.66 },
+      { label: 'DE', value: 1284 },
+    ];
+    assert.deepEqual(all(draw({ ranked: { caption: 'Countries', items } }), value), [
+      '1,284',
+      '41.66',
+    ]);
+    assert.deepEqual(
+      all(draw({ ranked: { caption: 'Countries', format: 'percent', items } }), value),
+      ['1,284%', '41.7%'],
+    );
+    assert.deepEqual(
+      all(draw({ ranked: { caption: 'Pages', format: 'duration', items } }), value),
+      ['21m 24s', '42s'],
+    );
   });
 
   it('drops a link that is not a web address or a path', () => {

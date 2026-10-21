@@ -208,7 +208,11 @@ function drawTable(data: unknown): DrawnBlock {
   };
 }
 
-type StatFormat = 'number' | 'percent' | 'duration';
+type ValueFormat = 'number' | 'percent' | 'duration';
+
+function isValueFormat(format: unknown): format is ValueFormat {
+  return format === 'number' || format === 'percent' || format === 'duration';
+}
 
 function duration(seconds: number): string {
   const total = Math.round(seconds);
@@ -219,7 +223,7 @@ function duration(seconds: number): string {
   return `${String(total)}s`;
 }
 
-function formatted(value: number, format: StatFormat): string {
+function formatted(value: number, format: ValueFormat): string {
   if (format === 'percent') return `${percent.format(value)}%`;
   if (format === 'duration') return duration(value);
   return whole.format(value);
@@ -229,7 +233,7 @@ function drawChange(
   value: number,
   previous: number,
   better: 'up' | 'down',
-  format: StatFormat,
+  format: ValueFormat,
 ): DrawnChange {
   const from = formatted(previous, format);
   if (value === previous) return { arrow: '', text: `No change from ${from}`, tone: 'none' };
@@ -252,7 +256,7 @@ function drawStats(data: unknown): DrawnBlock {
     const { previous, better = 'up', format = 'number' } = stat;
     if (previous !== undefined && !isAmount(previous)) return EMPTY;
     if (better !== 'up' && better !== 'down') return EMPTY;
-    if (format !== 'number' && format !== 'percent' && format !== 'duration') return EMPTY;
+    if (!isValueFormat(format)) return EMPTY;
     const value = stat['value'];
     stats.push({
       label: stat['label'],
@@ -386,6 +390,8 @@ function safeHref(href: unknown): string | undefined {
 function drawRanked(data: unknown): DrawnBlock {
   if (!isRecord(data) || typeof data['caption'] !== 'string') return EMPTY;
   const caption = data['caption'];
+  const { format = 'number' } = data;
+  if (!isValueFormat(format)) return EMPTY;
   const items = data['items'];
   if (
     !Array.isArray(items) ||
@@ -405,7 +411,7 @@ function drawRanked(data: unknown): DrawnBlock {
     caption,
     items: ranked.map((item) => ({
       label: item.label,
-      value: whole.format(item.value),
+      value: formatted(item.value, format),
       href: safeHref(item.href),
       widthPercent: most > 0 ? Math.round((item.value / most) * 1000) / 10 : 0,
     })),

@@ -381,9 +381,14 @@ export type PluginBlock =
       };
     }
   | {
-      /** Labels drawn largest value first, each linked when `href` is a path or a web address. */
+      /**
+       * Labels drawn largest value first, each linked when `href` is a path
+       * or a web address. `format` says how every value is written, as for
+       * stats.
+       */
       readonly ranked: {
         readonly caption: string;
+        readonly format?: 'number' | 'percent' | 'duration';
         readonly items: readonly {
           readonly label: string;
           readonly value: number;
