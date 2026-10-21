@@ -16,6 +16,9 @@ const MAX_REDIRECTS = 5;
 /** Redirects that keep the method and body, as `fetch` has them. */
 const KEEPS_BODY = new Set([307, 308]);
 
+/** The plugin headers sent to an origin other than the one the plugin asked. */
+const CROSS_ORIGIN_HEADERS = ['accept', 'accept-language', 'user-agent'];
+
 /** What decides which addresses a plugin may reach. */
 export interface PluginFetchOptions {
   /** The site federation's own switch; on only for tests and private networks. */
@@ -33,6 +36,13 @@ export async function pluginFetch(
   }
   let method = init.method ?? 'GET';
   let body = init.json === undefined ? undefined : JSON.stringify(init.json);
+  const asked = new Headers(init.headers);
+  const elsewhere = new Headers();
+  for (const name of CROSS_ORIGIN_HEADERS) {
+    const value = asked.get(name);
+    if (value !== null) elsewhere.set(name, value);
+  }
+  let origin: string | undefined;
   let at = target;
   for (let hop = 0; ; hop += 1) {
     const url = webUrl(at);
@@ -41,7 +51,8 @@ export async function pluginFetch(
       throw new Error(`${url.href} is not a public address.`);
     }
 
-    const headers = new Headers(init.headers);
+    origin ??= url.origin;
+    const headers = new Headers(url.origin === origin ? asked : elsewhere);
     if (body !== undefined) headers.set('content-type', 'application/json');
     const response = await fetch(url, {
       method,

@@ -134,6 +134,62 @@ describe('a plugin’s fetch', () => {
   });
 });
 
+describe('a plugin’s headers on a redirect', () => {
+  const credentials = {
+    authorization: 'Bearer secret',
+    cookie: 'session=secret',
+    'proxy-authorization': 'Basic secret',
+    'x-api-key': 'secret',
+    'x-umami-api-key': 'secret',
+    'api-key': 'secret',
+  };
+  const safe = { accept: 'application/json', 'user-agent': 'Acme/1.0' };
+  const headers = { ...credentials, ...safe };
+
+  it('drops every header but accept and user-agent on a hop to another origin', async () => {
+    await hostFor(false).fetch('https://public.example/moved-302?to=https://other.example/x', {
+      headers,
+    });
+    assert.equal(sent.length, 2);
+    assert.equal(sent[0]?.headers.get('authorization'), 'Bearer secret');
+    assert.equal(sent[1]?.url, 'https://other.example/x');
+    for (const name of Object.keys(credentials)) {
+      assert.equal(sent[1]?.headers.get(name), null, `${name} went to another origin`);
+    }
+    assert.equal(sent[1]?.headers.get('accept'), 'application/json');
+    assert.equal(sent[1]?.headers.get('user-agent'), 'Acme/1.0');
+  });
+
+  it('keeps every header on a hop to the same origin', async () => {
+    await hostFor(false).fetch('https://public.example/moved-302', { headers });
+    assert.equal(sent[1]?.url, 'https://public.example/landing');
+    for (const [name, value] of Object.entries(headers)) {
+      assert.equal(sent[1]?.headers.get(name), value);
+    }
+  });
+
+  it('treats http to https on the same host as another origin', async () => {
+    await hostFor(false).fetch('http://public.example/moved-301?to=https://public.example/x', {
+      headers,
+    });
+    assert.equal(sent[1]?.url, 'https://public.example/x');
+    assert.equal(sent[1]?.headers.get('authorization'), null);
+    assert.equal(sent[1]?.headers.get('accept'), 'application/json');
+  });
+
+  it('sends the headers again when a later hop comes back to the first origin', async () => {
+    const back = encodeURIComponent('https://public.example/landing');
+    await hostFor(false).fetch(
+      `https://public.example/moved-302?to=${encodeURIComponent(`https://other.example/moved-302?to=${back}`)}`,
+      { headers },
+    );
+    assert.equal(sent.length, 3);
+    assert.equal(sent[1]?.headers.get('authorization'), null);
+    assert.equal(sent[2]?.url, 'https://public.example/landing');
+    assert.equal(sent[2]?.headers.get('authorization'), 'Bearer secret');
+  });
+});
+
 describe('a plugin’s POST', () => {
   const sign = { method: 'POST', json: { username: 'admin', password: 'umami' } } as const;
 

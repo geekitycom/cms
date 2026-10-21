@@ -565,7 +565,13 @@ one, rejects with an error before it is asked, unless the site lets its
 federation reach private addresses. After a `POST`, a 301, 302 or 303 is
 followed as a `GET` without the body. A 307 or 308 resends the method and
 body to the same origin. A 307 or 308 to another origin rejects, and that
-origin is not asked. Headers the plugin passes go on every hop. A core
+origin is not asked. The headers the plugin passes go only to the origin of
+the URL it asked for, meaning the same scheme, host and port. A hop to any
+other origin carries only the plugin's `accept`, `accept-language` and
+`user-agent` headers, and drops the rest, such as `authorization`, `cookie`
+or an API-key header. A redirect from `http` to `https` on the same host is
+another origin, so it drops them too. A later hop back to the first origin
+sends them again. A core
 release before `method` and `json` sends every request as a `GET`, so a
 plugin that posts sets its `@geekity/cms` peer range to start at a release
 that has them.

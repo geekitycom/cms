@@ -897,7 +897,9 @@ export interface PluginHost<
    * rejects with an error, unless the site lets its federation reach private
    * addresses. After a `POST`, a 301, 302 or 303 is followed as a `GET`
    * without the body, and a 307 or 308 resends the body only to the same
-   * origin; one to another origin rejects. Rejects as `fetch` does when the
+   * origin; one to another origin rejects. The plugin's headers go only to
+   * the origin of `url`; a hop to another origin carries just its `accept`,
+   * `accept-language` and `user-agent`. Rejects as `fetch` does when the
    * host cannot be reached; any status is answered as it came.
    */
   fetch(url: string, init?: PluginFetchInit): Promise<Response>;
