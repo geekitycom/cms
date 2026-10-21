@@ -357,3 +357,85 @@ describe('llms.txt navigation (AC #8)', () => {
     );
   });
 });
+
+describe('an archive page (TASK-468)', () => {
+  const ARCHIVE_FILES: Record<string, string> = {
+    'pages/archive.md':
+      '---\ntitle: Everything\npermalink: /archive/\narchive: true\n---\n\nEvery post.\n',
+    'posts/2026-08-20-four.md': [
+      '---',
+      'title: Post *four*',
+      "date: '2026-08-20T09:00:00Z'",
+      'permalink: /2026/08/four/',
+      'description: |-',
+      '  A summer',
+      '  note.',
+      '---',
+      '',
+      'The fourth.',
+      '',
+    ].join('\n'),
+    'posts/2026-09-04-drafted.md':
+      "---\ntitle: Drafted\ndate: '2026-09-04T09:00:00Z'\npermalink: /2026/09/drafted/\ndraft: true\n---\n\nNot yet.\n",
+  };
+
+  const MONTHS = [
+    '## September 2026',
+    '',
+    '- [2026-09-03 Post three](/2026/09/three/index.md)',
+    '- [2026-09-02 Post two](/2026/09/two/index.md)',
+    '- [2026-09-01 Post one](/2026/09/one/index.md)',
+    '',
+    '## August 2026',
+    '',
+    '- [2026-08-20 Post \\*four\\*](/2026/08/four/index.md): A summer note.',
+  ].join('\n');
+
+  it('lists every published post under the page, by month, newest first, as the HTML does', async () => {
+    const cms = await site({ files: ARCHIVE_FILES });
+    const text = await markdown(cms, '/archive/index.md');
+    assert.ok(text.includes(`# Everything\n\nEvery post.\n\n${MONTHS}\n\n## Field`), text);
+    assert.doesNotMatch(text, /Drafted/);
+
+    const html = await markdown(cms, '/archive/');
+    const htmlTitles = [...html.matchAll(/<li><a href="[^"]*"><span>([^<]*)<\/span>/g)].map(
+      (match) => match[1],
+    );
+    const markdownTitles = [...text.matchAll(/^- \[\d{4}-\d{2}-\d{2} (.*?)\]\(/gm)].map((match) =>
+      match[1]?.replaceAll('\\', ''),
+    );
+    assert.deepEqual(markdownTitles, htmlTitles);
+  });
+
+  it('lists nothing on a page that did not ask for the archive', async () => {
+    const cms = await site({ files: ARCHIVE_FILES });
+    assert.doesNotMatch(await markdown(cms, '/about/index.md'), /September 2026/);
+  });
+
+  it('gives archiveMonths to both partials, so a site theme lays it out', async () => {
+    const cms = await site({
+      files: ARCHIVE_FILES,
+      site: { theme: 'mine' },
+      theme: {
+        'partials/markdown-header.md.njk':
+          '{% for group in archiveMonths %}{{ group.month }}: {{ group.posts.length }}\n{% endfor %}',
+        'partials/markdown-footer.md.njk':
+          '{% for group in archiveMonths %}{% for entry in group.posts %}=> {{ entry.url | markdownUrl }} {{ entry.date }} {{ entry.label }}{{ (" " + entry.description) if entry.description }}\n{% endfor %}{% endfor %}',
+      },
+    });
+    const text = await markdown(cms, '/archive/index.md');
+    assert.ok(text.includes('---\n\nSeptember 2026: 3\nAugust 2026: 1\n\nEvery post.\n\n'), text);
+    assert.ok(
+      text.endsWith(
+        [
+          '=> /2026/09/three/index.md 2026-09-03 Post three',
+          '=> /2026/09/two/index.md 2026-09-02 Post two',
+          '=> /2026/09/one/index.md 2026-09-01 Post one',
+          '=> /2026/08/four/index.md 2026-08-20 Post *four* A summer note.',
+          '',
+        ].join('\n'),
+      ),
+      text,
+    );
+  });
+});

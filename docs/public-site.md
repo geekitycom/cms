@@ -365,12 +365,12 @@ page's `.md` URL.
 
 A document's Markdown has four parts:
 
-| Part         | What it holds                                                                                                                   |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| Front matter | The file's front matter, with navigation added. See the table below.                                                            |
-| Header       | The theme's `partials/markdown-header.md.njk`. The default theme writes the title as a heading, and the bio where there is one. |
-| Body         | The stored body, with its links to the site's own pages pointing at their `.md` URLs.                                           |
-| Footer       | The theme's `partials/markdown-footer.md.njk`. The default theme writes a heading, a post's byline and the site's menus.        |
+| Part         | What it holds                                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Front matter | The file's front matter, with navigation added. See the table below.                                                                              |
+| Header       | The theme's `partials/markdown-header.md.njk`. The default theme writes the title as a heading, and the bio where there is one.                   |
+| Body         | The stored body, with its links to the site's own pages pointing at their `.md` URLs.                                                             |
+| Footer       | The theme's `partials/markdown-footer.md.njk`. The default theme writes an archive page's posts, a heading, a post's byline and the site's menus. |
 
 The CMS adds these front matter keys:
 
@@ -407,6 +407,19 @@ on that page, one line each:
 ## Posts
 
 - [2026-09-03 Third post](/third/index.md): The third post's description.
+```
+
+A page whose front matter says `archive: true` lists every published post
+after its own Markdown, as its HTML does. The default theme's footer writes
+one level-two heading per month, newest month first, and under each heading
+the posts of that month, newest first, one line each in the shape a listing
+uses:
+
+```markdown
+## September 2026
+
+- [2026-09-03 Third post](/third/index.md): The third post's description.
+- [2026-09-01 First post](/first/index.md)
 ```
 
 On an author archive the header writes the author's bio under the heading.

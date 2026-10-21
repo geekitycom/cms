@@ -950,14 +950,18 @@ for it:
 ```
 
 Each entry is `{ month, posts }`. `month` is the heading, such as
-`September 2026`. `posts` is `{ title, url, date }` for each post in that
-month, newest first. The CMS decides which month a post belongs to, not the
+`September 2026`. `posts` is `{ title, url, date, description }` for each
+post in that month, newest first. `description` is absent when the post has
+none. The CMS decides which month a post belongs to, not the
 template. A date in a file is a UTC instant, and the CMS reads it in the site's
 `timezone`. The month grouping and the date printed under an entry come from
 the same decision, so they always agree.
 
 The CMS honours the key on any page, as it does `contact: true`. To show the
 list on another kind of page, add the same three lines to that layout.
+
+The page's Markdown lists the same posts. See
+[The Markdown representation](markdown.md#context).
 
 ## The head
 

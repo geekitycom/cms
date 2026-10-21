@@ -53,6 +53,12 @@ export interface MarkdownEntry extends MarkdownLink {
   readonly description?: string | undefined;
 }
 
+/** One month of an archive page's Markdown: its heading and its posts, newest first. */
+export interface MarkdownArchiveMonth {
+  readonly month: string;
+  readonly posts: readonly MarkdownEntry[];
+}
+
 /** A canonical URL as the representation writes it: its `.md` when it has one. */
 export type MarkdownUrl = (url: string) => string;
 

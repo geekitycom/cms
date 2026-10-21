@@ -37,6 +37,8 @@ export interface ArchiveEntry {
   url: string;
   /** When it was published, for a theme that dates the line. */
   date: Date;
+  /** Its summary, which the archive's Markdown prints after the link. */
+  description?: string | undefined;
 }
 
 /** One month of an archive page: the heading, and what was published under it. */
@@ -84,7 +86,12 @@ export function archiveMonths(
       months.push({ month: formatDate(date, 'month', timezone, locale), posts: [] });
     }
 
-    months.at(-1)?.posts.push({ title: postLabel(document, cited), url: document.permalink, date });
+    months.at(-1)?.posts.push({
+      title: postLabel(document, cited),
+      url: document.permalink,
+      date,
+      ...(document.description === undefined ? {} : { description: document.description }),
+    });
   }
 
   return months;

@@ -604,5 +604,7 @@ as everywhere else.
 The default theme renders it from `partials/archive.njk`. The CMS passes the
 layout `archiveMonths`, which is `{ month, posts }` per month. The month is
 already converted to the site's `timezone`, so the heading and the dates agree.
+The page's Markdown lists the same posts after its own text. See
+[The Markdown](public-site.md#the-markdown).
 Eleventy ignores the key. A static build of the same directory publishes the
 page as an ordinary page.

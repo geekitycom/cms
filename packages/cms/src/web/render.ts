@@ -22,6 +22,7 @@ import { iconSetting, siteIcons } from '../images/icons.ts';
 import type { User } from '../site/users.ts';
 import { LLMS_TXT_PATH } from './llms.ts';
 import { archiveMonths, archiveOpen } from './archive.ts';
+import type { ArchiveMonth } from './archive.ts';
 import { authorContext, siteAuthorContext } from '../site/authors.ts';
 import type { AuthorContext } from '../site/authors.ts';
 import {
@@ -50,11 +51,12 @@ import type { CommentThread, Conversation } from '../comments/conversation.ts';
 import { activityStreamsId } from '../content/permalinks.ts';
 import { currentObjectId, readObjectIds } from '../federation/object-ids.ts';
 import { isServed } from '../content/served.ts';
+import { calendarDayIn } from '../content/time.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, NeighbourContext, PhotoContext } from './context.ts';
 import type { FrontPageSlugs, SiteData } from '../theme/site-data.ts';
-import { bioOf, escapeMarkdown, HOME_LINK } from './markdown-page.ts';
-import type { MarkdownChrome, MarkdownUrl } from './markdown-page.ts';
+import { bioOf, escapeMarkdown, HOME_LINK, oneLine } from './markdown-page.ts';
+import type { MarkdownArchiveMonth, MarkdownChrome, MarkdownUrl } from './markdown-page.ts';
 import { navigationLinks, navigationMenus } from '../site/navigation.ts';
 import { resolveLicense } from '../content/license.ts';
 import type { ContentLicense } from '../content/license.ts';
@@ -125,6 +127,8 @@ export interface MarkdownChromeOptions {
   markdownUrl: MarkdownUrl;
   /** The page, when it is the site's front page: `newestPosts` is offered there. */
   frontPage?: Document | undefined;
+  /** The document the Markdown is of: `archiveMonths` is offered when it says `archive: true`. */
+  document?: Document | undefined;
 }
 
 /** A page's Markdown header and footer, as the theme wrote them. */
@@ -269,7 +273,8 @@ export interface Renderer {
    * The header and footer of a page's Markdown, through
    * {@link MARKDOWN_TEMPLATES} with autoescaping off: Markdown is not HTML.
    * The partials get `site`, `menus`, `soloAuthor`, the chrome's links as
-   * data, and the `escapeMarkdown` and `markdownUrl` filters.
+   * data, `archiveMonths` on an archive page, and the `escapeMarkdown` and
+   * `markdownUrl` filters.
    */
   renderMarkdownChrome(chrome: MarkdownChrome, options: MarkdownChromeOptions): MarkdownChromeText;
   /** Any template by name, with the site data already in the context. */
@@ -733,14 +738,39 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
    * than reading front matter for itself — the way `contactForm` works.
    */
   function archiveContext(document: Document): Record<string, unknown> {
-    if (!archiveOpen(document)) return {};
+    const months = archiveOf(document);
+    return months === undefined ? {} : { archiveMonths: months };
+  }
+
+  function archiveOf(document: Document): ArchiveMonth[] | undefined {
+    if (!archiveOpen(document)) return undefined;
     const posts = options.archivePosts?.();
-    if (posts === undefined) return {};
+    if (posts === undefined) return undefined;
 
     const site = siteData.read();
-    return {
-      archiveMonths: archiveMonths(posts, siteTimezone(site), siteLocale(site), citedPage),
-    };
+    return archiveMonths(posts, siteTimezone(site), siteLocale(site), citedPage);
+  }
+
+  /**
+   * The archive as Markdown data for the page's header and footer partials:
+   * the months the HTML heads, each post a link with its calendar day and its
+   * summary on one line.
+   */
+  function markdownArchiveContext(document: Document | undefined): Record<string, unknown> {
+    const months = document === undefined ? undefined : archiveOf(document);
+    if (months === undefined) return {};
+
+    const timezone = siteTimezone(siteData.read());
+    const markdownMonths: MarkdownArchiveMonth[] = months.map(({ month, posts }) => ({
+      month,
+      posts: posts.map((entry) => ({
+        label: entry.title,
+        url: entry.url,
+        date: calendarDayIn(entry.date, timezone),
+        description: entry.description === undefined ? undefined : oneLine(entry.description),
+      })),
+    }));
+    return { archiveMonths: markdownMonths };
   }
 
   /**
@@ -948,7 +978,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
   function renderMarkdownChrome(
     chrome: MarkdownChrome,
-    { markdownUrl, frontPage }: MarkdownChromeOptions,
+    { markdownUrl, frontPage, document }: MarkdownChromeOptions,
   ): MarkdownChromeText {
     const site = siteData.read();
     useThemeDirs(markdownEnvironment, themes.current().dirs);
@@ -959,6 +989,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       navigation: navigationLinks(site),
       ...(soloAuthor === undefined ? {} : { soloAuthor }),
       ...(frontPage === undefined ? {} : newestPostsContext(frontPage)),
+      ...markdownArchiveContext(document),
       home: HOME_LINK,
       ...chrome,
       bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),
