@@ -1,6 +1,6 @@
 {
   "name": "@geekity/plugin-wordpress",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "type": "module",
   "description": "Geekity CMS plugin for a site that moved from the WordPress ActivityPub plugin: its old inbox and collection paths, and the import that brings each person across.",
   "license": "MIT",
@@ -44,8 +44,8 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@fedify/fedify": "^2.4.4",
-    "@fedify/vocab": "^2.4.4",
+    "@fedify/fedify": "^2.4.3",
+    "@fedify/vocab": "^2.4.3",
     "entities": "^8.1.0",
     "sax": "^1.6.1",
     "turndown": "^7.2.4"
@@ -54,16 +54,16 @@
     "@geekity/cms": "workspace:^"
   },
   "devDependencies": {
-    "@fedify/cli": "2.4.4",
+    "@fedify/cli": "2.4.3",
     "@geekity/cms": "workspace:*",
     "@geekity/plugin-llm": "workspace:*",
     "@geekity/plugin-post-summary": "workspace:*",
     "@geekity/plugin-tag-suggest": "workspace:*",
-    "@hono/node-server": "^2.1.5",
+    "@hono/node-server": "^2.1.4",
     "@types/node": "^26.6.5",
     "@types/sax": "^1.2.7",
     "esbuild": "^0.28.2",
-    "js-yaml": "^5.5.0",
+    "js-yaml": "^5.4.3",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

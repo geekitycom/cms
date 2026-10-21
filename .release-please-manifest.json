@@ -1,8 +1,8 @@
 {
-  "packages/cms": "0.36.1",
-  "packages/plugin-wordpress": "0.7.1",
+  "packages/cms": "0.37.0",
+  "packages/plugin-wordpress": "0.8.0",
   "packages/plugin-llm": "0.4.1",
   "packages/plugin-post-summary": "0.6.1",
   "packages/plugin-tag-suggest": "0.5.1",
-  "packages/plugin-umami": "0.0.0"
+  "packages/plugin-umami": "0.1.0"
 }
