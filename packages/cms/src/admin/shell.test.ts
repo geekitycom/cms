@@ -8,7 +8,7 @@ import { adminMenu } from './menu.ts';
 import { RESET_PATH } from './recovery.ts';
 import { MAIL_TEST_FIELDS, MAIL_TEST_PATH } from './settings-email.ts';
 import type { FlashMessage } from '../store/admin-store.ts';
-import { createAdminTemplateEnvironment } from './templates.ts';
+import { adminAssetUrl, createAdminTemplateEnvironment } from './templates.ts';
 
 const environment = createAdminTemplateEnvironment({ noCache: true });
 
@@ -17,7 +17,6 @@ const CHROME = {
   adminUrl: '/admin',
   siteUrl: '/',
   newPostUrl: '/admin/posts/new',
-  assetPrefix: '/admin/_static/',
   cspNonce: 'nonce',
   barScheme: 'auto',
   csrfToken: 'token',
@@ -98,7 +97,7 @@ describe('the shell', () => {
     assert.ok(content < html.indexOf('<main id="main"'), 'the screen is the drawer content');
 
     const scripts = [...html.matchAll(/<script\b[^>]*>/g)].map(([tag]) => tag);
-    assert.deepEqual(scripts, ['<script src="/admin/_static/admin-bar.js" defer>']);
+    assert.deepEqual(scripts, [`<script src="${adminAssetUrl('admin-bar.js')}" defer>`]);
   });
 
   it('draws each flash as an alert in the colour of its kind, as a status rather than an alarm', () => {

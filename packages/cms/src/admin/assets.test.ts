@@ -2,9 +2,19 @@ import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
 import { sandbox, signedIn } from './__testing__/harness.ts';
+import { ownManifest } from '../init.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
+
+const VERSION = ownManifest().version;
+const VERSION_PATTERN = VERSION.replaceAll('.', '\\.');
+
+function adminAssetLinks(html: string): string[] {
+  return [...html.matchAll(/(?:href|src)="(\/admin\/_static\/[^"]*)"/g)].map(
+    ([, url]) => url ?? '',
+  );
+}
 
 /**
  * Every inline `<style>` in an admin page but the two the admin bar carries
@@ -67,6 +77,18 @@ describe('the admin stylesheet', () => {
     assert.equal(await second.text(), '');
   });
 
+  it('is served with the same headers when its URL names the version', async () => {
+    const cms = await box.site();
+    const plain = await cms.app.request('/admin/_static/admin.css');
+    const versioned = await cms.app.request(`/admin/_static/admin.css?v=${VERSION}`);
+
+    assert.equal(versioned.status, 200);
+    assert.equal(versioned.headers.get('cache-control'), plain.headers.get('cache-control'));
+    assert.equal(versioned.headers.get('cache-control'), 'public, max-age=3600');
+    assert.equal(versioned.headers.get('etag'), plain.headers.get('etag'));
+    assert.equal(await versioned.text(), await plain.text());
+  });
+
   it('does not serve anything outside its own directory', async () => {
     const cms = await box.site();
 
@@ -86,12 +108,47 @@ describe('the admin stylesheet', () => {
 
     for (const response of [await agent.get('/admin'), await cms.app.request('/admin/login')]) {
       const html = await response.text();
-      assert.match(html, /<link[^>]+href="\/admin\/_static\/admin\.css"/);
+      assert.match(
+        html,
+        new RegExp(`<link[^>]+href="/admin/_static/admin\\.css\\?v=${VERSION_PATTERN}"`),
+      );
       assert.deepEqual(
         strayStyles(html, response.headers.get('content-security-policy') ?? ''),
         [],
         'the admin stylesheet is a file, not inline CSS',
       );
+    }
+  });
+
+  it('is linked, with every admin script, at a URL that names the running version', async () => {
+    const cms = await box.site();
+    const agent = await signedIn(cms);
+    const pages = {
+      '/admin/login': await cms.app.request('/admin/login'),
+      '/admin': await agent.get('/admin'),
+      '/admin/posts/new?kind=note': await agent.get('/admin/posts/new?kind=note'),
+      '/admin/media': await agent.get('/admin/media'),
+      '/admin/tools/export': await agent.get('/admin/tools/export'),
+    };
+
+    const linked = new Set<string>();
+    for (const [url, response] of Object.entries(pages)) {
+      const links = adminAssetLinks(await response.text());
+      assert.ok(links.length > 0, `${url} links admin assets`);
+      for (const link of links) {
+        assert.match(link, new RegExp(`\\?v=${VERSION_PATTERN}$`), `${url}: ${link}`);
+        linked.add(link.replace(/\?.*$/, ''));
+      }
+    }
+    for (const asset of [
+      'admin.css',
+      'admin-bar.js',
+      'editor.js',
+      'slug.js',
+      'media.js',
+      'job-status.js',
+    ]) {
+      assert.ok(linked.has(`/admin/_static/${asset}`), asset);
     }
   });
 

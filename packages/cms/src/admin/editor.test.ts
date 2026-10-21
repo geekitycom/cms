@@ -483,8 +483,11 @@ describe('the editor page', () => {
 
     const html = await (await agent.get('/admin/posts/new?kind=note')).text();
 
-    assert.match(html, /<script\b[^>]*\btype="module"[^>]*\bsrc="\/admin\/_static\/editor\.js"/s);
-    assert.match(html, /<script\b[^>]*\bsrc="\/admin\/_static\/slug\.js"/);
+    assert.match(
+      html,
+      /<script\b[^>]*\btype="module"[^>]*\bsrc="\/admin\/_static\/editor\.js\?v=[^"]+"/s,
+    );
+    assert.match(html, /<script\b[^>]*\bsrc="\/admin\/_static\/slug\.js\?v=[^"]+"/);
     assert.match(html, /data-preview-url="\/admin\/preview"/);
     assert.match(html, /data-upload-url="\/admin\/uploads"/);
     assert.match(html, /data-kind="post"/);

@@ -36,7 +36,7 @@ function control(html: string, kind: string, target: string): string {
   assert.match(tag, /\shidden>$/, `the control for #${target} waits for the script`);
   assert.match(tag, /data-upload-url="\/admin\/uploads"/);
   assert.match(html, new RegExp(`\\bid="${target}"`), `#${target} is on the page`);
-  assert.match(html, /<script defer src="\/admin\/_static\/upload-drop\.js"><\/script>/);
+  assert.match(html, /<script defer src="\/admin\/_static\/upload-drop\.js\?v=[^"]+"><\/script>/);
   return tag;
 }
 

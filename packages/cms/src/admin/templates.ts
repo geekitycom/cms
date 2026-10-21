@@ -2,6 +2,8 @@ import { fileURLToPath } from 'node:url';
 
 import { Environment, FileSystemLoader } from 'nunjucks';
 
+import { ownManifest } from '../init.ts';
+import { ADMIN_ASSET_PREFIX } from '../site/admin-paths.ts';
 import { formatDate } from '../theme/templates.ts';
 import { drawBlock } from './blocks.ts';
 import { formatFileSize } from './formatting.ts';
@@ -85,6 +87,16 @@ export const ADMIN_TEMPLATES = {
   publicAdminBar: 'components/public-admin-bar.njk',
 } as const;
 
+const CMS_VERSION = ownManifest().version;
+
+/**
+ * The query names the running CMS version, so an upgrade changes every URL and
+ * a browser does not keep the last release's file for the hour it may cache it.
+ */
+export function adminAssetUrl(name: string): string {
+  return `${ADMIN_ASSET_PREFIX}${name}?v=${encodeURIComponent(CMS_VERSION)}`;
+}
+
 /** How to build an {@link createAdminTemplateEnvironment}. */
 export interface CreateAdminTemplateEnvironmentOptions {
   /**
@@ -139,6 +151,7 @@ export function createAdminTemplateEnvironment(
   );
   environment.addFilter('modifier', modifierClass);
   environment.addFilter('drawn', drawBlock);
+  environment.addGlobal('adminAsset', adminAssetUrl);
 
   return environment;
 }

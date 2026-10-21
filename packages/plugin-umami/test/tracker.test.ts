@@ -47,7 +47,6 @@ describe('the Umami tracker', () => {
   for (const [unset, settings] of [
     ['nothing', undefined],
     ['the website ID', { umami_url: SET.umami_url }],
-    ['the Umami URL', { website_id: SET.website_id }],
   ] as const) {
     it(`draws no tag with ${unset} set`, async () => {
       const cms = await umamiSite(umami, settings === undefined ? {} : { settings });
@@ -56,6 +55,13 @@ describe('the Umami tracker', () => {
       }
     });
   }
+
+  it('loads the tracker from Umami Cloud when the Umami URL is not set', async () => {
+    const cms = await umamiSite(umami, { settings: { website_id: SET.website_id } });
+    assert.deepEqual(trackersOn(await anonymous(cms, '/')), [
+      '<script src="https://cloud.umami.is/script.js" defer data-website-id="a1b2c3"></script>',
+    ]);
+  });
 
   it('leaves out a signed-in reader, unless the site counts signed-in visits', async () => {
     const skipping = await umamiSite(umami, { settings: SET });

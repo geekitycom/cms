@@ -38,24 +38,35 @@ docker compose exec geekity geekity plugin add @geekity/plugin-umami
 Or press **Add plugin** under `/admin/plugins` and enter
 `@geekity/plugin-umami`.
 
-Then enable Umami under `/admin/plugins`, open its screen, and set the Umami
-URL and the website ID. To read the stats as well, set the API settings that
+Then enable Umami under `/admin/plugins`, open its screen, and set the website
+ID. On a self-hosted Umami, set the Umami URL as well. To read the stats as well, set the API settings that
 [Reading the stats](#reading-the-stats) describes.
+
+### With Umami Cloud
+
+1. In Umami Cloud, copy the website ID from the website's settings, and make
+   an API key in your account settings.
+2. On the plugin's screen, leave **Umami URL** as `https://cloud.umami.is`,
+   set **Website ID** to the copied ID, **Umami for the stats** to **Umami Cloud,
+   with an API key** and **API key** to the new key. Leave **API URL** empty.
+3. Select **Check connection**. When Umami answers and has the website, it
+   says so and names the website.
+4. Remove any Umami `<script>` the site's theme adds, as
+   [Moving from a theme snippet](#moving-from-a-theme-snippet) describes.
 
 ## Settings
 
-| Setting                    | Key               | What it does                                                                                                                         |
-| -------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Umami URL                  | `umami_url`       | Where Umami runs: `https://cloud.umami.is` for Umami Cloud, or the address of your own Umami. The tracker loads `script.js` from it. |
-| Website ID                 | `website_id`      | The ID Umami shows for the site under Settings > Websites. It becomes `data-website-id`.                                             |
-| Domains                    | `domains`         | Host names to count visits on, separated by commas, such as `example.com,www.example.com`. It becomes `data-domains`.                |
-| Respect Do Not Track       | `do_not_track`    | Counts no visit from a browser that sends Do Not Track. It adds `data-do-not-track="true"`.                                          |
-| Leave out the query string | `exclude_search`  | Records each page without its query string. It adds `data-exclude-search="true"`.                                                    |
-| Leave out the fragment     | `exclude_hash`    | Records each page without its fragment. It adds `data-exclude-hash="true"`.                                                          |
-| Count signed-in visits     | `count_signed_in` | Off by default, so a reader who is signed in to the site gets no tracker and your own visits are not counted.                        |
+| Setting                    | Key               | What it does                                                                                                                                                              |
+| -------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Umami URL                  | `umami_url`       | Where Umami runs: `https://cloud.umami.is` for Umami Cloud, or the address of your own Umami. The tracker loads `script.js` from it. `https://cloud.umami.is` unless set. |
+| Website ID                 | `website_id`      | The ID Umami shows for the site under Settings > Websites. It becomes `data-website-id`.                                                                                  |
+| Domains                    | `domains`         | Host names to count visits on, separated by commas, such as `example.com,www.example.com`. It becomes `data-domains`.                                                     |
+| Respect Do Not Track       | `do_not_track`    | Counts no visit from a browser that sends Do Not Track. It adds `data-do-not-track="true"`.                                                                               |
+| Leave out the query string | `exclude_search`  | Records each page without its query string. It adds `data-exclude-search="true"`.                                                                                         |
+| Leave out the fragment     | `exclude_hash`    | Records each page without its fragment. It adds `data-exclude-hash="true"`.                                                                                               |
+| Count signed-in visits     | `count_signed_in` | Off by default, so a reader who is signed in to the site gets no tracker and your own visits are not counted.                                                             |
 
-Until both the Umami URL and the website ID are set, the plugin adds nothing
-to any page. With Domains empty, Umami counts visits on every host.
+Until the website ID is set, the plugin adds nothing to any page. With Domains empty, Umami counts visits on every host.
 
 An environment variable overrides each setting. Its name is
 `GEEKITY_PLUGIN_UMAMI__` followed by the key in upper case, such as

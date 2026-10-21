@@ -33,7 +33,8 @@ package's README describes its settings.
 The Umami plugin replaces an Umami snippet in a site theme's
 `partials/head-end.njk`. Install it on Docker with
 `geekity plugin add @geekity/plugin-umami`, or with **Add plugin** on Admin >
-Plugins. Enable it and set its Umami URL and website ID on its screen. Then
+Plugins. Enable it and set its website ID on its screen, and its Umami URL when Umami
+is self-hosted. Then
 delete the old `<script>` from the theme, or each visit is counted twice. Its
 [README](../packages/plugin-umami/README.md#moving-from-a-theme-snippet)
 gives the steps.

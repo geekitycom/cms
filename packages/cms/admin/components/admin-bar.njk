@@ -6,7 +6,6 @@
    - `barScheme`, `adminColorScheme` of the user's admin theme; `auto` puts no
      data-scheme on the host.
    - `cspNonce`, on the admin only.
-   - `assetPrefix`, where static/admin-bar.js is served from.
 
    WordPress's "Howdy," menu, greeting the way this site's owner does. A
    popover rather than a script: the browser opens and closes it, shuts it on
@@ -45,4 +44,4 @@ html { margin-top: var(--geekity-admin-bar-height) !important; }
     </div>
   {% endif %}
 </nav>
-<script src="{{ assetPrefix }}admin-bar.js" defer></script></template></geekity-admin-bar>
+<script src="{{ adminAsset('admin-bar.js') }}" defer></script></template></geekity-admin-bar>

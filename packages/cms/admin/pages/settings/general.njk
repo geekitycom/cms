@@ -54,7 +54,7 @@
   {{ field.text('settings-icon', fields.icon, 'Site icon', form.icon,
        error=problems.icon, hintHtml=iconHint) }}
   {{ uploadControl('field', 'settings-icon', uploadsUrl, images=true) }}
-  <script defer src="{{ assetPrefix }}upload-drop.js"></script>
+  <script defer src="{{ adminAsset('upload-drop.js') }}"></script>
 
   <div class="flex items-center gap-4">
     {% if iconPreview %}

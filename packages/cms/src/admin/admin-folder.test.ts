@@ -10,16 +10,18 @@ import { ADMIN_TEMPLATES, PACKAGED_ADMIN_DIR } from './templates.ts';
  * Nunjucks has no public API for a template's dependencies, so they are read
  * from the text: every `extends`, `import`, `include` and `from` names its
  * target as a string literal, and every static file is written as
- * `{{ assetPrefix }}name`.
+ * `{{ adminAsset('name') }}`.
  */
 
 const TEMPLATE_REFERENCE = /\{%-?\s*(?:extends|import|include|from)\s+(["'])([^"']+)\1/g;
-const ASSET_REFERENCE = /\{\{\s*assetPrefix\s*\}\}([\w./-]+)/g;
+const ASSET_REFERENCE = /\{\{\s*adminAsset\((["'])([\w./-]+)\1\)\s*\}\}/g;
+const UNVERSIONED_ASSET = /_static\/|assetPrefix/;
 
 interface Walk {
   templates: Set<string>;
   assets: Set<string>;
   missing: string[];
+  unversioned: string[];
 }
 
 async function walk(name: string, from: string, seen: Walk): Promise<void> {
@@ -31,14 +33,20 @@ async function walk(name: string, from: string, seen: Walk): Promise<void> {
     return;
   }
   const text = await readFile(file, 'utf8');
-  for (const [, asset] of text.matchAll(ASSET_REFERENCE)) seen.assets.add(asset ?? '');
+  for (const [, , asset] of text.matchAll(ASSET_REFERENCE)) seen.assets.add(asset ?? '');
+  if (UNVERSIONED_ASSET.test(text)) seen.unversioned.push(name);
   for (const [, , target] of text.matchAll(TEMPLATE_REFERENCE)) {
     await walk(target ?? '', name, seen);
   }
 }
 
 describe('the admin folder', async () => {
-  const seen: Walk = { templates: new Set(), assets: new Set(), missing: [] };
+  const seen: Walk = {
+    templates: new Set(),
+    assets: new Set(),
+    missing: [],
+    unversioned: [],
+  };
   for (const name of Object.values(ADMIN_TEMPLATES)) await walk(name, 'ADMIN_TEMPLATES', seen);
 
   it('holds every template the admin renders and everything those extend, import or include', () => {
@@ -54,5 +62,9 @@ describe('the admin folder', async () => {
     assert.deepEqual(missing, []);
     assert.ok(seen.assets.has('editor.js'));
     assert.ok(seen.assets.has('admin.css'));
+  });
+
+  it('links every static file through adminAsset, so its URL names the version', () => {
+    assert.deepEqual(seen.unversioned, []);
   });
 });

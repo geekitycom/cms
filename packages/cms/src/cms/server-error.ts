@@ -2,7 +2,7 @@ import type { ErrorHandler } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { Environment } from 'nunjucks';
 
-import { ADMIN_ASSET_PREFIX, ADMIN_PREFIX } from '../site/admin-paths.ts';
+import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from '../admin/templates.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { CONTENT_TYPES, representationOf } from '../web/negotiate.ts';
@@ -68,7 +68,6 @@ export const serverError: ErrorHandler<GeekityEnv> = (error, c) => {
         adminEnvironment ??= createAdminTemplateEnvironment();
         return adminEnvironment.render(ADMIN_TEMPLATES.serverError, {
           adminUrl: ADMIN_PREFIX,
-          assetPrefix: ADMIN_ASSET_PREFIX,
         });
       }),
       500,

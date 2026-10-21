@@ -84,7 +84,7 @@ describe('the editor’s geolocation', () => {
     assert.match(here, /\btype="button"/);
     assert.match(here, /\shidden[\s>]/);
     assert.match(html, /<p id="editor-location-status" class="[^"]*" role="status"><\/p>/);
-    assert.match(html, /<script defer src="\/admin\/_static\/location\.js"><\/script>/);
+    assert.match(html, /<script defer src="\/admin\/_static\/location\.js\?v=[^"]+"><\/script>/);
 
     const page = await (await agent.get('/admin/pages/new')).text();
     assert.doesNotMatch(page, /editor-location-here|location\.js/);
