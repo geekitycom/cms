@@ -9,12 +9,6 @@ import type { UmamiSettings } from '../src/settings.ts';
 import { defaultData, fakeUmami, WEBSITE } from './fake-umami.ts';
 import type { FakeUmami } from './fake-umami.ts';
 
-/**
- * The Umami API client against a fake Umami on loopback, in both modes. The
- * site's own `host.fetch` is exercised by the screen tests; here a plain
- * `fetch` stands in for it.
- */
-
 let fake: FakeUmami;
 
 before(async () => {
@@ -257,6 +251,12 @@ describe('the Umami client on a slow or odd Umami', () => {
     assert.equal(failure.kind, 'aborted');
   });
 
+  it('waits on the caller’s signal in place of its own timeout', async () => {
+    fake.delayMs = 300;
+    const umami = client(cloud(), 50);
+    assert.equal(await umami.active({ signal: AbortSignal.timeout(2000) }), 3);
+  });
+
   it('reports an Umami that cannot be reached', async () => {
     const failure = await failureOf(client(cloud({ api_url: 'http://127.0.0.1:1/v1' })).active());
     assert.equal(failure.kind, 'network');
@@ -267,7 +267,7 @@ describe('the Umami client on a slow or odd Umami', () => {
     assert.equal((await failureOf(client(cloud()).active())).kind, 'invalid-answer');
   });
 
-  it('times out below the dashboard widget limit by default', async () => {
+  it('times out after 2.5 seconds when the caller gives no signal', async () => {
     fake.delayMs = 3500;
     const started = Date.now();
     assert.equal((await failureOf(client(cloud()).active())).kind, 'timeout');
@@ -314,7 +314,7 @@ describe('what the Umami client reads', () => {
         { day: '2026-10-14', count: 10 },
         { day: '2026-10-15', count: 20 },
       ],
-      sessions: [
+      visitors: [
         { day: '2026-10-14', count: 4 },
         { day: '2026-10-15', count: 6 },
       ],

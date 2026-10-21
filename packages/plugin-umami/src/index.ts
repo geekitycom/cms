@@ -1,9 +1,3 @@
-/**
- * `@geekity/plugin-umami`: the Umami analytics tracker on every public page,
- * through page tags (decision-59), and dashboard widgets that read the stats
- * from Umami Cloud or a self-hosted Umami.
- */
-
 import { definePlugin } from '@geekity/cms/plugin';
 
 import { audienceWidget, visitorsNowWidget } from './audience.ts';

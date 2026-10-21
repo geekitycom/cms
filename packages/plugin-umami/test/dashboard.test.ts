@@ -8,11 +8,6 @@ import type { FakeUmami } from './fake-umami.ts';
 import { closeSites, signIn, umamiSite } from './site.ts';
 import type { SiteOptions } from './site.ts';
 
-/**
- * The views and visitors card on the admin dashboard, loaded through the
- * site's own `host.fetch` from a fake Umami on loopback.
- */
-
 const TITLE = 'Umami: views and visitors';
 
 let fake: FakeUmami;

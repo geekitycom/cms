@@ -12,14 +12,8 @@ const LISTED = 10;
  */
 const PATHS_READ = 100;
 
-/** Enough to leave ten once the site's own domains are taken out. */
 const REFERRERS_READ = 25;
 
-/**
- * The ten pages with the most views over the dashboard's period. A path that
- * leads to one of the site's posts shows its title and links to its editor,
- * with the views of every path that leads to the same post added up.
- */
 export function topPagesWidget(
   client: UmamiClient,
   postsAt: (paths: readonly string[]) => Promise<readonly PostAtPath[]>,
@@ -30,12 +24,12 @@ export function topPagesWidget(
     title: 'Umami: top pages',
     width: 'half',
     refreshSeconds: 300,
-    async load({ timezone, period }) {
+    async load({ timezone, period, signal }) {
       if (!(await client.configured())) return [];
       const { range } = lastDays(now(), timezone, period);
-      const read = (await client.expandedMetrics('path', range, { limit: PATHS_READ })).filter(
-        (entry) => entry.value !== '' && entry.pageviews > 0,
-      );
+      const read = (
+        await client.expandedMetrics('path', range, { limit: PATHS_READ, signal })
+      ).filter((entry) => entry.value !== '' && entry.pageviews > 0);
       if (read.length === 0) return [{ paragraph: ['No page views in this period.'] }];
       const posts = new Map(
         (await postsAt(read.map((entry) => entry.value))).map((post) => [post.path, post]),
@@ -65,11 +59,6 @@ export function topPagesWidget(
   };
 }
 
-/**
- * The ten referring domains with the most visitors over the dashboard's
- * period, leaving out the site's own: the host of its URL and the domains the
- * tracker counts, with or without `www.`.
- */
 export function topReferrersWidget(
   client: UmamiClient,
   settings: () => Promise<UmamiSettings>,
@@ -80,13 +69,13 @@ export function topReferrersWidget(
     title: 'Umami: top referrers',
     width: 'half',
     refreshSeconds: 300,
-    async load({ site, timezone, period }) {
+    async load({ site, timezone, period, signal }) {
       if (!(await client.configured())) return [];
       const { range } = lastDays(now(), timezone, period);
       const own = new Set(
         [new URL(site.baseUrl).hostname, ...(await settings()).domains.split(',')].map(bareHost),
       );
-      const top = (await client.metrics('referrer', range, { limit: REFERRERS_READ }))
+      const top = (await client.metrics('referrer', range, { limit: REFERRERS_READ, signal }))
         .filter((entry) => entry.value !== '' && !own.has(bareHost(entry.value)))
         .slice(0, LISTED);
       if (top.length === 0) {

@@ -2,7 +2,6 @@ import type { UmamiRange } from './client.ts';
 
 const DAY_MS = 86_400_000;
 
-/** `YYYY-MM-DD` for the instant in the time zone. */
 export function dayIn(instant: Date, timezone: string): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
@@ -16,7 +15,6 @@ function addDays(day: string, count: number): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + count * DAY_MS).toISOString().slice(0, 10);
 }
 
-/** How far the time zone's wall clock is ahead of UTC at the instant. */
 function offsetAt(instant: number, timezone: string): number {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-US', {
@@ -43,18 +41,12 @@ function offsetAt(instant: number, timezone: string): number {
   return wall - Math.floor(instant / 1000) * 1000;
 }
 
-/** The instant the day starts in the time zone. */
 export function midnightIn(day: string, timezone: string): Date {
   const wall = Date.parse(`${day}T00:00:00Z`);
   const guess = wall - offsetAt(wall, timezone);
   return new Date(wall - offsetAt(guess, timezone));
 }
 
-/**
- * The `count` days that end with the instant's day in the time zone, oldest
- * first, and the range from the start of the first to the end of the last, so
- * Umami compares whole days.
- */
 export function lastDays(
   instant: Date,
   timezone: string,

@@ -3,38 +3,21 @@ import type { PluginFetchInit } from '@geekity/cms/plugin';
 
 import type { UmamiSettings } from './settings.ts';
 
-/**
- * A small client for the Umami API, written against Umami 3 and reading the
- * Umami 2 shapes where they differ. Umami Cloud takes an API key; a
- * self-hosted Umami signs a user in for a token, which the client keeps in
- * memory and replaces once when Umami refuses it. Every call reads the
- * settings afresh and gives up after a timeout below the dashboard's widget
- * limit.
- */
-
 export const CLOUD_API_URL = 'https://api.umami.is/v1';
 
-/** Below the dashboard's 3 second widget limit, sign-in and a retry included. */
-export const DEFAULT_TIMEOUT_MS = 2500;
+const DEFAULT_TIMEOUT_MS = 2500;
 
-/** Why a call came to nothing. */
 export type UmamiFailure =
-  /** `missing` names each setting to fill in, such as `the API key`. */
   | { readonly kind: 'unconfigured'; readonly missing: readonly string[] }
-  /** Umami refused the API key, the username and password, or a fresh token. */
   | { readonly kind: 'unauthorized' }
-  /** The self-hosted user signs in with two-factor authentication, which the client cannot. */
   | { readonly kind: 'two-factor' }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'unavailable'; readonly status: number }
-  /** `what` names the answer, such as `the stats`. */
   | { readonly kind: 'invalid-answer'; readonly what: string }
   | { readonly kind: 'timeout'; readonly seconds: number }
-  /** The caller's signal stopped the call. */
   | { readonly kind: 'aborted' }
   | { readonly kind: 'network' };
 
-/** A failed call. Its message is plain words that name Umami's host and never a credential. */
 export class UmamiError extends Error {
   readonly failure: UmamiFailure;
 
@@ -71,32 +54,26 @@ export interface UmamiTotals {
 
 export interface UmamiStats {
   readonly current: UmamiTotals;
-  /** The same length of time just before the range, when Umami sends it. */
   readonly previous: UmamiTotals | undefined;
 }
 
 export interface UmamiDayCount {
-  /** `YYYY-MM-DD` in the time zone asked for. */
   readonly day: string;
   readonly count: number;
 }
 
 export interface UmamiDailyCounts {
   readonly pageviews: readonly UmamiDayCount[];
-  /** Visitors per day. */
-  readonly sessions: readonly UmamiDayCount[];
+  readonly visitors: readonly UmamiDayCount[];
 }
 
-/** Umami 3's metric types the dashboard reads; Umami 2 called `path` `url`. */
 export type UmamiMetricType = 'path' | 'referrer' | 'country' | 'browser' | 'device';
 
 export interface UmamiMetric {
-  /** A path, a referring domain, a country code, a browser or a device; empty for none. */
   readonly value: string;
   readonly count: number;
 }
 
-/** A metric's value with its views and visitors, from `metrics/expanded`. */
 export interface UmamiExpandedMetric {
   readonly value: string;
   readonly pageviews: number;
@@ -104,7 +81,6 @@ export interface UmamiExpandedMetric {
 }
 
 export interface UmamiClient {
-  /** Whether the settings name everything a call needs. */
   configured(): Promise<boolean>;
   /**
    * The configured website. Umami refuses a website the account cannot see
@@ -112,7 +88,6 @@ export interface UmamiClient {
    * account's websites: `not-found` when that answers, `unauthorized` when not.
    */
   website(options?: UmamiCallOptions): Promise<UmamiWebsite>;
-  /** The totals for the range, or for one path on the site with Umami 3's `path` filter. */
   stats(
     range: UmamiRange,
     options?: UmamiCallOptions & { readonly path?: string },
@@ -136,12 +111,10 @@ export interface UmamiClient {
     range: UmamiRange,
     options?: UmamiCallOptions & { readonly limit?: number },
   ): Promise<readonly UmamiExpandedMetric[]>;
-  /** Visitors on the site in the last few minutes. */
   active(options?: UmamiCallOptions): Promise<number>;
 }
 
 export interface UmamiClientOptions {
-  /** `host.fetch`, which keeps the credentials on Umami's origin. */
   fetch(url: string, init: PluginFetchInit): Promise<Response>;
   settings(): Promise<UmamiSettings>;
   timeoutMs?: number | undefined;
@@ -152,7 +125,6 @@ export type Credentials =
   | { readonly kind: 'login'; readonly username: string; readonly password: string };
 
 export interface Connection {
-  /** Such as `https://api.umami.is/v1`, without a trailing slash. */
   readonly base: string;
   readonly host: string;
   readonly websiteId: string;
@@ -220,7 +192,6 @@ export function listed(items: readonly string[]): string {
 }
 
 interface Session {
-  /** The connection's base and credentials, so a change of settings signs in afresh. */
   readonly key: string;
   readonly token: Promise<string>;
 }
@@ -292,17 +263,13 @@ export function umamiClient(options: UmamiClientOptions): UmamiClient {
     return { session: current, headers: { authorization: `Bearer ${await current.token}` } };
   }
 
-  /** GET a path under the website, signing in again once if Umami refuses the token. */
   async function get(
     connection: Connection,
     path: string,
     query: Readonly<Record<string, string>>,
     call: UmamiCallOptions,
   ): Promise<unknown> {
-    const deadline = AbortSignal.timeout(timeoutMs);
-    const signal = AbortSignal.any(
-      call.signal === undefined ? [deadline] : [deadline, call.signal],
-    );
+    const signal = call.signal ?? AbortSignal.timeout(timeoutMs);
     const send: Send = (url, init) => options.fetch(url, { ...init, signal });
     const search = new URLSearchParams(query).toString();
     const url = `${connection.base}${path}${search === '' ? '' : `?${search}`}`;
@@ -320,8 +287,14 @@ export function umamiClient(options: UmamiClientOptions): UmamiClient {
       return await response.json();
     } catch (error) {
       if (error instanceof UmamiError) throw error;
-      if (call.signal?.aborted === true) throw fail({ kind: 'aborted' }, connection);
-      if (deadline.aborted) throw fail({ kind: 'timeout', seconds: timeoutMs / 1000 }, connection);
+      if (signal.aborted) {
+        throw fail(
+          call.signal === undefined
+            ? { kind: 'timeout', seconds: timeoutMs / 1000 }
+            : { kind: 'aborted' },
+          connection,
+        );
+      }
       if (error instanceof SyntaxError)
         throw fail({ kind: 'invalid-answer', what: 'a request' }, connection);
       throw fail({ kind: 'network' }, connection);
@@ -497,8 +470,8 @@ function parseSeries(body: unknown): UmamiDayCount[] | undefined {
 function parseDailyCounts(body: unknown): UmamiDailyCounts | undefined {
   if (!isRecord(body)) return undefined;
   const pageviews = parseSeries(body['pageviews']);
-  const sessions = parseSeries(body['sessions']);
-  return pageviews === undefined || sessions === undefined ? undefined : { pageviews, sessions };
+  const visitors = parseSeries(body['sessions']);
+  return pageviews === undefined || visitors === undefined ? undefined : { pageviews, visitors };
 }
 
 function parseMetrics(body: unknown): UmamiMetric[] | undefined {

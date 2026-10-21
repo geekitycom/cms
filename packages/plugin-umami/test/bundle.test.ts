@@ -5,11 +5,6 @@ import type { Plugin } from '@geekity/cms';
 
 import { anonymous, closeSites, trackersOn, umamiSite, UMAMI } from './site.ts';
 
-/**
- * The bundle a folder install loads (decision-33), run against the site: it
- * draws the tracker with nothing but Node beside it.
- */
-
 let bundled: Plugin;
 
 before(async () => {

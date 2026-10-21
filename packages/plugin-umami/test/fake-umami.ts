@@ -2,16 +2,8 @@ import { createServer } from 'node:http';
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-/**
- * An Umami on loopback that answers as Umami 3 does, so the tests reach no
- * real one. Under `/v1` it is Umami Cloud and takes the API key; under `/api`
- * it is a self-hosted Umami that signs users in and takes the tokens it
- * issued. It records every request. An endpoint is one entry in `ROUTES`.
- */
-
 export interface Received {
   method: string;
-  /** The path without the `/v1` or `/api` prefix, with its query. */
   path: string;
   headers: IncomingHttpHeaders;
   body: unknown;
@@ -23,41 +15,29 @@ export interface Website {
   domain: string;
 }
 
-/** What the data endpoints answer, as Umami's JSON. Tests replace any of them. */
 export interface FakeData {
   stats: unknown;
   pageviews: unknown;
   metrics: Record<string, unknown>;
-  /** What `metrics/expanded` answers, by its `type`. */
   expanded: Record<string, unknown>;
   active: unknown;
-  /** The views `stats` counts for a `path` filter, by path; a path not named has none. */
   pathViews: Record<string, number>;
 }
 
 export interface FakeUmami {
-  /** Such as `http://127.0.0.1:40123`, the self-hosted Umami URL. */
   origin: string;
-  /** Umami Cloud's API base on the fake: `<origin>/v1`. */
   cloudBase: string;
   apiKey: string;
   username: string;
   password: string;
   websites: Website[];
   data: FakeData;
-  /** Every request, in order, sign-ins included. */
   received: Received[];
-  /** How many sign-ins succeeded. */
   logins: number;
-  /** Wait this long before every answer, to outlast a timeout. */
   delayMs: number;
-  /** Answer sign-ins as an account with two-factor sign-in on does. */
   twoFactor: boolean;
-  /** Refuse every token issued so far, as Umami does once a token expires. */
   expireTokens(): void;
-  /** Refuse every token, new ones too, until it is called with `false`. */
   refuseAllTokens(refuse?: boolean): void;
-  /** The requests to `path`, which matches up to the query. */
   requestsTo(path: string): Received[];
   close(): Promise<void>;
 }
@@ -120,7 +100,6 @@ interface Exchange {
   fake: FakeUmami;
   received: Received;
   query: URLSearchParams;
-  /** The path's segments after the prefix, such as `['websites', '<id>', 'stats']`. */
   segments: string[];
 }
 
@@ -147,7 +126,6 @@ function withRange(exchange: Exchange, answer: () => unknown): Answer {
   return website(exchange) === undefined ? UNAUTHORIZED : { status: 200, body: answer() };
 }
 
-/** Each endpoint by its path's shape after the prefix, `:id` for a website ID. */
 const ROUTES: Record<string, (exchange: Exchange) => Answer> = {
   websites: (exchange) => ({
     status: 200,

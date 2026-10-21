@@ -4,11 +4,6 @@ import { connectionFrom, listed, UmamiError } from './client.ts';
 import type { UmamiClient } from './client.ts';
 import type { UmamiSettings } from './settings.ts';
 
-/**
- * The plugin's screen: where the dashboard reads the stats from, never the
- * credentials themselves, and Check connection, which asks Umami for the
- * configured website.
- */
 export function umamiScreen(
   settings: () => Promise<UmamiSettings>,
   client: UmamiClient,

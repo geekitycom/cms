@@ -10,11 +10,6 @@ import { trafficWidget } from '../src/traffic.ts';
 import { defaultData, fakeUmami, WEBSITE } from './fake-umami.ts';
 import type { FakeUmami } from './fake-umami.ts';
 
-/**
- * The views and visitors widget against a fake Umami on loopback, at ten in
- * the morning on 20 October in Chicago.
- */
-
 const TEN_AM_20_OCTOBER_IN_CHICAGO = new Date('2026-10-20T15:00:00.000Z');
 
 let fake: FakeUmami;
@@ -26,6 +21,7 @@ after(() => fake.close());
 beforeEach(() => {
   fake.received.length = 0;
   fake.data = defaultData();
+  fake.delayMs = 0;
 });
 
 function settings(overrides: Partial<UmamiSettings> = {}): UmamiSettings {
@@ -81,6 +77,16 @@ const STATS_PATH = `/websites/${WEBSITE.id}/stats`;
 const PAGEVIEWS_PATH = `/websites/${WEBSITE.id}/pageviews`;
 
 describe('the views and visitors widget', () => {
+  it('stops its requests when the dashboard’s signal aborts', async () => {
+    fake.delayMs = 1000;
+    const started = Date.now();
+    await assert.rejects(
+      async () => widget().load({ ...CHICAGO, signal: AbortSignal.timeout(50) }),
+      /stopped before it finished/,
+    );
+    assert.ok(Date.now() - started < 800, 'the load gave up at the signal');
+  });
+
   it('is a full-width card that refreshes every five minutes', () => {
     const traffic = widget();
     assert.equal(traffic.id, 'traffic');

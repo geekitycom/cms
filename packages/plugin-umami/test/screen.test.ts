@@ -8,11 +8,6 @@ import { fakeUmami, WEBSITE } from './fake-umami.ts';
 import type { FakeUmami } from './fake-umami.ts';
 import { closeSites, flashes, pluginFolder, SCREEN, signIn, umamiSite } from './site.ts';
 
-/**
- * The plugin's screen: the API settings and Check connection, through the
- * site's own `host.fetch`, against a fake Umami on loopback in both modes.
- */
-
 let fake: FakeUmami;
 
 before(async () => {

@@ -1,10 +1,3 @@
-/**
- * A plugin's outbound fetch (decision-33): `GET` another site's URL, or `POST`
- * it a JSON body, with the rule the site's federation keeps, so a plugin
- * cannot be steered into the site's own network unless the site allows
- * private addresses.
- */
-
 import type { PluginFetchInit } from '../plugin.ts';
 import { webUrl } from '../webmention/fetch-public.ts';
 import { publicHost } from '../util/public-address.ts';
@@ -13,10 +6,8 @@ import type { HostLookup } from '../util/public-address.ts';
 /** How many redirects are followed, each one checked like the first. */
 const MAX_REDIRECTS = 5;
 
-/** Redirects that keep the method and body, as `fetch` has them. */
 const KEEPS_BODY = new Set([307, 308]);
 
-/** The plugin headers sent to an origin other than the one the plugin asked. */
 const CROSS_ORIGIN_HEADERS = ['accept', 'accept-language', 'user-agent'];
 
 /** What decides which addresses a plugin may reach. */

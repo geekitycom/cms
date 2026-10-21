@@ -3,11 +3,6 @@ import type { PluginBlock, PluginWidget } from '@geekity/cms/plugin';
 import type { UmamiClient, UmamiDailyCounts, UmamiDayCount, UmamiTotals } from './client.ts';
 import { lastDays } from './period.ts';
 
-/**
- * The dashboard's main Umami card: visitors, views, bounce rate and average
- * visit time against the period before, and views and visitors per day. The
- * period is the dashboard's, its days in the site's time zone.
- */
 export function trafficWidget(
   client: UmamiClient,
   now: () => Date = () => new Date(),
@@ -17,12 +12,12 @@ export function trafficWidget(
     title: 'Umami: views and visitors',
     width: 'full',
     refreshSeconds: 300,
-    async load({ timezone, period }) {
+    async load({ timezone, period, signal }) {
       if (!(await client.configured())) return [];
       const { days, range } = lastDays(now(), timezone, period);
       const [stats, daily] = await Promise.all([
-        client.stats(range),
-        client.pageviews(range, { timezone }),
+        client.stats(range, { signal }),
+        client.pageviews(range, { timezone, signal }),
       ]);
       return [statsBlock(stats.current, stats.previous), seriesBlock(days, daily)];
     },
@@ -50,12 +45,10 @@ function statsBlock(current: UmamiTotals, previous: UmamiTotals | undefined): Pl
   };
 }
 
-/** As Umami's own dashboard: visits that saw one page, of all visits. */
 function bounceRate(totals: UmamiTotals): number {
   return totals.visits === 0 ? 0 : (Math.min(totals.bounces, totals.visits) / totals.visits) * 100;
 }
 
-/** Seconds, as Umami's own dashboard: the summed visit time over the visits. */
 function averageVisit(totals: UmamiTotals): number {
   return totals.visits === 0 ? 0 : totals.totaltime / totals.visits;
 }
@@ -71,7 +64,7 @@ function seriesBlock(days: readonly string[], daily: UmamiDailyCounts): PluginBl
       days,
       series: [
         { name: 'Views', values: perDay(daily.pageviews) },
-        { name: 'Visitors', values: perDay(daily.sessions) },
+        { name: 'Visitors', values: perDay(daily.visitors) },
       ],
     },
   };

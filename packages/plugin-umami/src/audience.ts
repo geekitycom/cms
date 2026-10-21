@@ -5,7 +5,6 @@ import { lastDays } from './period.ts';
 
 const LISTED = 5;
 
-/** The names Umami's own dashboard gives the browsers it detects. */
 const BROWSERS: Readonly<Record<string, string>> = {
   android: 'Android',
   aol: 'AOL',
@@ -60,12 +59,6 @@ const AUDIENCE = {
   device: { id: 'devices', title: 'Umami: devices', label: (value) => DEVICES[value] ?? value },
 } satisfies Record<string, { id: string; title: string; label: (value: string) => string }>;
 
-/**
- * The five countries, browsers or devices with the most visitors over the
- * dashboard's period, each as its share of the period's visitors. Umami counts
- * a visitor once for each value, and a visitor has one country, browser and
- * device, so the shares of one list add up to at most 100%.
- */
 export function audienceWidget(
   client: UmamiClient,
   type: keyof typeof AUDIENCE,
@@ -77,12 +70,12 @@ export function audienceWidget(
     title,
     width: 'half',
     refreshSeconds: 300,
-    async load({ timezone, period }) {
+    async load({ timezone, period, signal }) {
       if (!(await client.configured())) return [];
       const { range } = lastDays(now(), timezone, period);
       const [stats, top] = await Promise.all([
-        client.stats(range),
-        client.metrics(type, range, { limit: LISTED }),
+        client.stats(range, { signal }),
+        client.metrics(type, range, { limit: LISTED, signal }),
       ]);
       const { visitors } = stats.current;
       if (visitors === 0 || top.length === 0) {
@@ -104,17 +97,16 @@ export function audienceWidget(
   };
 }
 
-/** The visitors Umami saw on the site in the last 5 minutes. */
 export function visitorsNowWidget(client: UmamiClient): PluginWidget {
   return {
     id: 'visitors-now',
     title: 'Umami: visitors right now',
     width: 'half',
     refreshSeconds: 30,
-    async load() {
+    async load({ signal }) {
       if (!(await client.configured())) return [];
       return [
-        { stats: [{ label: 'Visitors right now', value: await client.active() }] },
+        { stats: [{ label: 'Visitors right now', value: await client.active({ signal }) }] },
         { paragraph: ['Umami counts the visitors seen on the site in the last 5 minutes.'] },
       ];
     },

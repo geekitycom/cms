@@ -9,11 +9,6 @@ import type { UmamiSettings } from '../src/settings.ts';
 import { defaultData, fakeUmami, WEBSITE } from './fake-umami.ts';
 import type { FakeUmami } from './fake-umami.ts';
 
-/**
- * The countries, browsers, devices and visitors right now widgets against a
- * fake Umami on loopback, at ten in the morning on 20 October in Chicago.
- */
-
 const TEN_AM_20_OCTOBER_IN_CHICAGO = new Date('2026-10-20T15:00:00.000Z');
 
 let fake: FakeUmami;

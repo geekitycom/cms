@@ -14,17 +14,14 @@ const DAYS = 30;
 const LISTED = 10;
 const FIRST_WEEK_MS = 7 * 86_400_000;
 
-/** Enough paths that a post of the last 30 days is among them. */
 const PATHS_READ = 500;
 
-/** First-week reads at once, so the card loads within the dashboard's limit. */
-const AT_ONCE = 4;
+const FIRST_WEEK_READS_AT_ONCE = 4;
 
 const NO_DATA = 'no data';
 
 const COLUMNS = ['Post', 'Views', 'Engaged', 'Week 1'];
 
-/** What the widget reads from the core: the posts, the post at a path, and engagement. */
 export interface RecentPostSources {
   publishedSince(since: string): Promise<readonly PublishedPost[]>;
   postsAt(paths: readonly string[]): Promise<readonly PostAtPath[]>;
@@ -33,38 +30,35 @@ export interface RecentPostSources {
 
 interface Row {
   readonly post: PublishedPost;
-  /** Views since it was published; `undefined` when Umami recorded none. */
   readonly views: number | undefined;
   readonly engagement: number;
 }
 
 const whole = new Intl.NumberFormat('en-US');
 
-/**
- * The posts published in the last 30 days with their views and engagement
- * since, listed once most read first and once most engaged first, and each
- * one's views over its first 7 days. A post Umami recorded no view of shows
- * no data rather than zero.
- */
 export function recentPostsWidget(
   client: UmamiClient,
   sources: RecentPostSources,
   now: () => Date = () => new Date(),
 ): PluginWidget {
-  /** First weeks that are over, which no longer change, by permalink and date. */
-  const firstWeeks = new Map<string, number>();
+  const finishedFirstWeeks = new Map<string, number>();
 
-  async function firstWeek(post: PublishedPost, directory: string): Promise<string> {
+  async function firstWeek(
+    post: PublishedPost,
+    directory: string,
+    signal: AbortSignal | undefined,
+  ): Promise<string> {
     const key = `${post.permalink} ${post.published}`;
-    const kept = firstWeeks.get(key);
+    const kept = finishedFirstWeeks.get(key);
     if (kept !== undefined) return whole.format(kept);
     const start = new Date(post.published);
     const over = start.getTime() + FIRST_WEEK_MS <= now().getTime();
     const end = over ? new Date(start.getTime() + FIRST_WEEK_MS) : now();
-    const views = (await client.stats({ start, end }, { path: `${directory}${post.permalink}` }))
-      .current.pageviews;
+    const views = (
+      await client.stats({ start, end }, { path: `${directory}${post.permalink}`, signal })
+    ).current.pageviews;
     if (!over) return `${whole.format(views)} so far`;
-    firstWeeks.set(key, views);
+    finishedFirstWeeks.set(key, views);
     return whole.format(views);
   }
 
@@ -73,7 +67,7 @@ export function recentPostsWidget(
     title: 'Umami: recent posts',
     width: 'full',
     refreshSeconds: 1800,
-    async load({ site, timezone }) {
+    async load({ site, timezone, signal }) {
       if (!(await client.configured())) return [];
       const { range } = lastDays(now(), timezone, DAYS);
       const since = range.start.toISOString();
@@ -82,7 +76,7 @@ export function recentPostsWidget(
         return [{ paragraph: [`No posts were published in the last ${String(DAYS)} days.`] }];
       }
       const [read, engaged] = await Promise.all([
-        client.expandedMetrics('path', range, { limit: PATHS_READ }),
+        client.expandedMetrics('path', range, { limit: PATHS_READ, signal }),
         sources.engagement(since),
       ]);
       const viewed = read.filter((entry) => entry.value !== '' && entry.pageviews > 0);
@@ -117,9 +111,9 @@ export function recentPostsWidget(
         (row) => row.views !== undefined,
       );
       const first = new Map<PublishedPost, string>();
-      for (let index = 0; index < shown.length; index += AT_ONCE) {
-        const batch = shown.slice(index, index + AT_ONCE);
-        const weeks = await Promise.all(batch.map((row) => firstWeek(row.post, directory)));
+      for (let index = 0; index < shown.length; index += FIRST_WEEK_READS_AT_ONCE) {
+        const batch = shown.slice(index, index + FIRST_WEEK_READS_AT_ONCE);
+        const weeks = await Promise.all(batch.map((row) => firstWeek(row.post, directory, signal)));
         batch.forEach((row, at) => first.set(row.post, weeks[at] ?? NO_DATA));
       }
 

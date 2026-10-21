@@ -6,15 +6,6 @@ import path from 'node:path';
 import { createCms, createUser } from '@geekity/cms';
 import type { Cms, Plugin } from '@geekity/cms';
 
-/**
- * A site with the Umami plugin enabled, a post and a page, its settings
- * written to the plugin's data folder, and an admin who can sign in. The site
- * lets plugins reach private addresses, so a fake Umami on loopback answers
- * `host.fetch`. Copied in
- * shape from plugin-post-summary's test site rather than imported across
- * packages.
- */
-
 const ADA = { username: 'ada', password: 'correct horse battery' };
 export const UMAMI = '@geekity/plugin-umami';
 export const SCREEN = `/admin/plugins/${UMAMI}`;
@@ -23,21 +14,15 @@ export const PAGES = ['/', '/2026/10/hello/', '/about/', '/tag/notes/', '/nothin
 
 export interface Admin {
   get(url: string): Promise<Response>;
-  /** Post a form with the session's CSRF token. */
   post(url: string, fields: Record<string, string>): Promise<Response>;
 }
 
 export interface SiteOptions {
-  /** The plugin's public settings, as `settings.json` holds them. */
   settings?: Record<string, string | boolean>;
-  /** The plugin's secrets, as `secrets.json` holds them. */
   secrets?: Record<string, string>;
   devMode?: boolean;
-  /** The site's IANA time zone, `UTC` when left out. */
   timezone?: string;
-  /** The site's clock, which decides when a dashboard widget loads again. */
   now?: () => Date;
-  /** More posts, by file name under `posts/`. */
   posts?: Record<string, string>;
 }
 
@@ -106,12 +91,10 @@ export async function umamiSite(plugin: Plugin, options: SiteOptions = {}): Prom
   return cms;
 }
 
-/** The plugin's folder under the site's `data/`. */
 export function pluginFolder(cms: Cms): string {
   return path.join(dataDirs.get(cms) ?? '', 'plugins', UMAMI);
 }
 
-/** The notices and errors a screen shows, as drawn. */
 export function flashes(html: string): string[] {
   return [
     ...html.matchAll(/<div role="status" class="alert alert-\w+">\s*<span>([\s\S]*?)<\/span>/g),
@@ -154,7 +137,6 @@ export async function anonymous(cms: Cms, pathname: string): Promise<string> {
   return await (await cms.app.request(pathname)).text();
 }
 
-/** Every Umami script tag on a page. */
 export function trackersOn(html: string): string[] {
   return [...html.matchAll(/<script src="[^"]*\/script\.js"[^>]*><\/script>/g)].map(([tag]) => tag);
 }

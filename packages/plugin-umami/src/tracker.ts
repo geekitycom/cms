@@ -7,12 +7,6 @@ import type {
 
 import type { UmamiSettings } from './settings.ts';
 
-/**
- * The Umami tracker for one page: a deferred `script.js` from the Umami URL
- * with the site's tracker options as data attributes. None while the URL or
- * the website ID is unset, in dev mode, or for a signed-in reader unless the
- * site counts them.
- */
 export function trackerTags(settings: UmamiSettings, page: PluginPageTagsContext): PluginPageTags {
   const websiteId = settings.website_id.trim();
   if (settings.umami_url === '' || websiteId === '') return {};

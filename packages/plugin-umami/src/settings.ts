@@ -1,6 +1,5 @@
 import type { PluginSettingField, PluginSettingValues } from '@geekity/cms/plugin';
 
-/** The plugin's settings form, in the order the screen draws it. */
 export const SETTINGS = [
   {
     type: 'url',
