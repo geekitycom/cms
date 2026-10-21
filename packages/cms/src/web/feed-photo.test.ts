@@ -107,6 +107,51 @@ describe('a photo-only post in the feeds (TASK-215)', () => {
   });
 });
 
+describe('a photo-only post summarised by its alt text (TASK-462)', () => {
+  const SUMMARY = 'Waves breaking at dusk · A dog asleep on the sand';
+
+  it('carries the alt text as the RSS description', async () => {
+    const cms = await site(PHOTO_ONLY);
+
+    const feed = parseXml(await (await cms.app.request('/feed/')).text());
+
+    assert.equal(child(child(child(feed, 'channel'), 'item'), 'description').text, SUMMARY);
+  });
+
+  it('carries the alt text as the Atom summary', async () => {
+    const cms = await site(PHOTO_ONLY);
+
+    const feed = parseXml(await (await cms.app.request('/feed/atom/')).text());
+
+    assert.equal(child(child(feed, 'entry'), 'summary').text, SUMMARY);
+  });
+
+  it('carries the alt text as the JSON Feed summary', async () => {
+    const cms = await site(PHOTO_ONLY);
+
+    const feed = (await (await cms.app.request('/feed/json/')).json()) as {
+      items: { summary?: string }[];
+    };
+
+    assert.equal(feed.items[0]?.summary, SUMMARY);
+  });
+
+  it('keeps the body as the summary of a photo post with words', async () => {
+    const cms = await site({
+      'posts/2026-10-01-beach.md': post(
+        ['photo:', '  - url: /uploads/2026/10/beach.jpg', '    alt: Waves breaking at dusk'],
+        'Went to the beach.',
+      ),
+    });
+
+    const feed = (await (await cms.app.request('/feed/json/')).json()) as {
+      items: { summary?: string }[];
+    };
+
+    assert.equal(feed.items[0]?.summary, 'Went to the beach.');
+  });
+});
+
 describe('photos beside a body, an image and a recording (TASK-215)', () => {
   it('prints the photos before the body, as the page does', async () => {
     const cms = await site({

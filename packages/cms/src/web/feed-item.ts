@@ -95,8 +95,9 @@ export interface FeedItem {
   terms: readonly string[];
   /**
    * What every format prints as the summary: the description the author wrote,
-   * else an excerpt of the rendered body. Never the whole post — the content is
-   * where that goes — and empty only for a post with nothing to summarise,
+   * else an excerpt of the rendered body, else the photos' alt text. Never the
+   * whole post — the content is where that goes — and empty only for a post
+   * with nothing to summarise,
    * which is the one case a format leaves the element out.
    */
   summary: string;
@@ -184,7 +185,7 @@ export interface FeedItem {
  * a comment is not a {@link FeedItem}, and their validator has a label of its
  * own in `commentsFeedResponse`.
  */
-export const FEED_ITEM_REVISION = 14;
+export const FEED_ITEM_REVISION = 15;
 
 /** Where one item's comments are, counted. */
 export interface FeedItemComments {
@@ -237,7 +238,7 @@ export function feedItem(document: Document, context: FeedItemContext): FeedItem
     terms: [...document.categories, ...document.tags],
     summary:
       review === undefined || document.description !== undefined
-        ? excerpt
+        ? excerpt || photosSummary(photos, context.altTexts ?? new Map())
         : [reviewSummary(review), excerpt].filter((part) => part !== '').join(' '),
     html:
       citationLines(document, context.replyContext, baseUrl) +
@@ -340,6 +341,13 @@ function photosHtml(photos: readonly Photo[], library: AltTextLibrary, baseUrl: 
         ` alt="${escapeXml(photoAlt(photo, library) ?? '')}"></figure>`,
     )
     .join('');
+}
+
+function photosSummary(photos: readonly Photo[], library: AltTextLibrary): string {
+  return photos
+    .map((photo) => photoAlt(photo, library) ?? '')
+    .filter((alt) => alt !== '')
+    .join(' · ');
 }
 
 function ownImage(document: Document): string | undefined {

@@ -166,8 +166,8 @@ describe('a feed item', () => {
     }
   });
 
-  it('is at revision 14, so feeds cached before source:comments named direct replies are refetched', () => {
-    assert.equal(FEED_ITEM_REVISION, 14);
+  it('is at revision 15, so feeds cached before photo-only posts had a summary are refetched', () => {
+    assert.equal(FEED_ITEM_REVISION, 15);
   });
 
   it('titles a titled repost, like or bookmark with no words (TASK-256)', () => {
