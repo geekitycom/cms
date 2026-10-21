@@ -32,7 +32,6 @@ export interface CoreWidget extends Omit<PluginWidget, 'load'> {
 
 export type WidgetPlacement = 'alerts' | 'activity';
 
-/** What names a widget in a user's dashboard layout: `core:id` or `plugin-name:id`. */
 export function widgetKey(owner: string, id: string): string {
   return `${owner}:${id}`;
 }

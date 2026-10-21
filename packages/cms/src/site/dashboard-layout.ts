@@ -105,13 +105,12 @@ export function changeLayout(
     case 'later':
       return {
         ...layout,
-        order: moved(arrangeCards(defaults, layout), layout, change, key),
+        order: stepPastDrawnNeighbour(arrangeCards(defaults, layout), layout, change, key),
       };
   }
 }
 
-/** The whole order with `key` swapped past its neighbour among the drawn cards. */
-function moved(
+function stepPastDrawnNeighbour(
   arranged: string[],
   layout: DashboardLayout,
   change: Extract<LayoutChange, { action: 'earlier' | 'later' }>,

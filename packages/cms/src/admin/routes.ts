@@ -316,7 +316,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     return c.redirect(LOGIN_PATH, 303);
   });
 
-  // The stat tiles and the widget cards, arranged by whoever is signed in.
   mountDashboard(app, { render });
 
   // The listing and the editor. Posts and pages are the same screens over the

@@ -29,7 +29,6 @@ import {
 } from './widgets.ts';
 import type { LoadedWidget, WidgetLoad } from './widgets.ts';
 
-/** Where the dashboard's arrange forms post (TASK-469). */
 export const DASHBOARD_LAYOUT_PATH = `${ADMIN_PREFIX}/dashboard/layout`;
 
 /**
@@ -74,14 +73,7 @@ export function mountDashboard(app: Hono<GeekityEnv>, options: { render: AdminRe
       const result = loaded.get(key);
       return result === undefined ? [] : [{ ...drawn(result), collapsed: false }];
     });
-    // The move buttons step past drawn neighbours, so the first and last are
-    // by position among the cards on the page.
-    const placed = cards.map((card, index) => ({
-      shown: cards.map((each) => each.key),
-      ...card,
-      first: index === 0,
-      last: index === cards.length - 1,
-    }));
+    const placed = positionedAmongDrawn(cards);
 
     return render(c, ADMIN_TEMPLATES.dashboard, {
       section: 'dashboard',
@@ -135,6 +127,16 @@ export function mountDashboard(app: Hono<GeekityEnv>, options: { render: AdminRe
     }
     return c.redirect(back, 303);
   });
+}
+
+function positionedAmongDrawn<Card extends { key: string }>(cards: readonly Card[]) {
+  const drawnKeys = cards.map((card) => card.key);
+  return cards.map((card, index) => ({
+    shown: drawnKeys,
+    ...card,
+    first: index === 0,
+    last: index === cards.length - 1,
+  }));
 }
 
 function keyOf(entry: WidgetLoad): string {

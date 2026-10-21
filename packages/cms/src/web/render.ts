@@ -751,11 +751,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     return archiveMonths(posts, siteTimezone(site), siteLocale(site), citedPage);
   }
 
-  /**
-   * The archive as Markdown data for the page's header and footer partials:
-   * the months the HTML heads, each post a link with its calendar day and its
-   * summary on one line.
-   */
   function markdownArchiveContext(document: Document | undefined): Record<string, unknown> {
     const months = document === undefined ? undefined : archiveOf(document);
     if (months === undefined) return {};

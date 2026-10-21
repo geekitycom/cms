@@ -1,13 +1,3 @@
-/* Drag and drop for the dashboard's widget cards (TASK-469).
-
-   Every card already has a form whose buttons move, collapse and remove it,
-   so the dashboard works without this file. It adds a drag handle to each
-   card, moves the card while it is dragged, and posts the new order to the
-   layout path with the CSRF token from the card's form. The move buttons
-   stay for keyboards and touch screens.
-
-   Plain ES5-shaped browser JavaScript, like copy.js: it is served as it is
-   written. */
 (function () {
   var grid = document.querySelector('[data-dashboard-cards]');
   if (!grid) return;
@@ -52,18 +42,19 @@
   grid.addEventListener('dragover', function (event) {
     if (!dragged) return;
     event.preventDefault();
-    var over = event.target.closest ? event.target.closest('[data-dashboard-card]') : null;
+    var over = event.target.closest('[data-dashboard-card]');
     if (!over || over === dragged) return;
-    /* Past the diagonal from the card's top right to its bottom left is
-       after it, which reads right in one column and in two. */
-    var box = over.getBoundingClientRect();
-    var past = (event.clientX - box.left) / box.width + (event.clientY - box.top) / box.height > 1;
+    var past = isPastDiagonal(over.getBoundingClientRect(), event);
     if (past && over.nextElementSibling !== dragged) over.after(dragged);
     else if (!past && over.previousElementSibling !== dragged) over.before(dragged);
   });
   grid.addEventListener('drop', function (event) {
     if (dragged) event.preventDefault();
   });
+
+  function isPastDiagonal(box, event) {
+    return (event.clientX - box.left) / box.width + (event.clientY - box.top) / box.height > 1;
+  }
 
   function cards() {
     return Array.prototype.slice.call(grid.querySelectorAll('[data-dashboard-card]'));
@@ -108,7 +99,6 @@
       });
   }
 
-  /* The first card cannot move earlier and the last cannot move later. */
   function moveButtons() {
     var all = cards();
     all.forEach(function (card, index) {
