@@ -35,7 +35,8 @@ Or press **Add plugin** under `/admin/plugins` and enter
 `@geekity/plugin-umami`.
 
 Then enable Umami under `/admin/plugins`, open its screen, and set the Umami
-URL and the website ID.
+URL and the website ID. To read the stats as well, set the API settings that
+[Reading the stats](#reading-the-stats) describes.
 
 ## Settings
 
@@ -67,6 +68,43 @@ Not Track on, every public page carries:
   data-do-not-track="true"
 ></script>
 ```
+
+## Reading the stats
+
+The plugin reads the website's stats from the Umami API. It signs in one of
+two ways, which **Umami for the stats** chooses:
+
+| Setting             | Key        | What it does                                                                                                                                                              |
+| ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Umami for the stats | `api_mode` | `cloud` for Umami Cloud, which takes an API key, or `self-hosted` for your own Umami, which takes a username and password. `cloud` unless set.                            |
+| API key             | `api_key`  | For Umami Cloud: an API key made in Umami Cloud. It is sent as `Authorization: Bearer` and as `x-umami-api-key`.                                                          |
+| Username            | `username` | For a self-hosted Umami: a user who can view the website.                                                                                                                 |
+| Password            | `password` | For a self-hosted Umami: the password of that user.                                                                                                                       |
+| API URL             | `api_url`  | Where the API answers, when it is not the usual place. Empty uses `https://api.umami.is/v1` for Umami Cloud, or the Umami URL followed by `/api` for a self-hosted Umami. |
+
+The API key and the password are secrets. They are kept in `secrets.json` in
+the plugin's data folder at mode 0600, or set by their environment variables
+`GEEKITY_PLUGIN_UMAMI__API_KEY` and `GEEKITY_PLUGIN_UMAMI__PASSWORD`. They are
+never drawn on a page and never logged. The plugin sends them only to the API
+URL's origin: a redirect to another origin carries no credential.
+
+A self-hosted Umami is signed in with `POST /api/auth/login`. The plugin keeps
+the token it answers in memory and sends it as `Authorization: Bearer`. When
+Umami refuses the token, the plugin signs in once more and repeats the request.
+A user who signs in with two-factor authentication cannot be used; name a user
+without it.
+
+Each request gives up after 2.5 seconds, sign-in included, so a slow Umami
+cannot hold up the dashboard.
+
+**Check connection** on the plugin's screen asks Umami for the website. It
+reports whether Umami answered, and whether it has a website with the
+configured ID that the account can see.
+
+The plugin is written against the Umami 3 API: `GET /websites/:id`, and its
+`stats`, `pageviews`, `metrics` and `active` endpoints. It also reads the
+Umami 2 answers to `stats` and `active`, which have a different shape. Umami 2
+calls the `path` metric `url`, so the top pages need Umami 3.
 
 ## Where the tracker is drawn
 

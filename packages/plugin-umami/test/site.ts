@@ -8,13 +8,16 @@ import type { Cms, Plugin } from '@geekity/cms';
 
 /**
  * A site with the Umami plugin enabled, a post and a page, its settings
- * written to the plugin's data folder, and an admin who can sign in. Copied in
+ * written to the plugin's data folder, and an admin who can sign in. The site
+ * lets plugins reach private addresses, so a fake Umami on loopback answers
+ * `host.fetch`. Copied in
  * shape from plugin-post-summary's test site rather than imported across
  * packages.
  */
 
 const ADA = { username: 'ada', password: 'correct horse battery' };
 export const UMAMI = '@geekity/plugin-umami';
+export const SCREEN = `/admin/plugins/${UMAMI}`;
 
 export const PAGES = ['/', '/2026/10/hello/', '/about/', '/tag/notes/', '/nothing-here/'];
 
@@ -27,10 +30,13 @@ export interface Admin {
 export interface SiteOptions {
   /** The plugin's public settings, as `settings.json` holds them. */
   settings?: Record<string, string | boolean>;
+  /** The plugin's secrets, as `secrets.json` holds them. */
+  secrets?: Record<string, string>;
   devMode?: boolean;
 }
 
 const opened: Cms[] = [];
+const dataDirs = new WeakMap<Cms, string>();
 const dirs: string[] = [];
 
 export async function closeSites(): Promise<void> {
@@ -62,10 +68,16 @@ export async function umamiSite(plugin: Plugin, options: SiteOptions = {}): Prom
     path.join(contentDir, 'pages', 'about.md'),
     '---\ntitle: About\npermalink: /about/\n---\n\nAbout us.\n',
   );
+  const folder = path.join(dataDir, 'plugins', UMAMI);
   if (options.settings !== undefined) {
-    const folder = path.join(dataDir, 'plugins', UMAMI);
     mkdirSync(folder, { recursive: true });
     writeFileSync(path.join(folder, 'settings.json'), JSON.stringify(options.settings));
+  }
+  if (options.secrets !== undefined) {
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(path.join(folder, 'secrets.json'), JSON.stringify(options.secrets), {
+      mode: 0o600,
+    });
   }
   await createUser({ dataDir, ...ADA });
   const cms = createCms({
@@ -74,11 +86,25 @@ export async function umamiSite(plugin: Plugin, options: SiteOptions = {}): Prom
     watch: false,
     devMode: options.devMode ?? false,
     plugins: [plugin],
+    federation: { allowPrivateAddress: true },
     hostLookup: (hostname) => Promise.reject(new Error(`a test resolves no names: ${hostname}`)),
   });
   opened.push(cms);
+  dataDirs.set(cms, dataDir);
   await cms.sync();
   return cms;
+}
+
+/** The plugin's folder under the site's `data/`. */
+export function pluginFolder(cms: Cms): string {
+  return path.join(dataDirs.get(cms) ?? '', 'plugins', UMAMI);
+}
+
+/** The notices and errors a screen shows, as drawn. */
+export function flashes(html: string): string[] {
+  return [
+    ...html.matchAll(/<div role="status" class="alert alert-\w+">\s*<span>([\s\S]*?)<\/span>/g),
+  ].map(([, message]) => message ?? '');
 }
 
 export async function signIn(cms: Cms): Promise<Admin> {
