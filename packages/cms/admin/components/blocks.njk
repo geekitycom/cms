@@ -172,8 +172,8 @@
 {% macro calendar(view) -%}
   <div class="grid gap-3">
     <p id="{{ view.id }}" class="sr-only">{{ view.description }}</p>
-    <div class="max-w-full overflow-x-auto">
-      <svg role="img" aria-labelledby="{{ view.id }}" viewBox="0 0 {{ view.width }} {{ view.height }}" width="{{ view.width * 1.25 }}" height="{{ view.height * 1.25 }}">
+    <div class="flex flex-row-reverse overflow-x-auto">
+      <svg role="img" aria-labelledby="{{ view.id }}" viewBox="0 0 {{ view.width }} {{ view.height }}" width="{{ view.width * 1.25 }}" height="{{ view.height * 1.25 }}" class="mr-auto h-auto{% if view.width * 1.25 > 640 %} max-w-full min-w-160{% endif %} shrink-0">
         {% for month in view.months %}
           <text class="fill-base-content/70" x="{{ month.x }}" y="11" text-anchor="start" font-size="10">{{ month.label }}</text>
         {% endfor %}

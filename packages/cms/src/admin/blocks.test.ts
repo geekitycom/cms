@@ -430,6 +430,29 @@ describe('a calendar', () => {
     assert.match(table, /<th scope="row">5 Oct 2026<\/th><td>1<\/td>/);
     assert.doesNotMatch(table, /6 Oct/);
   });
+
+  it('shrinks a year to its card down to a readable floor and opens on the newest weeks', () => {
+    const start = Date.UTC(2025, 9, 22);
+    const year = {
+      calendar: {
+        caption: 'Posts',
+        days: Array.from({ length: 364 }, (_, offset) => ({
+          day: new Date(start + offset * 86_400_000).toISOString().slice(0, 10),
+          count: offset % 3,
+        })),
+      },
+    };
+    const html = draw(year);
+    assert.match(html, /<div class="flex flex-row-reverse overflow-x-auto">/);
+    const svg = /<svg role="img"[^>]*>/.exec(html)?.[0] ?? '';
+    assert.match(svg, /class="mr-auto h-auto max-w-full min-w-160 shrink-0"/);
+    assert.match(svg, /width="965"/);
+  });
+
+  it('keeps a short calendar at its own size', () => {
+    const svg = /<svg role="img"[^>]*>/.exec(draw(calendar))?.[0] ?? '';
+    assert.match(svg, /class="mr-auto h-auto shrink-0"/);
+  });
 });
 
 describe('bars', () => {
