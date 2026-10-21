@@ -250,6 +250,11 @@ export interface CatalogReader {
    * unlisted — dated at or after `since`, a UTC instant, oldest first.
    */
   listPostsPublishedSince(since: string): Document[];
+  /**
+   * Posts waiting for their date — not drafts, not trashed, dated after the
+   * index clock — soonest first, at most `limit` of them.
+   */
+  listScheduledPosts(limit: number): Document[];
   /** Every indexed path, sorted. What a sync compares the content tree against. */
   listPaths(): string[];
   /** How many documents there are of each kind. */

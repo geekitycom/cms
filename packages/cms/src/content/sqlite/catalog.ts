@@ -30,6 +30,13 @@ const PUBLISHED_SINCE_SQL = `
   ORDER BY date_sort ASC, path ASC
 `;
 
+const SCHEDULED_POSTS_SQL = `
+  SELECT * FROM documents
+  WHERE type = 'post' AND draft = 0 AND trashed = 0 AND ${SCHEDULED_CLAUSE}
+  ORDER BY date_sort ASC, path ASC
+  LIMIT ?
+`;
+
 export function catalogReader(index: IndexDatabase): CatalogReader {
   return {
     listAll: (options = {}) => listAll(index, options),
@@ -39,6 +46,11 @@ export function catalogReader(index: IndexDatabase): CatalogReader {
       hydrateAll(
         index,
         cachedStatement(index, PUBLISHED_SINCE_SQL).all(nowKey(index), since) as Row[],
+      ),
+    listScheduledPosts: (limit) =>
+      hydrateAll(
+        index,
+        cachedStatement(index, SCHEDULED_POSTS_SQL).all(nowKey(index), limit) as Row[],
       ),
     listPaths: () =>
       cachedStatement(index, 'SELECT path FROM documents ORDER BY path')

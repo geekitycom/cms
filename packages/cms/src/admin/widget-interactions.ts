@@ -5,6 +5,7 @@ import type { LatestInteraction, PostComment } from '../store/admin-store.ts';
 import { actorHandle, guessedName } from '../store/inbox-replies.ts';
 import { COMMENTS_PATH } from './comments.ts';
 import { FEDERATION_PATH, localPosts } from './federation.ts';
+import { formatShortTime } from './formatting.ts';
 import type { CoreWidget } from './widgets.ts';
 
 /** How many interactions the widget lists. */
@@ -30,24 +31,6 @@ const WEBMENTION_KINDS: Readonly<Record<PostComment['kind'], string>> = {
   repost: 'Webmention repost of',
   mention: 'Mention of',
 };
-
-/** An instant as a short day and time in the site's time zone, such as `20 Oct, 17:46`. */
-function shortTime(instant: string, timezone: string): string {
-  const date = new Date(instant);
-  if (Number.isNaN(date.getTime())) return '';
-  const options: Intl.DateTimeFormatOptions = {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  };
-  try {
-    return new Intl.DateTimeFormat('en-GB', { ...options, timeZone: timezone }).format(date);
-  } catch {
-    return new Intl.DateTimeFormat('en-GB', { ...options, timeZone: 'UTC' }).format(date);
-  }
-}
 
 /**
  * The ten newest things people did, whatever the dashboard's period: comments
@@ -136,7 +119,11 @@ export const INTERACTIONS_WIDGET: CoreWidget = {
         table: {
           caption: 'The newest interactions',
           columns: ['Who', 'What', 'When'],
-          rows: entries.map((entry) => [entry.who, entry.what, shortTime(entry.at, timezone)]),
+          rows: entries.map((entry) => [
+            entry.who,
+            entry.what,
+            formatShortTime(entry.at, timezone),
+          ]),
         },
       },
     ];

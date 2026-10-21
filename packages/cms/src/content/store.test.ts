@@ -1324,6 +1324,37 @@ describe('listPostsPublishedSince', () => {
   });
 });
 
+describe('listScheduledPosts', () => {
+  it('lists the posts waiting for their date, soonest first, up to a limit', async () => {
+    const index = openContentStore({
+      dataDir: await dataDir(),
+      now: () => new Date('2026-10-20T12:00:00Z'),
+    });
+    openStores.push(index);
+    const dated = (slug: string, date: string, overrides: Partial<Document> = {}): Document =>
+      post({
+        path: `posts/${slug}.md`,
+        slug,
+        permalink: `/${slug}/`,
+        title: slug,
+        date,
+        ...overrides,
+      });
+    index.upsertAll([
+      dated('published', '2026-10-20T11:59:59Z'),
+      dated('third', '2026-11-02T09:00:00Z'),
+      dated('first', '2026-10-20T12:00:01Z'),
+      dated('second', '2026-10-25T09:00:00Z', { extra: { visibility: 'unlisted' } }),
+      dated('fourth', '2027-01-01T00:00:00Z'),
+      dated('draft', '2026-10-21T09:00:00Z', { draft: true }),
+      dated('trashed', '2026-10-21T09:00:00Z', { path: '_trash/posts/trashed.md' }),
+      dated('page', '2026-10-21T09:00:00Z', { type: 'page' }),
+    ]);
+
+    assert.deepEqual(titles(index.listScheduledPosts(3)), ['first', 'second', 'third']);
+  });
+});
+
 describe('permalinks', () => {
   it('are unique: a second document at the same URL fails with both paths named', async () => {
     const index = await store();
