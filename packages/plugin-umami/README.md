@@ -42,6 +42,18 @@ Then enable Umami under `/admin/plugins`, open its screen, and set the Umami
 URL and the website ID. To read the stats as well, set the API settings that
 [Reading the stats](#reading-the-stats) describes.
 
+### With Umami Cloud
+
+1. In Umami Cloud, copy the website ID from the website's settings, and make
+   an API key in your account settings.
+2. On the plugin's screen, set **Umami URL** to `https://cloud.umami.is`,
+   **Website ID** to the copied ID, **Umami for the stats** to **Umami Cloud,
+   with an API key** and **API key** to the new key. Leave **API URL** empty.
+3. Select **Check connection**. When Umami answers and has the website, it
+   says so and names the website.
+4. Remove any Umami `<script>` the site's theme adds, as
+   [Moving from a theme snippet](#moving-from-a-theme-snippet) describes.
+
 ## Settings
 
 | Setting                    | Key               | What it does                                                                                                                         |
