@@ -1,12 +1,6 @@
 import type { PluginScreenCell, PluginScreenText } from '../plugin.ts';
 import { isRecord } from '../util/guards.ts';
 
-/**
- * A block as `components/blocks.njk` draws it: what a plugin handed over,
- * checked, with every number formatted and every chart coordinate worked out,
- * so the template only writes markup. Input that cannot be drawn becomes
- * `empty`, keeping its caption when it had one.
- */
 export type DrawnBlock =
   | { readonly kind: 'empty'; readonly caption: string | undefined }
   | { readonly kind: 'paragraph'; readonly parts: readonly PluginScreenText[] }
@@ -21,7 +15,6 @@ export type DrawnBlock =
   | ({ readonly kind: 'bars' } & DrawnBars)
   | ({ readonly kind: 'calendar' } & DrawnCalendar);
 
-/** A table cell, with a link cell's `href` dropped when it may not be a link. */
 type DrawnCell =
   | PluginScreenText
   | { readonly time: string | null }
@@ -36,20 +29,16 @@ interface DrawnTable {
 interface DrawnChange {
   readonly arrow: '▲' | '▼' | '';
   readonly text: string;
-  /** Which way the change went for the reader, or `''` for no change. */
-  readonly tone: 'better' | 'worse' | '';
+  readonly tone: 'better' | 'worse' | 'none';
 }
 
 interface DrawnStat {
   readonly label: string;
   readonly value: string;
-  /** Absent when no previous value was given. */
   readonly change?: DrawnChange;
 }
 
-/** The numbers a chart's table shows: a heading per column and a row per day. */
 interface DrawnFigure {
-  /** Ties the SVG to its description. */
   readonly id: string;
   readonly description: string;
   readonly width: number;
@@ -67,13 +56,11 @@ interface DrawnTimeSeries extends DrawnFigure {
   };
   readonly yTicks: readonly { readonly y: number; readonly label: string }[];
   readonly xTicks: readonly { readonly x: number; readonly label: string }[];
-  /** In order; the template gives the series at each index its colour, dash and marker. */
   readonly series: readonly {
     readonly name: string;
     readonly path: string;
     readonly end: { readonly x: number; readonly y: number };
   }[];
-  /** A hover band per day, its title naming every series' value. */
   readonly bands: readonly { readonly x: number; readonly width: number; readonly title: string }[];
 }
 
@@ -81,20 +68,16 @@ interface DrawnRankedItem {
   readonly label: string;
   readonly value: string;
   readonly href: string | undefined;
-  /** The bar's length, out of 100. */
-  readonly width: number;
+  readonly widthPercent: number;
 }
 
 interface DrawnBars extends DrawnFigure {
   readonly plot: DrawnTimeSeries['plot'];
   readonly yTicks: DrawnTimeSeries['yTicks'];
-  /** In order; the template gives the series at each index its colour and texture. */
   readonly series: readonly string[];
   readonly bars: readonly {
-    /** The group's label under the bar, left out when labels would collide. */
     readonly tick: string | undefined;
-    /** The middle of the bar, where its label and total sit. */
-    readonly x: number;
+    readonly centerX: number;
     readonly total: { readonly y: number; readonly text: string } | undefined;
     readonly segments: readonly {
       readonly series: number;
@@ -107,12 +90,13 @@ interface DrawnBars extends DrawnFigure {
   }[];
 }
 
+type CalendarLevel = 0 | 1 | 2 | 3 | 4;
+
 interface DrawnCalendar extends DrawnFigure {
   readonly cells: readonly {
     readonly x: number;
     readonly y: number;
-    /** 0 for none, then 1 to 4 by share of the busiest day. */
-    readonly level: number;
+    readonly level: CalendarLevel;
     readonly title: string;
   }[];
   readonly months: readonly { readonly x: number; readonly label: string }[];
@@ -120,16 +104,12 @@ interface DrawnCalendar extends DrawnFigure {
   readonly cell: number;
 }
 
-/** The most series a time series draws, one per colour, dash and marker the template has. */
 const MAX_SERIES = 4;
 
-/** The most groups bars draw, two years of months. */
 const MAX_GROUPS = 24;
 
-/** The gap left between two segments of one bar, in the surface colour. */
 const SEGMENT_GAP = 2;
 
-/** The longest calendar drawn, a year and a leap day. */
 const MAX_CALENDAR_DAYS = 366;
 
 const DAY_MS = 86_400_000;
@@ -177,7 +157,6 @@ function drawCell(cell: PluginScreenCell): DrawnCell {
     : cell;
 }
 
-/** The UTC midnight of a `YYYY-MM-DD` day, or `undefined` for anything else. */
 function dayTime(value: unknown): number | undefined {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
   const time = Date.parse(`${value}T00:00:00Z`);
@@ -190,7 +169,6 @@ function round(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-/** A step of 1, 2 or 5 times a power of ten that splits `max` into about three. */
 function niceStep(max: number): number {
   const raw = max / 3;
   const magnitude = 10 ** Math.floor(Math.log10(raw));
@@ -231,7 +209,7 @@ function drawTable(data: unknown): DrawnBlock {
 
 function drawChange(value: number, previous: number, better: 'up' | 'down'): DrawnChange {
   if (value === previous)
-    return { arrow: '', text: `No change from ${whole.format(previous)}`, tone: '' };
+    return { arrow: '', text: `No change from ${whole.format(previous)}`, tone: 'none' };
   const up = value > previous;
   const tone = up === (better === 'up') ? 'better' : 'worse';
   const from = whole.format(previous);
@@ -262,7 +240,6 @@ function drawStats(data: unknown): DrawnBlock {
   return { kind: 'stats', stats };
 }
 
-/** Consecutive days from `days`, as UTC midnights, or `undefined` when they are not. */
 function consecutiveDays(days: unknown): number[] | undefined {
   if (!Array.isArray(days) || days.length === 0) return undefined;
   const times: number[] = [];
@@ -275,7 +252,6 @@ function consecutiveDays(days: unknown): number[] | undefined {
   return times;
 }
 
-/** The days from `first` to `last`, UTC midnights, in words. */
 function spanText(first: number, last: number): string {
   const length = (last - first) / DAY_MS + 1;
   return length === 1
@@ -283,7 +259,6 @@ function spanText(first: number, last: number): string {
     : `${String(length)} days from ${shortDay.format(first)} to ${shortDay.format(last)}`;
 }
 
-/** `series` as named values, one per point, or `undefined` when it cannot be drawn. */
 function namedSeries(
   series: unknown,
   points: number,
@@ -311,7 +286,6 @@ const CHART_WIDTH = 480;
 const CHART_HEIGHT = 220;
 const PLOT = { left: 44, right: CHART_WIDTH - 24, top: 12, bottom: CHART_HEIGHT - 28 };
 
-/** A value axis from 0 to a round number at or above `peak`, with its ticks. */
 function valueAxis(peak: number): {
   y: (value: number) => number;
   ticks: DrawnTimeSeries['yTicks'][number][];
@@ -382,7 +356,6 @@ function drawTimeSeries(data: unknown): DrawnBlock {
   };
 }
 
-/** `href` when it is a path on this site or a web address, which is all a link may be. */
 function safeHref(href: unknown): string | undefined {
   return typeof href === 'string' && /^(?:https?:\/\/|\/(?!\/))/i.test(href) ? href : undefined;
 }
@@ -411,7 +384,7 @@ function drawRanked(data: unknown): DrawnBlock {
       label: item.label,
       value: whole.format(item.value),
       href: safeHref(item.href),
-      width: most > 0 ? Math.round((item.value / most) * 1000) / 10 : 0,
+      widthPercent: most > 0 ? Math.round((item.value / most) * 1000) / 10 : 0,
     })),
   };
 }
@@ -466,7 +439,7 @@ function drawBars(data: unknown): DrawnBlock {
     });
     return {
       tick: (labels.length - 1 - index) % every === 0 ? label : undefined,
-      x: middle,
+      centerX: middle,
       total: total === 0 ? undefined : { y: round(y(total) - 4), text: whole.format(total) },
       segments,
     };
@@ -546,7 +519,10 @@ function drawCalendar(data: unknown): DrawnBlock {
     cells.push({
       x: left + column * pitch,
       y: top + row * pitch,
-      level: count === 0 ? 0 : Math.min(4, Math.max(1, Math.ceil((count / most) * 4))),
+      level:
+        count === 0
+          ? 0
+          : (Math.min(4, Math.max(1, Math.ceil((count / most) * 4))) as CalendarLevel),
       title: `${longDay.format(time)}: ${whole.format(count)}`,
     });
   }
@@ -580,10 +556,6 @@ function drawCalendar(data: unknown): DrawnBlock {
   };
 }
 
-/**
- * `block` as the template draws it. A plugin hands blocks over as plain data,
- * so this checks every field rather than trusting the type.
- */
 export function drawBlock(block: unknown): DrawnBlock {
   if (!isRecord(block)) return EMPTY;
   if ('paragraph' in block) {

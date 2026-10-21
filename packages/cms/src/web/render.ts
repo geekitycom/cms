@@ -488,7 +488,6 @@ export function drawnWith<T>(inputs: RequestInputs, draw: () => T): T {
 
 const pageTags = new AsyncLocalStorage<DrawnPageTags>();
 
-/** Run `draw` with the tags the running plugins add to every page it draws. */
 export function drawnWithPageTags<T>(tags: DrawnPageTags, draw: () => T): T {
   return pageTags.run(tags, draw);
 }

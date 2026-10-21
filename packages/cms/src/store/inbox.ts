@@ -92,26 +92,16 @@ export type NewInboxActivity = Omit<
   recipient?: string | null | undefined;
 };
 
-/** A like, boost or reply the inbox was sent, as the dashboard counts them. */
 export interface InboxInteraction {
   readonly kind: 'like' | 'boost' | 'reply';
-  /** When it arrived, as an ISO 8601 instant. */
   readonly receivedAt: string;
 }
 
-/** An {@link InboxInteraction} with who sent it and what it is about. */
 export interface LatestInteraction extends InboxInteraction {
   readonly actorId: string;
-  /** The object liked or boosted, or the one a reply answers, `null` when it named none. */
   readonly about: string | null;
 }
 
-/**
- * The likes, boosts and replies received at or after the instant bound first,
- * each once, leaving out what its actor took back. Shared by
- * {@link InboxStore.listInteractionsSince} and
- * {@link InboxStore.listLatestInteractions}, which order it differently.
- */
 const INTERACTIONS = `
   SELECT activity_type, actor_id,
     CASE WHEN activity_type = '${REPLY_ACTIVITY_TYPE}' THEN in_reply_to ELSE object_id END AS about,
@@ -132,10 +122,8 @@ const INTERACTIONS = `
     CASE WHEN activity_type = '${REPLY_ACTIVITY_TYPE}' THEN NULL ELSE actor_id END,
     object_id`;
 
-/** How many {@link InboxInteraction}s of one kind name one object. */
 export interface InteractionCount {
   readonly kind: InboxInteraction['kind'];
-  /** The object liked or boosted, or the one a reply answers, `null` when it named none. */
   readonly about: string | null;
   readonly count: number;
 }
@@ -198,26 +186,10 @@ export interface InboxStore {
   /** The logged replies whose note's id has this `/replies/` key (TASK-327). */
   listRepliesByKey(key: string): InboxActivity[];
 
-  /**
-   * The likes, boosts and replies that arrived at or after an instant, oldest
-   * first, each counted once: one like or boost per actor and object, one
-   * reply per note, at its earliest arrival. A like or boost its actor undid
-   * and a reply its actor deleted are left out, as a conversation leaves them
-   * out.
-   */
   listInteractionsSince(since: string): InboxInteraction[];
 
-  /**
-   * The newest likes, boosts and replies, newest first, counted and left out
-   * as {@link InboxStore.listInteractionsSince} counts and leaves them out.
-   */
   listLatestInteractions(limit: number): LatestInteraction[];
 
-  /**
-   * The likes, boosts and replies that arrived at or after an instant,
-   * counted per object and kind as {@link InboxStore.listInteractionsSince}
-   * counts them.
-   */
   countInteractionsSince(since: string): InteractionCount[];
 }
 

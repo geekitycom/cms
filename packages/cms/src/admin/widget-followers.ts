@@ -3,11 +3,6 @@ import type { FollowerDay } from '../federation/follower-history.ts';
 import { daysEndingToday } from './widgets.ts';
 import type { CoreWidget } from './widgets.ts';
 
-/**
- * The site's follower count at the end of each day of the dashboard's period,
- * in the site's time zone, with the follows and unfollows of the period
- * against the period before.
- */
 export const FOLLOWERS_WIDGET: CoreWidget = {
   id: 'followers',
   title: 'Followers',

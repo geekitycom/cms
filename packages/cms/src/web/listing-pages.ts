@@ -115,8 +115,7 @@ function pagedResponse(
  *
  * The documents on the page are not the whole story: the same two posts on a
  * differently sized archive are a different page, and a summary is not the
- * body, so the pagination and the `full` flag are in the fingerprint too, and
- * so are the plugins' page tags, which follow their settings.
+ * body, so the pagination and the `full` flag are in the fingerprint too.
  */
 function listingFingerprint(
   href: string,

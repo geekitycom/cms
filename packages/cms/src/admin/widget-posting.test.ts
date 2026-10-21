@@ -1,22 +1,15 @@
-/**
- * The posting activity widget on GET /admin (TASK-449): published posts per
- * day over the last 52 weeks and per month over the last 12 months, split by
- * kind, in the site's time zone.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { TEN_AM_20_OCTOBER_IN_CHICAGO } from './__testing__/chicago-clock.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
-
-/** 10:00 on 20 October in Chicago, which is UTC-5 then. */
-const NOW = new Date('2026-10-20T15:00:00.000Z');
 
 interface Post {
   readonly slug: string;
@@ -55,11 +48,10 @@ async function site(
   }
   const dataDir = await box.dir('geekity-posting-data-');
   await writeFile(path.join(dataDir, 'locations.json'), JSON.stringify(locations), 'utf8');
-  const cms = await box.site({ contentDir, dataDir, now: () => NOW });
+  const cms = await box.site({ contentDir, dataDir, now: () => TEN_AM_20_OCTOBER_IN_CHICAGO });
   return signedIn(cms);
 }
 
-/** The card's markup, from its title to the next card's. */
 async function card(agent: Browser, query = ''): Promise<string> {
   const response = await agent.get(`/admin${query}`);
   assert.equal(response.status, 200);
@@ -69,13 +61,11 @@ async function card(agent: Browser, query = ''): Promise<string> {
   return html.split('<h2 class="card-title">')[0] ?? '';
 }
 
-/** The figure whose description starts with `caption`, up to the next one. */
 function figure(html: string, caption: string): string {
   const rest = html.slice(html.indexOf(`class="sr-only">${caption}`) + 'class="sr-only">'.length);
   return rest.split('<p id="chart-')[0] ?? '';
 }
 
-/** Each body row of a figure's table as text. */
 function rows(html: string): string[] {
   const [, body = ''] = html.split('<tbody>');
   return [...body.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map(([, row]) => text(row ?? ''));

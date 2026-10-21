@@ -789,7 +789,6 @@ describe('the likes, boosts and replies a site received (TASK-445)', () => {
     admin.logInboxActivity(
       taken('Delete', 'https://remote.example/notes/1', '2026-10-11T00:00:00.000Z'),
     );
-    // Somebody else cannot take back Bob's like.
     admin.logInboxActivity(
       taken('Undo', 'https://remote.example/likes/2', '2026-10-11T00:00:00.000Z'),
     );

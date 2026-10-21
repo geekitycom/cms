@@ -3,14 +3,8 @@ import { documentEditorPath, POST_SCREENS } from './documents.ts';
 import { formatShortTime } from './formatting.ts';
 import type { CoreWidget } from './widgets.ts';
 
-/** How many scheduled posts the widget lists. */
 export const SCHEDULED_POSTS = 5;
 
-/**
- * The next posts waiting for their date, soonest first, whatever the
- * dashboard's period, each with the time it goes out in the site's time zone.
- * The card shows only when one is waiting.
- */
 export const SCHEDULED_WIDGET: CoreWidget = {
   id: 'scheduled-posts',
   title: 'Scheduled posts',

@@ -1,7 +1,3 @@
-/**
- * Page tags (decision-59, TASK-443): the script, link and meta tags a plugin
- * declares for the end of `<head>` and `<body>` on every public page.
- */
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';

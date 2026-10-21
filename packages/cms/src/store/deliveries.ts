@@ -97,11 +97,6 @@ export interface DeliveryStore {
   lastDeliveryToObject(objectId: string): Delivery | undefined;
   /** Every object id a `Delete` was ever recorded going out for. */
   listDeletedObjectIds(): string[];
-  /**
-   * How many deliveries stand failed from an attempt at or after `since`. A
-   * resend that reaches the follower replaces the failure, so it stops
-   * counting.
-   */
   countFailedDeliveriesSince(since: string): number;
 }
 

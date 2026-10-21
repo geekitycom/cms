@@ -1,11 +1,3 @@
-/**
- * Dashboard widgets (decision-59): the cards under the stat tiles on
- * `/admin`. The core's own widgets and the plugins' go through one board,
- * which loads them all at once under a time limit, reuses a good result for
- * the widget's refresh interval, and keeps the last good result to draw
- * marked stale when a later load fails.
- */
-
 import { Temporal } from '@js-temporal/polyfill';
 
 import { calendarDayIn } from '../content/time.ts';
@@ -15,21 +7,14 @@ import type { Clock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
 import type { GeekityEnv } from '../web/env.ts';
 
-/** How long the dashboard waits for one widget before it draws without it. */
 export const WIDGET_TIME_LIMIT_MS = 3000;
 
-/** The periods the dashboard offers, the default first. */
 export const DASHBOARD_PERIODS: readonly DashboardPeriod[] = [7, 30];
 
-/**
- * The days the dashboard covers, from its `period` query: one of
- * {@link DASHBOARD_PERIODS}, and the default for anything else.
- */
 export function dashboardPeriod(query: string | undefined): DashboardPeriod {
   return DASHBOARD_PERIODS.find((days) => String(days) === query) ?? 7;
 }
 
-/** The `count` days ending today in the site's time zone, oldest first, as `YYYY-MM-DD`. */
 export function daysEndingToday(vars: Readonly<GeekityEnv['Variables']>, count: number): string[] {
   const today = calendarDayIn(vars.config.now(), vars.siteAtRequestStart.timezone);
   if (today === undefined) throw new Error('The clock does not read as a date.');
@@ -37,18 +22,7 @@ export function daysEndingToday(vars: Readonly<GeekityEnv['Variables']>, count: 
   return Array.from({ length: count }, (_, index) => first.add({ days: index }).toString());
 }
 
-/**
- * A widget the core draws before every plugin's. Its `load` is handed the
- * request's variables (the store, the admin store, the config, the site
- * settings with `siteAtRequestStart.timezone`, and the rest) and the
- * dashboard's period.
- */
 export interface CoreWidget extends Omit<PluginWidget, 'load'> {
-  /**
-   * `alerts` draws it between the stat tiles and the Activity heading, for a
-   * card that shows only when something needs attention. Every plugin widget,
-   * and a core one with no placement, goes under Activity.
-   */
   readonly placement?: WidgetPlacement;
   load(
     context: Readonly<GeekityEnv['Variables']>,
@@ -56,41 +30,26 @@ export interface CoreWidget extends Omit<PluginWidget, 'load'> {
   ): readonly PluginBlock[] | Promise<readonly PluginBlock[]>;
 }
 
-/** Where on the dashboard a widget's card goes. */
 export type WidgetPlacement = 'alerts' | 'activity';
 
-/** One widget to load: who declared it, what it is, and its load with its context bound. */
 export interface WidgetLoad {
-  /** `core`, or the package name of the plugin that declared it. */
   readonly owner: string;
   readonly widget: Omit<PluginWidget, 'load'>;
   readonly placement: WidgetPlacement;
-  /** The period it is loaded for, which its kept result is kept by. */
   readonly period: DashboardPeriod;
   load(): readonly PluginBlock[] | Promise<readonly PluginBlock[]>;
 }
 
-/** A widget as the dashboard draws it. */
 export interface LoadedWidget {
   readonly title: string;
   readonly width: PluginWidget['width'];
   readonly placement: WidgetPlacement;
-  /**
-   * `fresh` is a result from within its refresh interval, `stale` the last
-   * good result after a load failed, `unavailable` a failed load with no
-   * earlier result, drawn with no blocks.
-   */
   readonly status: 'fresh' | 'stale' | 'unavailable';
   readonly blocks: readonly PluginBlock[];
-  /** When the blocks were loaded, `undefined` when unavailable. */
   readonly loadedAt: Date | undefined;
 }
 
 export interface WidgetBoard {
-  /**
-   * Load every widget at once and answer them in the order given, leaving
-   * out each whose result holds no blocks. Never rejects.
-   */
   load(widgets: readonly WidgetLoad[], now: Clock): Promise<LoadedWidget[]>;
 }
 
@@ -99,10 +58,6 @@ interface Result {
   readonly loadedAt: Date;
 }
 
-/**
- * The board one admin mount keeps for its life. Results are in memory only,
- * so a restart loads every widget again.
- */
 export function createWidgetBoard(options: { timeLimitMs: number }): WidgetBoard {
   const { timeLimitMs } = options;
   const kept = new Map<string, Result>();
@@ -122,8 +77,6 @@ export function createWidgetBoard(options: { timeLimitMs: number }): WidgetBoard
         return result;
       })
       .finally(() => running.delete(key));
-    // A load that outlives its time limit has been logged as late already.
-    loading.catch(() => {});
     running.set(key, loading);
     return loading;
   }
@@ -163,10 +116,6 @@ export function createWidgetBoard(options: { timeLimitMs: number }): WidgetBoard
   };
 }
 
-/**
- * The widgets GET /admin draws: the core's, then each running plugin's in the
- * order the plugins run, so a plugin's widgets go when it is disabled.
- */
 export function dashboardWidgets(
   vars: Readonly<GeekityEnv['Variables']>,
   core: readonly CoreWidget[],

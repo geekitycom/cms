@@ -12,7 +12,6 @@ import type { CoreWidget } from './widgets.ts';
 
 type Kind = PostType | 'checkin' | 'episode';
 
-/** Every kind in the order the chart draws them, each with its plural. */
 const KINDS: readonly (readonly [Kind, string])[] = [
   ['note', 'Notes'],
   ['article', 'Articles'],
@@ -28,7 +27,6 @@ const KINDS: readonly (readonly [Kind, string])[] = [
   ['episode', 'Episodes'],
 ];
 
-/** The most kinds drawn on their own; the rest are drawn together as Other. */
 const KINDS_SHOWN = 3;
 
 const WEEKS = 52;
@@ -40,10 +38,6 @@ const monthLabel = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'UTC',
 });
 
-/**
- * A post's kind as Post Type Discovery reads it, with a note, an article or a
- * photo that is an episode or a check-in counted as that, as the editor does.
- */
 function kindOf(document: Document, locations: PostLocations): Kind {
   const type = postTypeOf(document);
   if (type !== 'note' && type !== 'article' && type !== 'photo') return type;
@@ -52,11 +46,6 @@ function kindOf(document: Document, locations: PostLocations): Kind {
   return type;
 }
 
-/**
- * Published posts per day over the last 52 weeks and per month over the last
- * 12 months, split by kind, in the site's time zone. It is about the year,
- * so the dashboard's period does not change it.
- */
 export const POSTING_WIDGET: CoreWidget = {
   id: 'posting-activity',
   title: 'Posting activity',

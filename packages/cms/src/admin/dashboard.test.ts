@@ -273,10 +273,6 @@ function counts(html: string): Count[] {
   ].map(([, href, label, value]) => ({ label: label ?? '', value: value ?? '', href }));
 }
 
-/**
- * The rows of the screen's tables as text, one string a row, the head first,
- * leaving out the tables of numbers behind a widget's charts.
- */
 function rowTexts(html: string): string[] {
   const tables = screenOf(html).replace(/<details\b[\s\S]*?<\/details>/g, '');
   return [...tables.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].map(([, row]) => text(row ?? ''));

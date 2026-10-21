@@ -152,7 +152,6 @@ export interface UploadedFile {
  * assertion would bury what is being tested.
  */
 export interface Browser {
-  /** `extra` adds request headers, such as a validator to revalidate with. */
   get(url: string, extra?: Record<string, string>): Promise<Response>;
   /** Post a form. `extra` adds request headers, such as the Fetch Metadata a browser sends. */
   post(

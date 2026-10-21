@@ -1,7 +1,3 @@
-/**
- * The fediverse widget on GET /admin (TASK-445): likes, boosts and replies per
- * day over the dashboard's period, with totals against the period before.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -9,15 +5,19 @@ import { after, describe, it } from 'node:test';
 
 import type { Cms } from '../index.ts';
 import type { NewInboxActivity } from '../store/admin-store.ts';
+import {
+  ELEVEN_PM_19_OCTOBER_IN_CHICAGO,
+  TEN_AM_20_OCTOBER_IN_CHICAGO,
+} from './__testing__/chicago-clock.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 
+const ELEVEN_PM_13_OCTOBER_IN_CHICAGO = '2026-10-14T04:00:00.000Z';
+
 const box = sandbox();
 after(() => box.cleanup());
 
-/** 10:00 on 20 October in Chicago, which is UTC-5 then. */
-const NOW = new Date('2026-10-20T15:00:00.000Z');
 const POST = 'https://blog.example/2026/10/hello/';
 const ADA = 'https://remote.example/users/ada';
 
@@ -65,14 +65,13 @@ async function site(): Promise<{ cms: Cms; agent: Browser }> {
     JSON.stringify({ title: 'A Site', timezone: 'America/Chicago' }),
     'utf8',
   );
-  const cms = await box.site({ contentDir, now: () => NOW });
+  const cms = await box.site({ contentDir, now: () => TEN_AM_20_OCTOBER_IN_CHICAGO });
   return { cms, agent: await signedIn(cms) };
 }
 
 function seed(cms: Cms): void {
   const log = (entry: NewInboxActivity) => cms.admin.logInboxActivity(entry);
-  // 23:00 on 19 October in Chicago, though 20 October in UTC.
-  log(activity('Like', '2026-10-20T04:00:00.000Z'));
+  log(activity('Like', ELEVEN_PM_19_OCTOBER_IN_CHICAGO));
   log(
     activity('Like', '2026-10-20T06:00:00.000Z', { actorId: 'https://remote.example/users/bob' }),
   );
@@ -87,10 +86,8 @@ function seed(cms: Cms): void {
       objectId: undone.activityId,
     }),
   );
-  // The week before: 10 October, and 23:00 on 13 October in Chicago.
   log(activity('Like', '2026-10-10T12:00:00.000Z', { objectId: 'https://blog.example/a/' }));
-  log(activity('Like', '2026-10-14T04:00:00.000Z', { objectId: 'https://blog.example/b/' }));
-  // Only in the last 30 days.
+  log(activity('Like', ELEVEN_PM_13_OCTOBER_IN_CHICAGO, { objectId: 'https://blog.example/b/' }));
   log(activity('Like', '2026-10-01T12:00:00.000Z', { objectId: 'https://blog.example/c/' }));
 }
 

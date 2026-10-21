@@ -9,13 +9,10 @@ import { DELIVERY_PANEL, RESEND_PANEL } from './federation.ts';
 import { MAINTENANCE_PATH, STRIP_METADATA_PANEL } from './maintenance.ts';
 import type { CoreWidget } from './widgets.ts';
 
-/** How far back a failure counts. */
 const FAILURES_SINCE_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** How long a job runs before it counts as running longer than expected. */
 const LONG_RUNNING_MS = 60 * 60 * 1000;
 
-/** What each job is called on the dashboard and the panel that runs it. */
 const JOB_PANELS: Readonly<Record<string, { readonly label: string; readonly href: string }>> = {
   [STRIP_METADATA_JOB.name]: { label: 'Metadata sweep', href: STRIP_METADATA_PANEL },
   [RESEND_JOB.name]: { label: 'Resend', href: RESEND_PANEL },
@@ -32,17 +29,12 @@ interface Problem {
   readonly count: number;
 }
 
-/** When a job ended badly, or `undefined` for one that did not. */
 function endedBadlyAt(job: JobStatus): string | undefined {
   if (job.state === 'failed') return job.finishedAt;
   if (job.state === 'interrupted') return job.interruptedAt;
   return undefined;
 }
 
-/**
- * Per job name, the runs since `since` that failed or were interrupted after
- * the name's last finished run, so a run that later went through clears them.
- */
 function failedJobs(jobs: readonly JobStatus[], since: string): Problem[] {
   const lastFinished = new Map<string, string>();
   for (const job of jobs) {
@@ -76,11 +68,6 @@ function longRunningJobs(jobs: readonly JobStatus[], before: string): Problem[] 
   });
 }
 
-/**
- * What needs the owner's attention: failed and long-running jobs, and
- * federation deliveries and webmentions that failed in the last seven days.
- * The card shows only when one of them does.
- */
 export const HEALTH_WIDGET: CoreWidget = {
   id: 'health',
   title: 'Needs attention',

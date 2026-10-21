@@ -8,10 +8,10 @@ import { FEDERATION_PATH, localPosts } from './federation.ts';
 import { formatShortTime } from './formatting.ts';
 import type { CoreWidget } from './widgets.ts';
 
-/** How many interactions the widget lists. */
 export const RECENT_INTERACTIONS = 10;
 
-/** One row of the list, with the instant it is ordered by. */
+const INBOX_OVERREAD_FOR_OTHER_PEOPLES_POSTS = 4;
+
 interface Entry {
   readonly at: string;
   readonly who: string;
@@ -32,11 +32,6 @@ const WEBMENTION_KINDS: Readonly<Record<PostComment['kind'], string>> = {
   mention: 'Mention of',
 };
 
-/**
- * The ten newest things people did, whatever the dashboard's period: comments
- * and webmentions that are not spam, fediverse likes, boosts and replies to the
- * site's posts, and new followers, each linking to where the owner acts on it.
- */
 export const INTERACTIONS_WIDGET: CoreWidget = {
   id: 'recent-interactions',
   title: 'Recent interactions',
@@ -61,19 +56,22 @@ export const INTERACTIONS_WIDGET: CoreWidget = {
       );
     };
 
-    const comments = admin.listLatestComments(RECENT_INTERACTIONS).map((comment): Entry => {
-      const document = store.getBySlug(comment.slug);
-      const kind = comment.source === 'webmention' ? WEBMENTION_KINDS[comment.kind] : 'Comment on';
-      const title = document === undefined ? comment.slug : postLabel(document, cited);
-      return {
-        at: comment.submitted,
-        who: comment.author.name,
-        what: {
-          text: `${kind} ${title}${comment.status === 'pending' ? ', waiting' : ''}`,
-          href: `${COMMENTS_PATH}?status=${comment.status}#comment-${comment.id}`,
-        },
-      };
-    });
+    const comments = admin
+      .listLatestCommentsExceptImportedFediverse(RECENT_INTERACTIONS)
+      .map((comment): Entry => {
+        const document = store.getBySlug(comment.slug);
+        const kind =
+          comment.source === 'webmention' ? WEBMENTION_KINDS[comment.kind] : 'Comment on';
+        const title = document === undefined ? comment.slug : postLabel(document, cited);
+        return {
+          at: comment.submitted,
+          who: comment.author.name,
+          what: {
+            text: `${kind} ${title}${comment.status === 'pending' ? ', waiting' : ''}`,
+            href: `${COMMENTS_PATH}?status=${comment.status}#comment-${comment.id}`,
+          },
+        };
+      });
 
     const post = localPosts(
       store,
@@ -82,10 +80,8 @@ export const INTERACTIONS_WIDGET: CoreWidget = {
       cited,
       (url) => vars.conversation.documentOf(url),
     );
-    // Some of what the inbox holds is about somebody else's post, so more is
-    // read than is shown.
     const fediverse = admin
-      .listLatestInteractions(RECENT_INTERACTIONS * 4)
+      .listLatestInteractions(RECENT_INTERACTIONS * INBOX_OVERREAD_FOR_OTHER_PEOPLES_POSTS)
       .flatMap((interaction): Entry[] => {
         const about = post(interaction.about);
         if (about === null) return [];

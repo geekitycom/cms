@@ -1,29 +1,17 @@
-/**
- * Every follow and unfollow the site has had, in `data/follower-history.jsonl`
- * (TASK-446). The followers file holds only who follows now, so an unfollow
- * leaves no trace there. Each line is one change with the site's follower
- * count after it, kept as an instant so the dashboard can place it on the
- * site's day in whatever time zone the site has when it is read.
- */
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { FOLLOWER_HISTORY, dataPath } from '../files/data-files.ts';
 import { calendarDayIn } from '../content/time.ts';
 import { isRecord } from '../util/guards.ts';
 
 export interface FollowerChange {
-  /** When, as an ISO instant. */
   readonly at: string;
-  /** Which user was followed or unfollowed. */
   readonly username: string;
   readonly change: 'follow' | 'unfollow';
-  /** How many actors followed the site, counting every user, after the change. */
   readonly count: number;
 }
 
 export interface FollowerDay {
-  /** `YYYY-MM-DD` in the site's time zone. */
   readonly day: string;
-  /** The site's follower count at the end of the day. */
   readonly count: number;
   readonly gained: number;
   readonly lost: number;
@@ -62,13 +50,6 @@ export async function recordFollowerChange(dataDir: string, change: FollowerChan
   await updateFileAtomically(historyFile(dataDir), (current) => `${current ?? ''}${line}`);
 }
 
-/**
- * The count, follows and unfollows of each of `days`, which are consecutive
- * and oldest first. A day with no change keeps the count of the day before. A
- * day before the first change has the count that change started from, and
- * with no changes at all every day has `current`, so a site with no history
- * draws a flat line rather than a climb from zero.
- */
 export function followerDays(
   changes: readonly FollowerChange[],
   days: readonly string[],

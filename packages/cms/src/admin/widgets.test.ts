@@ -1,9 +1,3 @@
-/**
- * The widget board (decision-59, TASK-444): how the dashboard loads its
- * widgets, reuses their results and survives one that fails. Driven through
- * the board's own API with a clock the test moves; `dashboard-widgets.test.ts`
- * covers what GET /admin draws.
- */
 import assert from 'node:assert/strict';
 import { after, afterEach, beforeEach, describe, it, mock } from 'node:test';
 

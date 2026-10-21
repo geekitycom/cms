@@ -12,24 +12,18 @@ type Kind = 'likes' | 'boosts' | 'replies' | 'webmentions' | 'comments';
 
 const INBOX_KINDS = { like: 'likes', boost: 'boosts', reply: 'replies' } as const;
 
-/** What {@link postEngagement} reads. */
 export interface EngagementSources {
   readonly store: DocumentLookup & CatalogReader & IndexClock;
-  readonly admin: Pick<AdminStore, 'countInteractionsSince' | 'countApprovedCommentsSince'>;
+  readonly admin: Pick<
+    AdminStore,
+    'countInteractionsSince' | 'countApprovedCommentsExceptImportedFediverseSince'
+  >;
   readonly baseUrl: string;
   readonly objectIds: ObjectIdRecord;
   readonly cited: CitedPageReader;
-  /** The post whose thread holds a note, for a reply to a reply. */
   readonly threadOf: (url: string) => Document | undefined;
 }
 
-/**
- * Each post's likes, boosts and fediverse replies from the inbox, and its
- * approved webmentions and comments, from an instant on, most first. Counted
- * as the dashboard's other cards count: an undone like or boost and a deleted
- * reply are left out, and so are the fediverse comments imported from before
- * the site ran Geekity, which the inbox would otherwise count twice.
- */
 export function postEngagement(sources: EngagementSources, since: string): PostEngagement[] {
   const { store, admin, cited } = sources;
   const posts = new Map<string, PostEngagement>();
@@ -56,7 +50,9 @@ export function postEngagement(sources: EngagementSources, since: string): PostE
     const document = found === null ? undefined : store.getBySlug(found.slug);
     if (document !== undefined) add(document, INBOX_KINDS[kind], count);
   }
-  for (const { slug, source, count } of admin.countApprovedCommentsSince(since)) {
+  for (const { slug, source, count } of admin.countApprovedCommentsExceptImportedFediverseSince(
+    since,
+  )) {
     const document = store.getBySlug(slug);
     if (document?.type !== 'post') continue;
     add(document, source === 'webmention' ? 'webmentions' : 'comments', count);

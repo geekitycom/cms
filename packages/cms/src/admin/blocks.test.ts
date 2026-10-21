@@ -5,7 +5,6 @@ import { createAdminTemplateEnvironment } from './templates.ts';
 
 const environment = createAdminTemplateEnvironment({ noCache: true });
 
-/** `data` drawn by the `block` macro, with the whitespace between tags gone. */
 function draw(data: unknown): string {
   return environment
     .renderString(`{% from "components/blocks.njk" import block %}{{ block(data) }}`, { data })
@@ -14,12 +13,10 @@ function draw(data: unknown): string {
     .trim();
 }
 
-/** Every match of `pattern` in `html`, as the first group of each. */
 function all(html: string, pattern: RegExp): string[] {
   return [...html.matchAll(pattern)].map((match) => match[1] ?? '');
 }
 
-/** The days from `first` on, `count` of them, as `YYYY-MM-DD`. */
 function days(first: string, count: number): string[] {
   const start = Date.parse(`${first}T00:00:00Z`);
   return Array.from({ length: count }, (_, index) =>
@@ -29,7 +26,6 @@ function days(first: string, count: number): string[] {
 
 const EMPTY = /No data to show\./;
 
-/** The colour classes and the dash of each line a time series draws. */
 function lines(html: string): { colour: string; dash: string }[] {
   return [
     ...html.matchAll(
@@ -38,7 +34,6 @@ function lines(html: string): { colour: string; dash: string }[] {
   ].map(([, colour, dash]) => ({ colour: colour ?? '', dash: dash ?? '' }));
 }
 
-/** The legend of a chart, or `''` when it has none. */
 function legendOf(html: string): string {
   return /<ul class="[^"]*" aria-hidden="true">(.*?)<\/ul>/.exec(html)?.[1] ?? '';
 }
@@ -467,7 +462,6 @@ describe('bars', () => {
     },
   };
 
-  /** Each bar segment's height and hover title, left to right, bottom up. */
   function segments(html: string): { height: number; title: string }[] {
     return [
       ...html.matchAll(

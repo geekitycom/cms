@@ -76,10 +76,8 @@ export interface PluginContributions {
   settingsNamespace: DeclaredNamespace | undefined;
   /** Its buttons beside editor fields, in the order it declared them. */
   editorActions: readonly PluginEditorAction[];
-  /** What it adds to every public page, read as each page is drawn. */
   pageTags:
     ((context: PluginPageTagsContext) => PluginPageTags | Promise<PluginPageTags>) | undefined;
-  /** Its dashboard widgets, in the order it declared them. */
   widgets: readonly PluginWidget[];
   dataFiles: readonly DataFileDeclaration[];
 }
@@ -133,7 +131,6 @@ export interface PluginRegistry {
   reconcile(enabled: ReadonlySet<string>): Promise<void>;
   /** Stop every running plugin, dependents first. Nothing starts after. */
   close(): Promise<void>;
-  /** Hand plugins the core's services, once the CMS has built them. */
   provideCore(services: CoreServices): void;
 }
 
@@ -147,7 +144,6 @@ export class DuplicatePluginError extends Error {
 
 const CORE_PACKAGE = '@geekity/cms';
 
-/** The names in {@link CoreServices}, which a plugin may `use` without requiring anything. */
 const CORE_SERVICES: Readonly<Record<keyof CoreServices, true>> = {
   '@geekity/cms/engagement': true,
 };
@@ -575,7 +571,6 @@ function register(
   }
 }
 
-/** An editor action's or a widget's id: an editor action's is the last segment of its endpoint's path. */
 const DECLARED_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 async function lifecycle(plugin: Plugin, hook: 'start' | 'stop'): Promise<void> {

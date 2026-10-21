@@ -39,15 +39,10 @@
     </div>
   </section>
 
-  {# Core widgets placed as alerts, such as Needs attention: they draw only
-     when something is wrong, and no period applies to them. #}
   {% for widget in alerts %}
     <section class="mb-8">{{ widgetCard(widget, tone='warning') }}</section>
   {% endfor %}
 
-  {# The core's widgets, then each running plugin's (src/admin/widgets.ts). A
-     half widget sits beside another once the main area is wide enough; a full
-     one spans the row. #}
   {% if widgets.length %}
     <div class="@container">
       <div class="mb-3 flex flex-wrap items-center justify-between gap-3">

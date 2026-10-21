@@ -9,10 +9,6 @@ const SERIES: readonly { kind: InboxInteraction['kind']; name: string }[] = [
   { kind: 'reply', name: 'Replies' },
 ];
 
-/**
- * Likes, boosts and replies from the inbox per day of the dashboard's period,
- * in the site's time zone, with each total against the period before.
- */
 export const FEDIVERSE_WIDGET: CoreWidget = {
   id: 'fediverse-activity',
   title: 'Fediverse',

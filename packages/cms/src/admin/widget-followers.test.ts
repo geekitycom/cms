@@ -1,7 +1,3 @@
-/**
- * The followers widget on GET /admin (TASK-446): the site's follower count at
- * the end of each day of the dashboard's period, with what it gained and lost.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -10,15 +6,16 @@ import { after, describe, it } from 'node:test';
 import { recordFollowerChange } from '../federation/follower-history.ts';
 import type { FollowerChange } from '../federation/follower-history.ts';
 import type { Cms } from '../index.ts';
+import {
+  ELEVEN_PM_19_OCTOBER_IN_CHICAGO,
+  TEN_AM_20_OCTOBER_IN_CHICAGO,
+} from './__testing__/chicago-clock.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
-
-/** 10:00 on 20 October in Chicago, which is UTC-5 then. */
-const NOW = new Date('2026-10-20T15:00:00.000Z');
 
 async function site(): Promise<{ cms: Cms; agent: Browser }> {
   const contentDir = await box.dir('geekity-followers-widget-content-');
@@ -28,7 +25,7 @@ async function site(): Promise<{ cms: Cms; agent: Browser }> {
     JSON.stringify({ title: 'A Site', timezone: 'America/Chicago' }),
     'utf8',
   );
-  const cms = await box.site({ contentDir, now: () => NOW });
+  const cms = await box.site({ contentDir, now: () => TEN_AM_20_OCTOBER_IN_CHICAGO });
   return { cms, agent: await signedIn(cms) };
 }
 
@@ -51,16 +48,13 @@ function follow(cms: Cms, count: number): void {
 async function seed(cms: Cms): Promise<void> {
   const change = (at: string, kind: FollowerChange['change'], count: number) =>
     recordFollowerChange(cms.config.dataDir, { at, username: 'admin', change: kind, count });
-  // The week before: 12 October.
   await change('2026-10-12T12:00:00.000Z', 'follow', 3);
   await change('2026-10-15T12:00:00.000Z', 'follow', 4);
   await change('2026-10-15T13:00:00.000Z', 'follow', 5);
-  // 23:00 on 19 October in Chicago, though 20 October in UTC.
-  await change('2026-10-20T04:00:00.000Z', 'unfollow', 4);
+  await change(ELEVEN_PM_19_OCTOBER_IN_CHICAGO, 'unfollow', 4);
   follow(cms, 4);
 }
 
-/** The words of the followers card. */
 async function card(agent: Browser, query = ''): Promise<string> {
   const response = await agent.get(`/admin${query}`);
   assert.equal(response.status, 200);

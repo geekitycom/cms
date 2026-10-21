@@ -8,14 +8,6 @@ import type { GeekityEnv } from './env.ts';
 import { drawnWithPageTags } from './render.ts';
 import { requestPath } from './request.ts';
 
-/**
- * Read the page tags of every running plugin, in the order they run, and draw
- * the public pages of this request with them (decision-59). Each is told
- * whether the reader is signed in, which the admin bar in front of this has
- * settled, and whether the site is in dev mode. A plugin whose `pageTags`
- * throws, or returns a tag that breaks a rule, adds nothing and is logged. The
- * admin draws none.
- */
 export const pluginPageTags: MiddlewareHandler<GeekityEnv> = async (c, next) => {
   const pathname = requestPath(c);
   const tagging = [...c.var.activePlugins].flatMap((name) => {

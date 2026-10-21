@@ -1,8 +1,3 @@
-/**
- * Dashboard widgets on GET /admin (decision-59, TASK-444): what a plugin's
- * widgets draw, where, and what a failing one does to the rest of the page.
- * `widgets.test.ts` covers the board's timing and reuse.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';

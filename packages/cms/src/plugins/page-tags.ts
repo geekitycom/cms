@@ -1,14 +1,7 @@
-/**
- * Page tags (decision-59): the markup for the tags a plugin adds to the end of
- * `<head>` and `<body>`. A plugin hands over data and this writes the tags, so
- * nothing it returns reaches a page as raw HTML or as an inline script.
- */
-
 import type { PluginPageTag, PluginPageTagAttributes, PluginPageTags } from '../plugin.ts';
 import { isRecord } from '../util/guards.ts';
 import { escapeAttribute } from '../util/html.ts';
 
-/** One plugin's tags as markup, a tag per line. */
 export interface DrawnPageTags {
   readonly headEnd: string;
   readonly bodyEnd: string;
@@ -20,7 +13,6 @@ const ATTRIBUTE_NAME = /^[a-zA-Z][a-zA-Z0-9_:.-]*$/;
 const EVENT_HANDLER = /^on/i;
 const URL_ATTRIBUTES = new Set(['src', 'href']);
 
-/** Draw what a plugin's `pageTags` returned, or throw saying which rule it broke. */
 export function drawPageTags(tags: PluginPageTags): DrawnPageTags {
   if (!isRecord(tags)) throw new Error('Its page tags are not an object.');
   return { headEnd: drawList(tags.headEnd, 'headEnd'), bodyEnd: drawList(tags.bodyEnd, 'bodyEnd') };

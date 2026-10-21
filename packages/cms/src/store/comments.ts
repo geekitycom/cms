@@ -240,7 +240,6 @@ export interface PostComment extends CommentRecord {
   permalink: string;
 }
 
-/** How many approved comments of one source a post has. */
 export interface CommentCount {
   readonly slug: string;
   readonly source: Exclude<CommentSource, 'activitypub'>;
@@ -261,18 +260,8 @@ export interface CommentStore {
    * page of them. What the moderation screen and the site-wide feed read.
    */
   listComments(options: ListCommentsOptions): PostComment[];
-  /**
-   * The newest comments that are not spam, newest first, leaving out the
-   * fediverse ones imported from before the site ran Geekity: the fediverse
-   * since then is in the inbox log. What the dashboard lists.
-   */
-  listLatestComments(limit: number): PostComment[];
-  /**
-   * The approved comments submitted at or after an instant, counted per post
-   * and source, leaving out the imported fediverse ones as
-   * {@link CommentStore.listLatestComments} does.
-   */
-  countApprovedCommentsSince(since: string): CommentCount[];
+  listLatestCommentsExceptImportedFediverse(limit: number): PostComment[];
+  countApprovedCommentsExceptImportedFediverseSince(since: string): CommentCount[];
   /** One comment by id, or `undefined`. */
   getComment(id: string): PostComment | undefined;
   /** The comments whose `url` is this one, whatever their status (TASK-300). */
@@ -397,11 +386,11 @@ export function openCommentStore(
       return row === undefined ? undefined : toComment(row);
     },
 
-    listLatestComments(limit) {
+    listLatestCommentsExceptImportedFediverse(limit) {
       return (statements.latestComments.all(limit) as Record<string, unknown>[]).map(toComment);
     },
 
-    countApprovedCommentsSince(since) {
+    countApprovedCommentsExceptImportedFediverseSince(since) {
       const rows = statements.approvedCommentCounts.all(since) as Record<string, unknown>[];
       return rows.map((row) => ({
         slug: String(row['slug']),

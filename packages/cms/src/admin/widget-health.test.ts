@@ -1,8 +1,3 @@
-/**
- * The health widget on GET /admin (TASK-450): failed and long-running jobs,
- * failed federation deliveries and failed webmentions of the last seven days,
- * each with a count and a link, and no card at all while nothing fails.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -17,6 +12,7 @@ import type { JobState } from '../jobs/types.ts';
 import type { NewDelivery } from '../store/deliveries.ts';
 import { FEDERATION_QUEUE_TABLE, openQueueDatabase } from '../store/queue-database.ts';
 import type { NewSentWebmention } from '../store/webmentions.ts';
+import { TEN_AM_20_OCTOBER_IN_CHICAGO } from './__testing__/chicago-clock.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
@@ -24,10 +20,8 @@ import { screenOf, text } from './__testing__/markup.ts';
 const box = sandbox();
 after(() => box.cleanup());
 
-const NOW = new Date('2026-10-20T15:00:00.000Z');
-
 function ago(hours: number): string {
-  return new Date(NOW.getTime() - hours * 3600 * 1000).toISOString();
+  return new Date(TEN_AM_20_OCTOBER_IN_CHICAGO.getTime() - hours * 3600 * 1000).toISOString();
 }
 
 async function site(): Promise<{ cms: Cms; agent: Browser }> {
@@ -38,7 +32,11 @@ async function site(): Promise<{ cms: Cms; agent: Browser }> {
     JSON.stringify({ title: 'A Site' }),
     'utf8',
   );
-  const cms = await box.site({ contentDir, baseUrl: 'https://blog.example', now: () => NOW });
+  const cms = await box.site({
+    contentDir,
+    baseUrl: 'https://blog.example',
+    now: () => TEN_AM_20_OCTOBER_IN_CHICAGO,
+  });
   return { cms, agent: await signedIn(cms) };
 }
 
@@ -95,8 +93,10 @@ function webmention(fields: Partial<NewSentWebmention>): NewSentWebmention {
   };
 }
 
-/** Put outbox messages in data/queue.sqlite as Fedify leaves them. */
-async function waiting(cms: Cms, messages: readonly { attempt: number; started: string }[]) {
+async function seedFedifyOutbox(
+  cms: Cms,
+  messages: readonly { attempt: number; started: string }[],
+) {
   using queue = new SqliteMessageQueue(openQueueDatabase(cms.config.dataDir), {
     tableName: FEDERATION_QUEUE_TABLE,
   });
@@ -117,13 +117,11 @@ async function dashboard(agent: Browser): Promise<string> {
   return screenOf(await response.text());
 }
 
-/** The health card's markup, from its title to the end of its card. */
 function card(html: string): string {
   const [, after = ''] = html.split('<h2 class="card-title">Needs attention</h2>');
   return after.split('<h2')[0] ?? '';
 }
 
-/** Each row of the card's table as [problem, href, count]. */
 function rows(html: string): [string, string, string][] {
   return [
     ...card(html).matchAll(
@@ -147,7 +145,7 @@ describe('the health widget (TASK-450)', () => {
     cms.admin.recordSentWebmention(
       webmention({ target: 'https://old.example/', status: 'failed', attemptedAt: ago(24 * 8) }),
     );
-    await waiting(cms, [{ attempt: 0, started: ago(1) }]);
+    await seedFedifyOutbox(cms, [{ attempt: 0, started: ago(1) }]);
 
     const html = await dashboard(agent);
 
@@ -169,7 +167,7 @@ describe('the health widget (TASK-450)', () => {
       delivery({ actorId: 'https://remote.example/b', status: 'failed', error: '502' }),
     );
     cms.admin.recordSentWebmention(webmention({ status: 'failed', error: '400' }));
-    await waiting(cms, [
+    await seedFedifyOutbox(cms, [
       { attempt: 2, started: ago(3) },
       { attempt: 0, started: ago(1) },
     ]);

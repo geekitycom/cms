@@ -1,22 +1,15 @@
-/**
- * The scheduled posts widget on GET /admin (TASK-451): the next five posts
- * waiting for their date, with the time each goes out in the site's time zone
- * and a link to its editor, and no card at all while nothing is waiting.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { TEN_AM_20_OCTOBER_IN_CHICAGO } from './__testing__/chicago-clock.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
-
-/** 10:00 on 20 October in Chicago, which is UTC-5 then. */
-const NOW = new Date('2026-10-20T15:00:00.000Z');
 
 interface Post {
   readonly slug: string;
@@ -43,7 +36,7 @@ async function site(posts: readonly Post[]): Promise<Browser> {
       'utf8',
     );
   }
-  const cms = await box.site({ contentDir, now: () => NOW });
+  const cms = await box.site({ contentDir, now: () => TEN_AM_20_OCTOBER_IN_CHICAGO });
   return signedIn(cms);
 }
 
@@ -53,13 +46,11 @@ async function dashboard(agent: Browser): Promise<string> {
   return screenOf(await response.text());
 }
 
-/** The card's markup, from its title to the next card's. */
 function card(html: string): string {
   const [, after = ''] = html.split('<h2 class="card-title">Scheduled posts</h2>');
   return after.split('<h2')[0] ?? '';
 }
 
-/** Each row of the card's table as [title, href, time]. */
 function rows(html: string): [string, string, string][] {
   return [
     ...card(html).matchAll(

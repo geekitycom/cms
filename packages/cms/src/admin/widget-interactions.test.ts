@@ -1,8 +1,3 @@
-/**
- * The recent interactions widget on GET /admin (TASK-447): the ten newest
- * comments, webmentions, fediverse replies, likes and boosts, and new
- * followers, each linking to where the owner acts on it.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -12,6 +7,7 @@ import { addComment } from '../comments/records.ts';
 import type { NewComment } from '../comments/records.ts';
 import type { Cms } from '../index.ts';
 import type { NewInboxActivity } from '../store/admin-store.ts';
+import { TEN_AM_20_OCTOBER_IN_CHICAGO } from './__testing__/chicago-clock.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
@@ -19,8 +15,6 @@ import { screenOf, text } from './__testing__/markup.ts';
 const box = sandbox();
 after(() => box.cleanup());
 
-/** 10:00 on 20 October in Chicago, which is UTC-5 then. */
-const NOW = new Date('2026-10-20T15:00:00.000Z');
 const POST_ID = 'https://blog.example/2026/10/hello/';
 const ADA = 'https://remote.example/users/ada';
 
@@ -43,7 +37,11 @@ async function site(): Promise<{ cms: Cms; agent: Browser }> {
     'utf8',
   );
   await writeFile(path.join(contentDir, 'posts', '2026-10-01-hello.md'), POST, 'utf8');
-  const cms = await box.site({ contentDir, baseUrl: 'https://blog.example', now: () => NOW });
+  const cms = await box.site({
+    contentDir,
+    baseUrl: 'https://blog.example',
+    now: () => TEN_AM_20_OCTOBER_IN_CHICAGO,
+  });
   return { cms, agent: await signedIn(cms) };
 }
 
@@ -120,7 +118,6 @@ function follower(cms: Cms, name: string, followedAt: string): void {
   });
 }
 
-/** The card's markup, from its title to the next card's. */
 async function card(agent: Browser): Promise<string> {
   const response = await agent.get('/admin');
   assert.equal(response.status, 200);
@@ -130,7 +127,6 @@ async function card(agent: Browser): Promise<string> {
   return html.split('<h2 class="card-title">')[0] ?? '';
 }
 
-/** The names in the Who column, top to bottom. */
 function who(html: string): string[] {
   return [...html.matchAll(/<tr>\s*<td class="wrap-anywhere">([^<]*)<\/td>/g)].map(
     ([, name]) => name ?? '',

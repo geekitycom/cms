@@ -69,10 +69,6 @@ export interface WebmentionStore {
    * target, the later attempt is the one kept.
    */
   moveSentWebmentions(from: Pick<SentWebmention, 'slug' | 'source'>, to: string): void;
-  /**
-   * How many targets stand failed from an attempt at or after `since`. A
-   * later attempt that reaches the target replaces the failure.
-   */
   countFailedWebmentionsSince(since: string): number;
 }
 

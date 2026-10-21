@@ -13,6 +13,8 @@ after(async () => {
   await Promise.all(temporaryDirs.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
+const ELEVEN_PM_18_OCTOBER_IN_CHICAGO = '2026-10-19T04:00:00.000Z';
+
 const DAYS = ['2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20'];
 
 function change(at: string, kind: FollowerChange['change'], count: number): FollowerChange {
@@ -45,8 +47,7 @@ describe('the follower history', () => {
       [
         change('2026-10-18T12:00:00.000Z', 'follow', 5),
         change('2026-10-18T13:00:00.000Z', 'follow', 6),
-        // 23:00 on 18 October in Chicago, though 19 October in UTC.
-        change('2026-10-19T04:00:00.000Z', 'unfollow', 5),
+        change(ELEVEN_PM_18_OCTOBER_IN_CHICAGO, 'unfollow', 5),
       ],
       DAYS,
       'America/Chicago',

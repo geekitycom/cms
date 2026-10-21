@@ -1,9 +1,3 @@
-/**
- * The top posts widget on GET /admin (TASK-448): the five posts that drew the
- * most likes, boosts, replies, webmentions and approved comments over the
- * dashboard's period, and the same per-post totals offered to plugins as the
- * `@geekity/cms/engagement` core service.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -15,6 +9,7 @@ import type { Cms } from '../index.ts';
 import { definePlugin, HOST_API_VERSION } from '../plugin.ts';
 import type { Plugin, PostEngagement } from '../plugin.ts';
 import type { NewInboxActivity } from '../store/admin-store.ts';
+import { TEN_AM_20_OCTOBER_IN_CHICAGO } from './__testing__/chicago-clock.ts';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import type { Browser } from './__testing__/harness.ts';
 import { screenOf, text } from './__testing__/markup.ts';
@@ -22,8 +17,6 @@ import { screenOf, text } from './__testing__/markup.ts';
 const box = sandbox();
 after(() => box.cleanup());
 
-/** 10:00 on 20 October in Chicago, which is UTC-5 then. */
-const NOW = new Date('2026-10-20T15:00:00.000Z');
 const BASE = 'https://blog.example';
 
 const TITLES = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot'];
@@ -50,7 +43,12 @@ async function site(plugins: Plugin[] = []): Promise<{ cms: Cms; agent: Browser 
       'utf8',
     );
   }
-  const cms = await box.site({ contentDir, baseUrl: BASE, now: () => NOW, plugins });
+  const cms = await box.site({
+    contentDir,
+    baseUrl: BASE,
+    now: () => TEN_AM_20_OCTOBER_IN_CHICAGO,
+    plugins,
+  });
   return { cms, agent: await signedIn(cms) };
 }
 
@@ -115,7 +113,6 @@ function likes(cms: Cms, title: string, count: number): void {
   for (let i = 0; i < count; i += 1) cms.admin.logInboxActivity(activity('Like', title));
 }
 
-/** The card's markup, from its title to the next card's. */
 async function card(agent: Browser, query = ''): Promise<string> {
   const response = await agent.get(`/admin${query}`);
   assert.equal(response.status, 200);
@@ -125,7 +122,6 @@ async function card(agent: Browser, query = ''): Promise<string> {
   return html.split('<h2 class="card-title">')[0] ?? '';
 }
 
-/** Each body row's cells as text, top to bottom. */
 function rows(html: string): string[] {
   const [, body = ''] = html.split('<tbody>');
   return [...body.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map(([, row]) => text(row ?? ''));

@@ -132,7 +132,6 @@ export interface FederationRecords {
   readonly admin: AdminStore;
   /** The content directory the files live under. */
   readonly contentDir: string;
-  /** The data directory, which holds the follower history. */
   readonly dataDir: string;
 }
 

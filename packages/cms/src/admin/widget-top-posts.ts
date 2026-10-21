@@ -5,7 +5,6 @@ import { postEngagement } from './engagement.ts';
 import { daysEndingToday } from './widgets.ts';
 import type { CoreWidget } from './widgets.ts';
 
-/** How many posts the widget lists. */
 export const TOP_POSTS = 5;
 
 const KINDS = [
@@ -16,18 +15,12 @@ const KINDS = [
   ['comments', 'comment', 'comments'],
 ] as const;
 
-/** Each kind a post drew, such as `2 likes, 1 reply`. */
 function breakdown(post: PostEngagement): string {
   return KINDS.filter(([kind]) => post[kind] > 0)
     .map(([kind, one, many]) => `${String(post[kind])} ${post[kind] === 1 ? one : many}`)
     .join(', ');
 }
 
-/**
- * The five posts that drew the most likes, boosts, replies, webmentions and
- * approved comments over the dashboard's period, in the site's time zone,
- * each with its total and what it is made of.
- */
 export const TOP_POSTS_WIDGET: CoreWidget = {
   id: 'top-posts',
   title: 'Top posts',

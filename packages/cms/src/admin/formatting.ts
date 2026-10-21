@@ -73,7 +73,6 @@ function partsIn(date: Date, timezone: string): Record<string, string> | undefin
   return parts;
 }
 
-/** An instant as a short day and time in the site's time zone, such as `20 Oct, 17:46`. */
 export function formatShortTime(instant: string, timezone: string): string {
   const date = new Date(instant);
   if (Number.isNaN(date.getTime())) return '';
