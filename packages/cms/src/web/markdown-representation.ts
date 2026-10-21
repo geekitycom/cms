@@ -87,9 +87,13 @@ export function listingMarkdown(
     description: document.description,
   }));
   const pager = [newer, older].filter((link) => link !== undefined);
+  const { document } = archive.context;
 
   return markdownPage(c, { title: page.title, permalink: url }, chrome, [
     description === '' ? '' : `> ${description}`,
+    document === undefined
+      ? ''
+      : rewriteMarkdownLinks(normalizeBody(document.body), markdownHrefFor(c, document.permalink)),
     entries.length === 0 ? '' : `## Posts\n\n${entryList(entries, markdownUrl)}`,
     pager.length === 0 ? '' : `## More posts\n\n${linkList(pager, markdownUrl)}`,
   ]);

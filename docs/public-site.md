@@ -401,7 +401,10 @@ the URL as its text.
 
 A listing's Markdown has the same front matter keys, the title as a heading,
 the site's tagline or the posts page's description as a quote, then the posts
-on that page, one line each:
+on that page, one line each. On the posts page and each of its later pages,
+the page's own Markdown body comes between the quote and the posts, as its
+HTML prints the body above the list. Its links to the site's own pages point
+at their `.md` URLs, as a document's do:
 
 ```markdown
 ## Posts
