@@ -1,8 +1,6 @@
-import { Temporal } from '@js-temporal/polyfill';
-
-import { calendarDayIn } from '../content/time.ts';
 import { followerDays, readFollowerChanges } from '../federation/follower-history.ts';
 import type { FollowerDay } from '../federation/follower-history.ts';
+import { daysEndingToday } from './widgets.ts';
 import type { CoreWidget } from './widgets.ts';
 
 /**
@@ -16,15 +14,10 @@ export const FOLLOWERS_WIDGET: CoreWidget = {
   width: 'half',
   refreshSeconds: 300,
   load(vars, period) {
-    const timezone = vars.siteAtRequestStart.timezone;
-    const today = calendarDayIn(vars.config.now(), timezone);
-    if (today === undefined) throw new Error('The clock does not read as a date.');
-
-    const first = Temporal.PlainDate.from(today).subtract({ days: 2 * period - 1 });
     const days = followerDays(
       readFollowerChanges(vars.config.dataDir),
-      Array.from({ length: 2 * period }, (_, index) => first.add({ days: index }).toString()),
-      timezone,
+      daysEndingToday(vars, 2 * period),
+      vars.siteAtRequestStart.timezone,
       vars.admin.countFollowers(),
     );
 

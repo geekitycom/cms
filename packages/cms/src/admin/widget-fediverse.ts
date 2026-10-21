@@ -1,7 +1,6 @@
-import { Temporal } from '@js-temporal/polyfill';
-
 import { calendarDayIn, toUtcInstant } from '../content/time.ts';
 import type { InboxInteraction } from '../store/admin-store.ts';
+import { daysEndingToday } from './widgets.ts';
 import type { CoreWidget } from './widgets.ts';
 
 const SERIES: readonly { kind: InboxInteraction['kind']; name: string }[] = [
@@ -21,14 +20,8 @@ export const FEDIVERSE_WIDGET: CoreWidget = {
   refreshSeconds: 300,
   load(vars, period) {
     const timezone = vars.siteAtRequestStart.timezone;
-    const today = calendarDayIn(vars.config.now(), timezone);
-    if (today === undefined) throw new Error('The clock does not read as a date.');
-
-    const first = Temporal.PlainDate.from(today).subtract({ days: 2 * period - 1 });
-    const days = Array.from({ length: 2 * period }, (_, index) =>
-      first.add({ days: index }).toString(),
-    );
-    const since = toUtcInstant(days[0] ?? today, timezone);
+    const days = daysEndingToday(vars, 2 * period);
+    const since = toUtcInstant(days[0] ?? '', timezone);
     if (since === undefined) throw new Error('The period does not start on a date.');
 
     const counts = new Map(SERIES.map(({ kind }) => [kind, new Map<string, number>()]));

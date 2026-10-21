@@ -6,6 +6,9 @@
  * marked stale when a later load fails.
  */
 
+import { Temporal } from '@js-temporal/polyfill';
+
+import { calendarDayIn } from '../content/time.ts';
 import type { DashboardPeriod, PluginBlock, PluginWidget } from '../plugin.ts';
 import { pluginSite } from '../plugins/site.ts';
 import type { Clock } from '../util/clock.ts';
@@ -24,6 +27,14 @@ export const DASHBOARD_PERIODS: readonly DashboardPeriod[] = [7, 30];
  */
 export function dashboardPeriod(query: string | undefined): DashboardPeriod {
   return DASHBOARD_PERIODS.find((days) => String(days) === query) ?? 7;
+}
+
+/** The `count` days ending today in the site's time zone, oldest first, as `YYYY-MM-DD`. */
+export function daysEndingToday(vars: Readonly<GeekityEnv['Variables']>, count: number): string[] {
+  const today = calendarDayIn(vars.config.now(), vars.siteAtRequestStart.timezone);
+  if (today === undefined) throw new Error('The clock does not read as a date.');
+  const first = Temporal.PlainDate.from(today).subtract({ days: count - 1 });
+  return Array.from({ length: count }, (_, index) => first.add({ days: index }).toString());
 }
 
 /**

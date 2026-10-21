@@ -1,4 +1,5 @@
 import type { PluginScreenCell, PluginScreenText } from '../plugin.ts';
+import { isRecord } from '../util/guards.ts';
 
 /**
  * A block as `components/blocks.njk` draws it: what a plugin handed over,
@@ -151,10 +152,6 @@ const monthName = new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: '
 let figures = 0;
 
 const EMPTY: DrawnBlock = { kind: 'empty', caption: undefined };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function isAmount(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
@@ -338,12 +335,11 @@ function drawTimeSeries(data: unknown): DrawnBlock {
   const named = times === undefined ? undefined : namedSeries(data['series'], times.length);
   if (times === undefined || named === undefined) return empty;
 
-  const plot = PLOT;
   const { y, ticks: yTicks } = valueAxis(Math.max(...named.flatMap((entry) => entry.values)));
   const count = times.length;
-  const span = (plot.right - plot.left) / Math.max(count - 1, 1);
+  const span = (PLOT.right - PLOT.left) / Math.max(count - 1, 1);
   const x = (index: number): number =>
-    round(count === 1 ? (plot.left + plot.right) / 2 : plot.left + index * span);
+    round(count === 1 ? (PLOT.left + PLOT.right) / 2 : PLOT.left + index * span);
 
   const every = Math.ceil(count / 7);
   const xTicks: DrawnTimeSeries['xTicks'][number][] = [];
@@ -357,7 +353,7 @@ function drawTimeSeries(data: unknown): DrawnBlock {
     description: `${caption}, ${spanText(times[0] ?? 0, times.at(-1) ?? 0)}.`,
     width: CHART_WIDTH,
     height: CHART_HEIGHT,
-    plot,
+    plot: PLOT,
     yTicks,
     xTicks,
     series: named.map((entry) => ({
@@ -368,8 +364,8 @@ function drawTimeSeries(data: unknown): DrawnBlock {
       end: { x: x(count - 1), y: y(entry.values.at(-1) ?? 0) },
     })),
     bands: times.map((time, index) => {
-      const start = index === 0 ? plot.left : x(index) - span / 2;
-      const end = index === count - 1 ? plot.right : x(index) + span / 2;
+      const start = index === 0 ? PLOT.left : x(index) - span / 2;
+      const end = index === count - 1 ? PLOT.right : x(index) + span / 2;
       return {
         x: round(start),
         width: round(end - start),

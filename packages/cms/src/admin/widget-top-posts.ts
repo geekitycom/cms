@@ -1,9 +1,8 @@
-import { Temporal } from '@js-temporal/polyfill';
-
-import { calendarDayIn, toUtcInstant } from '../content/time.ts';
+import { toUtcInstant } from '../content/time.ts';
 import { readObjectIds } from '../federation/object-ids.ts';
 import type { PostEngagement } from '../plugin.ts';
 import { postEngagement } from './engagement.ts';
+import { daysEndingToday } from './widgets.ts';
 import type { CoreWidget } from './widgets.ts';
 
 /** How many posts the widget lists. */
@@ -35,13 +34,10 @@ export const TOP_POSTS_WIDGET: CoreWidget = {
   width: 'full',
   refreshSeconds: 300,
   load(vars, period) {
-    const timezone = vars.siteAtRequestStart.timezone;
-    const today = calendarDayIn(vars.config.now(), timezone);
-    if (today === undefined) throw new Error('The clock does not read as a date.');
-    const first = Temporal.PlainDate.from(today)
-      .subtract({ days: period - 1 })
-      .toString();
-    const since = toUtcInstant(first, timezone);
+    const since = toUtcInstant(
+      daysEndingToday(vars, period)[0] ?? '',
+      vars.siteAtRequestStart.timezone,
+    );
     if (since === undefined) throw new Error('The period does not start on a date.');
 
     const posts = postEngagement(

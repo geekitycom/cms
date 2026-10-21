@@ -29,7 +29,7 @@ export function drawPageTags(tags: PluginPageTags): DrawnPageTags {
 function drawList(list: unknown, where: string): string {
   if (list === undefined) return '';
   if (!Array.isArray(list)) throw new Error(`Its ${where} tags are not an array.`);
-  return list.map((tag: unknown) => drawTag(tag)).join('\n');
+  return list.map(drawTag).join('\n');
 }
 
 function drawTag(tag: unknown): string {
