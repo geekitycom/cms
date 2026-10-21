@@ -236,7 +236,7 @@ there.
 
 `host.use('@geekity/cms/engagement')` returns the engagement service. Its
 `posts({ since })` method takes an ISO 8601 instant and resolves to the posts
-that drew anything at or after it, most first:
+that drew any engagement at or after it, highest `total` first:
 
 | Field         | What it holds                                                    |
 | ------------- | ---------------------------------------------------------------- |
@@ -449,7 +449,7 @@ widget has these fields:
 | `id`             | Lower case words joined by `-`, unique among the plugin's widgets.                                            |
 | `title`          | The card's heading.                                                                                           |
 | `width`          | `half` or `full`. Two `half` widgets sit side by side when the screen is wide. A `full` widget spans the row. |
-| `refreshSeconds` | How long the dashboard shows a result again before it calls `load` again. Zero or more.                       |
+| `refreshSeconds` | How many seconds the dashboard reuses a result before it calls `load` again. Zero or more.                    |
 | `load`           | Returns the card's blocks, or a promise of them.                                                              |
 
 `load` gets one argument with three fields: `site`, the same `PluginSite` a
@@ -459,7 +459,7 @@ days the dashboard covers, ending today. `period` is `7` unless the owner
 chooses 30 days on the dashboard (`/admin?period=30`), when it is `30`. A
 widget that shows a period covers that many days and compares totals with the
 same number of days before them. A widget that does not show a period ignores
-it. The dashboard keeps a result for each period apart. A widget with an id that
+it. The dashboard keeps a separate result for each period. A widget with an id that
 breaks the rule, a duplicate id, an unknown width or a negative
 `refreshSeconds` fails the plugin's `register`, and the Plugins screen shows
 why.
@@ -479,7 +479,7 @@ the server logs a warning and the card shows the last good result with a
 Stale badge and the time it was loaded. If there is no earlier result, the card
 says the stats are unavailable. The rest of the dashboard draws as normal. A
 `load` that returns an empty array draws no card. Use this for a widget that
-only has something to say some of the time. Results are not kept across a
+has content only some of the time. Results are not kept across a
 restart.
 
 ```ts
