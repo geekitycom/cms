@@ -1,0 +1,46 @@
+{# /admin/plugins/add: install a plugin from the npm registry (TASK-466).
+
+   Reached from the Add plugin button on the Plugins screen. A refused or
+   failed install comes back here with what was typed still in the boxes. #}
+{% extends "layouts/shell.njk" %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
+{% import "components/fields.njk" as fields %}
+
+{% block title %}Add plugin{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">Add plugin</h1>
+
+  <div class="flex max-w-2xl flex-col gap-6">
+    {% call card() %}
+      <p class="text-sm">
+        A plugin runs as the site, with access to everything under <code>data/</code>,
+        the accounts and keys and other plugins' secrets. Add only plugins you trust.
+      </p>
+      {% if problems.package or problems.password %}
+        {% call fields.summary('Nothing was installed. Fix the fields marked below and try again.') %}
+          {{ fields.problem('plugin-package', problems.package) }}
+          {{ fields.problem('plugin-add-password', problems.password) }}
+        {% endcall %}
+      {% endif %}
+      <form id="plugin-add" method="post" action="{{ addUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+        {{ fields.text('plugin-package', 'package', 'Package', value=package,
+             hint='An npm package name, such as @geekity/plugin-llm.', error=problems.package,
+             required=true,
+             spellcheck='false', autocomplete='off') }}
+        {{ fields.text('plugin-version', 'version', 'Version (optional)', value=version,
+             hint='A version, a range or a dist-tag. Empty takes latest.', spellcheck='false',
+             autocomplete='off') }}
+        {{ fields.password('plugin-add-password', 'password', 'Your password',
+             error=problems.password, autocomplete='current-password', required=true) }}
+        {% call cardActions() %}
+          {{ button('Add plugin', type='submit', color='primary') }}
+        {% endcall %}
+      </form>
+    {% endcall %}
+
+    <p class="text-sm"><a class="link" href="{{ backUrl }}">Back to Plugins</a></p>
+  </div>
+{% endblock %}
