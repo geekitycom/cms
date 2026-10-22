@@ -492,7 +492,7 @@ export interface PluginWidget {
   /** Lower case words joined by `-`, unique among the plugin's widgets. */
   readonly id: string;
   readonly title: string;
-  /** `half` sits beside another half widget on a wide screen; `full` spans the row. */
+  /** Accepted for older plugins; every card sits in one of the dashboard's two columns. */
   readonly width: 'full' | 'half';
   /** How long a good result is drawn again before `load` is called again, zero or more. */
   readonly refreshSeconds: number;

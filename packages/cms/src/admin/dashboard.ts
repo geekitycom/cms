@@ -171,8 +171,8 @@ function layoutChange(body: Record<string, unknown>): LayoutChange | undefined {
   if (action === 'order') return { action, columns: [listOf(body['left']), listOf(body['right'])] };
   const key = stringOrEmpty(body['widget']);
   if (action === 'earlier' || action === 'later' || action === 'left' || action === 'right') {
-    const shown = listOf(body['shown']);
-    return shown.length === 0 ? { action, key } : { action, key, shown };
+    const cardsOnPage = listOf(body['shown']);
+    return cardsOnPage.length === 0 ? { action, key } : { action, key, cardsOnPage };
   }
   return { action, key };
 }

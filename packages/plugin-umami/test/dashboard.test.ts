@@ -139,7 +139,6 @@ function cardTitled(html: string, title: string): string {
   );
 }
 
-/** Each column draws the cards it holds in the order the plugin declared them. */
 function assertDeclaredOrderInEachColumn(html: string, titles: readonly string[]): void {
   const split = html.indexOf('data-dashboard-column="right"');
   assert.ok(split >= 0, 'the dashboard has a right column');

@@ -83,7 +83,6 @@ async function site(
   return { cms, agent, siteFile };
 }
 
-/** The core's own cards take places in the columns too; these tests are about the plugin's. */
 async function removeCoreCards(agent: Browser): Promise<void> {
   const { html } = await dashboard(agent);
   for (const [, core] of html.matchAll(/data-dashboard-card="(core:[^"]+)"/g)) {
@@ -108,7 +107,6 @@ async function arrange(
   return agent.post(LAYOUT_PATH, [['csrf_token', token], ...pairs]);
 }
 
-/** Press one of a card's buttons, sending its form's fields as a browser would. */
 async function press(agent: Browser, id: string, action: string): Promise<Response> {
   const { html } = await dashboard(agent);
   const form = [
@@ -127,7 +125,6 @@ function key(id: string): string {
   return `${PLUGIN}:${id}`;
 }
 
-/** The ids of the cards drawn in the left and right columns, top to bottom. */
 function columnsOf(html: string): [string[], string[]] {
   const split = html.indexOf('data-dashboard-column="right"');
   assert.ok(html.includes('data-dashboard-column="left"'), 'the left column is drawn');

@@ -159,7 +159,7 @@ describe('changeLayout', () => {
     const layout = columns(['core:a', 'core:b', 'core:c'], ['core:d']);
     const moved = changeLayout(
       layout,
-      { action: 'later', key: 'core:a', shown: ['core:a', 'core:c', 'core:d'] },
+      { action: 'later', key: 'core:a', cardsOnPage: ['core:a', 'core:c', 'core:d'] },
       DEFAULTS,
     );
     assert.deepEqual(arrangeColumns(DEFAULTS, moved), [['core:b', 'core:c', 'core:a'], ['core:d']]);

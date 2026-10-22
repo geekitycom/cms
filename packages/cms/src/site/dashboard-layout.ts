@@ -30,11 +30,7 @@ export type LayoutChange =
 interface Move {
   readonly action: 'earlier' | 'later' | 'left' | 'right';
   readonly key: string;
-  /**
-   * The cards the page drew, when the form said: a card whose widget had
-   * nothing to show is not a neighbour to step past.
-   */
-  readonly shown?: readonly string[];
+  readonly cardsOnPage?: readonly string[];
 }
 
 export const LAYOUT_ACTIONS = [
@@ -133,7 +129,7 @@ function stepPastDrawnNeighbour(layout: DashboardLayout, change: Move): Columns 
   const { key } = change;
   const side = layout.columns[0].includes(key) ? 0 : 1;
   const column = layout.columns[side];
-  const drawn = drawnIn(column, layout, change);
+  const drawn = neighboursIn(column, layout, change);
   const at = drawn.indexOf(key);
   const neighbour = drawn[change.action === 'earlier' ? at - 1 : at + 1];
   if (neighbour === undefined) return layout.columns;
@@ -143,39 +139,33 @@ function stepPastDrawnNeighbour(layout: DashboardLayout, change: Move): Columns 
   return withColumn(layout.columns, side, without);
 }
 
-/**
- * The card goes to the other column at the same place among the drawn cards,
- * above the card drawn there, or at the end when that column is shorter.
- */
 function moveAcross(layout: DashboardLayout, change: Move): Columns {
   const { key } = change;
   const to = change.action === 'left' ? 0 : 1;
   const from = to === 0 ? 1 : 0;
   if (!layout.columns[from].includes(key)) return layout.columns;
-  const at = drawnIn(layout.columns[from], layout, change).indexOf(key);
+  const at = neighboursIn(layout.columns[from], layout, change).indexOf(key);
   const target = [...layout.columns[to]];
-  const below = drawnIn(target, layout, change)[at];
+  const below = neighboursIn(target, layout, change)[at];
   target.splice(below === undefined ? target.length : target.indexOf(below), 0, key);
   const source = layout.columns[from].filter((each) => each !== key);
   return to === 0 ? [target, source] : [source, target];
 }
 
-function drawnIn(column: readonly string[], layout: DashboardLayout, change: Move): string[] {
+function neighboursIn(column: readonly string[], layout: DashboardLayout, change: Move): string[] {
   return column.filter(
     (each) =>
       !layout.removed.includes(each) &&
-      (change.shown === undefined || each === change.key || change.shown.includes(each)),
+      (change.cardsOnPage === undefined ||
+        each === change.key ||
+        change.cardsOnPage.includes(each)),
   );
 }
 
-/**
- * Drag and drop sends only the cards the page drew. A card it did not send,
- * such as a removed one, stays at the end of the column it was in.
- */
 function keepUnsent(before: Columns, sent: Columns, defaults: readonly string[]): Columns {
-  const [left, right] = distinct(sent).map((column) =>
-    column.filter((key) => defaults.includes(key)),
-  ) as [string[], string[]];
+  const unique = distinct(sent);
+  const left = unique[0].filter((key) => defaults.includes(key));
+  const right = unique[1].filter((key) => defaults.includes(key));
   const unsent = (side: 0 | 1) =>
     before[side].filter((key) => !left.includes(key) && !right.includes(key));
   return [

@@ -39,10 +39,6 @@
     });
   });
 
-  /*
-   * Over a card, the dragged card goes above or below it by the pointer's
-   * height. Over a column's empty space, or an empty column, it goes last.
-   */
   grid.addEventListener('dragover', function (event) {
     if (!dragged) return;
     event.preventDefault();
