@@ -20,11 +20,11 @@ import type { Pagination } from './pagination.ts';
 import {
   conditionalHeaders,
   drawnForSomebody,
-  notFound,
   queryFeedFormat,
   selectFromAccept,
   wantsFullDocuments,
 } from './request.ts';
+import { notFound } from './status-pages.ts';
 import {
   searchHref,
   searchJson,

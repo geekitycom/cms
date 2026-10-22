@@ -26,7 +26,8 @@ import {
 } from './negotiate.ts';
 import type { Representation } from './negotiate.ts';
 import { commentsFeedHref } from './paths.ts';
-import { conditionalHeaders, gone, notFound, selectFromAccept } from './request.ts';
+import { conditionalHeaders, selectFromAccept } from './request.ts';
+import { gone, notFound } from './status-pages.ts';
 import { siteView } from './site-view.ts';
 
 /**

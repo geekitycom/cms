@@ -1,25 +1,31 @@
 # The Markdown representation
 
 Every post, page and listing has a Markdown representation at its `.md` URL,
-and so do the search and a comment's own page.
-See [The Markdown](../public-site.md#the-markdown) for what it holds. The CMS
+and so do the search and a comment's own page. The 404, 410, 500 and 503
+pages answer a Markdown request in Markdown too. See
+[The Markdown](../public-site.md#the-markdown) for what it holds. The CMS
 writes the front matter, the page's own Markdown and the rewriting of the
-site's links. The theme writes the header and the footer.
+site's links. The theme writes the header and the footer, and the body of
+each status page.
 
 | Template                          | Where it goes                                       |
 | --------------------------------- | --------------------------------------------------- |
 | `partials/markdown-header.md.njk` | After the front matter, before the page's Markdown. |
 | `partials/markdown-footer.md.njk` | After the page's Markdown, at the end of the file.  |
 | `partials/markdown-reply.md.njk`  | Macros both partials write the conversation with.   |
+| `layouts/404.md.njk`              | The body of the 404 page's Markdown.                |
+| `layouts/410.md.njk`              | The body of the 410 page's Markdown.                |
+| `layouts/500.md.njk`              | The body of the 500 page's Markdown.                |
+| `layouts/503.md.njk`              | The body of the maintenance page's Markdown.        |
 
-Both resolve like every other template. For example, a
+All of them resolve like every other template. For example, a
 `partials/markdown-footer.md.njk` in the site's theme replaces the footer. The
 header still comes from the package. See
 [Overriding a template](overriding-a-template.md).
 
 ## Escaping
 
-The two partials render with autoescaping **off**, because Markdown is not
+These templates render with autoescaping **off**, because Markdown is not
 HTML. An `&` stays an `&`. Print text through the `escapeMarkdown` filter.
 It puts the text on one line and escapes the characters that would start
 emphasis, code, a link or raw HTML, so a label prints as written:
@@ -72,7 +78,7 @@ format, such as a Gemini page:
 | `newestPosts`     | On the homepage, when it is a page: the function the front page layout has. See [Template context](template-context.md).   |
 | `staticFrontPage` | True on the homepage when it is a page, false everywhere else.                                                             |
 | `archiveMonths`   | On a page whose front matter says `archive: true`: every published post as `{ month, posts }`, newest month first.         |
-| `type`            | `post`, `page`, `listing` or `comment`. The search is a `listing`.                                                         |
+| `type`            | `post`, `page`, `listing`, `comment` or `status`. The search is a `listing`, and a 404, 410, 500 or 503 is a `status`.     |
 | `categories`      | On a post: its categories, in the order the file lists them.                                                               |
 | `tags`            | On a post: its tags, in the order the file lists them.                                                                     |
 | `backlinks`       | On a post or a page: the site's posts and pages that link to it, newest first, as the HTML's Linked from list has them.    |
@@ -222,6 +228,42 @@ Each post in `archiveMonths` is a `label`, a `url`, a `date` and a
 as `YYYY-MM-DD`. The `description` is already on one line, and is absent when
 the post has none. The months and their posts are the same ones the HTML
 archive page lists. See [An archive page](page-shell.md#an-archive-page).
+
+## Status pages
+
+A request for a URL's `.md`, or with an `Accept` header that prefers
+`text/markdown` or `text/plain`, gets the 404, 410, 500 or 503 page in
+Markdown, with the same status code. Other requests get the HTML layout of the
+same name. The page has the front matter `title` and `home`, the header, the
+body from the status page's template, and the footer. The 503 front matter
+adds `until` when the operator named a time it has not reached.
+
+The header and footer get `type` as `status`, `title`, `url`, `site`, `feeds`,
+`navigation` and `menus`. The status page's template gets:
+
+| Key         | What it is                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------------ |
+| `site`      | `content/_data/site.json`.                                                                             |
+| `url`       | The path that was requested, such as `/2026/09/gone/index.md`.                                         |
+| `title`     | `Not found`, `Deleted`, `Something went wrong` or `Down for maintenance`.                              |
+| `until`     | On the 503: when the site is expected back, in ISO 8601. Absent when no time is set, or it has passed. |
+| `untilText` | The same time as an HTTP date, as the HTML 503 prints it.                                              |
+
+It has the `escapeMarkdown` and `markdownUrl` filters. The default templates
+write the HTML layout's sentence, the 503's back-by time, and links to the
+homepage and the search:
+
+```markdown
+# Down for maintenance
+
+This site is down for maintenance and will be back shortly. It should be back by Tue, 01 Dec 2026 14:00:00 GMT. Please try again then.
+
+Go [home](/index.md), or [search the site](/search/index.md).
+```
+
+When the 500 or 503 template fails to render, the CMS writes a fixed
+Markdown body in its place, as it writes a fixed HTML page when the HTML
+layout fails.
 
 ## The default partials
 

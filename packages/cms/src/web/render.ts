@@ -140,6 +140,15 @@ export const MARKDOWN_TEMPLATES = {
   footer: 'partials/markdown-footer.md.njk',
 } as const;
 
+/** What {@link Renderer.renderStatusMarkdown} writes a status page's Markdown with. */
+export interface StatusMarkdownContext {
+  /** The path the request was for. */
+  url: string;
+  markdownUrl: MarkdownUrl;
+  /** On the maintenance page: when the operator expects the site back. */
+  until?: Date | undefined;
+}
+
 /** What {@link Renderer.renderMarkdownChrome} writes links with. */
 export interface MarkdownChromeOptions {
   /** A canonical URL as the representation links it. */
@@ -291,6 +300,13 @@ export interface Renderer {
    * is down on purpose. `until` is when the operator expects it back.
    */
   renderMaintenance(url: string, until: Date | undefined): string;
+  /**
+   * The body of a status page's Markdown, from the theme's `markdown`
+   * template in {@link STATUS_PAGES}, with autoescaping off. The template gets
+   * `site`, `url`, `title`, the maintenance page's `until` and `untilText`,
+   * and the filters the Markdown partials have.
+   */
+  renderStatusMarkdown(page: StatusPageName, context: StatusMarkdownContext): string;
   /**
    * The header and footer of a page's Markdown, through
    * {@link MARKDOWN_TEMPLATES} with autoescaping off: Markdown is not HTML.
@@ -1300,11 +1316,19 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     renderGone: (url) => statusPage(STATUS_PAGES.gone, url),
     renderServerError: (url) => statusPage(STATUS_PAGES.serverError, url),
     renderMaintenance: (url, until) =>
-      statusPage(
-        STATUS_PAGES.maintenance,
+      statusPage(STATUS_PAGES.maintenance, url, untilContext(until)),
+
+    renderStatusMarkdown(page, { url, markdownUrl, until }) {
+      useThemeDirs(markdownEnvironment, themes.current().dirs);
+      const { markdown, title } = STATUS_PAGES[page];
+      return markdownEnvironment.render(markdown, {
+        site: siteData.read(),
         url,
-        until === undefined ? {} : { until: until.toISOString(), untilText: until.toUTCString() },
-      ),
+        title,
+        markdownUrl,
+        ...untilContext(until),
+      });
+    },
 
     render,
   };
@@ -1312,15 +1336,31 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
 interface StatusPage {
   readonly template: string;
+  /** The page's Markdown body, found on the theme search path like the HTML layout. */
+  readonly markdown: string;
   readonly title: string;
 }
 
-const STATUS_PAGES = {
-  notFound: { template: TEMPLATES.notFound, title: 'Not found' },
-  gone: { template: TEMPLATES.gone, title: 'Deleted' },
-  serverError: { template: TEMPLATES.serverError, title: 'Something went wrong' },
-  maintenance: { template: TEMPLATES.maintenance, title: 'Down for maintenance' },
+export const STATUS_PAGES = {
+  notFound: { template: TEMPLATES.notFound, markdown: 'layouts/404.md.njk', title: 'Not found' },
+  gone: { template: TEMPLATES.gone, markdown: 'layouts/410.md.njk', title: 'Deleted' },
+  serverError: {
+    template: TEMPLATES.serverError,
+    markdown: 'layouts/500.md.njk',
+    title: 'Something went wrong',
+  },
+  maintenance: {
+    template: TEMPLATES.maintenance,
+    markdown: 'layouts/503.md.njk',
+    title: 'Down for maintenance',
+  },
 } as const satisfies Record<string, StatusPage>;
+
+export type StatusPageName = keyof typeof STATUS_PAGES;
+
+function untilContext(until: Date | undefined): Record<string, string> {
+  return until === undefined ? {} : { until: until.toISOString(), untilText: until.toUTCString() };
+}
 
 /**
  * One neighbour under the name a theme reads it by, or nothing at all when

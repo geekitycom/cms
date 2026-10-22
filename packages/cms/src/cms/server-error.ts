@@ -5,8 +5,9 @@ import type { Environment } from 'nunjucks';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES, createAdminTemplateEnvironment } from '../admin/templates.ts';
 import type { GeekityEnv } from '../web/env.ts';
-import { CONTENT_TYPES, representationOf } from '../web/negotiate.ts';
+import { representationOf } from '../web/negotiate.ts';
 import { requestPath } from '../web/request.ts';
+import { statusMarkdownResponse } from '../web/status-pages.ts';
 
 /**
  * A server error is never stored: the next request may well succeed, and a
@@ -32,6 +33,7 @@ const STATIC_PAGE = `<!doctype html>
 </html>
 `;
 
+/** The Markdown for when the theme's Markdown 500 fails too. */
 const MARKDOWN_BODY =
   '# Something went wrong\n\nThe server could not answer this request. Try again later, or go to the [home page](/).\n';
 
@@ -84,10 +86,9 @@ export const serverError: ErrorHandler<GeekityEnv> = (error, c) => {
       });
     case 'markdown':
     case 'text':
-      return c.body(MARKDOWN_BODY, 500, {
-        'content-type': CONTENT_TYPES[representation],
-        'content-disposition': 'inline',
-        'cache-control': NO_STORE,
+      return statusMarkdownResponse(c, representation, 'serverError', 500, {
+        fallback: MARKDOWN_BODY,
+        headers: { 'cache-control': NO_STORE },
       });
     case 'html':
       return c.html(

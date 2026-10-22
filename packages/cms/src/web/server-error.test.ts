@@ -172,8 +172,8 @@ describe('an exception behind a JSON or Markdown representation', () => {
 
     assert.equal(response.status, 500);
     assert.match(response.headers.get('content-type') ?? '', /^text\/markdown/);
-    assert.match(text, /^# Something went wrong/);
-    assert.match(text, /\[home page\]\(\/\)/);
+    assert.match(text, /^---\ntitle: Something went wrong\n[^]*\n# Something went wrong\n/);
+    assert.match(text, /\[home\]\(\/index\.md\)/);
     assert.ok(!text.includes('/var/lib'), 'no internal path');
     assert.doesNotMatch(text, /<html/i);
   });

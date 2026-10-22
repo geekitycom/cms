@@ -151,7 +151,8 @@ endpoint answers `503 Service Unavailable` with `Retry-After` and
 `Cache-Control: no-store`. `Retry-After` is the `--until` time as an HTTP date
 while that time is in the future, and 600 seconds otherwise. A page renders the
 theme's `layouts/503.njk`. A `.json` or `.md` request gets the answer in that
-format. A crawler keeps the page in its index. A server whose inbox delivery
+format. The Markdown comes from `layouts/503.md.njk` and gives the back-by time
+when there is one. A crawler keeps the page in its index. A server whose inbox delivery
 was refused queues the delivery for a retry and does not drop it.
 
 These requests are still served:
@@ -503,8 +504,29 @@ Link: </search/index.md?q=otters>; rel="alternate"; type="text/markdown",
       </search/index.json?q=otters>; rel="alternate"; type="application/json"
 ```
 
-A theme overrides either partial like any other template. See
-[The Markdown representation](theme/markdown.md).
+A URL that answers 404, 410, 500 or 503 answers a `.md` request, or an
+`Accept` that prefers `text/markdown` or `text/plain`, in Markdown with the
+same status. The body says what happened, as the HTML page does, and links the
+homepage and the search. The 503 also gives its back-by time:
+
+```markdown
+---
+title: Not found
+home: /index.md
+---
+
+# Not found
+
+Content not found.
+
+Go [home](/index.md), or [search the site](/search/index.md).
+```
+
+The footer comes after the body, as on every page. A request with no `Accept`,
+with `*/*`, or one that ranks HTML at least as high gets the HTML page.
+
+A theme overrides either partial, and each status page's Markdown body, like
+any other template. See [The Markdown representation](theme/markdown.md).
 
 ### The JSON shape
 

@@ -45,13 +45,12 @@ import type { PathMatch } from './paths.ts';
 import {
   conditionalHeaders,
   encodePath,
-  gone,
-  notFound,
   queryFeedFormat,
   requestPath,
   requestSearch,
   selectFromAccept,
 } from './request.ts';
+import { gone, notFound } from './status-pages.ts';
 import { robotsResponse, ROBOTS_PATH } from './robots.ts';
 import { SEARCH_PATH } from './search.ts';
 import { llmsTxt, sitemap } from './site-index.ts';

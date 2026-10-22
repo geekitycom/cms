@@ -45,7 +45,7 @@ export interface MarkdownFeed extends MarkdownLink {
 export interface MarkdownChrome {
   /** The path the page is served at, which marks the current menu item. */
   readonly url: string;
-  readonly type: 'post' | 'page' | 'listing' | 'comment';
+  readonly type: 'post' | 'page' | 'listing' | 'comment' | 'status';
   /** The heading the header writes, absent when the body opens with its own. */
   readonly title?: string | undefined;
   readonly previous?: MarkdownLink | undefined;

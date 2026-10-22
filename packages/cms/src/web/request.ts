@@ -34,15 +34,6 @@ export function encodePath(pathname: string): string {
     .join('/');
 }
 
-/** The theme's 404 page. */
-export function notFound(c: Context<GeekityEnv>): Response {
-  return c.html(c.var.renderer.renderNotFound(requestPath(c)), 404);
-}
-
-export function gone(c: Context<GeekityEnv>): Response {
-  return c.html(c.var.renderer.renderGone(requestPath(c)), 410);
-}
-
 /** The conditional request headers, as the negotiator wants them. */
 export function conditionalHeaders(c: Context<GeekityEnv>): ConditionalHeaders {
   return {

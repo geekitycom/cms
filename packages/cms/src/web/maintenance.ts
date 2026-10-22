@@ -4,9 +4,10 @@ import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { signedInAccount } from './signed-in.ts';
 import type { GeekityEnv } from './env.ts';
 import { THEME_ASSET_PREFIX } from '../theme/assets.ts';
-import { representationOf, CONTENT_TYPES, PRIVATE_CACHE_CONTROL } from './negotiate.ts';
+import { representationOf, PRIVATE_CACHE_CONTROL } from './negotiate.ts';
 import { HEALTH_PATH } from './health.ts';
 import { requestPath } from './request.ts';
+import { statusMarkdownResponse } from './status-pages.ts';
 import { CHANGE_PASSWORD_WELL_KNOWN_PATH, SECURITY_TXT_PATH } from './well-known.ts';
 
 /**
@@ -33,6 +34,7 @@ const STATIC_PAGE = `<!doctype html>
 </html>
 `;
 
+/** The Markdown for when the theme's Markdown 503 fails. */
 const MARKDOWN_BODY =
   '# Down for maintenance\n\nThis site is down for maintenance and will be back shortly. Please try again later.\n';
 
@@ -109,10 +111,10 @@ function unavailable(c: Context<GeekityEnv>, pathname: string, until: Date | und
       });
     case 'markdown':
     case 'text':
-      return c.body(MARKDOWN_BODY, 503, {
-        ...headers,
-        'content-type': CONTENT_TYPES[representation],
-        'content-disposition': 'inline',
+      return statusMarkdownResponse(c, representation, 'maintenance', 503, {
+        until: upcoming,
+        fallback: MARKDOWN_BODY,
+        headers,
       });
     case 'html':
       return c.html(page(c, pathname, upcoming), 503, headers);

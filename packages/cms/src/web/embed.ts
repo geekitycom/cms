@@ -8,7 +8,8 @@ import { permalinkOfObjectId } from '../content/permalinks.ts';
 import { embedPage, embedResponse, oEmbedFor, oEmbedRequest, oEmbedResponse } from './oembed.ts';
 import type { EmbedSubject } from './oembed.ts';
 import { classifyPath } from './paths.ts';
-import { conditionalHeaders, notFound } from './request.ts';
+import { conditionalHeaders } from './request.ts';
+import { notFound } from './status-pages.ts';
 import { servedPath, siteView } from './site-view.ts';
 
 /**

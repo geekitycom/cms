@@ -341,7 +341,7 @@
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
-      "vary": "Accept-Encoding",
+      "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
       "x-frame-options": "SAMEORIGIN"
     },
@@ -356,7 +356,7 @@
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
-      "vary": "Accept-Encoding",
+      "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
       "x-frame-options": "SAMEORIGIN"
     },

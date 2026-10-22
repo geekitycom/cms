@@ -38,6 +38,8 @@ import {
 import type { MarkdownChrome, MarkdownFeed, MarkdownLink, MarkdownUrl } from './markdown-page.ts';
 import { representationHref } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
+import { STATUS_PAGES } from './render.ts';
+import type { StatusPageName } from './render.ts';
 import { classifyPath } from './paths.ts';
 import { documentLabel, encodePath } from './request.ts';
 import { SEARCH_PATH, snippetMarkdown } from './search.ts';
@@ -236,6 +238,37 @@ export function searchMarkdown(
       entries.length === 0 ? '' : `## Results\n\n${entryList(entries, markdownUrl)}`,
       pager.length === 0 ? '' : `## More results\n\n${linkList(pager, markdownUrl)}`,
     ],
+  );
+}
+
+/**
+ * A 404, 410, 500 or 503 in Markdown: the theme's body for it between the
+ * header and footer every page has, with the maintenance page's back-by time
+ * in the front matter as well.
+ */
+export function statusMarkdown(
+  c: Context<GeekityEnv>,
+  page: StatusPageName,
+  url: string,
+  until?: Date,
+): string {
+  const { title } = STATUS_PAGES[page];
+  const chrome: MarkdownChrome = {
+    url,
+    type: 'status',
+    title,
+    feeds: siteFeeds(c.var.renderer.site().title),
+  };
+  const body = c.var.renderer.renderStatusMarkdown(page, {
+    url,
+    markdownUrl: markdownUrlFor(c, url),
+    until,
+  });
+  return markdownPage(
+    c,
+    { title, ...(until === undefined ? {} : { until: until.toISOString() }) },
+    chrome,
+    [body],
   );
 }
 

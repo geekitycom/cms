@@ -17,7 +17,8 @@ import { naturalObjectId } from '../federation/object-ids.ts';
 import { acctOf, WEBFINGER_PATH, webFingerUser } from '../federation/webfinger.ts';
 import type { GeekityEnv } from './env.ts';
 import { prefersActivityStreams } from './negotiate.ts';
-import { notFound, requestPath } from './request.ts';
+import { requestPath } from './request.ts';
+import { notFound } from './status-pages.ts';
 
 /**
  * Put Fedify in front of the rest of the app.

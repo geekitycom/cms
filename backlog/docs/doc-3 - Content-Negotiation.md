@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-22 01:04'
+updated_date: '2026-10-22 01:21'
 ---
 # Content Negotiation
 
@@ -26,6 +26,8 @@ Every public content URL serves one document in several representations. The rep
 2. Otherwise run standard `Accept` matching with q-values against the list above. `*/*`, `text/*` and a missing header mean HTML. `text/plain` gets the Markdown under that label, and `text/markdown` wins whenever the request ranks it at least as high as `text/plain`.
 3. ActivityStreams types are claimed before this code runs, so they never reach the negotiator. A post's object id is its permalink, so the permalink itself answers them with the `Article`: one URL, a browser and a peer, decided by `Accept`. A page and a listing federate nothing and fall through to the negotiator, which answers 406 to a request that will take nothing else.
 4. A request whose only acceptable types are unsupported returns 406 with a short JSON body listing the options that have a URL of their own, which leaves out `text/plain`.
+
+A request that ends in 404, 410, 500 or 503 keeps its status and is answered in the representation it asked for by the same rules: its `.md` suffix, else its `Accept`, else HTML. A `.md` URL or an `Accept` that prefers `text/markdown` or `text/plain` gets the theme's Markdown status page (`layouts/404.md.njk`, `410.md.njk`, `500.md.njk`, `503.md.njk`) between the Markdown header and footer, labelled as asked, with `Vary: Accept` (TASK-478). The body says what happened, links the homepage and the search, and the 503's gives its back-by time, which its front matter carries as `until`. No `Accept`, `*/*`, and an `Accept` that ranks HTML at least as high get the HTML page. A 404 or 410 asked for as JSON gets the HTML page; a 500 or 503 asked for as JSON gets a short JSON error.
 
 Every response includes `Vary: Accept` and a `Link` header advertising the alternates. `text/plain` is never among them:
 
