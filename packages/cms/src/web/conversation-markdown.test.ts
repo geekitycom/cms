@@ -294,19 +294,19 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
       [
         '## 5 replies',
         '',
-        `- [Ada \\[Lovelace\\]](https://ada.example/), [11 September 2026](/comment/${ADA}/)`,
+        `- [Ada \\[Lovelace\\]](https://ada.example/), [11 September 2026](/comment/${ADA}/index.md)`,
         '',
         '  Approved _words_.',
         '',
         '  A second [paragraph](https://ada.example/x).',
         '',
-        `  - Grace Hopper, [11 September 2026](/comment/${GRACE}/)`,
+        `  - Grace Hopper, [11 September 2026](/comment/${GRACE}/index.md)`,
         '',
         '    Answering Ada.',
         '',
         '- This comment is no longer shown.',
         '',
-        `  - Somebody, [11 September 2026](/comment/${UNDER_HELD}/)`,
+        `  - Somebody, [11 September 2026](/comment/${UNDER_HELD}/index.md)`,
         '',
         '    Under a held one.',
         '',
@@ -378,7 +378,7 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
       [
         '## One reply',
         '',
-        `- Ada Lovelace, [11 September 2026](/comment/${CLOSED_COMMENT}/)`,
+        `- Ada Lovelace, [11 September 2026](/comment/${CLOSED_COMMENT}/index.md)`,
         '',
         '  Said while it was open.',
         '',
@@ -445,5 +445,101 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
     await get(cms, '/2026/09/hello/index.md', {
       'if-modified-since': new Date('2030-01-01').toUTCString(),
     });
+  });
+});
+
+describe('a comment’s own page in Markdown (TASK-477)', () => {
+  it('answers .md and Accept text/markdown with the comment and its place in the thread', async () => {
+    const cms = await site();
+    const byPath = await get(cms, `/comment/${GRACE}/index.md`);
+    const byAccept = await get(cms, `/comment/${GRACE}/`, { accept: 'text/markdown' });
+    for (const response of [byPath, byAccept]) {
+      assert.equal(response.headers.get('content-type'), 'text/markdown; charset=utf-8');
+      assert.equal(response.headers.get('x-robots-tag'), 'noindex');
+      assert.equal(response.headers.get('vary'), 'Accept, Accept-Encoding');
+    }
+    const markdown = await byPath.text();
+    assert.equal(await byAccept.text(), markdown);
+
+    assert.equal(
+      markdown.slice(0, markdown.indexOf('## Feeds')).trim(),
+      [
+        '---',
+        'title: Grace Hopper on Hello',
+        `permalink: /comment/${GRACE}/`,
+        'author: Grace Hopper',
+        'date: 2026-09-11T11:00:00.000Z',
+        'home: /index.md',
+        '---',
+        '',
+        '# Comment by Grace Hopper on Hello',
+        '',
+        'On [Hello](/2026/09/hello/index.md), 10 September 2026',
+        '',
+        '> Words.',
+        '',
+        `In reply to [Ada \\[Lovelace\\]](https://ada.example/), [11 September 2026](/comment/${ADA}/index.md)`,
+        '',
+        '> Approved _words_.',
+        '>',
+        '> A second [paragraph](https://ada.example/x).',
+        '',
+        `Grace Hopper, [11 September 2026](/comment/${GRACE}/index.md)`,
+        '',
+        'Answering Ada.',
+        '',
+        `[The whole conversation on Hello](/2026/09/hello/index.md#comment-${GRACE})`,
+      ].join('\n'),
+    );
+  });
+
+  it('lists the replies to the comment as the HTML does', async () => {
+    const cms = await site();
+    const html = await text(cms, `/comment/${ADA}/`);
+    assert.match(html, /<h2 class="comments-title">Replies<\/h2>/);
+
+    assert.equal(
+      before(await text(cms, `/comment/${ADA}/index.md`), '## Replies', '[The whole conversation'),
+      [
+        '## Replies',
+        '',
+        `- Grace Hopper, [11 September 2026](/comment/${GRACE}/index.md)`,
+        '',
+        '  Answering Ada.',
+      ].join('\n'),
+    );
+  });
+
+  it('stands a hidden comment in the thread without its words', async () => {
+    const cms = await site();
+    const markdown = await text(cms, `/comment/${UNDER_HELD}/index.md`);
+    assert.match(
+      markdown,
+      /\n> Words\.\n\nIn reply to a comment that is no longer shown\.\n\nSomebody, \[11 September 2026\]/,
+    );
+    assert.doesNotMatch(markdown, /Held words|Held Back/);
+  });
+
+  it('advertises its Markdown, and answers as the HTML does for a comment nobody may see', async () => {
+    const cms = await site();
+    const html = await get(cms, `/comment/${GRACE}/`);
+    assert.equal(
+      html.headers.get('link'),
+      `</comment/${GRACE}/index.md>; rel="alternate"; type="text/markdown"`,
+    );
+    const markdown = await get(cms, `/comment/${GRACE}/index.md`);
+    assert.equal(
+      markdown.headers.get('link'),
+      `</comment/${GRACE}/>; rel="alternate"; type="text/html"`,
+    );
+    assert.ok(markdown.headers.get('etag') !== null);
+
+    for (const hidden of [PENDING, HELD, SPAM]) {
+      assert.equal((await cms.app.request(`/comment/${hidden}/index.md`)).status, 404, hidden);
+    }
+    const refused = await cms.app.request(`/comment/${GRACE}/`, {
+      headers: { accept: 'image/png' },
+    });
+    assert.equal(refused.status, 406);
   });
 });

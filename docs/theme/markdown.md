@@ -1,6 +1,7 @@
 # The Markdown representation
 
-Every post, page and listing has a Markdown representation at its `.md` URL.
+Every post, page and listing has a Markdown representation at its `.md` URL,
+and so do the search and a comment's own page.
 See [The Markdown](../public-site.md#the-markdown) for what it holds. The CMS
 writes the front matter, the page's own Markdown and the rewriting of the
 site's links. The theme writes the header and the footer.
@@ -9,6 +10,7 @@ site's links. The theme writes the header and the footer.
 | --------------------------------- | --------------------------------------------------- |
 | `partials/markdown-header.md.njk` | After the front matter, before the page's Markdown. |
 | `partials/markdown-footer.md.njk` | After the page's Markdown, at the end of the file.  |
+| `partials/markdown-reply.md.njk`  | Macros both partials write the conversation with.   |
 
 Both resolve like every other template. For example, a
 `partials/markdown-footer.md.njk` in the site's theme replaces the footer. The
@@ -42,8 +44,8 @@ replies under it, inside its list item:
 Every link in the context is data: a `label` and the canonical `url` of what
 it names, never a `.md` URL. Write a link through the `markdownUrl` filter.
 It gives a URL that the site answers with a document or a listing its
-root-relative `.md` URL. It leaves any other URL as it is, such as another
-site's page or `/search/`. The data stays the same for a renderer of another
+root-relative `.md` URL, the search's with its query kept. It leaves any
+other URL as it is, such as another site's page or a feed. The data stays the same for a renderer of another
 format, such as a Gemini page:
 
 ```njk
@@ -70,7 +72,7 @@ format, such as a Gemini page:
 | `newestPosts`     | On the homepage, when it is a page: the function the front page layout has. See [Template context](template-context.md).   |
 | `staticFrontPage` | True on the homepage when it is a page, false everywhere else.                                                             |
 | `archiveMonths`   | On a page whose front matter says `archive: true`: every published post as `{ month, posts }`, newest month first.         |
-| `type`            | `post`, `page` or `listing`.                                                                                               |
+| `type`            | `post`, `page`, `listing` or `comment`. The search is a `listing`.                                                         |
 | `categories`      | On a post: its categories, in the order the file lists them.                                                               |
 | `tags`            | On a post: its tags, in the order the file lists them.                                                                     |
 | `backlinks`       | On a post or a page: the site's posts and pages that link to it, newest first, as the HTML's Linked from list has them.    |
@@ -88,6 +90,7 @@ format, such as a Gemini page:
 | `commentForm`     | On a post or a page taking comments: the `url` of the comment form on its HTML page. Absent when it is closed.             |
 | `contactForm`     | On a page whose front matter says `contact: true`: the `url` of the contact form on its HTML page.                         |
 | `webmention`      | The site's webmention endpoint, when it takes webmentions.                                                                 |
+| `thread`          | On a comment's own page: the post, the comments it answers and the comment itself. See below.                              |
 
 `home`, `previous`, `next` and `byline` are each a `label` and a `url`. So is
 each of `bio.links`, each `navigation` item, and each of `categories` and
@@ -187,6 +190,33 @@ URLs of the HTML page with the form's anchor, `#respond` or `#contact`. Print
 them as they are: through `markdownUrl` they would become the `.md` URL of the
 page the reader is already on.
 
+`thread` is on a comment's own page only, and holds the chain the HTML
+comment page draws:
+
+| Key         | What it is                                                                                                 |
+| ----------- | ---------------------------------------------------------------------------------------------------------- |
+| `post`      | The post the comment is on: a `label`, a `url`, an `author` (`label` and `url`), a `date` and a `summary`. |
+| `ancestors` | The comments it answers, from the top of the thread down, each a reply without its `replies`, or `null`.   |
+| `comment`   | The comment, a reply as above, with its replies threaded under it.                                         |
+| `url`       | The comment's anchor on the post's page, `{permalink}#comment-{key}`.                                      |
+
+A `null` ancestor is a comment a reader may not see. The comment's `text` is
+the page's body, so the partials do not print it. The `quote` filter writes
+Markdown as a blockquote, which the default header uses for each ancestor's
+words and the post's summary.
+
+`partials/markdown-reply.md.njk` holds the macros the default partials share:
+`named(person)`, `said(reply)`, the byline of a reply, and `reply(reply)`, a
+reply as a list item with its replies nested under it. Import it
+`with context`, so its links go through `markdownUrl`:
+
+```njk
+{% import "partials/markdown-reply.md.njk" as conversing with context %}
+{% for entry in conversation.replies %}
+{{ conversing.reply(entry) | trim }}
+{% endfor %}
+```
+
 Each post in `archiveMonths` is a `label`, a `url`, a `date` and a
 `description`. The `date` is the post's calendar day in the site's timezone,
 as `YYYY-MM-DD`. The `description` is already on one line, and is absent when
@@ -252,6 +282,12 @@ leaves the bio out and prints only the page, as the HTML front page does
 (decision-45). A site theme that wants the bio there tests `bio` without
 `staticFrontPage`.
 
+On a comment's own page the header writes `thread`: a line naming the post
+with its author and date, the post's summary as a quote, a line for each
+ancestor (`In reply to` its author and date, then its words as a quote, or
+`In reply to a comment that is no longer shown.`), and the comment's own
+author and date.
+
 The default footer starts with the archive, when the context has
 `archiveMonths`. It writes each month as a level-two heading over a list of
 that month's posts, one line each, in the shape a listing's Markdown has:
@@ -275,6 +311,7 @@ heading over a list, and leaves out a section that has nothing to list:
 | `Boosts`          | `conversation.boosts`, headed with the count.                                       |
 | `Mentions`        | `conversation.mentions`, headed with the count.                                     |
 | The replies       | `conversation.replies`, headed `One reply` or `3 replies` as the HTML is.           |
+| `Replies`         | On a comment's own page: `thread.comment.replies`, then a link to the whole thread. |
 | `Leave a comment` | A link to the comment form on the HTML page, while the document takes comments.     |
 | `Send a message`  | A link to the contact form on the HTML page.                                        |
 | `Feeds`           | `feeds`, each labelled with its title and format.                                   |
@@ -353,7 +390,7 @@ byline as a link line, and the navigation as a list:
 
 - [Home](/index.md)
 - [About](/about/index.md)
-- [Search](/search/)
+- [Search](/search/index.md)
 - [Mastodon](https://mastodon.example/@ada)
 ```
 

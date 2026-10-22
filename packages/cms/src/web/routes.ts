@@ -29,7 +29,6 @@ import {
   DOCUMENT_REPRESENTATIONS,
   LISTING_REPRESENTATIONS,
   representationHref,
-  SEARCH_REPRESENTATIONS,
   splitRepresentationExtension,
 } from './negotiate.ts';
 import { EMBED_PATH, OEMBED_PATH } from './oembed.ts';
@@ -144,6 +143,9 @@ export function mountPublicSite(
   // A native comment's own page (TASK-318), at a fixed path so a permalink
   // cannot take it.
   app.get(`${COMMENT_PAGE_PREFIX}:id/`, (c) => commentPage(c, c.req.param('id')));
+  app.get(`${COMMENT_PAGE_PREFIX}:id/index.md`, (c) =>
+    commentPage(c, c.req.param('id'), 'markdown'),
+  );
 
   // The feed of one item's direct replies (TASK-324), fixed for the same reason.
   app.get(`${REPLIES_ROOT}:segment/`, (c) => repliesFeed(c, c.req.param('segment')));
@@ -214,11 +216,12 @@ export function mountPublicSite(
 
   // The site's search (TASK-22): a route at a fixed path for the reason the
   // feeds are, so the form in every theme's footer submits somewhere no
-  // permalink can take. It negotiates HTML and JSON like a listing, and
-  // `/search/index.json` is the same escape hatch a listing has. The path
+  // permalink can take. It negotiates like a listing, and `/search/index.md`
+  // and `/search/index.json` are the same escape hatches a listing has. The path
   // without its slash is where a hand-typed URL lands, and keeps its query on
   // the way to the real one.
-  app.get(SEARCH_PATH, (c) => search(c, selectFromAccept(c, SEARCH_REPRESENTATIONS)));
+  app.get(SEARCH_PATH, (c) => search(c, selectFromAccept(c, LISTING_REPRESENTATIONS)));
+  app.get(representationHref(SEARCH_PATH, 'markdown'), (c) => search(c, 'markdown'));
   app.get(representationHref(SEARCH_PATH, 'json'), (c) => search(c, 'json'));
   app.get(SEARCH_PATH.slice(0, -1), (c) => c.redirect(`${SEARCH_PATH}${requestSearch(c)}`, 301));
 

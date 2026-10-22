@@ -1,8 +1,9 @@
 import { SNIPPET_CLOSE, SNIPPET_OPEN } from '../content/search.ts';
 import type { SearchHit } from '../content/store.ts';
 import { escapeText } from '../util/html.ts';
-import { documentJson, JSON_SCHEMA_VERSION, representationHref } from './negotiate.ts';
-import type { DocumentJson, Representation } from './negotiate.ts';
+import { escapeInline, oneLine } from './markdown-page.ts';
+import { documentJson, JSON_SCHEMA_VERSION } from './negotiate.ts';
+import type { DocumentJson } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
 
 /**
@@ -28,20 +29,19 @@ export const SEARCH_PAGE_PARAM = 'page';
 export const MAXIMUM_QUERY_LENGTH = 256;
 
 /**
- * The URL of one page of the results for a query, in one representation.
+ * The URL of one page of the results for a query. `representationHref` puts
+ * a representation's extension before the query.
  *
  * The first page carries no page number, so the form's own submission and the
  * pager's link back to it are the same URL. An empty query is the page with
  * the form and nothing else, at the bare path.
  */
-export function searchHref(query: string, index: number, representation?: Representation): string {
+export function searchHref(query: string, index: number): string {
   const params = new URLSearchParams();
   if (query !== '') params.set(SEARCH_QUERY_PARAM, query);
   if (index > 0) params.set(SEARCH_PAGE_PARAM, String(index + 1));
   const search = params.toString();
-  const path =
-    representation === undefined ? SEARCH_PATH : representationHref(SEARCH_PATH, representation);
-  return search === '' ? path : `${path}?${search}`;
+  return search === '' ? SEARCH_PATH : `${SEARCH_PATH}?${search}`;
 }
 
 /**
@@ -71,6 +71,20 @@ export function snippetHtml(snippet: string): string {
   return escapeText(snippet)
     .replaceAll(SNIPPET_OPEN, '<mark>')
     .replaceAll(SNIPPET_CLOSE, '</mark>');
+}
+
+/** A snippet as Markdown on one line: escaped, with the matched words in bold. */
+export function snippetMarkdown(snippet: string): string {
+  return oneLine(snippet)
+    .split(SNIPPET_OPEN)
+    .map((part, index) => {
+      if (index === 0) return escapeInline(part);
+      const close = part.indexOf(SNIPPET_CLOSE);
+      const marked = close < 0 ? part : part.slice(0, close);
+      const rest = close < 0 ? '' : part.slice(close + SNIPPET_CLOSE.length);
+      return `**${escapeInline(marked)}**${escapeInline(rest)}`;
+    })
+    .join('');
 }
 
 /** One hit as JSON: the document's own JSON summary, and where it matched. */

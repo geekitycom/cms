@@ -14,10 +14,19 @@ import {
   repliesFeedPath,
 } from './feeds.ts';
 import type { CommentFeedSource, FeedComment, FeedFormat, FeedSource } from './feeds.ts';
+import { commentPageHref } from '../content/guids.ts';
 import { archiveOf } from './listing-subject.ts';
 import type { ListingSubject } from './listing-subject.ts';
+import { commentMarkdown } from './markdown-representation.ts';
+import {
+  COMMENT_REPRESENTATIONS,
+  notAcceptableResponse,
+  representationEtag,
+  representationResponse,
+} from './negotiate.ts';
+import type { Representation } from './negotiate.ts';
 import { commentsFeedHref } from './paths.ts';
-import { conditionalHeaders, gone, notFound } from './request.ts';
+import { conditionalHeaders, gone, notFound, selectFromAccept } from './request.ts';
 import { siteView } from './site-view.ts';
 
 /**
@@ -139,9 +148,14 @@ export function repliesFeed(c: Context<GeekityEnv>, segment: string): Response {
 /**
  * One native comment on a page of its own (TASK-318), answering as its post
  * would: 410 once the post is deleted, and 404 while it is not served. It is
- * never listed anywhere, so it is noindex.
+ * never listed anywhere, so it is noindex. Its Markdown (TASK-477) is at
+ * `/comment/{key}/index.md` and by `Accept`.
  */
-export function commentPage(c: Context<GeekityEnv>, id: string): Response {
+export function commentPage(
+  c: Context<GeekityEnv>,
+  id: string,
+  representation: Representation | undefined = selectFromAccept(c, COMMENT_REPRESENTATIONS),
+): Response {
   const { conversation, renderer, store } = c.var;
   const found = conversation.comment(id, c.var.siteAtRequestStart);
   if (found === undefined) return notFound(c);
@@ -149,5 +163,18 @@ export function commentPage(c: Context<GeekityEnv>, id: string): Response {
   const now = store.now();
   if (isGone(found.post, now)) return gone(c);
   if (!isServed(found.post, now)) return notFound(c);
-  return c.html(renderer.renderComment(found), 200, { 'x-robots-tag': 'noindex' });
+
+  const href = commentPageHref(found.comment.key);
+  if (representation === undefined) return notAcceptableResponse(href, COMMENT_REPRESENTATIONS);
+  const markdown = representation === 'markdown' || representation === 'text';
+  const body = markdown ? commentMarkdown(c, found) : renderer.renderComment(found);
+  return representationResponse({
+    body,
+    representation,
+    href,
+    available: COMMENT_REPRESENTATIONS,
+    noindex: true,
+    ...(markdown ? { etag: representationEtag(representation, body) } : {}),
+    conditional: conditionalHeaders(c),
+  });
 }

@@ -1,6 +1,7 @@
 import { dump } from 'js-yaml';
 
 import type { AuthorContext } from '../site/authors.ts';
+import type { MarkdownCommentThread } from './markdown-conversation.ts';
 
 /**
  * The Markdown representation of a page: front matter, the theme's header, the
@@ -44,7 +45,7 @@ export interface MarkdownFeed extends MarkdownLink {
 export interface MarkdownChrome {
   /** The path the page is served at, which marks the current menu item. */
   readonly url: string;
-  readonly type: 'post' | 'page' | 'listing';
+  readonly type: 'post' | 'page' | 'listing' | 'comment';
   /** The heading the header writes, absent when the body opens with its own. */
   readonly title?: string | undefined;
   readonly previous?: MarkdownLink | undefined;
@@ -55,6 +56,8 @@ export interface MarkdownChrome {
   readonly bio?: MarkdownBio | undefined;
   /** The feeds the HTML head advertises, in its order. */
   readonly feeds: readonly MarkdownFeed[];
+  /** On a comment's own page: the comment and its place in the thread. */
+  readonly thread?: MarkdownCommentThread | undefined;
 }
 
 /**
@@ -186,12 +189,16 @@ export function linkList(links: readonly MarkdownLink[], markdownUrl: MarkdownUr
  * line start that would open a block escaped too.
  */
 export function escapeMarkdown(text: string): string {
-  return oneLine(text)
-    .replace(/[\\`*_[\]<>~|]/g, (character) => `\\${character}`)
+  return escapeInline(oneLine(text))
     .replace(/^[#+-]/, '\\$&')
     .replace(/^(\d+)([.)])/, '$1\\$2');
 }
 
 export function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+/** Text with the characters that would open emphasis, code, a link or raw HTML escaped. */
+export function escapeInline(text: string): string {
+  return text.replace(/[\\`*_[\]<>~|]/g, (character) => `\\${character}`);
 }

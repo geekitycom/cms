@@ -583,6 +583,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       typeof width === 'number' ? width : 2,
     ),
   );
+  markdownEnvironment.addFilter('quote', (value: unknown) => quote(filterText(value)));
   markdownEnvironment.addFilter('markdownUrl', function (this: unknown, value: unknown) {
     const url = filterText(value);
     const lookup = (this as { lookup?: (name: string) => unknown } | undefined)?.lookup;
@@ -1338,13 +1339,22 @@ function neighbourContext(
   return { [key]: { title: postLabel(document, cited), url: document.permalink } };
 }
 
-/** A filter's input as text: a string, number or boolean as written, anything else empty. */
 /** Every line after the first indented by `width` spaces, blank lines left blank. */
 function nest(text: string, width: number): string {
   const indent = ' '.repeat(width);
   return text.replace(/\n(?=[^\n])/g, `\n${indent}`);
 }
 
+/** Markdown as a blockquote: every line after `> `, a blank line as `>`. */
+function quote(text: string): string {
+  return text
+    .trim()
+    .split('\n')
+    .map((line) => (line.trim() === '' ? '>' : `> ${line}`))
+    .join('\n');
+}
+
+/** A filter's input as text: a string, number or boolean as written, anything else empty. */
 function filterText(value: unknown): string {
   return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
     ? String(value)

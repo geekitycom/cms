@@ -38,7 +38,8 @@ export const DOCUMENT_REPRESENTATIONS: readonly Representation[] = [
 
 export const LISTING_REPRESENTATIONS: readonly Representation[] = DOCUMENT_REPRESENTATIONS;
 
-export const SEARCH_REPRESENTATIONS: readonly Representation[] = ['html', 'json'];
+/** What a native comment's page offers: it has no JSON of its own. */
+export const COMMENT_REPRESENTATIONS: readonly Representation[] = ['html', 'markdown', 'text'];
 
 /**
  * The representation a request accepts, or `undefined` when it accepts none of
@@ -197,12 +198,16 @@ export function splitRepresentationExtension(
  * canonical URL.
  *
  * `index` is inserted before the extension when the canonical URL is a
- * directory-style path, which every permalink and every listing URL is.
+ * directory-style path, which every permalink and every listing URL is. A
+ * query, which only the search has, stays after the extension.
  */
 export function representationHref(href: string, representation: Representation): string {
   const extension = REPRESENTATION_EXTENSIONS[representation];
   if (extension === undefined) return href;
-  return href.endsWith('/') ? `${href}index${extension}` : `${href}${extension}`;
+  const queryAt = href.indexOf('?');
+  const path = queryAt < 0 ? href : href.slice(0, queryAt);
+  const query = queryAt < 0 ? '' : href.slice(queryAt);
+  return `${path.endsWith('/') ? `${path}index${extension}` : `${path}${extension}`}${query}`;
 }
 
 /**

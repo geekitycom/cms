@@ -151,7 +151,7 @@ const FOOTER = [
   '',
   '- [Home](/index.md)',
   '- [About \\[me\\]](/about/index.md)',
-  '- [Search](/search/)',
+  '- [Search](/search/index.md)',
   '- [Mastodon](https://mastodon.example/@ada)',
   '',
 ].join('\n');
@@ -284,7 +284,7 @@ describe('the header and footer the theme draws (AC #3, #4)', () => {
         '',
         '=> /index.md Home',
         '=> /about/index.md About [me]',
-        '=> /search/ Search',
+        '=> /search/index.md Search',
         '=> https://mastodon.example/@ada Mastodon',
         '',
       ].join('\n'),
@@ -353,7 +353,7 @@ describe('llms.txt navigation (AC #8)', () => {
           '',
           '- [Home](https://example.com/index.md)',
           '- [About \\[me\\]](https://example.com/about/index.md)',
-          '- [Search](https://example.com/search/)',
+          '- [Search](https://example.com/search/index.md)',
           '- [Mastodon](https://mastodon.example/@ada)',
         ]
           .join('\n')

@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-11 14:36'
+updated_date: '2026-10-22 01:04'
 ---
 # Content Negotiation
 
@@ -124,11 +124,17 @@ The posts page's `index.md` and `index.json` are the listing's, as `Accept` at i
 
 ## Search
 
-`/search/?q=term` is a route rather than a document, so no permalink can take the URL the theme's search form submits to; `/search?q=term` redirects there with its query kept. It negotiates HTML and JSON only, with no Markdown and no `text/plain`, and `/search/index.json?q=term` is the same escape hatch. The `Link` header advertises the other representation with the query carried over.
+`/search/?q=term` is a route rather than a document, so no permalink can take the URL the theme's search form submits to; `/search?q=term` redirects there with its query kept. It negotiates like a listing, and `/search/index.md?q=term` and `/search/index.json?q=term` are the same escape hatches: the query goes after the extension. The `Link` header and a 406 body name the other representations with the query carried over.
+
+Markdown has a listing's shape (TASK-477): front matter with `title`, `permalink` (query included), `query`, `home`, and `previous` and `next` with the query kept; the theme's header; a line saying how many results the query found, or how to search without one; `## Results` as `- [YYYY-MM-DD title](index.md URL): snippet` with the matched words in bold; `## More results`; the theme's footer. A link to `/search/?q=…` in any Markdown becomes `/search/index.md?q=…`.
 
 HTML renders `layouts/search.njk`. JSON is an object rather than a listing's bare array, because a result means nothing without the query that found it: `{ schema, query, pagination, results }`, where each result is the listing document shape plus a `snippet` of escaped HTML with the matched words in `<mark>`, and `?full=1` adds the bodies as it does on a listing. `?page=N` pages the results at the site's page size; a page past the last, or a `page` that is not a positive integer, is a 404. A missing or empty `q` is the form with nothing found, not an error.
 
 Results come from an FTS5 table in the content index, ranked by BM25 with the title weighted above the description and the taxonomy, and those above the body. Only published, untrashed, already-due posts and pages are ever returned, because the search joins to the same clauses every listing uses. The reader's words are quoted term by term before they reach FTS5, so no query can be a syntax error: `"double quotes"` make a phrase and a trailing `*` a prefix, and nothing else is syntax.
+
+## Comment pages
+
+A native comment's page, `/comment/{key}/` (TASK-318), negotiates HTML, Markdown and `text/plain`; it has no JSON. Its Markdown is at `/comment/{key}/index.md` (TASK-477): front matter with `title`, `permalink`, the comment's `author` and `date`; the theme's header writes the post it is on and each comment it answers, a withheld one as a placeholder, and the comment's byline; the comment's words are the body; the footer lists its replies and links the comment's anchor on the post. It answers 404 and 410 as the HTML does, and a link to a comment page becomes its `.md` while the comment is approved and its post served.
 
 ## Feeds
 

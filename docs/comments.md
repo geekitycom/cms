@@ -191,7 +191,9 @@ The page answers only for an approved comment, and only when the post would:
 - 404 while the post is not public or is not showing its conversation.
 
 The page is `noindex`. It is absent from the sitemap, the post feeds and
-search. Backlog doc-6 has the rules.
+search. Backlog doc-6 has the rules. Its Markdown is at
+`/comment/{key}/index.md`, and by `Accept: text/markdown`. See
+[The Markdown](public-site.md#the-markdown).
 
 ### Replying while signed in
 

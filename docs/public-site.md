@@ -317,7 +317,10 @@ a listing each have three.
 | `application/json` | `.json`   | The document as data, see below.                                                    |
 
 Listings are `/`, `/page/N/`, the posts page, the tag, category and author
-archives, and their pages.
+archives, and their pages. The search at `/search/?q=…` has the same three,
+with the query after the extension: `/search/index.md?q=otters` and
+`/search/index.json?q=otters`. A comment's own page, `/comment/{key}/`, has
+HTML and Markdown at `/comment/{key}/index.md`, and no JSON.
 
 The server chooses the representation in this order:
 
@@ -394,7 +397,11 @@ request: the homepage rule, `redirect_from`, the declared redirects and
 - Images.
 - Code spans and code blocks.
 - Raw HTML.
-- Links to URLs with no Markdown, such as `/search/` and `/feed/`.
+- Links to URLs with no Markdown, such as `/feed/`.
+
+A link to the search keeps its query, so `/search/?q=otters` becomes
+`/search/index.md?q=otters`. A link to a comment's own page points at its
+`.md` while the comment is approved and its post is public.
 
 An autolink or a bare URL to a page of the site becomes an inline link with
 the URL as its text.
@@ -429,6 +436,72 @@ On an author archive the header writes the author's bio under the heading.
 On a site whose author is a user, a homepage that lists the latest posts
 carries that bio too. A homepage that is a page shows only the page, as its
 HTML does. A site theme can add the bio there.
+
+The search's Markdown has the listing's shape. Its front matter has the
+`title` its HTML page carries, the `permalink` with the query, the `query`
+when there is one, and `previous` and `next` for the pages of results on
+either side, each with the query kept. Under the heading is a line that says
+how many results the query found, or how to search when there is no query.
+Then come the results, best match first, each with the snippet that matched
+and the matched words in bold, and links to the previous and next pages:
+
+```markdown
+---
+title: Search results for “otters”
+permalink: /search/?q=otters
+query: otters
+home: /index.md
+next: /search/index.md?q=otters&page=2
+---
+
+# Search results for “otters”
+
+12 results for “otters”.
+
+## Results
+
+- [2026-09-03 Otters](/otters/index.md): A post about **otters**.
+- [About](/about/index.md): I like **otters**.
+
+## More results
+
+- [More results](/search/index.md?q=otters&page=2)
+```
+
+A comment's own page writes what its HTML shows. The front matter has the
+`title`, the `permalink`, the comment's `author` and its `date`. The header
+writes the post the comment is on, with its author, date and summary, then
+each comment it answers from the top of the thread down, with its author,
+date and words as a quote. A comment a visitor may not see is a line that
+says it is no longer shown. Then come the comment's author and date, and the
+comment's own words are the body. The footer lists the replies to it,
+threaded as a post's are, and links the comment on the post's page:
+
+```markdown
+# Comment by Grace Hopper on Hello
+
+On [Hello](/2026/09/hello/index.md), 10 September 2026
+
+> Words.
+
+In reply to [Ada Lovelace](https://ada.example/), [11 September 2026](/comment/0000000000000001/index.md)
+
+> Approved _words_.
+
+Grace Hopper, [11 September 2026](/comment/0000000000000002/index.md)
+
+Answering Ada.
+
+[The whole conversation on Hello](/2026/09/hello/index.md#comment-0000000000000002)
+```
+
+Both are `noindex` in every representation and advertise their other
+representations in the `Link` header, the search's with the query kept:
+
+```
+Link: </search/index.md?q=otters>; rel="alternate"; type="text/markdown",
+      </search/index.json?q=otters>; rel="alternate"; type="application/json"
+```
 
 A theme overrides either partial like any other template. See
 [The Markdown representation](theme/markdown.md).

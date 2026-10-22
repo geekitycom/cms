@@ -34,7 +34,16 @@
   `transcript` with `url` and `captions`, and `alternates`, each a `url` and a
   `type` with a `title` and a `length` when the front matter gives them.
   `photos` are each a `url` and an `alt`, the alt text `photos.njk` prints.
+
+  `thread` is on a comment's own page, the chain `layouts/comment.njk` draws:
+  `post` (a `label`, a `url`, an `author` with a `label` and a `url`, a
+  `date` and a plain-text `summary`), then `ancestors`, the comments it
+  answers from the top of the thread down, each a reply as the footer's
+  conversation has one or `null` for one a reader may not see, then the
+  `comment` itself. The comment's words are the page's body, below this.
+  `quote` writes Markdown as a blockquote.
 #}
+{% import "partials/markdown-reply.md.njk" as conversing with context %}
 {% if title %}
 # {{ title | escapeMarkdown }}
 
@@ -99,4 +108,26 @@ Other versions:
 {% for link in bio.links %}
 - [{{ link.label | escapeMarkdown }}]({{ link.url | markdownUrl }})
 {% endfor %}
+{% endif %}
+{% if thread %}
+On [{{ thread.post.label | escapeMarkdown }}]({{ thread.post.url | markdownUrl }}){{ (" by " + conversing.named(thread.post.author)) if thread.post.author }}{{ (", " + (thread.post.date | date)) if thread.post.date }}
+
+{% if thread.post.summary %}
+{{ thread.post.summary | escapeMarkdown | quote }}
+
+{% endif %}
+{% for step in thread.ancestors %}
+{% if step %}
+In reply to {{ conversing.said(step) }}
+
+{% if step.text %}
+{{ step.text | quote }}
+
+{% endif %}
+{% else %}
+In reply to a comment that is no longer shown.
+
+{% endif %}
+{% endfor %}
+{{ conversing.said(thread.comment) }}
 {% endif %}

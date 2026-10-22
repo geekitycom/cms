@@ -1,6 +1,10 @@
 import type { Context } from 'hono';
 
+import { commentAnchor, commentKeyAt } from '../comments/conversation.ts';
+import type { CommentThread } from '../comments/conversation.ts';
+import { commentPageHref } from '../content/guids.ts';
 import type { Document } from '../content/document.ts';
+import type { SearchHit } from '../content/store.ts';
 import { rewriteMarkdownLinks } from '../content/markdown-links.ts';
 import { decodedPath } from '../content/redirects.ts';
 import { isServed } from '../content/served.ts';
@@ -16,12 +20,15 @@ import {
 } from './feed-source.ts';
 import type { FeedFormat } from './feed-source.ts';
 import { absoluteUrl } from '../util/url.ts';
-import { authorContext } from '../site/authors.ts';
+import { authorContext, siteAuthorContext } from '../site/authors.ts';
+import { feedExcerpt } from '../content/excerpt.ts';
 import { siteTimezone } from '../theme/site-data.ts';
 import type { Archive } from './listing-subject.ts';
+import { markdownCommentThread } from './markdown-conversation.ts';
 import {
   bioOf,
   entryList,
+  escapeMarkdown,
   linkList,
   markdownFile,
   namedAuthor,
@@ -33,6 +40,7 @@ import { representationHref } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
 import { classifyPath } from './paths.ts';
 import { documentLabel, encodePath } from './request.ts';
+import { SEARCH_PATH, snippetMarkdown } from './search.ts';
 import { servedPath, siteView } from './site-view.ts';
 
 /**
@@ -131,6 +139,106 @@ export function listingMarkdown(
   ]);
 }
 
+/**
+ * A native comment's page in Markdown: the post and the comments it answers
+ * above it, its own words as the body, and its replies below.
+ */
+export function commentMarkdown(c: Context<GeekityEnv>, found: CommentThread): string {
+  const { post, comment } = found;
+  const url = commentPageHref(comment.key);
+  const users = siteView(c).users();
+  const site = c.var.renderer.site();
+  const label = documentLabel(c, post);
+  const by = authorContext(users, post.author) ?? siteAuthorContext(users, site.author);
+  const thread = markdownCommentThread(
+    found,
+    {
+      label,
+      url: post.permalink,
+      author: by === undefined ? undefined : { label: by.name, url: by.url },
+      date: post.date,
+      summary: feedExcerpt(post),
+    },
+    `${post.permalink}#${commentAnchor(comment.key)}`,
+  );
+  const chrome: MarkdownChrome = {
+    url,
+    type: 'comment',
+    title: `Comment by ${comment.author.name} on ${label}`,
+    feeds: siteFeeds(site.title),
+    thread,
+  };
+
+  return markdownPage(
+    c,
+    {
+      title: `${comment.author.name} on ${label}`,
+      permalink: url,
+      author: comment.author.name,
+      date: comment.published,
+    },
+    chrome,
+    [thread.comment.text],
+  );
+}
+
+/**
+ * One page of search results in the listing's shape: what was asked and how
+ * much was found, the results with their snippets, and the pager. Every link
+ * to another page of the results keeps the query.
+ */
+export function searchMarkdown(
+  c: Context<GeekityEnv>,
+  page: { href: string; query: string; pagination: Pagination; hits: readonly SearchHit[] },
+): string {
+  const { query, pagination } = page;
+  const { next, previous } = pagination.href;
+  const home = siteView(c).pages.home;
+  const site = c.var.renderer.site();
+  const timezone = siteTimezone(site);
+  const markdownUrl = markdownUrlFor(c, SEARCH_PATH);
+  const title =
+    query === ''
+      ? 'Search'
+      : `Search results for “${query}”${pagination.pageNumber > 0 ? `, page ${String(pagination.pageNumber + 1)}` : ''}`;
+
+  const newer = previous === null ? undefined : { label: 'Previous results', url: previous };
+  const older = next === null ? undefined : { label: 'More results', url: next };
+  const chrome: MarkdownChrome = {
+    url: SEARCH_PATH,
+    type: 'listing',
+    title,
+    previous: newer,
+    next: older,
+    feeds: siteFeeds(site.title),
+  };
+  const asked = `“${escapeMarkdown(query)}”`;
+  const summary =
+    query === ''
+      ? 'Search this site by adding `?q=` and the words to this URL.'
+      : pagination.total === 0
+        ? `Nothing found for ${asked}.`
+        : `${pagination.total === 1 ? 'One result' : `${String(pagination.total)} results`} for ${asked}.`;
+  const entries = page.hits.map(({ document, snippet }) => ({
+    label: documentLabel(c, document),
+    url: servedPath(document, home),
+    date: document.date === undefined ? undefined : calendarDayIn(document.date, timezone),
+    description: snippetMarkdown(snippet),
+  }));
+  const pager = [newer, older].filter((link) => link !== undefined);
+
+  return markdownPage(
+    c,
+    { title, permalink: page.href, ...(query === '' ? {} : { query }) },
+    chrome,
+    [
+      summary,
+      entries.length === 0 ? '' : `## Results\n\n${entryList(entries, markdownUrl)}`,
+      pager.length === 0 ? '' : `## More results\n\n${linkList(pager, markdownUrl)}`,
+    ],
+  );
+}
+
 const FEED_NAMES: Readonly<Record<FeedFormat, Pick<MarkdownFeed, 'format' | 'type'>>> = {
   rss: { format: 'RSS', type: 'application/rss+xml' },
   atom: { format: 'Atom', type: 'application/atom+xml' },
@@ -182,7 +290,7 @@ export function markdownUrlFor(c: Context<GeekityEnv>, pageUrl: string): Markdow
  * redirect, then whatever is served at the path, then a moved document, then
  * a declared redirect, so `/?p=7`, a `redirect_from` and the homepage's own
  * permalink all land on the `.md` of the document they reach. A fragment is
- * kept.
+ * kept, and so is the query of a link to the search.
  */
 function markdownHrefFor(
   c: Context<GeekityEnv>,
@@ -197,6 +305,9 @@ function markdownHrefFor(
   const servedAt = (sitePath: string): string | undefined => {
     if (sitePath === '/') return '/';
     const directory = sitePath.endsWith('/') ? sitePath : `${sitePath}/`;
+    if (directory === SEARCH_PATH) return SEARCH_PATH;
+    const key = commentKeyAt(directory);
+    if (key !== undefined) return hasCommentPage(c, key) ? directory : undefined;
     const candidates = [directory, sitePath];
     for (const candidate of candidates) {
       const match = classifyPath(view, candidate);
@@ -219,7 +330,21 @@ function markdownHrefFor(
     const served = landed === undefined ? undefined : servedAt(landed);
     if (served === undefined) return undefined;
     const { pathname } = new URL(absoluteUrl(encodePath(served), config.baseUrl));
-    const hash = URL.parse(href, page)?.hash ?? '';
-    return `${representationHref(pathname, 'markdown')}${hash}`;
+    const target = URL.parse(href, page);
+    const query = served === SEARCH_PATH ? (target?.search ?? '') : '';
+    return `${representationHref(`${pathname}${query}`, 'markdown')}${target?.hash ?? ''}`;
   };
+}
+
+/**
+ * Whether a native comment has a page a reader can open: an approved comment
+ * left through the form on a post that is served. Read from the comment's own
+ * record, so a page with a hundred replies does not read its thread a hundred
+ * times over.
+ */
+function hasCommentPage(c: Context<GeekityEnv>, key: string): boolean {
+  const stored = c.var.admin.getComment(key);
+  if (stored?.source !== 'comment' || stored.status !== 'approved') return false;
+  const post = c.var.store.getBySlug(stored.slug);
+  return post !== undefined && isServed(post, c.var.store.now());
 }

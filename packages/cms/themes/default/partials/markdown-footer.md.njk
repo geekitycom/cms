@@ -28,7 +28,10 @@
   the form on the HTML page, printed as it is, since a form needs HTML;
   `commentForm` is absent while comments are closed. `webmention` is there
   when the site takes webmentions.
-  `type` is `post`, `page` or `listing`; a listing's newer and older pages
+  `thread` is on a comment's own page, as the header describes it: its
+  `comment.replies` are threaded as a conversation's are, and `url` is the
+  comment on the post's page.
+  `type` is `post`, `page`, `listing` or `comment`; a listing's newer and older pages
   are written by the CMS above this, so only a post's `previous` and `next`
   are printed here.
 
@@ -42,26 +45,7 @@
   written as a Gemini link line. Nothing is printed when there is nothing to
   link.
 #}
-{% macro named(person) %}{{ ("[" + (person.label | escapeMarkdown) + "](" + (person.url | markdownUrl) + ")") if person.url else (person.label | escapeMarkdown) }}{% endmacro %}
-{% macro reply(entry) %}
-{% if entry.withheld %}
-- This comment is no longer shown.
-{% else %}
-- {{ named(entry.author) }}, {{ ("[" + (entry.published | date) + "](" + (entry.url | markdownUrl) + ")") if entry.url else (entry.published | date) }}{{ ", via webmention" if entry.source == "webmention" }}{{ ", via the fediverse" if entry.source == "activitypub" }}
-{% if entry.rsvp %}
-
-  {{ entry.rsvp.label | escapeMarkdown }}
-{% endif %}
-{% if entry.text %}
-
-  {{ entry.text | nest(2) }}
-{% endif %}
-{% endif %}
-{% for child in entry.replies %}
-
-  {{ reply(child) | trim | nest(2) }}
-{% endfor %}
-{% endmacro %}
+{% import "partials/markdown-reply.md.njk" as conversing with context %}
 {% for group in archiveMonths %}
 ## {{ group.month | escapeMarkdown }}
 
@@ -106,7 +90,7 @@
 ## {{ group.label | escapeMarkdown }} ({{ group.people.length }})
 
 {% for person in group.people %}
-- {{ named(person) }}
+- {{ conversing.named(person) }}
 {% endfor %}
 
 {% endif %}
@@ -115,7 +99,7 @@
 ## {{ conversation.counts.replies | plural({ one: "One reply", other: "# replies" }, "en") }}
 
 {% for entry in conversation.replies %}
-{{ reply(entry) | trim }}
+{{ conversing.reply(entry) | trim }}
 
 {% endfor %}
 {% if not commentForm %}
@@ -123,6 +107,18 @@ Comments are closed.
 
 {% endif %}
 {% endif %}
+{% endif %}
+{% if thread %}
+{% if thread.comment.replies.length %}
+## Replies
+
+{% for entry in thread.comment.replies %}
+{{ conversing.reply(entry) | trim }}
+
+{% endfor %}
+{% endif %}
+[The whole conversation on {{ thread.post.label | escapeMarkdown }}]({{ thread.url | markdownUrl }})
+
 {% endif %}
 {% if commentForm %}
 ## Leave a comment
