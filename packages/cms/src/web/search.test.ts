@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
+import { representationHref } from './negotiate.ts';
 import type { SearchJson } from './search.ts';
 import { searchHref, searchPageIndex, searchQuery, snippetHtml } from './search.ts';
 
@@ -142,31 +143,126 @@ describe('GET /search/', () => {
     }
   });
 
-  it('advertises the other representation with the query kept', async () => {
+  it('advertises the other representations with the query kept', async () => {
     const cms = await site(corpus());
 
     const html = await cms.app.request('/search/?q=otters');
-    assert.match(
-      html.headers.get('link') ?? '',
-      /<\/search\/index\.json\?q=otters>; rel="alternate"; type="application\/json"/,
+    assert.equal(
+      html.headers.get('link'),
+      '</search/index.md?q=otters>; rel="alternate"; type="text/markdown", ' +
+        '</search/index.json?q=otters>; rel="alternate"; type="application/json"',
     );
     assert.equal(html.headers.get('vary'), 'Accept, Accept-Encoding');
-    assert.doesNotMatch(html.headers.get('link') ?? '', /text\/(markdown|plain)/);
+
+    const markdown = await cms.app.request('/search/index.md?q=otters');
+    assert.equal(
+      markdown.headers.get('link'),
+      '</search/?q=otters>; rel="alternate"; type="text/html", ' +
+        '</search/index.json?q=otters>; rel="alternate"; type="application/json"',
+    );
   });
 
-  it('answers 406 to a client that accepts neither', async () => {
+  it('answers Markdown at /search/index.md and to a client that asks for it (TASK-477)', async () => {
     const cms = await site(corpus());
 
-    for (const accept of ['text/markdown', 'text/plain']) {
-      const response = await cms.app.request('/search/?q=otters', { headers: { accept } });
-      assert.equal(response.status, 406, accept);
-      const body = (await response.json()) as { alternates: { type: string }[] };
-      assert.deepEqual(
-        body.alternates.map((alternate) => alternate.type),
-        ['text/html', 'application/json'],
-      );
+    const byPath = await cms.app.request('/search/index.md?q=rivers');
+    const byAccept = await cms.app.request('/search/?q=rivers', {
+      headers: { accept: 'text/markdown' },
+    });
+    for (const response of [byPath, byAccept]) {
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('content-type'), 'text/markdown; charset=utf-8');
+      assert.equal(response.headers.get('x-robots-tag'), 'noindex');
     }
-    assert.equal((await cms.app.request('/search/index.md?q=otters')).status, 404);
+    const markdown = await byPath.text();
+    assert.equal(await byAccept.text(), markdown);
+
+    assert.ok(
+      markdown.startsWith(
+        [
+          '---',
+          'title: Search results for “rivers”',
+          'permalink: /search/?q=rivers',
+          'query: rivers',
+          'home: /index.md',
+          '---',
+          '',
+          '# Search results for “rivers”',
+          '',
+          '2 results for “rivers”.',
+          '',
+          '## Results',
+          '',
+          '- [2026-09-01 Rivers](/rivers/index.md): **Rivers**',
+          '- [2026-09-01 Otters](/otters/index.md): A post about **rivers**.',
+          '',
+          '## Feeds',
+        ].join('\n'),
+      ),
+      markdown,
+    );
+
+    const plain = await cms.app.request('/search/?q=rivers', { headers: { accept: 'text/plain' } });
+    assert.equal(plain.headers.get('content-type'), 'text/plain; charset=utf-8');
+    assert.equal(await plain.text(), markdown);
+  });
+
+  it('pages the Markdown results with the query kept (TASK-477)', async () => {
+    const cms = await site({
+      '_data/site.json': JSON.stringify({ postsPerPage: 1 }),
+      'posts/a.md': post('A', '/a/', 'shared word'),
+      'posts/b.md': post('B', '/b/', 'shared word'),
+      'posts/c.md': post('C', '/c/', 'shared word'),
+    });
+
+    const second = await (await cms.app.request('/search/index.md?q=shared&page=2')).text();
+    assert.match(second, /^title: Search results for “shared”, page 2$/m);
+    assert.match(second, /^permalink: \/search\/\?q=shared&page=2$/m);
+    assert.match(second, /^previous: \/search\/index\.md\?q=shared$/m);
+    assert.match(second, /^next: \/search\/index\.md\?q=shared&page=3$/m);
+    assert.match(
+      second,
+      /## More results\n\n- \[Previous results\]\(\/search\/index\.md\?q=shared\)\n- \[More results\]\(\/search\/index\.md\?q=shared&page=3\)/,
+    );
+    assert.equal((await cms.app.request('/search/index.md?q=shared&page=4')).status, 404);
+  });
+
+  it('says how to search, and when nothing matches, in Markdown (TASK-477)', async () => {
+    const cms = await site(corpus());
+
+    const empty = await (await cms.app.request('/search/index.md')).text();
+    assert.match(empty, /^title: Search$/m);
+    assert.match(empty, /^# Search$/m);
+    assert.match(empty, /Search this site by adding `\?q=` and the words to this URL\./);
+    assert.doesNotMatch(empty, /## Results/);
+
+    const nothing = await (await cms.app.request('/search/index.md?q=platypus')).text();
+    assert.match(nothing, /^Nothing found for “platypus”\.$/m);
+    assert.doesNotMatch(nothing, /## Results/);
+  });
+
+  it('points a page’s links to the search at the search’s Markdown (TASK-477)', async () => {
+    const cms = await site({
+      'pages/find.md': page('Find', '/find/', 'Try [a search](/search/?q=otters#top).'),
+    });
+
+    const markdown = await (await cms.app.request('/find/index.md')).text();
+    assert.match(markdown, /\[a search\]\(\/search\/index\.md\?q=otters#top\)/);
+  });
+
+  it('answers 406 to a client that accepts none of them', async () => {
+    const cms = await site(corpus());
+
+    const response = await cms.app.request('/search/?q=otters', {
+      headers: { accept: 'image/png' },
+    });
+    assert.equal(response.status, 406);
+    const body = (await response.json()) as { alternates: { type: string; url: string }[] };
+    assert.deepEqual(body.alternates, [
+      { type: 'text/html', url: '/search/?q=otters' },
+      { type: 'text/markdown', url: '/search/index.md?q=otters' },
+      { type: 'application/json', url: '/search/index.json?q=otters' },
+    ]);
   });
 
   it('shows the form and nothing else before a search', async () => {
@@ -303,7 +399,8 @@ describe('search URLs', () => {
     assert.equal(searchHref('', 0), '/search/');
     assert.equal(searchHref('a b', 0), '/search/?q=a+b');
     assert.equal(searchHref('a', 2), '/search/?q=a&page=3');
-    assert.equal(searchHref('a', 0, 'json'), '/search/index.json?q=a');
+    assert.equal(representationHref(searchHref('a', 0), 'json'), '/search/index.json?q=a');
+    assert.equal(representationHref(searchHref('a', 1), 'markdown'), '/search/index.md?q=a&page=2');
   });
 
   it('read a page number one-based, and nothing that is not one', () => {

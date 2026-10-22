@@ -301,6 +301,16 @@ describe('the author archive as Markdown (TASK-289)', () => {
         '',
         '- [Older posts](/author/ada/page/2/index.md)',
         '',
+        '## Feeds',
+        '',
+        '- [A Site (RSS)](/feed/)',
+        '- [A Site (Atom)](/feed/atom/)',
+        '- [A Site (JSON Feed)](/feed/json/)',
+        '- [A Site comments (RSS)](/comments/feed/)',
+        '- [A Site: Ada Lovelace (RSS)](/author/ada/feed/)',
+        '- [A Site: Ada Lovelace (Atom)](/author/ada/feed/atom/)',
+        '- [A Site: Ada Lovelace (JSON Feed)](/author/ada/feed/json/)',
+        '',
       ].join('\n'),
     );
   });

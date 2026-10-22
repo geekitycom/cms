@@ -1,0 +1,9 @@
+{#
+  The body of the maintenance page's Markdown. `until` (an ISO 8601 time)
+  and `untilText` (an HTTP date) are when the operator expects the site
+  back, absent when they named no time or it has passed. Otherwise the
+  context is the 404's. When this fails, the CMS writes a fixed body instead.
+#}
+This site is down for maintenance and will be back shortly.{% if until %} It should be back by {{ untilText }}.{% endif %} Please try again then.
+
+Go [home]({{ "/" | markdownUrl }}), or [search the site]({{ "/search/" | markdownUrl }}).

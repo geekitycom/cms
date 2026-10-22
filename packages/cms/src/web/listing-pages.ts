@@ -5,16 +5,14 @@ import type { ListOptions } from '../content/store.ts';
 import type { GeekityEnv } from './env.ts';
 import { archiveOf } from './listing-subject.ts';
 import type { ListingRequest } from './listing-subject.ts';
-import { listingMarkdown } from './markdown-representation.ts';
+import { listingMarkdown, searchMarkdown } from './markdown-representation.ts';
 import {
   documentJson,
   latestModified,
   LISTING_REPRESENTATIONS,
-  MEDIA_TYPES,
   notAcceptableResponse,
   representationEtag,
   representationResponse,
-  SEARCH_REPRESENTATIONS,
 } from './negotiate.ts';
 import type { Representation } from './negotiate.ts';
 import { offsetForPage, paginate } from './pagination.ts';
@@ -22,11 +20,11 @@ import type { Pagination } from './pagination.ts';
 import {
   conditionalHeaders,
   drawnForSomebody,
-  notFound,
   queryFeedFormat,
   selectFromAccept,
   wantsFullDocuments,
 } from './request.ts';
+import { notFound } from './status-pages.ts';
 import {
   searchHref,
   searchJson,
@@ -78,7 +76,6 @@ function pagedResponse(
     body: unknown;
     documents: readonly Document[];
     available: readonly Representation[];
-    links?: string[];
     full?: boolean;
     fingerprint?: string;
   },
@@ -98,7 +95,6 @@ function pagedResponse(
     representation,
     href,
     available: options.available,
-    ...(options.links === undefined ? {} : { links: options.links }),
     ...(drawnForSomebody(c, representation) ? { private: true } : {}),
     ...(sendsValidators
       ? {
@@ -207,11 +203,19 @@ export function search(
     pageNumber,
     hrefForPage: (index) => searchHref(query, index),
     representation,
-    available: SEARCH_REPRESENTATIONS,
+    available: LISTING_REPRESENTATIONS,
   });
   if (page instanceof Response) return page;
 
   const hits = store.search(query, page.paging);
+  const documents = hits.map((hit) => hit.document);
+  const available = LISTING_REPRESENTATIONS;
+
+  if (page.representation === 'markdown' || page.representation === 'text') {
+    const body = searchMarkdown(c, { ...page, query, hits });
+    return pagedResponse(c, page, { body, documents, available, fingerprint: body });
+  }
+
   const full = wantsFullDocuments(c);
   const body =
     page.representation === 'json'
@@ -224,16 +228,5 @@ export function search(
         })
       : renderer.renderSearch({ query, url: page.href, hits, pagination: page.pagination });
 
-  return pagedResponse(c, page, {
-    body,
-    documents: hits.map((hit) => hit.document),
-    // The alternates are spelled here rather than by the negotiator, because
-    // they carry the query and a listing's never have one to carry.
-    available: [page.representation],
-    links: SEARCH_REPRESENTATIONS.filter((other) => other !== page.representation).map(
-      (other) =>
-        `<${searchHref(query, pageNumber, other)}>; rel="alternate"; type="${MEDIA_TYPES[other]}"`,
-    ),
-    full,
-  });
+  return pagedResponse(c, page, { body, documents, available, full });
 }

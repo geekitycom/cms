@@ -1,16 +1,18 @@
 import TurndownService from 'turndown';
 import type { TurndownNode } from 'turndown';
 
-import { htmlInlineOffset, markdownTokens } from '../content/markdown.ts';
-import { normalizeBody } from '../content/writer.ts';
-import { cleanPostHtml } from '../content/sanitize.ts';
+import { htmlInlineOffset, markdownTokens } from './markdown.ts';
+import { normalizeBody } from './writer.ts';
+import { cleanPostHtml } from './sanitize.ts';
 
 /**
- * A Micropub client's content as the post body the site stores (TASK-258,
- * decision-27). The renderer passes raw HTML through, as Eleventy's does, so
- * the body is cleaned here, at the boundary, before anything is written: HTML
- * content is cleaned and converted to Markdown, and Markdown content keeps
- * its text while every piece of raw HTML in it is cleaned in place.
+ * HTML as Markdown: a Micropub client's content as the post body the site
+ * stores (TASK-258, decision-27), and a reply's sanitised words in a
+ * document's Markdown (TASK-476). The renderer passes raw HTML through, as
+ * Eleventy's does, so the body is cleaned here, at the boundary, before
+ * anything is written: HTML content is cleaned and converted to Markdown, and
+ * Markdown content keeps its text while every piece of raw HTML in it is
+ * cleaned in place.
  */
 
 const KEPT_BLOCKS = ['TABLE', 'FIGURE', 'DETAILS', 'DL'];

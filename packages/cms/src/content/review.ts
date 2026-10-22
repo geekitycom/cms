@@ -210,7 +210,7 @@ export function reviewHtml(review: Review | undefined, options: ReviewHtmlOption
   const { item, rating } = review;
   const words = REVIEW_KIND_WORDS[item.kind];
   const root = item.kind === 'place' ? 'h-card' : 'h-cite';
-  const link = item.url ?? (item.uid !== undefined && isWebUrl(item.uid) ? item.uid : undefined);
+  const link = itemLink(item);
   const name = `<cite class="p-name">${escapeText(item.name)}</cite>`;
   const linked =
     link === undefined
@@ -237,8 +237,8 @@ export function reviewHtml(review: Review | undefined, options: ReviewHtmlOption
         ? `<data class="u-uid" value="${escapeAttribute(item.uid)}"></data>`
         : `, <data class="u-uid" value="${escapeAttribute(item.uid)}">${escapeText(uidLabel(item.uid))}</data>`;
   const details = [
-    seasonWords(item),
-    address(item),
+    seasonWords(item, escapeText),
+    address(item, (property, value) => `<span class="${property}">${escapeText(value)}</span>`),
     item.date === undefined
       ? undefined
       : `${words.date} <time datetime="${item.date}">${readableDay(item.date)}</time>`,
@@ -255,6 +255,45 @@ export function reviewHtml(review: Review | undefined, options: ReviewHtmlOption
     '</div>\n' +
     (rating === undefined ? '' : ratingHtml(rating))
   );
+}
+
+/**
+ * What {@link reviewHtml} says about the item, as plain words for a page that
+ * is not HTML: the `link` its name is, the kind or category and the year in
+ * the brackets after it, the creator with the kind's phrase, an identifier
+ * that is no web address, and the sentences under the line.
+ */
+export interface ReviewWords {
+  readonly link?: string;
+  readonly about: readonly string[];
+  readonly by?: string;
+  readonly uid?: string;
+  readonly details: readonly string[];
+}
+
+export function reviewWords({ item }: Review): ReviewWords {
+  const words = REVIEW_KIND_WORDS[item.kind];
+  const link = itemLink(item);
+  const about = [
+    item.kind === 'place' || item.kind === 'other' ? item.category : words.noun,
+    item.year,
+  ].filter((part) => part !== undefined);
+  const details = [
+    seasonWords(item, (text) => text),
+    address(item, (_property, value) => value),
+    item.date === undefined ? undefined : `${words.date} ${readableDay(item.date)}`,
+  ].filter((part) => part !== undefined);
+  return {
+    ...(link === undefined ? {} : { link }),
+    about,
+    ...(item.by === undefined ? {} : { by: `${words.byPhrase} ${item.by}` }),
+    ...(item.uid === undefined || isWebUrl(item.uid) ? {} : { uid: uidLabel(item.uid) }),
+    details: details.map((sentence) => `${sentence}.`),
+  };
+}
+
+function itemLink(item: ReviewedItem): string | undefined {
+  return item.url ?? (item.uid !== undefined && isWebUrl(item.uid) ? item.uid : undefined);
 }
 
 export function reviewSummary(review: Review): string {
@@ -281,17 +320,23 @@ function ratingHtml(rating: Rating): string {
   );
 }
 
-function seasonWords({ season, episode }: ReviewedItem): string | undefined {
+function seasonWords(
+  { season, episode }: ReviewedItem,
+  text: (value: string) => string,
+): string | undefined {
   if (season === undefined && episode === undefined) return undefined;
   const parts = [
-    season === undefined ? undefined : `Season ${escapeText(season)}`,
-    episode === undefined ? undefined : `episode ${escapeText(episode)}`,
+    season === undefined ? undefined : `Season ${text(season)}`,
+    episode === undefined ? undefined : `episode ${text(episode)}`,
   ].filter((part) => part !== undefined);
   const sentence = parts.join(', ');
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
-function address(item: ReviewedItem): string | undefined {
+function address(
+  item: ReviewedItem,
+  mark: (property: string, value: string) => string,
+): string | undefined {
   const parts = (
     [
       ['p-street-address', item.streetAddress],
@@ -299,9 +344,7 @@ function address(item: ReviewedItem): string | undefined {
       ['p-region', item.region],
       ['p-country-name', item.countryName],
     ] as const
-  ).flatMap(([property, value]) =>
-    value === undefined ? [] : [`<span class="${property}">${escapeText(value)}</span>`],
-  );
+  ).flatMap(([property, value]) => (value === undefined ? [] : [mark(property, value)]));
   return parts.length === 0 ? undefined : parts.join(', ');
 }
 

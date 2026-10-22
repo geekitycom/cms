@@ -1,6 +1,7 @@
 import { dump } from 'js-yaml';
 
 import type { AuthorContext } from '../site/authors.ts';
+import type { MarkdownCommentThread } from './markdown-conversation.ts';
 
 /**
  * The Markdown representation of a page: front matter, the theme's header, the
@@ -32,10 +33,18 @@ export interface MarkdownBio {
   readonly links: readonly MarkdownLink[];
 }
 
+/** One feed a page advertises: its title, its URL, and which format it is in. */
+export interface MarkdownFeed extends MarkdownLink {
+  readonly format: 'RSS' | 'Atom' | 'JSON Feed';
+  /** Its media type, as the HTML head's `<link type>` says it. */
+  readonly type: string;
+}
+
 /** What the header and footer partials are given beside `site` and `menus`. */
 export interface MarkdownChrome {
   /** The path the page is served at, which marks the current menu item. */
   readonly url: string;
+  readonly type: 'post' | 'page' | 'listing' | 'comment' | 'status';
   /** The heading the header writes, absent when the body opens with its own. */
   readonly title?: string | undefined;
   readonly previous?: MarkdownLink | undefined;
@@ -44,6 +53,36 @@ export interface MarkdownChrome {
   readonly byline?: MarkdownLink | undefined;
   /** On an author archive, and on a solo author site's homepage. */
   readonly bio?: MarkdownBio | undefined;
+  /** The feeds the HTML head advertises, in its order. */
+  readonly feeds: readonly MarkdownFeed[];
+  /** On a comment's own page: the comment and its place in the thread. */
+  readonly thread?: MarkdownCommentThread | undefined;
+}
+
+/**
+ * What a post answers or cites, as its HTML citation line names it: a reply's
+ * target, an RSVP's event, or what it likes, reposts or bookmarks.
+ */
+export interface MarkdownCite {
+  /** `In reply to`, an RSVP's phrase such as `Going to`, `Liked`, `Reposted` or `Bookmarked`. */
+  readonly verb: string;
+  /** The page cited: the original when the target is a silo copy of one. */
+  readonly url: string;
+  /** Its title, or what the HTML calls it without one, such as `a page on example.com`. */
+  readonly name: string;
+  /** Who wrote it, absent when the name already ends with them. */
+  readonly author?: string | undefined;
+  /** The site it is on, when it names no author. */
+  readonly site?: string | undefined;
+  /** An event's start, the instant to print, and the zone to print it in when it is not the site's. */
+  readonly startDate?: Date | undefined;
+  readonly startZone?: string | undefined;
+  /** When it was published, on a target that is no event. */
+  readonly published?: Date | undefined;
+  /** Where an event takes place. */
+  readonly location?: string | undefined;
+  /** The silo copy the post also answers, when `url` is the original. */
+  readonly copy?: string | undefined;
 }
 
 /** One post of a dated list. */
@@ -149,12 +188,16 @@ export function linkList(links: readonly MarkdownLink[], markdownUrl: MarkdownUr
  * line start that would open a block escaped too.
  */
 export function escapeMarkdown(text: string): string {
-  return oneLine(text)
-    .replace(/[\\`*_[\]<>~|]/g, (character) => `\\${character}`)
+  return escapeInline(oneLine(text))
     .replace(/^[#+-]/, '\\$&')
     .replace(/^(\d+)([.)])/, '$1\\$2');
 }
 
 export function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+/** Text with the characters that would open emphasis, code, a link or raw HTML escaped. */
+export function escapeInline(text: string): string {
+  return text.replace(/[\\`*_[\]<>~|]/g, (character) => `\\${character}`);
 }

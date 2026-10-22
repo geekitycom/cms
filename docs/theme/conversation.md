@@ -58,6 +58,9 @@ h-cite`s. The page it answers finds them there when it receives a salmention
 
 When `conversationPart` is unset, the partial prints the whole section.
 
+A document's Markdown carries the same conversation, with each reply's words
+converted to Markdown. See [The Markdown representation](markdown.md).
+
 ## The shape
 
 The conversation does **not** use ActivityPub's vocabulary. Native comments

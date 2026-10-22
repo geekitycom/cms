@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { formatFileSize } from './formatting.ts';
+import { formatFileSize } from './file-size.ts';
 
 describe('formatFileSize', () => {
   it('counts bytes, then kilobytes, then megabytes to one place', () => {

@@ -11,7 +11,6 @@ import {
   prefersActivityStreams,
   representationEtag,
   representationHref,
-  SEARCH_REPRESENTATIONS,
   selectRepresentation,
   splitRepresentationExtension,
 } from './negotiate.ts';
@@ -67,12 +66,6 @@ describe('selectRepresentation', () => {
   it('refuses what is not on offer', () => {
     assert.equal(selectRepresentation('image/png', DOCUMENT_REPRESENTATIONS), undefined);
     assert.equal(selectRepresentation('*/*;q=0', DOCUMENT_REPRESENTATIONS), undefined);
-    assert.equal(
-      selectRepresentation('text/markdown', SEARCH_REPRESENTATIONS),
-      undefined,
-      'search has no Markdown to give',
-    );
-    assert.equal(selectRepresentation('text/plain', SEARCH_REPRESENTATIONS), undefined);
   });
 
   it('answers text/plain with the Markdown under its own label', () => {

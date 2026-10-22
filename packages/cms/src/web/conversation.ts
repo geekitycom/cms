@@ -434,10 +434,21 @@ function fromReplyPosts(
  * the post, so a reply the post's thread shows is shown here, and one it
  * leaves out is left out here.
  */
-function commentThread(context: Reading, id: string): CommentThread | undefined {
-  const stored = context.admin.getComment(id);
+/**
+ * The post an approved native comment is on, read from the comment's record
+ * alone, without gathering the post's whole conversation.
+ */
+export function commentedPost(
+  context: Pick<ConversationContext, 'admin'> & { readonly store: DocumentLookup },
+  key: string,
+): Document | undefined {
+  const stored = context.admin.getComment(key);
   if (stored?.source !== 'comment' || stored.status !== 'approved') return undefined;
-  const post = context.store.getBySlug(stored.slug);
+  return context.store.getBySlug(stored.slug);
+}
+
+function commentThread(context: Reading, id: string): CommentThread | undefined {
+  const post = commentedPost(context, id);
   if (post === undefined) return undefined;
 
   const said = gather(context, post);

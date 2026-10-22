@@ -22,7 +22,8 @@ import {
   THEME_ASSET_PREFIX,
   UPLOAD_ASSET_MAX_AGE,
 } from '../theme/assets.ts';
-import { notFound, requestPath } from './request.ts';
+import { requestPath } from './request.ts';
+import { notFound } from './status-pages.ts';
 
 /**
  * A file from the theme's `static/` directory, the site's copy first.

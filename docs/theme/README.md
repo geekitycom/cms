@@ -21,6 +21,7 @@ themes/default/
     410.njk      what was at this URL was deleted
     500.njk      the request failed on the server
     503.njk      the site is in maintenance mode
+    404.md.njk   the 404 page's Markdown body, and likewise 410, 500 and 503
     comment.njk  a native comment on a page of its own
   partials/
     post-list.njk     the h-feed a listing is made of

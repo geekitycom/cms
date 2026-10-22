@@ -15,11 +15,91 @@
   and a `url`). `staticFrontPage` is true on a homepage that is a page. This
   theme prints the bio there only when the homepage lists posts, as its HTML
   does (decision-45); a site theme may print it on a static homepage too.
+
+  A post then says what kind it is, with the data its HTML partials read.
+  `event` is an event's `start`, its `end` and its `location`, printed in the
+  site's zone as `event.njk` prints them. `cites` are what it answers or cites,
+  each a `verb`, a `url` and a `name`, as `reply-context.njk` and
+  `citations.njk` name them, with an `author` or `site`, an event's
+  `startDate` (in `startZone` when it has one), a `published` date, a
+  `location`, and a silo `copy`, each only when it is known. `review` is the
+  HTML's review with its words in plain text: `link`, `about`, `by`, `uid`
+  and `details`. `location` is where the post was written, only as far as
+  Settings > Privacy shares it, in the shape `location.njk` reads. `lang` is
+  the post's own language, which its dates are written in.
+
+  Then the post's recording and photos, in the order its HTML draws them.
+  `enclosure` is the object `recording.njk` reads: `player` (`audio` or
+  `video`), `url`, `type`, `length` in bytes (printed through `fileSize`), a
+  `transcript` with `url` and `captions`, and `alternates`, each a `url` and a
+  `type` with a `title` and a `length` when the front matter gives them.
+  `photos` are each a `url` and an `alt`, the alt text `photos.njk` prints.
+
+  `thread` is on a comment's own page, the chain `layouts/comment.njk` draws:
+  `post` (a `label`, a `url`, an `author` with a `label` and a `url`, a
+  `date` and a plain-text `summary`), then `ancestors`, the comments it
+  answers from the top of the thread down, each a reply as the footer's
+  conversation has one or `null` for one a reader may not see, then the
+  `comment` itself. The comment's words are the page's body, below this.
+  `quote` writes Markdown as a blockquote.
 #}
+{% import "partials/markdown-reply.md.njk" as conversing with context %}
 {% if title %}
 # {{ title | escapeMarkdown }}
 
 {% endif %}
+{% if event %}
+When: {{ event.start | date("datetime", none, lang) }}{{ (" to " + (event.end | date("datetime", none, lang))) if event.end }}
+
+{% if event.location %}
+Where: {{ ("Online at [" + (event.location.url | host | escapeMarkdown) + "](" + (event.location.url | markdownUrl) + ")") if event.location.kind == "virtual" else (event.location.name | escapeMarkdown) }}
+
+{% endif %}
+{% endif %}
+{% for cite in cites %}
+{{ cite.verb }} [{{ cite.name | escapeMarkdown }}]({{ cite.url | markdownUrl }}){{ (" by " + (cite.author | escapeMarkdown)) if cite.author }}{{ (" · " + (cite.site | escapeMarkdown)) if cite.site }}{{ (", " + (cite.startDate | date("readable", cite.startZone, lang))) if cite.startDate }}{{ (", " + (cite.published | date("readable", none, lang))) if cite.published }}{{ (", " + (cite.location | escapeMarkdown)) if cite.location }}
+
+{% if cite.copy %}
+Also in reply to [its copy on {{ cite.copy | host | escapeMarkdown }}]({{ cite.copy }})
+
+{% endif %}
+{% endfor %}
+{% if review %}
+Review of {{ ("[" + (review.item.name | escapeMarkdown) + "](" + (review.link | markdownUrl) + ")") if review.link else (review.item.name | escapeMarkdown) }}{{ (" (" + (review.about | join(", ") | escapeMarkdown) + ")") if review.about.length }}{{ (", " + (review.by | escapeMarkdown)) if review.by }}{{ (", " + (review.uid | escapeMarkdown)) if review.uid }}
+
+{% if review.details.length %}
+{{ review.details | join(" ") | escapeMarkdown }}
+
+{% endif %}
+{% if review.rating %}
+Rated {{ review.rating }} out of {{ review.best }}
+
+{% endif %}
+{% endif %}
+{% if location %}
+Location: {% for word in location.words %}{{ word.text | escapeMarkdown }}{{ ", " if not loop.last }}{% endfor %}{{ (location.geo.latitude + ", " + location.geo.longitude) if location.geo and not location.words.length }}
+
+{% endif %}
+{% if enclosure %}
+[Download the {{ "video" if enclosure.player == "video" else "recording" }}]({{ enclosure.url | markdownUrl }}) ({{ enclosure.type }}, {{ enclosure.length | fileSize }})
+
+{% if enclosure.transcript %}
+[{{ "Captions" if enclosure.transcript.captions else "Transcript" }}]({{ enclosure.transcript.url | markdownUrl }})
+
+{% endif %}
+{% if enclosure.alternates.length %}
+Other versions:
+
+{% for alternate in enclosure.alternates %}
+- [{{ (alternate.title or alternate.type) | escapeMarkdown }}]({{ alternate.url | markdownUrl }}){{ (" (" + ([alternate.type if alternate.title, alternate.length | fileSize] | select | join(", ")) + ")") if alternate.title or alternate.length }}
+{% endfor %}
+
+{% endif %}
+{% endif %}
+{% for photo in photos %}
+![{{ photo.alt | escapeMarkdown }}]({{ photo.url | markdownUrl }})
+
+{% endfor %}
 {% if bio and not staticFrontPage %}
 {% if bio.note %}
 {{ bio.note | escapeMarkdown }}
@@ -28,4 +108,26 @@
 {% for link in bio.links %}
 - [{{ link.label | escapeMarkdown }}]({{ link.url | markdownUrl }})
 {% endfor %}
+{% endif %}
+{% if thread %}
+On [{{ thread.post.label | escapeMarkdown }}]({{ thread.post.url | markdownUrl }}){{ (" by " + conversing.named(thread.post.author)) if thread.post.author }}{{ (", " + (thread.post.date | date)) if thread.post.date }}
+
+{% if thread.post.summary %}
+{{ thread.post.summary | escapeMarkdown | quote }}
+
+{% endif %}
+{% for step in thread.ancestors %}
+{% if step %}
+In reply to {{ conversing.said(step) }}
+
+{% if step.text %}
+{{ step.text | quote }}
+
+{% endif %}
+{% else %}
+In reply to a comment that is no longer shown.
+
+{% endif %}
+{% endfor %}
+{{ conversing.said(thread.comment) }}
 {% endif %}

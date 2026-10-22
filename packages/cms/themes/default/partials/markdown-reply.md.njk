@@ -1,0 +1,31 @@
+{#
+  The macros the Markdown header and footer write a conversation with,
+  imported `with context` so `markdownUrl` gives a page of the site its `.md`.
+
+  `named(person)` is a person as a link, or their name when they have no URL.
+  `said(entry)` is a reply's byline: its author, its date linked to where it
+  can be read, and where it came from when that was not the comment form.
+  `reply(entry)` is a reply as a list item, its words and its own replies
+  indented under it, or the placeholder for a hidden one.
+#}
+{% macro named(person) %}{{ ("[" + (person.label | escapeMarkdown) + "](" + (person.url | markdownUrl) + ")") if person.url else (person.label | escapeMarkdown) }}{% endmacro %}
+{% macro said(entry) %}{{ named(entry.author) }}, {{ ("[" + (entry.published | date) + "](" + (entry.url | markdownUrl) + ")") if entry.url else (entry.published | date) }}{{ ", via webmention" if entry.source == "webmention" }}{{ ", via the fediverse" if entry.source == "activitypub" }}{% endmacro %}
+{% macro reply(entry) %}
+{% if entry.withheld %}
+- This comment is no longer shown.
+{% else %}
+- {{ said(entry) }}
+{% if entry.rsvp %}
+
+  {{ entry.rsvp.label | escapeMarkdown }}
+{% endif %}
+{% if entry.text %}
+
+  {{ entry.text | nest(2) }}
+{% endif %}
+{% endif %}
+{% for child in entry.replies %}
+
+  {{ reply(child) | trim | nest(2) }}
+{% endfor %}
+{% endmacro %}

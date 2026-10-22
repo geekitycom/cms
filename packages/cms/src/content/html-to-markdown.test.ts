@@ -7,9 +7,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { renderMarkdown } from '../content/markdown.ts';
-import { normalizeBody } from '../content/writer.ts';
-import { cleanMarkdown, markdownFromHtml } from './content.ts';
+import { renderMarkdown } from './markdown.ts';
+import { normalizeBody } from './writer.ts';
+import { cleanMarkdown, markdownFromHtml } from './html-to-markdown.ts';
 
 function fromHtml(html: string): string {
   const markdown = markdownFromHtml(html);

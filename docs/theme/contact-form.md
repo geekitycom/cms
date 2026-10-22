@@ -44,3 +44,9 @@ One more key comes from the URL, not from the page:
 **The contact address is never on the context.** The CMS reads it when a
 submission arrives, so no version of this partial can put it in the HTML. Do
 not try to print it, and do not put a `mailto:` link next to the form.
+
+## In the Markdown
+
+A form needs HTML, so a document's Markdown has no fields. Its footer links
+the contact form on the HTML page, at `#contact`, from `contactForm.url`. See
+[The Markdown representation](markdown.md#context).

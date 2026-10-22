@@ -151,7 +151,8 @@ endpoint answers `503 Service Unavailable` with `Retry-After` and
 `Cache-Control: no-store`. `Retry-After` is the `--until` time as an HTTP date
 while that time is in the future, and 600 seconds otherwise. A page renders the
 theme's `layouts/503.njk`. A `.json` or `.md` request gets the answer in that
-format. A crawler keeps the page in its index. A server whose inbox delivery
+format. The Markdown comes from `layouts/503.md.njk` and gives the back-by time
+when there is one. A crawler keeps the page in its index. A server whose inbox delivery
 was refused queues the delivery for a retry and does not drop it.
 
 These requests are still served:
@@ -317,7 +318,10 @@ a listing each have three.
 | `application/json` | `.json`   | The document as data, see below.                                                    |
 
 Listings are `/`, `/page/N/`, the posts page, the tag, category and author
-archives, and their pages.
+archives, and their pages. The search at `/search/?q=…` has the same three,
+with the query after the extension: `/search/index.md?q=otters` and
+`/search/index.json?q=otters`. A comment's own page, `/comment/{key}/`, has
+HTML and Markdown at `/comment/{key}/index.md`, and no JSON.
 
 The server chooses the representation in this order:
 
@@ -365,12 +369,12 @@ page's `.md` URL.
 
 A document's Markdown has four parts:
 
-| Part         | What it holds                                                                                                                                     |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Front matter | The file's front matter, with navigation added. See the table below.                                                                              |
-| Header       | The theme's `partials/markdown-header.md.njk`. The default theme writes the title as a heading, and the bio where there is one.                   |
-| Body         | The stored body, with its links to the site's own pages pointing at their `.md` URLs.                                                             |
-| Footer       | The theme's `partials/markdown-footer.md.njk`. The default theme writes an archive page's posts, a heading, a post's byline and the site's menus. |
+| Part         | What it holds                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Front matter | The file's front matter, with navigation added. See the table below.                                                                                                                                                                                                                                                                                                                                           |
+| Header       | The theme's `partials/markdown-header.md.njk`. The default theme writes the title as a heading, then what kind of post it is (what it replies to, likes, reposts, bookmarks or RSVPs to, an event's time and place, a review's item and rating, and the shared location), a post's recording with its transcript and other versions, its photos as images with their alt text, and the bio where there is one. |
+| Body         | The stored body, with its links to the site's own pages pointing at their `.md` URLs.                                                                                                                                                                                                                                                                                                                          |
+| Footer       | The theme's `partials/markdown-footer.md.njk`. The default theme writes an archive page's posts, a post's categories and tags, the posts and pages that link here, a post's previous and next posts, the likes, boosts, mentions and threaded replies the HTML shows, links to the comment and contact forms on the HTML page, the page's feeds, a heading, a post's byline and the site's menus.              |
 
 The CMS adds these front matter keys:
 
@@ -394,14 +398,21 @@ request: the homepage rule, `redirect_from`, the declared redirects and
 - Images.
 - Code spans and code blocks.
 - Raw HTML.
-- Links to URLs with no Markdown, such as `/search/` and `/feed/`.
+- Links to URLs with no Markdown, such as `/feed/`.
+
+A link to the search keeps its query, so `/search/?q=otters` becomes
+`/search/index.md?q=otters`. A link to a comment's own page points at its
+`.md` while the comment is approved and its post is public.
 
 An autolink or a bare URL to a page of the site becomes an inline link with
 the URL as its text.
 
 A listing's Markdown has the same front matter keys, the title as a heading,
 the site's tagline or the posts page's description as a quote, then the posts
-on that page, one line each:
+on that page, one line each. On the posts page and each of its later pages,
+the page's own Markdown body comes between the quote and the posts, as its
+HTML prints the body above the list. Its links to the site's own pages point
+at their `.md` URLs, as a document's do:
 
 ```markdown
 ## Posts
@@ -427,8 +438,95 @@ On a site whose author is a user, a homepage that lists the latest posts
 carries that bio too. A homepage that is a page shows only the page, as its
 HTML does. A site theme can add the bio there.
 
-A theme overrides either partial like any other template. See
-[The Markdown representation](theme/markdown.md).
+The search's Markdown has the listing's shape. Its front matter has the
+`title` its HTML page carries, the `permalink` with the query, the `query`
+when there is one, and `previous` and `next` for the pages of results on
+either side, each with the query kept. Under the heading is a line that says
+how many results the query found, or how to search when there is no query.
+Then come the results, best match first, each with the snippet that matched
+and the matched words in bold, and links to the previous and next pages:
+
+```markdown
+---
+title: Search results for “otters”
+permalink: /search/?q=otters
+query: otters
+home: /index.md
+next: /search/index.md?q=otters&page=2
+---
+
+# Search results for “otters”
+
+12 results for “otters”.
+
+## Results
+
+- [2026-09-03 Otters](/otters/index.md): A post about **otters**.
+- [About](/about/index.md): I like **otters**.
+
+## More results
+
+- [More results](/search/index.md?q=otters&page=2)
+```
+
+A comment's own page writes what its HTML shows. The front matter has the
+`title`, the `permalink`, the comment's `author` and its `date`. The header
+writes the post the comment is on, with its author, date and summary, then
+each comment it answers from the top of the thread down, with its author,
+date and words as a quote. A comment a visitor may not see is a line that
+says it is no longer shown. Then come the comment's author and date, and the
+comment's own words are the body. The footer lists the replies to it,
+threaded as a post's are, and links the comment on the post's page:
+
+```markdown
+# Comment by Grace Hopper on Hello
+
+On [Hello](/2026/09/hello/index.md), 10 September 2026
+
+> Words.
+
+In reply to [Ada Lovelace](https://ada.example/), [11 September 2026](/comment/0000000000000001/index.md)
+
+> Approved _words_.
+
+Grace Hopper, [11 September 2026](/comment/0000000000000002/index.md)
+
+Answering Ada.
+
+[The whole conversation on Hello](/2026/09/hello/index.md#comment-0000000000000002)
+```
+
+Both are `noindex` in every representation and advertise their other
+representations in the `Link` header, the search's with the query kept:
+
+```
+Link: </search/index.md?q=otters>; rel="alternate"; type="text/markdown",
+      </search/index.json?q=otters>; rel="alternate"; type="application/json"
+```
+
+A URL that answers 404, 410, 500 or 503 answers a `.md` request, or an
+`Accept` that prefers `text/markdown` or `text/plain`, in Markdown with the
+same status. The body says what happened, as the HTML page does, and links the
+homepage and the search. The 503 also gives its back-by time:
+
+```markdown
+---
+title: Not found
+home: /index.md
+---
+
+# Not found
+
+Content not found.
+
+Go [home](/index.md), or [search the site](/search/index.md).
+```
+
+The footer comes after the body, as on every page. A request with no `Accept`,
+with `*/*`, or one that ranks HTML at least as high gets the HTML page.
+
+A theme overrides either partial, and each status page's Markdown body, like
+any other template. See [The Markdown representation](theme/markdown.md).
 
 ### The JSON shape
 
@@ -500,10 +598,14 @@ Link: </2026/09/hello/index.md>; rel="alternate"; type="text/markdown",
 
 It also carries these headers:
 
-- `ETag`, derived from the document's content hash and the representation. A
-  client that holds the JSON never gets a `304` for the Markdown.
-- `Last-Modified`, from the document's `updated`, or its `date` if it has no
-  `updated`.
+- `ETag`, derived from the representation and what it holds: the document's
+  content hash for the JSON, and what was drawn for the HTML and the
+  Markdown, which show the conversation too. A new reply changes the HTML's
+  and the Markdown's ETag. A client that holds the JSON never gets a `304`
+  for the Markdown.
+- `Last-Modified`, on the JSON only, from the document's `updated`, or its
+  `date` if it has no `updated`. The HTML and the Markdown show replies,
+  which have no date that could agree with their ETag, so they carry none.
 - `Cache-Control: no-cache`, so a client revalidates and does not guess how long
   the page stays fresh.
 

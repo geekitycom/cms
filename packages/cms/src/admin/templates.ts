@@ -5,8 +5,8 @@ import { Environment, FileSystemLoader } from 'nunjucks';
 import { ownManifest } from '../init.ts';
 import { ADMIN_ASSET_PREFIX } from '../site/admin-paths.ts';
 import { formatDate } from '../theme/templates.ts';
+import { formatFileSize } from '../util/file-size.ts';
 import { drawBlock } from './blocks.ts';
-import { formatFileSize } from './formatting.ts';
 
 /**
  * The admin's templates, resolved from this module rather than the working

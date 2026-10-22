@@ -285,7 +285,7 @@
       "cross-origin-opener-policy": "same-origin",
       "etag": "\"77113b611aae83d8ff1a684b6414c1ea\"",
       "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
-      "link": "</search/index.json?q=engines>; rel=\"alternate\"; type=\"application/json\"",
+      "link": "</search/index.md?q=engines>; rel=\"alternate\"; type=\"text/markdown\", </search/index.json?q=engines>; rel=\"alternate\"; type=\"application/json\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
@@ -304,7 +304,7 @@
       "cross-origin-opener-policy": "same-origin",
       "etag": "\"77113b611aae83d8ff1a684b6414c1ea\"",
       "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
-      "link": "</search/index.json?q=engines>; rel=\"alternate\"; type=\"application/json\"",
+      "link": "</search/index.md?q=engines>; rel=\"alternate\"; type=\"text/markdown\", </search/index.json?q=engines>; rel=\"alternate\"; type=\"application/json\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
@@ -322,7 +322,7 @@
       "cross-origin-opener-policy": "same-origin",
       "etag": "\"77113b611aae83d8ff1a684b6414c1ea\"",
       "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
-      "link": "</search/index.json?q=engines>; rel=\"alternate\"; type=\"application/json\"",
+      "link": "</search/index.md?q=engines>; rel=\"alternate\"; type=\"text/markdown\", </search/index.json?q=engines>; rel=\"alternate\"; type=\"application/json\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
@@ -341,7 +341,7 @@
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
-      "vary": "Accept-Encoding",
+      "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
       "x-frame-options": "SAMEORIGIN"
     },
@@ -356,7 +356,7 @@
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
       "strict-transport-security": "max-age=31536000; includeSubDomains",
-      "vary": "Accept-Encoding",
+      "vary": "Accept, Accept-Encoding",
       "x-content-type-options": "nosniff",
       "x-frame-options": "SAMEORIGIN"
     },
@@ -410,8 +410,7 @@
       "content-security-policy": "frame-ancestors 'self'",
       "content-type": "text/markdown; charset=utf-8",
       "cross-origin-opener-policy": "same-origin",
-      "etag": "\"ed2e15cbbf92a99aa6448193f4b5ad31\"",
-      "last-modified": "Sat, 19 Sep 2026 09:00:00 GMT",
+      "etag": "\"07c092d9f07b3a0c4fe612fefe2b6bf7\"",
       "link": "</2026/09/hello-world/>; rel=\"alternate\"; type=\"text/html\", </2026/09/hello-world/index.json>; rel=\"alternate\"; type=\"application/json\", </_geekity/webmention>; rel=\"webmention\"",
       "permissions-policy": "browsing-topics=(), camera=(), display-capture=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()",
       "referrer-policy": "strict-origin-when-cross-origin",
@@ -422,7 +421,7 @@
       "x-pingback": "https://blog.example/_geekity/pingback",
       "x-robots-tag": "noindex"
     },
-    "body": "---\ntitle: Hello world\ndate: '2026-09-19T09:00:00Z'\npermalink: /2026/09/hello-world/\ntags:\n  - engines\nhome: /index.md\n---\n\n# Hello world\n\nWords about engines.\n"
+    "body": "---\ntitle: Hello world\ndate: '2026-09-19T09:00:00Z'\npermalink: /2026/09/hello-world/\ntags:\n  - engines\nhome: /index.md\n---\n\n# Hello world\n\nWords about engines.\n\n## Filed under\n\n- [Tag: engines](/tag/engines/index.md)\n\n## Leave a comment\n\n[Leave a comment on the web page](https://blog.example/2026/09/hello-world/#respond)\n\nOr reply from your own site and send a [webmention](https://indieweb.org/Webmention).\n\n## Feeds\n\n- [A Site (RSS)](/feed/)\n- [A Site (Atom)](/feed/atom/)\n- [A Site (JSON Feed)](/feed/json/)\n- [A Site comments (RSS)](/comments/feed/)\n- [Comments on: Hello world (RSS)](/2026/09/hello-world/feed/)\n"
   },
   "feed": {
     "status": 200,

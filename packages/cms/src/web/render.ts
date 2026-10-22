@@ -6,7 +6,13 @@ import type { Environment } from 'nunjucks';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { citationsOf, citesAnImage, previewShown } from '../content/citation.ts';
+import {
+  CITATION_VERBS,
+  citationsOf,
+  citedPageName,
+  citesAnImage,
+  previewShown,
+} from '../content/citation.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { NO_PAGE_TAGS } from '../plugins/page-tags.ts';
@@ -15,6 +21,8 @@ import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
+import { reviewWords } from '../content/review.ts';
+import { RSVP_PHRASES } from '../content/rsvp.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
@@ -55,18 +63,29 @@ import { calendarDayIn } from '../content/time.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, NeighbourContext, PhotoContext } from './context.ts';
 import type { FrontPageSlugs, SiteData } from '../theme/site-data.ts';
+import { markdownConversation } from './markdown-conversation.ts';
 import { bioOf, escapeMarkdown, HOME_LINK, oneLine } from './markdown-page.ts';
-import type { MarkdownArchiveMonth, MarkdownChrome, MarkdownUrl } from './markdown-page.ts';
+import type {
+  MarkdownArchiveMonth,
+  MarkdownChrome,
+  MarkdownCite,
+  MarkdownEntry,
+  MarkdownLink,
+  MarkdownUrl,
+} from './markdown-page.ts';
 import { navigationLinks, navigationMenus } from '../site/navigation.ts';
 import { resolveLicense } from '../content/license.ts';
 import type { ContentLicense } from '../content/license.ts';
 import { shareImage } from './share-image.ts';
 import type { Pagination } from './pagination.ts';
 import { snippetHtml } from './search.ts';
-import type { TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
+import { termHref } from '../content/taxonomy.ts';
+import type { Taxonomy, TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
 import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
 import { createThemeSource, findThemeFile } from '../theme/themes.ts';
 import type { ThemeColors, ThemeSource } from '../theme/themes.ts';
+import { formatFileSize } from '../util/file-size.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import { readCitedStart } from '../webmention/cited-start.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
@@ -121,13 +140,25 @@ export const MARKDOWN_TEMPLATES = {
   footer: 'partials/markdown-footer.md.njk',
 } as const;
 
+/** What {@link Renderer.renderStatusMarkdown} writes a status page's Markdown with. */
+export interface StatusMarkdownContext {
+  /** The path the request was for. */
+  url: string;
+  markdownUrl: MarkdownUrl;
+  /** On the maintenance page: when the operator expects the site back. */
+  until?: Date | undefined;
+}
+
 /** What {@link Renderer.renderMarkdownChrome} writes links with. */
 export interface MarkdownChromeOptions {
   /** A canonical URL as the representation links it. */
   markdownUrl: MarkdownUrl;
   /** The page, when it is the site's front page: `newestPosts` is offered there. */
   frontPage?: Document | undefined;
-  /** The document the Markdown is of: `archiveMonths` is offered when it says `archive: true`. */
+  /**
+   * The document the Markdown is of, for its `categories`, `tags` and
+   * `backlinks`, and `archiveMonths` when it says `archive: true`.
+   */
   document?: Document | undefined;
 }
 
@@ -270,11 +301,19 @@ export interface Renderer {
    */
   renderMaintenance(url: string, until: Date | undefined): string;
   /**
+   * The body of a status page's Markdown, from the theme's `markdown`
+   * template in {@link STATUS_PAGES}, with autoescaping off. The template gets
+   * `site`, `url`, `title`, the maintenance page's `until` and `untilText`,
+   * and the filters the Markdown partials have.
+   */
+  renderStatusMarkdown(page: StatusPageName, context: StatusMarkdownContext): string;
+  /**
    * The header and footer of a page's Markdown, through
    * {@link MARKDOWN_TEMPLATES} with autoescaping off: Markdown is not HTML.
    * The partials get `site`, `menus`, `soloAuthor`, the chrome's links as
-   * data, `archiveMonths` on an archive page, and the `escapeMarkdown` and
-   * `markdownUrl` filters.
+   * data, a document's `categories`, `tags`, `backlinks`, `conversation` and
+   * form links, `archiveMonths` on an archive page, and the `escapeMarkdown`,
+   * `nest` and `markdownUrl` filters.
    */
   renderMarkdownChrome(chrome: MarkdownChrome, options: MarkdownChromeOptions): MarkdownChromeText;
   /** Any template by name, with the site data already in the context. */
@@ -551,6 +590,16 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   markdownEnvironment.addFilter('escapeMarkdown', (value: unknown) =>
     escapeMarkdown(filterText(value)),
   );
+  markdownEnvironment.addFilter('fileSize', (value: unknown) =>
+    typeof value === 'number' ? formatFileSize(value) : '',
+  );
+  markdownEnvironment.addFilter('nest', (value: unknown, width: unknown) =>
+    nest(
+      value instanceof nunjucks.runtime.SafeString ? value.toString() : filterText(value),
+      typeof width === 'number' ? width : 2,
+    ),
+  );
+  markdownEnvironment.addFilter('quote', (value: unknown) => quote(filterText(value)));
   markdownEnvironment.addFilter('markdownUrl', function (this: unknown, value: unknown) {
     const url = filterText(value);
     const lookup = (this as { lookup?: (name: string) => unknown } | undefined)?.lookup;
@@ -766,6 +815,124 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       })),
     }));
     return { archiveMonths: markdownMonths };
+  }
+
+  function markdownLinksContext(document: Document | undefined): Record<string, unknown> {
+    if (document === undefined) return {};
+
+    const site = siteData.read();
+    const bases = taxonomyBases(site);
+    const timezone = siteTimezone(site);
+    const terms = (taxonomy: Taxonomy, names: readonly string[]): MarkdownLink[] =>
+      document.type === 'post'
+        ? names.map((term) => ({ label: term, url: termHref({ taxonomy, term }, 0, bases) }))
+        : [];
+    const backlinks: MarkdownEntry[] = (options.backlinks?.(document) ?? []).map((linking) => ({
+      label: postLabel(linking, citedPage),
+      url: linking.permalink,
+      date: linking.date === undefined ? undefined : calendarDayIn(linking.date, timezone),
+    }));
+    return {
+      categories: terms('category', document.categories),
+      tags: terms('tag', document.tags),
+      backlinks,
+    };
+  }
+
+  function markdownKindContext(document: Document | undefined): Record<string, unknown> {
+    if (document?.type !== 'post') return {};
+
+    const { postType, lang, rsvp, event, review, enclosure, photos } = documentContext(
+      document,
+      config,
+      undefined,
+      undefined,
+      citedPage,
+    );
+    const cite = (verb: string, target: string): MarkdownCite => {
+      const context = citedPage?.(target);
+      const url = context?.original ?? target;
+      const name = citedPageName(url, context);
+      const author = context?.author?.name.trim();
+      const named =
+        author !== undefined &&
+        author !== '' &&
+        name.trim().toLowerCase().endsWith(` by ${author.toLowerCase()}`);
+      const { startDate, startZone, published } = replyContextFor(context ?? { url });
+      return {
+        verb,
+        url,
+        name,
+        ...(author === undefined || named ? {} : { author }),
+        ...(author === undefined && context?.site !== undefined ? { site: context.site } : {}),
+        ...(startDate instanceof Date
+          ? { startDate, ...(typeof startZone === 'string' ? { startZone } : {}) }
+          : published instanceof Date
+            ? { published }
+            : {}),
+        ...(context?.location === undefined ? {} : { location: context.location }),
+        ...(context?.original === undefined ? {} : { copy: target }),
+      };
+    };
+    const target = replyTarget(document);
+    const cites = [
+      ...(target === undefined
+        ? []
+        : [cite(rsvp === undefined ? 'In reply to' : RSVP_PHRASES[rsvp.value], target)]),
+      ...citationsOf(document.extra).map((citation) =>
+        cite(CITATION_VERBS[citation.property], citation.url),
+      ),
+    ];
+    const shared = options.location?.(document, requestSite());
+    return {
+      postType,
+      ...(lang === undefined ? {} : { lang }),
+      cites,
+      photos: photos.map(({ url, alt }) => ({ url, alt })),
+      ...(enclosure === undefined ? {} : { enclosure }),
+      ...(rsvp === undefined ? {} : { rsvp: { value: rsvp.value, label: rsvp.label } }),
+      ...(event === undefined ? {} : { event }),
+      ...(review === undefined
+        ? {}
+        : {
+            review: {
+              item: review.item,
+              kindLabel: review.kindLabel,
+              ...(review.rating === undefined ? {} : { rating: review.rating }),
+              best: review.best,
+              ...reviewWords(review),
+            },
+          }),
+      ...(shared === undefined ? {} : { location: locationContext(shared) }),
+    };
+  }
+
+  function strangerCommentForm(document: Document): CommentFormContext | undefined {
+    const signedOut: CommentViewer | undefined = undefined;
+    const offersNotifications = false;
+    return options.commentForm?.(document, signedOut, offersNotifications);
+  }
+
+  function markdownConversationContext(
+    document: Document | undefined,
+    url: string,
+  ): Record<string, unknown> {
+    if (document === undefined) return {};
+
+    const said = options.conversation?.(document, requestSite());
+    const page = absoluteUrl(url, config.baseUrl);
+    const takesComments = strangerCommentForm(document) !== undefined;
+    const webmention = webmentionEndpointFor(siteData.read());
+    return {
+      ...(said === undefined || said.counts.total === 0
+        ? {}
+        : { conversation: markdownConversation(said) }),
+      ...(takesComments ? { commentForm: { url: `${page}#respond` } } : {}),
+      ...(options.contactForm?.(document) === undefined
+        ? {}
+        : { contactForm: { url: `${page}#contact` } }),
+      ...(webmention === undefined ? {} : { webmention }),
+    };
   }
 
   /**
@@ -985,6 +1152,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(soloAuthor === undefined ? {} : { soloAuthor }),
       ...(frontPage === undefined ? {} : newestPostsContext(frontPage)),
       ...markdownArchiveContext(document),
+      ...markdownLinksContext(document),
+      ...markdownKindContext(document),
+      ...markdownConversationContext(document, chrome.url),
       home: HOME_LINK,
       ...chrome,
       bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),
@@ -1135,11 +1305,19 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     renderGone: (url) => statusPage(STATUS_PAGES.gone, url),
     renderServerError: (url) => statusPage(STATUS_PAGES.serverError, url),
     renderMaintenance: (url, until) =>
-      statusPage(
-        STATUS_PAGES.maintenance,
+      statusPage(STATUS_PAGES.maintenance, url, untilContext(until)),
+
+    renderStatusMarkdown(page, { url, markdownUrl, until }) {
+      useThemeDirs(markdownEnvironment, themes.current().dirs);
+      const { markdown, title } = STATUS_PAGES[page];
+      return markdownEnvironment.render(markdown, {
+        site: siteData.read(),
         url,
-        until === undefined ? {} : { until: until.toISOString(), untilText: until.toUTCString() },
-      ),
+        title,
+        markdownUrl,
+        ...untilContext(until),
+      });
+    },
 
     render,
   };
@@ -1147,15 +1325,30 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
 interface StatusPage {
   readonly template: string;
+  readonly markdown: string;
   readonly title: string;
 }
 
-const STATUS_PAGES = {
-  notFound: { template: TEMPLATES.notFound, title: 'Not found' },
-  gone: { template: TEMPLATES.gone, title: 'Deleted' },
-  serverError: { template: TEMPLATES.serverError, title: 'Something went wrong' },
-  maintenance: { template: TEMPLATES.maintenance, title: 'Down for maintenance' },
+export const STATUS_PAGES = {
+  notFound: { template: TEMPLATES.notFound, markdown: 'layouts/404.md.njk', title: 'Not found' },
+  gone: { template: TEMPLATES.gone, markdown: 'layouts/410.md.njk', title: 'Deleted' },
+  serverError: {
+    template: TEMPLATES.serverError,
+    markdown: 'layouts/500.md.njk',
+    title: 'Something went wrong',
+  },
+  maintenance: {
+    template: TEMPLATES.maintenance,
+    markdown: 'layouts/503.md.njk',
+    title: 'Down for maintenance',
+  },
 } as const satisfies Record<string, StatusPage>;
+
+export type StatusPageName = keyof typeof STATUS_PAGES;
+
+function untilContext(until: Date | undefined): Record<string, string> {
+  return until === undefined ? {} : { until: until.toISOString(), untilText: until.toUTCString() };
+}
 
 /**
  * One neighbour under the name a theme reads it by, or nothing at all when
@@ -1172,6 +1365,21 @@ function neighbourContext(
 ): Record<string, NeighbourContext> | object {
   if (document === undefined) return {};
   return { [key]: { title: postLabel(document, cited), url: document.permalink } };
+}
+
+/** Every line after the first indented by `width` spaces, blank lines left blank. */
+function nest(text: string, width: number): string {
+  const indent = ' '.repeat(width);
+  return text.replace(/\n(?=[^\n])/g, `\n${indent}`);
+}
+
+/** Markdown as a blockquote: every line after `> `, a blank line as `>`. */
+function quote(text: string): string {
+  return text
+    .trim()
+    .split('\n')
+    .map((line) => (line.trim() === '' ? '>' : `> ${line}`))
+    .join('\n');
 }
 
 /** A filter's input as text: a string, number or boolean as written, anything else empty. */

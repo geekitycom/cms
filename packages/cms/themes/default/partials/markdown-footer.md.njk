@@ -1,6 +1,8 @@
 {#
   The end of every page's Markdown: the archive on a page that asked for one,
-  then a heading and link lists.
+  what the page is filed under, what links to it, a post's neighbours, the
+  conversation, where the comment and contact forms are, the feeds, then a
+  heading and the site's link lists.
 
   `archiveMonths` is on the context only of a page whose front matter says
   `archive: true`: every published post as `{ month, posts }`, newest month
@@ -8,16 +10,42 @@
   `description` already on one line, written here in the shape a listing's
   Markdown has.
 
+  `categories` and `tags` are a post's, each a `label` (the term as written)
+  and the `url` of its archive. `backlinks` are the site's posts and pages
+  that link to this one, newest first, each a `label`, a `url` and a `date`.
+  This theme leaves them off a homepage that is a page, as its front page
+  layout does; a site theme may print them there.
+  `feeds` are the feeds the HTML head advertises, each a `label` (the feed's
+  title), a `url`, a `format` (`RSS`, `Atom` or `JSON Feed`) and a `type`.
+  `conversation` is on a post or page that has been answered: what
+  `conversation.njk` draws, from the same reader, so nothing the HTML hides
+  is in it. Its `rsvps`, `likes`, `boosts` and `mentions` are people, each a
+  `label` and a `url` when there is one. Its `replies` are threaded as the
+  HTML's are, each a `key`, `source`, `author` (a `label` and a `url`), `url`,
+  `published`, `rsvp`, `text` (its words as Markdown) and its own `replies`,
+  or a `withheld` placeholder with only `replies`. `nest` indents a reply
+  under its list item. `commentForm` and `contactForm` are each the `url` of
+  the form on the HTML page, printed as it is, since a form needs HTML;
+  `commentForm` is absent while comments are closed. `webmention` is there
+  when the site takes webmentions.
+  `thread` is on a comment's own page, as the header describes it: its
+  `comment.replies` are threaded as a conversation's are, and `onPostUrl` is the
+  comment on the post's page.
+  `type` is `post`, `page`, `listing`, `comment` or `status` (a 404, 410,
+  500 or 503 page); a listing's newer and older pages are written by the CMS
+  above this, so only a post's `previous` and `next` are printed here.
+
   `byline` is a post's author, a `label` and the `url` of their archive.
   `navigation` is every item of every menu the site stores, each URL once,
   each a `label` and a `url`; `menus` has them by menu name, as the HTML
-  does. `home`, `previous` and `next` are here too, though the
-  front matter already carries them for a Markdown browser.
+  does. `home`, `previous` and `next` are here too; the front matter carries
+  them as well, for a Markdown browser.
 
   Each link is a line of its own, with its own words, so the same data can be
   written as a Gemini link line. Nothing is printed when there is nothing to
   link.
 #}
+{% import "partials/markdown-reply.md.njk" as conversing with context %}
 {% for group in archiveMonths %}
 ## {{ group.month | escapeMarkdown }}
 
@@ -26,6 +54,96 @@
 {% endfor %}
 
 {% endfor %}
+{% if categories.length or tags.length %}
+## Filed under
+
+{% for link in categories %}
+- [Category: {{ link.label | escapeMarkdown }}]({{ link.url | markdownUrl }})
+{% endfor %}
+{% for link in tags %}
+- [Tag: {{ link.label | escapeMarkdown }}]({{ link.url | markdownUrl }})
+{% endfor %}
+
+{% endif %}
+{% if backlinks.length and not staticFrontPage %}
+## Linked from
+
+{% for entry in backlinks %}
+- [{{ (((entry.date + " ") if entry.date) + entry.label) | escapeMarkdown }}]({{ entry.url | markdownUrl }})
+{% endfor %}
+
+{% endif %}
+{% if type == "post" and (previous or next) %}
+## More posts
+
+{% if previous %}
+- [Previous: {{ previous.label | escapeMarkdown }}]({{ previous.url | markdownUrl }})
+{% endif %}
+{% if next %}
+- [Next: {{ next.label | escapeMarkdown }}]({{ next.url | markdownUrl }})
+{% endif %}
+
+{% endif %}
+{% if conversation %}
+{% for group in conversation.rsvps.concat([{ label: "Likes", people: conversation.likes }, { label: "Boosts", people: conversation.boosts }, { label: "Mentions", people: conversation.mentions }]) %}
+{% if group.people.length %}
+## {{ group.label | escapeMarkdown }} ({{ group.people.length }})
+
+{% for person in group.people %}
+- {{ conversing.named(person) }}
+{% endfor %}
+
+{% endif %}
+{% endfor %}
+{% if conversation.replies.length %}
+## {{ conversation.counts.replies | plural({ one: "One reply", other: "# replies" }, "en") }}
+
+{% for entry in conversation.replies %}
+{{ conversing.reply(entry) | trim }}
+
+{% endfor %}
+{% if not commentForm %}
+Comments are closed.
+
+{% endif %}
+{% endif %}
+{% endif %}
+{% if thread %}
+{% if thread.comment.replies.length %}
+## Replies
+
+{% for entry in thread.comment.replies %}
+{{ conversing.reply(entry) | trim }}
+
+{% endfor %}
+{% endif %}
+[The whole conversation on {{ thread.post.label | escapeMarkdown }}]({{ thread.onPostUrl | markdownUrl }})
+
+{% endif %}
+{% if commentForm %}
+## Leave a comment
+
+[Leave a comment on the web page]({{ commentForm.url }})
+
+{% if webmention %}
+Or reply from your own site and send a [webmention](https://indieweb.org/Webmention).
+
+{% endif %}
+{% endif %}
+{% if contactForm %}
+## Send a message
+
+[Send a message on the web page]({{ contactForm.url }})
+
+{% endif %}
+{% if feeds.length %}
+## Feeds
+
+{% for feed in feeds %}
+- [{{ (feed.label + " (" + feed.format + ")") | escapeMarkdown }}]({{ feed.url | markdownUrl }})
+{% endfor %}
+
+{% endif %}
 {% if byline or navigation.length %}
 ## {{ site.title | escapeMarkdown }}
 

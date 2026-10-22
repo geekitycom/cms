@@ -144,7 +144,12 @@ describe('a site whose homepage is a page', () => {
     ]) {
       const text = await (await request).text();
       assert.match(text, /^permalink: \/$/m, 'the front matter says where it is served');
-      assert.doesNotMatch(text, /\/welcome\//, 'not the permalink that redirects');
+      assert.doesNotMatch(
+        text,
+        /\/welcome\/(?:index\.md)?(?:\)|$)/m,
+        'not the permalink that redirects',
+      );
+      assert.match(text, /\(\/welcome\/feed\/\)/, 'the comments feed is under the permalink');
     }
 
     for (const request of [
@@ -447,6 +452,35 @@ describe('a site with a posts page', () => {
 
     const json = (await (await cms.app.request('/news/index.json')).json()) as unknown;
     assert.ok(Array.isArray(json), 'and its JSON is the listing’s array');
+  });
+
+  it('prints the page’s own words in its Markdown, as its HTML does (TASK-472)', async () => {
+    const { cms } = await site({
+      ...CONTENT,
+      'pages/news.md': `---\ntitle: News\ndescription: What is new.\npermalink: /news/\n---\n\nEverything as it happens, from [the newest one](/2026/09/newest/).\n`,
+      '_data/site.json': siteJson({ homepage: 'welcome', postsPage: 'news', postsPerPage: 2 }),
+    });
+
+    const words = 'Everything as it happens, from [the newest one](/2026/09/newest/index.md).';
+    const first = await (await cms.app.request('/news/index.md')).text();
+    assert.ok(
+      first.includes(`# News\n\n> What is new.\n\n${words}\n\n## Posts\n`),
+      'under the heading and description, above the posts, its links at their .md',
+    );
+
+    const secondHtml = await (await cms.app.request('/news/page/2/')).text();
+    assert.match(secondHtml, /Everything as it happens/, 'page two of the HTML has the words');
+    const second = await (await cms.app.request('/news/page/2/index.md')).text();
+    assert.ok(second.includes(`${words}\n\n## Posts\n`), 'and so does page two of the Markdown');
+  });
+
+  it('has no page words in the Markdown of a root listing (TASK-472)', async () => {
+    const { cms } = await site({ ...CONTENT, '_data/site.json': siteJson({ postsPerPage: 2 }) });
+
+    for (const path of ['/index.md', '/page/2/index.md']) {
+      const body = await (await cms.app.request(path)).text();
+      assert.doesNotMatch(body, /Everything as it happens/, path);
+    }
   });
 
   it('sends the root’s own pagination to it (AC #3)', async () => {
