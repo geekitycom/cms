@@ -1,10 +1,10 @@
 ---
 id: TASK-463
 title: Alt text a post gives an upload fills the media library when it has none
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-21 00:48'
-updated_date: '2026-10-21 00:52'
+updated_date: '2026-10-22 13:52'
 labels:
   - media
   - editor
@@ -38,3 +38,9 @@ After writeDocument saves the file, fillAltTexts collects the post's photo alts 
 <!-- SECTION:NOTES:BEGIN -->
 Shared write path, so the editor and Micropub both fill the library. Verified by new cases in src/admin/alt-text.test.ts (photo, body image, never overwrite described/decorative, nothing for non-uploads or empty alt) and a library assertion on the Micropub { value, alt } test. Full cms suite 6340/6340.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Shipped in cms 0.37.0 (ddf1966). Saving a post, from the editor or Micropub, writes the alt text it gives an upload into media.json when the library has none; described or decorative entries are never changed.
+<!-- SECTION:FINAL_SUMMARY:END -->

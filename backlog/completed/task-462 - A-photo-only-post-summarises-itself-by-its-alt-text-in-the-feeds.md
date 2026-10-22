@@ -1,10 +1,10 @@
 ---
 id: TASK-462
 title: A photo-only post summarises itself by its alt text in the feeds
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-21 00:36'
-updated_date: '2026-10-21 00:38'
+updated_date: '2026-10-22 13:52'
 labels:
   - bug
   - feeds
@@ -37,3 +37,9 @@ Fall back to the photos' alt text (post's own, else the media library's), joined
 <!-- SECTION:NOTES:BEGIN -->
 Reviews keep their own summary path. Body text or a description still wins over alt text. Verified with new cases in src/web/feed-photo.test.ts for RSS, Atom and JSON Feed, plus the library alt on the second photo. The enclosure fixture's sha256 values are unchanged and only its ETags moved.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Shipped in cms 0.37.0 (6d7856e). A photo post with no description or body text is summarised by its photos' alt text, the post's own or the media library's, in RSS, Atom and JSON Feed. FEED_ITEM_REVISION moved.
+<!-- SECTION:FINAL_SUMMARY:END -->
