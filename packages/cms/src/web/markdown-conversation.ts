@@ -52,7 +52,6 @@ export type MarkdownSaid = Exclude<MarkdownReply, { readonly withheld: true }>;
 
 /** A native comment's page (TASK-318) as `layouts/comment.njk` draws it, for the Markdown partials. */
 export interface MarkdownCommentThread {
-  /** The post the thread is on. */
   readonly post: {
     readonly label: string;
     readonly url: string;
@@ -69,15 +68,14 @@ export interface MarkdownCommentThread {
   readonly ancestors: readonly (MarkdownSaid | null)[];
   /** The comment, with its replies threaded under it. */
   readonly comment: MarkdownSaid;
-  /** The comment's anchor on the post. */
-  readonly url: string;
+  readonly onPostUrl: string;
 }
 
 /** A comment's thread with HTML turned into Markdown; `post` is what the code knows of the post. */
 export function markdownCommentThread(
   thread: CommentThread,
   post: MarkdownCommentThread['post'],
-  url: string,
+  onPostUrl: string,
 ): MarkdownCommentThread {
   return {
     post,
@@ -85,7 +83,7 @@ export function markdownCommentThread(
       step === null ? null : markdownSaid({ ...step, replies: [] }),
     ),
     comment: markdownSaid(thread.comment),
-    url,
+    onPostUrl,
   };
 }
 
@@ -136,7 +134,6 @@ function markdownSaid(reply: Interaction): MarkdownSaid {
   };
 }
 
-/** Sanitised HTML as Markdown, or as its escaped text when it cannot be converted. */
 function markdownText(html: string): string {
   if (html.trim() === '') return '';
   return markdownFromHtml(html) ?? escapeMarkdown(textOf(parseHtml(html)));

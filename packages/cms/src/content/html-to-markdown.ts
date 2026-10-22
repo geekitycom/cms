@@ -8,10 +8,11 @@ import { cleanPostHtml } from './sanitize.ts';
 /**
  * HTML as Markdown: a Micropub client's content as the post body the site
  * stores (TASK-258, decision-27), and a reply's sanitised words in a
- * document's Markdown (TASK-476). The renderer passes raw HTML through, as Eleventy's does, so
- * the body is cleaned here, at the boundary, before anything is written: HTML
- * content is cleaned and converted to Markdown, and Markdown content keeps
- * its text while every piece of raw HTML in it is cleaned in place.
+ * document's Markdown (TASK-476). The renderer passes raw HTML through, as
+ * Eleventy's does, so the body is cleaned here, at the boundary, before
+ * anything is written: HTML content is cleaned and converted to Markdown, and
+ * Markdown content keeps its text while every piece of raw HTML in it is
+ * cleaned in place.
  */
 
 const KEPT_BLOCKS = ['TABLE', 'FIGURE', 'DETAILS', 'DL'];

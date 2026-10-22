@@ -29,12 +29,11 @@
   `commentForm` is absent while comments are closed. `webmention` is there
   when the site takes webmentions.
   `thread` is on a comment's own page, as the header describes it: its
-  `comment.replies` are threaded as a conversation's are, and `url` is the
+  `comment.replies` are threaded as a conversation's are, and `onPostUrl` is the
   comment on the post's page.
   `type` is `post`, `page`, `listing`, `comment` or `status` (a 404, 410,
-  500 or 503 page); a listing's newer and older pages
-  are written by the CMS above this, so only a post's `previous` and `next`
-  are printed here.
+  500 or 503 page); a listing's newer and older pages are written by the CMS
+  above this, so only a post's `previous` and `next` are printed here.
 
   `byline` is a post's author, a `label` and the `url` of their archive.
   `navigation` is every item of every menu the site stores, each URL once,
@@ -118,7 +117,7 @@ Comments are closed.
 
 {% endfor %}
 {% endif %}
-[The whole conversation on {{ thread.post.label | escapeMarkdown }}]({{ thread.url | markdownUrl }})
+[The whole conversation on {{ thread.post.label | escapeMarkdown }}]({{ thread.onPostUrl | markdownUrl }})
 
 {% endif %}
 {% if commentForm %}

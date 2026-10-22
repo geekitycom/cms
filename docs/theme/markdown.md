@@ -204,7 +204,7 @@ comment page draws:
 | `post`      | The post the comment is on: a `label`, a `url`, an `author` (`label` and `url`), a `date` and a `summary`. |
 | `ancestors` | The comments it answers, from the top of the thread down, each a reply without its `replies`, or `null`.   |
 | `comment`   | The comment, a reply as above, with its replies threaded under it.                                         |
-| `url`       | The comment's anchor on the post's page, `{permalink}#comment-{key}`.                                      |
+| `onPostUrl` | The comment's anchor on the post's page, `{permalink}#comment-{key}`.                                      |
 
 A `null` ancestor is a comment a reader may not see. The comment's `text` is
 the page's body, so the partials do not print it. The `quote` filter writes

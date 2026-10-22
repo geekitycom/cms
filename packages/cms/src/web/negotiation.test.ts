@@ -393,8 +393,6 @@ describe('validators and alternates', () => {
       assert.ok(etag !== null, `${accept} carries an ETag`);
       assert.match(etag, /^"[0-9a-f]{32}"$/, `${accept} has a quoted hex ETag`);
       etags.add(etag);
-      // The HTML and the Markdown also show the conversation, which has no
-      // date to agree with their ETags, so only the JSON reports the file's.
       assert.equal(
         response.headers.get('last-modified'),
         accept === 'application/json' ? new Date('2026-09-04T11:30:00Z').toUTCString() : null,

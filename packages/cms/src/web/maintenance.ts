@@ -34,8 +34,7 @@ const STATIC_PAGE = `<!doctype html>
 </html>
 `;
 
-/** The Markdown for when the theme's Markdown 503 fails. */
-const MARKDOWN_BODY =
+const FALLBACK_MARKDOWN =
   '# Down for maintenance\n\nThis site is down for maintenance and will be back shortly. Please try again later.\n';
 
 const JSON_BODY = `${JSON.stringify(
@@ -113,7 +112,7 @@ function unavailable(c: Context<GeekityEnv>, pathname: string, until: Date | und
     case 'text':
       return statusMarkdownResponse(c, representation, 'maintenance', 503, {
         until: upcoming,
-        fallback: MARKDOWN_BODY,
+        fallback: FALLBACK_MARKDOWN,
         headers,
       });
     case 'html':

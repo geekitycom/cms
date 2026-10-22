@@ -11,6 +11,7 @@ import type { TestContext } from 'node:test';
 
 import { sandbox } from '../admin/__testing__/harness.ts';
 import type { Cms } from '../index.ts';
+import { RECHECK_MS } from '../maintenance.ts';
 
 const box = sandbox();
 after(() => box.cleanup());
@@ -30,7 +31,6 @@ function post(slug: string): string {
   return `---\ntitle: ${slug}\ndate: '2026-09-02T09:00:00Z'\npermalink: /2026/09/${slug}/\n---\n\nBody of ${slug}.\n`;
 }
 
-/** A site with one post, one deleted post and a route that throws, in an optional site theme. */
 async function site(theme?: Record<string, string>): Promise<Cms> {
   const contentDir = await box.dir('geekity-status-md-content-');
   const dataDir = await box.dir('geekity-status-md-data-');
@@ -72,8 +72,7 @@ async function maintenance(cms: Cms, until?: Date): Promise<void> {
     ]),
     'cli',
   );
-  // Past the second a running site trusts its last look at the file for.
-  clock += 1001;
+  clock += RECHECK_MS + 1;
 }
 
 function quiet(t: TestContext): void {

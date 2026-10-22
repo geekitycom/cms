@@ -35,8 +35,7 @@ export interface MarkdownBio {
 
 /** One feed a page advertises: its title, its URL, and which format it is in. */
 export interface MarkdownFeed extends MarkdownLink {
-  /** `RSS`, `Atom` or `JSON Feed`. */
-  readonly format: string;
+  readonly format: 'RSS' | 'Atom' | 'JSON Feed';
   /** Its media type, as the HTML head's `<link type>` says it. */
   readonly type: string;
 }

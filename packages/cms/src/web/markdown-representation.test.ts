@@ -144,6 +144,12 @@ function frontMatterOf(text: string): string {
   return text.slice(4, end + 1);
 }
 
+function headerOf(text: string, body: string): string {
+  const start = text.indexOf('\n---\n', 4) + 5;
+  const end = body === '' ? text.indexOf('\n## ', start) : text.indexOf(`\n${body}\n`, start);
+  return text.slice(start, end).trim();
+}
+
 const FOOTER = [
   '## Field \\*Notes\\*',
   '',
@@ -706,13 +712,6 @@ describe('what kind of post a post is (TASK-474)', () => {
     });
   }
 
-  /** What the header writes between the front matter and the post's own words. */
-  function headerOf(text: string, body: string): string {
-    const start = text.indexOf('\n---\n', 4) + 5;
-    const end = body === '' ? text.indexOf('\n## ', start) : text.indexOf(`\n${body}\n`, start);
-    return text.slice(start, end).trim();
-  }
-
   it('opens a reply, like, repost and bookmark with a linked line naming what it answers (AC #1)', async () => {
     const cms = await kinds();
     const expected: [slug: string, body: string, line: string][] = [
@@ -917,12 +916,6 @@ describe('a post’s photos and its recording (TASK-475)', () => {
       'Watch this.',
     ),
   };
-
-  /** What the header writes between the front matter and the post's own words. */
-  function headerOf(text: string, body: string): string {
-    const start = text.indexOf('\n---\n', 4) + 5;
-    return text.slice(start, text.indexOf(`\n${body}\n`, start)).trim();
-  }
 
   it('writes each photo as an image with its alt text, in the order the HTML draws them (AC #1)', async () => {
     const cms = await site({ files: MEDIA });

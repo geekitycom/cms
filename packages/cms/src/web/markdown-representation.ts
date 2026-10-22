@@ -24,6 +24,7 @@ import { authorContext, siteAuthorContext } from '../site/authors.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
 import { siteTimezone } from '../theme/site-data.ts';
 import type { Archive } from './listing-subject.ts';
+import { commentedPost } from './conversation.ts';
 import { markdownCommentThread } from './markdown-conversation.ts';
 import {
   bioOf,
@@ -282,7 +283,6 @@ function feed(format: FeedFormat, label: string, url: string): MarkdownFeed {
   return { label, url, ...FEED_NAMES[format] };
 }
 
-/** The feeds every page's head advertises: the site's posts in each format, and its comments. */
 function siteFeeds(siteTitle: string): MarkdownFeed[] {
   return [
     ...FEED_FORMATS.map((format) => feed(format, siteTitle, feedPathUnder('/', format))),
@@ -369,15 +369,7 @@ function markdownHrefFor(
   };
 }
 
-/**
- * Whether a native comment has a page a reader can open: an approved comment
- * left through the form on a post that is served. Read from the comment's own
- * record, so a page with a hundred replies does not read its thread a hundred
- * times over.
- */
 function hasCommentPage(c: Context<GeekityEnv>, key: string): boolean {
-  const stored = c.var.admin.getComment(key);
-  if (stored?.source !== 'comment' || stored.status !== 'approved') return false;
-  const post = c.var.store.getBySlug(stored.slug);
+  const post = commentedPost(c.var, key);
   return post !== undefined && isServed(post, c.var.store.now());
 }

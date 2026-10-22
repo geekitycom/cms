@@ -2,7 +2,7 @@ import { MAINTENANCE } from './settings/maintenance.ts';
 import type { SettingsRegistry, ValuesOf } from './settings/types.ts';
 import type { Clock } from './util/clock.ts';
 
-const RECHECK_MS = 1000;
+export const RECHECK_MS = 1000;
 
 export type MaintenanceState = ValuesOf<typeof MAINTENANCE>;
 

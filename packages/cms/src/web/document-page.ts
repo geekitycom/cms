@@ -87,20 +87,7 @@ export function negotiateDocument(
     // post have no head to put one in (TASK-51).
     links: webmentionLinks(c),
     ...(drawnForSomebody(c, representation) ? { private: true } : {}),
-    // The JSON is the file, so the file's hash and dates validate it. The HTML
-    // and the Markdown also draw the theme, the conversation, the neighbours
-    // and whatever else the site holds, none of which the file's hash sees, so
-    // each is validated by what it drew (TASK-181, TASK-476). Nothing records
-    // when a withdrawn reply stopped being shown, so neither has a date that
-    // could agree with that ETag, and neither carries a Last-Modified.
-    ...(page !== undefined
-      ? { etag: representationEtag(representation, page.fingerprint) }
-      : markdown !== undefined
-        ? { etag: representationEtag(representation, markdown) }
-        : {
-            etag: representationEtag(representation, document.hash),
-            lastModified: lastModifiedOf(document),
-          }),
+    ...validatorsFor(representation, document, page?.fingerprint ?? markdown),
     conditional: conditionalHeaders(c),
   });
 
@@ -109,6 +96,20 @@ export function negotiateDocument(
     response.headers.set('x-pingback', absoluteUrl(pingback, c.var.config.baseUrl));
   }
   return response;
+}
+
+function validatorsFor(
+  representation: Representation,
+  document: Document,
+  drawnBytes: string | undefined,
+): { etag: string; lastModified?: Date | undefined } {
+  if (drawnBytes !== undefined) {
+    return { etag: representationEtag(representation, drawnBytes) };
+  }
+  return {
+    etag: representationEtag(representation, document.hash),
+    lastModified: lastModifiedOf(document),
+  };
 }
 
 /**

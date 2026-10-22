@@ -276,8 +276,7 @@ async function text(cms: Cms, pathname: string): Promise<string> {
   return (await get(cms, pathname)).text();
 }
 
-/** What the footer writes between a heading and the `## Feeds` after it. */
-function before(markdown: string, heading: string, end = '## Feeds'): string {
+function sectionFrom(markdown: string, heading: string, end = '## Feeds'): string {
   const start = markdown.indexOf(heading);
   assert.ok(start >= 0, `no ${heading} in:\n${markdown}`);
   return markdown.slice(start, markdown.indexOf(end, start)).trim();
@@ -290,7 +289,7 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
     assert.match(html, /<h2 class="comments-title">5 replies<\/h2>/);
 
     assert.equal(
-      before(await text(cms, '/2026/09/hello/index.md'), '## 5 replies', '## Leave a comment'),
+      sectionFrom(await text(cms, '/2026/09/hello/index.md'), '## 5 replies', '## Leave a comment'),
       [
         '## 5 replies',
         '',
@@ -332,7 +331,7 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
   it('lists the likes, boosts and mentions as the HTML’s facepiles do (AC #2)', async () => {
     const cms = await site();
     assert.equal(
-      before(await text(cms, '/2026/09/hello/index.md'), '## Likes', '## 5 replies'),
+      sectionFrom(await text(cms, '/2026/09/hello/index.md'), '## Likes', '## 5 replies'),
       [
         '## Likes (2)',
         '',
@@ -353,7 +352,7 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
   it('says where the comment form is and links the HTML page (AC #4)', async () => {
     const cms = await site();
     assert.equal(
-      before(await text(cms, '/2026/09/hello/index.md'), '## Leave a comment'),
+      sectionFrom(await text(cms, '/2026/09/hello/index.md'), '## Leave a comment'),
       [
         '## Leave a comment',
         '',
@@ -374,7 +373,7 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
     const cms = await site();
     const closed = await text(cms, '/2026/09/closed/index.md');
     assert.equal(
-      before(closed, '## One reply'),
+      sectionFrom(closed, '## One reply'),
       [
         '## One reply',
         '',
@@ -391,7 +390,7 @@ describe('the conversation in a post’s Markdown (TASK-476)', () => {
   it('says where the contact form is and links the HTML page (AC #4)', async () => {
     const cms = await site();
     assert.equal(
-      before(await text(cms, '/write/index.md'), '## Send a message'),
+      sectionFrom(await text(cms, '/write/index.md'), '## Send a message'),
       [
         '## Send a message',
         '',
@@ -499,7 +498,11 @@ describe('a comment’s own page in Markdown (TASK-477)', () => {
     assert.match(html, /<h2 class="comments-title">Replies<\/h2>/);
 
     assert.equal(
-      before(await text(cms, `/comment/${ADA}/index.md`), '## Replies', '[The whole conversation'),
+      sectionFrom(
+        await text(cms, `/comment/${ADA}/index.md`),
+        '## Replies',
+        '[The whole conversation',
+      ),
       [
         '## Replies',
         '',

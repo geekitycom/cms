@@ -4,6 +4,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import type { GeekityConfig } from '../config.ts';
+import { RECHECK_MS } from '../maintenance.ts';
 import { MAINTENANCE } from '../settings/maintenance.ts';
 import { csrfField, sandbox, signedIn } from './__testing__/harness.ts';
 import { MAINTENANCE_PATH } from './maintenance.ts';
@@ -20,7 +21,7 @@ async function screen(config: GeekityConfig = {}) {
   const token = csrfField(html);
   assert.ok(token !== undefined, 'the maintenance screen carried a CSRF token');
   const tick = () => {
-    now += 1001;
+    now += RECHECK_MS + 1;
   };
   return { cms, agent, token, html, status: page.status, tick };
 }

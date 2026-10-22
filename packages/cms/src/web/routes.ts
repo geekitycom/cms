@@ -216,9 +216,9 @@ export function mountPublicSite(
   // The site's search (TASK-22): a route at a fixed path for the reason the
   // feeds are, so the form in every theme's footer submits somewhere no
   // permalink can take. It negotiates like a listing, and `/search/index.md`
-  // and `/search/index.json` are the same escape hatches a listing has. The path
-  // without its slash is where a hand-typed URL lands, and keeps its query on
-  // the way to the real one.
+  // and `/search/index.json` are the same escape hatches a listing has. The
+  // path without its slash is where a hand-typed URL lands, and keeps its
+  // query on the way to the real one.
   app.get(SEARCH_PATH, (c) => search(c, selectFromAccept(c, LISTING_REPRESENTATIONS)));
   app.get(representationHref(SEARCH_PATH, 'markdown'), (c) => search(c, 'markdown'));
   app.get(representationHref(SEARCH_PATH, 'json'), (c) => search(c, 'json'));

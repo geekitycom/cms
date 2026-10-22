@@ -33,8 +33,7 @@ const STATIC_PAGE = `<!doctype html>
 </html>
 `;
 
-/** The Markdown for when the theme's Markdown 500 fails too. */
-const MARKDOWN_BODY =
+const FALLBACK_MARKDOWN =
   '# Something went wrong\n\nThe server could not answer this request. Try again later, or go to the [home page](/).\n';
 
 const JSON_BODY = `${JSON.stringify(
@@ -87,7 +86,7 @@ export const serverError: ErrorHandler<GeekityEnv> = (error, c) => {
     case 'markdown':
     case 'text':
       return statusMarkdownResponse(c, representation, 'serverError', 500, {
-        fallback: MARKDOWN_BODY,
+        fallback: FALLBACK_MARKDOWN,
         headers: { 'cache-control': NO_STORE },
       });
     case 'html':

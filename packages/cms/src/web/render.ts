@@ -817,10 +817,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     return { archiveMonths: markdownMonths };
   }
 
-  /**
-   * What a document's Markdown links beside its words: a post's categories and
-   * tags, and the posts and pages that link to it, the lists its HTML prints.
-   */
   function markdownLinksContext(document: Document | undefined): Record<string, unknown> {
     if (document === undefined) return {};
 
@@ -843,12 +839,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     };
   }
 
-  /**
-   * What kind of post a document is, for its Markdown header: the HTML's own
-   * `postType`, `rsvp`, `event`, `review` and `enclosure`, its photos' URLs and
-   * alt text, what it answers or cites as {@link MarkdownCite}s, and its
-   * location as far as the site shares it.
-   */
   function markdownKindContext(document: Document | undefined): Record<string, unknown> {
     if (document?.type !== 'post') return {};
 
@@ -917,13 +907,12 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     };
   }
 
-  /**
-   * What was said about a document and where its forms are, for its Markdown:
-   * the conversation the HTML draws, from the same reader, and the HTML
-   * page's comment and contact forms as links, since a form needs HTML. The
-   * comment form is asked for as a stranger's, as the Markdown is the same
-   * for everybody.
-   */
+  function strangerCommentForm(document: Document): CommentFormContext | undefined {
+    const signedOut: CommentViewer | undefined = undefined;
+    const offersNotifications = false;
+    return options.commentForm?.(document, signedOut, offersNotifications);
+  }
+
   function markdownConversationContext(
     document: Document | undefined,
     url: string,
@@ -932,7 +921,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
     const said = options.conversation?.(document, requestSite());
     const page = absoluteUrl(url, config.baseUrl);
-    const takesComments = options.commentForm?.(document, undefined, false) !== undefined;
+    const takesComments = strangerCommentForm(document) !== undefined;
     const webmention = webmentionEndpointFor(siteData.read());
     return {
       ...(said === undefined || said.counts.total === 0
@@ -1336,7 +1325,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
 interface StatusPage {
   readonly template: string;
-  /** The page's Markdown body, found on the theme search path like the HTML layout. */
   readonly markdown: string;
   readonly title: string;
 }

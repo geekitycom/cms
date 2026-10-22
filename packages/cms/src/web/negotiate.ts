@@ -38,7 +38,6 @@ export const DOCUMENT_REPRESENTATIONS: readonly Representation[] = [
 
 export const LISTING_REPRESENTATIONS: readonly Representation[] = DOCUMENT_REPRESENTATIONS;
 
-/** What a native comment's page offers: it has no JSON of its own. */
 export const COMMENT_REPRESENTATIONS: readonly Representation[] = ['html', 'markdown', 'text'];
 
 /**
