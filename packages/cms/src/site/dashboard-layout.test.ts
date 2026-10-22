@@ -1,57 +1,106 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { arrangeCards, changeLayout, dashboardLayout, EMPTY_LAYOUT } from './dashboard-layout.ts';
+import { arrangeColumns, changeLayout, dashboardLayout, EMPTY_LAYOUT } from './dashboard-layout.ts';
+import type { DashboardLayout } from './dashboard-layout.ts';
 
 const DEFAULTS = ['core:a', 'core:b', 'core:c', 'core:d'];
 
+function columns(left: string[], right: string[]): DashboardLayout {
+  return { ...EMPTY_LAYOUT, columns: [left, right] };
+}
+
 describe('dashboardLayout', () => {
-  it('reads the three lists and drops entries that are not strings', () => {
+  it('reads the columns and lists, and drops entries that are not strings', () => {
     assert.deepEqual(
-      dashboardLayout({ order: ['core:b', 3, 'core:a'], collapsed: ['core:c'], removed: 'x' }),
-      { order: ['core:b', 'core:a'], collapsed: ['core:c'], removed: [] },
+      dashboardLayout({
+        columns: [['core:b', 3, 'core:a'], ['core:d']],
+        collapsed: ['core:c'],
+        removed: 'x',
+      }),
+      { columns: [['core:b', 'core:a'], ['core:d']], collapsed: ['core:c'], removed: [] },
+    );
+  });
+
+  it('keeps a key in only the first column that lists it', () => {
+    assert.deepEqual(dashboardLayout({ columns: [['core:a'], ['core:a', 'core:b']] })?.columns, [
+      ['core:a'],
+      ['core:b'],
+    ]);
+  });
+
+  it('reads an order saved before the columns as columns alternating in that order', () => {
+    assert.deepEqual(
+      dashboardLayout({ order: ['core:d', 'core:c', 'core:b', 'core:a'], removed: ['core:c'] }),
+      {
+        columns: [
+          ['core:d', 'core:b'],
+          ['core:c', 'core:a'],
+        ],
+        collapsed: [],
+        removed: ['core:c'],
+      },
     );
   });
 
   it('reads nothing usable as no layout', () => {
     assert.equal(dashboardLayout('nope'), undefined);
-    assert.equal(dashboardLayout({ order: [], collapsed: [], removed: [] }), undefined);
+    assert.equal(dashboardLayout({ columns: [[], []], collapsed: [], removed: [] }), undefined);
+    assert.equal(dashboardLayout({ order: [] }), undefined);
   });
 });
 
-describe('arrangeCards', () => {
-  it('is the default order when nothing is saved', () => {
-    assert.deepEqual(arrangeCards(DEFAULTS, EMPTY_LAYOUT), DEFAULTS);
+describe('arrangeColumns', () => {
+  it('alternates the default order left and right when nothing is saved', () => {
+    assert.deepEqual(arrangeColumns(DEFAULTS, EMPTY_LAYOUT), [
+      ['core:a', 'core:c'],
+      ['core:b', 'core:d'],
+    ]);
   });
 
-  it('follows the saved order', () => {
+  it('follows the saved columns', () => {
     assert.deepEqual(
-      arrangeCards(DEFAULTS, { ...EMPTY_LAYOUT, order: ['core:d', 'core:c', 'core:b', 'core:a'] }),
-      ['core:d', 'core:c', 'core:b', 'core:a'],
+      arrangeColumns(DEFAULTS, columns(['core:d', 'core:c', 'core:b'], ['core:a'])),
+      [['core:d', 'core:c', 'core:b'], ['core:a']],
     );
   });
 
-  it('puts a widget the order does not mention after the cards that come before it by default', () => {
+  it('puts a widget the columns do not mention at the end of the column with fewer cards', () => {
     assert.deepEqual(
-      arrangeCards([...DEFAULTS, 'plugin:new'], {
-        ...EMPTY_LAYOUT,
-        order: ['core:d', 'core:a', 'core:c', 'core:b'],
+      arrangeColumns(
+        [...DEFAULTS, 'plugin:new'],
+        columns(['core:a', 'core:b', 'core:c'], ['core:d']),
+      ),
+      [
+        ['core:a', 'core:b', 'core:c'],
+        ['core:d', 'plugin:new'],
+      ],
+    );
+  });
+
+  it('does not count removed cards when it picks the shorter column', () => {
+    assert.deepEqual(
+      arrangeColumns([...DEFAULTS, 'plugin:new'], {
+        ...columns(['core:a', 'core:b'], ['core:c', 'core:d']),
+        removed: ['core:a', 'core:b'],
       }),
-      ['core:d', 'core:a', 'core:c', 'core:b', 'plugin:new'],
-    );
-    assert.deepEqual(
-      arrangeCards(['core:first', ...DEFAULTS], { ...EMPTY_LAYOUT, order: ['core:b', 'core:a'] }),
-      ['core:first', 'core:b', 'core:a', 'core:c', 'core:d'],
+      [
+        ['core:a', 'core:b', 'plugin:new'],
+        ['core:c', 'core:d'],
+      ],
     );
   });
 
   it('ignores saved ids that no longer exist', () => {
     assert.deepEqual(
-      arrangeCards(DEFAULTS, {
-        ...EMPTY_LAYOUT,
-        order: ['gone:x', 'core:d', 'core:c', 'gone:y', 'core:b', 'core:a'],
-      }),
-      ['core:d', 'core:c', 'core:b', 'core:a'],
+      arrangeColumns(
+        DEFAULTS,
+        columns(['gone:x', 'core:d', 'core:c'], ['gone:y', 'core:b', 'core:a']),
+      ),
+      [
+        ['core:d', 'core:c'],
+        ['core:b', 'core:a'],
+      ],
     );
   });
 });
@@ -73,39 +122,134 @@ describe('changeLayout', () => {
     );
   });
 
-  it('moves a card past its visible neighbour, skipping removed cards', () => {
-    const layout = changeLayout(EMPTY_LAYOUT, { action: 'remove', key: 'core:b' }, DEFAULTS);
+  it('keeps every other card in its column when one is removed, and adds it back where it was', () => {
+    const removed = changeLayout(EMPTY_LAYOUT, { action: 'remove', key: 'core:a' }, DEFAULTS);
+    assert.deepEqual(arrangeColumns(DEFAULTS, removed), [
+      ['core:a', 'core:c'],
+      ['core:b', 'core:d'],
+    ]);
+    const back = changeLayout(removed, { action: 'restore', key: 'core:a' }, DEFAULTS);
+    assert.deepEqual(arrangeColumns(DEFAULTS, back), [
+      ['core:a', 'core:c'],
+      ['core:b', 'core:d'],
+    ]);
+  });
+
+  it('adds a card back to the shorter column when no column holds it', () => {
+    const layout = { ...columns(['core:a', 'core:c'], ['core:b']), removed: ['core:d'] };
+    const back = changeLayout(layout, { action: 'restore', key: 'core:d' }, DEFAULTS);
+    assert.deepEqual(arrangeColumns(DEFAULTS, back), [
+      ['core:a', 'core:c'],
+      ['core:b', 'core:d'],
+    ]);
+  });
+
+  it('moves a card up and down its own column, skipping removed cards', () => {
+    const layout = {
+      ...columns(['core:a', 'core:b', 'core:c'], ['core:d']),
+      removed: ['core:b'],
+    };
     const moved = changeLayout(layout, { action: 'later', key: 'core:a' }, DEFAULTS);
-    assert.deepEqual(arrangeCards(DEFAULTS, moved), ['core:b', 'core:c', 'core:a', 'core:d']);
+    assert.deepEqual(arrangeColumns(DEFAULTS, moved), [['core:b', 'core:c', 'core:a'], ['core:d']]);
     const back = changeLayout(moved, { action: 'earlier', key: 'core:a' }, DEFAULTS);
-    assert.deepEqual(arrangeCards(DEFAULTS, back), ['core:b', 'core:a', 'core:c', 'core:d']);
+    assert.deepEqual(arrangeColumns(DEFAULTS, back), [['core:b', 'core:a', 'core:c'], ['core:d']]);
   });
 
-  it('leaves the first card first and the last card last', () => {
-    assert.deepEqual(
-      arrangeCards(
-        DEFAULTS,
-        changeLayout(EMPTY_LAYOUT, { action: 'earlier', key: 'core:a' }, DEFAULTS),
-      ),
+  it('steps past only the cards the page drew', () => {
+    const layout = columns(['core:a', 'core:b', 'core:c'], ['core:d']);
+    const moved = changeLayout(
+      layout,
+      { action: 'later', key: 'core:a', cardsOnPage: ['core:a', 'core:c', 'core:d'] },
       DEFAULTS,
     );
+    assert.deepEqual(arrangeColumns(DEFAULTS, moved), [['core:b', 'core:c', 'core:a'], ['core:d']]);
+  });
+
+  it('leaves the top card on top and the bottom card at the bottom of its column', () => {
+    for (const change of [
+      { action: 'earlier', key: 'core:a' },
+      { action: 'later', key: 'core:c' },
+      { action: 'earlier', key: 'core:b' },
+      { action: 'later', key: 'core:d' },
+    ] as const) {
+      assert.deepEqual(arrangeColumns(DEFAULTS, changeLayout(EMPTY_LAYOUT, change, DEFAULTS)), [
+        ['core:a', 'core:c'],
+        ['core:b', 'core:d'],
+      ]);
+    }
+  });
+
+  it('moves a card to the other column at the same place among the drawn cards', () => {
+    const layout = columns(['core:a', 'core:b'], ['core:c', 'core:d']);
     assert.deepEqual(
-      arrangeCards(
-        DEFAULTS,
-        changeLayout(EMPTY_LAYOUT, { action: 'later', key: 'core:d' }, DEFAULTS),
-      ),
-      DEFAULTS,
+      arrangeColumns(DEFAULTS, changeLayout(layout, { action: 'right', key: 'core:b' }, DEFAULTS)),
+      [['core:a'], ['core:c', 'core:b', 'core:d']],
+    );
+    assert.deepEqual(
+      arrangeColumns(DEFAULTS, changeLayout(layout, { action: 'left', key: 'core:c' }, DEFAULTS)),
+      [['core:c', 'core:a', 'core:b'], ['core:d']],
     );
   });
 
-  it('takes a whole order, as drag and drop sends it, and drops unknown keys', () => {
+  it('moves a card to the end of the other column when it is lower than that column reaches', () => {
+    const layout = columns(['core:a', 'core:b', 'core:c'], ['core:d']);
+    assert.deepEqual(
+      arrangeColumns(DEFAULTS, changeLayout(layout, { action: 'right', key: 'core:c' }, DEFAULTS)),
+      [
+        ['core:a', 'core:b'],
+        ['core:d', 'core:c'],
+      ],
+    );
+  });
+
+  it('moves a card into an empty column', () => {
+    const layout = columns(DEFAULTS, []);
+    assert.deepEqual(
+      arrangeColumns(DEFAULTS, changeLayout(layout, { action: 'right', key: 'core:b' }, DEFAULTS)),
+      [['core:a', 'core:c', 'core:d'], ['core:b']],
+    );
+  });
+
+  it('leaves a card where it is when it is already in the column it is sent to', () => {
+    const layout = columns(['core:a', 'core:b'], ['core:c', 'core:d']);
+    assert.deepEqual(
+      arrangeColumns(DEFAULTS, changeLayout(layout, { action: 'left', key: 'core:a' }, DEFAULTS)),
+      [
+        ['core:a', 'core:b'],
+        ['core:c', 'core:d'],
+      ],
+    );
+  });
+
+  it('takes both columns, as drag and drop sends them, and drops unknown keys', () => {
     const layout = changeLayout(
       EMPTY_LAYOUT,
-      { action: 'order', keys: ['core:c', 'nope', 'core:a'] },
+      {
+        action: 'order',
+        columns: [
+          ['core:c', 'nope'],
+          ['core:a', 'core:b', 'core:d'],
+        ],
+      },
       DEFAULTS,
     );
-    assert.deepEqual(layout.order, ['core:c', 'core:a']);
-    assert.deepEqual(arrangeCards(DEFAULTS, layout), ['core:c', 'core:a', 'core:b', 'core:d']);
+    assert.deepEqual(arrangeColumns(DEFAULTS, layout), [
+      ['core:c'],
+      ['core:a', 'core:b', 'core:d'],
+    ]);
+  });
+
+  it('keeps a card drag and drop did not send in its old column', () => {
+    const layout = {
+      ...columns(['core:a', 'core:b'], ['core:c', 'core:d']),
+      removed: ['core:b'],
+    };
+    const moved = changeLayout(
+      layout,
+      { action: 'order', columns: [[], ['core:c', 'core:a', 'core:d']] },
+      DEFAULTS,
+    );
+    assert.deepEqual(arrangeColumns(DEFAULTS, moved), [['core:b'], ['core:c', 'core:a', 'core:d']]);
   });
 
   it('ignores a key the dashboard does not have', () => {

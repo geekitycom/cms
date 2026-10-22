@@ -1,36 +1,37 @@
 /**
- * How one user has arranged the dashboard's widget cards (TASK-469).
+ * How one user has arranged the dashboard's widget cards (TASK-469, TASK-479).
  *
  * Cards are named by key, `owner:id`, where the owner is `core` or a plugin's
- * package name. The layout holds only what the user changed: an order, and
- * the cards they collapsed or removed. A card the order does not mention is
- * drawn in its default position, and a key for a card that no longer exists
- * is ignored, so a new widget appears for everybody and a disabled plugin
- * breaks nothing.
+ * package name. The dashboard is two columns, each a stack of cards. The
+ * layout holds what the user changed: the cards in each column, and the cards
+ * they collapsed or removed. A card no column mentions goes at the end of the
+ * column with fewer cards, and a key for a card that no longer exists is
+ * ignored, so a new widget appears for everybody and a disabled plugin breaks
+ * nothing.
  */
 export interface DashboardLayout {
-  /** Card keys in the order the user put them. May be partial or stale. */
-  readonly order: readonly string[];
+  /** Card keys in the left and right columns, top to bottom. May be partial or stale. */
+  readonly columns: Columns;
   /** Cards drawn as their title bar only, and not loaded. */
   readonly collapsed: readonly string[];
   /** Cards not drawn at all, and not loaded, until the user adds them back. */
   readonly removed: readonly string[];
 }
 
-export const EMPTY_LAYOUT: DashboardLayout = { order: [], collapsed: [], removed: [] };
+export type Columns = readonly [readonly string[], readonly string[]];
+
+export const EMPTY_LAYOUT: DashboardLayout = { columns: [[], []], collapsed: [], removed: [] };
 
 export type LayoutChange =
   | { readonly action: 'collapse' | 'expand' | 'remove' | 'restore'; readonly key: string }
-  | {
-      readonly action: 'earlier' | 'later';
-      readonly key: string;
-      /**
-       * The cards the page drew, when the form said: a card whose widget had
-       * nothing to show is not a neighbour to step past.
-       */
-      readonly shown?: readonly string[];
-    }
-  | { readonly action: 'order'; readonly keys: readonly string[] };
+  | Move
+  | { readonly action: 'order'; readonly columns: Columns };
+
+interface Move {
+  readonly action: 'earlier' | 'later' | 'left' | 'right';
+  readonly key: string;
+  readonly cardsOnPage?: readonly string[];
+}
 
 export const LAYOUT_ACTIONS = [
   'collapse',
@@ -39,15 +40,23 @@ export const LAYOUT_ACTIONS = [
   'restore',
   'earlier',
   'later',
+  'left',
+  'right',
   'order',
 ] as const;
 
-/** A stored layout as this version reads it, or `undefined` when it says nothing. */
+/**
+ * A stored layout as this version reads it, or `undefined` when it says
+ * nothing. A layout saved before the columns holds one `order`; it is read as
+ * columns that alternate left and right in that order.
+ */
 export function dashboardLayout(value: unknown): DashboardLayout | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
   const layout = {
-    order: keysFrom(record['order']),
+    columns: Array.isArray(record['columns'])
+      ? distinct([keysFrom(record['columns'][0]), keysFrom(record['columns'][1])])
+      : alternate(keysFrom(record['order'])),
     collapsed: keysFrom(record['collapsed']),
     removed: keysFrom(record['removed']),
   };
@@ -55,80 +64,127 @@ export function dashboardLayout(value: unknown): DashboardLayout | undefined {
 }
 
 export function isEmpty(layout: DashboardLayout): boolean {
-  return layout.order.length + layout.collapsed.length + layout.removed.length === 0;
+  return (
+    layout.columns[0].length +
+      layout.columns[1].length +
+      layout.collapsed.length +
+      layout.removed.length ===
+    0
+  );
 }
 
 /**
- * Every card in `defaults`, in the user's order. A card the order does not
- * mention goes straight after the last of the cards that come before it in the
- * default order, or first when there are none, so a newly enabled plugin's
- * cards go at the end.
+ * Every card in `defaults`, in its column. A card no column mentions goes at
+ * the end of the column with fewer cards drawn, the left one on a tie, so with
+ * nothing saved the default order alternates left and right.
  */
-export function arrangeCards(defaults: readonly string[], layout: DashboardLayout): string[] {
+export function arrangeColumns(defaults: readonly string[], layout: DashboardLayout): Columns {
   const known = new Set(defaults);
-  const arranged = [...new Set(layout.order)].filter((key) => known.has(key));
-  const placed = new Set(arranged);
-  defaults.forEach((key, index) => {
-    if (placed.has(key)) return;
-    const after = Math.max(
-      -1,
-      ...defaults.slice(0, index).map((earlier) => arranged.indexOf(earlier)),
-    );
-    arranged.splice(after + 1, 0, key);
-    placed.add(key);
-  });
-  return arranged;
+  const left = layout.columns[0].filter((key) => known.has(key));
+  const right = layout.columns[1].filter((key) => known.has(key));
+  const drawn = (column: string[]) => column.filter((key) => !layout.removed.includes(key)).length;
+  for (const key of defaults) {
+    if (left.includes(key) || right.includes(key)) continue;
+    (drawn(right) < drawn(left) ? right : left).push(key);
+  }
+  return [left, right];
 }
 
-/** The layout after one change. A key the dashboard does not have changes nothing. */
+/**
+ * The layout after one change. The columns are saved as they are drawn
+ * first, so a later change never moves a card the user did not touch. A key
+ * the dashboard does not have changes nothing.
+ */
 export function changeLayout(
   layout: DashboardLayout,
   change: LayoutChange,
   defaults: readonly string[],
 ): DashboardLayout {
+  const columns = arrangeColumns(defaults, layout);
   if (change.action === 'order') {
-    const known = new Set(defaults);
-    return { ...layout, order: [...new Set(change.keys)].filter((key) => known.has(key)) };
+    return { ...layout, columns: keepUnsent(columns, change.columns, defaults) };
   }
   const { key } = change;
   if (!defaults.includes(key)) return layout;
+  const placed = { ...layout, columns };
   switch (change.action) {
     case 'collapse':
-      return { ...layout, collapsed: withKey(layout.collapsed, key) };
+      return { ...placed, collapsed: withKey(layout.collapsed, key) };
     case 'expand':
-      return { ...layout, collapsed: withoutKey(layout.collapsed, key) };
+      return { ...placed, collapsed: withoutKey(layout.collapsed, key) };
     case 'remove':
-      return { ...layout, removed: withKey(layout.removed, key) };
+      return { ...placed, removed: withKey(layout.removed, key) };
     case 'restore':
-      return { ...layout, removed: withoutKey(layout.removed, key) };
+      return { ...placed, removed: withoutKey(layout.removed, key) };
     case 'earlier':
     case 'later':
-      return {
-        ...layout,
-        order: stepPastDrawnNeighbour(arrangeCards(defaults, layout), layout, change, key),
-      };
+      return { ...placed, columns: stepPastDrawnNeighbour(placed, change) };
+    case 'left':
+    case 'right':
+      return { ...placed, columns: moveAcross(placed, change) };
   }
 }
 
-function stepPastDrawnNeighbour(
-  arranged: string[],
-  layout: DashboardLayout,
-  change: Extract<LayoutChange, { action: 'earlier' | 'later' }>,
-  key: string,
-): string[] {
-  const direction = change.action;
-  const drawn = arranged.filter(
+function stepPastDrawnNeighbour(layout: DashboardLayout, change: Move): Columns {
+  const { key } = change;
+  const side = layout.columns[0].includes(key) ? 0 : 1;
+  const column = layout.columns[side];
+  const drawn = neighboursIn(column, layout, change);
+  const at = drawn.indexOf(key);
+  const neighbour = drawn[change.action === 'earlier' ? at - 1 : at + 1];
+  if (neighbour === undefined) return layout.columns;
+  const without = column.filter((each) => each !== key);
+  const target = without.indexOf(neighbour);
+  without.splice(change.action === 'earlier' ? target : target + 1, 0, key);
+  return withColumn(layout.columns, side, without);
+}
+
+function moveAcross(layout: DashboardLayout, change: Move): Columns {
+  const { key } = change;
+  const to = change.action === 'left' ? 0 : 1;
+  const from = to === 0 ? 1 : 0;
+  if (!layout.columns[from].includes(key)) return layout.columns;
+  const at = neighboursIn(layout.columns[from], layout, change).indexOf(key);
+  const target = [...layout.columns[to]];
+  const below = neighboursIn(target, layout, change)[at];
+  target.splice(below === undefined ? target.length : target.indexOf(below), 0, key);
+  const source = layout.columns[from].filter((each) => each !== key);
+  return to === 0 ? [target, source] : [source, target];
+}
+
+function neighboursIn(column: readonly string[], layout: DashboardLayout, change: Move): string[] {
+  return column.filter(
     (each) =>
       !layout.removed.includes(each) &&
-      (change.shown === undefined || each === key || change.shown.includes(each)),
+      (change.cardsOnPage === undefined ||
+        each === change.key ||
+        change.cardsOnPage.includes(each)),
   );
-  const at = drawn.indexOf(key);
-  const neighbour = drawn[direction === 'earlier' ? at - 1 : at + 1];
-  if (neighbour === undefined) return arranged;
-  const without = arranged.filter((each) => each !== key);
-  const target = without.indexOf(neighbour);
-  without.splice(direction === 'earlier' ? target : target + 1, 0, key);
-  return without;
+}
+
+function keepUnsent(before: Columns, sent: Columns, defaults: readonly string[]): Columns {
+  const unique = distinct(sent);
+  const left = unique[0].filter((key) => defaults.includes(key));
+  const right = unique[1].filter((key) => defaults.includes(key));
+  const unsent = (side: 0 | 1) =>
+    before[side].filter((key) => !left.includes(key) && !right.includes(key));
+  return [
+    [...left, ...unsent(0)],
+    [...right, ...unsent(1)],
+  ];
+}
+
+function withColumn(columns: Columns, side: 0 | 1, column: string[]): Columns {
+  return side === 0 ? [column, columns[1]] : [columns[0], column];
+}
+
+function alternate(order: readonly string[]): Columns {
+  return [order.filter((_, index) => index % 2 === 0), order.filter((_, index) => index % 2 === 1)];
+}
+
+function distinct(columns: Columns): Columns {
+  const left = [...new Set(columns[0])];
+  return [left, [...new Set(columns[1])].filter((key) => !left.includes(key))];
 }
 
 function withKey(keys: readonly string[], key: string): string[] {

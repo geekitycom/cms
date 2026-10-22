@@ -511,13 +511,13 @@ has no plugin tags. Use the partials for a tag that a static build must carry.
 dashboard while the plugin is enabled. A plugin may declare more than one. A
 widget has these fields:
 
-| Field            | Value                                                                                                         |
-| ---------------- | ------------------------------------------------------------------------------------------------------------- |
-| `id`             | Lower case words joined by `-`, unique among the plugin's widgets.                                            |
-| `title`          | The card's heading.                                                                                           |
-| `width`          | `half` or `full`. Two `half` widgets sit side by side when the screen is wide. A `full` widget spans the row. |
-| `refreshSeconds` | How many seconds the dashboard reuses a result before it calls `load` again. Zero or more.                    |
-| `load`           | Returns the card's blocks, or a promise of them.                                                              |
+| Field            | Value                                                                                                                               |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `id`             | Lower case words joined by `-`, unique among the plugin's widgets.                                                                  |
+| `title`          | The card's heading.                                                                                                                 |
+| `width`          | `half` or `full`. Accepted and checked, but it no longer changes the layout: every card sits in one of the dashboard's two columns. |
+| `refreshSeconds` | How many seconds the dashboard reuses a result before it calls `load` again. Zero or more.                                          |
+| `load`           | Returns the card's blocks, or a promise of them.                                                                                    |
 
 `load` gets one argument with four fields: `site`, the same `PluginSite` a
 screen's `render` gets; `timezone`, the site's time zone, such as
@@ -538,8 +538,12 @@ each enabled plugin's widgets in the order the plugins run. Within one plugin,
 the widgets keep the order they were declared in. When a plugin is disabled,
 its widgets are gone from the next dashboard request. No restart is needed.
 
-This is the default order. Each user can reorder, collapse and remove cards,
-plugin cards included, and the dashboard keeps that arrangement for them. A
+This is the default order. The dashboard draws the cards in two columns,
+alternating left and right in that order, whatever each widget's `width`.
+Each user can move cards within and between the columns, collapse them and
+remove them, plugin cards included, and the dashboard keeps that arrangement
+for them. A widget that is new to a user's arrangement goes at the end of the
+column with fewer cards. A
 collapsed or removed card's `load` is not called. A widget is named in the
 arrangement by the plugin's name and the widget's `id`, so changing a widget's
 `id` puts it back in its default place for everybody. See
