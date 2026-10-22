@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, afterEach, beforeEach, describe, it, mock } from 'node:test';
 
@@ -67,7 +67,10 @@ interface Site {
   siteFile: string;
 }
 
-async function site(plugins: Plugin[] = [cardsPlugin([ALPHA, BETA, GAMMA])]): Promise<Site> {
+async function site(
+  plugins: Plugin[] = [cardsPlugin([ALPHA, BETA, GAMMA])],
+  { keepCore = false } = {},
+): Promise<Site> {
   loads.clear();
   const contentDir = await box.dir('geekity-arrange-content-');
   const dataDir = await box.dir('geekity-arrange-data-');
@@ -75,7 +78,17 @@ async function site(plugins: Plugin[] = [cardsPlugin([ALPHA, BETA, GAMMA])]): Pr
   const siteFile = path.join(contentDir, '_data', 'site.json');
   await writeFile(siteFile, siteJson(plugins.map((plugin) => plugin.name)), 'utf8');
   const cms = await box.open({ contentDir, dataDir, plugins });
-  return { cms, agent: await signedIn(cms), siteFile };
+  const agent = await signedIn(cms);
+  if (!keepCore) await removeCoreCards(agent);
+  return { cms, agent, siteFile };
+}
+
+/** The core's own cards take places in the columns too; these tests are about the plugin's. */
+async function removeCoreCards(agent: Browser): Promise<void> {
+  const { html } = await dashboard(agent);
+  for (const [, core] of html.matchAll(/data-dashboard-card="(core:[^"]+)"/g)) {
+    await arrange(agent, { action: 'remove', widget: core ?? '' });
+  }
 }
 
 async function dashboard(agent: Browser): Promise<{ html: string; words: string }> {
@@ -95,71 +108,135 @@ async function arrange(
   return agent.post(LAYOUT_PATH, [['csrf_token', token], ...pairs]);
 }
 
+/** Press one of a card's buttons, sending its form's fields as a browser would. */
+async function press(agent: Browser, id: string, action: string): Promise<Response> {
+  const { html } = await dashboard(agent);
+  const form = [
+    ...html.matchAll(/<form method="post" action="\/admin\/dashboard\/layout"[\s\S]*?<\/form>/g),
+  ]
+    .map(([found]) => found)
+    .find((found) => found.includes(`name="widget" value="${key(id)}"`));
+  assert.ok(form, `the ${id} card has a form`);
+  const fields = [...form.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g)].map(
+    ([, name, value]): [string, string] => [name ?? '', value ?? ''],
+  );
+  return agent.post(LAYOUT_PATH, [...fields, ['action', action]]);
+}
+
 function key(id: string): string {
   return `${PLUGIN}:${id}`;
 }
 
-function cardOrder(words: string, titles: readonly string[]): string[] {
-  return titles
-    .map((title) => ({ title, at: words.indexOf(`${title} body.`) }))
-    .filter(({ at }) => at >= 0)
-    .sort((one, other) => one.at - other.at)
-    .map(({ title }) => title);
+/** The ids of the cards drawn in the left and right columns, top to bottom. */
+function columnsOf(html: string): [string[], string[]] {
+  const split = html.indexOf('data-dashboard-column="right"');
+  assert.ok(html.includes('data-dashboard-column="left"'), 'the left column is drawn');
+  assert.ok(split >= 0, 'the right column is drawn');
+  const ids = (part: string) =>
+    [...part.matchAll(/data-dashboard-card="([^"]+)"/g)]
+      .map(([, found]) => found ?? '')
+      .filter((found) => !found.startsWith('core:'))
+      .map((found) => found.replace(/^.*:/, ''));
+  return [ids(html.slice(0, split)), ids(html.slice(split))];
 }
 
-describe('arranging the dashboard (TASK-469)', () => {
-  it('moves a card later and earlier, and the order survives a reload (AC #1)', async () => {
-    const { agent } = await site();
+async function columns(agent: Browser): Promise<[string[], string[]]> {
+  return columnsOf((await dashboard(agent)).html);
+}
 
-    const response = await arrange(agent, { action: 'later', widget: key('alpha') });
-    assert.equal(response.status, 303);
-    assert.equal(response.headers.get('location'), '/admin');
-    assert.deepEqual(cardOrder((await dashboard(agent)).words, ['Alpha', 'Beta', 'Gamma']), [
-      'Beta',
-      'Alpha',
-      'Gamma',
-    ]);
+const DELTA = card('delta', 'Delta');
 
-    await arrange(agent, { action: 'earlier', widget: key('gamma') });
-    assert.deepEqual(cardOrder((await dashboard(agent)).words, ['Alpha', 'Beta', 'Gamma']), [
-      'Beta',
-      'Gamma',
-      'Alpha',
+describe('arranging the dashboard (TASK-469, TASK-479)', () => {
+  it('fills two columns in the default order, alternating left and right (AC #1, #2)', async () => {
+    const { agent } = await site([cardsPlugin([ALPHA, BETA, GAMMA, DELTA])]);
+    assert.deepEqual(await columns(agent), [
+      ['alpha', 'gamma'],
+      ['beta', 'delta'],
     ]);
   });
 
-  it('moves past a card that drew nothing, as the page shows it (AC #1)', async () => {
+  it('puts a full width widget in a column like any other (AC #1)', async () => {
+    const wide: PluginWidget = { ...card('wide', 'Wide'), width: 'full' };
+    const { agent } = await site([cardsPlugin([ALPHA, wide, BETA])]);
+    const { html } = await dashboard(agent);
+    assert.deepEqual(columnsOf(html), [['alpha', 'beta'], ['wide']]);
+    assert.doesNotMatch(html, /col-span/);
+  });
+
+  it('moves a card down and up its column, and the order survives a reload (AC #3)', async () => {
+    const { agent } = await site([cardsPlugin([ALPHA, BETA, GAMMA, DELTA])]);
+
+    const response = await press(agent, 'alpha', 'later');
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin');
+    assert.deepEqual(await columns(agent), [
+      ['gamma', 'alpha'],
+      ['beta', 'delta'],
+    ]);
+
+    await press(agent, 'delta', 'earlier');
+    assert.deepEqual(await columns(agent), [
+      ['gamma', 'alpha'],
+      ['delta', 'beta'],
+    ]);
+  });
+
+  it('moves a card to the other column and back (AC #3)', async () => {
+    const { agent } = await site([cardsPlugin([ALPHA, BETA, GAMMA, DELTA])]);
+
+    await press(agent, 'gamma', 'right');
+    assert.deepEqual(await columns(agent), [['alpha'], ['beta', 'gamma', 'delta']]);
+
+    await press(agent, 'beta', 'left');
+    assert.deepEqual(await columns(agent), [
+      ['beta', 'alpha'],
+      ['gamma', 'delta'],
+    ]);
+  });
+
+  it('moves a card into an empty column (AC #3)', async () => {
+    const { agent } = await site([cardsPlugin([ALPHA, BETA])]);
+    await press(agent, 'beta', 'left');
+    assert.deepEqual(await columns(agent), [['beta', 'alpha'], []]);
+
+    await press(agent, 'alpha', 'right');
+    assert.deepEqual(await columns(agent), [['beta'], ['alpha']]);
+  });
+
+  it('moves past a card that drew nothing, as the page shows it (AC #3)', async () => {
     const empty: PluginWidget = { ...card('empty', 'Empty'), load: () => [] };
-    const { agent } = await site([cardsPlugin([ALPHA, empty, BETA])]);
+    const { agent } = await site([cardsPlugin([ALPHA, BETA, empty, GAMMA, DELTA])]);
+    assert.deepEqual(await columns(agent), [
+      ['alpha', 'delta'],
+      ['beta', 'gamma'],
+    ]);
 
     await arrange(agent, [
       ['action', 'later'],
       ['widget', key('alpha')],
       ['shown', key('alpha')],
       ['shown', key('beta')],
+      ['shown', key('gamma')],
+      ['shown', key('delta')],
     ]);
 
-    assert.deepEqual(cardOrder((await dashboard(agent)).words, ['Alpha', 'Beta']), [
-      'Beta',
-      'Alpha',
+    assert.deepEqual(await columns(agent), [
+      ['delta', 'alpha'],
+      ['beta', 'gamma'],
     ]);
   });
 
-  it('takes a whole order from drag and drop (AC #1)', async () => {
+  it('takes both columns from drag and drop, an empty one included (AC #3)', async () => {
     const { agent } = await site();
 
     await arrange(agent, [
       ['action', 'order'],
-      ['order', key('gamma')],
-      ['order', key('alpha')],
-      ['order', key('beta')],
+      ['right', key('gamma')],
+      ['right', key('alpha')],
+      ['right', key('beta')],
     ]);
 
-    assert.deepEqual(cardOrder((await dashboard(agent)).words, ['Alpha', 'Beta', 'Gamma']), [
-      'Gamma',
-      'Alpha',
-      'Beta',
-    ]);
+    assert.deepEqual(await columns(agent), [[], ['gamma', 'alpha', 'beta']]);
   });
 
   it('keeps the period when it redirects back', async () => {
@@ -168,7 +245,7 @@ describe('arranging the dashboard (TASK-469)', () => {
     assert.equal(response.headers.get('location'), '/admin?period=30');
   });
 
-  it('collapses a card to its title, does not load it, and expands it again (AC #2)', async () => {
+  it('collapses a card to its title, does not load it, and expands it again (AC #6)', async () => {
     const { agent } = await site();
     await arrange(agent, { action: 'collapse', widget: key('beta') });
     loads.clear();
@@ -183,8 +260,8 @@ describe('arranging the dashboard (TASK-469)', () => {
     assert.match((await dashboard(agent)).words, /Beta body\./);
   });
 
-  it('removes a card, does not load it, and the gear adds it back (AC #3, #4)', async () => {
-    const { agent } = await site();
+  it('removes a card, does not load it, and the gear adds it back (AC #6)', async () => {
+    const { agent } = await site(undefined, { keepCore: true });
     assert.match((await dashboard(agent)).words, /No cards are removed\./);
 
     await arrange(agent, { action: 'remove', widget: key('gamma') });
@@ -203,7 +280,17 @@ describe('arranging the dashboard (TASK-469)', () => {
     assert.match(back.words, /No cards are removed\./);
   });
 
-  it('keeps each user’s arrangement apart, and a new user sees the default order (AC #5)', async () => {
+  it('adds a removed card back to the column it was in (AC #6)', async () => {
+    const { agent } = await site([cardsPlugin([ALPHA, BETA, GAMMA, DELTA])]);
+    await arrange(agent, { action: 'remove', widget: key('alpha') });
+    await arrange(agent, { action: 'remove', widget: key('gamma') });
+    assert.deepEqual(await columns(agent), [[], ['beta', 'delta']]);
+
+    await arrange(agent, { action: 'restore', widget: key('gamma') });
+    assert.deepEqual(await columns(agent), [['gamma'], ['beta', 'delta']]);
+  });
+
+  it('keeps each user’s arrangement apart, and a new user sees the default order', async () => {
     const { cms, agent } = await site();
     await createUser({
       dataDir: cms.config.dataDir,
@@ -213,57 +300,91 @@ describe('arranging the dashboard (TASK-469)', () => {
     const grace = await signIn(cms, { username: 'grace', password: 'another long password' });
 
     await arrange(agent, { action: 'remove', widget: key('alpha') });
-    await arrange(agent, { action: 'later', widget: key('beta') });
+    await press(agent, 'gamma', 'right');
 
-    assert.deepEqual(cardOrder((await dashboard(agent)).words, ['Alpha', 'Beta', 'Gamma']), [
-      'Gamma',
-      'Beta',
-    ]);
-    assert.deepEqual(cardOrder((await dashboard(grace)).words, ['Alpha', 'Beta', 'Gamma']), [
-      'Alpha',
-      'Beta',
-      'Gamma',
-    ]);
+    assert.deepEqual(await columns(agent), [[], ['gamma', 'beta']]);
+    assert.deepEqual(await columns(grace), [['alpha', 'gamma'], ['beta']]);
   });
 
-  it('draws a widget the arrangement does not mention, and ignores one that is gone (AC #6)', async () => {
-    const later = cardsPlugin([card('delta', 'Delta')], '@test/plugin-later');
+  it('puts a widget the arrangement does not mention in the shorter column, and ignores one that is gone (AC #4)', async () => {
+    const later = cardsPlugin([DELTA], '@test/plugin-later');
     const { agent, siteFile } = await site([cardsPlugin([ALPHA, BETA, GAMMA]), later]);
     await writeFile(siteFile, siteJson([PLUGIN]), 'utf8');
 
-    await arrange(agent, { action: 'later', widget: key('alpha') });
+    await press(agent, 'beta', 'left');
     await writeFile(siteFile, siteJson([PLUGIN, later.name]), 'utf8');
-    assert.deepEqual(
-      cardOrder((await dashboard(agent)).words, ['Alpha', 'Beta', 'Gamma', 'Delta']),
-      ['Beta', 'Alpha', 'Gamma', 'Delta'],
-    );
+    assert.deepEqual(await columns(agent), [['beta', 'alpha', 'gamma'], ['delta']]);
 
     await arrange(agent, { action: 'collapse', widget: '@test/plugin-later:delta' });
     await writeFile(siteFile, siteJson([later.name]), 'utf8');
-    const { words } = await dashboard(agent);
+    const { html, words } = await dashboard(agent);
     assert.doesNotMatch(words, /Alpha|Beta|Gamma/);
-    assert.match(words, /Delta/);
+    assert.deepEqual(columnsOf(html), [[], ['delta']]);
   });
 
-  it('refuses a change without the CSRF token (AC #8)', async () => {
+  it('reads an arrangement saved as one order as columns alternating in that order (AC #5)', async () => {
+    const { cms, agent } = await site([cardsPlugin([ALPHA, BETA, GAMMA, DELTA])]);
+    const usersFile = path.join(cms.config.dataDir, 'users.json');
+    const stored = JSON.parse(await readFile(usersFile, 'utf8')) as {
+      users: Record<string, unknown>[];
+    };
+    stored.users = stored.users.map((user) => ({
+      ...user,
+      dashboardLayout: {
+        order: [key('delta'), key('gamma'), key('beta'), key('alpha')],
+        collapsed: [],
+        removed: [],
+      },
+    }));
+    await writeFile(usersFile, JSON.stringify(stored), 'utf8');
+
+    assert.deepEqual(await columns(agent), [
+      ['delta', 'beta'],
+      ['gamma', 'alpha'],
+    ]);
+
+    await arrange(agent, { action: 'collapse', widget: key('alpha') });
+    const saved = JSON.parse(await readFile(usersFile, 'utf8')) as {
+      users: { dashboardLayout?: Record<string, unknown> }[];
+    };
+    const savedColumns = saved.users[0]?.dashboardLayout?.['columns'] as string[][];
+    assert.deepEqual(
+      savedColumns.map((column) => column.filter((saved) => !saved.startsWith('core:'))),
+      [
+        [key('delta'), key('beta')],
+        [key('gamma'), key('alpha')],
+      ],
+    );
+    assert.equal(saved.users[0]?.dashboardLayout?.['order'], undefined);
+  });
+
+  it('refuses a change without the CSRF token', async () => {
     const { agent } = await site();
     const response = await agent.post(LAYOUT_PATH, { action: 'remove', widget: key('alpha') });
     assert.equal(response.status, 403);
     assert.match((await dashboard(agent)).words, /Alpha body\./);
   });
 
-  it('draws every control as a form that posts without JavaScript (AC #7)', async () => {
+  it('draws every control as a form that posts without JavaScript (AC #3)', async () => {
     const { agent } = await site();
     const { html } = await dashboard(agent);
     const forms = [
       ...html.matchAll(/<form method="post" action="\/admin\/dashboard\/layout"[\s\S]*?<\/form>/g),
     ].map(([form]) => form);
-    const alpha = forms.find((form) => form.includes(`value="${key('alpha')}"`));
-    assert.ok(alpha, 'the Alpha card has a form');
+    const formOf = (id: string) => {
+      const found = forms.find((form) => form.includes(`name="widget" value="${key(id)}"`));
+      assert.ok(found, `the ${id} card has a form`);
+      return found;
+    };
+    const alpha = formOf('alpha');
     assert.match(alpha, new RegExp(`name="shown" value="${key('beta')}"`));
-    for (const action of ['later', 'collapse', 'remove']) {
+    for (const action of ['later', 'right', 'collapse', 'remove']) {
       assert.match(alpha, new RegExp(`<button type="submit"[^>]*name="action" value="${action}"`));
     }
+    assert.match(alpha, /aria-label="Move Alpha to the right column"/);
+    assert.match(alpha, /value="left"[^>]*hidden/);
     assert.match(alpha, /name="csrf_token"/);
+    assert.match(formOf('beta'), /aria-label="Move Beta to the left column"/);
+    assert.match(formOf('beta'), /value="right"[^>]*hidden/);
   });
 });

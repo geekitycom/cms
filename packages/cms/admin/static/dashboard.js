@@ -11,7 +11,7 @@
   var dragged = null;
   var before = '';
 
-  Array.prototype.forEach.call(cards(), function (card) {
+  Array.prototype.forEach.call(cards(grid), function (card) {
     var title = card.querySelector('.card-title');
     var handle = document.createElement('span');
     handle.className = 'cursor-grab select-none text-base-content/60';
@@ -26,7 +26,7 @@
     });
     card.addEventListener('dragstart', function (event) {
       dragged = card;
-      before = order().join('\n');
+      before = arrangement();
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData('text/plain', card.getAttribute('data-dashboard-card'));
       card.classList.add('opacity-50');
@@ -35,35 +35,56 @@
       card.draggable = false;
       card.classList.remove('opacity-50');
       dragged = null;
-      if (order().join('\n') !== before) save(card);
+      if (arrangement() !== before) save(card);
     });
   });
 
+  /*
+   * Over a card, the dragged card goes above or below it by the pointer's
+   * height. Over a column's empty space, or an empty column, it goes last.
+   */
   grid.addEventListener('dragover', function (event) {
     if (!dragged) return;
     event.preventDefault();
+    var column = event.target.closest('[data-dashboard-column]');
+    if (!column) return;
     var over = event.target.closest('[data-dashboard-card]');
-    if (!over || over === dragged) return;
-    var past = isPastDiagonal(over.getBoundingClientRect(), event);
-    if (past && over.nextElementSibling !== dragged) over.after(dragged);
-    else if (!past && over.previousElementSibling !== dragged) over.before(dragged);
+    if (over === dragged) return;
+    if (!over) {
+      if (column.lastElementChild !== dragged) column.appendChild(dragged);
+      return;
+    }
+    var box = over.getBoundingClientRect();
+    if (event.clientY > box.top + box.height / 2) {
+      if (over.nextElementSibling !== dragged) over.after(dragged);
+    } else if (over.previousElementSibling !== dragged) {
+      over.before(dragged);
+    }
   });
   grid.addEventListener('drop', function (event) {
     if (dragged) event.preventDefault();
   });
 
-  function isPastDiagonal(box, event) {
-    return (event.clientX - box.left) / box.width + (event.clientY - box.top) / box.height > 1;
+  function columns() {
+    return Array.prototype.slice.call(grid.querySelectorAll('[data-dashboard-column]'));
   }
 
-  function cards() {
-    return Array.prototype.slice.call(grid.querySelectorAll('[data-dashboard-card]'));
+  function cards(within) {
+    return Array.prototype.slice.call(within.querySelectorAll('[data-dashboard-card]'));
   }
 
-  function order() {
-    return cards().map(function (card) {
+  function keys(column) {
+    return cards(column).map(function (card) {
       return card.getAttribute('data-dashboard-card');
     });
+  }
+
+  function arrangement() {
+    return columns()
+      .map(function (column) {
+        return keys(column).join('\n');
+      })
+      .join('\n\n');
   }
 
   function save(card) {
@@ -71,8 +92,11 @@
     var body = new URLSearchParams();
     body.append('csrf_token', form.elements['csrf_token'].value);
     body.append('action', 'order');
-    order().forEach(function (key) {
-      body.append('order', key);
+    columns().forEach(function (column) {
+      var side = column.getAttribute('data-dashboard-column');
+      keys(column).forEach(function (key) {
+        body.append(side, key);
+      });
     });
     fetch(url, {
       method: 'POST',
@@ -85,14 +109,17 @@
           throw new Error(String(response.status));
         }
         moveButtons();
-        var all = cards();
+        var column = card.closest('[data-dashboard-column]');
+        var stack = cards(column);
         live.textContent =
           card.querySelector('.card-title').textContent.replace('⠿', '').trim() +
           ' moved to position ' +
-          String(all.indexOf(card) + 1) +
+          String(stack.indexOf(card) + 1) +
           ' of ' +
-          String(all.length) +
-          '.';
+          String(stack.length) +
+          ' in the ' +
+          column.getAttribute('data-dashboard-column') +
+          ' column.';
       })
       .catch(function () {
         window.location.reload();
@@ -100,10 +127,15 @@
   }
 
   function moveButtons() {
-    var all = cards();
-    all.forEach(function (card, index) {
-      card.querySelector('button[value="earlier"]').disabled = index === 0;
-      card.querySelector('button[value="later"]').disabled = index === all.length - 1;
+    columns().forEach(function (column) {
+      var side = column.getAttribute('data-dashboard-column');
+      var stack = cards(column);
+      stack.forEach(function (card, index) {
+        card.querySelector('button[value="earlier"]').disabled = index === 0;
+        card.querySelector('button[value="later"]').disabled = index === stack.length - 1;
+        card.querySelector('button[value="left"]').hidden = side === 'left';
+        card.querySelector('button[value="right"]').hidden = side === 'right';
+      });
     });
   }
 })();

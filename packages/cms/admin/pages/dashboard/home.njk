@@ -36,6 +36,8 @@
           {% for key in widget.shown %}<input type="hidden" name="shown" value="{{ key }}" />{% endfor %}
           {{ button('↑', type='submit', name='action', value='earlier', style='ghost', size='xs', shape='square', ariaLabel='Move ' + widget.title + ' earlier', disabled=widget.first) }}
           {{ button('↓', type='submit', name='action', value='later', style='ghost', size='xs', shape='square', ariaLabel='Move ' + widget.title + ' later', disabled=widget.last) }}
+          {{ button('←', type='submit', name='action', value='left', style='ghost', size='xs', shape='square', ariaLabel='Move ' + widget.title + ' to the left column', hidden=widget.side == 'left') }}
+          {{ button('→', type='submit', name='action', value='right', style='ghost', size='xs', shape='square', ariaLabel='Move ' + widget.title + ' to the right column', hidden=widget.side == 'right') }}
           {% if widget.collapsed %}
             {{ button('+', type='submit', name='action', value='expand', style='ghost', size='xs', shape='square', ariaLabel='Expand ' + widget.title) }}
           {% else %}
@@ -107,9 +109,13 @@
         </div>
       </div>
       <div class="grid grid-cols-1 gap-6 @3xl:grid-cols-2" data-dashboard-cards data-layout-url="{{ layoutUrl }}">
-        {% for widget in widgets %}
-          <div class="min-w-0{% if widget.width == 'full' %} @3xl:col-span-2{% endif %}" data-dashboard-card="{{ widget.key }}">
-            {{ arrangedCard(widget) }}
+        {% for column in columns %}
+          <div class="flex min-w-0 flex-col gap-6 @3xl:min-h-24" data-dashboard-column="{{ column.side }}">
+            {% for widget in column.cards %}
+              <div class="min-w-0" data-dashboard-card="{{ widget.key }}">
+                {{ arrangedCard(widget) }}
+              </div>
+            {% endfor %}
           </div>
         {% endfor %}
       </div>

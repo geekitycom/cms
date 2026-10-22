@@ -139,15 +139,26 @@ function cardTitled(html: string, title: string): string {
   );
 }
 
+/** Each column draws the cards it holds in the order the plugin declared them. */
+function assertDeclaredOrderInEachColumn(html: string, titles: readonly string[]): void {
+  const split = html.indexOf('data-dashboard-column="right"');
+  assert.ok(split >= 0, 'the dashboard has a right column');
+  for (const column of [html.slice(0, split), html.slice(split)]) {
+    const at = titles.map((title) => column.indexOf(title)).filter((found) => found >= 0);
+    assert.deepEqual(
+      at.toSorted((a, b) => a - b),
+      at,
+    );
+  }
+  for (const title of titles) {
+    assert.match(cardTitled(html, title), /^<div class="min-w-0" data-dashboard-card=/);
+  }
+}
+
 describe('the Umami top pages and top referrers cards on the dashboard', () => {
-  it('sit side by side after the views and visitors card', async () => {
+  it('sit in the columns after the views and visitors card', async () => {
     const html = await (await dashboard(cloudOn(fake)))();
-    const traffic = html.indexOf(TITLE);
-    const pages = html.indexOf('Umami: top pages');
-    const referrers = html.indexOf('Umami: top referrers');
-    assert.ok(traffic < pages && pages < referrers, 'traffic, then pages, then referrers');
-    assert.match(cardTitled(html, 'Umami: top pages'), /^<div class="min-w-0"[ >]/);
-    assert.match(cardTitled(html, 'Umami: top referrers'), /^<div class="min-w-0"[ >]/);
+    assertDeclaredOrderInEachColumn(html, [TITLE, 'Umami: top pages', 'Umami: top referrers']);
   });
 
   it('lists views per page, with a post shown by its title and linked to its editor (AC #1)', async () => {
@@ -202,17 +213,8 @@ describe('the Umami audience and visitors right now cards on the dashboard', () 
     'Umami: visitors right now',
   ];
 
-  it('sit in pairs after the top referrers card, so no half card sits alone', async () => {
-    const html = await (await dashboard(cloudOn(fake)))();
-    const at = TITLES.map((title) => html.indexOf(title));
-    assert.deepEqual(
-      at.toSorted((a, b) => a - b),
-      at,
-      'referrers, countries, browsers, devices, then right now',
-    );
-    for (const title of TITLES.slice(1)) {
-      assert.match(cardTitled(html, title), /^<div class="min-w-0"[ >]/);
-    }
+  it('sit in the columns after the top referrers card', async () => {
+    assertDeclaredOrderInEachColumn(await (await dashboard(cloudOn(fake)))(), TITLES);
   });
 
   it('lists the share of visitors per country, browser and device (AC #1)', async () => {

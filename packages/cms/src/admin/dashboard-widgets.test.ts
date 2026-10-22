@@ -85,16 +85,14 @@ describe('dashboard widgets (TASK-444)', () => {
 
     const words = text(await dashboard(agent));
 
-    const order = ['At a glance', 'Visits', 'Top pages', 'Referrers'].map((title) =>
-      words.indexOf(title),
-    );
-    assert.ok(
-      order.every((at, index) => at >= 0 && (index === 0 || at > (order[index - 1] ?? 0))),
-      words,
-    );
+    const glance = words.indexOf('At a glance');
+    assert.ok(glance >= 0, words);
+    for (const title of ['Visits', 'Top pages', 'Referrers']) {
+      assert.ok(words.indexOf(title) > glance, words);
+    }
     assert.match(words, /Visitors 1,234/);
     assert.match(words, /Days follow UTC\./);
-    assert.match(words, /Top pages ↑ ↓ − ✕ \/about\/ 9/);
+    assert.match(words, /Top pages ↑ ↓ ← → − ✕ \/about\/ 9/);
   });
 
   it('draws the rest of the dashboard when a widget throws, and says that one is unavailable (AC #2)', async () => {
@@ -113,8 +111,8 @@ describe('dashboard widgets (TASK-444)', () => {
 
     const words = text(await dashboard(agent));
 
-    assert.match(words, /Broken ↑ ↓ − ✕ These stats are unavailable right now\./);
-    assert.match(words, /Visits ↑ ↓ − ✕ Visitors 1,234/);
+    assert.match(words, /Broken ↑ ↓ ← → − ✕ These stats are unavailable right now\./);
+    assert.match(words, /Visits ↑ ↓ ← → − ✕ Visitors 1,234/);
     assert.match(words, /At a glance/);
   });
 

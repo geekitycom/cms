@@ -4,7 +4,7 @@ import type { DashboardPeriod } from '../plugin.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import {
-  arrangeCards,
+  arrangeColumns,
   changeLayout,
   EMPTY_LAYOUT,
   LAYOUT_ACTIONS,
@@ -33,8 +33,8 @@ export const DASHBOARD_LAYOUT_PATH = `${ADMIN_PREFIX}/dashboard/layout`;
 
 /**
  * The dashboard: the stat tiles, the alert cards, and the activity cards in
- * the order the signed-in user arranged them. Collapsed and removed cards are
- * never handed to the widget board, so their widgets do not load.
+ * the two columns the signed-in user arranged them in. Collapsed and removed
+ * cards are never handed to the widget board, so their widgets do not load.
  */
 export function mountDashboard(app: Hono<GeekityEnv>, options: { render: AdminRender }): void {
   const { render } = options;
@@ -47,7 +47,8 @@ export function mountDashboard(app: Hono<GeekityEnv>, options: { render: AdminRe
     const all = dashboardWidgets(c.var, CORE_WIDGETS, period);
     const activity = all.filter((entry) => entry.placement === 'activity');
     const byKey = new Map(activity.map((entry) => [keyOf(entry), entry]));
-    const arranged = arrangeCards([...byKey.keys()], layout);
+    const columns = arrangeColumns([...byKey.keys()], layout);
+    const arranged = [...columns[0], ...columns[1]];
     const shown = arranged.filter((key) => !layout.removed.includes(key));
     const loading = all.filter(
       (entry) =>
@@ -65,15 +66,19 @@ export function mountDashboard(app: Hono<GeekityEnv>, options: { render: AdminRe
           ? undefined
           : formatInTimezone(widget.loadedAt.toISOString(), timezone),
     });
-    const cards = shown.flatMap((key) => {
-      const { widget } = byKey.get(key) as WidgetLoad;
-      if (layout.collapsed.includes(key)) {
-        return [{ key, title: widget.title, width: widget.width, collapsed: true }];
-      }
-      const result = loaded.get(key);
-      return result === undefined ? [] : [{ ...drawn(result), collapsed: false }];
-    });
-    const placed = positionedAmongDrawn(cards);
+    const cardsIn = (column: readonly string[]) =>
+      column.flatMap((key) => {
+        if (layout.removed.includes(key)) return [];
+        const { widget } = byKey.get(key) as WidgetLoad;
+        if (layout.collapsed.includes(key)) {
+          return [{ key, title: widget.title, collapsed: true }];
+        }
+        const result = loaded.get(key);
+        return result === undefined ? [] : [{ ...drawn(result), collapsed: false }];
+      });
+    const left = cardsIn(columns[0]);
+    const right = cardsIn(columns[1]);
+    const drawnKeys = [...left, ...right].map((card) => card.key);
 
     return render(c, ADMIN_TEMPLATES.dashboard, {
       section: 'dashboard',
@@ -100,7 +105,10 @@ export function mountDashboard(app: Hono<GeekityEnv>, options: { render: AdminRe
       messagesUrl: MESSAGES_PATH,
       alerts: [...loaded.values()].filter((widget) => widget.placement === 'alerts').map(drawn),
       arrangeable: byKey.size > 0,
-      widgets: placed,
+      columns: [
+        { side: 'left', cards: positionedInColumn(left, 'left', drawnKeys) },
+        { side: 'right', cards: positionedInColumn(right, 'right', drawnKeys) },
+      ],
       removed: arranged
         .filter((key) => layout.removed.includes(key))
         .map((key) => ({ key, title: (byKey.get(key) as WidgetLoad).widget.title })),
@@ -129,11 +137,15 @@ export function mountDashboard(app: Hono<GeekityEnv>, options: { render: AdminRe
   });
 }
 
-function positionedAmongDrawn<Card extends { key: string }>(cards: readonly Card[]) {
-  const drawnKeys = cards.map((card) => card.key);
+function positionedInColumn<Card extends { key: string }>(
+  cards: readonly Card[],
+  side: 'left' | 'right',
+  shown: readonly string[],
+) {
   return cards.map((card, index) => ({
-    shown: drawnKeys,
+    shown,
     ...card,
+    side,
     first: index === 0,
     last: index === cards.length - 1,
   }));
@@ -156,9 +168,9 @@ function layoutOf(c: Context<GeekityEnv>): DashboardLayout {
 function layoutChange(body: Record<string, unknown>): LayoutChange | undefined {
   const action = LAYOUT_ACTIONS.find((each) => each === stringOrEmpty(body['action']));
   if (action === undefined) return undefined;
-  if (action === 'order') return { action, keys: listOf(body['order']) };
+  if (action === 'order') return { action, columns: [listOf(body['left']), listOf(body['right'])] };
   const key = stringOrEmpty(body['widget']);
-  if (action === 'earlier' || action === 'later') {
+  if (action === 'earlier' || action === 'later' || action === 'left' || action === 'right') {
     const shown = listOf(body['shown']);
     return shown.length === 0 ? { action, key } : { action, key, shown };
   }
