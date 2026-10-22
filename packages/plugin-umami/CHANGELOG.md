@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/geekitycom/cms/compare/plugin-umami-v0.3.0...plugin-umami-v0.4.0) (2026-10-22)
+
+
+### Features
+
+* **cms:** draw the built-in dashboard cards half width ([12b9c95](https://github.com/geekitycom/cms/commit/12b9c9529413c36ff0c159e61002d5aee35b1e1e))
+
 ## [0.3.0](https://github.com/geekitycom/cms/compare/plugin-umami-v0.2.0...plugin-umami-v0.3.0) (2026-10-21)
 
 

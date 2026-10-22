@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.40.0](https://github.com/geekitycom/cms/compare/v0.39.0...v0.40.0) (2026-10-22)
+
+
+### Features
+
+* **cms:** answer a markdown request for a 404, 410, 500 or 503 page in markdown ([889cf19](https://github.com/geekitycom/cms/commit/889cf1964c75e66e7e66af3fda22ac92c7dc00ab))
+* **cms:** draw the built-in dashboard cards half width ([12b9c95](https://github.com/geekitycom/cms/commit/12b9c9529413c36ff0c159e61002d5aee35b1e1e))
+* **cms:** drop the posts-per-month chart from posting activity ([2805775](https://github.com/geekitycom/cms/commit/2805775c2482a4544042df7d0dc5b2a8e148e04c))
+* **cms:** give search results and comment pages a markdown representation ([c9d94c9](https://github.com/geekitycom/cms/commit/c9d94c9a452b68a1d8e0d41af82d61c74b804607))
+* **cms:** link a page's tags, categories, neighbours, backlinks and feeds in its markdown ([159d9e7](https://github.com/geekitycom/cms/commit/159d9e78c90cc85098910520a135f59704d082c9))
+* **cms:** say what kind of post a post is in its markdown ([7169f75](https://github.com/geekitycom/cms/commit/7169f754b628fdd8c12a4988748826c55d29c079))
+* **cms:** write a post's conversation and its forms in its markdown ([a8791f0](https://github.com/geekitycom/cms/commit/a8791f0c669185d48cca6f548ede12d9147c0e5d))
+* **cms:** write a post's photos and recording in its markdown ([3c339f6](https://github.com/geekitycom/cms/commit/3c339f68cfc515a26b9690b526e561a4d5870f9d))
+
+
+### Bug Fixes
+
+* **cms:** print the posts page's own words in its markdown ([3d807fa](https://github.com/geekitycom/cms/commit/3d807fa70780159dcecf13002b1fdcebf39db5d2))
+
 ## [0.39.0](https://github.com/geekitycom/cms/compare/v0.38.0...v0.39.0) (2026-10-21)
 
 
