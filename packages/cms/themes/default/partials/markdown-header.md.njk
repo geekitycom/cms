@@ -15,9 +15,53 @@
   and a `url`). `staticFrontPage` is true on a homepage that is a page. This
   theme prints the bio there only when the homepage lists posts, as its HTML
   does (decision-45); a site theme may print it on a static homepage too.
+
+  A post then says what kind it is, with the data its HTML partials read.
+  `event` is an event's `start`, its `end` and its `location`, printed in the
+  site's zone as `event.njk` prints them. `cites` are what it answers or cites,
+  each a `verb`, a `url` and a `name`, as `reply-context.njk` and
+  `citations.njk` name them, with an `author` or `site`, an event's
+  `startDate` (in `startZone` when it has one), a `published` date, a
+  `location`, and a silo `copy`, each only when it is known. `review` is the
+  HTML's review with its words in plain text: `link`, `about`, `by`, `uid`
+  and `details`. `location` is where the post was written, only as far as
+  Settings > Privacy shares it, in the shape `location.njk` reads. `lang` is
+  the post's own language, which its dates are written in.
 #}
 {% if title %}
 # {{ title | escapeMarkdown }}
+
+{% endif %}
+{% if event %}
+When: {{ event.start | date("datetime", none, lang) }}{{ (" to " + (event.end | date("datetime", none, lang))) if event.end }}
+
+{% if event.location %}
+Where: {{ ("Online at [" + (event.location.url | host | escapeMarkdown) + "](" + (event.location.url | markdownUrl) + ")") if event.location.kind == "virtual" else (event.location.name | escapeMarkdown) }}
+
+{% endif %}
+{% endif %}
+{% for cite in cites %}
+{{ cite.verb }} [{{ cite.name | escapeMarkdown }}]({{ cite.url | markdownUrl }}){{ (" by " + (cite.author | escapeMarkdown)) if cite.author }}{{ (" · " + (cite.site | escapeMarkdown)) if cite.site }}{{ (", " + (cite.startDate | date("readable", cite.startZone, lang))) if cite.startDate }}{{ (", " + (cite.published | date("readable", none, lang))) if cite.published }}{{ (", " + (cite.location | escapeMarkdown)) if cite.location }}
+
+{% if cite.copy %}
+Also in reply to [its copy on {{ cite.copy | host | escapeMarkdown }}]({{ cite.copy }})
+
+{% endif %}
+{% endfor %}
+{% if review %}
+Review of {{ ("[" + (review.item.name | escapeMarkdown) + "](" + (review.link | markdownUrl) + ")") if review.link else (review.item.name | escapeMarkdown) }}{{ (" (" + (review.about | join(", ") | escapeMarkdown) + ")") if review.about.length }}{{ (", " + (review.by | escapeMarkdown)) if review.by }}{{ (", " + (review.uid | escapeMarkdown)) if review.uid }}
+
+{% if review.details.length %}
+{{ review.details | join(" ") | escapeMarkdown }}
+
+{% endif %}
+{% if review.rating %}
+Rated {{ review.rating }} out of {{ review.best }}
+
+{% endif %}
+{% endif %}
+{% if location %}
+Location: {% for word in location.words %}{{ word.text | escapeMarkdown }}{{ ", " if not loop.last }}{% endfor %}{{ (location.geo.latitude + ", " + location.geo.longitude) if location.geo and not location.words.length }}
 
 {% endif %}
 {% if bio and not staticFrontPage %}

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { LOCATIONS, dataPath } from '../files/data-files.ts';
 import { createCms } from '../index.ts';
 import type { Cms } from '../index.ts';
 import { createUser, setUserProfile } from '../site/users.ts';
@@ -88,6 +89,7 @@ async function site(
     site?: Record<string, unknown>;
     files?: Record<string, string>;
     theme?: Record<string, string>;
+    locations?: Record<string, unknown>;
   } = {},
 ): Promise<Cms> {
   const contentDir = await temporaryDir('geekity-md-content-');
@@ -98,6 +100,9 @@ async function site(
     ...options.files,
     '_data/site.json': `${JSON.stringify({ ...SITE, ...options.site }, null, 2)}\n`,
   });
+  if (options.locations !== undefined) {
+    await writeFile(dataPath(dataDir, LOCATIONS), JSON.stringify(options.locations), 'utf8');
+  }
   if (options.theme !== undefined) {
     await writeTree(path.join(themesDir, 'mine'), {
       'theme.json': JSON.stringify({ name: 'mine', kind: 'site' }),
@@ -601,5 +606,243 @@ describe('what a post links to beyond its words (TASK-473)', () => {
     assert.ok(text.includes(`---\n\n${expected}\n\nThe first.\n\n${expected}\n`), text);
     assert.match(await markdown(cms, '/tag/travel/index.md'), /^type=listing$/m);
     assert.match(await markdown(cms, '/about/index.md'), /^type=page$/m);
+  });
+});
+
+describe('what kind of post a post is (TASK-474)', () => {
+  const THEIRS = 'https://them.example/post';
+  const LIKED = 'https://them.example/liked';
+  const REPOSTED = 'https://them.example/reposted';
+  const SONG = 'https://them.example/song';
+  const CAMP = 'https://events.example/indieweb-camp';
+  const COPY = 'https://silo.example/notes/42';
+  const ORIGINAL = 'https://them.example/party';
+  const ZONE = 'America/Chicago';
+
+  function kind(slug: string, lines: readonly string[], body = ''): Record<string, string> {
+    return {
+      [`posts/2026-09-10-${slug}.md`]: [
+        '---',
+        "date: '2026-09-10T09:00:00Z'",
+        `permalink: /2026/09/${slug}/`,
+        'author: ada',
+        ...lines,
+        '---',
+        '',
+        body,
+        '',
+      ].join('\n'),
+    };
+  }
+
+  const KINDS: Record<string, string> = {
+    ...kind('reply', [`in-reply-to: ${THEIRS}`], 'Agreed.'),
+    ...kind('like', [`like-of: ${LIKED}`]),
+    ...kind('copy', [`in-reply-to: ${COPY}`], 'Count me in.'),
+    ...kind('repost', [`repost-of: ${REPOSTED}`]),
+    ...kind('bookmark', [`bookmark-of: ${SONG}`]),
+    ...kind('home-reply', ['in-reply-to: https://example.com/2026/09/one/'], 'Me too.'),
+    ...kind('rsvp', [`in-reply-to: ${CAMP}`, 'rsvp: yes'], 'See you there.'),
+    ...kind(
+      'event',
+      [
+        'title: Homebrew Website Club',
+        "start: '2026-10-14T00:30:00Z'",
+        "end: '2026-10-14T02:30:00Z'",
+        'location: The *Bridge*, Portland',
+      ],
+      'Bring a laptop.',
+    ),
+    ...kind('online', ["start: '2026-10-14T00:30:00Z'", 'location: https://meet.example/room']),
+    ...kind(
+      'review',
+      [
+        'item:',
+        '  kind: book',
+        '  name: Dune',
+        '  by: Frank Herbert',
+        '  year: 1965',
+        '  url: https://books.example/dune',
+        '  date: 2026-09-01',
+        'rating: 4',
+      ],
+      'A classic.',
+    ),
+    ...kind('located', [], 'Lunch.'),
+    ...kind('pinned', [], 'Here.'),
+    '_data/replyContexts.json': JSON.stringify({
+      [THEIRS]: {
+        name: 'Their *post*',
+        author: { name: 'Bea' },
+        published: '2026-09-01T12:00:00Z',
+      },
+      [LIKED]: {},
+      [COPY]: { original: ORIGINAL, name: 'The party' },
+      [REPOSTED]: { author: { name: 'Bea' } },
+      [SONG]: { name: 'Flickermood by Forss', author: { name: 'Forss' } },
+      [CAMP]: {
+        name: 'IndieWeb Camp Chicago',
+        start: '2026-10-10T14:00:00Z',
+        location: 'Chicago Public Library',
+      },
+    }),
+  };
+
+  const LOCATIONS_STORED = {
+    '/2026/09/located/': {
+      name: 'Los Gorditos',
+      locality: 'Portland',
+      geo: { latitude: 45.5, longitude: -122.6 },
+    },
+    '/2026/09/pinned/': { geo: { latitude: 45.5, longitude: -122.6 } },
+  };
+
+  async function kinds(sharing: string = 'none', theme?: Record<string, string>): Promise<Cms> {
+    return await site({
+      files: KINDS,
+      site: { timezone: ZONE, locationSharing: sharing, ...(theme ? { theme: 'mine' } : {}) },
+      locations: LOCATIONS_STORED,
+      ...(theme ? { theme } : {}),
+    });
+  }
+
+  /** What the header writes between the front matter and the post's own words. */
+  function headerOf(text: string, body: string): string {
+    const start = text.indexOf('\n---\n', 4) + 5;
+    const end = body === '' ? text.indexOf('\n## ', start) : text.indexOf(`\n${body}\n`, start);
+    return text.slice(start, end).trim();
+  }
+
+  it('opens a reply, like, repost and bookmark with a linked line naming what it answers (AC #1)', async () => {
+    const cms = await kinds();
+    const expected: [slug: string, body: string, line: string][] = [
+      ['reply', 'Agreed.', `In reply to [Their \\*post\\*](${THEIRS}) by Bea, 1 September 2026`],
+      ['like', '', `Liked [a page on them.example](${LIKED})`],
+      [
+        'copy',
+        'Count me in.',
+        `In reply to [The party](${ORIGINAL})\n\nAlso in reply to [its copy on silo.example](${COPY})`,
+      ],
+      ['repost', '', `Reposted [a post](${REPOSTED}) by Bea`],
+      ['bookmark', '', `Bookmarked [Flickermood by Forss](${SONG})`],
+      [
+        'home-reply',
+        'Me too.',
+        'In reply to [Post one](/2026/09/one/index.md) by Ada Lovelace, 1 September 2026',
+      ],
+    ];
+    for (const [slug, body, line] of expected) {
+      const url = `/2026/09/${slug}/`;
+      assert.equal(headerOf(await markdown(cms, `${url}index.md`), body), line, slug);
+    }
+    const html = await markdown(cms, '/2026/09/home-reply/');
+    assert.match(
+      html,
+      /In reply to <a class="u-url p-name" href="[^"]*\/2026\/09\/one\/">Post one<\/a> by [\s\S]*Ada Lovelace[\s\S]*>1 September 2026</,
+    );
+  });
+
+  it('writes an RSVP’s answer and the event, and when and where an event is (AC #2)', async () => {
+    const cms = await kinds();
+    assert.equal(
+      headerOf(await markdown(cms, '/2026/09/rsvp/index.md'), 'See you there.'),
+      `Going to [IndieWeb Camp Chicago](${CAMP}), 10 October 2026, Chicago Public Library`,
+    );
+
+    const html = await markdown(cms, '/2026/09/event/');
+    const times = [...html.matchAll(/<time class="dt-(?:start|end)"[^>]*>([^<]*)<\/time>/g)].map(
+      (match) => match[1] ?? '',
+    );
+    assert.equal(times.length, 2);
+    assert.match(times[0] ?? '', /October 13, 2026|13 October 2026/, 'the site’s zone, not UTC');
+    assert.equal(
+      headerOf(await markdown(cms, '/2026/09/event/index.md'), 'Bring a laptop.'),
+      [
+        '# Homebrew Website Club',
+        '',
+        `When: ${times[0] ?? ''} to ${times[1] ?? ''}`,
+        '',
+        'Where: The \\*Bridge\\*, Portland',
+      ].join('\n'),
+    );
+    assert.equal(
+      headerOf(await markdown(cms, '/2026/09/online/index.md'), ''),
+      [
+        `When: ${times[0] ?? ''}`,
+        '',
+        'Where: Online at [meet.example](https://meet.example/room)',
+      ].join('\n'),
+    );
+  });
+
+  it('writes a review’s item, kind, year, creator and rating (AC #3)', async () => {
+    const cms = await kinds();
+    assert.equal(
+      headerOf(await markdown(cms, '/2026/09/review/index.md'), 'A classic.'),
+      [
+        'Review of [Dune](https://books.example/dune) (book, 1965), by Frank Herbert',
+        '',
+        'Finished on 1 September 2026.',
+        '',
+        'Rated 4 out of 5',
+      ].join('\n'),
+    );
+  });
+
+  it('writes the location only as far as Settings > Privacy shares it (AC #4)', async () => {
+    const hidden = await kinds('none');
+    assert.equal(headerOf(await markdown(hidden, '/2026/09/located/index.md'), 'Lunch.'), '');
+    assert.doesNotMatch(await markdown(hidden, '/2026/09/located/'), /p-location/);
+    assert.doesNotMatch(await markdown(hidden, '/2026/09/located/index.md'), /Gorditos|45\.5/);
+    assert.equal(headerOf(await markdown(hidden, '/2026/09/pinned/index.md'), 'Here.'), '');
+
+    const place = await kinds('place');
+    assert.equal(
+      headerOf(await markdown(place, '/2026/09/located/index.md'), 'Lunch.'),
+      'Location: Los Gorditos, Portland',
+    );
+    assert.doesNotMatch(await markdown(place, '/2026/09/located/index.md'), /45\.5/);
+    assert.equal(headerOf(await markdown(place, '/2026/09/pinned/index.md'), 'Here.'), '');
+
+    const exact = await kinds('exact');
+    assert.equal(
+      headerOf(await markdown(exact, '/2026/09/located/index.md'), 'Lunch.'),
+      'Location: Los Gorditos, Portland',
+    );
+    assert.equal(
+      headerOf(await markdown(exact, '/2026/09/pinned/index.md'), 'Here.'),
+      'Location: 45.5, -122.6',
+    );
+  });
+
+  it('gives each kind’s data to both partials, so a site theme writes its own lines (AC #5)', async () => {
+    const partial = [
+      'type={{ postType }}',
+      '{% for cite in cites %}c {{ cite.verb }} {{ cite.name }} {{ cite.url }} {{ cite.author }}\n{% endfor %}',
+      '{% if rsvp %}r {{ rsvp.value }} {{ rsvp.label }}\n{% endif %}',
+      '{% if event %}e {{ event.start | date("iso") }} {{ event.location.name }}\n{% endif %}',
+      '{% if review %}v {{ review.item.name }} {{ review.about | join("/") }} {{ review.rating }}/{{ review.best }}\n{% endif %}',
+      '{% if location %}l {{ location.type }} {% for word in location.words %}{{ word.text }};{% endfor %}\n{% endif %}',
+    ].join('\n');
+    const cms = await kinds('place', {
+      'partials/markdown-header.md.njk': partial,
+      'partials/markdown-footer.md.njk': partial,
+    });
+    const lines = async (slug: string): Promise<string> =>
+      (await markdown(cms, `/2026/09/${slug}/index.md`)).split('\n---\n')[1] ?? '';
+    assert.match(
+      await lines('repost'),
+      /^type=repost\nc Reposted a post https:\/\/them\.example\/reposted Bea$/m,
+    );
+    assert.match(
+      await lines('rsvp'),
+      /^c Going to IndieWeb Camp Chicago https:\S+ $\nr yes Going$/m,
+    );
+    assert.match(
+      await lines('event'),
+      /^type=event\ne 2026-10-14T00:30:00\.000Z The \*Bridge\*, Portland$/m,
+    );
+    assert.match(await lines('review'), /^v Dune book\/1965 4\/5$/m);
+    assert.match(await lines('located'), /^l h-card Los Gorditos;Portland;$/m);
   });
 });

@@ -6,7 +6,13 @@ import type { Environment } from 'nunjucks';
 
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
-import { citationsOf, citesAnImage, previewShown } from '../content/citation.ts';
+import {
+  CITATION_VERBS,
+  citationsOf,
+  citedPageName,
+  citesAnImage,
+  previewShown,
+} from '../content/citation.ts';
 import type { Citation, CitedPageReader } from '../content/citation.ts';
 import type { SharedLocation } from '../content/location.ts';
 import { NO_PAGE_TAGS } from '../plugins/page-tags.ts';
@@ -15,6 +21,8 @@ import { DEFAULT_SITE_SETTINGS } from '../site/settings.ts';
 import type { SiteSettings } from '../site/settings.ts';
 import type { ImageLoading } from '../images/markup.ts';
 import { postLabel, replyTarget } from '../content/post-type.ts';
+import { reviewWords } from '../content/review.ts';
+import { RSVP_PHRASES } from '../content/rsvp.ts';
 import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
@@ -59,6 +67,7 @@ import { bioOf, escapeMarkdown, HOME_LINK, oneLine } from './markdown-page.ts';
 import type {
   MarkdownArchiveMonth,
   MarkdownChrome,
+  MarkdownCite,
   MarkdownEntry,
   MarkdownLink,
   MarkdownUrl,
@@ -805,6 +814,77 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   }
 
   /**
+   * What kind of post a document is, for its Markdown header: the HTML's own
+   * `postType`, `rsvp`, `event` and `review`, what it answers or cites as
+   * {@link MarkdownCite}s, and its location as far as the site shares it.
+   */
+  function markdownKindContext(document: Document | undefined): Record<string, unknown> {
+    if (document?.type !== 'post') return {};
+
+    const { postType, lang, rsvp, event, review } = documentContext(
+      document,
+      undefined,
+      undefined,
+      undefined,
+      citedPage,
+    );
+    const cite = (verb: string, target: string): MarkdownCite => {
+      const context = citedPage?.(target);
+      const url = context?.original ?? target;
+      const name = citedPageName(url, context);
+      const author = context?.author?.name.trim();
+      const named =
+        author !== undefined &&
+        author !== '' &&
+        name.trim().toLowerCase().endsWith(` by ${author.toLowerCase()}`);
+      const { startDate, startZone, published } = replyContextFor(context ?? { url });
+      return {
+        verb,
+        url,
+        name,
+        ...(author === undefined || named ? {} : { author }),
+        ...(author === undefined && context?.site !== undefined ? { site: context.site } : {}),
+        ...(startDate instanceof Date
+          ? { startDate, ...(typeof startZone === 'string' ? { startZone } : {}) }
+          : published instanceof Date
+            ? { published }
+            : {}),
+        ...(context?.location === undefined ? {} : { location: context.location }),
+        ...(context?.original === undefined ? {} : { copy: target }),
+      };
+    };
+    const target = replyTarget(document);
+    const cites = [
+      ...(target === undefined
+        ? []
+        : [cite(rsvp === undefined ? 'In reply to' : RSVP_PHRASES[rsvp.value], target)]),
+      ...citationsOf(document.extra).map((citation) =>
+        cite(CITATION_VERBS[citation.property], citation.url),
+      ),
+    ];
+    const shared = options.location?.(document, requestSite());
+    return {
+      postType,
+      ...(lang === undefined ? {} : { lang }),
+      cites,
+      ...(rsvp === undefined ? {} : { rsvp: { value: rsvp.value, label: rsvp.label } }),
+      ...(event === undefined ? {} : { event }),
+      ...(review === undefined
+        ? {}
+        : {
+            review: {
+              item: review.item,
+              kindLabel: review.kindLabel,
+              ...(review.rating === undefined ? {} : { rating: review.rating }),
+              best: review.best,
+              ...reviewWords(review),
+            },
+          }),
+      ...(shared === undefined ? {} : { location: locationContext(shared) }),
+    };
+  }
+
+  /**
    * The page whose own URL carries the listing, as the link a front page draws
    * to it, or nothing at all when the site names none.
    *
@@ -1022,6 +1102,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(frontPage === undefined ? {} : newestPostsContext(frontPage)),
       ...markdownArchiveContext(document),
       ...markdownLinksContext(document),
+      ...markdownKindContext(document),
       home: HOME_LINK,
       ...chrome,
       bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),

@@ -365,12 +365,12 @@ page's `.md` URL.
 
 A document's Markdown has four parts:
 
-| Part         | What it holds                                                                                                                                                                                                                                                           |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Front matter | The file's front matter, with navigation added. See the table below.                                                                                                                                                                                                    |
-| Header       | The theme's `partials/markdown-header.md.njk`. The default theme writes the title as a heading, and the bio where there is one.                                                                                                                                         |
-| Body         | The stored body, with its links to the site's own pages pointing at their `.md` URLs.                                                                                                                                                                                   |
-| Footer       | The theme's `partials/markdown-footer.md.njk`. The default theme writes an archive page's posts, a post's categories and tags, the posts and pages that link here, a post's previous and next posts, the page's feeds, a heading, a post's byline and the site's menus. |
+| Part         | What it holds                                                                                                                                                                                                                                                                                             |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Front matter | The file's front matter, with navigation added. See the table below.                                                                                                                                                                                                                                      |
+| Header       | The theme's `partials/markdown-header.md.njk`. The default theme writes the title as a heading, then what kind of post it is (what it replies to, likes, reposts, bookmarks or RSVPs to, an event's time and place, a review's item and rating, and the shared location), and the bio where there is one. |
+| Body         | The stored body, with its links to the site's own pages pointing at their `.md` URLs.                                                                                                                                                                                                                     |
+| Footer       | The theme's `partials/markdown-footer.md.njk`. The default theme writes an archive page's posts, a post's categories and tags, the posts and pages that link here, a post's previous and next posts, the page's feeds, a heading, a post's byline and the site's menus.                                   |
 
 The CMS adds these front matter keys:
 

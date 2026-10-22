@@ -64,6 +64,13 @@ format, such as a Gemini page:
 | `tags`            | On a post: its tags, in the order the file lists them.                                                                     |
 | `backlinks`       | On a post or a page: the site's posts and pages that link to it, newest first, as the HTML's Linked from list has them.    |
 | `feeds`           | The feeds the HTML head advertises for the page, in the head's order.                                                      |
+| `postType`        | On a post: its kind, as the HTML has it, such as `reply`, `like`, `rsvp`, `event` or `review`.                             |
+| `cites`           | On a post: what it answers or cites, one entry for its reply target, then one for each like, repost and bookmark.          |
+| `rsvp`            | On an RSVP: its `value` (`yes`, `no`, `maybe` or `interested`) and its `label`, such as `Going`.                           |
+| `event`           | On an event: `start`, `end` when it has one, and `location`, the same object `event.njk` reads.                            |
+| `review`          | On a review: the HTML's `item`, `kindLabel`, `rating` and `best`, with the review line in plain words.                     |
+| `location`        | On a post with a location: what Settings > Privacy shares of it, the same object `location.njk` reads. Absent otherwise.   |
+| `lang`            | On a post whose front matter names its language: that language. Dates are written in it.                                   |
 
 `home`, `previous`, `next` and `byline` are each a `label` and a `url`. So is
 each of `bio.links`, each `navigation` item, and each of `categories` and
@@ -82,6 +89,41 @@ such as `application/rss+xml`. Every page lists the site's three feeds and its
 comments feed. A post or page adds its own comments feed. A tag, category or
 author archive adds its three feeds.
 
+Each of `cites` is a `verb`, a `url` and a `name`. The `verb` is
+`In reply to`, the RSVP's phrase (`Going to`, `Not going to`, `Maybe going to`
+or `Interested in`), `Liked`, `Reposted` or `Bookmarked`. The `name` is the
+cited page's title, or what the HTML calls a page without one: `a comment`,
+`a post`, `an image from example.com` or `a page on example.com`. These keys
+are present only when the site knows them from the cited page:
+
+| Key         | What it is                                                                               |
+| ----------- | ---------------------------------------------------------------------------------------- |
+| `author`    | Who wrote it. Absent when the `name` already ends with "by" and the author.              |
+| `site`      | The site it is on, when it names no author.                                              |
+| `startDate` | When the event it is starts, as a `Date`. Print it in `startZone` when that is present.  |
+| `published` | When it was published, on a page that is no event.                                       |
+| `location`  | Where the event takes place, as its page names it.                                       |
+| `copy`      | The silo copy the post answers, when `url` is the original the copy was syndicated from. |
+
+`event.start` and `event.end` are `Date`s. The `date` filter prints them in
+the site's timezone. `event.location` is `{ kind: "place", name }` or
+`{ kind: "virtual", url }`.
+
+`review.item` is the reviewed item as the front matter gives it: `kind`,
+`name`, and `by`, `year`, `url` and the rest when it has them. `review.rating`
+is absent on a review with no rating, and `review.best` is 5. The plain words
+of the review line are `link` (the item's URL, absent when it has none),
+`about` (the kind or category, then the year), `by` (the creator with the
+kind's phrase, such as `by Frank Herbert` or `directed by Denis Villeneuve`),
+`uid` (an identifier such as `ISBN 9780441013593`, absent when it is a web
+address) and `details` (the sentences under the line, such as
+`Finished on 1 September 2026.`).
+
+`location.words` are the place's words, each a `text`. `location.geo` is a
+`latitude` and a `longitude`, present only when Settings > Privacy shares the
+exact location. Under `none`, a post has no `location`. See
+[Location on posts](../settings.md#location-on-posts).
+
 Each post in `archiveMonths` is a `label`, a `url`, a `date` and a
 `description`. The `date` is the post's calendar day in the site's timezone,
 as `YYYY-MM-DD`. The `description` is already on one line, and is absent when
@@ -90,8 +132,38 @@ archive page lists. See [An archive page](page-shell.md#an-archive-page).
 
 ## The default partials
 
-The default header writes `title` as a level-one heading, then the bio's note
-and its links as a list. On a homepage that is a page (`staticFrontPage`), it
+The default header writes `title` as a level-one heading. On a post it then
+writes what kind of post it is, each line a paragraph of its own: an event's
+`When` and `Where`, a line for each of `cites`, a review's line, its details
+and its rating, and the location. A post of none of these kinds gets none of
+these lines. Here are the lines of several kinds of post together:
+
+```markdown
+When: 13 October 2026 at 19:30 GMT-5 to 13 October 2026 at 21:30 GMT-5
+
+Where: Online at [meet.example](https://meet.example/room)
+
+In reply to [Their post](https://them.example/post) by Bea, 1 September 2026
+
+Going to [IndieWeb Camp](https://events.example/camp), 10 October 2026, Chicago Public Library
+
+Liked [a page on them.example](https://them.example/liked)
+
+Review of [Dune](https://books.example/dune) (book, 1965), by Frank Herbert
+
+Finished on 1 September 2026.
+
+Rated 4 out of 5
+
+Location: Los Gorditos, Portland
+```
+
+The dates are in the site's timezone, and a cited event's start is in its
+own zone when its page wrote it without one, as the HTML prints them. The
+location line prints the place's words, or the coordinates when the site
+shares the exact location and the place has no words.
+
+Where there is a bio, the header writes its note and its links as a list. On a homepage that is a page (`staticFrontPage`), it
 leaves the bio out and prints only the page, as the HTML front page does
 (decision-45). A site theme that wants the bio there tests `bio` without
 `staticFrontPage`.
