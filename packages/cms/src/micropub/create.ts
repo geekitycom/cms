@@ -10,7 +10,7 @@ import type { MicropubRequest, MicropubType } from '../content/post-fields.ts';
 import { isVisibility } from '../content/visibility.ts';
 import { normalizeBody } from '../content/writer.ts';
 import type { SyndicationTarget } from '../content/syndicate-to.ts';
-import { cleanMarkdown, markdownFromHtml } from './content.ts';
+import { cleanMarkdown, markdownFromHtml } from '../content/html-to-markdown.ts';
 
 /**
  * A Micropub create (TASK-164), whichever way it was encoded: the one

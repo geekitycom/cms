@@ -63,6 +63,7 @@ import { calendarDayIn } from '../content/time.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, NeighbourContext, PhotoContext } from './context.ts';
 import type { FrontPageSlugs, SiteData } from '../theme/site-data.ts';
+import { markdownConversation } from './markdown-conversation.ts';
 import { bioOf, escapeMarkdown, HOME_LINK, oneLine } from './markdown-page.ts';
 import type {
   MarkdownArchiveMonth,
@@ -84,6 +85,7 @@ import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
 import { createThemeSource, findThemeFile } from '../theme/themes.ts';
 import type { ThemeColors, ThemeSource } from '../theme/themes.ts';
 import { formatFileSize } from '../util/file-size.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import { readCitedStart } from '../webmention/cited-start.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
@@ -293,8 +295,9 @@ export interface Renderer {
    * The header and footer of a page's Markdown, through
    * {@link MARKDOWN_TEMPLATES} with autoescaping off: Markdown is not HTML.
    * The partials get `site`, `menus`, `soloAuthor`, the chrome's links as
-   * data, a document's `categories`, `tags` and `backlinks`, `archiveMonths`
-   * on an archive page, and the `escapeMarkdown` and `markdownUrl` filters.
+   * data, a document's `categories`, `tags`, `backlinks`, `conversation` and
+   * form links, `archiveMonths` on an archive page, and the `escapeMarkdown`,
+   * `nest` and `markdownUrl` filters.
    */
   renderMarkdownChrome(chrome: MarkdownChrome, options: MarkdownChromeOptions): MarkdownChromeText;
   /** Any template by name, with the site data already in the context. */
@@ -573,6 +576,12 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   );
   markdownEnvironment.addFilter('fileSize', (value: unknown) =>
     typeof value === 'number' ? formatFileSize(value) : '',
+  );
+  markdownEnvironment.addFilter('nest', (value: unknown, width: unknown) =>
+    nest(
+      value instanceof nunjucks.runtime.SafeString ? value.toString() : filterText(value),
+      typeof width === 'number' ? width : 2,
+    ),
   );
   markdownEnvironment.addFilter('markdownUrl', function (this: unknown, value: unknown) {
     const url = filterText(value);
@@ -892,6 +901,35 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   }
 
   /**
+   * What was said about a document and where its forms are, for its Markdown:
+   * the conversation the HTML draws, from the same reader, and the HTML
+   * page's comment and contact forms as links, since a form needs HTML. The
+   * comment form is asked for as a stranger's, as the Markdown is the same
+   * for everybody.
+   */
+  function markdownConversationContext(
+    document: Document | undefined,
+    url: string,
+  ): Record<string, unknown> {
+    if (document === undefined) return {};
+
+    const said = options.conversation?.(document, requestSite());
+    const page = absoluteUrl(url, config.baseUrl);
+    const takesComments = options.commentForm?.(document, undefined, false) !== undefined;
+    const webmention = webmentionEndpointFor(siteData.read());
+    return {
+      ...(said === undefined || said.counts.total === 0
+        ? {}
+        : { conversation: markdownConversation(said) }),
+      ...(takesComments ? { commentForm: { url: `${page}#respond` } } : {}),
+      ...(options.contactForm?.(document) === undefined
+        ? {}
+        : { contactForm: { url: `${page}#contact` } }),
+      ...(webmention === undefined ? {} : { webmention }),
+    };
+  }
+
+  /**
    * The page whose own URL carries the listing, as the link a front page draws
    * to it, or nothing at all when the site names none.
    *
@@ -1110,6 +1148,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...markdownArchiveContext(document),
       ...markdownLinksContext(document),
       ...markdownKindContext(document),
+      ...markdownConversationContext(document, chrome.url),
       home: HOME_LINK,
       ...chrome,
       bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),
@@ -1300,6 +1339,12 @@ function neighbourContext(
 }
 
 /** A filter's input as text: a string, number or boolean as written, anything else empty. */
+/** Every line after the first indented by `width` spaces, blank lines left blank. */
+function nest(text: string, width: number): string {
+  const indent = ' '.repeat(width);
+  return text.replace(/\n(?=[^\n])/g, `\n${indent}`);
+}
+
 function filterText(value: unknown): string {
   return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
     ? String(value)

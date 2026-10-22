@@ -26,6 +26,17 @@ emphasis, code, a link or raw HTML, so a label prints as written:
 - [{{ item.label | escapeMarkdown }}]({{ item.url | markdownUrl }})
 ```
 
+A reply's `text` is already Markdown and is printed as it is. The `nest`
+filter indents every line after the first by a number of spaces, 2 by
+default, and leaves blank lines blank. It puts a reply's paragraphs, and the
+replies under it, inside its list item:
+
+```njk
+- {{ entry.author.label | escapeMarkdown }}
+
+  {{ entry.text | nest(2) }}
+```
+
 ## Links
 
 Every link in the context is data: a `label` and the canonical `url` of what
@@ -73,6 +84,10 @@ format, such as a Gemini page:
 | `lang`            | On a post whose front matter names its language: that language. Dates are written in it.                                   |
 | `enclosure`       | On a post with a recording: the object `recording.njk` reads. Absent otherwise.                                            |
 | `photos`          | On a post: its photos, in the order the HTML draws them, each a `url` and an `alt`. Empty when it has none.                |
+| `conversation`    | On a post or a page that has been answered: what `conversation.njk` draws, in Markdown. Absent when nothing has been said. |
+| `commentForm`     | On a post or a page taking comments: the `url` of the comment form on its HTML page. Absent when it is closed.             |
+| `contactForm`     | On a page whose front matter says `contact: true`: the `url` of the contact form on its HTML page.                         |
+| `webmention`      | The site's webmention endpoint, when it takes webmentions.                                                                 |
 
 `home`, `previous`, `next` and `byline` are each a `label` and a `url`. So is
 each of `bio.links`, each `navigation` item, and each of `categories` and
@@ -136,6 +151,41 @@ bytes. The `fileSize` filter prints a size the way the admin does, such as
 
 A photo's `alt` is the post's own alt text for it, else the media library's,
 as the HTML prints it. It is empty when neither says.
+
+`conversation` comes from the same reader as the HTML's `conversation`, so
+it holds what a reader of the HTML may see and nothing more: no pending, spam
+or deleted comment, and no fediverse reply its author withdrew. See
+[The conversation](conversation.md). Its keys are:
+
+| Key        | What it is                                                                                                        |
+| ---------- | ----------------------------------------------------------------------------------------------------------------- |
+| `replies`  | The replies to the document, oldest first, each with its own `replies`, threaded as the HTML threads them.        |
+| `likes`    | The likes, oldest first. Each is a `label`, the person's name, and a `url`, their profile, when the site has one. |
+| `boosts`   | The boosts and reposts, in the same shape.                                                                        |
+| `mentions` | The pages that mention the document, in the same shape. The `url` is the mentioning page, as in the facepile.     |
+| `rsvps`    | An event's answers, each `{ value, label, people }`, with `people` in the same shape.                             |
+| `counts`   | The HTML's `counts`: `replies` through the whole thread, `likes`, `boosts`, `mentions`, `rsvps` and `total`.      |
+
+Each reply is:
+
+| Key         | What it is                                                                                               |
+| ----------- | -------------------------------------------------------------------------------------------------------- |
+| `key`       | Its key, as in the HTML's `#comment-{key}` anchor.                                                       |
+| `source`    | `comment`, `webmention`, `activitypub` or `post`.                                                        |
+| `author`    | A `label`, their name, and a `url` when they gave one.                                                   |
+| `url`       | Where it can be read: a comment's own page, the webmention's page or the fediverse note.                 |
+| `published` | A `Date`. The `date` filter prints it as the HTML does.                                                  |
+| `rsvp`      | An RSVP's `value` and `label`, on a reply that is one.                                                   |
+| `text`      | Its words as Markdown, converted from the sanitised HTML the thread prints. Empty for a reply with none. |
+| `replies`   | The replies to it, in the same shape.                                                                    |
+
+A reply the HTML prints as a placeholder, a hidden comment with a visible
+reply under it, is `{ key, withheld: true, replies }`.
+
+The forms need HTML, so `commentForm.url` and `contactForm.url` are absolute
+URLs of the HTML page with the form's anchor, `#respond` or `#contact`. Print
+them as they are: through `markdownUrl` they would become the `.md` URL of the
+page the reader is already on.
 
 Each post in `archiveMonths` is a `label`, a `url`, a `date` and a
 `description`. The `date` is the post's calendar day in the site's timezone,
@@ -215,12 +265,19 @@ that month's posts, one line each, in the shape a listing's Markdown has:
 After the archive, the footer writes these sections, each as a level-two
 heading over a list, and leaves out a section that has nothing to list:
 
-| Heading       | What it lists                                                                     |
-| ------------- | --------------------------------------------------------------------------------- |
-| `Filed under` | A post's categories, then its tags.                                               |
-| `Linked from` | `backlinks`, one line each in the shape a listing's Markdown has.                 |
-| `More posts`  | A post's `previous` and `next`. The CMS writes a listing's pages under its posts. |
-| `Feeds`       | `feeds`, each labelled with its title and format.                                 |
+| Heading           | What it lists                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `Filed under`     | A post's categories, then its tags.                                                 |
+| `Linked from`     | `backlinks`, one line each in the shape a listing's Markdown has.                   |
+| `More posts`      | A post's `previous` and `next`. The CMS writes a listing's pages under its posts.   |
+| RSVP answers      | Each of `conversation.rsvps`, headed with its label and count, such as `Going (2)`. |
+| `Likes`           | `conversation.likes`, headed with the count.                                        |
+| `Boosts`          | `conversation.boosts`, headed with the count.                                       |
+| `Mentions`        | `conversation.mentions`, headed with the count.                                     |
+| The replies       | `conversation.replies`, headed `One reply` or `3 replies` as the HTML is.           |
+| `Leave a comment` | A link to the comment form on the HTML page, while the document takes comments.     |
+| `Send a message`  | A link to the contact form on the HTML page.                                        |
+| `Feeds`           | `feeds`, each labelled with its title and format.                                   |
 
 ```markdown
 ## Filed under
@@ -245,6 +302,40 @@ heading over a list, and leaves out a section that has nothing to list:
 - [Field Notes comments (RSS)](/comments/feed/)
 - [Comments on: Second post (RSS)](/2026/09/second/feed/)
 ```
+
+The replies are a nested list. Each item opens with the author, linked when
+they gave a URL, the date linked to where the reply can be read, and
+`via webmention` or `via the fediverse` for those sources. The reply's words
+follow as paragraphs in the item, and the replies to it as a list inside it.
+A placeholder prints `This comment is no longer shown.` with its replies under
+it. Under the replies of a document that no longer takes comments, the footer
+writes `Comments are closed.`, as the HTML does:
+
+```markdown
+## Likes (1)
+
+- [Ada Lovelace](https://remote.example/@ada)
+
+## 2 replies
+
+- [Ada Lovelace](https://ada.example/), [11 September 2026](/comment/0000000000000001/)
+
+  Approved _words_.
+
+  - Grace Hopper, [11 September 2026](/comment/0000000000000002/)
+
+    Answering Ada.
+
+## Leave a comment
+
+[Leave a comment on the web page](https://example.com/2026/09/second/#respond)
+
+Or reply from your own site and send a [webmention](https://indieweb.org/Webmention).
+```
+
+The webmention line is there only when the site takes webmentions. On a
+contact page the footer writes a `Send a message` section the same way, with
+a link to `#contact` on the HTML page.
 
 A feed has no Markdown, so its link stays the feed's own URL. On a homepage
 that is a page (`staticFrontPage`), the footer leaves out `Linked from`, as

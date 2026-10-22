@@ -1,7 +1,8 @@
 {#
   The end of every page's Markdown: the archive on a page that asked for one,
   what the page is filed under, what links to it, a post's neighbours, the
-  feeds, then a heading and the site's link lists.
+  conversation, where the comment and contact forms are, the feeds, then a
+  heading and the site's link lists.
 
   `archiveMonths` is on the context only of a page whose front matter says
   `archive: true`: every published post as `{ month, posts }`, newest month
@@ -16,6 +17,17 @@
   layout does; a site theme may print them there.
   `feeds` are the feeds the HTML head advertises, each a `label` (the feed's
   title), a `url`, a `format` (`RSS`, `Atom` or `JSON Feed`) and a `type`.
+  `conversation` is on a post or page that has been answered: what
+  `conversation.njk` draws, from the same reader, so nothing the HTML hides
+  is in it. Its `rsvps`, `likes`, `boosts` and `mentions` are people, each a
+  `label` and a `url` when there is one. Its `replies` are threaded as the
+  HTML's are, each a `key`, `source`, `author` (a `label` and a `url`), `url`,
+  `published`, `rsvp`, `text` (its words as Markdown) and its own `replies`,
+  or a `withheld` placeholder with only `replies`. `nest` indents a reply
+  under its list item. `commentForm` and `contactForm` are each the `url` of
+  the form on the HTML page, printed as it is, since a form needs HTML;
+  `commentForm` is absent while comments are closed. `webmention` is there
+  when the site takes webmentions.
   `type` is `post`, `page` or `listing`; a listing's newer and older pages
   are written by the CMS above this, so only a post's `previous` and `next`
   are printed here.
@@ -30,6 +42,26 @@
   written as a Gemini link line. Nothing is printed when there is nothing to
   link.
 #}
+{% macro named(person) %}{{ ("[" + (person.label | escapeMarkdown) + "](" + (person.url | markdownUrl) + ")") if person.url else (person.label | escapeMarkdown) }}{% endmacro %}
+{% macro reply(entry) %}
+{% if entry.withheld %}
+- This comment is no longer shown.
+{% else %}
+- {{ named(entry.author) }}, {{ ("[" + (entry.published | date) + "](" + (entry.url | markdownUrl) + ")") if entry.url else (entry.published | date) }}{{ ", via webmention" if entry.source == "webmention" }}{{ ", via the fediverse" if entry.source == "activitypub" }}
+{% if entry.rsvp %}
+
+  {{ entry.rsvp.label | escapeMarkdown }}
+{% endif %}
+{% if entry.text %}
+
+  {{ entry.text | nest(2) }}
+{% endif %}
+{% endif %}
+{% for child in entry.replies %}
+
+  {{ reply(child) | trim | nest(2) }}
+{% endfor %}
+{% endmacro %}
 {% for group in archiveMonths %}
 ## {{ group.month | escapeMarkdown }}
 
@@ -66,6 +98,46 @@
 {% if next %}
 - [Next: {{ next.label | escapeMarkdown }}]({{ next.url | markdownUrl }})
 {% endif %}
+
+{% endif %}
+{% if conversation %}
+{% for group in conversation.rsvps.concat([{ label: "Likes", people: conversation.likes }, { label: "Boosts", people: conversation.boosts }, { label: "Mentions", people: conversation.mentions }]) %}
+{% if group.people.length %}
+## {{ group.label | escapeMarkdown }} ({{ group.people.length }})
+
+{% for person in group.people %}
+- {{ named(person) }}
+{% endfor %}
+
+{% endif %}
+{% endfor %}
+{% if conversation.replies.length %}
+## {{ conversation.counts.replies | plural({ one: "One reply", other: "# replies" }, "en") }}
+
+{% for entry in conversation.replies %}
+{{ reply(entry) | trim }}
+
+{% endfor %}
+{% if not commentForm %}
+Comments are closed.
+
+{% endif %}
+{% endif %}
+{% endif %}
+{% if commentForm %}
+## Leave a comment
+
+[Leave a comment on the web page]({{ commentForm.url }})
+
+{% if webmention %}
+Or reply from your own site and send a [webmention](https://indieweb.org/Webmention).
+
+{% endif %}
+{% endif %}
+{% if contactForm %}
+## Send a message
+
+[Send a message on the web page]({{ contactForm.url }})
 
 {% endif %}
 {% if feeds.length %}

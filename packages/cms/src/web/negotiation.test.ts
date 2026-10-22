@@ -382,7 +382,7 @@ describe('validators and alternates', () => {
     }
   });
 
-  it('gives each representation its own ETag, and the file-shaped ones a Last-Modified', async () => {
+  it('gives each representation its own ETag, and the JSON a Last-Modified', async () => {
     const { cms } = await site(HELLO);
     const etags = new Set<string>();
 
@@ -393,11 +393,11 @@ describe('validators and alternates', () => {
       assert.ok(etag !== null, `${accept} carries an ETag`);
       assert.match(etag, /^"[0-9a-f]{32}"$/, `${accept} has a quoted hex ETag`);
       etags.add(etag);
-      // The HTML also shows the conversation, which has no date to agree with
-      // its ETag, so only the Markdown and the JSON report the file's.
+      // The HTML and the Markdown also show the conversation, which has no
+      // date to agree with their ETags, so only the JSON reports the file's.
       assert.equal(
         response.headers.get('last-modified'),
-        accept === 'text/html' ? null : new Date('2026-09-04T11:30:00Z').toUTCString(),
+        accept === 'application/json' ? new Date('2026-09-04T11:30:00Z').toUTCString() : null,
         `${accept} reports the updated date only when the file is all it shows`,
       );
     }
@@ -441,7 +441,7 @@ describe('validators and alternates', () => {
 
     const fresh = await cms.app.request('/2026/09/hello/', {
       headers: {
-        accept: 'text/markdown',
+        accept: 'application/json',
         'if-modified-since': new Date('2026-09-05T00:00:00Z').toUTCString(),
       },
     });
@@ -449,7 +449,7 @@ describe('validators and alternates', () => {
 
     const stale = await cms.app.request('/2026/09/hello/', {
       headers: {
-        accept: 'text/markdown',
+        accept: 'application/json',
         'if-modified-since': new Date('2026-09-03T00:00:00Z').toUTCString(),
       },
     });

@@ -131,3 +131,9 @@ Two more keys come from the URL, not from the post:
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `commentNotice`                       | The thank-you after a submission, from the `?comment=` the redirect carried.                                                |
 | `commentReplyTo`, `commentReplyingTo` | The comment a `?reply_to=` link named and the name on it, after the CMS checks that it is an approved comment on this post. |
+
+## In the Markdown
+
+A form needs HTML, so a document's Markdown has no fields. Its footer links
+the comment form on the HTML page, at `#respond`, from `commentForm.url`. See
+[The Markdown representation](markdown.md#context).

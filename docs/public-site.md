@@ -370,7 +370,7 @@ A document's Markdown has four parts:
 | Front matter | The file's front matter, with navigation added. See the table below.                                                                                                                                                                                                                                                                                                                                           |
 | Header       | The theme's `partials/markdown-header.md.njk`. The default theme writes the title as a heading, then what kind of post it is (what it replies to, likes, reposts, bookmarks or RSVPs to, an event's time and place, a review's item and rating, and the shared location), a post's recording with its transcript and other versions, its photos as images with their alt text, and the bio where there is one. |
 | Body         | The stored body, with its links to the site's own pages pointing at their `.md` URLs.                                                                                                                                                                                                                                                                                                                          |
-| Footer       | The theme's `partials/markdown-footer.md.njk`. The default theme writes an archive page's posts, a post's categories and tags, the posts and pages that link here, a post's previous and next posts, the page's feeds, a heading, a post's byline and the site's menus.                                                                                                                                        |
+| Footer       | The theme's `partials/markdown-footer.md.njk`. The default theme writes an archive page's posts, a post's categories and tags, the posts and pages that link here, a post's previous and next posts, the likes, boosts, mentions and threaded replies the HTML shows, links to the comment and contact forms on the HTML page, the page's feeds, a heading, a post's byline and the site's menus.              |
 
 The CMS adds these front matter keys:
 
@@ -503,10 +503,14 @@ Link: </2026/09/hello/index.md>; rel="alternate"; type="text/markdown",
 
 It also carries these headers:
 
-- `ETag`, derived from the document's content hash and the representation. A
-  client that holds the JSON never gets a `304` for the Markdown.
-- `Last-Modified`, from the document's `updated`, or its `date` if it has no
-  `updated`.
+- `ETag`, derived from the representation and what it holds: the document's
+  content hash for the JSON, and what was drawn for the HTML and the
+  Markdown, which show the conversation too. A new reply changes the HTML's
+  and the Markdown's ETag. A client that holds the JSON never gets a `304`
+  for the Markdown.
+- `Last-Modified`, on the JSON only, from the document's `updated`, or its
+  `date` if it has no `updated`. The HTML and the Markdown show replies,
+  which have no date that could agree with their ETag, so they carry none.
 - `Cache-Control: no-cache`, so a client revalidates and does not guess how long
   the page stays fresh.
 

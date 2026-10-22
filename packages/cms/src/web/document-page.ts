@@ -88,17 +88,19 @@ export function negotiateDocument(
     links: webmentionLinks(c),
     ...(drawnForSomebody(c, representation) ? { private: true } : {}),
     // The JSON is the file, so the file's hash and dates validate it. The HTML
-    // also draws the theme, the conversation, the neighbours and whatever else
-    // the site holds, none of which the file's hash sees, so it is validated by
-    // the page it drew (TASK-181). Nothing records when a withdrawn reply
-    // stopped being shown, so the HTML has no date that could agree with that
-    // ETag and carries no Last-Modified.
-    ...(page === undefined
-      ? {
-          etag: representationEtag(representation, markdown ?? document.hash),
-          lastModified: lastModifiedOf(document),
-        }
-      : { etag: representationEtag(representation, page.fingerprint) }),
+    // and the Markdown also draw the theme, the conversation, the neighbours
+    // and whatever else the site holds, none of which the file's hash sees, so
+    // each is validated by what it drew (TASK-181, TASK-476). Nothing records
+    // when a withdrawn reply stopped being shown, so neither has a date that
+    // could agree with that ETag, and neither carries a Last-Modified.
+    ...(page !== undefined
+      ? { etag: representationEtag(representation, page.fingerprint) }
+      : markdown !== undefined
+        ? { etag: representationEtag(representation, markdown) }
+        : {
+            etag: representationEtag(representation, document.hash),
+            lastModified: lastModifiedOf(document),
+          }),
     conditional: conditionalHeaders(c),
   });
 
