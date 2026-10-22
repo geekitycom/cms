@@ -846,3 +846,177 @@ describe('what kind of post a post is (TASK-474)', () => {
     assert.match(await lines('located'), /^l h-card Los Gorditos;Portland;$/m);
   });
 });
+
+describe('a post’s photos and its recording (TASK-475)', () => {
+  function media(slug: string, lines: readonly string[], body: string): Record<string, string> {
+    return {
+      [`posts/2026-09-11-${slug}.md`]: [
+        '---',
+        "date: '2026-09-11T09:00:00Z'",
+        `permalink: /2026/09/${slug}/`,
+        'author: ada',
+        ...lines,
+        '---',
+        '',
+        body,
+        '',
+      ].join('\n'),
+    };
+  }
+
+  const MEDIA: Record<string, string> = {
+    '_data/media.json': JSON.stringify({ '2026/09/dog.jpg': { alt: 'A dog asleep on a rug' } }),
+    ...media(
+      'beach',
+      [
+        'photo:',
+        '  - url: /uploads/2026/09/beach.jpg',
+        '    alt: Waves [breaking] at *dusk*',
+        '  - url: /uploads/2026/09/dog.jpg',
+        '  - url: https://cdn.example/cat.webp',
+        '    alt: A cat on a wall',
+      ],
+      'A day at the beach.',
+    ),
+    ...media(
+      'episode',
+      [
+        'title: Episode twelve',
+        'enclosure:',
+        '  url: /uploads/2026/09/episode-12.mp3',
+        '  type: audio/mpeg',
+        '  length: 23456789',
+        '  transcript:',
+        '    url: /uploads/2026/09/episode-12.vtt',
+        '    type: text/vtt',
+        '  alternates:',
+        '    - url: /uploads/2026/09/episode-12.mp4',
+        '      type: video/mp4',
+        '      length: 98765432',
+        '      title: Video',
+        '    - url: https://cdn.example.com/episode-12-low.mp3',
+        '      type: audio/mpeg',
+        '      lang: en',
+      ],
+      'Show notes.',
+    ),
+    ...media(
+      'screencast',
+      [
+        'enclosure:',
+        '  url: /uploads/2026/09/screencast.webm',
+        '  type: video/webm',
+        '  length: 4096',
+        '  transcript:',
+        '    url: /uploads/2026/09/screencast.html',
+        '    type: text/html',
+        'photo:',
+        '  - url: /uploads/2026/09/still.jpg',
+        '    alt: The first frame',
+      ],
+      'Watch this.',
+    ),
+  };
+
+  /** What the header writes between the front matter and the post's own words. */
+  function headerOf(text: string, body: string): string {
+    const start = text.indexOf('\n---\n', 4) + 5;
+    return text.slice(start, text.indexOf(`\n${body}\n`, start)).trim();
+  }
+
+  it('writes each photo as an image with its alt text, in the order the HTML draws them (AC #1)', async () => {
+    const cms = await site({ files: MEDIA });
+    const html = await markdown(cms, '/2026/09/beach/');
+    const drawn = [...html.matchAll(/<img class="u-photo" src="([^"]+)" alt="([^"]*)"/g)].map(
+      (match) => `${match[2] ?? ''} ${match[1] ?? ''}`,
+    );
+    assert.deepEqual(drawn, [
+      'Waves [breaking] at *dusk* /uploads/2026/09/beach.jpg',
+      'A dog asleep on a rug /uploads/2026/09/dog.jpg',
+      'A cat on a wall https://cdn.example/cat.webp',
+    ]);
+    assert.equal(
+      headerOf(await markdown(cms, '/2026/09/beach/index.md'), 'A day at the beach.'),
+      [
+        '![Waves \\[breaking\\] at \\*dusk\\*](/uploads/2026/09/beach.jpg)',
+        '',
+        '![A dog asleep on a rug](/uploads/2026/09/dog.jpg)',
+        '',
+        '![A cat on a wall](https://cdn.example/cat.webp)',
+      ].join('\n'),
+    );
+  });
+
+  it('links the recording with its type and size, its transcript or captions, and each other version (AC #2)', async () => {
+    const cms = await site({ files: MEDIA });
+    assert.equal(
+      headerOf(await markdown(cms, '/2026/09/episode/index.md'), 'Show notes.'),
+      [
+        '# Episode twelve',
+        '',
+        '[Download the recording](/uploads/2026/09/episode-12.mp3) (audio/mpeg, 22.4 MB)',
+        '',
+        '[Captions](/uploads/2026/09/episode-12.vtt)',
+        '',
+        'Other versions:',
+        '',
+        '- [Video](/uploads/2026/09/episode-12.mp4) (video/mp4, 94.2 MB)',
+        '- [audio/mpeg](https://cdn.example.com/episode-12-low.mp3)',
+      ].join('\n'),
+    );
+  });
+
+  it('puts a video before the photos, as the HTML does, with its transcript', async () => {
+    const cms = await site({ files: MEDIA });
+    const html = await markdown(cms, '/2026/09/screencast/');
+    assert.ok(html.indexOf('<video') < html.indexOf('class="post-photos"'));
+    assert.equal(
+      headerOf(await markdown(cms, '/2026/09/screencast/index.md'), 'Watch this.'),
+      [
+        '[Download the video](/uploads/2026/09/screencast.webm) (video/webm, 4 KB)',
+        '',
+        '[Transcript](/uploads/2026/09/screencast.html)',
+        '',
+        '![The first frame](/uploads/2026/09/still.jpg)',
+      ].join('\n'),
+    );
+  });
+
+  it('writes no media lines on a post with neither', async () => {
+    const cms = await site({ files: MEDIA });
+    const text = await markdown(cms, '/2026/09/one/index.md');
+    assert.doesNotMatch(text, /!\[|Download the|Other versions/);
+  });
+
+  it('gives photos and enclosure to both partials, so a site theme writes its own lines (AC #3)', async () => {
+    const partial = [
+      '{% for photo in photos %}p {{ photo.url }} {{ photo.alt }}\n{% endfor %}',
+      '{% if enclosure %}e {{ enclosure.player }} {{ enclosure.url }} {{ enclosure.type }} {{ enclosure.length | fileSize }} {{ enclosure.transcript.captions }}\n{% endif %}',
+      '{% for alternate in enclosure.alternates %}a {{ alternate.title }} {{ alternate.lang }}\n{% endfor %}',
+    ].join('\n');
+    const cms = await site({
+      files: MEDIA,
+      site: { theme: 'mine' },
+      theme: {
+        'partials/markdown-header.md.njk': partial,
+        'partials/markdown-footer.md.njk': partial,
+      },
+    });
+    const parts = async (slug: string): Promise<string[]> =>
+      (await markdown(cms, `/2026/09/${slug}/index.md`))
+        .split('\n---\n')[1]
+        ?.split('Show notes.') ?? [];
+    for (const part of await parts('episode')) {
+      assert.match(
+        part,
+        /^e audio \/uploads\/2026\/09\/episode-12\.mp3 audio\/mpeg 22\.4 MB true$/m,
+      );
+      assert.match(part, /^a Video $\na {2}en$/m);
+    }
+    const beach = (await markdown(cms, '/2026/09/beach/index.md')).split('\n---\n')[1] ?? '';
+    assert.equal(
+      beach.match(/^p \/uploads\/2026\/09\/dog\.jpg A dog asleep on a rug$/gm)?.length,
+      2,
+    );
+  });
+});

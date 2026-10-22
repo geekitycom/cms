@@ -83,6 +83,7 @@ import type { Taxonomy, TaxonomyBases, TaxonomyRedirect } from '../content/taxon
 import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
 import { createThemeSource, findThemeFile } from '../theme/themes.ts';
 import type { ThemeColors, ThemeSource } from '../theme/themes.ts';
+import { formatFileSize } from '../util/file-size.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import { readCitedStart } from '../webmention/cited-start.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
@@ -570,6 +571,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   markdownEnvironment.addFilter('escapeMarkdown', (value: unknown) =>
     escapeMarkdown(filterText(value)),
   );
+  markdownEnvironment.addFilter('fileSize', (value: unknown) =>
+    typeof value === 'number' ? formatFileSize(value) : '',
+  );
   markdownEnvironment.addFilter('markdownUrl', function (this: unknown, value: unknown) {
     const url = filterText(value);
     const lookup = (this as { lookup?: (name: string) => unknown } | undefined)?.lookup;
@@ -815,15 +819,16 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
   /**
    * What kind of post a document is, for its Markdown header: the HTML's own
-   * `postType`, `rsvp`, `event` and `review`, what it answers or cites as
-   * {@link MarkdownCite}s, and its location as far as the site shares it.
+   * `postType`, `rsvp`, `event`, `review` and `enclosure`, its photos' URLs and
+   * alt text, what it answers or cites as {@link MarkdownCite}s, and its
+   * location as far as the site shares it.
    */
   function markdownKindContext(document: Document | undefined): Record<string, unknown> {
     if (document?.type !== 'post') return {};
 
-    const { postType, lang, rsvp, event, review } = documentContext(
+    const { postType, lang, rsvp, event, review, enclosure, photos } = documentContext(
       document,
-      undefined,
+      config,
       undefined,
       undefined,
       citedPage,
@@ -867,6 +872,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       postType,
       ...(lang === undefined ? {} : { lang }),
       cites,
+      photos: photos.map(({ url, alt }) => ({ url, alt })),
+      ...(enclosure === undefined ? {} : { enclosure }),
       ...(rsvp === undefined ? {} : { rsvp: { value: rsvp.value, label: rsvp.label } }),
       ...(event === undefined ? {} : { event }),
       ...(review === undefined

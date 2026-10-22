@@ -71,6 +71,8 @@ format, such as a Gemini page:
 | `review`          | On a review: the HTML's `item`, `kindLabel`, `rating` and `best`, with the review line in plain words.                     |
 | `location`        | On a post with a location: what Settings > Privacy shares of it, the same object `location.njk` reads. Absent otherwise.   |
 | `lang`            | On a post whose front matter names its language: that language. Dates are written in it.                                   |
+| `enclosure`       | On a post with a recording: the object `recording.njk` reads. Absent otherwise.                                            |
+| `photos`          | On a post: its photos, in the order the HTML draws them, each a `url` and an `alt`. Empty when it has none.                |
 
 `home`, `previous`, `next` and `byline` are each a `label` and a `url`. So is
 each of `bio.links`, each `navigation` item, and each of `categories` and
@@ -124,6 +126,17 @@ address) and `details` (the sentences under the line, such as
 exact location. Under `none`, a post has no `location`. See
 [Location on posts](../settings.md#location-on-posts).
 
+`enclosure.player` is `audio` or `video`. `enclosure.url` and
+`enclosure.type` are the main file's, and `enclosure.length` is its size in
+bytes. The `fileSize` filter prints a size the way the admin does, such as
+`22.4 MB`. `enclosure.transcript`, when there is one, is a `url`, a `type` and
+`captions`, which is true for timed captions (WebVTT or SubRip). Each of
+`enclosure.alternates` is a `url` and a `type`, with a `title`, a `length`, a
+`height` and a `lang` when the front matter gives them.
+
+A photo's `alt` is the post's own alt text for it, else the media library's,
+as the HTML prints it. It is empty when neither says.
+
 Each post in `archiveMonths` is a `label`, a `url`, a `date` and a
 `description`. The `date` is the post's calendar day in the site's timezone,
 as `YYYY-MM-DD`. The `description` is already on one line, and is absent when
@@ -157,6 +170,27 @@ Rated 4 out of 5
 
 Location: Los Gorditos, Portland
 ```
+
+After those lines comes the post's recording, then its photos, in the order
+the HTML draws them above the post's words. The recording is a download link
+with its type and size, a link to its captions or transcript, and a list of
+its other versions, each labelled with its title, or its type when it has
+none. Each photo is an image with its alt text:
+
+```markdown
+[Download the recording](/uploads/2026/09/episode-12.mp3) (audio/mpeg, 22.4 MB)
+
+[Captions](/uploads/2026/09/episode-12.vtt)
+
+Other versions:
+
+- [Video](/uploads/2026/09/episode-12.mp4) (video/mp4, 94.2 MB)
+- [audio/mpeg](https://cdn.example.com/episode-12-low.mp3)
+
+![Waves breaking at dusk](/uploads/2026/09/beach.jpg)
+```
+
+A video's link says `Download the video`.
 
 The dates are in the site's timezone, and a cited event's start is in its
 own zone when its page wrote it without one, as the HTML prints them. The
