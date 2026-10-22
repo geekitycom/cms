@@ -59,10 +59,28 @@ format, such as a Gemini page:
 | `newestPosts`     | On the homepage, when it is a page: the function the front page layout has. See [Template context](template-context.md).   |
 | `staticFrontPage` | True on the homepage when it is a page, false everywhere else.                                                             |
 | `archiveMonths`   | On a page whose front matter says `archive: true`: every published post as `{ month, posts }`, newest month first.         |
+| `type`            | `post`, `page` or `listing`.                                                                                               |
+| `categories`      | On a post: its categories, in the order the file lists them.                                                               |
+| `tags`            | On a post: its tags, in the order the file lists them.                                                                     |
+| `backlinks`       | On a post or a page: the site's posts and pages that link to it, newest first, as the HTML's Linked from list has them.    |
+| `feeds`           | The feeds the HTML head advertises for the page, in the head's order.                                                      |
 
 `home`, `previous`, `next` and `byline` are each a `label` and a `url`. So is
-each of `bio.links` and each `navigation` item. The front matter carries
-`home`, `previous` and `next` already, for a Markdown browser.
+each of `bio.links`, each `navigation` item, and each of `categories` and
+`tags`. A term's `label` is the term as the file writes it, and its `url` is
+its archive. The front matter carries `home`, `previous` and `next` already,
+for a Markdown browser.
+
+Each of `backlinks` is a `label`, a `url` and a `date`, the linking
+document's calendar day as `YYYY-MM-DD`. The `date` is absent for a page that
+has none.
+
+Each of `feeds` is a `label`, a `url`, a `format` and a `type`. The `label` is
+the feed's title, as the head's `<link title>` has it. The `format` is `RSS`,
+`Atom` or `JSON Feed`, and the `type` is the media type the head declares,
+such as `application/rss+xml`. Every page lists the site's three feeds and its
+comments feed. A post or page adds its own comments feed. A tag, category or
+author archive adds its three feeds.
 
 Each post in `archiveMonths` is a `label`, a `url`, a `date` and a
 `description`. The `date` is the post's calendar day in the site's timezone,
@@ -88,9 +106,48 @@ that month's posts, one line each, in the shape a listing's Markdown has:
 - [2026-09-03 Third post](/third/index.md): The third post's description.
 ```
 
-After the archive, the footer writes nothing more when there is no byline and
-no navigation. Otherwise it writes the site's title as a level-two heading,
-the byline as a link line, and the navigation as a list:
+After the archive, the footer writes these sections, each as a level-two
+heading over a list, and leaves out a section that has nothing to list:
+
+| Heading       | What it lists                                                                     |
+| ------------- | --------------------------------------------------------------------------------- |
+| `Filed under` | A post's categories, then its tags.                                               |
+| `Linked from` | `backlinks`, one line each in the shape a listing's Markdown has.                 |
+| `More posts`  | A post's `previous` and `next`. The CMS writes a listing's pages under its posts. |
+| `Feeds`       | `feeds`, each labelled with its title and format.                                 |
+
+```markdown
+## Filed under
+
+- [Category: Field notes](/category/Field%20notes/index.md)
+- [Tag: travel](/tag/travel/index.md)
+
+## Linked from
+
+- [2026-09-04 A later post](/2026/09/later/index.md)
+
+## More posts
+
+- [Previous: First post](/2026/09/first/index.md)
+- [Next: Third post](/2026/09/third/index.md)
+
+## Feeds
+
+- [Field Notes (RSS)](/feed/)
+- [Field Notes (Atom)](/feed/atom/)
+- [Field Notes (JSON Feed)](/feed/json/)
+- [Field Notes comments (RSS)](/comments/feed/)
+- [Comments on: Second post (RSS)](/2026/09/second/feed/)
+```
+
+A feed has no Markdown, so its link stays the feed's own URL. On a homepage
+that is a page (`staticFrontPage`), the footer leaves out `Linked from`, as
+the default front page layout does. A site theme that wants the list there
+tests `backlinks` without `staticFrontPage`.
+
+The footer then writes nothing more when there is no byline and no
+navigation. Otherwise it writes the site's title as a level-two heading, the
+byline as a link line, and the navigation as a list:
 
 ```markdown
 ## Field Notes

@@ -144,7 +144,8 @@ describe('a site whose homepage is a page', () => {
     ]) {
       const text = await (await request).text();
       assert.match(text, /^permalink: \/$/m, 'the front matter says where it is served');
-      assert.doesNotMatch(text, /\/welcome\//, 'not the permalink that redirects');
+      // Its comments feed stays under the permalink, as the HTML head has it.
+      assert.doesNotMatch(text, /\/welcome\/(?!feed\/)/, 'not the permalink that redirects');
     }
 
     for (const request of [

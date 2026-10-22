@@ -67,7 +67,7 @@ export function negotiateDocument(
   const served = path === document.permalink ? document : { ...document, permalink: path };
   const markdown =
     representation === 'markdown' || representation === 'text'
-      ? documentMarkdown(c, served)
+      ? documentMarkdown(c, document, path)
       : undefined;
   const body =
     markdown ??

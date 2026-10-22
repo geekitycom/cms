@@ -1,6 +1,7 @@
 {#
   The end of every page's Markdown: the archive on a page that asked for one,
-  then a heading and link lists.
+  what the page is filed under, what links to it, a post's neighbours, the
+  feeds, then a heading and the site's link lists.
 
   `archiveMonths` is on the context only of a page whose front matter says
   `archive: true`: every published post as `{ month, posts }`, newest month
@@ -8,11 +9,22 @@
   `description` already on one line, written here in the shape a listing's
   Markdown has.
 
+  `categories` and `tags` are a post's, each a `label` (the term as written)
+  and the `url` of its archive. `backlinks` are the site's posts and pages
+  that link to this one, newest first, each a `label`, a `url` and a `date`.
+  This theme leaves them off a homepage that is a page, as its front page
+  layout does; a site theme may print them there.
+  `feeds` are the feeds the HTML head advertises, each a `label` (the feed's
+  title), a `url`, a `format` (`RSS`, `Atom` or `JSON Feed`) and a `type`.
+  `type` is `post`, `page` or `listing`; a listing's newer and older pages
+  are written by the CMS above this, so only a post's `previous` and `next`
+  are printed here.
+
   `byline` is a post's author, a `label` and the `url` of their archive.
   `navigation` is every item of every menu the site stores, each URL once,
   each a `label` and a `url`; `menus` has them by menu name, as the HTML
-  does. `home`, `previous` and `next` are here too, though the
-  front matter already carries them for a Markdown browser.
+  does. `home`, `previous` and `next` are here too; the front matter carries
+  them as well, for a Markdown browser.
 
   Each link is a line of its own, with its own words, so the same data can be
   written as a Gemini link line. Nothing is printed when there is nothing to
@@ -26,6 +38,44 @@
 {% endfor %}
 
 {% endfor %}
+{% if categories.length or tags.length %}
+## Filed under
+
+{% for link in categories %}
+- [Category: {{ link.label | escapeMarkdown }}]({{ link.url | markdownUrl }})
+{% endfor %}
+{% for link in tags %}
+- [Tag: {{ link.label | escapeMarkdown }}]({{ link.url | markdownUrl }})
+{% endfor %}
+
+{% endif %}
+{% if backlinks.length and not staticFrontPage %}
+## Linked from
+
+{% for entry in backlinks %}
+- [{{ (((entry.date + " ") if entry.date) + entry.label) | escapeMarkdown }}]({{ entry.url | markdownUrl }})
+{% endfor %}
+
+{% endif %}
+{% if type == "post" and (previous or next) %}
+## More posts
+
+{% if previous %}
+- [Previous: {{ previous.label | escapeMarkdown }}]({{ previous.url | markdownUrl }})
+{% endif %}
+{% if next %}
+- [Next: {{ next.label | escapeMarkdown }}]({{ next.url | markdownUrl }})
+{% endif %}
+
+{% endif %}
+{% if feeds.length %}
+## Feeds
+
+{% for feed in feeds %}
+- [{{ (feed.label + " (" + feed.format + ")") | escapeMarkdown }}]({{ feed.url | markdownUrl }})
+{% endfor %}
+
+{% endif %}
 {% if byline or navigation.length %}
 ## {{ site.title | escapeMarkdown }}
 

@@ -8,6 +8,13 @@ import { landing, siteLinkAt } from '../content/site-links.ts';
 import { calendarDayIn } from '../content/time.ts';
 import { documentFrontMatter, normalizeBody } from '../content/writer.ts';
 import type { GeekityEnv } from './env.ts';
+import {
+  COMMENTS_TITLE_PREFIX,
+  FEED_FORMATS,
+  commentsFeedPath,
+  feedPathUnder,
+} from './feed-source.ts';
+import type { FeedFormat } from './feed-source.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { authorContext } from '../site/authors.ts';
 import { siteTimezone } from '../theme/site-data.ts';
@@ -21,14 +28,19 @@ import {
   navigationFrontMatter,
   oneLine,
 } from './markdown-page.ts';
-import type { MarkdownChrome, MarkdownLink, MarkdownUrl } from './markdown-page.ts';
+import type { MarkdownChrome, MarkdownFeed, MarkdownLink, MarkdownUrl } from './markdown-page.ts';
 import { representationHref } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
 import { classifyPath } from './paths.ts';
 import { documentLabel, encodePath } from './request.ts';
 import { servedPath, siteView } from './site-view.ts';
 
-export function documentMarkdown(c: Context<GeekityEnv>, document: Document): string {
+/**
+ * A document's Markdown at `url`, which is its permalink everywhere but the
+ * front page. The front matter says where it is served; everything the page
+ * lists about the document, such as its comments feed, is the stored one's.
+ */
+export function documentMarkdown(c: Context<GeekityEnv>, document: Document, url: string): string {
   const writer = authorContext(siteView(c).users(), document.author);
   const neighbours = document.type === 'post' ? c.var.store.neighbours(document) : {};
   const link = (neighbour: Document | undefined): MarkdownLink | undefined =>
@@ -38,8 +50,10 @@ export function documentMarkdown(c: Context<GeekityEnv>, document: Document): st
 
   const title = oneLine(document.title);
   const body = normalizeBody(document.body);
+  const siteTitle = c.var.renderer.site().title;
   const chrome: MarkdownChrome = {
-    url: document.permalink,
+    url,
+    type: document.type,
     title: title === '' || /^#[ \t]/.test(body.trimStart()) ? undefined : title,
     previous: link(neighbours.previous),
     next: link(neighbours.next),
@@ -47,14 +61,26 @@ export function documentMarkdown(c: Context<GeekityEnv>, document: Document): st
       document.type === 'post' && writer?.url !== undefined
         ? { label: writer.name, url: writer.url }
         : undefined,
+    feeds: [
+      ...siteFeeds(siteTitle),
+      ...(isServed(document, c.var.store.now())
+        ? [
+            feed(
+              'rss',
+              `${COMMENTS_TITLE_PREFIX}${documentLabel(c, document)}`,
+              commentsFeedPath(document.permalink),
+            ),
+          ]
+        : []),
+    ],
   };
 
   return markdownPage(
     c,
-    namedAuthor(documentFrontMatter(document), writer),
+    namedAuthor(documentFrontMatter({ ...document, permalink: url }), writer),
     chrome,
-    [rewriteMarkdownLinks(body, markdownHrefFor(c, document.permalink))],
-    { frontPage: document.permalink === '/' ? document : undefined, document },
+    [rewriteMarkdownLinks(body, markdownHrefFor(c, url))],
+    { frontPage: url === '/' ? document : undefined, document },
   );
 }
 
@@ -73,12 +99,18 @@ export function listingMarkdown(
 
   const newer = previous === null ? undefined : { label: 'Newer posts', url: previous };
   const older = next === null ? undefined : { label: 'Older posts', url: next };
+  const ownFeeds = archive.feedHref('rss') === feedPathUnder('/', 'rss') ? [] : FEED_FORMATS;
   const chrome: MarkdownChrome = {
     url,
+    type: 'listing',
     title: page.title,
     previous: newer,
     next: older,
     bio: bioOf(archive.author),
+    feeds: [
+      ...siteFeeds(site.title),
+      ...ownFeeds.map((format) => feed(format, archive.feedTitle(site), archive.feedHref(format))),
+    ],
   };
   const entries = page.documents.map((document) => ({
     label: documentLabel(c, document),
@@ -97,6 +129,24 @@ export function listingMarkdown(
     entries.length === 0 ? '' : `## Posts\n\n${entryList(entries, markdownUrl)}`,
     pager.length === 0 ? '' : `## More posts\n\n${linkList(pager, markdownUrl)}`,
   ]);
+}
+
+const FEED_NAMES: Readonly<Record<FeedFormat, Pick<MarkdownFeed, 'format' | 'type'>>> = {
+  rss: { format: 'RSS', type: 'application/rss+xml' },
+  atom: { format: 'Atom', type: 'application/atom+xml' },
+  json: { format: 'JSON Feed', type: 'application/feed+json' },
+};
+
+function feed(format: FeedFormat, label: string, url: string): MarkdownFeed {
+  return { label, url, ...FEED_NAMES[format] };
+}
+
+/** The feeds every page's head advertises: the site's posts in each format, and its comments. */
+function siteFeeds(siteTitle: string): MarkdownFeed[] {
+  return [
+    ...FEED_FORMATS.map((format) => feed(format, siteTitle, feedPathUnder('/', format))),
+    feed('rss', `${siteTitle} comments`, commentsFeedPath()),
+  ];
 }
 
 function markdownPage(

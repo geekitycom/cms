@@ -394,7 +394,7 @@ describe('an archive page (TASK-468)', () => {
   it('lists every published post under the page, by month, newest first, as the HTML does', async () => {
     const cms = await site({ files: ARCHIVE_FILES });
     const text = await markdown(cms, '/archive/index.md');
-    assert.ok(text.includes(`# Everything\n\nEvery post.\n\n${MONTHS}\n\n## Field`), text);
+    assert.ok(text.includes(`# Everything\n\nEvery post.\n\n${MONTHS}\n\n## Feeds`), text);
     assert.doesNotMatch(text, /Drafted/);
 
     const html = await markdown(cms, '/archive/');
@@ -437,5 +437,169 @@ describe('an archive page (TASK-468)', () => {
       ),
       text,
     );
+  });
+});
+
+describe('what a post links to beyond its words (TASK-473)', () => {
+  const FILED: Record<string, string> = {
+    'posts/2026-09-01-one.md': [
+      '---',
+      'title: Post one',
+      "date: '2026-09-01T09:00:00Z'",
+      'permalink: /2026/09/one/',
+      'author: ada',
+      'tags: [Travel, Two words]',
+      'categories: [Field notes]',
+      '---',
+      '',
+      'The first.',
+      '',
+    ].join('\n'),
+  };
+
+  function section(text: string, heading: string): string | undefined {
+    const start = text.indexOf(`\n## ${heading}\n\n`);
+    if (start === -1) return undefined;
+    const body = text.slice(start + heading.length + 6);
+    const end = body.indexOf('\n\n');
+    return end === -1 ? body.trimEnd() : body.slice(0, end);
+  }
+
+  it('lists a post’s categories and tags as links to their archives’ Markdown', async () => {
+    const cms = await site({ files: FILED });
+    const text = await markdown(cms, '/2026/09/one/index.md');
+    assert.equal(
+      section(text, 'Filed under'),
+      [
+        '- [Category: Field notes](/category/Field%20notes/index.md)',
+        '- [Tag: Travel](/tag/travel/index.md)',
+        '- [Tag: Two words](/tag/two%20words/index.md)',
+      ].join('\n'),
+    );
+    for (const url of ['/category/Field%20notes/index.md', '/tag/two%20words/index.md']) {
+      assert.match(await markdown(cms, url), /Post one/);
+    }
+    assert.equal(section(await markdown(cms, '/2026/09/two/index.md'), 'Filed under'), undefined);
+  });
+
+  it('links a post’s previous and next posts in its body', async () => {
+    const cms = await site();
+    assert.equal(
+      section(await markdown(cms, '/2026/09/two/index.md'), 'More posts'),
+      [
+        '- [Previous: Post one](/2026/09/one/index.md)',
+        '- [Next: Post three](/2026/09/three/index.md)',
+      ].join('\n'),
+    );
+    assert.equal(
+      section(await markdown(cms, '/2026/09/three/index.md'), 'More posts'),
+      '- [Previous: Post two](/2026/09/two/index.md)',
+    );
+    assert.equal(section(await markdown(cms, '/about/index.md'), 'More posts'), undefined);
+  });
+
+  it('lists the posts and pages that link here under Linked from, as the HTML does', async () => {
+    const cms = await site();
+    for (const url of ['/2026/09/one/', '/about/']) {
+      const html = await markdown(cms, url);
+      assert.match(html, /Linked from[\s\S]*href="\/2026\/09\/two\/">Post two</);
+      assert.equal(
+        section(await markdown(cms, `${url}index.md`), 'Linked from'),
+        '- [2026-09-02 Post two](/2026/09/two/index.md)',
+      );
+    }
+    assert.equal(section(await markdown(cms, '/2026/09/two/index.md'), 'Linked from'), undefined);
+
+    const front = await site({ site: { homepage: 'about' } });
+    const html = await markdown(front, '/');
+    const htmlLinks = [
+      ...(/<section class="backlinks"[\s\S]*?<\/section>/.exec(html)?.[0] ?? '').matchAll(
+        /href="([^"]*)"/g,
+      ),
+    ].map((match) => `${match[1] ?? ''}index.md`);
+    const markdownLinks = [
+      ...(section(await markdown(front, '/index.md'), 'Linked from') ?? '').matchAll(
+        /\]\(([^)]*)\)/g,
+      ),
+    ].map((match) => match[1]);
+    assert.deepEqual(markdownLinks, htmlLinks, 'a static homepage lists what its HTML lists');
+  });
+
+  async function feedsMatch(cms: Cms, url: string): Promise<void> {
+    const html = await markdown(cms, url);
+    const advertised = [
+      ...html.matchAll(
+        /<link rel="alternate" type="application\/(?:rss\+xml|atom\+xml|feed\+json)" title="[^"]*" href="([^"]*)">/g,
+      ),
+    ].map((match) => match[1]);
+    const listed = [
+      ...(section(await markdown(cms, `${url}index.md`), 'Feeds') ?? '').matchAll(
+        /^- \[.*\]\((.*)\)$/gm,
+      ),
+    ].map((match) => match[1]);
+    assert.deepEqual(listed, advertised, url);
+  }
+
+  it('lists the feeds the HTML head advertises, on every kind of page', async () => {
+    const cms = await site({ files: FILED });
+    const pages = [
+      '/2026/09/two/',
+      '/about/',
+      '/',
+      '/tag/travel/',
+      '/category/Field%20notes/',
+      '/author/ada/',
+    ];
+    for (const url of pages) await feedsMatch(cms, url);
+    await feedsMatch(await site({ site: { homepage: 'about' } }), '/');
+
+    assert.equal(
+      section(await markdown(cms, '/2026/09/two/index.md'), 'Feeds'),
+      [
+        '- [Field \\*Notes\\* (RSS)](/feed/)',
+        '- [Field \\*Notes\\* (Atom)](/feed/atom/)',
+        '- [Field \\*Notes\\* (JSON Feed)](/feed/json/)',
+        '- [Field \\*Notes\\* comments (RSS)](/comments/feed/)',
+        '- [Comments on: Post two (RSS)](/2026/09/two/feed/)',
+      ].join('\n'),
+    );
+    assert.match(
+      section(await markdown(cms, '/tag/travel/index.md'), 'Feeds') ?? '',
+      /\n- \[Field \\\*Notes\\\*: Travel \(Atom\)\]\(\/tag\/travel\/feed\/atom\/\)\n/,
+    );
+  });
+
+  it('gives every list to both partials, so a site theme lays them out', async () => {
+    const partial = [
+      'type={{ type }}',
+      '{% for link in categories %}c {{ link.label }} {{ link.url }}\n{% endfor %}',
+      '{% for link in tags %}t {{ link.label }} {{ link.url }}\n{% endfor %}',
+      '{% for link in backlinks %}b {{ link.date }} {{ link.label }} {{ link.url }}\n{% endfor %}',
+      '{% for feed in feeds %}f {{ feed.format }} {{ feed.type }} {{ feed.label }} {{ feed.url }}\n{% endfor %}',
+    ].join('\n');
+    const cms = await site({
+      files: FILED,
+      site: { theme: 'mine' },
+      theme: {
+        'partials/markdown-header.md.njk': partial,
+        'partials/markdown-footer.md.njk': partial,
+      },
+    });
+    const text = await markdown(cms, '/2026/09/one/index.md');
+    const expected = [
+      'type=post',
+      'c Field notes /category/Field%20notes/',
+      't Travel /tag/travel/',
+      't Two words /tag/two%20words/',
+      'b 2026-09-02 Post two /2026/09/two/',
+      'f RSS application/rss+xml Field *Notes* /feed/',
+      'f Atom application/atom+xml Field *Notes* /feed/atom/',
+      'f JSON Feed application/feed+json Field *Notes* /feed/json/',
+      'f RSS application/rss+xml Field *Notes* comments /comments/feed/',
+      'f RSS application/rss+xml Comments on: Post one /2026/09/one/feed/',
+    ].join('\n');
+    assert.ok(text.includes(`---\n\n${expected}\n\nThe first.\n\n${expected}\n`), text);
+    assert.match(await markdown(cms, '/tag/travel/index.md'), /^type=listing$/m);
+    assert.match(await markdown(cms, '/about/index.md'), /^type=page$/m);
   });
 });

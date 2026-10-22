@@ -32,10 +32,19 @@ export interface MarkdownBio {
   readonly links: readonly MarkdownLink[];
 }
 
+/** One feed a page advertises: its title, its URL, and which format it is in. */
+export interface MarkdownFeed extends MarkdownLink {
+  /** `RSS`, `Atom` or `JSON Feed`. */
+  readonly format: string;
+  /** Its media type, as the HTML head's `<link type>` says it. */
+  readonly type: string;
+}
+
 /** What the header and footer partials are given beside `site` and `menus`. */
 export interface MarkdownChrome {
   /** The path the page is served at, which marks the current menu item. */
   readonly url: string;
+  readonly type: 'post' | 'page' | 'listing';
   /** The heading the header writes, absent when the body opens with its own. */
   readonly title?: string | undefined;
   readonly previous?: MarkdownLink | undefined;
@@ -44,6 +53,8 @@ export interface MarkdownChrome {
   readonly byline?: MarkdownLink | undefined;
   /** On an author archive, and on a solo author site's homepage. */
   readonly bio?: MarkdownBio | undefined;
+  /** The feeds the HTML head advertises, in its order. */
+  readonly feeds: readonly MarkdownFeed[];
 }
 
 /** One post of a dated list. */

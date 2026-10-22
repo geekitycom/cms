@@ -69,10 +69,28 @@ const HELLO_FILE = [
 
 const HELLO = { 'posts/2026-09-02-hello.md': HELLO_FILE };
 
-const HELLO_MARKDOWN = HELLO_FILE.replace(
-  'series: notebook\n---\n\n',
-  'series: notebook\nhome: /index.md\n---\n\n# Hello, World!\n\n',
-);
+const SITE_FEEDS = [
+  '- [Geekity (RSS)](/feed/)',
+  '- [Geekity (Atom)](/feed/atom/)',
+  '- [Geekity (JSON Feed)](/feed/json/)',
+  '- [Geekity comments (RSS)](/comments/feed/)',
+];
+
+const HELLO_MARKDOWN = [
+  HELLO_FILE.replace(
+    'series: notebook\n---\n\n',
+    'series: notebook\nhome: /index.md\n---\n\n# Hello, World!\n\n',
+  ),
+  '## Filed under',
+  '',
+  '- [Tag: introductions](/tag/introductions/index.md)',
+  '',
+  '## Feeds',
+  '',
+  ...SITE_FEEDS,
+  '- [Comments on: Hello, World! (RSS)](/2026/09/hello/feed/)',
+  '',
+].join('\n');
 
 describe('the Markdown representation', () => {
   it('serves the stored file under its title as a heading, front matter included', async () => {
@@ -96,10 +114,36 @@ describe('the Markdown representation', () => {
     const markdown = async (url: string): Promise<string> =>
       (await cms.app.request(url, { headers: { accept: 'text/markdown' } })).text();
 
-    const navigated = (file: string, neighbour: string): string =>
-      file.replace('\n---\n\n', `\nhome: /index.md\n${neighbour}\n---\n\n`);
-    assert.equal(await markdown('/note/'), navigated(note, 'next: /headed/index.md'));
-    assert.equal(await markdown('/headed/'), navigated(headed, 'previous: /note/index.md'));
+    const navigated = (file: string, neighbour: string, footer: string[]): string =>
+      [
+        file.replace('\n---\n\n', `\nhome: /index.md\n${neighbour}\n---\n\n`),
+        '## More posts',
+        '',
+        ...footer,
+        '',
+      ].join('\n');
+    assert.equal(
+      await markdown('/note/'),
+      navigated(note, 'next: /headed/index.md', [
+        '- [Next: Headed](/headed/index.md)',
+        '',
+        '## Feeds',
+        '',
+        ...SITE_FEEDS,
+        '- [Comments on: Just a thought. (RSS)](/note/feed/)',
+      ]),
+    );
+    assert.equal(
+      await markdown('/headed/'),
+      navigated(headed, 'previous: /note/index.md', [
+        '- [Previous: Just a thought.](/note/index.md)',
+        '',
+        '## Feeds',
+        '',
+        ...SITE_FEEDS,
+        '- [Comments on: Headed (RSS)](/headed/feed/)',
+      ]),
+    );
   });
 
   it('keeps the stored body in the JSON', async () => {
@@ -572,6 +616,13 @@ const LONG_ARCHIVE = {
   'posts/four.md': post('Four', '2026-08-30T09:00:00Z', '/four/', ['notes']),
 };
 
+const ARCHIVE_FEEDS = [
+  '- [Archive (RSS)](/feed/)',
+  '- [Archive (Atom)](/feed/atom/)',
+  '- [Archive (JSON Feed)](/feed/json/)',
+  '- [Archive comments (RSS)](/comments/feed/)',
+];
+
 describe('a listing as Markdown (TASK-289)', () => {
   it('lists the page’s posts under its title, with the older page’s Markdown', async () => {
     const { cms } = await site(LONG_ARCHIVE);
@@ -603,6 +654,13 @@ describe('a listing as Markdown (TASK-289)', () => {
         '## More posts',
         '',
         '- [Older posts](/tag/notes/page/2/index.md)',
+        '',
+        '## Feeds',
+        '',
+        ...ARCHIVE_FEEDS,
+        '- [Archive: notes (RSS)](/tag/notes/feed/)',
+        '- [Archive: notes (Atom)](/tag/notes/feed/atom/)',
+        '- [Archive: notes (JSON Feed)](/tag/notes/feed/json/)',
         '',
       ].join('\n'),
     );
@@ -673,6 +731,10 @@ describe('a listing as Markdown (TASK-289)', () => {
         '## More posts',
         '',
         '- [Older posts](/page/2/index.md)',
+        '',
+        '## Feeds',
+        '',
+        ...ARCHIVE_FEEDS,
         '',
       ].join('\n'),
     );

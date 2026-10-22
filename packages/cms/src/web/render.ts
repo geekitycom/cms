@@ -56,14 +56,21 @@ import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, NeighbourContext, PhotoContext } from './context.ts';
 import type { FrontPageSlugs, SiteData } from '../theme/site-data.ts';
 import { bioOf, escapeMarkdown, HOME_LINK, oneLine } from './markdown-page.ts';
-import type { MarkdownArchiveMonth, MarkdownChrome, MarkdownUrl } from './markdown-page.ts';
+import type {
+  MarkdownArchiveMonth,
+  MarkdownChrome,
+  MarkdownEntry,
+  MarkdownLink,
+  MarkdownUrl,
+} from './markdown-page.ts';
 import { navigationLinks, navigationMenus } from '../site/navigation.ts';
 import { resolveLicense } from '../content/license.ts';
 import type { ContentLicense } from '../content/license.ts';
 import { shareImage } from './share-image.ts';
 import type { Pagination } from './pagination.ts';
 import { snippetHtml } from './search.ts';
-import type { TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
+import { termHref } from '../content/taxonomy.ts';
+import type { Taxonomy, TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
 import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
 import { createThemeSource, findThemeFile } from '../theme/themes.ts';
 import type { ThemeColors, ThemeSource } from '../theme/themes.ts';
@@ -127,7 +134,10 @@ export interface MarkdownChromeOptions {
   markdownUrl: MarkdownUrl;
   /** The page, when it is the site's front page: `newestPosts` is offered there. */
   frontPage?: Document | undefined;
-  /** The document the Markdown is of: `archiveMonths` is offered when it says `archive: true`. */
+  /**
+   * The document the Markdown is of, for its `categories`, `tags` and
+   * `backlinks`, and `archiveMonths` when it says `archive: true`.
+   */
   document?: Document | undefined;
 }
 
@@ -273,8 +283,8 @@ export interface Renderer {
    * The header and footer of a page's Markdown, through
    * {@link MARKDOWN_TEMPLATES} with autoescaping off: Markdown is not HTML.
    * The partials get `site`, `menus`, `soloAuthor`, the chrome's links as
-   * data, `archiveMonths` on an archive page, and the `escapeMarkdown` and
-   * `markdownUrl` filters.
+   * data, a document's `categories`, `tags` and `backlinks`, `archiveMonths`
+   * on an archive page, and the `escapeMarkdown` and `markdownUrl` filters.
    */
   renderMarkdownChrome(chrome: MarkdownChrome, options: MarkdownChromeOptions): MarkdownChromeText;
   /** Any template by name, with the site data already in the context. */
@@ -769,6 +779,32 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   }
 
   /**
+   * What a document's Markdown links beside its words: a post's categories and
+   * tags, and the posts and pages that link to it, the lists its HTML prints.
+   */
+  function markdownLinksContext(document: Document | undefined): Record<string, unknown> {
+    if (document === undefined) return {};
+
+    const site = siteData.read();
+    const bases = taxonomyBases(site);
+    const timezone = siteTimezone(site);
+    const terms = (taxonomy: Taxonomy, names: readonly string[]): MarkdownLink[] =>
+      document.type === 'post'
+        ? names.map((term) => ({ label: term, url: termHref({ taxonomy, term }, 0, bases) }))
+        : [];
+    const backlinks: MarkdownEntry[] = (options.backlinks?.(document) ?? []).map((linking) => ({
+      label: postLabel(linking, citedPage),
+      url: linking.permalink,
+      date: linking.date === undefined ? undefined : calendarDayIn(linking.date, timezone),
+    }));
+    return {
+      categories: terms('category', document.categories),
+      tags: terms('tag', document.tags),
+      backlinks,
+    };
+  }
+
+  /**
    * The page whose own URL carries the listing, as the link a front page draws
    * to it, or nothing at all when the site names none.
    *
@@ -985,6 +1021,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ...(soloAuthor === undefined ? {} : { soloAuthor }),
       ...(frontPage === undefined ? {} : newestPostsContext(frontPage)),
       ...markdownArchiveContext(document),
+      ...markdownLinksContext(document),
       home: HOME_LINK,
       ...chrome,
       bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),
