@@ -166,7 +166,7 @@
           <text class="fill-base-content/70" x="24" y="{{ day.y }}" text-anchor="end" font-size="9">{{ day.label }}</text>
         {% endfor %}
         {% for cell in view.cells %}
-          <rect class="{% if cell.level == 0 %}fill-base-content/10{% elif cell.level == 1 %}fill-primary/25{% elif cell.level == 2 %}fill-primary/50{% elif cell.level == 3 %}fill-primary/75{% else %}fill-primary{% endif %}" x="{{ cell.x }}" y="{{ cell.y }}" width="{{ view.cell }}" height="{{ view.cell }}" rx="2"><title>{{ cell.title }}</title></rect>
+          <rect class="{% if cell.level == 0 %}fill-base-content/10{% elif cell.level == 1 %}fill-primary/25{% elif cell.level == 2 %}fill-primary/50{% elif cell.level == 3 %}fill-primary/75{% else %}fill-primary{% endif %}{% if cell.marked %} stroke-base-content{% endif %}"{% if cell.marked %} stroke-width="1.5"{% endif %} x="{{ cell.x }}" y="{{ cell.y }}" width="{{ view.cell }}" height="{{ view.cell }}" rx="2"><title>{{ cell.title }}</title></rect>
         {% endfor %}
       </svg>
     </div>
@@ -180,6 +180,12 @@
         <rect class="fill-primary" x="56" y="0" width="12" height="12" rx="2" />
       </svg>
       <span>More</span>
+      {% if view.mark %}
+        <svg class="ml-3 size-3" viewBox="0 0 12 12">
+          <rect class="fill-base-content/10 stroke-base-content" stroke-width="1.5" x="0.75" y="0.75" width="10.5" height="10.5" rx="2" />
+        </svg>
+        <span>{{ view.mark }}</span>
+      {% endif %}
     </div>
     {{ numbers(view) }}
   </div>
@@ -243,6 +249,14 @@
     {{ bars(view) }}
   {% elif view.kind == 'calendar' %}
     {{ calendar(view) }}
+  {% elif view.kind == 'progress' %}
+    <div class="grid gap-1">
+      <div class="flex flex-wrap justify-between gap-x-3 text-sm">
+        <span>{{ view.label }}</span>
+        <span class="tabular-nums">{{ view.value }} of {{ view.max }} · <span class="font-semibold">{{ view.percent }}</span></span>
+      </div>
+      <progress class="progress progress-primary w-full" value="{{ view.filled }}" max="{{ view.limit }}" aria-label="{{ view.label }}">{{ view.percent }}</progress>
+    </div>
   {% else %}
     {% if view.caption %}<p class="text-sm font-semibold">{{ view.caption }}</p>{% endif %}
     <p class="text-sm text-base-content/70">No data to show.</p>

@@ -410,10 +410,27 @@ export type PluginBlock =
       };
     }
   | {
-      /** A count for each day; days between the first and the last that are left out count none. */
+      /**
+       * A count for each day; days between the first and the last that are
+       * left out count none. A day with `marked: true` is outlined, and
+       * `mark` names what the outline means, `Marked` when left out.
+       */
       readonly calendar: {
         readonly caption: string;
-        readonly days: readonly { readonly day: string; readonly count: number }[];
+        readonly mark?: string;
+        readonly days: readonly {
+          readonly day: string;
+          readonly count: number;
+          readonly marked?: boolean;
+        }[];
+      };
+    }
+  | {
+      /** A bar filled to `value` out of `max`, with both numbers and the percentage. */
+      readonly progress: {
+        readonly label: string;
+        readonly value: number;
+        readonly max: number;
       };
     };
 

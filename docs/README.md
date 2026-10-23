@@ -16,6 +16,7 @@ CMS is and how to start a site.
 - [The admin](admin.md). The admin screens, the editor, users, menus, and tags and categories.
 - [Site settings](settings.md). The settings pages, `site.json`, and what the front page shows.
 - [Media](media.md). The media library, alt text, stripped metadata and image variants.
+- [Writing goals](writing-goals.md). What counts as a word and as writing, goals, streaks and the dashboard's Writing goal card.
 
 ## Run the site
 

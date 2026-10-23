@@ -5,10 +5,12 @@ import { INTERACTIONS_WIDGET } from './widget-interactions.ts';
 import { POSTING_WIDGET } from './widget-posting.ts';
 import { SCHEDULED_WIDGET } from './widget-scheduled.ts';
 import { TOP_POSTS_WIDGET } from './widget-top-posts.ts';
+import { WRITING_WIDGET } from './widget-writing.ts';
 import type { CoreWidget } from './widgets.ts';
 
 export const CORE_WIDGETS: readonly CoreWidget[] = [
   HEALTH_WIDGET,
+  WRITING_WIDGET,
   FEDIVERSE_WIDGET,
   FOLLOWERS_WIDGET,
   INTERACTIONS_WIDGET,
