@@ -96,6 +96,7 @@ import {
 import { formatInTimezone } from './formatting.ts';
 import { allowGeolocation } from './headers.ts';
 import { AUTOSAVE_DISCARD_PATH, AUTOSAVE_PATH } from './autosave.ts';
+import { later } from './autosave-client.ts';
 import { PREVIEW_PATH } from './preview.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -302,7 +303,7 @@ export function mountDocumentScreens(
     const document = findEdited(c.var.store, kind, c.req.param('slug'), c.req.query('path'));
     if (document === undefined) return c.notFound();
     const copy = ownCopy(c, kind, document.path);
-    const restore = copy === undefined ? undefined : c.req.query(RESTORE);
+    const restore = c.req.query(RESTORE);
     if (copy !== undefined && restore !== undefined) {
       const form = submittedForm(kind, copy.fields, c.var.config.contentDir);
       if (restore === REBASE || copy.hash === document.hash) {
@@ -767,9 +768,7 @@ function ownCopy(
  * `updated` has never been saved through the admin, so any copy of it is.
  */
 function newerThan(copy: AutosaveCopy, document: Document | undefined): boolean {
-  if (document?.updated === undefined) return true;
-  const saved = Date.parse(document.updated);
-  return Number.isNaN(saved) || Date.parse(copy.savedAt) > saved;
+  return later(copy.savedAt, document?.updated);
 }
 
 function withQuery(address: string, query: Record<string, string>): string {
@@ -828,6 +827,7 @@ function renderUnsaved(
     .map((copy): UnsavedRow => {
       const document = copy.path === undefined ? undefined : c.var.store.getByPath(copy.path);
       const postKind = isPostKind(copy.kind) ? copy.kind : undefined;
+      const gone = copy.path !== undefined && document === undefined;
       return {
         label: copyLabel(copy),
         kind:
@@ -839,15 +839,12 @@ function renderUnsaved(
         savedAt: copy.savedAt,
         at: formatInTimezone(copy.savedAt, siteTimezone(c)),
         of:
-          copy.path === undefined
-            ? `New ${kind.singular}`
-            : document === undefined
+          document !== undefined
+            ? `Edits to ${postLabel(document, cited)}`
+            : gone
               ? 'Edits to a document that is gone'
-              : `Edits to ${postLabel(document, cited)}`,
-        resumeUrl:
-          copy.path !== undefined && document === undefined
-            ? undefined
-            : resumeUrl(kind, document, copy.key, postKind),
+              : `New ${kind.singular}`,
+        resumeUrl: gone ? undefined : resumeUrl(kind, document, copy.key, postKind),
         key: copy.key,
       };
     });

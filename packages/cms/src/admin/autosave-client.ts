@@ -5,6 +5,8 @@
  * runs under `node:test` with fake timers.
  */
 
+import { isRecord } from '../util/guards.ts';
+
 /** How long typing has to pause before the form is posted. */
 export const AUTOSAVE_DELAY_MS = 2000;
 const RETRY_FIRST_MS = 2000;
@@ -96,25 +98,26 @@ export function readLocalCopy(storage: KeyValueStorage, storageKey: string): Loc
   } catch {
     return undefined;
   }
-  if (typeof parsed !== 'object' || parsed === null) return undefined;
-  const copy = parsed as Record<string, unknown>;
-  if (
-    copy['version'] !== LOCAL_COPY_VERSION ||
-    typeof copy['key'] !== 'string' ||
-    typeof copy['hash'] !== 'string' ||
-    typeof copy['savedAt'] !== 'string' ||
-    !Array.isArray(copy['fields']) ||
-    !copy['fields'].every(
+  return isLocalCopy(parsed) ? parsed : undefined;
+}
+
+function isLocalCopy(value: unknown): value is LocalCopy {
+  if (!isRecord(value)) return false;
+  const { version, key, hash, savedAt, fields } = value;
+  return (
+    version === LOCAL_COPY_VERSION &&
+    typeof key === 'string' &&
+    typeof hash === 'string' &&
+    typeof savedAt === 'string' &&
+    Array.isArray(fields) &&
+    fields.every(
       (field: unknown) =>
         Array.isArray(field) &&
         field.length === 2 &&
         typeof field[0] === 'string' &&
         typeof field[1] === 'string',
     )
-  ) {
-    return undefined;
-  }
-  return copy as unknown as LocalCopy;
+  );
 }
 
 /** Which copy the editor offers back when it opens. */
@@ -149,13 +152,13 @@ export function resumeOffer(input: ResumeInput): ResumeOffer {
     later(local.savedAt, input.fileTime) &&
     serialize(local.fields) !== serialize(input.current)
   ) {
-    const hash = input.current.find(([name]) => name === 'hash')?.[1] ?? '';
-    return { from: 'browser', copy: local, changedSince: local.hash !== hash };
+    return { from: 'browser', copy: local, changedSince: local.hash !== hashOf(input.current) };
   }
   return input.offered ? { from: 'server' } : { from: 'none' };
 }
 
-function later(instant: string, than: string | undefined): boolean {
+/** Whether `instant` is after `than`; a missing or unreadable `than` counts as earlier. */
+export function later(instant: string, than: string | undefined): boolean {
   if (than === undefined || than === '') return true;
   const other = Date.parse(than);
   return Number.isNaN(other) || Date.parse(instant) > other;
@@ -197,8 +200,13 @@ export function autosave(options: AutosaveOptions): Autosave {
     for (const listener of listeners) listener(status);
   }
 
-  function schedule(delay: number): void {
+  function cancel(): void {
     if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  }
+
+  function schedule(delay: number): void {
+    cancel();
     timer = setTimeout(() => {
       timer = undefined;
       void attempt();
@@ -210,7 +218,7 @@ export function autosave(options: AutosaveOptions): Autosave {
     const copy: LocalCopy = {
       version: LOCAL_COPY_VERSION,
       key: options.key,
-      hash: snapshot.find(([name]) => name === 'hash')?.[1] ?? '',
+      hash: hashOf(snapshot),
       savedAt: at.toISOString(),
       fields: snapshot,
     };
@@ -284,22 +292,19 @@ export function autosave(options: AutosaveOptions): Autosave {
     },
     flush() {
       if (stopped) return;
-      if (timer !== undefined) clearTimeout(timer);
-      timer = undefined;
+      cancel();
       void attempt();
     },
     leave() {
       if (stopped || held) return;
-      if (timer !== undefined) clearTimeout(timer);
-      timer = undefined;
+      cancel();
       const snapshot = options.read();
       if (serialize(snapshot) === onServer) return;
       if (!options.beacon(snapshot)) keepLocally(snapshot, now());
     },
     submitting() {
       stopped = true;
-      if (timer !== undefined) clearTimeout(timer);
-      timer = undefined;
+      cancel();
     },
     release() {
       if (!held) return;
@@ -317,6 +322,11 @@ export function autosave(options: AutosaveOptions): Autosave {
       return () => listeners.delete(listener);
     },
   };
+}
+
+/** The form's `hash` field: the file it was filled in from. */
+function hashOf(snapshot: Snapshot): string {
+  return snapshot.find(([name]) => name === 'hash')?.[1] ?? '';
 }
 
 function serialize(snapshot: Snapshot): string {

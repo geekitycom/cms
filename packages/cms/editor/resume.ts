@@ -65,9 +65,11 @@ export function offerBack(options: OfferBack): void {
   }
   if (banner === null) return;
   const shown = banner;
-  shown.querySelector('form')?.addEventListener('submit', (event) => {
+  const discardForm = shown.querySelector('form');
+  if (discardForm === null) return;
+  discardForm.addEventListener('submit', (event) => {
     event.preventDefault();
-    void discard(options, shown, event.currentTarget as HTMLFormElement);
+    void discard(options, shown, discardForm);
   });
 }
 
