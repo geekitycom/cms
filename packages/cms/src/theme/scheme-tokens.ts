@@ -174,7 +174,7 @@ function matchSelector(selector: string, page: TokenPage): SelectorMatch {
     );
     const unreadable = inner.find((result) => 'unreadable' in result);
     if (unreadable !== undefined) return unreadable;
-    const known = inner as { matches: boolean; specificity: number }[];
+    const known = inner.flatMap((result) => ('matches' in result ? [result] : []));
     const any = known.some((result) => result.matches);
     const most = Math.max(0, ...known.map((result) => result.specificity));
 
@@ -231,7 +231,7 @@ export function computedTokens(rules: readonly StyleRule[], page: TokenPage): Ma
     if (!rule.media.every((condition) => mediaHolds(condition, page))) return;
     const matching = rule.selectors
       .map((selector) => matchSelector(selector, page))
-      .filter((result) => 'matches' in result && result.matches) as { specificity: number }[];
+      .flatMap((result) => ('matches' in result && result.matches ? [result] : []));
     if (matching.length === 0) return;
     const specificity = Math.max(...matching.map((result) => result.specificity));
     applying.push({ rule, specificity, order });

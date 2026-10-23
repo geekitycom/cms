@@ -46,8 +46,8 @@ export interface WebManifest {
  * `themeColor`, dark under the dark mode and light otherwise, or the theme's
  * light `themeColor` under a theme with no schemes. In the default theme that
  * is also the page background, so the splash screen a launcher paints before
- * the first page loads is the page's own colour. Every URL carries the base path of a site served from a
- * subdirectory.
+ * the first page loads is the page's own colour. Every URL carries the base
+ * path of a site served from a subdirectory.
  */
 export function webManifest(input: {
   config: ImageConfig & { baseUrl: string };

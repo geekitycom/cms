@@ -82,8 +82,8 @@ function readFace(body: string): GoogleFace | string {
   if (fontStyle !== 'normal' && fontStyle !== 'italic') return `a face has the style ${fontStyle}`;
 
   const weightText = declarations.get('font-weight') ?? '400';
-  const weight = /^\d{3}$/.test(weightText) ? Number(weightText) : Number.NaN;
-  if (!Number.isInteger(weight)) return `a face has the weight ${weightText}`;
+  if (!/^\d{3}$/.test(weightText)) return `a face has the weight ${weightText}`;
+  const weight = Number(weightText);
 
   const srcText = declarations.get('src') ?? '';
   const src = /^url\(\s*(['"]?)([^'")]*)\1\s*\)\s*format\(\s*(['"])woff2\3\s*\)$/.exec(

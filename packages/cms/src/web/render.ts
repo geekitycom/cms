@@ -336,8 +336,8 @@ export interface Renderer {
   themeColors(): ThemeColors;
   /**
    * The scheme and mode the site draws its pages in right now, with the
-   * scheme's colour tokens from the theme's stylesheet (TASK-488): what a page
-   * that does not load the stylesheet, the embed view, colours itself with.
+   * scheme's colour tokens from the theme's stylesheet: what a page that does
+   * not load the stylesheet, the embed view, colours itself with.
    * `undefined` under a theme with no schemes.
    */
   siteColors(): (SiteColors & { readonly tokens: SchemeTokens }) | undefined;
@@ -708,8 +708,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // font is in use, so a page that sets none loads nothing more.
       ...(fonts.length === 0 ? {} : { fonts: pageFontsContext(fonts) }),
       // The colours the head declares before the stylesheet loads (TASK-146),
-      // and the scheme and mode the site chose (TASK-488) when the theme has
-      // schemes to choose from.
+      // and the scheme and mode the site chose when the theme has schemes to
+      // choose from.
       theme: { ...chosen.colors, ...siteColors(site, chosen.schemes) },
       // Where the index for language models is (TASK-149), while the site
       // serves one, so a theme asks `{% if llmsTxt %}`.

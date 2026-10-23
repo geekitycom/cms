@@ -189,9 +189,9 @@ export function oEmbedResponse(
  * would, and nothing about either. `noindex` because the post is the page to
  * find, not its card.
  *
- * With `colors`, the card is drawn in the site's scheme and mode (TASK-488),
- * from the tokens the theme's stylesheet gives that scheme; without, under a
- * theme that has no schemes, in a look of its own.
+ * With `colors`, the card is drawn in the site's scheme and mode, from the
+ * tokens the theme's stylesheet gives that scheme; without, under a theme
+ * that has no schemes, in a look of its own.
  */
 export function embedPage(subject: EmbedSubject & { colors: EmbedColors | undefined }): EmbedPage {
   const { colors } = subject;

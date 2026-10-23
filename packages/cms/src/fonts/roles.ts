@@ -60,7 +60,7 @@ export function declaredFontRoles(
  * The roles the theme declares that the site can set, each with the family
  * `site.json` names for it under its file key, empty when it names none.
  */
-export function chosenFonts(
+function chosenFonts(
   site: Readonly<Record<string, unknown>>,
   declared: readonly ThemeFont[],
 ): { readonly font: ThemeFont; readonly role: FontRole; readonly family: string }[] {
