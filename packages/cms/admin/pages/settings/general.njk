@@ -83,6 +83,10 @@
     </p>
   </div>
 
+  {{ field.checkbox('settings-header-icon', fields.header_icon,
+       'Show the icon before the site title in the header', checked=form.header_icon,
+       hint='The default theme shows it at the size of the title on every page, once the site has an icon.') }}
+
   {% set licenseHint %}What readers may do with your posts. The footer links it, and the structured data and the feeds declare it. A post can name its own with <code>license</code> in its front matter.{% endset %}
   {% call field.select('settings-license', fields.license, 'License', error=problems.license, hintHtml=licenseHint) %}
     <option value=""{% if not form.license %} selected{% endif %}>No license (all rights reserved)</option>

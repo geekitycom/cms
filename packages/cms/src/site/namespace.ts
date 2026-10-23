@@ -394,6 +394,12 @@ export const SITE = declareNamespace({
       default: true,
       description: 'Whether the site serves /llms.txt.',
     },
+    header_icon: {
+      fileKey: 'headerIcon',
+      type: boolean,
+      default: false,
+      description: 'Whether the header shows the site icon before the site title.',
+    },
     index_now: {
       fileKey: 'indexNow',
       type: boolean,

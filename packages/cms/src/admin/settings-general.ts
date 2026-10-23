@@ -43,6 +43,7 @@ export const GENERAL_SETTINGS: SettingsPage = {
     'language',
     'locale',
     'icon',
+    'header_icon',
     'license',
     'license_url',
     'license_name',

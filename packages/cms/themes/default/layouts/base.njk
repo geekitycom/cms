@@ -283,7 +283,9 @@
       <header class="global-header">
         {% if atRoot %}
         <h1 class="main-heading">
-          <a href="{{ "/" | url }}">{{ site.title }}</a>
+          <a href="{{ "/" | url }}">
+            {%- if headerIcon %}<img class="site-icon" src="{{ headerIcon | url }}" alt="" width="48" height="48">{% endif -%}
+            {{ site.title }}</a>
         </h1>
         {% if site.tagline %}
         <p class="site-tagline">{{ site.tagline }}</p>
@@ -291,7 +293,9 @@
         {% else %}
         {#- The solo author's own archive claims the homepage back, so the
             two URLs are provably one person (TASK-180). -#}
-        <a class="header-link-home"{% if isAuthorArchive and soloAuthor.url == author.url %} rel="me"{% endif %} href="{{ "/" | url }}">{{ site.title }}</a>
+        <a class="header-link-home"{% if isAuthorArchive and soloAuthor.url == author.url %} rel="me"{% endif %} href="{{ "/" | url }}">
+          {%- if headerIcon %}<img class="site-icon" src="{{ headerIcon | url }}" alt="" width="24" height="24">{% endif -%}
+          {{ site.title }}</a>
         {% endif %}
         {{ nav.list(menus.primary, "Site") }}
       </header>

@@ -27,6 +27,7 @@ import type { DocumentNeighbours, SearchHit } from '../content/store.ts';
 import { visibilityOf } from '../content/visibility.ts';
 import { MAXIMUM_FORM_AGE_SECONDS } from '../forms/protection.ts';
 import { iconSetting, siteIcons } from '../images/icons.ts';
+import type { SiteIcon } from '../images/icons.ts';
 import type { User } from '../site/users.ts';
 import { LLMS_TXT_PATH } from './llms.ts';
 import { archiveMonths, archiveOpen } from './archive.ts';
@@ -644,6 +645,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // all: a theme that was handed the icon's path would have to build the URL
     // itself and would link 404s on a site with image optimization off.
     const icons = siteIcons(config, iconSetting(site));
+    const headerIcon = site['headerIcon'] === true ? svgElseTouchIconHref(icons) : undefined;
     // The picture a shared link shows (TASK-146), here for the reason the
     // icons are: its alt text and its size are in files only this side reads.
     const title = [context['title'], context['label']].find(
@@ -675,6 +677,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       // Where the index for language models is (TASK-149), while the site
       // serves one, so a theme asks `{% if llmsTxt %}`.
       ...(site['llmsTxt'] === false ? {} : { llmsTxt: LLMS_TXT_PATH }),
+      ...(headerIcon === undefined ? {} : { headerIcon }),
       ...(image === undefined ? {} : { shareImage: image }),
       ...(owner === undefined ? {} : { siteAuthor: owner }),
       // Who the homepage speaks for, on a site whose author is a user (TASK-180,
@@ -1400,6 +1403,13 @@ function filterText(value: unknown): string {
  */
 function themeTemplate(themeDirs: readonly string[], preferred: string, fallback: string): string {
   return findThemeFile(themeDirs, preferred) === undefined ? fallback : preferred;
+}
+
+function svgElseTouchIconHref(icons: readonly SiteIcon[]): string | undefined {
+  return (
+    icons.find((icon) => icon.type === 'image/svg+xml') ??
+    icons.find((icon) => icon.rel === 'apple-touch-icon')
+  )?.href;
 }
 
 /**
