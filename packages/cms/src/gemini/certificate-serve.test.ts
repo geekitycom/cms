@@ -27,7 +27,7 @@ async function dirs(
 }
 
 async function servedOnce(config: GeekityConfig): Promise<void> {
-  const cms = createCms({ watch: false, port: 0, ...config });
+  const cms = createCms({ watch: false, port: 0, geminiPort: 0, ...config });
   try {
     await cms.serve();
   } finally {
@@ -65,6 +65,7 @@ describe('starting a site with Gemini on', () => {
       ...site,
       watch: false,
       port: 0,
+      geminiPort: 0,
       baseUrl: 'https://shll.me',
       geminiCert: missing,
       geminiKey: missing,

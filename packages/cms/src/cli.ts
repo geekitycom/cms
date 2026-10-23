@@ -1379,7 +1379,7 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
       folderPlugins: await importPluginFolders(loaded),
       supervision: worker.supervision,
     });
-    const { port } = await cms.serve();
+    const { port, geminiPort } = await cms.serve();
     if (await cms.settings.get(DEV_MODE.on)) {
       process.stdout.write(
         'Dev mode is on: ActivityPub, webmentions, feed pings, IndexNow and email are held ' +
@@ -1387,6 +1387,10 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
       );
     }
     process.stdout.write(`Geekity CMS is serving ${cms.config.baseUrl} on port ${String(port)}\n`);
+    if (geminiPort !== undefined) {
+      const host = geminiHost(cms.config, await cms.settings.values(SITE));
+      process.stdout.write(`Gemini is on port ${String(geminiPort)} for ${host}\n`);
+    }
     worker.serving(cms);
   } catch (error) {
     const message = messageOf(error);

@@ -14,6 +14,7 @@ import { promisify } from 'node:util';
 
 import { cleanupTemporaryDirs, CLI, runCli, temporaryDir } from './__testing__/cli.ts';
 import { fakeNpmRegistry, pluginFiles } from './__testing__/npm-registry.ts';
+import { freePort, geminiRequest } from './gemini/__testing__/client.ts';
 import { nextEvent } from './__testing__/wait.ts';
 import { PLUGIN_SETTLE_MS } from './supervisor/primary.ts';
 
@@ -309,6 +310,58 @@ describe('geekity serve, supervised', () => {
     assert.ok(!after.includes('@test/plugin-first'), 'the removed plugin is gone');
     assert.ok(!after.includes(RELOAD_PATH), 'the folder is what the new server loaded');
     assert.match(server.output(), /Reloaded/);
+
+    server.child.kill('SIGTERM');
+    assert.equal(await server.exited, 0, server.output());
+  });
+
+  it('keeps the Gemini port answering through a reload, refusing no connection (TASK-484 AC #2)', async (t) => {
+    const { site: directory, pluginsDir } = await site();
+    await fs.writeFile(
+      path.join(directory, 'content', '_data', 'site.json'),
+      JSON.stringify({ title: 'Reloading', gemini: true }),
+    );
+    const geminiPort = await freePort();
+    const server = await serve(directory, pluginsDir, { GEEKITY_GEMINI_PORT: String(geminiPort) });
+    await server.printed('the Gemini port', (text) =>
+      /Gemini is on port \d+ for localhost/.test(text),
+    );
+    const agent = await signedIn(server);
+    await installPlugin(pluginsDir, 'plugin-second');
+
+    const statuses = new Map<number, number>();
+    const failures: string[] = [];
+    let stopping = false;
+    const loops = Array.from({ length: 4 }, async () => {
+      while (!stopping) {
+        try {
+          const answer = await geminiRequest(geminiPort, 'gemini://localhost/\r\n', 'localhost');
+          statuses.set(answer.status, (statuses.get(answer.status) ?? 0) + 1);
+        } catch (error) {
+          failures.push(String(error));
+        }
+      }
+    });
+    const response = await reload(agent);
+    assert.equal(response.status, 303);
+    await server.printed('the old worker to retire', (text) => /Reloaded/.test(text));
+    await server.printed(
+      'the new worker to serve Gemini',
+      (text) => [...text.matchAll(/Gemini is on port/g)].length === 2,
+    );
+    // The new worker's throttle starts empty, so its first answers are pages.
+    const before = statuses.get(20) ?? 0;
+    while ((statuses.get(20) ?? 0) < before + 20) await new Promise((r) => setImmediate(r));
+    stopping = true;
+    await Promise.all(loops);
+    t.diagnostic(`gemini answers ${JSON.stringify(Object.fromEntries(statuses))}`);
+
+    assert.deepEqual(failures, [], 'no Gemini connection failed');
+    assert.deepEqual(
+      [...statuses.keys()].filter((status) => status !== 20 && status !== 44),
+      [],
+      'every Gemini request was answered with the page, or told to slow down',
+    );
 
     server.child.kill('SIGTERM');
     assert.equal(await server.exited, 0, server.output());

@@ -38,7 +38,11 @@ import { SITE } from '../site/namespace.ts';
 import { messageOf } from '../util/errors.ts';
 import type { ReplyContextService, WebmentionService } from '../webmention/index.ts';
 import { syndicationTargetProblems } from '../webmention/syndication.ts';
-import { warnAboutGeminiCertificate } from '../gemini/site-certificate.ts';
+import { LOGGED_ELSEWHERE_ENV, writeToStdout } from '../access-log.ts';
+import { listenForGemini } from '../web/gemini-listener.ts';
+import type { GeminiListener } from '../web/gemini-listener.ts';
+import { ensureSiteGeminiCertificate, geminiHost } from '../gemini/site-certificate.ts';
+import { effectiveBaseUrl } from '../site/settings.ts';
 import { createApp } from './app.ts';
 import { boot } from './boot.ts';
 import { endServices, releaseServices, startServices } from './lifecycle.ts';
@@ -257,10 +261,12 @@ export interface Cms {
   sync(): Promise<SyncResult>;
   /**
    * Scan the content directory, start watching it unless
-   * {@link ResolvedConfig.watch} is off, and start listening. Resolves with
-   * the address actually bound, which matters when the port is 0.
+   * {@link ResolvedConfig.watch} is off, and start listening: HTTP, and
+   * Gemini while `site.gemini` is on and its certificate is usable (TASK-484),
+   * started and stopped with the setting from then on. Resolves with the
+   * ports actually bound, which matters when one is 0.
    */
-  serve(): Promise<{ port: number }>;
+  serve(): Promise<{ port: number; geminiPort: number | undefined }>;
   /**
    * Hand over to a new server (TASK-288): refuse every request but GET and
    * HEAD with a 503, let the writes already in flight finish, stop the
@@ -335,6 +341,57 @@ export function createCms(
 
   let server: HttpServer | undefined;
   let releaseFiles: (() => void) | undefined;
+  let gemini: GeminiListener | undefined;
+  let geminiChanges: Promise<void> = Promise.resolve();
+  let unwatchGemini: (() => void) | undefined;
+
+  /**
+   * Listen for Gemini when the setting is on and the certificate can be had.
+   * A certificate that cannot is said once by whoever asked first: here at
+   * start, or the setting's own watch when it was turned on.
+   */
+  async function startGemini(warn: boolean): Promise<void> {
+    if (gemini !== undefined) return;
+    const result = await ensureSiteGeminiCertificate(resolved, booted.settings);
+    if (result === undefined) return;
+    if (!result.ok) {
+      if (warn) console.warn(`Gemini is not served: ${result.problem}`);
+      return;
+    }
+    gemini = await listenForGemini({
+      port: resolved.geminiPort,
+      certificate: result.certificate,
+      async site() {
+        const site = await booted.settings.values(SITE);
+        return {
+          host: geminiHost(resolved, site),
+          origin: new URL(effectiveBaseUrl(resolved, site)).origin,
+        };
+      },
+      fetch: async (request) => await app.fetch(request, LOGGED_ELSEWHERE_ENV),
+      log: resolved.accessLog
+        ? {
+            write: resolved.accessLogWriter ?? writeToStdout,
+            address: resolved.accessLogAddress,
+          }
+        : undefined,
+      now: resolved.now,
+    });
+  }
+
+  async function stopGemini(): Promise<void> {
+    const running = gemini;
+    gemini = undefined;
+    await running?.close();
+  }
+
+  /** One start or stop at a time, in the order the setting changed. */
+  function changeGemini(change: () => Promise<void>): Promise<void> {
+    geminiChanges = geminiChanges.then(change).catch((error: unknown) => {
+      console.warn(`Gemini could not be started or stopped: ${messageOf(error)}`);
+    });
+    return geminiChanges;
+  }
 
   return {
     app,
@@ -406,13 +463,16 @@ export function createCms(
       // and said so once here rather than on every page (TASK-155).
       for (const problem of syndicationTargetProblems(resolved.contentDir)) console.warn(problem);
 
-      await warnAboutGeminiCertificate(resolved, booted.settings);
-
-      return new Promise((resolve) => {
+      const port = await new Promise<number>((resolve) => {
         server = serveNode({ fetch: app.fetch, port: resolved.port }, (info) => {
-          resolve({ port: info.port });
+          resolve(info.port);
         }) as HttpServer;
       });
+      await startGemini(true);
+      unwatchGemini = booted.settings.watch(SITE.gemini, ({ next }) =>
+        changeGemini(next ? () => startGemini(false) : stopGemini),
+      );
+      return { port, geminiPort: gemini?.port };
     },
 
     async drain(onWritesInFlight) {
@@ -438,10 +498,14 @@ export function createCms(
       const handingOver =
         running !== undefined && writes.refusing ? closeServer(running, true) : undefined;
       if (writes.refusing) writes.handOver();
+      unwatchGemini?.();
+      unwatchGemini = undefined;
+      const closingGemini = changeGemini(stopGemini);
       await endServices(lifecycle, 'close');
       releaseServices(lifecycle);
 
       if (running !== undefined) await (handingOver ?? closeServer(running, false));
+      await closingGemini;
 
       releaseFiles?.();
       releaseFiles = undefined;

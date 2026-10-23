@@ -53,6 +53,7 @@ directory. Absolute directories are used as given.
 | `compression`      | `true`                                               | `GEEKITY_COMPRESSION`        | Compress text responses with brotli or gzip. Turn it off behind a proxy that compresses. See [Compression](public-site.md#compression).                                                                                                                                                                                  |
 | `geminiCert`       | none                                                 | `GEEKITY_GEMINI_CERT`        | Your own PEM certificate for Gemini, instead of the one the site generates. Needs `geminiKey`. See [The Gemini certificate](#the-gemini-certificate).                                                                                                                                                                    |
 | `geminiKey`        | none                                                 | `GEEKITY_GEMINI_KEY`         | The PEM private key for `geminiCert`.                                                                                                                                                                                                                                                                                    |
+| `geminiPort`       | `1965`                                               | `GEEKITY_GEMINI_PORT`        | Port the Gemini listener uses while Gemini is on. `0` picks a free one. See [The Gemini listener](#the-gemini-listener).                                                                                                                                                                                                 |
 | `securityHeaders`  | [see Security headers](security.md#security-headers) | —                            | Headers on every response. A string replaces a default or adds a header. `false` removes a header.                                                                                                                                                                                                                       |
 | `onDocumentChange` | none                                                 | —                            | Hook run for every change to the index. See [Hooks](plugins.md#hooks).                                                                                                                                                                                                                                                   |
 | `onPublish`        | none                                                 | —                            | Hook run when a document becomes visible. See [Hooks](plugins.md#hooks).                                                                                                                                                                                                                                                 |
@@ -183,6 +184,45 @@ missing, cannot be read, is not a PEM certificate or key, or the key does not
 belong to the certificate, the site still starts and serves HTTP. It does not
 serve Gemini, and it logs one line that names the file and the problem.
 Settings > Reading and `geekity gemini cert` show the same problem.
+
+## The Gemini listener
+
+While `site.gemini` is on and the certificate is usable, the site answers
+`gemini://` requests on `geminiPort` (default `1965`), in the same process as
+HTTP. Turning Gemini on or off in the admin starts or stops the listener
+without a restart. Under `geekity serve`, a reload keeps the port open, as it
+does the HTTP port. `geekity serve` prints the port when it starts:
+
+```
+Geekity CMS is serving https://shll.me on port 3000
+Gemini is on port 1965 for shll.me
+```
+
+The listener answers only for the host of the base URL in effect, the host
+the certificate names. A request for another host or another scheme gets `53`.
+Each request is one absolute URL of at most 1024 bytes, ending in CR LF, that
+arrives within 10 seconds. Anything else gets `59`.
+
+Each request is answered from the same page HTTP serves for it:
+
+| Request                                     | Answer                                                                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `gemini://host/path/`                       | `20 text/gemini` with the body of `/path/index.gmi`                                                            |
+| `gemini://host/path/index.gmi`              | the same                                                                                                       |
+| `gemini://host/uploads/…`, an image variant | `20` with the file's media type                                                                                |
+| a moved page                                | `31` (permanent) or `30` (temporary), to a path on the capsule                                                 |
+| a page that does not exist                  | `51`                                                                                                           |
+| a deleted page                              | `52`                                                                                                           |
+| maintenance mode                            | `41`, with the back-by time when one is set                                                                    |
+| a server error                              | `40`                                                                                                           |
+| `gemini://host/search/`                     | `10`, asking for a query. The client sends it back as the query string, and the answer is the search's gemtext |
+
+Every gemtext page links to the site's pages by root-relative `.gmi` paths, so
+a reader who follows a link stays on the capsule. Links to other sites are
+unchanged.
+
+Each client address may make 60 requests a minute. A request over that gets
+`44` with the seconds to wait.
 
 ## Plugin settings
 
@@ -330,6 +370,18 @@ blog keeps it with no retention policy unless the site owner sets one.
 
 The login throttle counts failed sign-ins against the same address, so the log
 and the throttle always agree on the client.
+
+A Gemini request gets one line in the same order, with `GEMINI` as the method
+and the Gemini status as the third field. A request that cannot be read has `-`
+as its path:
+
+```
+GEMINI /2026/10/hello-world/ 20 5.3ms
+GEMINI /nothing-here/ 51 1.8ms
+GEMINI - 59 0.4ms
+```
+
+Gemini has no forwarded header, so its address is always the socket's own.
 
 The lines go to stdout because a container collects stdout, dockge shows it
 and journald keeps it. To write to a file, redirect stdout. `accessLogWriter`

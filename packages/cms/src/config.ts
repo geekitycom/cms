@@ -466,6 +466,11 @@ export interface GeekityConfig {
   geminiCert?: string;
   /** The private key for {@link GeekityConfig.geminiCert}, a PEM file. Overridden by `GEEKITY_GEMINI_KEY`. */
   geminiKey?: string;
+  /**
+   * Port the Gemini listener uses while `site.gemini` is on. Default 1965,
+   * Gemini's own. Overridden by `GEEKITY_GEMINI_PORT`.
+   */
+  geminiPort?: number;
 }
 
 /**
@@ -554,6 +559,7 @@ export interface ResolvedConfig {
   readonly geminiCert: string | undefined;
   /** The operator's Gemini key file, or `undefined` for the generated one. */
   readonly geminiKey: string | undefined;
+  readonly geminiPort: number;
 }
 
 /** Ambient inputs {@link resolveConfig} reads, injectable so the resolution is testable. */
@@ -565,6 +571,8 @@ export interface ResolveConfigContext {
 }
 
 export const DEFAULT_PORT = 3000;
+/** Gemini's own port. */
+export const DEFAULT_GEMINI_PORT = 1965;
 export const DEFAULT_CONTENT_DIR = 'content';
 export const DEFAULT_DATA_DIR = 'data';
 export const DEFAULT_THEMES_DIR = 'themes';
@@ -837,6 +845,7 @@ const ENV_SETTINGS = {
   pluginWatch: setting('GEEKITY_PLUGIN_WATCH', BOOLEAN, true),
   geminiCert: setting('GEEKITY_GEMINI_CERT', OPTIONAL_PATH, undefined),
   geminiKey: setting('GEEKITY_GEMINI_KEY', OPTIONAL_PATH, undefined),
+  geminiPort: setting('GEEKITY_GEMINI_PORT', PORT, DEFAULT_GEMINI_PORT),
 } satisfies {
   [K in keyof GeekityConfig]?: EnvSetting<NonNullable<GeekityConfig[K]>, unknown>;
 };

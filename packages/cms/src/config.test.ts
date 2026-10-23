@@ -135,6 +135,20 @@ describe('resolveConfig', () => {
     assert.equal(fromEnv.geminiKey, path.join(cwd, 'key.pem'));
   });
 
+  it('listens for Gemini on 1965 unless the config or GEEKITY_GEMINI_PORT names a port', () => {
+    const cwd = '/srv/site';
+    assert.equal(resolveConfig({}, { cwd, env: {} }).geminiPort, 1965);
+    assert.equal(resolveConfig({ geminiPort: 1966 }, { cwd, env: {} }).geminiPort, 1966);
+    assert.equal(
+      resolveConfig({ geminiPort: 1966 }, { cwd, env: { GEEKITY_GEMINI_PORT: '0' } }).geminiPort,
+      0,
+    );
+    assert.throws(
+      () => resolveConfig({}, { cwd, env: { GEEKITY_GEMINI_PORT: '70000' } }),
+      /GEEKITY_GEMINI_PORT/,
+    );
+  });
+
   it('watches the plugins folder unless the config or GEEKITY_PLUGIN_WATCH turns it off', () => {
     const cwd = '/srv/site';
     assert.equal(resolveConfig({}, { cwd, env: {} }).pluginWatch, true);
@@ -757,6 +771,7 @@ describe('what the environment and config may say', () => {
       pluginWatch: true,
       geminiCert: undefined,
       geminiKey: undefined,
+      geminiPort: 1965,
     });
   });
 
