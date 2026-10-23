@@ -1,4 +1,5 @@
-import { FONT_FILES_ORIGIN, isFontFamilyName } from './family.ts';
+import { isFontFamilyName } from '../theme/font-family.ts';
+import { FONT_FILES_ORIGIN } from './family.ts';
 import type { FontStyle } from './family.ts';
 
 /** One `@font-face` of a CSS2 stylesheet, read and checked. */

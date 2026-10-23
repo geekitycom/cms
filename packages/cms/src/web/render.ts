@@ -85,7 +85,8 @@ import { termHref } from '../content/taxonomy.ts';
 import type { Taxonomy, TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
 import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
 import { createThemeSource, findThemeFile } from '../theme/themes.ts';
-import type { ThemeColors, ThemeSource } from '../theme/themes.ts';
+import type { ThemeColors, ThemeFont, ThemeSource } from '../theme/themes.ts';
+import type { PageFont } from '../fonts/index.ts';
 import { schemeTokens } from '../theme/scheme-tokens.ts';
 import type { SchemeTokens } from '../theme/scheme-tokens.ts';
 import { formatFileSize } from '../util/file-size.ts';
@@ -363,6 +364,12 @@ export interface CreateRendererOptions {
   /** Config after defaults, for the themes directory, base URL and content directory. */
   config: ResolvedConfig;
   /**
+   * The Google Fonts a page is set in, per the site's `headingFont` and
+   * `bodyFont` and the roles the theme declares (decision-61). A renderer
+   * built without it sets every role in the theme's own stack.
+   */
+  fonts?: ((site: SiteData, declared: readonly ThemeFont[]) => readonly PageFont[]) | undefined;
+  /**
    * Which theme the site is rendering through, asked per render (decision-15).
    *
    * Injected so that one CMS has one answer: the pages, the `/theme/` assets
@@ -562,6 +569,17 @@ function requestSite(): SiteSettings {
   return requestInputs.getStore()?.site ?? DEFAULT_SITE_SETTINGS;
 }
 
+/** What the head prints for the fonts a page is set in. */
+function pageFontsContext(fonts: readonly PageFont[]): {
+  stylesheets: string[];
+  properties: { property: string; value: string }[];
+} {
+  return {
+    stylesheets: [...new Set(fonts.map((font) => font.href))],
+    properties: fonts.map((font) => ({ property: font.font.property, value: font.value })),
+  };
+}
+
 /** Half the time a form stays submittable: the oldest stamp a 304 hands back. */
 const STAMP_WINDOW_MS = (MAXIMUM_FORM_AGE_SECONDS * 1000) / 2;
 
@@ -680,10 +698,15 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         { url: iconSetting(site), describedAs: site.title },
       ],
     });
+    const fonts = options.fonts?.(site, chosen.fonts) ?? [];
     return environment.render(template, {
       site,
       menus,
       icons,
+      // The hosted Google Fonts the site chose (decision-61): the stylesheets
+      // to link and each role's custom property, on the context only while a
+      // font is in use, so a page that sets none loads nothing more.
+      ...(fonts.length === 0 ? {} : { fonts: pageFontsContext(fonts) }),
       // The colours the head declares before the stylesheet loads (TASK-146),
       // and the scheme and mode the site chose (TASK-488) when the theme has
       // schemes to choose from.

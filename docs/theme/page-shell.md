@@ -1380,6 +1380,52 @@ for example `:root { --font-heading: "Fraunces", 'Iowan Old Style', Georgia, ser
 and that rule wins. To change a font in a site's own stylesheet, redefine the
 property the same way. There is no need to replace this stylesheet.
 
+### Chosen Google Fonts in the head
+
+When the site chooses a Google Fonts family for a role on Appearance > Look
+(see [Fonts on the Look page](../settings.md#heading-and-body-fonts)), the
+renderer puts `fonts` on the page context. `base.njk` prints it right after
+the theme stylesheet:
+
+```html
+<link rel="stylesheet" href="/_geekity/fonts/fraunces/700.css?v=1a2b3c4d5e6f" />
+<style>
+  :root {
+    --font-heading:
+      'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Palatino,
+      'Book Antiqua', Georgia, serif;
+  }
+</style>
+```
+
+- `fonts.stylesheets` lists the hosted `@font-face` stylesheet of each family
+  in use, once each. Each is a same-origin URL whose `v` parameter is the
+  hash of the stylesheet's bytes.
+- `fonts.properties` lists one `{ property, value }` per role. The value is
+  the family in double quotes, then the role's `fallback`.
+
+The `<style>` rule is not in a layer, so it overrides the default that the
+stylesheet sets in `@layer base`. The family name holds only letters, digits
+and spaces, and the fallback is checked when the manifest is read, so the
+template prints both without escaping. When the context has a `cspNonce`, the
+`<style>` element carries it. The editor preview in the admin passes the
+admin's nonce, so the admin's policy lets the rule apply.
+
+A page prints nothing for a role in these cases:
+
+- The site chose no font for the role.
+- The active theme does not declare the role.
+- The family's files are not in `data/fonts/`. The page uses the fallback and
+  queues one `fetch-font` job. The next page drawn after the job finishes
+  uses the font. If the files go missing again later, the next page queues
+  another job.
+
+With no font in use, the context has no `fonts` and the head is unchanged. The
+embed view (`/_geekity/embed`) keeps its system stack, because it loads nothing
+beyond its own HTML.
+
+### The font utilities
+
 In `src/style.css`, `@theme inline` maps the `font-heading` and `font-body`
 utilities onto the two properties, so `@apply font-heading` writes
 `font-family: var(--font-heading)`.

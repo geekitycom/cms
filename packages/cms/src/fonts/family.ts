@@ -11,18 +11,6 @@ export const CSS2_ORIGIN = 'https://fonts.googleapis.com';
 /** Where the files the CSS2 stylesheet lists are served from. */
 export const FONT_FILES_ORIGIN = 'https://fonts.gstatic.com';
 
-const MAX_FAMILY_LENGTH = 64;
-
-/**
- * Whether `name` can be a Google Fonts family name: letters and digits in
- * words split by single spaces, as every family Google lists is. It is the
- * check that lets a family name be printed into CSS and a URL with nothing
- * to escape.
- */
-export function isFontFamilyName(name: string): boolean {
-  return name.length <= MAX_FAMILY_LENGTH && /^[A-Za-z0-9]+(?: [A-Za-z0-9]+)*$/.test(name);
-}
-
 /** The folder name a family's files live under: `atkinson-hyperlegible`. */
 export function fontFamilySlug(family: string): string {
   return family.toLowerCase().replaceAll(' ', '-');

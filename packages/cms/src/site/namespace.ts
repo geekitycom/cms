@@ -39,6 +39,7 @@ import {
   PACKAGED_THEME,
   themeNameProblem,
 } from '../theme/themes.ts';
+import { isFontFamilyName } from '../theme/font-family.ts';
 import { isFileSync } from '../util/files.ts';
 import { isRecord } from '../util/guards.ts';
 import { DEFAULT_FEED_CADENCE, DEFAULT_NOTIFY_SERVER, UPDATE_PERIODS } from './feed-settings.ts';
@@ -176,6 +177,12 @@ function taxonomyBase(which: 'tag' | 'category') {
       tag: String(after['tag_base']),
       category: String(after['category_base']),
     })[which];
+}
+
+function fontFamily(value: string): string | undefined {
+  return value === '' || isFontFamilyName(value)
+    ? undefined
+    : 'A font is a Google Fonts family name, letters and digits in words, or empty.';
 }
 
 function frontPage(after: Readonly<Record<string, unknown>>): string | undefined {
@@ -521,6 +528,20 @@ export const SITE = declareNamespace({
       type: oneOf(COLOR_MODES),
       default: 'system',
       description: 'Whether pages follow the reader system setting, or are always light or dark.',
+    },
+    heading_font: {
+      fileKey: 'headingFont',
+      type: optionalText,
+      default: '',
+      description: 'The Google Fonts family for headings. Empty means the theme stack.',
+      check: fontFamily,
+    },
+    body_font: {
+      fileKey: 'bodyFont',
+      type: optionalText,
+      default: '',
+      description: 'The Google Fonts family for body text. Empty means the theme stack.',
+      check: fontFamily,
     },
     locale: {
       type: optionalText,

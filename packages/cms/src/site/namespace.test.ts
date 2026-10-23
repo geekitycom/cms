@@ -67,6 +67,8 @@ const STABLE_SITE_JSON_KEYS = [
   'avatar',
   'colorScheme',
   'colorMode',
+  'headingFont',
+  'bodyFont',
 ];
 
 const dirs: string[] = [];
@@ -363,5 +365,60 @@ describe('the colour scheme and mode settings (TASK-488)', () => {
     assert.deepEqual(await settings.set('site', new Map([['color_mode', 'light']]), 'admin'), {
       ok: true,
     });
+  });
+});
+
+describe('the heading and body font settings (TASK-492)', () => {
+  it('default to empty, the theme stack, and describe themselves', async () => {
+    const { settings } = await siteWith({});
+    assert.equal(await settings.get(SITE.heading_font), '');
+    assert.equal(await settings.get(SITE.body_font), '');
+    for (const key of ['heading_font', 'body_font']) {
+      const declared = SITE.declaration.settings.find((setting) => setting.key === key);
+      assert.match(declared?.description ?? '', /Google Fonts/);
+    }
+  });
+
+  it('are read from headingFont and bodyFont in site.json', async () => {
+    const { settings } = await siteWith({ headingFont: 'Fraunces', bodyFont: 'Literata' });
+    assert.equal(await settings.get(SITE.heading_font), 'Fraunces');
+    assert.equal(await settings.get(SITE.body_font), 'Literata');
+  });
+
+  it('take an environment variable over the file', async () => {
+    const { settings } = await siteWith(
+      { headingFont: 'Fraunces', bodyFont: 'Literata' },
+      {},
+      { GEEKITY_SITE__HEADING_FONT: 'Lora', GEEKITY_SITE__BODY_FONT: 'Source Serif 4' },
+    );
+    assert.equal(await settings.get(SITE.heading_font), 'Lora');
+    assert.equal(await settings.get(SITE.body_font), 'Source Serif 4');
+  });
+
+  it('save a family name, and empty for the theme stack', async () => {
+    const { settings, file } = await siteWith({});
+    const fonts = new Map([
+      ['heading_font', 'Playfair Display'],
+      ['body_font', 'Atkinson Hyperlegible'],
+    ]);
+    assert.deepEqual(await settings.set('site', fonts, 'admin'), { ok: true });
+    const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    assert.equal(written['headingFont'], 'Playfair Display');
+    assert.equal(written['bodyFont'], 'Atkinson Hyperlegible');
+
+    assert.deepEqual(await settings.set('site', new Map([['body_font', '']]), 'admin'), {
+      ok: true,
+    });
+  });
+
+  it('refuse a value that cannot be a Google Fonts family name', async () => {
+    const { settings } = await siteWith({});
+    const refused = await settings.set(
+      'site',
+      new Map([['heading_font', 'Lora"; } body { color: red']]),
+      'admin',
+    );
+    assert.equal(refused.ok, false);
+    assert.match(refused.ok ? '' : (refused.problems['heading_font'] ?? ''), /family name/);
   });
 });

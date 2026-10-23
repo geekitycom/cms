@@ -74,6 +74,8 @@ The file holds these keys:
 - `relays`, `menus` and `taxonomyRedirects`
 - `colorScheme` (when set) and `colorMode` (see
   [Colour scheme and mode](#colour-scheme-and-mode))
+- `headingFont` and `bodyFont` (when set, see
+  [Heading and body fonts](#heading-and-body-fonts))
 
 A save writes every one of these keys, so the file always holds the whole set
 of values in effect for a theme or an Eleventy build to read. It keeps every
@@ -465,6 +467,81 @@ access to Google.
 leaves it out. When the files are missing, for example in a new container,
 pages use the theme's system fonts, and a `fetch-font`
 [admin job](configuration.md#admin-jobs) downloads them again.
+
+## Heading and body fonts
+
+Two settings choose a Google Fonts family for the headings and the body text
+of the site's pages (decision-61):
+
+| Setting             | `site.json` key | Value                                | Default                   |
+| ------------------- | --------------- | ------------------------------------ | ------------------------- |
+| `site.heading_font` | `headingFont`   | A Google Fonts family name, or empty | Empty: the theme's stack. |
+| `site.body_font`    | `bodyFont`      | A Google Fonts family name, or empty | Empty: the theme's stack. |
+
+Set both on **Appearance > Look** in the admin. Its Fonts section has one
+group of controls for each font role that the active theme declares (see
+[Font roles](theme/manifest.md#font-roles)). The packaged theme declares
+`heading` (Headings) and `body` (Body text). Each group has:
+
+- A list with the theme's own stack first, then the curated families, then
+  **Custom…**. The body list offers Atkinson Hyperlegible, Source Serif 4,
+  Literata, Merriweather, Lora, Source Sans 3, IBM Plex Serif and IBM Plex
+  Sans. The heading list offers the same families plus Fraunces and Playfair
+  Display.
+- A **Custom Google Fonts family** box. The server uses it when **Custom…** is
+  chosen. Type the family as Google Fonts names it, for example `Bitter`.
+- A sample line set in the saved font. The admin loads the sample from the
+  files the site hosts, so the admin's Content-Security-Policy needs no
+  Google host.
+
+The Fonts section works without JavaScript.
+
+A role needs these styles from its family:
+
+| Role    | Styles                  |
+| ------- | ----------------------- |
+| Body    | 400, 400 italic and 700 |
+| Heading | 700                     |
+
+Body text uses regular, italic and bold, and a browser that has to synthesise
+an italic or a bold draws it badly. Headings are bold.
+
+When you save, the server downloads each chosen family in its role's styles
+before it writes anything (see [Hosted Google Fonts](#hosted-google-fonts)).
+It refuses the save, returns the page with status 400 and writes neither
+setting in these cases:
+
+- Google Fonts has no family of that name.
+- The family lacks a style the role needs. The message names the missing
+  styles, for example `Upright Only has no 400 italic on Google Fonts.`
+- The server cannot reach Google Fonts.
+- The name is not a family name: letters and digits in words separated by
+  single spaces.
+
+The message appears beside the field it is about. On success, the setting
+holds the family as Google Fonts spells it. An empty value removes the key
+from `site.json`.
+
+Each page of the site then links the family's hosted `@font-face` stylesheet
+and sets the role's `--font-<role>` property to the family, followed by the
+theme's fallback stack. A page that uses no chosen font loads nothing extra.
+[The page shell](theme/page-shell.md#chosen-google-fonts-in-the-head)
+describes the markup.
+
+A page never fails because of these values:
+
+- A role that the active theme does not declare ignores its setting, and the
+  Look page shows no control for it.
+- A value that is not a family name, for example from a hand edit, is
+  ignored.
+- When the family's files are missing from `data/fonts/`, pages use the
+  theme's stack and the server queues one `fetch-font` job to download them
+  again. The setting stays.
+
+The variables `GEEKITY_SITE__HEADING_FONT` and `GEEKITY_SITE__BODY_FONT`
+override the settings in the admin and on the command line. As with the
+colour settings, the public pages read `site.json` and do not follow these
+variables.
 
 ## License
 

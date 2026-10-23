@@ -11,6 +11,7 @@
 {% from "components/badge.njk" import badge %}
 {% from "components/button.njk" import button %}
 {% from "components/card.njk" import card, cardActions %}
+{% import "components/fields.njk" as field %}
 
 {% macro swatch(mode, colours) -%}
 <span class="flex flex-col gap-1" aria-hidden="true">
@@ -91,6 +92,56 @@
           {{ button('Save colours', type='submit', color='primary') }}
         {% endcall %}
       </form>
+    {% endcall %}
+
+    {% call card(title='Fonts') %}
+      {% if fonts.length %}
+        {#- The sample lines are set in the saved fonts from the files the site
+            hosts, linked from this origin, so the admin's CSP needs no font
+            host of Google's. The family is applied by a style block the
+            response's nonce lets run, since a style attribute is refused. #}
+        {% for font in fonts %}{% if font.sample %}
+          <link rel="stylesheet" href="{{ font.sample.href }}" />
+        {% endif %}{% endfor %}
+        <style nonce="{{ cspNonce }}">
+          {% for font in fonts %}
+          [data-font-sample="{{ font.role }}"] { font-family: {% if font.sample %}"{{ font.sample.family }}", {% endif %}{{ font.fallback | safe }}; }
+          {% endfor %}
+        </style>
+
+        {% if fontProblems %}
+          {% call field.summary('The fonts were not saved. Fix the fields marked below.') %}
+            {% for font in fonts %}
+              {{ field.problem('font-' + font.role + ('-custom' if font.customChosen else ''), font.problem) }}
+            {% endfor %}
+          {% endcall %}
+        {% endif %}
+
+        <form method="post" action="{{ fontsUrl }}">
+          <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+          <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {% for font in fonts %}
+              <fieldset class="fieldset" data-font-role="{{ font.role }}">
+                <legend class="fieldset-legend">{{ font.label }}</legend>
+                <p data-font-sample="{{ font.role }}" class="text-xl">The quick brown fox jumps over the lazy dog.</p>
+                {% call field.select('font-' + font.role, font.fields.select, 'Font', error=(font.problem if not font.customChosen else '')) %}
+                  {% for option in font.options %}
+                    <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+                  {% endfor %}
+                {% endcall %}
+                {{ field.text('font-' + font.role + '-custom', font.fields.custom, 'Custom Google Fonts family', value=font.custom, error=(font.problem if font.customChosen else ''), hint='Used when Custom… is chosen. Type the family as Google Fonts names it, such as Bitter.', spellcheck='false', autocomplete='off') }}
+              </fieldset>
+            {% endfor %}
+          </div>
+          <p class="label mt-2 block whitespace-normal">Saving downloads each family from Google Fonts to this site, so readers load it from here. Body text needs regular, italic and bold; headings need bold.</p>
+
+          {% call cardActions() %}
+            {{ button('Save fonts', type='submit', color='primary') }}
+          {% endcall %}
+        </form>
+      {% else %}
+        <p>This theme declares no fonts to choose.</p>
+      {% endif %}
     {% endcall %}
   </div>
 {% endblock %}

@@ -122,6 +122,27 @@
     {% endif %}
     <link rel="canonical" href="{{ canonicalUrl }}">
     <link rel="stylesheet" href="{{ "style.css" | asset }}">
+    {#
+      The Google Fonts the site chose (decision-61), hosted by the site: each
+      family's `@font-face` stylesheet, then each role's custom property set to
+      the family before the theme's stack. Unlayered, so it wins over the
+      stylesheet's default in `@layer base`. Both values were checked before
+      they reached the page, the family as letters and digits and the stack as
+      family names, which is why they are printed as they are. With no font
+      chosen there is no `fonts` and nothing is printed.
+    #}
+    {% if fonts %}
+    {% for href in fonts.stylesheets %}
+    <link rel="stylesheet" href="{{ href | url }}">
+    {% endfor %}
+    <style{% if cspNonce %} nonce="{{ cspNonce }}"{% endif %}>
+      :root {
+        {% for font in fonts.properties %}
+        {{ font.property }}: {{ font.value | safe }};
+        {% endfor %}
+      }
+    </style>
+    {% endif %}
     {% block speculationRules %}
     {#
       Prefetch the page behind a link the reader is about to follow: a hover

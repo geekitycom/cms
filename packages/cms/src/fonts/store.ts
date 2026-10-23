@@ -9,6 +9,7 @@ import type { StaticAsset } from '../files/static-files.ts';
 import { assetVersion } from '../theme/assets.ts';
 import type { HostLookup } from '../util/public-address.ts';
 import { fetchPublic } from '../webmention/fetch-public.ts';
+import { isFontFamilyName } from '../theme/font-family.ts';
 import { faceRule, isFontFileUrl, parseGoogleCss } from './css.ts';
 import type { GoogleFace } from './css.ts';
 import {
@@ -16,7 +17,6 @@ import {
   canonicalStyles,
   css2Url,
   fontFamilySlug,
-  isFontFamilyName,
   isFontStyle,
   styleKey,
   styleLabel,

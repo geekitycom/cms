@@ -65,6 +65,9 @@ const SEPARATELY: Readonly<Record<string, readonly Record<string, unknown>[]>> =
     syndicationRefused('target-new'),
   ],
   'pages/plugins/screen.njk': [pluginSettingsRefused()],
+  // The Fonts card's form, refused on both roles; the Colours card above it
+  // states its own refusal without the field macros.
+  'pages/appearance/look.njk': [fontsRefused()],
   'pages/plugins/installed.njk': [{ installer: 'on', add: {}, plugins: [], changeLog: [] }],
   'pages/plugins/confirm.njk': [{ ready: true, lines: [] }],
   'pages/users/apps.njk': [
@@ -79,6 +82,26 @@ const SEPARATELY: Readonly<Record<string, readonly Record<string, unknown>[]>> =
     },
   ],
 };
+
+/** The Look screen's Fonts form with a refusal on each role, one under Custom. */
+function fontsRefused(): Record<string, unknown> {
+  const font = (role: string, customChosen: boolean) => ({
+    role,
+    label: role,
+    fields: { select: `${role}_font`, custom: `${role}_font_custom` },
+    options: [{ value: '', label: 'Theme', selected: !customChosen }],
+    custom: customChosen ? 'Nosuch' : '',
+    customChosen,
+    fallback: 'serif',
+    sample: undefined,
+    problem: `Wrong ${role}.`,
+  });
+  return {
+    problems: undefined,
+    fonts: [font('heading', false), font('body', true)],
+    fontProblems: { heading: 'Wrong heading.', body: 'Wrong body.' },
+  };
+}
 
 /** A plugin screen with one field of each kind that can be refused. */
 function pluginSettingsRefused(): Record<string, unknown> {

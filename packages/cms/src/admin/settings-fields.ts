@@ -41,7 +41,9 @@ type OffTheForm =
   | 'clients_without_pkce'
   | 'avatar'
   | 'color_scheme'
-  | 'color_mode';
+  | 'color_mode'
+  | 'heading_font'
+  | 'body_font';
 
 type FormKey = Exclude<keyof SiteSettings, OffTheForm>;
 

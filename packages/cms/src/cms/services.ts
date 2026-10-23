@@ -8,7 +8,7 @@ import { readObjectIds } from '../federation/object-ids.ts';
 import type { ConversationWrite } from '../store/admin-store.ts';
 import { createAvatarService } from '../avatars/index.ts';
 import type { AvatarService } from '../avatars/index.ts';
-import { createFontStore, fontFetchJob } from '../fonts/index.ts';
+import { createFontStore, createPageFonts, fontFetchJob, queueFontFetch } from '../fonts/index.ts';
 import type { FontStore } from '../fonts/index.ts';
 import { followAllMovedComments, followMovedComments } from '../comments/index.ts';
 import { createReplyNotices } from '../comments/reply-notices.ts';
@@ -258,6 +258,12 @@ export function createServices({
   const renderer = createRenderer({
     config: resolved,
     themes,
+    // A family whose files are gone is fetched again by a job, queued from
+    // the first page drawn without it (decision-61).
+    fonts: createPageFonts({
+      store: fonts,
+      refetch: (family, styles) => queueFontFetch(jobs, family, styles),
+    }),
     // The stored context of a reply's target: a file read, never a fetch, so
     // a page is drawn without waiting on anybody's server (TASK-123).
     replyContext: (target, site) => replyContexts.read(target, site),

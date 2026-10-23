@@ -112,8 +112,10 @@ Templates are Nunjucks (decision-4). The default theme lives in
 
 `pnpm build` compiles that stylesheet from `src/style.css` with Tailwind v4
 (decision-22). The output is a build product. It is gitignored and shipped in
-the package. A visitor's browser loads one plain CSS file, with no script, web
-font or CDN. `pnpm --filter @geekity/cms build:theme` recompiles the stylesheet
+the package. A visitor's browser loads one plain CSS file, with no script or
+CDN. A site that chooses a Google Fonts family on Appearance > Look also loads
+that family's files from the site itself (see
+[Heading and body fonts](settings.md#heading-and-body-fonts)). `pnpm --filter @geekity/cms build:theme` recompiles the stylesheet
 alone. The package's `pretest` runs it before the test suites read the file.
 
 The packaged theme is the Paper design (doc-9) on the andrewshell.org shell
