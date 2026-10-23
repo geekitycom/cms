@@ -1074,8 +1074,10 @@ links print, in each of these cases:
   Browsers and crawlers request it from the root whatever the head links. It
   answers 404 on a site with no icon.
 - `/manifest.webmanifest` gives the site's title as `name` and `short_name`,
-  `start_url` `/`, and `display` `minimal-ui`. It gives the theme's light
-  `themeColor` as `theme_color` and `background_color`. Its icons are at 192
+  `start_url` `/`, and `display` `minimal-ui`. Its `theme_color` and
+  `background_color` are the chosen scheme's `themeColor`: the dark value when
+  `colorMode` is `dark`, the light value otherwise. Under a theme with no
+  schemes they are the theme's light `themeColor`. Its icons are at 192
   and 512 pixels, plus a maskable 512 whose picture sits inside the middle 80%,
   padded with its own dominant colour. The head links the manifest on every
   page.

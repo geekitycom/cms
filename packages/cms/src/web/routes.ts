@@ -173,6 +173,7 @@ export function mountPublicSite(
       title: site.title,
       iconSetting: iconSetting(site),
       colors: c.var.renderer.themeColors(),
+      scheme: c.var.renderer.siteColors(),
     });
     return manifestResponse(manifest, conditionalHeaders(c));
   });

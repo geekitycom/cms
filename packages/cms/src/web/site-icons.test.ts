@@ -253,6 +253,44 @@ async function pixels(
   };
 }
 
+describe('the web app manifest colours (TASK-493)', () => {
+  const SLATE = { light: '#f4f7fb', dark: '#12161c' };
+
+  for (const [mode, expected] of [
+    ['system', SLATE.light],
+    ['light', SLATE.light],
+    ['dark', SLATE.dark],
+  ] as const) {
+    it(`are the chosen scheme's ${mode === 'dark' ? 'dark' : 'light'} theme colour in ${mode} mode (AC #1)`, async () => {
+      const body = await manifest(await site({ colorScheme: 'slate', colorMode: mode }));
+      assert.equal(body['theme_color'], expected);
+      assert.equal(body['background_color'], expected);
+    });
+  }
+
+  it('are the top-level light theme colour under a theme with no schemes (AC #1)', async () => {
+    const themesDir = await box.dir('geekity-icons-themes-');
+    const theme = path.join(themesDir, 'plain');
+    await mkdir(path.join(theme, 'static'), { recursive: true });
+    await writeFile(
+      path.join(theme, 'theme.json'),
+      JSON.stringify({
+        name: 'Plain',
+        kind: 'site',
+        themeColor: { light: '#abcdef', dark: '#123456' },
+      }),
+    );
+    await writeFile(path.join(theme, 'static', 'style.css'), ':root { --color-body: #abcdef; }');
+
+    const body = await manifest(
+      await site({ theme: 'plain', colorMode: 'dark' }, {}, { themesDir }),
+    );
+
+    assert.equal(body['theme_color'], '#abcdef');
+    assert.equal(body['background_color'], '#abcdef');
+  });
+});
+
 describe('the web app manifest (TASK-147 AC #4)', () => {
   it('is served with the name, the icons, the start URL, the colours and the display', async () => {
     const cms = await site({ avatar: AVATAR }, { [AVATAR]: await png(240) });
