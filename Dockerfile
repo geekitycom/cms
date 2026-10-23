@@ -15,7 +15,7 @@
 # release: an image that would need python, make and g++ to install on one
 # architecture is exactly what this base rules out. The size cost over Alpine
 # is a few tens of megabytes.
-ARG NODE_IMAGE=node:24.18.0-trixie-slim
+ARG NODE_IMAGE=node:24.22.1-trixie-slim
 
 
 FROM ${NODE_IMAGE} AS build
