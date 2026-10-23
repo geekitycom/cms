@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.41.0](https://github.com/geekitycom/cms/compare/v0.40.0...v0.41.0) (2026-10-23)
+
+
+### Features
+
+* **cms:** add a distraction-free writing mode to the editor ([88d7fdf](https://github.com/geekitycom/cms/commit/88d7fdf02e47aa1b525e2f8c37c705a8b962fed3))
+* **cms:** add an Appearance &gt; Look page to choose the colour scheme and mode ([23990c3](https://github.com/geekitycom/cms/commit/23990c37ffd5591cb0850d3d27a8a07f3faa5e5c))
+* **cms:** autosave the editor as the writer types, keeping a browser copy while offline ([5fb4cdb](https://github.com/geekitycom/cms/commit/5fb4cdb246929df1610a192ccd691db6321464bb))
+* **cms:** download a chosen Google Fonts family into data/fonts and serve it from the site ([a0a09bd](https://github.com/geekitycom/cms/commit/a0a09bd592bef1c82656316901f6004a1307c33d))
+* **cms:** keep a per-user autosave copy of an editor form under data/autosave ([d387538](https://github.com/geekitycom/cms/commit/d3875384abdadd9f55c499472e9d1142c9fc2877))
+* **cms:** lay the dashboard out in two columns that stack independently ([34cfbc3](https://github.com/geekitycom/cms/commit/34cfbc3afa1685c3d11eb03c30a84c9d24370b51))
+* **cms:** let a theme declare colour schemes and ship six in the default theme ([47e7be3](https://github.com/geekitycom/cms/commit/47e7be3fdd5d17f543543c4a5280adc8ded59d14))
+* **cms:** let a theme declare font roles and read headings and body through them ([336d8b3](https://github.com/geekitycom/cms/commit/336d8b3915c5d235f7453d304235a3f24c1c08c9))
+* **cms:** let the site choose a colour scheme and mode for every page ([f306391](https://github.com/geekitycom/cms/commit/f306391ff8c5c6854f31054f6443bff195a429e2))
+* **cms:** let the site choose heading and body Google Fonts on Appearance &gt; Look ([ef8833d](https://github.com/geekitycom/cms/commit/ef8833d788141c8c8c52cae8b745ce5432c96142))
+* **cms:** offer unsaved changes back when the editor opens and list them under Unsaved ([bfdb222](https://github.com/geekitycom/cms/commit/bfdb22249a0f50612416a906c3749b89f0e0737c))
+* **cms:** show the site icon before the title in the header ([5759a3c](https://github.com/geekitycom/cms/commit/5759a3cef68a158c7f854cf7975c98d144e17913))
+
+
+### Bug Fixes
+
+* **cms:** decide a restored copy's conflict from the file on disk, as a save does ([562d17d](https://github.com/geekitycom/cms/commit/562d17dfb91d63a560796c5a1adb914b617f1b36))
+* **cms:** drop the article before the job title in the bio ([6a4e719](https://github.com/geekitycom/cms/commit/6a4e719bbee6b7cc19f23f166a19925bc5beef0d))
+* **cms:** name the CMS Geekity CMS in the footer, feeds and CLI ([abf736c](https://github.com/geekitycom/cms/commit/abf736c9d643cc31d6f29cd5f3d451aa1bf9cfd8))
+* **cms:** put the contact form above the bio on a page ([1355e83](https://github.com/geekitycom/cms/commit/1355e831490da5593ee97bf26d375c4ee79fcd9f))
+* **cms:** take the web manifest colours from the chosen colour scheme ([988a822](https://github.com/geekitycom/cms/commit/988a822c289da3c83926ffa0329c04c401497b65))
+
 ## [0.40.0](https://github.com/geekitycom/cms/compare/v0.39.0...v0.40.0) (2026-10-22)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/geekitycom/cms/compare/plugin-umami-v0.4.0...plugin-umami-v0.5.0) (2026-10-23)
+
+
+### Features
+
+* **cms:** lay the dashboard out in two columns that stack independently ([34cfbc3](https://github.com/geekitycom/cms/commit/34cfbc3afa1685c3d11eb03c30a84c9d24370b51))
+
 ## [0.4.0](https://github.com/geekitycom/cms/compare/plugin-umami-v0.3.0...plugin-umami-v0.4.0) (2026-10-22)
 
 
