@@ -35,16 +35,16 @@ No extra baseline store is needed: the autosave copy already holds the last text
 
 **The ledger** is `data/writing/<userId>.json`: `{ "days": { "2026-10-23": 312, … } }`, written atomically. Its class under decision-55 is kept and private: it is the user's history and cannot be rebuilt. Days with no words are not stored. Deleting a user deletes their ledger.
 
-**Goals and streaks belong to the user** and live on their record in `data/users.json`, next to `dashboardLayout`, edited on the user's own profile page:
+**Goals and streaks belong to the user** and live on their record in `data/users.json`, next to `dashboardLayout`. Each user edits them on their own Writing goals page, which starts with a **Track writing goals** checkbox, off by default. The goal and streak fields show only while it is checked. Unchecking keeps the saved goal, so checking again restores it. The ledger is kept whether or not a user tracks goals, so turning tracking on shows the words they have already written.
 
-- `writingGoal`: `{ words, period }`, with `period` one of `day`, `week`, `month` or `year`. Weeks start on Monday. No goal means no goal card and no streak.
+- `writingGoals`: `{ tracking, words, period }`. `tracking` is the checkbox; with it on, a goal is required. `period` is one of `day`, `week`, `month` or `year`. Weeks start on Monday.
 - `streak`: `{ dailyWords, missesAllowed }`. A day keeps the streak when the user wrote at least `dailyWords` that day. The form defaults `dailyWords` to the goal for a daily goal, and otherwise to the goal's daily pace rounded up (100,000 a month is 3,334). `missesAllowed` (0 to 7) is how many missed days in a row the streak survives: with 1, missing a day is fine and missing two in a row ends it.
 - The streak is the number of days that met the rule in the current run; allowed misses do not add to it. Today does not break a streak until it is over. The best streak is the longest run in the ledger.
 - Progress and streaks are computed from the ledger each time, by pure functions. Changing the rules re-reads all history under the new rules.
 
-**The dashboard** gains a core Writing goal card for the signed-in user. It shows words this period against the goal, whether the user is ahead of or behind the even pace for today, words today, the current and best streak, and a calendar of words per day. With no goal set it offers a link to set one. Its cache key includes the user, because the widget board keys cached results by owner, widget and period only.
+**The dashboard** gains a core Writing goal card for the signed-in user. It shows words this period against the goal, whether the user is ahead of or behind the even pace for today, words today, the current and best streak, and a calendar of words per day. The card exists only for users who track writing goals; for anyone else it is not drawn and is not offered among the cards they can add back. Its cache key includes the user, because the widget board keys cached results by owner, widget and period only.
 
-**The editor** always shows the body's current word count, in the normal view and in the focus mode bar, with the words written today next to it ("1,240 words · 312 today"). The page carries the user's total for today, each autosave response returns the new total, and the bundle adds the words typed since the last autosave using the shared module. Without JavaScript the page shows the counts as of the moment it loaded.
+**The editor** always shows the body's current word count, in the normal view and in the focus mode bar, with the words written today next to it ("1,240 words · 312 today") for a user who tracks writing goals. The page carries the user's total for today, each autosave response returns the new total, and the bundle adds the words typed since the last autosave using the shared module. Without JavaScript the page shows the counts as of the moment it loaded.
 
 ## Consequences
 

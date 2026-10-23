@@ -4,6 +4,7 @@ title: 'Editor word count and words written today, in normal and focus mode'
 status: To Do
 assignee: []
 created_date: '2026-10-23 14:11'
+updated_date: '2026-10-23 14:25'
 labels:
   - writing-goals
 milestone: m-48
@@ -27,4 +28,5 @@ The post and page editor always shows the body's current word count and the word
 - [ ] #4 Deleting text lowers the word count but never lowers words written today
 - [ ] #5 Without JavaScript the editor shows the counts as of page load
 - [ ] #6 The counter is announced politely to screen readers at most when typing pauses, not on every keystroke
+- [ ] #7 Words written today show only for a user tracking writing goals; the current word count shows for everyone
 <!-- AC:END -->
