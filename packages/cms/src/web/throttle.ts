@@ -139,22 +139,13 @@ export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottl
   };
 }
 
-/** What {@link createRequestLimit} needs to know. */
 export interface RequestLimitOptions {
-  /** Requests a key may make in one window. */
   requests: number;
   windowSeconds: number;
   now: Clock;
 }
 
-/**
- * A count of requests per key in fixed windows, for a door that answers
- * reads rather than guesses: a key over its count waits for its window to
- * end, and the next window starts it from nothing, with no lockout that
- * grows. In memory, like the login throttle.
- */
 export interface RequestLimit {
-  /** Count one request, answering the seconds to wait when the key is over its limit. */
   take(key: string): number | undefined;
 }
 

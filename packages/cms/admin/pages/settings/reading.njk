@@ -162,7 +162,6 @@
   {{ field.checkbox('settings-index-now', fields.index_now, 'Submit changes to IndexNow',
        checked=form.index_now, hintHtml=indexNowHint) }}
 
-  {# TASK-483. The capsule's certificate, which clients pin on first visit. #}
   {% set geminiHint %}
     Serves the site as a Gemini capsule at <code>gemini://</code> with a self-signed
     certificate the site generates once and keeps. Gemini clients remember the

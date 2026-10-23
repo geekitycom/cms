@@ -1,21 +1,14 @@
 import net from 'node:net';
 import tls from 'node:tls';
 
-/** One Gemini response as a client reads it. */
 export interface GeminiAnswer {
   readonly status: number;
   readonly meta: string;
   readonly body: Buffer;
-  /** Whether the server ended the TLS session with close_notify rather than a reset. */
   readonly closedCleanly: boolean;
   readonly fingerprint256: string;
 }
 
-/**
- * Send `request` as it is (add the CRLF yourself) over a real TLS connection
- * and read until the server closes. A `preamble`, such as a PROXY header, is
- * written in the clear ahead of the TLS handshake, as a layer-4 proxy does.
- */
 export async function geminiRequest(
   port: number,
   request: string | Buffer,
@@ -54,12 +47,10 @@ export async function geminiRequest(
   });
 }
 
-/** `gemini://example.com<path>` and its CRLF, the usual request. */
 export async function gemini(port: number, path: string): Promise<GeminiAnswer> {
   return await geminiRequest(port, `gemini://example.com${path}\r\n`);
 }
 
-/** A PROXY protocol v2 header for a TCP client at `address`, or a LOCAL one. */
 export function proxyV2(
   options: { readonly address?: string; readonly local?: boolean; readonly tlv?: Buffer } = {},
 ): Buffer {
@@ -92,7 +83,6 @@ function ipv6Bytes(address: string): Buffer {
   return bytes;
 }
 
-/** Whether anything accepts a TCP connection on the port. */
 export async function refuses(port: number): Promise<boolean> {
   return await new Promise((resolve) => {
     const socket = net.connect(port, '127.0.0.1');
@@ -104,7 +94,6 @@ export async function refuses(port: number): Promise<boolean> {
   });
 }
 
-/** A port nothing listens on just now. */
 export async function freePort(): Promise<number> {
   const server = net.createServer();
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

@@ -349,7 +349,6 @@ describe('geekity serve, supervised', () => {
       'the new worker to serve Gemini',
       (text) => [...text.matchAll(/Gemini is on port/g)].length === 2,
     );
-    // The new worker's throttle starts empty, so its first answers are pages.
     const before = statuses.get(20) ?? 0;
     while ((statuses.get(20) ?? 0) < before + 20) await new Promise((r) => setImmediate(r));
     stopping = true;

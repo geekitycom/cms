@@ -1,8 +1,3 @@
-/**
- * Gemtext as a representation (TASK-481, decision-60): every page with a
- * Markdown representation also answers at its `.gmi` URL and by
- * `Accept: text/gemini`, built from the same data as its Markdown.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -136,7 +131,6 @@ function linesOf(text: string): string[] {
   return text.split('\n');
 }
 
-/** What good gemtext never has: front matter, inline links, emphasis or HTML. */
 function assertClean(text: string, url: string): void {
   assert.doesNotMatch(text, /^---\n/, `${url} opens with front matter`);
   assert.doesNotMatch(text, /\]\(|\]\[|<https?:/, `${url} has an inline link`);

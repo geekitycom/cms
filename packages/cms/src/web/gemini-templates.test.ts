@@ -1,8 +1,3 @@
-/**
- * A theme's Gemini templates (TASK-482, decision-60): each Gemini slot is
- * the chosen theme's `.gmi.njk`, else its `.md.njk` converted, else the
- * default theme's `.gmi.njk`, else the default theme's `.md.njk` converted.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';

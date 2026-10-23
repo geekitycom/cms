@@ -346,11 +346,6 @@ export function createCms(
   let geminiChanges: Promise<void> = Promise.resolve();
   let unwatchGemini: (() => void) | undefined;
 
-  /**
-   * Listen for Gemini when the setting is on and the certificate can be had.
-   * A certificate that cannot is said once by whoever asked first: here at
-   * start, or the setting's own watch when it was turned on.
-   */
   async function startGemini(warn: boolean): Promise<void> {
     if (gemini !== undefined) return;
     const result = await ensureSiteGeminiCertificate(resolved, booted.settings);
@@ -377,7 +372,7 @@ export function createCms(
           }
         : undefined,
       now: resolved.now,
-      trustProxy: resolved.trustProxy ? isLocalAddress : () => false,
+      acceptsProxyHeaderFrom: resolved.trustProxy ? isLocalAddress : () => false,
     });
   }
 
@@ -387,7 +382,6 @@ export function createCms(
     await running?.close();
   }
 
-  /** One start or stop at a time, in the order the setting changed. */
   function changeGemini(change: () => Promise<void>): Promise<void> {
     geminiChanges = geminiChanges.then(change).catch((error: unknown) => {
       console.warn(`Gemini could not be started or stopped: ${messageOf(error)}`);

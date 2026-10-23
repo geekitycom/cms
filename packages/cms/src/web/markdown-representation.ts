@@ -51,11 +51,6 @@ import { documentLabel, encodePath } from './request.ts';
 import { SEARCH_PATH, snippetMarkdown } from './search.ts';
 import { servedPath, siteView } from './site-view.ts';
 
-/**
- * A document's Markdown or gemtext at `url`, which is its permalink everywhere
- * but the front page. The front matter says where it is served; everything the
- * page lists about the document, such as its comments feed, is the stored one's.
- */
 export function documentMarkdown(
   c: Context<GeekityEnv>,
   document: Document,
@@ -157,10 +152,6 @@ export function listingMarkdown(
   ]);
 }
 
-/**
- * A native comment's page in Markdown or gemtext: the post and the comments it
- * answers above it, its own words as the body, and its replies below.
- */
 export function commentMarkdown(
   c: Context<GeekityEnv>,
   found: CommentThread,
@@ -264,11 +255,6 @@ export function searchMarkdown(
   );
 }
 
-/**
- * A 404, 410, 500 or 503 in Markdown or gemtext: the theme's body for it
- * between the header and footer every page has, with the maintenance page's
- * back-by time in the Markdown's front matter as well.
- */
 export function statusMarkdown(
   c: Context<GeekityEnv>,
   page: StatusPageName,
@@ -315,16 +301,6 @@ function siteFeeds(siteTitle: string): MarkdownFeed[] {
   ];
 }
 
-/**
- * One page in a text format: the theme's header, the blocks and the theme's
- * footer, with every link to the site written in that format. A block is
- * Markdown, or what the theme wrote for a status page's body.
- *
- * Markdown carries the page's data as front matter. Gemtext has none, so the
- * page is converted with a document's date as a line under the header and a
- * link home at the end. Its dated lists are drawn without descriptions, so
- * each converts to a gemfeed line, `=> url YYYY-MM-DD title`.
- */
 function textPage(
   c: Context<GeekityEnv>,
   format: TextFormat,
@@ -337,7 +313,6 @@ function textPage(
   }: {
     frontPage?: Document | undefined;
     document?: Document | undefined;
-    /** A document's date, which gemtext writes as a line under the header. */
     published?: string | undefined;
   } = {},
 ): string {
@@ -370,12 +345,6 @@ function textPage(
   return gemtext.split('\n').includes(home) ? gemtext : `${gemtext}\n${home}\n`;
 }
 
-/**
- * The parts as one gemtext page. The Markdown is converted in one pass, so
- * its `[n]` link numbers run through the whole page. What a theme wrote as
- * gemtext stands in that pass as a placeholder paragraph and is put back
- * unconverted, with its `=>` lines unnumbered as the theme wrote them.
- */
 function gemtextOf(parts: readonly ThemeText[]): string {
   const token = `geekity-gemtext-${randomUUID()}`;
   const gemtext: string[] = [];
@@ -392,10 +361,8 @@ function gemtextOf(parts: readonly ThemeText[]): string {
   );
 }
 
-/** How a page's Markdown becomes gemtext: no emphasis or code marks, no HTML. */
 export const GEMTEXT = { plain: true, stripHtml: true } as const;
 
-/** Every link on the page at `pageUrl` as `format` links it, the site's own pages in that format. */
 export function siteUrlFor(
   c: Context<GeekityEnv>,
   pageUrl: string,
@@ -405,17 +372,6 @@ export function siteUrlFor(
   return (url) => href(url) ?? url;
 }
 
-/**
- * A link on the page at `pageUrl` as the Markdown or gemtext URL of what it
- * names, or `undefined` when it names nothing on this site with such a
- * representation.
- *
- * The link is followed the way the site answers a request for it: a query
- * redirect, then whatever is served at the path, then a moved document, then
- * a declared redirect, so `/?p=7`, a `redirect_from` and the homepage's own
- * permalink all land on the `.md` of the document they reach. A fragment is
- * kept, and so is the query of a link to the search.
- */
 function siteHrefFor(
   c: Context<GeekityEnv>,
   pageUrl: string,

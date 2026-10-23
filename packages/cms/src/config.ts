@@ -571,7 +571,6 @@ export interface ResolveConfigContext {
 }
 
 export const DEFAULT_PORT = 3000;
-/** Gemini's own port. */
 export const DEFAULT_GEMINI_PORT = 1965;
 export const DEFAULT_CONTENT_DIR = 'content';
 export const DEFAULT_DATA_DIR = 'data';

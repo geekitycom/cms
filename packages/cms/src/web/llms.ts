@@ -54,7 +54,6 @@ export interface LlmsIndex {
   title: string;
   /** The site's tagline, or empty for none. */
   description: string;
-  /** The gemini:// URL of the site's capsule, while it serves one (TASK-485). */
   capsule?: string | undefined;
   /** The site's menus, every item once. */
   navigation: readonly LlmsEntry[];

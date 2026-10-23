@@ -1,11 +1,3 @@
-/**
- * The gemini:// listener (decision-60, TASK-484): a TLS server that reads one
- * request line per connection, asks the site's own app for the gemtext HTTP
- * serves at the same place, and answers with the Gemini status for what the
- * app said. One rendering path serves both protocols, so a page, a redirect
- * or a status cannot read differently over Gemini than at its `.gmi` URL.
- */
-
 import net from 'node:net';
 import tls from 'node:tls';
 import type { TLSSocket } from 'node:tls';
@@ -17,38 +9,24 @@ import type { GeminiHeader } from './gemini-request.ts';
 import { readProxyPreamble } from './proxy-protocol.ts';
 import { createRequestLimit } from './throttle.ts';
 
-/** Per client address: about one a second, which a reader never reaches and a crawler can keep to. */
 const DEFAULT_LIMIT = { requests: 60, windowSeconds: 60 };
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 
 export interface GeminiListenerOptions {
-  /** 0 for any free port. */
   readonly port: number;
-  /** PEM. */
   readonly certificate: { readonly cert: string; readonly key: string };
-  /** The host the capsule answers for, and the HTTP origin its pages are asked of. Read per request. */
   site(): Promise<{ readonly host: string; readonly origin: string }>;
-  /** The site's app. */
   fetch(request: Request): Promise<Response>;
-  /** Where the access log goes, and whether its lines carry the client address; `undefined` logs nothing. */
   readonly log: { readonly write: (line: string) => void; readonly address: boolean } | undefined;
   readonly now: Clock;
-  /**
-   * Whether a PROXY protocol header from this TCP peer is believed. When it
-   * is, the client the header names is the one throttled and logged; a
-   * connection without one is the client itself. When it is not, a
-   * connection that opens with one is closed.
-   */
-  trustProxy(peer: string): boolean;
+  acceptsProxyHeaderFrom(peer: string): boolean;
   readonly limit?: { readonly requests: number; readonly windowSeconds: number };
   readonly requestTimeoutMs?: number;
 }
 
 export interface GeminiListener {
-  /** The port bound, which matters when it was asked for as 0. */
   readonly port: number;
-  /** Stop accepting, and resolve once every connection has been answered. Safe to call twice. */
   close(): Promise<void>;
 }
 
@@ -56,10 +34,6 @@ export async function listenForGemini(options: GeminiListenerOptions): Promise<G
   const limit = createRequestLimit({ ...(options.limit ?? DEFAULT_LIMIT), now: options.now });
   const timeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
-  /**
-   * One connection from `address`. The address is handed in rather than read
-   * here, so a listener behind a proxy can give the one its PROXY header names.
-   */
   async function answer(socket: TLSSocket, address: string | undefined): Promise<void> {
     const started = performance.now();
     let target = '-';
@@ -135,7 +109,7 @@ export async function listenForGemini(options: GeminiListenerOptions): Promise<G
       const peer = raw.remoteAddress;
       if (
         preamble === undefined ||
-        (preamble.proxied && (peer === undefined || !options.trustProxy(peer)))
+        (preamble.proxied && (peer === undefined || !options.acceptsProxyHeaderFrom(peer)))
       ) {
         raw.destroy();
         return;
@@ -178,12 +152,6 @@ export async function listenForGemini(options: GeminiListenerOptions): Promise<G
   };
 }
 
-/**
- * Read past a PROXY header, if the connection opens with one, and leave every
- * byte after it for TLS. `undefined` for a header that cannot be read or does
- * not finish within `timeoutMs`, or a connection that ends first. A header
- * without an address leaves `address` to the socket's.
- */
 function readPreamble(
   raw: net.Socket,
   timeoutMs: number,
@@ -224,7 +192,6 @@ function readPreamble(
   });
 }
 
-/** The request line as far as it has come, a header to answer at once, or a 59 when time runs out. */
 function readRequest(
   socket: TLSSocket,
   timeoutMs: number,
@@ -251,7 +218,6 @@ function readRequest(
   });
 }
 
-/** The path and query a request asked for, for the log. */
 function targetOf(line: string): string {
   try {
     const url = new URL(line);

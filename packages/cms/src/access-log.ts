@@ -24,11 +24,6 @@ export function writeToStdout(line: string): void {
 
 const LOGGED_ELSEWHERE = Symbol('logged elsewhere');
 
-/**
- * The `env` for a request a listener in this process hands the app and logs
- * itself, as Gemini does: the app's log leaves it out, so one request is one
- * line. A symbol, so nothing that arrives over HTTP can carry it.
- */
 export const LOGGED_ELSEWHERE_ENV: Readonly<Record<symbol, true>> = Object.freeze({
   [LOGGED_ELSEWHERE]: true,
 });

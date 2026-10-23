@@ -6,42 +6,23 @@ export type Options = Required<ConvertOptions>;
 
 interface State {
   readonly options: Options;
-  /** `=>` lines that follow the top-level block being rendered. */
   pending: string[];
-  /** `=>` lines that follow the whole document, in at-end mode. */
   readonly atEnd: string[];
-  /** The number of the last link marked `[n]`. */
   linkNumber: number;
 }
 
-/**
- * Where rendered inline content sits, which decides what a line break and a
- * standalone `=>` line can do there.
- *
- * - `flow`: a paragraph or list item, which may break into several lines and
- *   hold `=>` lines between them.
- * - `quote`: a blockquote, which may break into several lines, but whose
- *   lines all start `>`, so `=>` lines wait for the end of the block.
- * - `line`: a heading or table cell, which is one line.
- */
 type Flow = 'flow' | 'quote' | 'line';
 
 const BREAK = Symbol('break');
-/**
- * A `=>` line, with the text it leaves behind where it cannot stand on its
- * own and has to wait for the end of the block.
- */
 interface Standalone {
   readonly line: string;
   readonly text: string;
 }
-/** A `=>` line that follows the block, in paragraph and copy modes. */
 interface After {
   readonly after: string;
 }
 type Piece = string | typeof BREAK | Standalone | After;
 
-/** How much text besides its link a list item may have and still be a link. */
 const NOTE_LIMIT = 60;
 
 const LINKS = new Set(['link', 'image']);
@@ -165,11 +146,6 @@ function drawCheckbox(item: Node): void {
   );
 }
 
-/**
- * The `=>` lines of a list whose every item is one link, optionally with a
- * date or a short note, such as an archive or a menu; undefined for any other
- * list, or when links are off.
- */
 function linkList(list: Node, state: State): string[] | undefined {
   if (state.options.links === 'off') return undefined;
   const textOnly: State = { ...state, options: { ...state.options, links: 'off' } };
@@ -191,7 +167,6 @@ function linkList(list: Node, state: State): string[] | undefined {
   return lines;
 }
 
-/** The `=>` line of a top-level paragraph that is one link and nothing else, such as a byline. */
 function loneLink(block: Node, state: State): string[] | undefined {
   if (block.type !== 'paragraph' || state.options.links === 'off') return undefined;
   const inline = inlineOf(block).filter(

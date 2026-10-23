@@ -14,17 +14,10 @@ import { matchesEtag } from '../theme/assets.ts';
  */
 export type Representation = 'html' | 'markdown' | 'gemini' | 'text' | 'json';
 
-/**
- * The formats a page's text representations are written in. Markdown is
- * served as itself and as `text/plain`; gemtext is converted from the same
- * Markdown (decision-60).
- */
 export type TextFormat = 'markdown' | 'gemini';
 
-/** The representations written in a {@link TextFormat}. */
 export type TextRepresentation = 'markdown' | 'gemini' | 'text';
 
-/** The format a representation is written in, or `undefined` for HTML and JSON. */
 export function textFormatOf(representation: Representation): TextFormat | undefined {
   switch (representation) {
     case 'markdown':
@@ -191,17 +184,6 @@ export interface RepresentationExtension {
   paths: readonly string[];
 }
 
-/**
- * A `.md`, `.gmi` or `.json` suffix taken off a request path, or `undefined`
- * when the path carries none of them.
- *
- * Both spellings are recognised: `/2026/09/hello/index.md` — the one the `Link`
- * header advertises, and the one an Eleventy-style static build would produce —
- * and the shorter `/2026/09/hello.md` that people actually type, which the
- * router redirects to the first once it has found what it names. The result is a
- * list of candidate paths rather than one, because the trailing slash a
- * permalink carries is exactly what an extension has to displace.
- */
 export function splitRepresentationExtension(
   pathname: string,
 ): RepresentationExtension | undefined {
@@ -403,7 +385,6 @@ export function representationResponse(options: RepresentationResponseOptions): 
 
   headers.set('content-type', CONTENT_TYPES[options.representation]);
   if (textFormatOf(options.representation) !== undefined) {
-    // The point of the Markdown and gemtext is to be read, not downloaded.
     headers.set('content-disposition', 'inline');
   }
 
@@ -647,10 +628,6 @@ function splitList(header: string): string[] {
     .filter((part) => part !== '');
 }
 
-/**
- * The representation the failed request was after: the one its `.md`, `.gmi`
- * or `.json` suffix names, else the one its `Accept` header prefers, else HTML.
- */
 export function representationOf(pathname: string, accept: string | undefined): Representation {
   return (
     splitRepresentationExtension(pathname)?.representation ??

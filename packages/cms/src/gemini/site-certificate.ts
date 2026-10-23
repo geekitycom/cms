@@ -5,7 +5,6 @@ import type { SiteSettings } from '../site/settings.ts';
 import { ensureGeminiCertificate } from './certificate.ts';
 import type { GeminiCertificateResult } from './certificate.ts';
 
-/** The host a generated certificate names: the base URL's in effect. */
 export function geminiHost(
   config: Pick<ResolvedConfig, 'baseUrl' | 'baseUrlSource'>,
   site: SiteSettings,
@@ -13,7 +12,6 @@ export function geminiHost(
   return new URL(effectiveBaseUrl(config, site)).hostname;
 }
 
-/** The site's certificate, made on first use, or `undefined` while Gemini is off. */
 export async function ensureSiteGeminiCertificate(
   config: ResolvedConfig,
   settings: SettingsRegistry,
@@ -23,7 +21,6 @@ export async function ensureSiteGeminiCertificate(
   return await ensureGeminiCertificate(config, geminiHost(config, site), config.now());
 }
 
-/** A certificate that cannot be had leaves Gemini unserved and HTTP serving, and says why. */
 export async function warnAboutGeminiCertificate(
   config: ResolvedConfig,
   settings: SettingsRegistry,

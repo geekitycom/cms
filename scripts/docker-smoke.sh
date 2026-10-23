@@ -24,10 +24,7 @@
 # file is compiled by `pnpm build` inside the image and is not in the checkout
 # (decision-22), so it is read out of the image rather than off the disk; it
 # must also hold the theme's colour tokens, so an empty or stray file fails
-# too. With Gemini, GEEKITY_TRUST_PROXY and the access log's addresses turned
-# on, a gemini:// request inside the container must get `20 text/gemini`, both
-# directly and after a PROXY v1 header, and the log must name the address that
-# header carried. Any other
+# too. Any other
 # outcome fails the run and prints the container's log. The container and the
 # volumes are removed however the run ends.
 #

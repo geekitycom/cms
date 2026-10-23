@@ -1,13 +1,3 @@
-/**
- * One gemini:// request for scripts/docker-smoke.sh, run with the image's own
- * node inside the container under test, so the smoke test needs no Gemini
- * client on the machine running it. With a client address, the request opens
- * with a PROXY protocol v1 header naming it, as a layer-4 proxy writes one.
- * Prints the response header line, and exits non-zero when there is none.
- *
- *   node gemini-request.mjs <port> <url> [client address]
- */
-
 import net from 'node:net';
 import tls from 'node:tls';
 

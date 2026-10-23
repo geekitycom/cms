@@ -5,7 +5,6 @@ import { convert, type LinkMode } from '../src/index.ts';
 
 const lines = (...text: string[]): string => `${text.join('\n')}\n`;
 
-// md2gemini's README shows every link mode converting this text.
 const twoParagraphs = [
   'This is a paragraph with an [inline](https://example.com) link.',
   'Here is [another](https://example.org/) link, part of the same paragraph.',

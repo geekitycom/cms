@@ -1,20 +1,5 @@
-/**
- * The PROXY protocol (HAProxy's, versions 1 and 2): the header a layer-4
- * proxy writes ahead of a client's own bytes to say who the client is
- * (TASK-485). Gemini reaches the site through such a proxy, which passes TLS
- * through untouched, so this header is the only place the visitor's address
- * can come from.
- */
-
 import net from 'node:net';
 
-/**
- * What the first bytes of a connection are: the start of a header that has
- * not all come yet, no header at all, a header that cannot be read, or a
- * header `length` bytes long naming the client's `address`. A header without
- * an address is a proxy speaking for itself (v2 LOCAL, v1 UNKNOWN), or a
- * client that is not on TCP.
- */
 export type ProxyPreamble =
   | { readonly kind: 'partial' }
   | { readonly kind: 'none' }
@@ -26,25 +11,18 @@ const V1_SIGNATURE = Buffer.from('PROXY ');
 const V1_MAX_BYTES = 107;
 const V2_SIGNATURE = Buffer.from('0d0a0d0a000d0a515549540a', 'hex');
 const V2_FIXED_BYTES = 16;
-/** Room for the addresses and any TLVs a proxy adds; a proxy that sends more is not one this site trusts. */
 const V2_MAX_BYTES = V2_FIXED_BYTES + 2048;
 
 const PARTIAL = { kind: 'partial' } as const;
 const NONE = { kind: 'none' } as const;
 const INVALID = { kind: 'invalid' } as const;
 
-/**
- * Read `received`, the bytes a connection has sent so far. A TLS record opens
- * with 0x16, which neither signature does, so a client that sends no header is
- * known from its first byte.
- */
 export function readProxyPreamble(received: Buffer): ProxyPreamble {
   if (startsLike(received, V1_SIGNATURE)) return readV1(received);
   if (startsLike(received, V2_SIGNATURE)) return readV2(received);
   return NONE;
 }
 
-/** Whether `received` and `signature` agree as far as both go. */
 function startsLike(received: Buffer, signature: Buffer): boolean {
   const length = Math.min(received.length, signature.length);
   return received.subarray(0, length).equals(signature.subarray(0, length));
@@ -99,7 +77,6 @@ function readV2(received: Buffer): ProxyPreamble {
   };
 }
 
-/** Sixteen bytes as an IPv6 address in its shortest form, as a socket's own address is written. */
 function ipv6(bytes: Buffer): string {
   const groups = Array.from({ length: 8 }, (_, index) =>
     bytes.readUInt16BE(index * 2).toString(16),

@@ -52,9 +52,6 @@ COPY tsconfig.base.json ./
 COPY packages/md2gemini packages/md2gemini
 COPY packages/cms packages/cms
 
-# Core imports @geekity/md2gemini from the workspace, so its dist/ is built
-# first. Then tsc into dist/ and the admin editor bundle into
-# admin/static/editor.js.
 RUN pnpm --filter @geekity/md2gemini build
 RUN pnpm --filter @geekity/cms build
 
@@ -112,7 +109,6 @@ WORKDIR /site
 # Runs unprivileged, as the uid 1000 the base image ships as `node`.
 USER node
 
-# 1965 is Gemini, which listens only while the site has it turned on.
 EXPOSE 3000 1965
 
 # Only the status code is read, which is why /healthz answers 503 rather than a

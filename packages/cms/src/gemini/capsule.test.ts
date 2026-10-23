@@ -1,8 +1,3 @@
-/**
- * A site served over gemini:// (TASK-484, decision-60): `Cms.serve()` with
- * Gemini on, driven by a real TLS client, and compared with what HTTP serves
- * at the same page's `.gmi` URL.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';

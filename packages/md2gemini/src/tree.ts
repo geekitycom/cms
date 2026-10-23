@@ -6,9 +6,7 @@ import type { Token } from 'markdown-it';
  * it lets each element be rendered from its own children.
  */
 export interface Node {
-  /** The token's type without its `_open` suffix: `paragraph`, `link`, `text`. */
   readonly type: string;
-  /** The opening token, or the token itself when it encloses nothing. */
   readonly token: Token;
   readonly children: readonly Node[];
 }

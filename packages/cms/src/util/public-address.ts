@@ -25,7 +25,6 @@ export const systemHostLookup: HostLookup = async (hostname) =>
 
 type Range = readonly [network: string, prefix: number, type: 'ipv4' | 'ipv6'];
 
-/** Loopback, private and link-local: a peer on this host or its own network. */
 const LOCAL: readonly Range[] = [
   ['10.0.0.0', 8, 'ipv4'],
   ['127.0.0.0', 8, 'ipv4'],
@@ -37,7 +36,6 @@ const LOCAL: readonly Range[] = [
   ['fe80::', 10, 'ipv6'],
 ];
 
-/** Shared, reserved, benchmarking and multicast ranges: not the public internet, and not a peer either. */
 const RESERVED: readonly Range[] = [
   ['0.0.0.0', 8, 'ipv4'],
   ['100.64.0.0', 10, 'ipv4'],
@@ -58,7 +56,6 @@ function blockList(ranges: readonly Range[]): BlockList {
 const LOCAL_RANGES = blockList(LOCAL);
 const PRIVATE_RANGES = blockList([...LOCAL, ...RESERVED]);
 
-/** Whether `address` is on one of `ranges`; `undefined` for a string that is not an IP address. */
 function onRanges(ranges: BlockList, address: string): boolean | undefined {
   const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address)?.[1];
   if (mapped !== undefined) return onRanges(ranges, mapped);
@@ -73,11 +70,6 @@ function isPrivateAddress(address: string): boolean {
   return onRanges(PRIVATE_RANGES, address) ?? true;
 }
 
-/**
- * Whether a connection's peer address is loopback, private or link-local: a
- * proxy on this host or reached through its container network, never a
- * visitor arriving from the internet. Anything that is not an IP address is not.
- */
 export function isLocalAddress(address: string): boolean {
   return onRanges(LOCAL_RANGES, address) ?? false;
 }

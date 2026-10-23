@@ -7,7 +7,6 @@ interface Cell {
   readonly align: Align;
 }
 
-/** A table drawn with box-drawing characters, its header ruled off with a double line. */
 export function drawTable(table: Node, renderCell: (inline: readonly Node[]) => string): string[] {
   const section = (type: string) =>
     table.children

@@ -18,19 +18,14 @@ import { messageOf } from '../util/errors.ts';
 export type GeminiCertificateConfig = Pick<ResolvedConfig, 'dataDir' | 'geminiCert' | 'geminiKey'>;
 
 export interface GeminiCertificate {
-  /** `generated` is the pair under `data/gemini/`; `operator` is the files the config names. */
   readonly source: 'generated' | 'operator';
   readonly certFile: string;
   readonly keyFile: string;
-  /** PEM. */
   readonly cert: string;
-  /** PEM. */
   readonly key: string;
   readonly subject: string;
   readonly validTo: Date;
-  /** Colon-separated upper-case hex, as Gemini clients show it. */
   readonly fingerprint256: string;
-  /** Whether it names the host it was asked about. */
   readonly coversHost: boolean;
 }
 
@@ -48,7 +43,6 @@ const KEY_MODE = 0o600;
 const CERT_MODE = 0o644;
 const FOLDER_MODE = 0o700;
 
-/** The certificate in effect, without making one. */
 export async function readGeminiCertificate(
   config: GeminiCertificateConfig,
   host: string,
@@ -65,11 +59,6 @@ export async function readGeminiCertificate(
   return readGenerated(files, host);
 }
 
-/**
- * The certificate in effect, generated for `host` when the site has none.
- * A stored certificate is never replaced here, whatever host it names: a new
- * one is a new identity to every client that pinned the old one.
- */
 export async function ensureGeminiCertificate(
   config: GeminiCertificateConfig,
   host: string,
@@ -83,7 +72,6 @@ export async function ensureGeminiCertificate(
   });
 }
 
-/** Replace the generated certificate with a new one for `host`. Refused for operator files. */
 export async function regenerateGeminiCertificate(
   config: GeminiCertificateConfig,
   host: string,
@@ -109,13 +97,11 @@ interface PairFiles {
   readonly key: string;
 }
 
-/** What the config names, which may be one file without the other. */
 interface NamedFiles {
   readonly cert: string | undefined;
   readonly key: string | undefined;
 }
 
-/** `undefined` when the config names neither file, so the generated pair is in use. */
 function operatorFiles(config: GeminiCertificateConfig): NamedFiles | undefined {
   const { geminiCert: cert, geminiKey: key } = config;
   return cert === undefined && key === undefined ? undefined : { cert, key };
@@ -217,7 +203,6 @@ function unbracketed(host: string): string {
   return host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
 }
 
-/** The key first and the certificate last, so a certificate on disk always has its key. */
 function writePair(dataDir: string, host: string, now: Date): void {
   const { cert, key } = selfSignedCertificate(unbracketed(host).toLowerCase(), now);
   writeFileAtomicallySync(dataPath(dataDir, GEMINI_KEY), key, { mode: KEY_MODE });

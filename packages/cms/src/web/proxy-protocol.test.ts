@@ -1,7 +1,3 @@
-/**
- * The PROXY protocol header a layer-4 proxy sends ahead of a Gemini client's
- * own bytes (TASK-485), read from what has arrived so far.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

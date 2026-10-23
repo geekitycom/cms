@@ -1,8 +1,3 @@
-/**
- * A site with Gemini on says so where a reader or a tool looks (TASK-485): an
- * HTML page links its gemini:// URL as an alternate, its Markdown footer
- * offers the page over Gemini, and llms.txt names the capsule.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';

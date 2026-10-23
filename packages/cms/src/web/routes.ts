@@ -220,12 +220,6 @@ export function mountPublicSite(
     return indexNowKeyResponse(key);
   });
 
-  // The site's search (TASK-22): a route at a fixed path for the reason the
-  // feeds are, so the form in every theme's footer submits somewhere no
-  // permalink can take. It negotiates like a listing, and `/search/index.md`,
-  // `/search/index.gmi` and `/search/index.json` are the same escape hatches a
-  // listing has. The path without its slash is where a hand-typed URL lands,
-  // and keeps its query on the way to the real one.
   app.get(SEARCH_PATH, (c) => search(c, selectFromAccept(c, LISTING_REPRESENTATIONS)));
   for (const representation of ['markdown', 'gemini', 'json'] as const) {
     app.get(representationHref(SEARCH_PATH, representation), (c) => search(c, representation));

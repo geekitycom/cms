@@ -1,7 +1,3 @@
-/**
- * One line in the access log's field order: what was asked, the status, how
- * long it took, and the client address when there is one to give.
- */
 export function accessLine(
   method: string,
   target: string,

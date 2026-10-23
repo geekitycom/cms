@@ -88,8 +88,7 @@ readonly site="${scratch}/scratch-site"
 
 log "building ${ROOT}/packages/cms"
 # `pnpm pack` ships whatever is in dist/, so a stale build would make this
-# whole script test the wrong bytes. Core imports @geekity/md2gemini, so that
-# is built first.
+# whole script test the wrong bytes.
 pnpm --dir "${ROOT}" --filter @geekity/md2gemini build
 pnpm --dir "${ROOT}" --filter @geekity/cms build
 

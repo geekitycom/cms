@@ -19,11 +19,6 @@ export function gone(c: Context<GeekityEnv>): Response {
   return statusPage(c, 'gone', 410, (url) => c.var.renderer.renderGone(url));
 }
 
-/**
- * A status page in the representation the request asked for: Markdown or
- * gemtext for a `.md` or `.gmi` URL or an `Accept` that prefers it, HTML for
- * anything else.
- */
 function statusPage(
   c: Context<GeekityEnv>,
   page: StatusPageName,
@@ -47,18 +42,10 @@ function statusPage(
 export interface StatusMarkdownOptions {
   /** The maintenance page's back-by time. */
   until?: Date | undefined;
-  /**
-   * The body, in Markdown, when the theme's fails to render; without one the
-   * failure is thrown.
-   */
   fallback?: string | undefined;
   headers?: Record<string, string> | undefined;
 }
 
-/**
- * A status page's Markdown or gemtext, labelled as the representation the
- * request asked for, which is Markdown, plain text or gemtext.
- */
 export function statusMarkdownResponse(
   c: Context<GeekityEnv>,
   representation: TextRepresentation,

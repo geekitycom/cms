@@ -139,28 +139,21 @@ export const OPTIONAL_TEMPLATES = {
   postsPage: 'layouts/posts-page.njk',
 } as const;
 
-/** One slot a theme fills in a text representation: its Markdown and its gemtext template. */
 export interface TextTemplates {
   readonly markdown: string;
   readonly gemini: string;
 }
 
-/** What a theme wrote for one slot, and whether it wrote it in Markdown or gemtext. */
 export interface ThemeText {
   readonly format: TextFormat;
   readonly text: string;
 }
 
-/**
- * The two partials around a page's Markdown or gemtext, found on the theme
- * search path like every other template.
- */
 const CHROME_TEMPLATES = {
   header: { markdown: 'partials/markdown-header.md.njk', gemini: 'partials/gemini-header.gmi.njk' },
   footer: { markdown: 'partials/markdown-footer.md.njk', gemini: 'partials/gemini-footer.gmi.njk' },
 } as const satisfies Record<string, TextTemplates>;
 
-/** What {@link Renderer.renderStatusMarkdown} writes a status page's Markdown or gemtext with. */
 export interface StatusMarkdownContext {
   /** The path the request was for. */
   url: string;
@@ -188,7 +181,6 @@ export interface MarkdownChromeOptions {
   format: TextFormat;
 }
 
-/** A page's header and footer, as the theme wrote them. */
 export interface MarkdownChromeText {
   readonly header: ThemeText;
   readonly footer: ThemeText;
@@ -1195,11 +1187,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     return { ...form, loaded: mark };
   }
 
-  /**
-   * The page at `url` on the site's Gemini capsule, for a theme to link as an
-   * alternate, while the site serves one (TASK-485). Only a page that has
-   * gemtext carries it, so a 404 does not point at another 404.
-   */
   function capsuleContext(url: string): { capsuleUrl?: string } {
     const { pathname, search } = new URL(absoluteUrl(url, config.baseUrl));
     const capsule = capsuleUrl(
@@ -1248,12 +1235,6 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     };
   }
 
-  /**
-   * One slot in `format`. Gemtext is the first of the chosen theme's
-   * `.gmi.njk`, its `.md.njk`, the default theme's `.gmi.njk` and its
-   * `.md.njk`, so a theme's Markdown beats the default theme's gemtext.
-   * Nunjucks then finds the same file, since it walks the same directories.
-   */
   function renderText(
     templates: TextTemplates,
     format: TextFormat,
@@ -1468,7 +1449,6 @@ export const STATUS_PAGES = {
   },
 } as const satisfies Record<string, StatusPage>;
 
-/** Whether the first theme on `dirs` with either template wrote the gemtext one. */
 function writesGemtext(dirs: readonly string[], templates: TextTemplates): boolean {
   for (const dir of dirs) {
     if (findThemeFile([dir], templates.gemini) !== undefined) return true;
