@@ -10,6 +10,7 @@ import { after, describe, it } from 'node:test';
 
 import { selfSignedCertificate } from '../gemini/certificate.ts';
 import { gemini, geminiRequest, proxyV2, refuses } from '../gemini/__testing__/client.ts';
+import { isLocalAddress } from '../util/public-address.ts';
 import { listenForGemini } from './gemini-listener.ts';
 import type { GeminiListener, GeminiListenerOptions } from './gemini-listener.ts';
 
@@ -40,7 +41,7 @@ async function listen(options: Partial<GeminiListenerOptions> = {}): Promise<Stu
     },
     log: { write: (line) => lines.push(line), address: true },
     now: () => new Date(),
-    trustProxy: false,
+    trustProxy: () => false,
     ...options,
   });
   listeners.push(listener);
@@ -160,7 +161,7 @@ async function closesSilently(port: number, bytes: Buffer): Promise<boolean> {
 describe('the gemini listener behind a layer-4 proxy (TASK-485)', () => {
   it('logs and throttles by the address a PROXY v1 or v2 header carries, when it trusts the proxy', async () => {
     const { listener, lines } = await listen({
-      trustProxy: true,
+      trustProxy: isLocalAddress,
       limit: { requests: 1, windowSeconds: 60 },
     });
     assert.equal((await proxied(listener.port, proxyV1('203.0.113.7'))).status, 20);
@@ -177,7 +178,7 @@ describe('the gemini listener behind a layer-4 proxy (TASK-485)', () => {
   });
 
   it('uses the socket address for a v2 LOCAL header or no header at all', async () => {
-    const { listener, lines } = await listen({ trustProxy: true });
+    const { listener, lines } = await listen({ trustProxy: isLocalAddress });
     assert.equal((await proxied(listener.port, proxyV2({ local: true }))).status, 20);
     assert.equal((await gemini(listener.port, '/')).status, 20);
     assert.match(lines[0] ?? '', LOCAL);
@@ -185,7 +186,7 @@ describe('the gemini listener behind a layer-4 proxy (TASK-485)', () => {
   });
 
   it('refuses a PROXY header when it does not trust a proxy', async () => {
-    const { listener, lines } = await listen({ trustProxy: false });
+    const { listener, lines } = await listen({ trustProxy: () => false });
     await assert.rejects(proxied(listener.port, proxyV1('203.0.113.7')));
     await assert.rejects(proxied(listener.port, proxyV2({ address: '203.0.113.7' })));
     assert.ok(await closesSilently(listener.port, proxyV1('203.0.113.7')));
@@ -193,8 +194,39 @@ describe('the gemini listener behind a layer-4 proxy (TASK-485)', () => {
     assert.equal((await gemini(listener.port, '/')).status, 20, 'a direct client is served');
   });
 
+  it('believes a PROXY header only from a loopback or private peer (TASK-504)', async () => {
+    const peers: string[] = [];
+    const { listener, lines } = await listen({
+      trustProxy: (peer) => {
+        peers.push(peer);
+        return isLocalAddress(peer);
+      },
+      limit: { requests: 1, windowSeconds: 60 },
+    });
+    assert.equal((await proxied(listener.port, proxyV1('203.0.113.7'))).status, 20);
+    assert.equal(
+      (await proxied(listener.port, proxyV1('203.0.113.7'))).status,
+      44,
+      'the throttle keys on the address the header carries',
+    );
+    assert.match(lines[0] ?? '', / 203\.0\.113\.7$/);
+    assert.ok(peers.length > 0 && peers.every((peer) => LOCAL.test(peer)), 'asked of the TCP peer');
+  });
+
+  it('closes a connection whose PROXY header comes from a public peer, and serves its TLS', async () => {
+    const { listener, lines } = await listen({
+      trustProxy: (peer) => isLocalAddress(LOCAL.test(peer) ? '198.51.100.20' : peer),
+    });
+    await assert.rejects(proxied(listener.port, proxyV1('203.0.113.7')));
+    await assert.rejects(proxied(listener.port, proxyV2({ address: '203.0.113.7' })));
+    assert.ok(await closesSilently(listener.port, proxyV1('203.0.113.7')));
+    assert.deepEqual(lines, [], 'the spoofed address is neither logged nor throttled');
+    assert.equal((await gemini(listener.port, '/')).status, 20, 'a direct client is served');
+    assert.match(lines[0] ?? '', LOCAL, 'under the address of its own socket');
+  });
+
   it('closes a connection whose header is malformed, too long, or never finishes', async () => {
-    const { listener, asked } = await listen({ trustProxy: true, requestTimeoutMs: 200 });
+    const { listener, asked } = await listen({ trustProxy: isLocalAddress, requestTimeoutMs: 200 });
     assert.ok(await closesSilently(listener.port, Buffer.from('PROXY TCP4 nonsense\r\n')));
     assert.ok(await closesSilently(listener.port, Buffer.from(`PROXY ${'9'.repeat(200)}`)));
     assert.ok(

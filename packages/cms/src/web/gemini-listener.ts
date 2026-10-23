@@ -35,11 +35,12 @@ export interface GeminiListenerOptions {
   readonly log: { readonly write: (line: string) => void; readonly address: boolean } | undefined;
   readonly now: Clock;
   /**
-   * Whether a PROXY protocol header is believed. On, a connection may open
-   * with one, and the client it names is the one throttled and logged; a
-   * connection without one is the client itself. Off, one is refused.
+   * Whether a PROXY protocol header from this TCP peer is believed. When it
+   * is, the client the header names is the one throttled and logged; a
+   * connection without one is the client itself. When it is not, a
+   * connection that opens with one is closed.
    */
-  readonly trustProxy: boolean;
+  trustProxy(peer: string): boolean;
   readonly limit?: { readonly requests: number; readonly windowSeconds: number };
   readonly requestTimeoutMs?: number;
 }
@@ -131,7 +132,11 @@ export async function listenForGemini(options: GeminiListenerOptions): Promise<G
   const server = net.createServer((raw) => {
     raw.on('error', () => undefined);
     void readPreamble(raw, timeoutMs).then((preamble) => {
-      if (preamble === undefined || (preamble.proxied && !options.trustProxy)) {
+      const peer = raw.remoteAddress;
+      if (
+        preamble === undefined ||
+        (preamble.proxied && (peer === undefined || !options.trustProxy(peer)))
+      ) {
         raw.destroy();
         return;
       }
@@ -141,7 +146,7 @@ export async function listenForGemini(options: GeminiListenerOptions): Promise<G
       socket.once('secure', () => clearTimeout(handshake));
       socket.once('close', () => clearTimeout(handshake));
       socket.setTimeout(timeoutMs * 3, () => socket.destroy());
-      answer(socket, preamble.address ?? raw.remoteAddress).catch((error: unknown) => {
+      answer(socket, preamble.address ?? peer).catch((error: unknown) => {
         console.error('A Gemini request failed:', error);
         if (!socket.destroyed) socket.end('40 Something went wrong\r\n');
       });

@@ -36,6 +36,7 @@ import type { RetentionService } from '../privacy/retention.ts';
 import type { Supervision } from '../supervisor/supervision.ts';
 import { SITE } from '../site/namespace.ts';
 import { messageOf } from '../util/errors.ts';
+import { isLocalAddress } from '../util/public-address.ts';
 import type { ReplyContextService, WebmentionService } from '../webmention/index.ts';
 import { syndicationTargetProblems } from '../webmention/syndication.ts';
 import { LOGGED_ELSEWHERE_ENV, writeToStdout } from '../access-log.ts';
@@ -376,7 +377,7 @@ export function createCms(
           }
         : undefined,
       now: resolved.now,
-      trustProxy: resolved.trustProxy,
+      trustProxy: resolved.trustProxy ? isLocalAddress : () => false,
     });
   }
 

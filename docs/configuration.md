@@ -229,8 +229,15 @@ on, a connection may open with a PROXY protocol header, version 1 or 2, and
 the client address in it is the one the throttle counts and the access log
 shows. The header is optional: a connection without one is the client itself.
 A header that cannot be read, is longer than 2 KiB, or is not complete
-within 10 seconds closes the connection. With `trustProxy` off, a connection that opens with a
-PROXY header is closed. [Serving Gemini](deploying.md#serving-gemini) has
+within 10 seconds closes the connection. Only a proxy whose own address is
+loopback (127.0.0.0/8, `::1`), private (10.0.0.0/8, 172.16.0.0/12,
+192.168.0.0/16, `fc00::/7`) or link-local (169.254.0.0/16, `fe80::/10`) may
+send the header, IPv4-mapped IPv6 forms included. That covers a proxy on the
+same host and one that reaches the container over the Docker bridge. A
+connection from any other address that opens with a PROXY header is closed,
+so a proxy on another host with a public address is not trusted, and a
+visitor cannot name a different client address. With `trustProxy` off, a
+connection that opens with a PROXY header is closed. [Serving Gemini](deploying.md#serving-gemini) has
 proxy configurations for Caddy and nginx.
 
 While Gemini is on, the site links to its capsule. Each HTML page that has

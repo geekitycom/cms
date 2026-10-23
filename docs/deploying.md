@@ -372,6 +372,17 @@ header that is malformed, longer than 2 KiB, or not complete within 10
 seconds closes the connection. While `GEEKITY_TRUST_PROXY` is off, a
 connection that opens with a PROXY header is closed.
 
+Only a proxy that connects from a loopback, private or link-local address may
+send the header. Caddy or nginx on the same host qualifies, whether it
+connects to 127.0.0.1 or reaches the container over the Docker bridge. A
+connection from any other address that opens with a PROXY header is closed.
+A proxy on another host with a public address is therefore not trusted. Put
+it on a private network with the site, or let it pass connections through
+without a PROXY header. This also means a visitor who reaches a published
+Gemini port directly cannot send a header that names another address. The
+[configuration reference](configuration.md#the-gemini-listener) lists the
+ranges.
+
 #### Caddy with caddy-l4
 
 Stock Caddy has no layer-4 proxy. Get a Caddy binary that includes
