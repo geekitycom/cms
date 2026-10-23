@@ -989,11 +989,29 @@ It prints once, as `<meta name="description">`. The Open Graph and Twitter
 descriptions use the same text.
 
 **The colours** come from the theme's `theme.json` (see
-[The manifest](manifest.md)), on the context as `theme`.
+[The manifest](manifest.md)) and from the site's
+[colour scheme and mode](../settings.md#colour-scheme-and-mode). They are on
+the context as `theme`:
+
+| Key                 | Value                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------- |
+| `theme.colorScheme` | The manifest's `colorScheme`.                                                                            |
+| `theme.themeColor`  | The manifest's top-level `themeColor`, as `{ light, dark }`.                                             |
+| `theme.scheme`      | The scheme the page is drawn in, as `{ name, label, themeColor }`. Absent when the theme has no schemes. |
+| `theme.mode`        | `system`, `light` or `dark`. Absent when the theme has no schemes.                                       |
+
 `<meta name="color-scheme">` comes before the stylesheet, so a visitor in dark
-mode gets a dark canvas, not a white flash, while the stylesheet loads.
-`<meta name="theme-color">` prints twice: once with
-`media="(prefers-color-scheme: light)"` and once for dark.
+mode gets a dark canvas, not a white flash, while the stylesheet loads. With a
+scheme, the head prints these tags:
+
+| Mode     | `color-scheme` | `theme-color`                                                                                          |
+| -------- | -------------- | ------------------------------------------------------------------------------------------------------ |
+| `system` | `light dark`   | Two tags with the scheme's colours: one with `media="(prefers-color-scheme: light)"` and one for dark. |
+| `light`  | `light`        | One tag with the scheme's light colour and no `media`.                                                 |
+| `dark`   | `dark`         | One tag with the scheme's dark colour and no `media`.                                                  |
+
+A theme with no schemes prints the manifest's `colorScheme` and its two
+`themeColor` values, each with its `media` query.
 
 **The card.**
 
@@ -1221,8 +1239,27 @@ which set a page gets:
 
 - `data-scheme` names the scheme. A page with no `data-scheme` gets the first
   scheme, Paper.
-- `data-mode` is `light` or `dark`. With no `data-mode`, the visitor's system
-  setting picks the mode.
+- `data-mode` is `system`, `light` or `dark`. With `system`, or with no
+  `data-mode`, the visitor's system setting picks the mode.
+
+`base.njk` prints both on every page, the error pages included, from the
+site's `colorScheme` and `colorMode` settings (see
+[Colour scheme and mode](../settings.md#colour-scheme-and-mode)):
+
+```text
+<html lang="en" data-scheme="slate" data-mode="dark">
+```
+
+A `colorScheme` that the theme does not declare prints the theme's first
+scheme. Under a theme with no schemes, `<html>` has neither attribute.
+
+The embed view at `/_geekity/embed` does not load the stylesheet. It carries
+the same two attributes, and its inline style draws the card in the scheme's
+`--color-body`, `--color-text`, `--color-muted`, `--color-primary` and
+`--color-edge` for the mode: the light and dark sets under the system's query
+for `system`, or the one set for a fixed mode. It reads those values from the
+theme's compiled `static/style.css`. Under a theme with no schemes, the card
+keeps its own light colours.
 
 The packaged stylesheet uses these selectors:
 

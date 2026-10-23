@@ -35,7 +35,8 @@ export function embedView(c: Context<GeekityEnv>): Response {
   if (found === undefined) return notFound(c);
 
   c.set('frameable', true);
-  return embedResponse(embedPage(embedSubject(c, found)), conditionalHeaders(c));
+  const page = embedPage({ ...embedSubject(c, found), colors: c.var.renderer.siteColors() });
+  return embedResponse(page, conditionalHeaders(c));
 }
 
 /** What an embed of `found` is drawn from, with the byline it names. */

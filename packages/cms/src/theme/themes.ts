@@ -121,6 +121,31 @@ export interface ThemeScheme {
   readonly themeColor: ThemeColors['themeColor'];
 }
 
+/**
+ * Whether a page follows the reader's system setting or is always light or
+ * always dark (decision-61): the `colorMode` setting.
+ */
+export const COLOR_MODES = ['system', 'light', 'dark'] as const;
+
+/** One of {@link COLOR_MODES}. */
+export type ColorMode = (typeof COLOR_MODES)[number];
+
+/**
+ * Why `name` cannot be the `colorScheme` of a site whose theme draws
+ * `schemes`, or `undefined` when it can. Empty always can: it is the first.
+ */
+export function colorSchemeProblem(
+  schemes: readonly ThemeScheme[],
+  name: string,
+): string | undefined {
+  if (name === '' || schemes.some((scheme) => scheme.name === name)) return undefined;
+  if (schemes.length === 0) {
+    return 'The theme in use declares no colour schemes, so the colour scheme stays empty.';
+  }
+  const names = schemes.map((scheme) => scheme.name).join(', ');
+  return `"${name}" is not a colour scheme of the theme in use. Choose one of ${names}, or leave it empty for the first.`;
+}
+
 /** One theme directory, read and validated. */
 export interface Theme {
   /** The directory name, which is the theme's id and what a site.json names. */

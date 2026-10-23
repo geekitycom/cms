@@ -27,6 +27,15 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 
+import {
+  colorTokens,
+  computedTokens,
+  mediaHolds,
+  selectorMatches,
+  stylesheetProblems,
+  stylesheetRules,
+} from '../theme/scheme-tokens.ts';
+import type { TokenPage } from '../theme/scheme-tokens.ts';
 import { PACKAGED_THEME_DIR, readTheme } from '../theme/themes.ts';
 
 const STYLESHEET = path.join(PACKAGED_THEME_DIR, 'static', 'style.css');
@@ -35,7 +44,7 @@ const STYLESHEET = path.join(PACKAGED_THEME_DIR, 'static', 'style.css');
 interface Pair {
   /** What a reader is looking at, for the assertion message. */
   readonly what: string;
-  /** The custom property the foreground comes from, without the `--`. */
+  /** The custom property the foreground comes from, without the `--color-`. */
   readonly foreground: string;
   /** The custom property the background comes from. */
   readonly background: string;
@@ -55,83 +64,83 @@ interface Pair {
  * them says so.
  */
 const PAIRS: readonly Pair[] = [
-  { what: 'body text', foreground: 'color-text', background: 'color-body', minimum: 7 },
-  { what: 'a heading', foreground: 'color-text', background: 'color-body', minimum: 7 },
+  { what: 'body text', foreground: 'text', background: 'body', minimum: 7 },
+  { what: 'a heading', foreground: 'text', background: 'body', minimum: 7 },
   {
     what: 'a kicker, a date or a meta line',
-    foreground: 'color-muted',
-    background: 'color-body',
+    foreground: 'muted',
+    background: 'body',
     minimum: 7,
   },
-  { what: 'footer text', foreground: 'color-muted', background: 'color-body', minimum: 7 },
+  { what: 'footer text', foreground: 'muted', background: 'body', minimum: 7 },
   {
     what: 'a deck, a quote or a bio note',
-    foreground: 'color-muted',
-    background: 'color-body',
+    foreground: 'muted',
+    background: 'body',
     minimum: 7,
   },
   {
     what: 'muted text on a sunk surface',
-    foreground: 'color-muted',
-    background: 'color-base',
+    foreground: 'muted',
+    background: 'base',
     minimum: 7,
   },
   {
     what: 'a link on the paper',
-    foreground: 'color-primary',
-    background: 'color-body',
+    foreground: 'primary',
+    background: 'body',
     minimum: 7,
   },
   {
     what: 'the kind word in a kicker',
-    foreground: 'color-primary',
-    background: 'color-body',
+    foreground: 'primary',
+    background: 'body',
     minimum: 7,
   },
   {
     what: 'a link on a sunk surface',
-    foreground: 'color-primary',
-    background: 'color-base',
+    foreground: 'primary',
+    background: 'base',
     minimum: 7,
   },
   {
     what: 'the words on a submit button',
-    foreground: 'color-body',
-    background: 'color-primary',
+    foreground: 'body',
+    background: 'primary',
     minimum: 7,
   },
   {
     what: 'the words on a submit button under the pointer',
-    foreground: 'color-body',
-    background: 'color-text',
+    foreground: 'body',
+    background: 'text',
     minimum: 7,
   },
-  { what: 'a tag link', foreground: 'color-secondary', background: 'color-body', minimum: 7 },
+  { what: 'a tag link', foreground: 'secondary', background: 'body', minimum: 7 },
   {
     what: 'the skip link when it is focused',
-    foreground: 'color-text',
-    background: 'color-base-3',
+    foreground: 'text',
+    background: 'base-3',
     minimum: 7,
   },
   {
     what: 'text in a field or a notice',
-    foreground: 'color-text',
-    background: 'color-base',
+    foreground: 'text',
+    background: 'base',
     minimum: 7,
   },
   {
     what: 'text on the cooler sunk surface',
-    foreground: 'color-text',
-    background: 'color-base-2',
+    foreground: 'text',
+    background: 'base-2',
     minimum: 7,
   },
   {
     what: 'code in a block',
-    foreground: 'color-code-text',
-    background: 'color-code-background',
+    foreground: 'code-text',
+    background: 'code-background',
     minimum: 7,
   },
-  { what: 'an error message', foreground: 'color-error', background: 'color-body', minimum: 7 },
+  { what: 'an error message', foreground: 'error', background: 'body', minimum: 7 },
   // The highlighter's token colours (TASK-86): Tomorrow on light paper and
   // Tomorrow Night on dark, every one of them on the block background. A
   // syntax theme is drawn for a reader looking at code for an hour, and some of
@@ -140,298 +149,93 @@ const PAIRS: readonly Pair[] = [
   // and this is where that is kept honest.
   ...(
     [
-      ['a comment', 'color-code-comment'],
-      ['a markup tag', 'color-code-tag'],
-      ['a variable or a list bullet', 'color-code-name'],
-      ['a number or a constant', 'color-code-literal'],
-      ['a class name', 'color-code-class'],
-      ['a string', 'color-code-string'],
-      ['a built-in or a regexp', 'color-code-support'],
-      ['a function name or a heading', 'color-code-function'],
-      ['a keyword', 'color-code-keyword'],
-      ['a preprocessor line', 'color-code-meta'],
+      ['a comment', 'code-comment'],
+      ['a markup tag', 'code-tag'],
+      ['a variable or a list bullet', 'code-name'],
+      ['a number or a constant', 'code-literal'],
+      ['a class name', 'code-class'],
+      ['a string', 'code-string'],
+      ['a built-in or a regexp', 'code-support'],
+      ['a function name or a heading', 'code-function'],
+      ['a keyword', 'code-keyword'],
+      ['a preprocessor line', 'code-meta'],
     ] as const
   ).map(([what, foreground]) => ({
     what: `${what} in a code block`,
     foreground,
-    background: 'color-code-background',
+    background: 'code-background',
     minimum: 7 as const,
   })),
   // A diff's added and removed lines keep the block's own ink on a tinted
   // line, the way prism-diff.css did, so the tint is the pair to check.
   {
     what: 'an added line in a diff',
-    foreground: 'color-code-text',
-    background: 'color-code-added-background',
+    foreground: 'code-text',
+    background: 'code-added-background',
     minimum: 7,
   },
   {
     what: 'a removed line in a diff',
-    foreground: 'color-code-text',
-    background: 'color-code-removed-background',
+    foreground: 'code-text',
+    background: 'code-removed-background',
     minimum: 7,
   },
   // Borders a reader relies on to find a control or a boundary.
   {
     what: 'the focus outline on the paper',
-    foreground: 'color-secondary',
-    background: 'color-body',
+    foreground: 'secondary',
+    background: 'body',
     minimum: 3,
   },
   {
     what: 'the focus outline on a field',
-    foreground: 'color-secondary',
-    background: 'color-base',
+    foreground: 'secondary',
+    background: 'base',
     minimum: 3,
   },
   {
     what: 'a field’s border on the field',
-    foreground: 'color-edge',
-    background: 'color-base',
+    foreground: 'edge',
+    background: 'base',
     minimum: 3,
   },
   {
     what: 'a field’s border on the paper',
-    foreground: 'color-edge',
-    background: 'color-body',
+    foreground: 'edge',
+    background: 'body',
     minimum: 3,
   },
   {
     what: 'a previous or next card’s border',
-    foreground: 'color-edge',
-    background: 'color-body',
+    foreground: 'edge',
+    background: 'body',
     minimum: 3,
   },
   {
     what: 'a code block’s border',
-    foreground: 'color-edge',
-    background: 'color-code-background',
+    foreground: 'edge',
+    background: 'code-background',
     minimum: 3,
   },
   {
     what: 'the citation rule',
-    foreground: 'color-primary',
-    background: 'color-body',
+    foreground: 'primary',
+    background: 'body',
     minimum: 3,
   },
   {
     what: 'the blockquote rule',
-    foreground: 'color-primary',
-    background: 'color-body',
+    foreground: 'primary',
+    background: 'body',
     minimum: 3,
   },
   {
     what: 'an invalid field’s border',
-    foreground: 'color-error',
-    background: 'color-base',
+    foreground: 'error',
+    background: 'base',
     minimum: 3,
   },
 ];
-
-/** What the stylesheet sets on `<html>` that this test reads. */
-const READ = (property: string): boolean =>
-  property.startsWith('--color-') || property === 'color-scheme';
-
-/** One style rule of the compiled stylesheet, with what it sits inside. */
-interface Rule {
-  readonly selectors: readonly string[];
-  /** The conditions of every `@media` around it, innermost last. */
-  readonly media: readonly string[];
-  /** Inside an `@layer`, which an unlayered rule beats whatever its specificity. */
-  readonly layered: boolean;
-  readonly declarations: ReadonlyMap<string, string>;
-}
-
-/**
- * The style rules that set a colour token or `color-scheme`, in source order.
- *
- * `@layer`, `@supports` and `@media` are looked through, recording the media
- * conditions and whether a layer was crossed; any other at-rule (`@property`,
- * `@keyframes`) holds nothing this test reads.
- */
-function rulesOf(css: string): Rule[] {
-  const rules: Rule[] = [];
-  const source = css.replaceAll(/\/\*[\s\S]*?\*\//g, '');
-
-  function walk(from: number, to: number, media: readonly string[], layered: boolean): void {
-    let at = from;
-    while (at < to) {
-      const open = source.indexOf('{', at);
-      const semicolon = source.indexOf(';', at);
-      if (open === -1 || open >= to) return;
-      if (semicolon !== -1 && semicolon < open) {
-        at = semicolon + 1;
-        continue;
-      }
-
-      const prelude = source.slice(at, open).trim();
-      const close = closingBrace(source, open);
-
-      if (prelude.startsWith('@media')) {
-        walk(open + 1, close, [...media, prelude.slice('@media'.length).trim()], layered);
-      } else if (prelude.startsWith('@layer')) {
-        walk(open + 1, close, media, true);
-      } else if (prelude.startsWith('@supports')) {
-        walk(open + 1, close, media, layered);
-      } else if (!prelude.startsWith('@')) {
-        const body = source.slice(open + 1, close);
-        const declarations = new Map<string, string>();
-        for (const [, name = '', value = ''] of body.matchAll(/([\w-]+)\s*:\s*([^;]+)/g)) {
-          if (READ(name)) declarations.set(name, value.trim());
-        }
-        if (declarations.size > 0) {
-          assert.ok(!body.includes('{'), `a nested rule under ${prelude} was not flattened`);
-          rules.push({ selectors: splitTopLevel(prelude), media, layered, declarations });
-        }
-      }
-
-      at = close + 1;
-    }
-  }
-
-  walk(0, source.length, [], false);
-  return rules;
-}
-
-function closingBrace(css: string, open: number): number {
-  let depth = 0;
-  for (let index = open; index < css.length; index += 1) {
-    if (css[index] === '{') depth += 1;
-    if (css[index] === '}') {
-      depth -= 1;
-      if (depth === 0) return index;
-    }
-  }
-  throw new Error('unbalanced braces in the stylesheet');
-}
-
-/** A selector list split on the commas that are not inside parentheses. */
-function splitTopLevel(list: string): string[] {
-  const parts: string[] = [];
-  let depth = 0;
-  let start = 0;
-  for (let index = 0; index < list.length; index += 1) {
-    if (list[index] === '(') depth += 1;
-    if (list[index] === ')') depth -= 1;
-    if (list[index] === ',' && depth === 0) {
-      parts.push(list.slice(start, index).trim());
-      start = index + 1;
-    }
-  }
-  parts.push(list.slice(start).trim());
-  return parts;
-}
-
-/** The `<html>` element as the stylesheet sees it, and the reader's system setting. */
-interface Page {
-  readonly scheme?: string | undefined;
-  readonly mode?: 'light' | 'dark' | undefined;
-  readonly system: 'light' | 'dark';
-}
-
-/**
- * Whether one compound selector matches `<html>` on this page, and its
- * specificity as a count of class-level parts, the only kind these use.
- * `undefined` for a selector that cannot match `<html>` at all, such as
- * `:host`. Anything this test does not know how to read fails it, so a
- * selector it would misjudge cannot slip through.
- */
-function match(
-  selector: string,
-  page: Page,
-): { matches: boolean; specificity: number } | undefined {
-  const attributes: Record<string, string | undefined> = {
-    'data-scheme': page.scheme,
-    'data-mode': page.mode,
-  };
-  let rest = selector.trim();
-  let matches = true;
-  let specificity = 0;
-
-  while (rest !== '') {
-    if (rest.startsWith(':root')) {
-      specificity += 1;
-      rest = rest.slice(':root'.length);
-      continue;
-    }
-    if (rest.startsWith(':host')) return undefined;
-
-    const attribute = /^\[([\w-]+)(?:=(["']?)([^"'\]]*)\2)?\]/.exec(rest);
-    if (attribute) {
-      const [whole, name = '', , value] = attribute;
-      const actual = attributes[name];
-      matches &&= value === undefined ? actual !== undefined : actual === value;
-      specificity += 1;
-      rest = rest.slice(whole.length);
-      continue;
-    }
-
-    const pseudo = /^:(not|is|where)\(/.exec(rest);
-    assert.ok(pseudo, `the colour test cannot read the selector ${selector}`);
-    const open = pseudo[0].length - 1;
-    let depth = 0;
-    let close = open;
-    for (; close < rest.length; close += 1) {
-      if (rest[close] === '(') depth += 1;
-      if (rest[close] === ')') depth -= 1;
-      if (depth === 0) break;
-    }
-    const inner = splitTopLevel(rest.slice(open + 1, close)).map((part) => match(part, page));
-    const known = inner.filter((result) => result !== undefined);
-    const any = known.some((result) => result.matches);
-    const most = Math.max(0, ...known.map((result) => result.specificity));
-
-    if (pseudo[1] === 'not') matches &&= !any;
-    else matches &&= any;
-    if (pseudo[1] !== 'where') specificity += most;
-    rest = rest.slice(close + 1);
-  }
-
-  return { matches, specificity };
-}
-
-/** Whether a media condition holds for this reader; only the colour scheme is asked. */
-function holds(condition: string, page: Page): boolean {
-  const query = /^\(prefers-color-scheme:\s*(light|dark)\)$/.exec(condition);
-  assert.ok(query, `colour tokens are set under @media ${condition}, which this test cannot read`);
-  return query[1] === page.system;
-}
-
-/** What `<html>` ends up with on this page: the cascade over {@link rulesOf}. */
-function computed(rules: readonly Rule[], page: Page): Map<string, string> {
-  const applying: { rule: Rule; specificity: number; order: number }[] = [];
-
-  rules.forEach((rule, order) => {
-    if (!rule.media.every((condition) => holds(condition, page))) return;
-    const results = rule.selectors.map((selector) => match(selector, page));
-    const matching = results.filter((result) => result?.matches === true);
-    if (matching.length === 0) return;
-    const specificity = Math.max(...matching.map((result) => result?.specificity ?? 0));
-    applying.push({ rule, specificity, order });
-  });
-
-  applying.sort(
-    (a, b) =>
-      Number(!a.rule.layered) - Number(!b.rule.layered) ||
-      a.specificity - b.specificity ||
-      a.order - b.order,
-  );
-
-  const properties = new Map<string, string>();
-  for (const { rule } of applying) {
-    for (const [name, value] of rule.declarations) properties.set(name, value);
-  }
-  return properties;
-}
-
-/** Only the colour tokens, without the `--`, which is how {@link PAIRS} names them. */
-function colorTokens(properties: ReadonlyMap<string, string>): Map<string, string> {
-  return new Map(
-    [...properties]
-      .filter(([name]) => name.startsWith('--color-'))
-      .map(([name, value]) => [name.slice(2), value]),
-  );
-}
 
 /** `#rgb`, `#rrggbb` and `rgb(r g b)` as the three channels, 0-255. */
 function channels(color: string): [number, number, number] {
@@ -482,11 +286,15 @@ function normal(color: string | undefined): string | undefined {
 const MODES = ['light', 'dark'] as const;
 
 describe('the default theme palette', () => {
-  const rules = rulesOf(readFileSync(STYLESHEET, 'utf8'));
+  const rules = stylesheetRules(readFileSync(STYLESHEET, 'utf8'));
   const read = readTheme(PACKAGED_THEME_DIR);
   assert.ok(read.ok, read.ok ? '' : read.reason);
   const { schemes } = read.theme;
-  const tokens = (page: Page): Map<string, string> => colorTokens(computed(rules, page));
+  const tokens = (page: TokenPage): Map<string, string> => colorTokens(computedTokens(rules, page));
+
+  it('sets its colours only where this test can read them', () => {
+    assert.deepEqual(stylesheetProblems(rules), []);
+  });
 
   it('declares at least one scheme, Paper first', () => {
     assert.equal(schemes[0]?.name, 'paper');
@@ -501,7 +309,8 @@ describe('the default theme palette', () => {
   });
 
   it('says which modes a browser may paint form controls in, following data-mode', () => {
-    const scheme = (page: Page): string | undefined => computed(rules, page).get('color-scheme');
+    const scheme = (page: TokenPage): string | undefined =>
+      computedTokens(rules, page).get('color-scheme');
 
     assert.equal(scheme({ system: 'light' }), 'light dark');
     assert.equal(scheme({ system: 'dark', mode: 'light' }), 'light');
@@ -520,11 +329,11 @@ describe('the default theme palette', () => {
           rules.some(
             (rule) =>
               rule.declarations.has('--color-body') &&
-              rule.media.every((condition) => holds(condition, { system })) &&
+              rule.media.every((condition) => mediaHolds(condition, { system })) &&
               rule.selectors.some(
                 (selector) =>
                   selector.includes(`[data-scheme="${name}"]`) &&
-                  match(selector, { scheme: name, system })?.matches === true,
+                  selectorMatches(selector, { scheme: name, system }),
               ),
           );
 
@@ -547,7 +356,7 @@ describe('the default theme palette', () => {
         for (const mode of MODES) {
           assert.equal(
             normal(themeColor[mode]),
-            normal(drawn[mode].get('color-body')),
+            normal(drawn[mode].get('body')),
             `theme.json gives ${name} a ${mode} themeColor other than its --color-body`,
           );
         }
@@ -560,13 +369,19 @@ describe('the default theme palette', () => {
               const foreground = drawn[mode].get(pair.foreground);
               const background = drawn[mode].get(pair.background);
 
-              assert.ok(foreground, `--${pair.foreground} is not declared for ${name} ${mode}`);
-              assert.ok(background, `--${pair.background} is not declared for ${name} ${mode}`);
+              assert.ok(
+                foreground,
+                `--color-${pair.foreground} is not declared for ${name} ${mode}`,
+              );
+              assert.ok(
+                background,
+                `--color-${pair.background} is not declared for ${name} ${mode}`,
+              );
 
               const ratio = contrast(foreground, background);
               assert.ok(
                 ratio >= pair.minimum,
-                `${name} ${mode}, ${pair.what}: --${pair.foreground} on --${pair.background} is ${ratio.toFixed(2)}:1, below ${String(pair.minimum)}:1`,
+                `${name} ${mode}, ${pair.what}: --color-${pair.foreground} on --color-${pair.background} is ${ratio.toFixed(2)}:1, below ${String(pair.minimum)}:1`,
               );
             });
           }

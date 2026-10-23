@@ -46,6 +46,7 @@ import {
   createSiteDataSource,
   frontPageSlugs,
   postsPerPage,
+  siteColors,
   siteLocale,
   siteTimezone,
   taxonomyBases,
@@ -63,7 +64,7 @@ import { isServed } from '../content/served.ts';
 import { calendarDayIn } from '../content/time.ts';
 import { commentsFeedPath } from './feeds.ts';
 import type { DocumentContext, NeighbourContext, PhotoContext } from './context.ts';
-import type { FrontPageSlugs, SiteData } from '../theme/site-data.ts';
+import type { FrontPageSlugs, SiteColors, SiteData } from '../theme/site-data.ts';
 import { markdownConversation } from './markdown-conversation.ts';
 import { bioOf, escapeMarkdown, HOME_LINK, oneLine } from './markdown-page.ts';
 import type {
@@ -85,6 +86,8 @@ import type { Taxonomy, TaxonomyBases, TaxonomyRedirect } from '../content/taxon
 import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
 import { createThemeSource, findThemeFile } from '../theme/themes.ts';
 import type { ThemeColors, ThemeSource } from '../theme/themes.ts';
+import { schemeTokens } from '../theme/scheme-tokens.ts';
+import type { SchemeTokens } from '../theme/scheme-tokens.ts';
 import { formatFileSize } from '../util/file-size.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
@@ -330,6 +333,13 @@ export interface Renderer {
    * packaged theme: what the head declares and the web manifest repeats.
    */
   themeColors(): ThemeColors;
+  /**
+   * The scheme and mode the site draws its pages in right now, with the
+   * scheme's colour tokens from the theme's stylesheet (TASK-488): what a page
+   * that does not load the stylesheet, the embed view, colours itself with.
+   * `undefined` under a theme with no schemes.
+   */
+  siteColors(): (SiteColors & { readonly tokens: SchemeTokens }) | undefined;
   /** The Nunjucks environment, for a site that wants to add its own filters. */
   readonly environment: Environment;
   /**
@@ -674,8 +684,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       site,
       menus,
       icons,
-      // The colours the head declares before the stylesheet loads (TASK-146).
-      theme: chosen.colors,
+      // The colours the head declares before the stylesheet loads (TASK-146),
+      // and the scheme and mode the site chose (TASK-488) when the theme has
+      // schemes to choose from.
+      theme: { ...chosen.colors, ...siteColors(site, chosen.schemes) },
       // Where the index for language models is (TASK-149), while the site
       // serves one, so a theme asks `{% if llmsTxt %}`.
       ...(site['llmsTxt'] === false ? {} : { llmsTxt: LLMS_TXT_PATH }),
@@ -1187,6 +1199,18 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
     themeColors() {
       return themes.current().colors;
+    },
+
+    siteColors() {
+      const chosen = themes.current();
+      const colors = siteColors(siteData.read(), chosen.schemes);
+      if (colors === undefined) return undefined;
+      const stylesheet = findThemeFile(chosen.dirs, 'static/style.css');
+      const tokens =
+        stylesheet === undefined
+          ? { light: new Map<string, string>(), dark: new Map<string, string>() }
+          : schemeTokens(stylesheet, colors.scheme.name);
+      return { ...colors, tokens };
     },
 
     pageSize() {

@@ -4,8 +4,9 @@ import type { Document } from '../content/document.ts';
 import type { ImageConfig } from '../images/paths.ts';
 import { absoluteUrl } from '../util/url.ts';
 import type { AuthorContext } from '../site/authors.ts';
+import type { SchemeTokens } from '../theme/scheme-tokens.ts';
 import { siteLocale, siteTimezone } from '../theme/site-data.ts';
-import type { SiteData } from '../theme/site-data.ts';
+import type { SiteColors, SiteData } from '../theme/site-data.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
 import { escapeXml } from './feed-xml.ts';
 import { contentEtag, isNotModified } from './negotiate.ts';
@@ -187,17 +188,27 @@ export function oEmbedResponse(
  * session, so a reader of a framing site sees the same card a signed-in admin
  * would, and nothing about either. `noindex` because the post is the page to
  * find, not its card.
+ *
+ * With `colors`, the card is drawn in the site's scheme and mode (TASK-488),
+ * from the tokens the theme's stylesheet gives that scheme; without, under a
+ * theme that has no schemes, in a look of its own.
  */
-export function embedPage(subject: EmbedSubject): string {
-  return [
+export function embedPage(subject: EmbedSubject & { colors: EmbedColors | undefined }): EmbedPage {
+  const { colors } = subject;
+  const style = colors === undefined ? EMBED_STYLE : schemeStyle(colors);
+  const chosen =
+    colors === undefined
+      ? ''
+      : ` data-scheme="${escapeXml(colors.scheme.name)}" data-mode="${colors.mode}"`;
+  const html = [
     '<!doctype html>',
-    `<html lang="${escapeXml(siteLocale(subject.site))}">`,
+    `<html lang="${escapeXml(siteLocale(subject.site))}"${chosen}>`,
     '<head>',
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     '<meta name="robots" content="noindex">',
     `<title>${escapeXml(subject.label)}</title>`,
-    `<style>${EMBED_STYLE}</style>`,
+    `<style>${style}</style>`,
     '</head>',
     '<body>',
     embedCard(subject),
@@ -206,6 +217,16 @@ export function embedPage(subject: EmbedSubject): string {
     '</html>',
     '',
   ].join('\n');
+  return { html, policy: embedPolicy(style) };
+}
+
+/** The scheme an embed is drawn in, its mode, and the scheme's colour tokens. */
+export type EmbedColors = SiteColors & { readonly tokens: SchemeTokens };
+
+/** The embed view's page and the policy that lets its one style and script run. */
+export interface EmbedPage {
+  readonly html: string;
+  readonly policy: string;
 }
 
 /**
@@ -216,12 +237,15 @@ export function embedPage(subject: EmbedSubject): string {
  * caller marks the context frameable as well, so the baseline leaves off
  * `X-Frame-Options`, which has no way to say "anyone".
  */
-export function embedResponse(page: string, conditional: ConditionalHeaders | undefined): Response {
-  const etag = contentEtag('embed', page);
+export function embedResponse(
+  page: EmbedPage,
+  conditional: ConditionalHeaders | undefined,
+): Response {
+  const etag = contentEtag('embed', page.html);
   const headers = new Headers({
     etag,
     'cache-control': 'no-cache',
-    'content-security-policy': EMBED_CONTENT_SECURITY_POLICY,
+    'content-security-policy': page.policy,
   });
 
   if (isNotModified(conditional, etag, undefined)) {
@@ -229,21 +253,72 @@ export function embedResponse(page: string, conditional: ConditionalHeaders | un
   }
 
   headers.set('content-type', 'text/html; charset=utf-8');
-  return new Response(page, { headers });
+  return new Response(page.html, { headers });
 }
 
 /**
- * The card's look inside the frame. Inline, like the script, because the page
- * loads nothing: one request per embed is all a framing page should cost.
+ * The tokens the card is drawn in, each with the colour the plain card uses
+ * when a theme's stylesheet does not give its scheme one.
  */
-const EMBED_STYLE = [
-  'html{color-scheme:light}',
-  'body{margin:0;background:#fff;color:#1f1f1f;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}',
-  '.geekity-embed{margin:0;padding:16px 20px;border:1px solid #d6d6d6;border-radius:8px;overflow-wrap:anywhere}',
-  '.geekity-embed p{margin:0 0 8px}',
-  '.geekity-embed p:last-child{margin:0;font-size:14px;color:#595959}',
-  '.geekity-embed a{color:#0b57d0}',
-].join('');
+const EMBED_TOKENS = {
+  body: '#fff',
+  text: '#1f1f1f',
+  muted: '#595959',
+  primary: '#0b57d0',
+  edge: '#d6d6d6',
+} as const;
+
+/** A colour value that cannot close the rule or the element it is printed in. */
+const PLAIN_VALUE = /^[\w#%.,() -]+$/;
+
+function tokenDeclarations(tokens: ReadonlyMap<string, string>): string {
+  return Object.entries(EMBED_TOKENS)
+    .map(([name, fallback]) => {
+      const value = tokens.get(name);
+      return `--${name}:${value !== undefined && PLAIN_VALUE.test(value) ? value : fallback}`;
+    })
+    .join(';');
+}
+
+/**
+ * The card's look in a scheme: the plain look's rules over the scheme's
+ * tokens, the light set and the dark set under the system's query, or the one
+ * set a fixed mode shows.
+ */
+function schemeStyle({ mode, tokens }: EmbedColors): string {
+  const first = mode === 'dark' ? tokens.dark : tokens.light;
+  return [
+    `:root{color-scheme:${mode === 'system' ? 'light dark' : mode};${tokenDeclarations(first)}}`,
+    mode === 'system'
+      ? `@media (prefers-color-scheme:dark){:root{${tokenDeclarations(tokens.dark)}}}`
+      : '',
+    cardRules({
+      body: 'var(--body)',
+      text: 'var(--text)',
+      muted: 'var(--muted)',
+      primary: 'var(--primary)',
+      edge: 'var(--edge)',
+    }),
+  ].join('');
+}
+
+/** The card's rules, in the colour each token names. */
+function cardRules(color: Readonly<Record<keyof typeof EMBED_TOKENS, string>>): string {
+  return [
+    `body{margin:0;background:${color.body};color:${color.text};font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}`,
+    `.geekity-embed{margin:0;padding:16px 20px;border:1px solid ${color.edge};border-radius:8px;overflow-wrap:anywhere}`,
+    '.geekity-embed p{margin:0 0 8px}',
+    `.geekity-embed p:last-child{margin:0;font-size:14px;color:${color.muted}}`,
+    `.geekity-embed a{color:${color.primary}}`,
+  ].join('');
+}
+
+/**
+ * The card's look inside the frame under a theme with no schemes. Inline,
+ * like the script, because the page loads nothing: one request per embed is
+ * all a framing page should cost.
+ */
+const EMBED_STYLE = `html{color-scheme:light}${cardRules(EMBED_TOKENS)}`;
 
 /**
  * WordPress's embed protocol, the framed side (wp-includes/js/wp-embed.js is
@@ -276,14 +351,16 @@ function inlineHash(contents: string): string {
   return `'sha256-${createHash('sha256').update(contents, 'utf8').digest('base64')}'`;
 }
 
-const EMBED_CONTENT_SECURITY_POLICY = [
-  "default-src 'none'",
-  `style-src ${inlineHash(EMBED_STYLE)}`,
-  `script-src ${inlineHash(EMBED_SCRIPT)}`,
-  "base-uri 'none'",
-  "form-action 'none'",
-  'frame-ancestors *',
-].join('; ');
+function embedPolicy(style: string): string {
+  return [
+    "default-src 'none'",
+    `style-src ${inlineHash(style)}`,
+    `script-src ${inlineHash(EMBED_SCRIPT)}`,
+    "base-uri 'none'",
+    "form-action 'none'",
+    'frame-ancestors *',
+  ].join('; ');
+}
 
 /**
  * The frame of the embed view, in the shape WordPress's own provider sends:

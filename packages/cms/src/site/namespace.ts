@@ -32,7 +32,13 @@ import type {
   SettingType,
   ValuesOf,
 } from '../settings/types.ts';
-import { PACKAGED_THEME, themeNameProblem } from '../theme/themes.ts';
+import {
+  chooseTheme,
+  COLOR_MODES,
+  colorSchemeProblem,
+  PACKAGED_THEME,
+  themeNameProblem,
+} from '../theme/themes.ts';
 import { isFileSync } from '../util/files.ts';
 import { isRecord } from '../util/guards.ts';
 import { DEFAULT_FEED_CADENCE, DEFAULT_NOTIFY_SERVER, UPDATE_PERIODS } from './feed-settings.ts';
@@ -498,6 +504,23 @@ export const SITE = declareNamespace({
       default: PACKAGED_THEME,
       description: 'The theme directory the site renders through. Empty means the packaged one.',
       check: (value) => (value === '' ? undefined : themeNameProblem(value)),
+    },
+    color_scheme: {
+      fileKey: 'colorScheme',
+      type: optionalText,
+      default: '',
+      description: 'The colour scheme of the theme in use. Empty means its first.',
+      check: (value, after, dirs) =>
+        colorSchemeProblem(
+          chooseTheme({ themesDir: dirs.themesDir, name: String(after['theme']) }).schemes,
+          value,
+        ),
+    },
+    color_mode: {
+      fileKey: 'colorMode',
+      type: oneOf(COLOR_MODES),
+      default: 'system',
+      description: 'Whether pages follow the reader system setting, or are always light or dark.',
     },
     locale: {
       type: optionalText,

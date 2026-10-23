@@ -35,7 +35,13 @@ import { DEFAULT_SITE_SETTINGS, SITE } from '../site/settings.ts';
 import type { SiteLicense, SiteSettings } from '../site/settings.ts';
 
 type OffTheForm =
-  'taxonomy_redirects' | 'menus' | 'index_now_key' | 'clients_without_pkce' | 'avatar';
+  | 'taxonomy_redirects'
+  | 'menus'
+  | 'index_now_key'
+  | 'clients_without_pkce'
+  | 'avatar'
+  | 'color_scheme'
+  | 'color_mode';
 
 type FormKey = Exclude<keyof SiteSettings, OffTheForm>;
 

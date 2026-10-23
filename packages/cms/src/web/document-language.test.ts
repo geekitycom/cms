@@ -52,7 +52,7 @@ describe('the article lang (TASK-154 AC #2)', () => {
   it('marks a post in another language, in its canonical spelling', async () => {
     const html = await body(await site(), '/2026/09/bonjour/');
 
-    assert.match(html, /<html lang="en">/);
+    assert.match(html, /<html lang="en"[ >]/);
     assert.deepEqual(articles(html), ['<article class="blog-post h-entry" lang="fr-CA">']);
   });
 

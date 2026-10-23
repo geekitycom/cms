@@ -72,6 +72,8 @@ The file holds these keys:
 - `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`
 - `contactEmail`, `securityContacts`, `securityPolicy`, `securityLanguages`
 - `relays`, `menus` and `taxonomyRedirects`
+- `colorScheme` (when set) and `colorMode` (see
+  [Colour scheme and mode](#colour-scheme-and-mode))
 
 A save writes every one of these keys, so the file always holds the whole set
 of values in effect for a theme or an Eleventy build to read. It keeps every
@@ -383,6 +385,46 @@ default theme's header, inside the link home and in front of the title, on
 every page. It is off by default. `site.json` stores it as `headerIcon`. The
 header shows no icon while the box is clear, while the site has no icon, or
 while image optimization is off. See [The page shell](theme/page-shell.md).
+
+## Colour scheme and mode
+
+Two settings choose how the site's pages are coloured (decision-61):
+
+| Setting             | `site.json` key | Values                    | Default                          |
+| ------------------- | --------------- | ------------------------- | -------------------------------- |
+| `site.color_scheme` | `colorScheme`   | A scheme name, or empty   | Empty: the theme's first scheme. |
+| `site.color_mode`   | `colorMode`     | `system`, `light`, `dark` | `system`                         |
+
+`colorScheme` names one of the colour schemes that the active theme declares in
+its `theme.json` (see [Colour schemes](theme/manifest.md#colour-schemes)). The
+packaged theme declares `paper`, `slate`, `forest`, `plum`, `ocean` and `ink`.
+Paper is its first. `site.json` has no `colorScheme` while the value is empty.
+
+`colorMode` sets which of the scheme's two sets of colours a page uses:
+
+- `system` follows the visitor's light or dark setting.
+- `light` always uses the light colours.
+- `dark` always uses the dark colours.
+
+A save checks `colorScheme` against the theme in effect after the save. When
+the same save changes `theme`, the check uses the new theme. The save is
+refused when the name is not one of that theme's schemes, or when the theme
+declares no schemes and the name is not empty. The message lists the names the
+theme accepts. `colorMode` accepts only the three values above.
+
+A page never fails because of these values. A scheme name that the active
+theme does not declare, for example after a change of theme or a hand edit,
+draws the theme's first scheme. A `colorMode` that is not one of the three
+values is `system`. A theme that declares no schemes ignores both settings.
+
+The variables `GEEKITY_SITE__COLOR_SCHEME` and `GEEKITY_SITE__COLOR_MODE`
+override the settings in the admin and on the command line, as for every other
+`site` setting (see [Runtime settings](#runtime-settings)). Like the other
+`site` settings, the public pages read `site.json` and do not follow these
+variables.
+
+[The page shell](theme/page-shell.md#colour-schemes-and-modes) describes how a
+page prints the chosen scheme and mode.
 
 ## License
 

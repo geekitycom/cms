@@ -65,6 +65,8 @@ const STABLE_SITE_JSON_KEYS = [
   'locationSharing',
   'clientsWithoutPkce',
   'avatar',
+  'colorScheme',
+  'colorMode',
 ];
 
 const dirs: string[] = [];
@@ -74,7 +76,7 @@ after(async () => {
 
 async function siteWith(
   file: Record<string, unknown>,
-  config: { baseUrl?: string } = {},
+  config: { baseUrl?: string; themesDir?: string } = {},
   env: Record<string, string> = {},
 ): Promise<{ contentDir: string; file: string; settings: ReturnType<typeof createSettings> }> {
   const root = await mkdtemp(path.join(tmpdir(), 'geekity-site-namespace-'));
@@ -254,5 +256,112 @@ describe('the site namespace', () => {
       'admin',
     );
     assert.equal(refused.ok, false);
+  });
+});
+
+describe('the colour scheme and mode settings (TASK-488)', () => {
+  async function themesWith(themes: Record<string, Record<string, string>>): Promise<string> {
+    const root = await mkdtemp(path.join(tmpdir(), 'geekity-site-namespace-themes-'));
+    dirs.push(root);
+    for (const [name, files] of Object.entries(themes)) {
+      for (const [relative, contents] of Object.entries(files)) {
+        const file = path.join(root, name, relative);
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(file, contents);
+      }
+    }
+    return root;
+  }
+
+  function problemOf(result: { ok: boolean; problems?: Record<string, string> }): string {
+    return result.problems?.['color_scheme'] ?? '';
+  }
+
+  it('default to the theme first scheme and the system mode', async () => {
+    const { settings } = await siteWith({});
+    assert.equal(await settings.get(SITE.color_scheme), '');
+    assert.equal(await settings.get(SITE.color_mode), 'system');
+  });
+
+  it('are read from colorScheme and colorMode in site.json', async () => {
+    const { settings } = await siteWith({ colorScheme: 'slate', colorMode: 'dark' });
+    assert.equal(await settings.get(SITE.color_scheme), 'slate');
+    assert.equal(await settings.get(SITE.color_mode), 'dark');
+  });
+
+  it('take an environment variable over the file', async () => {
+    const { settings } = await siteWith(
+      { colorScheme: 'slate', colorMode: 'dark' },
+      {},
+      { GEEKITY_SITE__COLOR_SCHEME: 'ink', GEEKITY_SITE__COLOR_MODE: 'light' },
+    );
+    assert.equal(await settings.get(SITE.color_scheme), 'ink');
+    assert.equal(await settings.get(SITE.color_mode), 'light');
+  });
+
+  it('save a scheme the packaged theme declares, and empty for its first', async () => {
+    const { settings, file } = await siteWith({});
+
+    assert.deepEqual(await settings.set('site', new Map([['color_scheme', 'forest']]), 'admin'), {
+      ok: true,
+    });
+    const written = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
+    assert.equal(written['colorScheme'], 'forest');
+    assert.deepEqual(await settings.set('site', new Map([['color_scheme', '']]), 'admin'), {
+      ok: true,
+    });
+  });
+
+  it('refuse a scheme the active theme does not declare, naming the ones it does', async () => {
+    const { settings } = await siteWith({});
+
+    const refused = await settings.set('site', new Map([['color_scheme', 'neon']]), 'admin');
+
+    assert.equal(refused.ok, false);
+    assert.match(problemOf(refused), /neon/);
+    assert.match(problemOf(refused), /paper/);
+  });
+
+  it('check the scheme against the theme named in the same save', async () => {
+    const themesDir = await themesWith({
+      dusk: {
+        'theme.json': JSON.stringify({
+          name: 'Dusk',
+          kind: 'site',
+          schemes: [{ name: 'dusk', label: 'Dusk' }],
+        }),
+      },
+      plain: {
+        'theme.json': JSON.stringify({ name: 'Plain', kind: 'site' }),
+        'static/style.css': 'body{}',
+      },
+    });
+    const { settings } = await siteWith({}, { themesDir });
+
+    const toDusk = new Map([
+      ['theme', 'dusk'],
+      ['color_scheme', 'dusk'],
+    ]);
+    assert.deepEqual(await settings.set('site', toDusk, 'admin'), { ok: true });
+
+    const paperOnDusk = await settings.set('site', new Map([['color_scheme', 'paper']]), 'admin');
+    assert.equal(paperOnDusk.ok, false);
+
+    const toPlain = new Map([
+      ['theme', 'plain'],
+      ['color_scheme', 'dusk'],
+    ]);
+    const onPlain = await settings.set('site', toPlain, 'admin');
+    assert.equal(onPlain.ok, false);
+    assert.match(problemOf(onPlain), /no colour schemes/);
+  });
+
+  it('refuse a mode other than system, light or dark', async () => {
+    const { settings } = await siteWith({});
+    const refused = await settings.set('site', new Map([['color_mode', 'sepia']]), 'admin');
+    assert.equal(refused.ok, false);
+    assert.deepEqual(await settings.set('site', new Map([['color_mode', 'light']]), 'admin'), {
+      ok: true,
+    });
   });
 });

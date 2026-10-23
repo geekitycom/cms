@@ -8,6 +8,7 @@
  */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -19,6 +20,9 @@ import { sandbox, signIn } from '../admin/__testing__/harness.ts';
 import { generateImageVariants } from '../images/variants.ts';
 import type { Cms, GeekityConfig } from '../index.ts';
 import { createUser, setUserProfile } from '../site/users.ts';
+import { schemeTokens } from '../theme/scheme-tokens.ts';
+import type { SchemeTokens } from '../theme/scheme-tokens.ts';
+import { PACKAGED_THEME_DIR } from '../theme/themes.ts';
 import { child, parseXml } from './__testing__/xml.ts';
 
 const box = sandbox();
@@ -369,7 +373,7 @@ describe('the embed view (TASK-208)', () => {
       const { html } = await embedViewOf(cms, url);
       const card = String((await embed(cms, url))['html']).replace(/<iframe[\s\S]*$/, '');
 
-      assert.match(html, /^<!doctype html>\n<html lang="en">/, url);
+      assert.match(html, /^<!doctype html>\n<html lang="en"[ >]/, url);
       assert.ok(html.includes('<meta charset="utf-8">'), `${url}: no charset`);
       assert.ok(html.includes('<meta name="viewport"'), `${url}: no viewport`);
       assert.match(html, /<title>[^<]+<\/title>/, url);
@@ -530,6 +534,93 @@ function framedScript(script: string, hash: string) {
   }
   return { posted, fire, click };
 }
+
+describe('the embed view in the colour scheme and mode the site chooses (TASK-488)', () => {
+  const POST = 'https://blog.example/2026/09/hello/';
+  const packaged = JSON.parse(
+    readFileSync(path.join(PACKAGED_THEME_DIR, 'theme.json'), 'utf8'),
+  ) as { schemes: { name: string; themeColor: { light: string; dark: string } }[] };
+  const tokensOf = (name: string): SchemeTokens =>
+    schemeTokens(path.join(PACKAGED_THEME_DIR, 'static', 'style.css'), name);
+  const paperOf = (name: string): { light: string; dark: string } =>
+    packaged.schemes.find((scheme) => scheme.name === name)?.themeColor ?? { light: '', dark: '' };
+
+  /** The opening `<html …>` tag. */
+  function htmlTag(html: string): string {
+    return /<html[^>]*>/.exec(html)?.[0] ?? '';
+  }
+
+  /** The style's `@media (prefers-color-scheme: dark)` part, or empty. */
+  function darkPart(style: string): string {
+    return /@media \(prefers-color-scheme: ?dark\)\{(.*)\}\}/.exec(style)?.[1] ?? '';
+  }
+
+  it('draws the first scheme in both modes when the site chooses neither', async () => {
+    const { html } = await embedViewOf(await site(), POST);
+    const style = inline(html, 'style');
+    const paper = tokensOf('paper');
+
+    assert.equal(htmlTag(html), '<html lang="en" data-scheme="paper" data-mode="system">');
+    assert.match(style, /color-scheme:light dark/);
+    assert.ok(style.includes(paperOf('paper').light), 'no light paper');
+    assert.ok(darkPart(style).includes(paperOf('paper').dark), 'no dark paper under the query');
+    for (const token of ['text', 'muted', 'primary', 'edge']) {
+      assert.ok(style.includes(paper.light.get(token) ?? '-'), `no light ${token}`);
+      assert.ok(darkPart(style).includes(paper.dark.get(token) ?? '-'), `no dark ${token}`);
+    }
+  });
+
+  it('draws the chosen scheme in the dark mode alone', async () => {
+    const cms = await site({ colorScheme: 'slate', colorMode: 'dark' });
+    const { response, html } = await embedViewOf(cms, POST);
+    const style = inline(html, 'style');
+
+    assert.equal(htmlTag(html), '<html lang="en" data-scheme="slate" data-mode="dark">');
+    assert.match(style, /color-scheme:dark/);
+    assert.ok(style.includes(paperOf('slate').dark));
+    assert.ok(style.includes(tokensOf('slate').dark.get('text') ?? '-'));
+    assert.ok(!style.includes(paperOf('slate').light), 'the light paper is drawn');
+    assert.equal(darkPart(style), '');
+    assert.equal(directives(response).get('style-src'), sha256(style));
+  });
+
+  it('draws the chosen scheme in the light mode alone', async () => {
+    const { html } = await embedViewOf(
+      await site({ colorScheme: 'ink', colorMode: 'light' }),
+      POST,
+    );
+    const style = inline(html, 'style');
+
+    assert.equal(htmlTag(html), '<html lang="en" data-scheme="ink" data-mode="light">');
+    assert.match(style, /color-scheme:light[;}]/);
+    assert.ok(style.includes(tokensOf('ink').light.get('primary') ?? '-'));
+    assert.ok(!style.includes(paperOf('ink').dark), 'the dark paper is drawn');
+  });
+
+  it('falls back to the first scheme for one the theme does not declare', async () => {
+    const { html } = await embedViewOf(await site({ colorScheme: 'neon' }), POST);
+    assert.equal(htmlTag(html), '<html lang="en" data-scheme="paper" data-mode="system">');
+    assert.ok(inline(html, 'style').includes(paperOf('paper').light));
+  });
+
+  it('keeps its own look under a theme with no schemes', async () => {
+    const themesDir = await box.dir('geekity-oembed-themes-');
+    await mkdir(path.join(themesDir, 'plain', 'static'), { recursive: true });
+    await writeFile(
+      path.join(themesDir, 'plain', 'theme.json'),
+      JSON.stringify({ name: 'Plain', kind: 'site' }),
+    );
+    await writeFile(path.join(themesDir, 'plain', 'static', 'style.css'), 'body{}');
+    const cms = await site({ theme: 'plain', colorMode: 'dark' }, { themesDir });
+
+    const { html } = await embedViewOf(cms, POST);
+    assert.equal(htmlTag(html), '<html lang="en">');
+    assert.match(
+      inline(html, 'style'),
+      /^html\{color-scheme:light\}body\{margin:0;background:#fff;/,
+    );
+  });
+});
 
 describe("the embed view's side of the wp-embed protocol (TASK-208)", () => {
   async function script(): Promise<string> {

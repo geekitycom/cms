@@ -127,7 +127,7 @@ describe('a General form the validator refuses', () => {
 
     assert.equal((await saveSettings(agent, 'general', { language: 'pt-BR' })).status, 303);
 
-    assert.match(await (await cms.app.request('/')).text(), /<html lang="pt-BR">/);
+    assert.match(await (await cms.app.request('/')).text(), /<html lang="pt-BR"[ >]/);
     assert.match(
       await (await cms.app.request('/feed/')).text(),
       /<language>pt-BR<\/language>/,
@@ -181,7 +181,7 @@ describe('a General form the validator refuses', () => {
     assert.equal(saved.status, 303);
     const home = await (await cms.app.request('/')).text();
     assert.match(home, />September 2, 2026</);
-    assert.match(home, /<html lang="en">/, 'the locale leaves the page language alone');
+    assert.match(home, /<html lang="en"[ >]/, 'the locale leaves the page language alone');
     assert.equal((await stored())['locale'], 'en-US');
     assert.equal(field(await (await agent.get('/admin/settings')).text(), 'locale'), 'en-US');
   });

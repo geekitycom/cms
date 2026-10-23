@@ -11,6 +11,8 @@ import {
 import type { TaxonomyBases, TaxonomyRedirect } from '../content/taxonomy.ts';
 import { DEFAULT_TIMEZONE } from '../content/time.ts';
 import { isRecord } from '../util/guards.ts';
+import { COLOR_MODES, themeScheme } from './themes.ts';
+import type { ColorMode, ThemeScheme } from './themes.ts';
 
 /** Where the site-wide data file lives, relative to the content directory. */
 export const SITE_DATA_FILE = '_data/site.json';
@@ -285,4 +287,27 @@ export interface FrontPageSlugs {
   homepage: string;
   /** The page whose permalink carries the listing, or empty for none. */
   postsPage: string;
+}
+
+/** The scheme and the mode a page is drawn in (decision-61). */
+export interface SiteColors {
+  readonly scheme: ThemeScheme;
+  readonly mode: ColorMode;
+}
+
+/**
+ * The scheme a page of this site is drawn in, out of the theme's `schemes`,
+ * and its mode: `colorScheme` when the theme declares it, else the theme's
+ * first, and `colorMode` when it is one of {@link COLOR_MODES}, else `system`.
+ * `undefined` for a theme with no schemes, whose page names neither.
+ */
+export function siteColors(
+  site: SiteData,
+  schemes: readonly ThemeScheme[],
+): SiteColors | undefined {
+  const named = site['colorScheme'];
+  const scheme = themeScheme(schemes, typeof named === 'string' ? named.trim() : '');
+  if (scheme === undefined) return undefined;
+  const mode = COLOR_MODES.find((each) => each === site['colorMode']) ?? 'system';
+  return { scheme, mode };
 }
