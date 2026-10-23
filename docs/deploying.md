@@ -101,7 +101,7 @@ port published on every interface is reachable from the internet even when the
 firewall is closed. A client that connects to it directly can put any address
 in `X-Forwarded-For`.
 
-The proxy forwards to `http://127.0.0.1:3000`. Geekity reads the **first**
+The proxy forwards to `http://127.0.0.1:3000`. Geekity CMS reads the **first**
 address in `X-Forwarded-For`. The proxy must replace that header with the
 address it saw. It must not append to a header the client sent. For nginx:
 
@@ -117,7 +117,7 @@ location / {
 Set the proxy's body limit to at least the larger of
 `GEEKITY_UPLOAD_MAX_BYTES` and `GEEKITY_UPLOAD_MEDIA_MAX_BYTES`, which is
 200 MiB by default. Otherwise the proxy refuses an episode with a 413 before
-Geekity sees it. Proxy limits:
+Geekity CMS sees it. Proxy limits:
 
 - nginx defaults to 1 MiB.
 - Caddy sets no limit unless the site block has
@@ -125,7 +125,7 @@ Geekity sees it. Proxy limits:
 - Cloudflare's free plan stops at 100 MB, whatever the origin allows. Upload a
   larger episode to the server directly.
 
-Geekity compresses its own text responses with brotli or gzip, so the proxy
+Geekity CMS compresses its own text responses with brotli or gzip, so the proxy
 does not need to. If the proxy also compresses (nginx with `gzip on`, Caddy
 with `encode`, or a CDN such as Cloudflare), add `GEEKITY_COMPRESSION=false` to
 the `.env`. Each response is then compressed once, by the proxy. Leave

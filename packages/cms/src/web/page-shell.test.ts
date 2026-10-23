@@ -482,7 +482,7 @@ describe('the footer (AC #2, TASK-105)', () => {
     const printed = footer(await body(cms, '/'));
 
     assert.match(printed, new RegExp(`&copy; ${YEAR}, Ada Lovelace`), 'no copyright line');
-    assert.match(printed, /Published with[\s\S]*Geekity/, 'no colophon');
+    assert.match(printed, /Published with[\s\S]*Geekity CMS/, 'no colophon');
   });
 
   it('prints menus.footer on every page and nothing off an account (TASK-105 AC #4)', async () => {

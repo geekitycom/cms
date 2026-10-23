@@ -1323,7 +1323,7 @@ async function serveWorker(configPath: string | undefined): Promise<number> {
           'and recorded in data/dev-mode.jsonl. `geekity dev-mode off` takes the site live.\n',
       );
     }
-    process.stdout.write(`Geekity is serving ${cms.config.baseUrl} on port ${String(port)}\n`);
+    process.stdout.write(`Geekity CMS is serving ${cms.config.baseUrl} on port ${String(port)}\n`);
     worker.serving(cms);
   } catch (error) {
     const message = messageOf(error);
