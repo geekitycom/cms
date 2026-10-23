@@ -152,13 +152,13 @@ The stylesheet sets:
 - a serif body and sans headings at an 18px root
 - one column at 42rem
 - warm paper with a rust primary and a blue secondary
-- a second scheme under `prefers-color-scheme: dark` that redefines the same
-  `--color-*` tokens on dark paper
+- six colour schemes (Paper, Slate, Forest, Plum, Ocean and Ink), each with a
+  light and a dark set of the same `--color-*` tokens
 
 `packages/cms/src/web/theme-colors.test.ts` reads the `--color-*` custom
 properties from the compiled stylesheet. It checks that every run of text in
-both schemes meets 7:1 contrast and every border a visitor relies on meets 3:1.
-A colour change that breaks either ratio fails the build.
+every scheme, in both modes, meets 7:1 contrast and every border a visitor
+relies on meets 3:1. A colour change that breaks either ratio fails the build.
 
 The kicker above each entry names its kind. Only an article has a headline, so
 a note or a reply shows just its words. The bio under an entry shows the person

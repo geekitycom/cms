@@ -172,6 +172,25 @@ describe('the default theme stylesheet', () => {
     assert.equal(border('pre', 'border'), '1px solid canvastext');
   });
 
+  it('keeps the forced-colours rules for every colour scheme and mode (TASK-487 AC #5)', () => {
+    const forced = rules.filter((rule) => rule.media === '(forced-colors: active)');
+    assert.ok(forced.length > 0, 'there is a forced-colors block');
+    assert.deepEqual(
+      forced
+        .flatMap((rule) => rule.selectors)
+        .filter((selector) => /data-(?:scheme|mode)/.test(selector)),
+      [],
+      'a forced-colours rule is limited to one scheme or mode',
+    );
+    assert.deepEqual(
+      rules
+        .filter((rule) => rule.declarations.has('forced-color-adjust'))
+        .flatMap((rule) => rule.selectors),
+      [],
+      'something opts out of the reader’s forced palette',
+    );
+  });
+
   it('never takes a focus ring away, which a forced palette would otherwise redraw', () => {
     const removed = rules.filter(
       (rule) =>

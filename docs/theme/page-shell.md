@@ -1212,13 +1212,77 @@ clears Tailwind's own palette. It maps Tailwind's utilities (`text-ink`,
 `bg-paper`, `border-edge` and the rest) onto these properties with
 `@theme inline`, so redefining a token recolours every rule that uses it.
 
-A second scheme under `@media (prefers-color-scheme: dark)` redefines the same
-tokens on dark paper. `color-scheme: light dark` lets a browser paint its own
-form controls and scrollbars to match. There is no toggle. The visitor's system
-setting picks the scheme.
+### Colour schemes and modes
 
-Both schemes meet the Colour contrast rule of the
-[specification.website checklist](https://specification.website/checklist.md):
+The stylesheet draws each colour scheme that `theme.json` lists under
+`schemes` (see [Colour schemes](manifest.md#colour-schemes)). Each scheme sets
+every token twice: a light set and a dark set. Two attributes on `<html>` pick
+which set a page gets:
+
+- `data-scheme` names the scheme. A page with no `data-scheme` gets the first
+  scheme, Paper.
+- `data-mode` is `light` or `dark`. With no `data-mode`, the visitor's system
+  setting picks the mode.
+
+The packaged stylesheet uses these selectors:
+
+| Selector                                                                               | What it sets                                       |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `:root[data-scheme="<name>"]`                                                          | The scheme's light set.                            |
+| `:root[data-scheme="<name>"]:not([data-mode="light"])` in `prefers-color-scheme: dark` | The scheme's dark set, from the system.            |
+| `:root[data-scheme="<name>"][data-mode="dark"]`                                        | The scheme's dark set, always.                     |
+| `:root`                                                                                | Paper's light set, and `color-scheme: light dark`. |
+| `:root[data-mode="light"]`, `:root[data-mode="dark"]`                                  | `color-scheme: light` or `dark`.                   |
+
+Paper's blocks also match plain `:root`, so a page with no `data-scheme` is
+drawn in Paper. The other schemes come after Paper in the file and set every
+token, so a named scheme wins. `color-scheme` follows the mode, so a browser
+paints its own form controls and scrollbars to match.
+
+In `src/style.css` each scheme is one block. The dark set sits inside
+`@variant dark { … }`. The stylesheet redefines Tailwind's `dark` variant as
+the two dark selectors above, and Tailwind writes out both.
+
+The packaged schemes:
+
+| Scheme   | Light paper | Light link | Dark paper | Dark link |
+| -------- | ----------- | ---------- | ---------- | --------- |
+| `paper`  | `#faf7f2`   | `#8c2f1f`  | `#171412`  | `#ee9370` |
+| `slate`  | `#f4f7fb`   | `#0f4e94`  | `#12161c`  | `#80b7fe` |
+| `forest` | `#f5f7ed`   | `#035b27`  | `#0f1912`  | `#75c687` |
+| `plum`   | `#fbf3fa`   | `#822973`  | `#1b121d`  | `#f493e0` |
+| `ocean`  | `#eef9fb`   | `#04585c`  | `#08191f`  | `#57c5cb` |
+| `ink`    | `#ffffff`   | `#1b388a`  | `#0d0d0d`  | `#aec8fe` |
+
+Ink is monochrome with one blue for links. It holds text to 10:1 and borders
+to 4.5:1.
+
+Under `@media (forced-colors: active)`, the visitor's own palette replaces
+every colour, and the stylesheet gives a border to anything that a background
+alone draws. Those rules name no scheme or mode, so they apply under every
+scheme.
+
+### A site theme's own stylesheet
+
+A site theme that replaces `static/style.css` must draw every scheme its
+`theme.json` declares. For each scheme it supplies:
+
+- every `--color-*` token in the table below on `:root[data-scheme="<name>"]`
+- the same tokens for dark mode on
+  `:root[data-scheme="<name>"]:not([data-mode="light"])` inside
+  `@media (prefers-color-scheme: dark)`, and on
+  `:root[data-scheme="<name>"][data-mode="dark"]`
+- a `themeColor` per scheme in `theme.json` that matches its `--color-body`
+
+It also sets the first scheme's tokens on plain `:root`, so a page with no
+`data-scheme` has colours. A site theme that declares no `schemes` needs none
+of this. It keeps the single palette it has.
+
+### Contrast
+
+Every scheme meets the Colour contrast rule of the
+[specification.website checklist](https://specification.website/checklist.md)
+in both modes:
 
 - Every run of text, including the small kickers, dates and meta lines, is at
   7:1 (WCAG 1.4.6, AAA) on whatever it sits on.
@@ -1226,9 +1290,13 @@ Both schemes meet the Colour contrast rule of the
   outline, the citation and blockquote rules) is at 3:1 (1.4.11).
 - Nothing a visitor needs is drawn at reduced opacity.
 
-A test enforces this. `src/web/theme-colors.test.ts` reads the tokens out of
-the compiled stylesheet and computes the ratio of every pair the design puts on
-screen. A colour change in `src/style.css` that breaks a pair fails the build.
+A test enforces this. `src/web/theme-colors.test.ts` reads the compiled
+stylesheet and works out the tokens `<html>` gets for every scheme in
+`theme.json`, in both modes, from the selectors, their specificity and their
+order. It then computes the ratio of every pair the design puts on screen. The
+test fails when a colour change in `src/style.css` breaks a pair, when a
+declared scheme has no tokens in the stylesheet, or when a scheme's
+`themeColor` is not its `--color-body`.
 
 | Token                     | Utility    | What it colours                                                        |
 | ------------------------- | ---------- | ---------------------------------------------------------------------- |

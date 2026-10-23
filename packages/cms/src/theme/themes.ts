@@ -99,6 +99,28 @@ export interface ThemeColors {
   readonly themeColor: { readonly light?: string | undefined; readonly dark?: string | undefined };
 }
 
+/**
+ * One colour scheme a theme draws, as its `theme.json` lists it under
+ * `schemes` (decision-61):
+ *
+ *     "schemes": [
+ *       { "name": "paper", "label": "Paper", "themeColor": { "light": "#faf7f2", "dark": "#171412" } },
+ *       { "name": "slate", "label": "Slate" }
+ *     ]
+ *
+ * The first is the theme's default. The `name` is what the page prints as
+ * `data-scheme` on `<html>` and what the stylesheet selects on, so it is
+ * lower-case letters, digits and hyphens. The `themeColor` is the browser
+ * chrome for that scheme; whatever a scheme leaves out is the manifest's
+ * top-level `themeColor`.
+ */
+export interface ThemeScheme {
+  readonly name: string;
+  /** What the Appearance screen calls the scheme, for a person to read. */
+  readonly label: string;
+  readonly themeColor: ThemeColors['themeColor'];
+}
+
 /** One theme directory, read and validated. */
 export interface Theme {
   /** The directory name, which is the theme's id and what a site.json names. */
@@ -119,6 +141,8 @@ export interface Theme {
   readonly areas: readonly ThemeArea[];
   /** The colours the manifest declares, each one absent when it declares none. */
   readonly colors: ThemeColors;
+  /** The colour schemes it draws, default first. Empty for a theme that declares none. */
+  readonly schemes: readonly ThemeScheme[];
 }
 
 /** A theme, or the reason the directory is not one. */
@@ -176,6 +200,7 @@ export function readTheme(dir: string): ThemeRead {
   }
 
   const description = manifest['description'];
+  const colors = themeColorsOf(manifest['colorScheme'], manifest['themeColor']);
 
   return {
     ok: true,
@@ -188,7 +213,8 @@ export function readTheme(dir: string): ThemeRead {
         ? { description: description.trim() }
         : {}),
       areas: themeAreasOf(manifest['areas']),
-      colors: themeColorsOf(manifest['colorScheme'], manifest['themeColor']),
+      colors,
+      schemes: themeSchemesOf(manifest['schemes'], colors.themeColor),
     },
   };
 }
@@ -202,6 +228,15 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
  * not take costs the site a tinted address bar, not its pages.
  */
 function themeColorsOf(scheme: unknown, color: unknown): ThemeColors {
+  return {
+    ...(COLOR_SCHEMES.includes(scheme as ColorScheme)
+      ? { colorScheme: scheme as ColorScheme }
+      : {}),
+    themeColor: themeColorOf(color),
+  };
+}
+
+function themeColorOf(color: unknown): ThemeColors['themeColor'] {
   const declared =
     typeof color === 'object' && color !== null ? (color as Record<string, unknown>) : {};
   const hex = (value: unknown): string | undefined =>
@@ -210,14 +245,64 @@ function themeColorsOf(scheme: unknown, color: unknown): ThemeColors {
   const dark = hex(declared['dark']);
 
   return {
-    ...(COLOR_SCHEMES.includes(scheme as ColorScheme)
-      ? { colorScheme: scheme as ColorScheme }
-      : {}),
-    themeColor: {
-      ...(light === undefined ? {} : { light }),
-      ...(dark === undefined ? {} : { dark }),
-    },
+    ...(light === undefined ? {} : { light }),
+    ...(dark === undefined ? {} : { dark }),
   };
+}
+
+const SCHEME_NAME = /^[a-z][a-z0-9-]*$/;
+
+/**
+ * A `schemes` value as the schemes it declares, ignoring anything that is not
+ * one, tolerant for the reason {@link themeAreasOf} is. A name that is not
+ * {@link SCHEME_NAME} is dropped because the stylesheet could not select on it.
+ */
+function themeSchemesOf(value: unknown, fallback: ThemeColors['themeColor']): ThemeScheme[] {
+  if (!Array.isArray(value)) return [];
+
+  const schemes: ThemeScheme[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { name, label, themeColor } = entry as Record<string, unknown>;
+    if (typeof name !== 'string' || !SCHEME_NAME.test(name) || seen.has(name)) continue;
+    seen.add(name);
+
+    const words = typeof label === 'string' ? label.trim() : '';
+    schemes.push({
+      name,
+      label: words === '' ? name : words,
+      themeColor: { ...fallback, ...themeColorOf(themeColor) },
+    });
+  }
+
+  return schemes;
+}
+
+/**
+ * The scheme a page is drawn in: the one named, or the theme's first when the
+ * name is empty or names a scheme the theme does not declare, so a site that
+ * switches themes keeps rendering. `undefined` only for a theme with no schemes.
+ */
+export function themeScheme(
+  schemes: readonly ThemeScheme[],
+  name: string,
+): ThemeScheme | undefined {
+  return schemes.find((scheme) => scheme.name === name) ?? schemes[0];
+}
+
+/**
+ * A chosen theme's schemes. A site theme that declares none but keeps the
+ * packaged stylesheet still draws the packaged schemes, so it has those; one
+ * that ships its own `static/style.css` and declares none has none.
+ */
+function resolvedSchemes(theme: Theme | undefined): readonly ThemeScheme[] {
+  if (theme !== undefined && theme.schemes.length > 0) return theme.schemes;
+  if (theme !== undefined && existsSync(path.join(theme.dir, 'static', 'style.css'))) return [];
+
+  const packaged = readTheme(PACKAGED_THEME_DIR);
+  return packaged.ok ? packaged.theme.schemes : [];
 }
 
 /**
@@ -386,6 +471,11 @@ export interface ChosenTheme {
   readonly problem: string | undefined;
   /** The colours the page declares: {@link ThemeColors}, the packaged theme's where this one is silent. */
   readonly colors: ThemeColors;
+  /**
+   * The colour schemes the site may choose from, default first. Pick the one a
+   * page uses with {@link themeScheme}.
+   */
+  readonly schemes: readonly ThemeScheme[];
 }
 
 /**
@@ -398,13 +488,17 @@ export interface ChosenTheme {
  */
 export function chooseTheme(options: { themesDir: string; name: string }): ChosenTheme {
   const chosen = chooseThemeDirs(options);
-  return { ...chosen, colors: resolvedColors(chosen.theme) };
+  return {
+    ...chosen,
+    colors: resolvedColors(chosen.theme),
+    schemes: resolvedSchemes(chosen.theme),
+  };
 }
 
 function chooseThemeDirs(options: {
   themesDir: string;
   name: string;
-}): Omit<ChosenTheme, 'colors'> {
+}): Omit<ChosenTheme, 'colors' | 'schemes'> {
   const name = options.name.trim();
   if (name === PACKAGED_THEME) {
     return { theme: undefined, dirs: themeSearchPath(), problem: undefined };
