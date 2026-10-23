@@ -123,15 +123,16 @@ async function post(cms: Cms): Promise<string> {
 }
 
 describe('the Appearance section', () => {
-  it('is one section with one child, Themes, landing on it (AC #1)', () => {
+  it('is one section whose first child, Themes, it lands on (AC #1)', () => {
     const appearance = ADMIN_SECTIONS.find((section) => section.section === 'appearance');
 
     assert.ok(appearance !== undefined, 'the admin menu has an Appearance section');
     assert.equal(appearance.label, 'Appearance');
-    assert.deepEqual(
-      appearance.children.map((child) => [child.child, child.label, child.url]),
-      [['themes', 'Themes', '/admin/appearance/themes']],
-    );
+    assert.deepEqual(appearance.children.map((child) => [child.child, child.label, child.url])[0], [
+      'themes',
+      'Themes',
+      '/admin/appearance/themes',
+    ]);
     assert.equal(appearance.url, THEMES_PATH, 'the heading lands on Themes');
   });
 

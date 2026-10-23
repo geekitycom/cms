@@ -20,10 +20,10 @@ export interface SettingType<V> {
 export type Parsed<V> =
   { readonly ok: true; readonly value: V } | { readonly ok: false; readonly problem: string };
 
-/** The two directories a site is, as a change hook sees them. */
 export interface SettingsDirs {
   readonly contentDir: string;
   readonly dataDir: string;
+  readonly themesDir: string;
 }
 
 /** Who asked for a change: the admin, the CLI, boot, or a plugin's own code. */

@@ -8,6 +8,8 @@ import { readObjectIds } from '../federation/object-ids.ts';
 import type { ConversationWrite } from '../store/admin-store.ts';
 import { createAvatarService } from '../avatars/index.ts';
 import type { AvatarService } from '../avatars/index.ts';
+import { createFontStore, createPageFonts, fontFetchJob, queueFontFetch } from '../fonts/index.ts';
+import type { FontStore } from '../fonts/index.ts';
 import { followAllMovedComments, followMovedComments } from '../comments/index.ts';
 import { createReplyNotices } from '../comments/reply-notices.ts';
 import { createContentSync, createScheduler } from '../content/index.ts';
@@ -113,6 +115,7 @@ export interface Services {
   readonly webmentions: WebmentionService;
   readonly replyContexts: ReplyContextService;
   readonly avatars: AvatarService;
+  readonly fonts: FontStore;
   readonly actorProfiles: ActorProfileService;
   readonly replyBackfill: ReplyBackfill;
   readonly retention: RetentionService;
@@ -244,6 +247,8 @@ export function createServices({
   // reader's address never reaches the servers they live on (TASK-134).
   const avatars = createAvatarService({ admin, config: resolved });
 
+  const fonts = createFontStore(resolved);
+
   // What keeps a site from holding its readers' personal data for longer than
   // its settings say (TASK-135).
   const retention = createRetentionService({ admin, config: resolved, settings });
@@ -251,6 +256,10 @@ export function createServices({
   const renderer = createRenderer({
     config: resolved,
     themes,
+    fonts: createPageFonts({
+      store: fonts,
+      refetch: (family, styles) => queueFontFetch(jobs, family, styles),
+    }),
     // The stored context of a reply's target: a file read, never a fetch, so
     // a page is drawn without waiting on anybody's server (TASK-123).
     replyContext: (target, site) => replyContexts.read(target, site),
@@ -394,6 +403,7 @@ export function createServices({
       stripMetadataJob(resolved.contentDir),
       resendJob({ store, delivery, webmentions }),
       siteExportJob({ config: resolved, settings, plugins }, resolved.now),
+      fontFetchJob(fonts),
       ...(resolved.jobs.definitions ?? []),
     ],
     now: resolved.now,
@@ -500,6 +510,7 @@ export function createServices({
       settled: () => replyContexts.settled(),
     },
     avatars,
+    { settled: () => fonts.settled() },
     actorProfiles,
     replyBackfill,
     retention,
@@ -540,6 +551,7 @@ export function createServices({
     webmentions,
     replyContexts,
     avatars,
+    fonts,
     actorProfiles,
     replyBackfill,
     retention,

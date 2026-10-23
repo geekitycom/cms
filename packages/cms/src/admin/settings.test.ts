@@ -94,6 +94,7 @@ describe('content/_data/site.json', () => {
       // (TASK-108), so no settings save invents one.
       menus: {},
       taxonomyRedirects: [],
+      colorMode: 'system',
     });
   });
 

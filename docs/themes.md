@@ -112,8 +112,10 @@ Templates are Nunjucks (decision-4). The default theme lives in
 
 `pnpm build` compiles that stylesheet from `src/style.css` with Tailwind v4
 (decision-22). The output is a build product. It is gitignored and shipped in
-the package. A visitor's browser loads one plain CSS file, with no script, web
-font or CDN. `pnpm --filter @geekity/cms build:theme` recompiles the stylesheet
+the package. A visitor's browser loads one plain CSS file, with no script or
+CDN. A site that chooses a Google Fonts family on Appearance > Look also loads
+that family's files from the site itself (see
+[Heading and body fonts](settings.md#heading-and-body-fonts)). `pnpm --filter @geekity/cms build:theme` recompiles the stylesheet
 alone. The package's `pretest` runs it before the test suites read the file.
 
 The packaged theme is the Paper design (doc-9) on the andrewshell.org shell
@@ -149,16 +151,22 @@ Microdata. To emit a different graph, a site replaces that one file.
 
 The stylesheet sets:
 
-- a serif body and sans headings at an 18px root
+- serif body text and headings at an 18px root, read through the `heading` and
+  `body` font roles, with sans for small labels
 - one column at 42rem
 - warm paper with a rust primary and a blue secondary
-- a second scheme under `prefers-color-scheme: dark` that redefines the same
-  `--color-*` tokens on dark paper
+- six colour schemes (Paper, Slate, Forest, Plum, Ocean and Ink), each with a
+  light and a dark set of the same `--color-*` tokens
+
+Choose the scheme and the mode on **Appearance > Look** in the admin. The screen
+shows each scheme of the theme in use as a card with its page, text, accent and
+secondary colours in light and dark, read from the theme's compiled
+stylesheet.
 
 `packages/cms/src/web/theme-colors.test.ts` reads the `--color-*` custom
 properties from the compiled stylesheet. It checks that every run of text in
-both schemes meets 7:1 contrast and every border a visitor relies on meets 3:1.
-A colour change that breaks either ratio fails the build.
+every scheme, in both modes, meets 7:1 contrast and every border a visitor
+relies on meets 3:1. A colour change that breaks either ratio fails the build.
 
 The kicker above each entry names its kind. Only an article has a headline, so
 a note or a reply shows just its words. The bio under an entry shows the person

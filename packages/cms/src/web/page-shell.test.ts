@@ -715,7 +715,7 @@ describe('the colour scheme and the theme colour (TASK-146 AC #1)', () => {
     }
   });
 
-  it('takes the colours of the theme a site has chosen', async () => {
+  it('takes the colours of a chosen theme that draws its own stylesheet and no schemes', async () => {
     const themesDir = await box.dir('geekity-shell-themes-');
     await writeTree(themesDir, {
       'night/theme.json': JSON.stringify({
@@ -724,15 +724,139 @@ describe('the colour scheme and the theme colour (TASK-146 AC #1)', () => {
         colorScheme: 'dark',
         themeColor: { dark: '#000000' },
       }),
+      'night/static/style.css': 'body { background: #000; color: #fff; }',
     });
-    const html = await body(await site({ theme: 'night' }, { themesDir }), '/');
+    const cms = await site(
+      { theme: 'night', colorScheme: 'slate', colorMode: 'light' },
+      { themesDir },
+    );
+    const html = await body(cms, '/');
 
+    assert.match(html, /<html lang="en">/, 'a theme with no schemes names none on <html>');
     assert.equal(metaContent(html, 'color-scheme'), 'dark');
     assert.ok(html.includes('content="#000000" media="(prefers-color-scheme: dark)"'));
     assert.ok(
       html.includes(`content="${declared.themeColor.light}" media="(prefers-color-scheme: light)"`),
       'the colour it left out is not the packaged one',
     );
+  });
+});
+
+describe('the colour scheme and mode the site chooses (TASK-488)', () => {
+  const declared = JSON.parse(
+    readFileSync(path.join(PACKAGED_THEME_DIR, 'theme.json'), 'utf8'),
+  ) as { schemes: { name: string; themeColor: { light: string; dark: string } }[] };
+  const colorsOf = (name: string): { light: string; dark: string } => {
+    const scheme = declared.schemes.find((each) => each.name === name);
+    assert.ok(scheme, `the packaged theme declares no ${name} scheme`);
+    return scheme.themeColor;
+  };
+
+  function htmlTag(html: string): string {
+    return /<html[^>]*>/.exec(html)?.[0] ?? '';
+  }
+
+  function themeColors(html: string): string[] {
+    return [...html.matchAll(/<meta name="theme-color"[^>]*>/g)].map((match) => match[0]);
+  }
+
+  it('draws the first scheme and follows the system when the site chooses neither', async () => {
+    const html = await body(await site(), '/2026/09/hello/');
+    const paper = colorsOf('paper');
+
+    assert.equal(htmlTag(html), '<html lang="en" data-scheme="paper" data-mode="system">');
+    assert.equal(metaContent(html, 'color-scheme'), 'light dark');
+    assert.deepEqual(themeColors(html), [
+      `<meta name="theme-color" content="${paper.light}" media="(prefers-color-scheme: light)">`,
+      `<meta name="theme-color" content="${paper.dark}" media="(prefers-color-scheme: dark)">`,
+    ]);
+  });
+
+  it('prints the chosen scheme in both colours under the system mode', async () => {
+    const html = await body(await site({ colorScheme: 'forest' }), '/');
+    const forest = colorsOf('forest');
+
+    assert.equal(htmlTag(html), '<html lang="en" data-scheme="forest" data-mode="system">');
+    assert.equal(metaContent(html, 'color-scheme'), 'light dark');
+    assert.deepEqual(themeColors(html), [
+      `<meta name="theme-color" content="${forest.light}" media="(prefers-color-scheme: light)">`,
+      `<meta name="theme-color" content="${forest.dark}" media="(prefers-color-scheme: dark)">`,
+    ]);
+  });
+
+  it('is always light in the light mode, with one theme colour', async () => {
+    const html = await body(await site({ colorScheme: 'slate', colorMode: 'light' }), '/');
+
+    assert.equal(htmlTag(html), '<html lang="en" data-scheme="slate" data-mode="light">');
+    assert.equal(metaContent(html, 'color-scheme'), 'light');
+    assert.deepEqual(themeColors(html), [
+      `<meta name="theme-color" content="${colorsOf('slate').light}">`,
+    ]);
+  });
+
+  it('is always dark in the dark mode, with one theme colour', async () => {
+    const html = await body(await site({ colorScheme: 'plum', colorMode: 'dark' }), '/about/');
+
+    assert.equal(htmlTag(html), '<html lang="en" data-scheme="plum" data-mode="dark">');
+    assert.equal(metaContent(html, 'color-scheme'), 'dark');
+    assert.deepEqual(themeColors(html), [
+      `<meta name="theme-color" content="${colorsOf('plum').dark}">`,
+    ]);
+  });
+
+  it('falls back to the first scheme and the system mode for names it does not know', async () => {
+    const html = await body(await site({ colorScheme: 'neon', colorMode: 'sepia' }), '/');
+
+    assert.equal(htmlTag(html), '<html lang="en" data-scheme="paper" data-mode="system">');
+    assert.equal(metaContent(html, 'color-scheme'), 'light dark');
+    assert.equal(themeColors(html).length, 2);
+  });
+
+  it('draws a scheme a chosen theme declares, falling back to its own first', async () => {
+    const themesDir = await box.dir('geekity-shell-scheme-themes-');
+    await writeTree(themesDir, {
+      'dusk/theme.json': JSON.stringify({
+        name: 'Dusk',
+        kind: 'site',
+        schemes: [
+          { name: 'dusk', label: 'Dusk', themeColor: { light: '#eeeeee', dark: '#111111' } },
+          { name: 'dawn', label: 'Dawn', themeColor: { light: '#ffeedd', dark: '#221100' } },
+        ],
+      }),
+      'dusk/static/style.css': ':root[data-scheme="dusk"] { --color-body: #eeeeee; }',
+    });
+
+    const dawn = await body(
+      await site({ theme: 'dusk', colorScheme: 'dawn', colorMode: 'dark' }, { themesDir }),
+      '/',
+    );
+    assert.equal(htmlTag(dawn), '<html lang="en" data-scheme="dawn" data-mode="dark">');
+    assert.deepEqual(themeColors(dawn), ['<meta name="theme-color" content="#221100">']);
+
+    const kept = await body(
+      await site({ theme: 'dusk', colorScheme: 'slate' }, { themesDir }),
+      '/',
+    );
+    assert.equal(htmlTag(kept), '<html lang="en" data-scheme="dusk" data-mode="system">');
+  });
+
+  it('applies the same scheme and mode to the error pages', async () => {
+    const chosen = { colorScheme: 'ocean', colorMode: 'dark' };
+    const notFound = await (await site(chosen)).app.request('/no/such/page/');
+    const down = await (await site(chosen, { maintenance: true })).app.request('/');
+
+    for (const [response, status] of [
+      [notFound, 404],
+      [down, 503],
+    ] as const) {
+      assert.equal(response.status, status);
+      const html = await response.text();
+      assert.equal(htmlTag(html), '<html lang="en" data-scheme="ocean" data-mode="dark">');
+      assert.equal(metaContent(html, 'color-scheme'), 'dark');
+      assert.deepEqual(themeColors(html), [
+        `<meta name="theme-color" content="${colorsOf('ocean').dark}">`,
+      ]);
+    }
   });
 });
 

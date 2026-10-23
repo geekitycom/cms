@@ -58,6 +58,7 @@ export function mountPreview(app: Hono<GeekityEnv>): void {
             (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart),
           ),
           editorPreview: true,
+          cspNonce: c.var.cspNonce,
         },
       ),
     );

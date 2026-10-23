@@ -16,6 +16,7 @@ import {
 import type { User } from '../site/users.ts';
 import { adminColorScheme } from '../site/admin-theme.ts';
 import { mountAppearanceScreen } from './appearance.ts';
+import { mountLookScreen } from './look.ts';
 import { adminAssetResponse } from './assets.ts';
 import { ADMIN_ASSET_PREFIX, ADMIN_PREFIX, editUserPath, LOGIN_PATH } from '../site/admin-paths.ts';
 import { credentialProblem } from './credentials.ts';
@@ -358,6 +359,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // What the site is wearing: the themes on disk, and the one setting that
   // says which of them (decision-15).
   mountAppearanceScreen(app, { render });
+  mountLookScreen(app, { render });
 
   mountEditorActions(app);
   mountItemLookup(app);

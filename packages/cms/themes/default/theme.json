@@ -4,6 +4,28 @@
   "description": "The theme that ships with Geekity CMS: Nunjucks and one stylesheet compiled from Tailwind, in the Paper design, and the layer every other theme is laid over.",
   "colorScheme": "light dark",
   "themeColor": { "light": "#faf7f2", "dark": "#171412" },
+  "schemes": [
+    { "name": "paper", "label": "Paper", "themeColor": { "light": "#faf7f2", "dark": "#171412" } },
+    { "name": "slate", "label": "Slate", "themeColor": { "light": "#f4f7fb", "dark": "#12161c" } },
+    {
+      "name": "forest",
+      "label": "Forest",
+      "themeColor": { "light": "#f5f7ed", "dark": "#0f1912" }
+    },
+    { "name": "plum", "label": "Plum", "themeColor": { "light": "#fbf3fa", "dark": "#1b121d" } },
+    { "name": "ocean", "label": "Ocean", "themeColor": { "light": "#eef9fb", "dark": "#08191f" } },
+    { "name": "ink", "label": "Ink", "themeColor": { "light": "#ffffff", "dark": "#0d0d0d" } }
+  ],
+  "fonts": {
+    "heading": {
+      "label": "Headings",
+      "fallback": "'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif"
+    },
+    "body": {
+      "label": "Body text",
+      "fallback": "'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif"
+    }
+  },
   "areas": [
     { "name": "primary", "label": "Site menu" },
     { "name": "footer", "label": "Footer links" }

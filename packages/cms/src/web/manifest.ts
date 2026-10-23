@@ -4,6 +4,7 @@ import type { ImageConfig } from '../images/paths.ts';
 import { absoluteUrl } from '../util/url.ts';
 import { contentEtag, isNotModified } from './negotiate.ts';
 import type { ConditionalHeaders } from './negotiate.ts';
+import type { SiteColors } from '../theme/site-data.ts';
 import type { ThemeColors } from '../theme/themes.ts';
 
 /**
@@ -41,20 +42,25 @@ export interface WebManifest {
  * The manifest of one site.
  *
  * The name is the site's title for both the long and the short form; a
- * launcher shortens a long one itself. The colours are the chosen theme's
- * light `themeColor`, which in the default theme is also its page background,
- * so the splash screen a launcher paints before the first page loads is the
- * page's own colour. Every URL carries the base path of a site served from a
- * subdirectory.
+ * launcher shortens a long one itself. The colours are the chosen scheme's
+ * `themeColor`, dark under the dark mode and light otherwise, or the theme's
+ * light `themeColor` under a theme with no schemes. In the default theme that
+ * is also the page background, so the splash screen a launcher paints before
+ * the first page loads is the page's own colour. Every URL carries the base
+ * path of a site served from a subdirectory.
  */
 export function webManifest(input: {
   config: ImageConfig & { baseUrl: string };
   title: string;
   iconSetting: string | undefined;
   colors: ThemeColors;
+  scheme: SiteColors | undefined;
 }): WebManifest {
-  const { config } = input;
-  const color = input.colors.themeColor.light;
+  const { config, scheme } = input;
+  const color =
+    scheme === undefined
+      ? input.colors.themeColor.light
+      : scheme.scheme.themeColor[scheme.mode === 'dark' ? 'dark' : 'light'];
   return {
     name: input.title,
     short_name: input.title,

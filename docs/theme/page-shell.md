@@ -990,11 +990,29 @@ It prints once, as `<meta name="description">`. The Open Graph and Twitter
 descriptions use the same text.
 
 **The colours** come from the theme's `theme.json` (see
-[The manifest](manifest.md)), on the context as `theme`.
+[The manifest](manifest.md)) and from the site's
+[colour scheme and mode](../settings.md#colour-scheme-and-mode). They are on
+the context as `theme`:
+
+| Key                 | Value                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------- |
+| `theme.colorScheme` | The manifest's `colorScheme`.                                                                            |
+| `theme.themeColor`  | The manifest's top-level `themeColor`, as `{ light, dark }`.                                             |
+| `theme.scheme`      | The scheme the page is drawn in, as `{ name, label, themeColor }`. Absent when the theme has no schemes. |
+| `theme.mode`        | `system`, `light` or `dark`. Absent when the theme has no schemes.                                       |
+
 `<meta name="color-scheme">` comes before the stylesheet, so a visitor in dark
-mode gets a dark canvas, not a white flash, while the stylesheet loads.
-`<meta name="theme-color">` prints twice: once with
-`media="(prefers-color-scheme: light)"` and once for dark.
+mode gets a dark canvas, not a white flash, while the stylesheet loads. With a
+scheme, the head prints these tags:
+
+| Mode     | `color-scheme` | `theme-color`                                                                                          |
+| -------- | -------------- | ------------------------------------------------------------------------------------------------------ |
+| `system` | `light dark`   | Two tags with the scheme's colours: one with `media="(prefers-color-scheme: light)"` and one for dark. |
+| `light`  | `light`        | One tag with the scheme's light colour and no `media`.                                                 |
+| `dark`   | `dark`         | One tag with the scheme's dark colour and no `media`.                                                  |
+
+A theme with no schemes prints the manifest's `colorScheme` and its two
+`themeColor` values, each with its `media` query.
 
 **The card.**
 
@@ -1057,8 +1075,10 @@ links print, in each of these cases:
   Browsers and crawlers request it from the root whatever the head links. It
   answers 404 on a site with no icon.
 - `/manifest.webmanifest` gives the site's title as `name` and `short_name`,
-  `start_url` `/`, and `display` `minimal-ui`. It gives the theme's light
-  `themeColor` as `theme_color` and `background_color`. Its icons are at 192
+  `start_url` `/`, and `display` `minimal-ui`. Its `theme_color` and
+  `background_color` are the chosen scheme's `themeColor`: the dark value when
+  `colorMode` is `dark`, the light value otherwise. Under a theme with no
+  schemes they are the theme's light `themeColor`. Its icons are at 192
   and 512 pixels, plus a maskable 512 whose picture sits inside the middle 80%,
   padded with its own dominant colour. The head links the manifest on every
   page.
@@ -1213,13 +1233,96 @@ clears Tailwind's own palette. It maps Tailwind's utilities (`text-ink`,
 `bg-paper`, `border-edge` and the rest) onto these properties with
 `@theme inline`, so redefining a token recolours every rule that uses it.
 
-A second scheme under `@media (prefers-color-scheme: dark)` redefines the same
-tokens on dark paper. `color-scheme: light dark` lets a browser paint its own
-form controls and scrollbars to match. There is no toggle. The visitor's system
-setting picks the scheme.
+### Colour schemes and modes
 
-Both schemes meet the Colour contrast rule of the
-[specification.website checklist](https://specification.website/checklist.md):
+The stylesheet draws each colour scheme that `theme.json` lists under
+`schemes` (see [Colour schemes](manifest.md#colour-schemes)). Each scheme sets
+every token twice: a light set and a dark set. Two attributes on `<html>` pick
+which set a page gets:
+
+- `data-scheme` names the scheme. A page with no `data-scheme` gets the first
+  scheme, Paper.
+- `data-mode` is `system`, `light` or `dark`. With `system`, or with no
+  `data-mode`, the visitor's system setting picks the mode.
+
+`base.njk` prints both on every page, the error pages included, from the
+site's `colorScheme` and `colorMode` settings (see
+[Colour scheme and mode](../settings.md#colour-scheme-and-mode)):
+
+```text
+<html lang="en" data-scheme="slate" data-mode="dark">
+```
+
+A `colorScheme` that the theme does not declare prints the theme's first
+scheme. Under a theme with no schemes, `<html>` has neither attribute.
+
+The embed view at `/_geekity/embed` does not load the stylesheet. It carries
+the same two attributes, and its inline style draws the card in the scheme's
+`--color-body`, `--color-text`, `--color-muted`, `--color-primary` and
+`--color-edge` for the mode: the light and dark sets under the system's query
+for `system`, or the one set for a fixed mode. It reads those values from the
+theme's compiled `static/style.css`. Under a theme with no schemes, the card
+keeps its own light colours.
+
+The packaged stylesheet uses these selectors:
+
+| Selector                                                                               | What it sets                                       |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `:root[data-scheme="<name>"]`                                                          | The scheme's light set.                            |
+| `:root[data-scheme="<name>"]:not([data-mode="light"])` in `prefers-color-scheme: dark` | The scheme's dark set, from the system.            |
+| `:root[data-scheme="<name>"][data-mode="dark"]`                                        | The scheme's dark set, always.                     |
+| `:root`                                                                                | Paper's light set, and `color-scheme: light dark`. |
+| `:root[data-mode="light"]`, `:root[data-mode="dark"]`                                  | `color-scheme: light` or `dark`.                   |
+
+Paper's blocks also match plain `:root`, so a page with no `data-scheme` is
+drawn in Paper. The other schemes come after Paper in the file and set every
+token, so a named scheme wins. `color-scheme` follows the mode, so a browser
+paints its own form controls and scrollbars to match.
+
+In `src/style.css` each scheme is one block. The dark set sits inside
+`@variant dark { … }`. The stylesheet redefines Tailwind's `dark` variant as
+the two dark selectors above, and Tailwind writes out both.
+
+The packaged schemes:
+
+| Scheme   | Light paper | Light link | Dark paper | Dark link |
+| -------- | ----------- | ---------- | ---------- | --------- |
+| `paper`  | `#faf7f2`   | `#8c2f1f`  | `#171412`  | `#ee9370` |
+| `slate`  | `#f4f7fb`   | `#0f4e94`  | `#12161c`  | `#80b7fe` |
+| `forest` | `#f5f7ed`   | `#035b27`  | `#0f1912`  | `#75c687` |
+| `plum`   | `#fbf3fa`   | `#822973`  | `#1b121d`  | `#f493e0` |
+| `ocean`  | `#eef9fb`   | `#04585c`  | `#08191f`  | `#57c5cb` |
+| `ink`    | `#ffffff`   | `#1b388a`  | `#0d0d0d`  | `#aec8fe` |
+
+Ink is monochrome with one blue for links. It holds text to 10:1 and borders
+to 4.5:1.
+
+Under `@media (forced-colors: active)`, the visitor's own palette replaces
+every colour, and the stylesheet gives a border to anything that a background
+alone draws. Those rules name no scheme or mode, so they apply under every
+scheme.
+
+### A site theme's own stylesheet
+
+A site theme that replaces `static/style.css` must draw every scheme its
+`theme.json` declares. For each scheme it supplies:
+
+- every `--color-*` token in the table below on `:root[data-scheme="<name>"]`
+- the same tokens for dark mode on
+  `:root[data-scheme="<name>"]:not([data-mode="light"])` inside
+  `@media (prefers-color-scheme: dark)`, and on
+  `:root[data-scheme="<name>"][data-mode="dark"]`
+- a `themeColor` per scheme in `theme.json` that matches its `--color-body`
+
+It also sets the first scheme's tokens on plain `:root`, so a page with no
+`data-scheme` has colours. A site theme that declares no `schemes` needs none
+of this. It keeps the single palette it has.
+
+### Contrast
+
+Every scheme meets the Colour contrast rule of the
+[specification.website checklist](https://specification.website/checklist.md)
+in both modes:
 
 - Every run of text, including the small kickers, dates and meta lines, is at
   7:1 (WCAG 1.4.6, AAA) on whatever it sits on.
@@ -1227,9 +1330,13 @@ Both schemes meet the Colour contrast rule of the
   outline, the citation and blockquote rules) is at 3:1 (1.4.11).
 - Nothing a visitor needs is drawn at reduced opacity.
 
-A test enforces this. `src/web/theme-colors.test.ts` reads the tokens out of
-the compiled stylesheet and computes the ratio of every pair the design puts on
-screen. A colour change in `src/style.css` that breaks a pair fails the build.
+A test enforces this. `src/web/theme-colors.test.ts` reads the compiled
+stylesheet and works out the tokens `<html>` gets for every scheme in
+`theme.json`, in both modes, from the selectors, their specificity and their
+order. It then computes the ratio of every pair the design puts on screen. The
+test fails when a colour change in `src/style.css` breaks a pair, when a
+declared scheme has no tokens in the stylesheet, or when a scheme's
+`themeColor` is not its `--color-body`.
 
 | Token                     | Utility    | What it colours                                                        |
 | ------------------------- | ---------- | ---------------------------------------------------------------------- |
@@ -1251,6 +1358,91 @@ screen. A colour change in `src/style.css` that breaks a pair fails the build.
 decoration. A site that recolours it can make it as faint as it likes.
 Anything drawn with `--color-edge` must stay at 3:1 against the paper and the
 surface.
+
+## Fonts
+
+The stylesheet uses three font stacks. Headings and body text use the font
+roles that `theme.json` declares under `fonts` (see
+[Font roles](manifest.md#font-roles)). Small labels and code keep fixed system
+stacks.
+
+| What                                                                                                                              | Font                                 |
+| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Body text, and the text in comment and contact fields                                                                             | `var(--font-body)`                   |
+| `h1` to `h6`: the site title, entry and page titles, prose headings, the reply and comment headings, and the inner-page home link | `var(--font-heading)`                |
+| Kickers, menus, meta lines, section and reaction labels, backlinks, buttons                                                       | `system-ui`, then the system sans    |
+| `code`, `kbd`, `samp`, `pre`                                                                                                      | `ui-monospace`, then the system mono |
+
+Both role properties are set on `:root` inside `@layer base`, each to the
+fallback the manifest names for it. With no font chosen, both are the serif
+stack `'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif`.
+A page that sets a font for a role sets the property again outside any layer,
+for example `:root { --font-heading: "Fraunces", 'Iowan Old Style', Georgia, serif; }`,
+and that rule wins. To change a font in a site's own stylesheet, redefine the
+property the same way. There is no need to replace this stylesheet.
+
+### Chosen Google Fonts in the head
+
+When the site chooses a Google Fonts family for a role on Appearance > Look
+(see [Fonts on the Look page](../settings.md#heading-and-body-fonts)), the
+renderer puts `fonts` on the page context. `base.njk` prints it right after
+the theme stylesheet:
+
+```html
+<link rel="stylesheet" href="/_geekity/fonts/fraunces/700.css?v=1a2b3c4d5e6f" />
+<style>
+  :root {
+    --font-heading:
+      'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Palatino,
+      'Book Antiqua', Georgia, serif;
+  }
+</style>
+```
+
+- `fonts.stylesheets` lists the hosted `@font-face` stylesheet of each family
+  in use, once each. Each is a same-origin URL whose `v` parameter is the
+  hash of the stylesheet's bytes.
+- `fonts.properties` lists one `{ property, value }` per role. The value is
+  the family in double quotes, then the role's `fallback`.
+
+The `<style>` rule is not in a layer, so it overrides the default that the
+stylesheet sets in `@layer base`. The family name holds only letters, digits
+and spaces, and the fallback is checked when the manifest is read, so the
+template prints both without escaping. When the context has a `cspNonce`, the
+`<style>` element carries it. The editor preview in the admin passes the
+admin's nonce, so the admin's policy lets the rule apply.
+
+A page prints nothing for a role in these cases:
+
+- The site chose no font for the role.
+- The active theme does not declare the role.
+- The family's files are not in `data/fonts/`. The page uses the fallback and
+  queues one `fetch-font` job. The next page drawn after the job finishes
+  uses the font. If the files go missing again later, the next page queues
+  another job.
+
+With no font in use, the context has no `fonts` and the head is unchanged. The
+embed view (`/_geekity/embed`) keeps its system stack, because it loads nothing
+beyond its own HTML.
+
+### The font utilities
+
+In `src/style.css`, `@theme inline` maps the `font-heading` and `font-body`
+utilities onto the two properties, so `@apply font-heading` writes
+`font-family: var(--font-heading)`.
+
+### A site theme's own stylesheet
+
+A site theme that replaces `static/style.css` and declares `fonts` must, for
+each role:
+
+- set `--font-<role>` on `:root` to the role's `fallback`, in a layer or at a
+  specificity that a plain `:root` rule printed by the page can override
+- set `font-family: var(--font-<role>)` on the elements the role covers
+
+A site theme that replaces `static/style.css` and declares no `fonts` offers
+no font roles, and a font a site chose for the packaged theme does not apply
+to it.
 
 ## Code highlighting
 

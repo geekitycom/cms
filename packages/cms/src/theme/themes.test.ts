@@ -14,6 +14,7 @@ import {
   readTheme,
   SITE_THEME_KIND,
   THEME_MANIFEST_FILE,
+  themeScheme,
   themeSearchPath,
 } from './themes.ts';
 import type { ThemeSource } from './themes.ts';
@@ -305,6 +306,222 @@ describe('the colours a theme declares (TASK-146 AC #1)', () => {
       colorScheme: 'light dark',
       themeColor: { light: '#faf7f2', dark: '#171412' },
     });
+  });
+});
+
+describe('the colour schemes a theme declares (TASK-487 AC #1)', () => {
+  it('reads each scheme, its label and its own theme colours out of a theme.json', async () => {
+    const { dir } = await themeDir('harbour', {
+      [THEME_MANIFEST_FILE]: JSON.stringify({
+        name: 'Harbour',
+        kind: 'site',
+        themeColor: { light: '#ffffff', dark: '#000000' },
+        schemes: [
+          { name: 'day', label: 'Day', themeColor: { light: '#eeeeee', dark: '#111111' } },
+          { name: 'dusk', label: 'Dusk', themeColor: { dark: '#222222' } },
+          { name: 'plain' },
+        ],
+      }),
+    });
+
+    const read = readTheme(dir);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.schemes, [
+      { name: 'day', label: 'Day', themeColor: { light: '#eeeeee', dark: '#111111' } },
+      { name: 'dusk', label: 'Dusk', themeColor: { light: '#ffffff', dark: '#222222' } },
+      { name: 'plain', label: 'plain', themeColor: { light: '#ffffff', dark: '#000000' } },
+    ]);
+  });
+
+  it('drops a scheme it cannot use, a repeated name and a colour a browser would not take', async () => {
+    const { dir } = await themeDir('rough', {
+      [THEME_MANIFEST_FILE]: JSON.stringify({
+        name: 'Rough',
+        kind: 'site',
+        schemes: [
+          'paper',
+          { label: 'No name' },
+          { name: 'Two Words', label: 'Not a name an attribute can carry' },
+          { name: 'night', label: 'Night', themeColor: { light: 'red"><script>' } },
+          { name: 'night', label: 'Night again' },
+        ],
+      }),
+    });
+
+    const read = readTheme(dir);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.schemes, [{ name: 'night', label: 'Night', themeColor: {} }]);
+  });
+
+  it('loads a theme with no schemes as before, declaring none', async () => {
+    const { dir } = await themeDir('bare', {
+      [THEME_MANIFEST_FILE]: JSON.stringify({ name: 'Bare', kind: 'site', schemes: 'paper' }),
+    });
+
+    const read = readTheme(dir);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.schemes, []);
+    assert.deepEqual(read.theme.colors, { themeColor: {} });
+  });
+
+  it('is what the packaged theme declares: Paper first, then five more', () => {
+    const read = readTheme(PACKAGED_THEME_DIR);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(
+      read.theme.schemes.map((scheme) => scheme.name),
+      ['paper', 'slate', 'forest', 'plum', 'ocean', 'ink'],
+    );
+    assert.deepEqual(read.theme.schemes[0], {
+      name: 'paper',
+      label: 'Paper',
+      themeColor: { light: '#faf7f2', dark: '#171412' },
+    });
+  });
+
+  it('gives a chosen theme the packaged schemes while it keeps the packaged stylesheet', async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), 'geekity-themes-schemes-'));
+    temporaryDirs.push(parent);
+    const manifest = JSON.stringify({ name: 'Laid over', kind: 'site' });
+    await mkdir(path.join(parent, 'over'));
+    await writeFile(path.join(parent, 'over', THEME_MANIFEST_FILE), manifest);
+    await mkdir(path.join(parent, 'own', 'static'), { recursive: true });
+    await writeFile(path.join(parent, 'own', THEME_MANIFEST_FILE), manifest);
+    await writeFile(path.join(parent, 'own', 'static', 'style.css'), 'body { color: red; }');
+
+    const packaged = readTheme(PACKAGED_THEME_DIR);
+    assert.ok(packaged.ok);
+
+    assert.deepEqual(chooseTheme({ themesDir: parent, name: '' }).schemes, packaged.theme.schemes);
+    assert.deepEqual(
+      chooseTheme({ themesDir: parent, name: 'over' }).schemes,
+      packaged.theme.schemes,
+    );
+    assert.deepEqual(chooseTheme({ themesDir: parent, name: 'own' }).schemes, []);
+  });
+
+  it('names the scheme a page uses: the one asked for, or the first when it is not declared', () => {
+    const { schemes } = chooseTheme({ themesDir: tmpdir(), name: '' });
+
+    assert.equal(themeScheme(schemes, 'ocean')?.name, 'ocean');
+    assert.equal(themeScheme(schemes, '')?.name, 'paper');
+    assert.equal(themeScheme(schemes, 'gone')?.name, 'paper');
+    assert.equal(themeScheme([], 'ocean'), undefined);
+  });
+});
+
+const SERIF = "'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif";
+
+describe('the font roles a theme declares (TASK-490 AC #1)', () => {
+  it('reads each role, its label, its custom property and its fallback out of a theme.json', async () => {
+    const { dir } = await themeDir('lettered', {
+      [THEME_MANIFEST_FILE]: JSON.stringify({
+        name: 'Lettered',
+        kind: 'site',
+        fonts: {
+          heading: { label: 'Headings', fallback: 'Georgia, serif' },
+          body: { label: 'Body text', fallback: SERIF },
+          caption: { fallback: '"Gill Sans", sans-serif' },
+        },
+      }),
+    });
+
+    const read = readTheme(dir);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.fonts, [
+      {
+        role: 'heading',
+        label: 'Headings',
+        property: '--font-heading',
+        fallback: 'Georgia, serif',
+      },
+      { role: 'body', label: 'Body text', property: '--font-body', fallback: SERIF },
+      {
+        role: 'caption',
+        label: 'caption',
+        property: '--font-caption',
+        fallback: '"Gill Sans", sans-serif',
+      },
+    ]);
+  });
+
+  it('drops a role it cannot use: a bad name, no fallback, or one that is not a font list', async () => {
+    const { dir } = await themeDir('rough-fonts', {
+      [THEME_MANIFEST_FILE]: JSON.stringify({
+        name: 'Rough',
+        kind: 'site',
+        fonts: {
+          'Two Words': { label: 'Not a property name', fallback: 'serif' },
+          plain: 'serif',
+          bare: { label: 'No fallback' },
+          empty: { fallback: '  ' },
+          escape: { fallback: 'serif; } body { display: none' },
+          tag: { fallback: 'serif</style><script>' },
+          open: { fallback: '"Unclosed, serif' },
+          body: { label: 'Body', fallback: ' Georgia ,serif ' },
+        },
+      }),
+    });
+
+    const read = readTheme(dir);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.fonts, [
+      { role: 'body', label: 'Body', property: '--font-body', fallback: 'Georgia ,serif' },
+    ]);
+  });
+
+  it('loads a theme with no fonts as before, declaring none', async () => {
+    for (const fonts of [undefined, 'serif', ['heading']]) {
+      const { dir } = await themeDir('bare', {
+        [THEME_MANIFEST_FILE]: JSON.stringify({ name: 'Bare', kind: 'site', fonts }),
+      });
+
+      const read = readTheme(dir);
+
+      assert.ok(read.ok, read.ok ? '' : read.reason);
+      assert.deepEqual(read.theme.fonts, []);
+    }
+  });
+
+  it('is what the packaged theme declares: heading and body, both on the serif stack', () => {
+    const read = readTheme(PACKAGED_THEME_DIR);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.fonts, [
+      { role: 'heading', label: 'Headings', property: '--font-heading', fallback: SERIF },
+      { role: 'body', label: 'Body text', property: '--font-body', fallback: SERIF },
+    ]);
+  });
+
+  it('gives a chosen theme the packaged roles while it keeps the packaged stylesheet', async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), 'geekity-themes-fonts-'));
+    temporaryDirs.push(parent);
+    const manifest = JSON.stringify({ name: 'Laid over', kind: 'site' });
+    await mkdir(path.join(parent, 'over'));
+    await writeFile(path.join(parent, 'over', THEME_MANIFEST_FILE), manifest);
+    await mkdir(path.join(parent, 'own', 'static'), { recursive: true });
+    await writeFile(path.join(parent, 'own', THEME_MANIFEST_FILE), manifest);
+    await writeFile(path.join(parent, 'own', 'static', 'style.css'), 'body { color: red; }');
+    await mkdir(path.join(parent, 'mono'));
+    await writeFile(
+      path.join(parent, 'mono', THEME_MANIFEST_FILE),
+      JSON.stringify({ name: 'Mono', kind: 'site', fonts: { body: { fallback: 'monospace' } } }),
+    );
+
+    const packaged = readTheme(PACKAGED_THEME_DIR);
+    assert.ok(packaged.ok);
+
+    assert.deepEqual(chooseTheme({ themesDir: parent, name: '' }).fonts, packaged.theme.fonts);
+    assert.deepEqual(chooseTheme({ themesDir: parent, name: 'over' }).fonts, packaged.theme.fonts);
+    assert.deepEqual(chooseTheme({ themesDir: parent, name: 'own' }).fonts, []);
+    assert.deepEqual(chooseTheme({ themesDir: parent, name: 'mono' }).fonts, [
+      { role: 'body', label: 'body', property: '--font-body', fallback: 'monospace' },
+    ]);
   });
 });
 

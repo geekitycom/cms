@@ -16,6 +16,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { before, describe, it } from 'node:test';
 
+import { PACKAGED_THEME_DIR, readTheme } from '../theme/themes.ts';
+
 interface Rule {
   media: string | undefined;
   selectors: string[];
@@ -170,6 +172,63 @@ describe('the default theme stylesheet', () => {
     }
     assert.equal(border('hr', 'border-block-start'), '1px solid canvastext');
     assert.equal(border('pre', 'border'), '1px solid canvastext');
+  });
+
+  it('keeps the forced-colours rules for every colour scheme and mode (TASK-487 AC #5)', () => {
+    const forced = rules.filter((rule) => rule.media === '(forced-colors: active)');
+    assert.ok(forced.length > 0, 'there is a forced-colors block');
+    assert.deepEqual(
+      forced
+        .flatMap((rule) => rule.selectors)
+        .filter((selector) => /data-(?:scheme|mode)/.test(selector)),
+      [],
+      'a forced-colours rule is limited to one scheme or mode',
+    );
+    assert.deepEqual(
+      rules
+        .filter((rule) => rule.declarations.has('forced-color-adjust'))
+        .flatMap((rule) => rule.selectors),
+      [],
+      'something opts out of the reader’s forced palette',
+    );
+  });
+
+  describe('font roles (TASK-490)', () => {
+    const stack = (value: string | undefined) =>
+      value
+        ?.replaceAll(/['"]/g, '')
+        .split(',')
+        .map((family) => family.trim())
+        .join(', ');
+
+    it('gives each role the packaged theme declares a property on :root holding its fallback', () => {
+      const read = readTheme(PACKAGED_THEME_DIR);
+      assert.ok(read.ok);
+      assert.deepEqual(
+        read.theme.fonts.map((font) => font.role),
+        ['heading', 'body'],
+      );
+      const root = declared(':root');
+      for (const font of read.theme.fonts) {
+        assert.equal(stack(root.get(font.property)), stack(font.fallback), font.property);
+      }
+    });
+
+    it('sets body text from --font-body and every heading and the site title from --font-heading', () => {
+      assert.equal(declared('body').get('font-family'), 'var(--font-body)');
+      for (const heading of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', '.header-link-home']) {
+        assert.equal(declared(heading).get('font-family'), 'var(--font-heading)', heading);
+      }
+    });
+
+    it('keeps small labels on the sans stack and code on the mono stack', () => {
+      const sans = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+      const mono = 'ui-monospace, SF Mono, Menlo, Consolas, DejaVu Sans Mono, monospace';
+      for (const label of ['.kicker', '.section-title', '.reaction-title', '.backlinks-title']) {
+        assert.equal(stack(declared(label).get('font-family')), sans, label);
+      }
+      assert.equal(stack(declared('code').get('font-family')), mono);
+    });
   });
 
   it('never takes a focus ring away, which a forced palette would otherwise redraw', () => {

@@ -197,7 +197,11 @@ export function createSettingsRegistry({
   env = process.env,
   coreDeclaredAbove = [],
 }: CreateSettingsRegistryOptions): SettingsRegistry {
-  const dirs = { contentDir: config.contentDir, dataDir: config.dataDir };
+  const dirs = {
+    contentDir: config.contentDir,
+    dataDir: config.dataDir,
+    themesDir: config.themesDir,
+  };
   const namespaces = new Map(
     [...CORE, ...coreDeclaredAbove].map(({ declaration }) => [declaration.namespace, declaration]),
   );

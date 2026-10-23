@@ -1,6 +1,7 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
 import { mountAvatars } from './avatar-routes.ts';
+import { mountFonts } from './font-routes.ts';
 import { mountComments } from './comment-routes.ts';
 import { mountContact } from './contact-routes.ts';
 import { COMMENT_PAGE_PREFIX } from '../content/guids.ts';
@@ -109,6 +110,8 @@ export function mountPublicSite(
   // the same prefix again, so a reader's browser fetches every face from here.
   mountAvatars(app);
 
+  mountFonts(app);
+
   app.get('/', (c) => {
     // The site's latest posts, or the page the Reading setting names — the
     // whole of WordPress's "Your homepage displays", decided per request off
@@ -173,6 +176,7 @@ export function mountPublicSite(
       title: site.title,
       iconSetting: iconSetting(site),
       colors: c.var.renderer.themeColors(),
+      scheme: c.var.renderer.siteColors(),
     });
     return manifestResponse(manifest, conditionalHeaders(c));
   });

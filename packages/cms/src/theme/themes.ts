@@ -3,6 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { messageOf } from '../util/errors.ts';
+import { cssFontStack } from './font-family.ts';
+import type { CssFontStack } from './font-family.ts';
 
 /**
  * Where a theme is, and what makes a directory one.
@@ -99,6 +101,77 @@ export interface ThemeColors {
   readonly themeColor: { readonly light?: string | undefined; readonly dark?: string | undefined };
 }
 
+/**
+ * One colour scheme a theme draws, as its `theme.json` lists it under
+ * `schemes` (decision-61):
+ *
+ *     "schemes": [
+ *       { "name": "paper", "label": "Paper", "themeColor": { "light": "#faf7f2", "dark": "#171412" } },
+ *       { "name": "slate", "label": "Slate" }
+ *     ]
+ *
+ * The first is the theme's default. The `name` is what the page prints as
+ * `data-scheme` on `<html>` and what the stylesheet selects on, so it is
+ * lower-case letters, digits and hyphens. The `themeColor` is the browser
+ * chrome for that scheme; whatever a scheme leaves out is the manifest's
+ * top-level `themeColor`.
+ */
+export interface ThemeScheme {
+  readonly name: string;
+  readonly label: string;
+  readonly themeColor: ThemeColors['themeColor'];
+}
+
+/**
+ * One font role a theme declares, as its `theme.json` writes it under `fonts`
+ * (decision-61):
+ *
+ *     "fonts": {
+ *       "heading": { "label": "Headings", "fallback": "Georgia, serif" },
+ *       "body": { "label": "Body text", "fallback": "Georgia, serif" }
+ *     }
+ *
+ * A role is a place the theme's stylesheet reads a font from: it sets
+ * `font-family` from the `--font-<role>` custom property and gives that
+ * property the `fallback` stack on `:root`. A page that sets a font for the
+ * role sets the property to the family followed by the fallback. Both are
+ * printed into a style rule, so the role is lower-case letters, digits and
+ * hyphens, and the fallback is a comma-separated list of family names, plain
+ * or quoted.
+ */
+export interface ThemeFont {
+  readonly role: string;
+  readonly label: string;
+  /** The custom property the stylesheet reads the role from: `--font-<role>`. */
+  readonly property: `--font-${string}`;
+  /** The `font-family` list the role uses when the site sets no font. */
+  readonly fallback: CssFontStack;
+}
+
+/**
+ * Whether a page follows the reader's system setting or is always light or
+ * always dark (decision-61): the `colorMode` setting.
+ */
+export const COLOR_MODES = ['system', 'light', 'dark'] as const;
+
+export type ColorMode = (typeof COLOR_MODES)[number];
+
+/**
+ * Why `name` cannot be the `colorScheme` of a site whose theme draws
+ * `schemes`, or `undefined` when it can. Empty always can: it is the first.
+ */
+export function colorSchemeProblem(
+  schemes: readonly ThemeScheme[],
+  name: string,
+): string | undefined {
+  if (name === '' || schemes.some((scheme) => scheme.name === name)) return undefined;
+  if (schemes.length === 0) {
+    return 'The theme in use declares no colour schemes, so the colour scheme stays empty.';
+  }
+  const names = schemes.map((scheme) => scheme.name).join(', ');
+  return `"${name}" is not a colour scheme of the theme in use. Choose one of ${names}, or leave it empty for the first.`;
+}
+
 /** One theme directory, read and validated. */
 export interface Theme {
   /** The directory name, which is the theme's id and what a site.json names. */
@@ -119,6 +192,10 @@ export interface Theme {
   readonly areas: readonly ThemeArea[];
   /** The colours the manifest declares, each one absent when it declares none. */
   readonly colors: ThemeColors;
+  /** The colour schemes it draws, default first. Empty for a theme that declares none. */
+  readonly schemes: readonly ThemeScheme[];
+  /** The font roles it declares, in manifest order. Empty for a theme that declares none. */
+  readonly fonts: readonly ThemeFont[];
 }
 
 /** A theme, or the reason the directory is not one. */
@@ -176,6 +253,7 @@ export function readTheme(dir: string): ThemeRead {
   }
 
   const description = manifest['description'];
+  const colors = themeColorsOf(manifest['colorScheme'], manifest['themeColor']);
 
   return {
     ok: true,
@@ -188,7 +266,9 @@ export function readTheme(dir: string): ThemeRead {
         ? { description: description.trim() }
         : {}),
       areas: themeAreasOf(manifest['areas']),
-      colors: themeColorsOf(manifest['colorScheme'], manifest['themeColor']),
+      colors,
+      schemes: themeSchemesOf(manifest['schemes'], colors.themeColor),
+      fonts: themeFontsOf(manifest['fonts']),
     },
   };
 }
@@ -202,6 +282,15 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
  * not take costs the site a tinted address bar, not its pages.
  */
 function themeColorsOf(scheme: unknown, color: unknown): ThemeColors {
+  return {
+    ...(COLOR_SCHEMES.includes(scheme as ColorScheme)
+      ? { colorScheme: scheme as ColorScheme }
+      : {}),
+    themeColor: themeColorOf(color),
+  };
+}
+
+function themeColorOf(color: unknown): ThemeColors['themeColor'] {
   const declared =
     typeof color === 'object' && color !== null ? (color as Record<string, unknown>) : {};
   const hex = (value: unknown): string | undefined =>
@@ -210,14 +299,80 @@ function themeColorsOf(scheme: unknown, color: unknown): ThemeColors {
   const dark = hex(declared['dark']);
 
   return {
-    ...(COLOR_SCHEMES.includes(scheme as ColorScheme)
-      ? { colorScheme: scheme as ColorScheme }
-      : {}),
-    themeColor: {
-      ...(light === undefined ? {} : { light }),
-      ...(dark === undefined ? {} : { dark }),
-    },
+    ...(light === undefined ? {} : { light }),
+    ...(dark === undefined ? {} : { dark }),
   };
+}
+
+const SCHEME_NAME = /^[a-z][a-z0-9-]*$/;
+
+function themeSchemesOf(value: unknown, fallback: ThemeColors['themeColor']): ThemeScheme[] {
+  if (!Array.isArray(value)) return [];
+
+  const schemes: ThemeScheme[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { name, label, themeColor } = entry as Record<string, unknown>;
+    if (typeof name !== 'string' || !SCHEME_NAME.test(name) || seen.has(name)) continue;
+    seen.add(name);
+
+    const words = typeof label === 'string' ? label.trim() : '';
+    schemes.push({
+      name,
+      label: words === '' ? name : words,
+      themeColor: { ...fallback, ...themeColorOf(themeColor) },
+    });
+  }
+
+  return schemes;
+}
+
+function themeFontsOf(value: unknown): ThemeFont[] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return [];
+
+  const fonts: ThemeFont[] = [];
+  for (const [role, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!SCHEME_NAME.test(role) || typeof entry !== 'object' || entry === null) continue;
+    const { label, fallback } = entry as Record<string, unknown>;
+    if (typeof fallback !== 'string') continue;
+    const stack = cssFontStack(fallback);
+    if (stack === undefined) continue;
+
+    const words = typeof label === 'string' ? label.trim() : '';
+    fonts.push({
+      role,
+      label: words === '' ? role : words,
+      property: `--font-${role}`,
+      fallback: stack,
+    });
+  }
+
+  return fonts;
+}
+
+/**
+ * The scheme a page is drawn in: the one named, or the theme's first when the
+ * name is empty or names a scheme the theme does not declare, so a site that
+ * switches themes keeps rendering. `undefined` only for a theme with no schemes.
+ */
+export function themeScheme(
+  schemes: readonly ThemeScheme[],
+  name: string,
+): ThemeScheme | undefined {
+  return schemes.find((scheme) => scheme.name === name) ?? schemes[0];
+}
+
+function inheritPackagedUnlessOwnStylesheet<Key extends 'schemes' | 'fonts'>(
+  theme: Theme | undefined,
+  key: Key,
+): Theme[Key] {
+  if (theme !== undefined && theme[key].length > 0) return theme[key];
+  if (theme !== undefined && existsSync(path.join(theme.dir, 'static', 'style.css'))) return [];
+
+  const packaged = readTheme(PACKAGED_THEME_DIR);
+  return packaged.ok ? packaged.theme[key] : [];
 }
 
 /**
@@ -386,6 +541,13 @@ export interface ChosenTheme {
   readonly problem: string | undefined;
   /** The colours the page declares: {@link ThemeColors}, the packaged theme's where this one is silent. */
   readonly colors: ThemeColors;
+  /**
+   * The colour schemes the site may choose from, default first. Pick the one a
+   * page uses with {@link themeScheme}.
+   */
+  readonly schemes: readonly ThemeScheme[];
+  /** The font roles the site may set a font for, in manifest order. */
+  readonly fonts: readonly ThemeFont[];
 }
 
 /**
@@ -398,13 +560,18 @@ export interface ChosenTheme {
  */
 export function chooseTheme(options: { themesDir: string; name: string }): ChosenTheme {
   const chosen = chooseThemeDirs(options);
-  return { ...chosen, colors: resolvedColors(chosen.theme) };
+  return {
+    ...chosen,
+    colors: resolvedColors(chosen.theme),
+    schemes: inheritPackagedUnlessOwnStylesheet(chosen.theme, 'schemes'),
+    fonts: inheritPackagedUnlessOwnStylesheet(chosen.theme, 'fonts'),
+  };
 }
 
 function chooseThemeDirs(options: {
   themesDir: string;
   name: string;
-}): Omit<ChosenTheme, 'colors'> {
+}): Omit<ChosenTheme, 'colors' | 'schemes' | 'fonts'> {
   const name = options.name.trim();
   if (name === PACKAGED_THEME) {
     return { theme: undefined, dirs: themeSearchPath(), problem: undefined };

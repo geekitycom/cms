@@ -33,8 +33,8 @@ the `site` namespace of the settings registry (see
 such as `title` or `postsPerPage`. No other store holds a setting, and
 `data/geekity.db` holds none.
 
-Every settings page, the Navigation, Taxonomy and Connected apps screens, and
-Appearance > Themes save through the registry. Each saves only its own
+Every settings page, the Navigation, Taxonomy and Connected apps screens,
+Appearance > Themes and Appearance > Look save through the registry. Each saves only its own
 settings. The registry re-reads the file inside the write and applies the
 change to that copy, so when two people save two different pages at the same
 moment, both saves land. Each page validates only the fields it shows. A
@@ -72,6 +72,10 @@ The file holds these keys:
 - `mailProvider`, `mailFromName`, `mailFromAddress`, `mailReplyTo`
 - `contactEmail`, `securityContacts`, `securityPolicy`, `securityLanguages`
 - `relays`, `menus` and `taxonomyRedirects`
+- `colorScheme` (when set) and `colorMode` (see
+  [Colour scheme and mode](#colour-scheme-and-mode))
+- `headingFont` and `bodyFont` (when set, see
+  [Heading and body fonts](#heading-and-body-fonts))
 
 A save writes every one of these keys, so the file always holds the whole set
 of values in effect for a theme or an Eleventy build to read. It keeps every
@@ -383,6 +387,161 @@ default theme's header, inside the link home and in front of the title, on
 every page. It is off by default. `site.json` stores it as `headerIcon`. The
 header shows no icon while the box is clear, while the site has no icon, or
 while image optimization is off. See [The page shell](theme/page-shell.md).
+
+## Colour scheme and mode
+
+Two settings choose how the site's pages are coloured (decision-61):
+
+| Setting             | `site.json` key | Values                    | Default                          |
+| ------------------- | --------------- | ------------------------- | -------------------------------- |
+| `site.color_scheme` | `colorScheme`   | A scheme name, or empty   | Empty: the theme's first scheme. |
+| `site.color_mode`   | `colorMode`     | `system`, `light`, `dark` | `system`                         |
+
+Set both on **Appearance > Look** in the admin. Its Colours section saves
+`colorScheme` and `colorMode` and nothing else. Under a theme with no schemes it
+saves `colorMode` alone.
+
+`colorScheme` names one of the colour schemes that the active theme declares in
+its `theme.json` (see [Colour schemes](theme/manifest.md#colour-schemes)). The
+packaged theme declares `paper`, `slate`, `forest`, `plum`, `ocean` and `ink`.
+Paper is its first. `site.json` has no `colorScheme` while the value is empty.
+
+`colorMode` sets which of the scheme's two sets of colours a page uses:
+
+- `system` follows the visitor's light or dark setting.
+- `light` always uses the light colours.
+- `dark` always uses the dark colours.
+
+A save checks `colorScheme` against the theme in effect after the save. When
+the same save changes `theme`, the check uses the new theme. The save is
+refused when the name is not one of that theme's schemes, or when the theme
+declares no schemes and the name is not empty. The message lists the names the
+theme accepts. `colorMode` accepts only the three values above.
+
+A page never fails because of these values. A scheme name that the active
+theme does not declare, for example after a change of theme or a hand edit,
+draws the theme's first scheme. A `colorMode` that is not one of the three
+values is `system`. A theme that declares no schemes ignores both settings.
+
+The variables `GEEKITY_SITE__COLOR_SCHEME` and `GEEKITY_SITE__COLOR_MODE`
+override the settings in the admin and on the command line, as for every other
+`site` setting (see [Runtime settings](#runtime-settings)). Like the other
+`site` settings, the public pages read `site.json` and do not follow these
+variables.
+
+[The page shell](theme/page-shell.md#colour-schemes-and-modes) describes how a
+page prints the chosen scheme and mode.
+
+## Hosted Google Fonts
+
+A site can use Google Fonts families, and the server hosts their files
+(decision-61). A visitor's browser loads the fonts from the site and never
+contacts Google.
+
+When a family is saved, the server fetches it from Google Fonts:
+
+1. It asks `https://fonts.googleapis.com/css2` for the family in the styles
+   it needs.
+2. It downloads every WOFF2 file that stylesheet lists from
+   `https://fonts.gstatic.com`, one file for each Unicode subset.
+3. It writes the files to `data/fonts/<family>/` and writes a stylesheet beside
+   them that points at those files on the site.
+
+The site serves these files under `/_geekity/fonts/`. A font file is named by
+the hash of its bytes, and browsers may cache it for a year. The stylesheet URL
+carries a `v` parameter with the hash of the stylesheet, as theme assets do.
+The files are served during maintenance mode, as theme assets are.
+
+A family name is letters and digits in words separated by single spaces, for
+example `Atkinson Hyperlegible`. The save is refused when Google Fonts has no
+family of that name, or when the family lacks a style the site needs. The
+message names the missing family or styles. Nothing is written in either case.
+
+**Saving a font needs outbound HTTPS from the server** to `fonts.googleapis.com`
+and `fonts.gstatic.com`. The server contacts no other host for fonts, and
+refuses a stylesheet that names a file on any other host. Visitors never need
+access to Google.
+
+`data/fonts/` is rebuildable (see
+[Two directories](content.md#two-directories-content-and-data)). A site export
+leaves it out. When the files are missing, for example in a new container,
+pages use the theme's system fonts, and a `fetch-font`
+[admin job](configuration.md#admin-jobs) downloads them again.
+
+## Heading and body fonts
+
+Two settings choose a Google Fonts family for the headings and the body text
+of the site's pages (decision-61):
+
+| Setting             | `site.json` key | Value                                | Default                   |
+| ------------------- | --------------- | ------------------------------------ | ------------------------- |
+| `site.heading_font` | `headingFont`   | A Google Fonts family name, or empty | Empty: the theme's stack. |
+| `site.body_font`    | `bodyFont`      | A Google Fonts family name, or empty | Empty: the theme's stack. |
+
+Set both on **Appearance > Look** in the admin. Its Fonts section has one
+group of controls for each font role that the active theme declares (see
+[Font roles](theme/manifest.md#font-roles)). The packaged theme declares
+`heading` (Headings) and `body` (Body text). Each group has:
+
+- A list with the theme's own stack first, then the curated families, then
+  **Custom…**. The body list offers Atkinson Hyperlegible, Source Serif 4,
+  Literata, Merriweather, Lora, Source Sans 3, IBM Plex Serif and IBM Plex
+  Sans. The heading list offers the same families plus Fraunces and Playfair
+  Display.
+- A **Custom Google Fonts family** box. The server uses it when **Custom…** is
+  chosen. Type the family as Google Fonts names it, for example `Bitter`.
+- A sample line set in the saved font. The admin loads the sample from the
+  files the site hosts, so the admin's Content-Security-Policy needs no
+  Google host.
+
+The Fonts section works without JavaScript.
+
+A role needs these styles from its family:
+
+| Role    | Styles                  |
+| ------- | ----------------------- |
+| Body    | 400, 400 italic and 700 |
+| Heading | 700                     |
+
+Body text uses regular, italic and bold, and a browser that has to synthesise
+an italic or a bold draws it badly. Headings are bold.
+
+When you save, the server downloads each chosen family in its role's styles
+before it writes anything (see [Hosted Google Fonts](#hosted-google-fonts)).
+It refuses the save, returns the page with status 400 and writes neither
+setting in these cases:
+
+- Google Fonts has no family of that name.
+- The family lacks a style the role needs. The message names the missing
+  styles, for example `Upright Only has no 400 italic on Google Fonts.`
+- The server cannot reach Google Fonts.
+- The name is not a family name: letters and digits in words separated by
+  single spaces.
+
+The message appears beside the field it is about. On success, the setting
+holds the family as Google Fonts spells it. An empty value removes the key
+from `site.json`.
+
+Each page of the site then links the family's hosted `@font-face` stylesheet
+and sets the role's `--font-<role>` property to the family, followed by the
+theme's fallback stack. A page that uses no chosen font loads nothing extra.
+[The page shell](theme/page-shell.md#chosen-google-fonts-in-the-head)
+describes the markup.
+
+A page never fails because of these values:
+
+- A role that the active theme does not declare ignores its setting, and the
+  Look page shows no control for it.
+- A value that is not a family name, for example from a hand edit, is
+  ignored.
+- When the family's files are missing from `data/fonts/`, pages use the
+  theme's stack and the server queues one `fetch-font` job to download them
+  again. The setting stays.
+
+The variables `GEEKITY_SITE__HEADING_FONT` and `GEEKITY_SITE__BODY_FONT`
+override the settings in the admin and on the command line. As with the
+colour settings, the public pages read `site.json` and do not follow these
+variables.
 
 ## License
 

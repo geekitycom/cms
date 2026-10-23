@@ -4,11 +4,12 @@
  * The source. `pnpm build` compiles it with Tailwind v4 to `static/style.css`,
  * which is what a page loads and what the package ships; that file is a build
  * product and gitignored. Nothing about Tailwind reaches a reader: no script,
- * no CDN, no web font, one stylesheet.
+ * no CDN, one stylesheet. A site may choose Google Fonts for headings and
+ * body; the site serves their files itself, so nothing third-party loads.
  *
  * One warm column at 42rem, serif throughout, sans reserved for small labels.
  * Only an article has a headline; every other kind of post is its words under
- * a small-caps kicker that names the kind. Dark mode follows the system.
+ * a small-caps kicker that names the kind.
  *
  * The look lives here, on the theme's semantic class names, through `@apply`:
  * the templates carry no utility classes, so a site theme that has CSS for the
@@ -19,18 +20,39 @@
  * "Colours" in docs/theme/page-shell.md). `src/web/theme-colors.test.ts` reads
  * them out of the compiled file and computes the WCAG 2.2 ratio of every pair
  * the design puts on screen: every run of text at 7:1, every border a reader
- * relies on at 3:1, in both schemes. `--color-rule` is the one exception, a
- * decorative hairline nothing a reader needs is drawn with.
+ * relies on at 3:1, in every scheme and both modes. `--color-rule` is the one
+ * exception, a decorative hairline nothing a reader needs is drawn with.
  */
 @import 'tailwindcss' source(none);
 @source '../layouts';
 @source '../partials';
 
-:root {
-  /* Light and dark are both drawn below, so a browser may paint its own form
-     controls, scrollbars and spellcheck marks to match. */
-  color-scheme: light dark;
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:not([data-mode='light']) {
+      @slot;
+    }
+  }
 
+  &[data-mode='dark'] {
+    @slot;
+  }
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+:root[data-mode='light'] {
+  color-scheme: light;
+}
+
+:root[data-mode='dark'] {
+  color-scheme: dark;
+}
+
+:root,
+:root[data-scheme='paper'] {
   /* `body` is the paper and `text` the ink. `muted` is every small line of
      sans and every quote; `primary` is links, the kind a kicker names and the
      citation rule; `secondary` is tags and the focus outline. `rule` is a
@@ -72,10 +94,8 @@
   --color-code-meta: #6d453c; /* base0F, stock #a3685a */
   --color-code-added-background: #dcedd3;
   --color-code-removed-background: #f5d8d6;
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
+  @variant dark {
     --color-body: #171412;
     --color-text: #ece6de;
     --color-muted: #b2aaa0;
@@ -108,6 +128,286 @@
   }
 }
 
+:root[data-scheme='slate'] {
+  --color-body: #f4f7fb;
+  --color-text: #161b20;
+  --color-muted: #4b4f54;
+  --color-primary: #0f4e94;
+  --color-secondary: #59447b;
+  --color-rule: #dadee3;
+  --color-edge: #82868a;
+  --color-base: #edf1f6;
+  --color-base-2: #f3f2f5;
+  --color-base-3: #ffffff;
+  --color-code-background: #edf1f6;
+  --color-code-text: #161b20;
+  --color-error: #9d121d;
+  --color-code-comment: #4e4e4e;
+  --color-code-tag: #514e4f;
+  --color-code-name: #991c21;
+  --color-code-literal: #7c3e03;
+  --color-code-class: #614c02;
+  --color-code-string: #405603;
+  --color-code-support: #045858;
+  --color-code-function: #1f4f8a;
+  --color-code-keyword: #6b3a7f;
+  --color-code-meta: #6d443a;
+  --color-code-added-background: #d6f0d6;
+  --color-code-removed-background: #fedbda;
+
+  @variant dark {
+    --color-body: #12161c;
+    --color-text: #e3e8f0;
+    --color-muted: #a3adba;
+    --color-primary: #80b7fe;
+    --color-secondary: #b7a2e0;
+    --color-rule: #212831;
+    --color-edge: #676e77;
+    --color-base: #181f27;
+    --color-base-2: #1e1d22;
+    --color-base-3: #21272f;
+    --color-code-background: #181f27;
+    --color-code-text: #e3e8f0;
+    --color-error: #ff8a83;
+    --color-code-comment: #acacac;
+    --color-code-tag: #adabab;
+    --color-code-name: #ff8a83;
+    --color-code-literal: #f29551;
+    --color-code-class: #cca83c;
+    --color-code-string: #95b84d;
+    --color-code-support: #5bbaba;
+    --color-code-function: #7caff1;
+    --color-code-keyword: #cd98e4;
+    --color-code-meta: #d1a195;
+    --color-code-added-background: #213622;
+    --color-code-removed-background: #442727;
+  }
+}
+
+:root[data-scheme='forest'] {
+  --color-body: #f5f7ed;
+  --color-text: #1a1b15;
+  --color-muted: #4d4f42;
+  --color-primary: #035b27;
+  --color-secondary: #734301;
+  --color-rule: #dcdfd0;
+  --color-edge: #84867b;
+  --color-base: #eff1e4;
+  --color-base-2: #eef3ef;
+  --color-base-3: #ffffff;
+  --color-code-background: #eff1e4;
+  --color-code-text: #1a1b15;
+  --color-error: #9c111c;
+  --color-code-comment: #4e4e4e;
+  --color-code-tag: #504d4e;
+  --color-code-name: #991b21;
+  --color-code-literal: #7b3d02;
+  --color-code-class: #604b01;
+  --color-code-string: #3f5501;
+  --color-code-support: #025757;
+  --color-code-function: #1e4e89;
+  --color-code-keyword: #6a3a7f;
+  --color-code-meta: #6c4339;
+  --color-code-added-background: #d6f0d6;
+  --color-code-removed-background: #fedbda;
+
+  @variant dark {
+    --color-body: #0f1912;
+    --color-text: #e2eae4;
+    --color-muted: #9db1a3;
+    --color-primary: #75c687;
+    --color-secondary: #daa168;
+    --color-rule: #1c2c22;
+    --color-edge: #627166;
+    --color-base: #142219;
+    --color-base-2: #182020;
+    --color-base-3: #1c2a21;
+    --color-code-background: #142219;
+    --color-code-text: #e2eae4;
+    --color-error: #fe8c84;
+    --color-code-comment: #acacac;
+    --color-code-tag: #aeacac;
+    --color-code-name: #fe8c84;
+    --color-code-literal: #f39651;
+    --color-code-class: #cca83c;
+    --color-code-string: #95b84d;
+    --color-code-support: #5cbbba;
+    --color-code-function: #7caff1;
+    --color-code-keyword: #cd99e5;
+    --color-code-meta: #d1a195;
+    --color-code-added-background: #213622;
+    --color-code-removed-background: #442727;
+  }
+}
+
+:root[data-scheme='plum'] {
+  --color-body: #fbf3fa;
+  --color-text: #1e191d;
+  --color-muted: #544b53;
+  --color-primary: #822973;
+  --color-secondary: #3f488b;
+  --color-rule: #e4d9e2;
+  --color-edge: #8a8289;
+  --color-base: #f6ecf5;
+  --color-base-2: #f6f0f1;
+  --color-base-3: #ffffff;
+  --color-code-background: #f6ecf5;
+  --color-code-text: #1e191d;
+  --color-error: #9c111c;
+  --color-code-comment: #4d4d4d;
+  --color-code-tag: #504d4e;
+  --color-code-name: #981b20;
+  --color-code-literal: #7b3d02;
+  --color-code-class: #604b01;
+  --color-code-string: #3f5501;
+  --color-code-support: #025757;
+  --color-code-function: #1e4e89;
+  --color-code-keyword: #6a397e;
+  --color-code-meta: #6c4339;
+  --color-code-added-background: #d6f0d6;
+  --color-code-removed-background: #fedbda;
+
+  @variant dark {
+    --color-body: #1b121d;
+    --color-text: #ece5ed;
+    --color-muted: #b7a5bc;
+    --color-primary: #f493e0;
+    --color-secondary: #98a6f2;
+    --color-rule: #302233;
+    --color-edge: #766879;
+    --color-base: #251928;
+    --color-base-2: #251b1e;
+    --color-base-3: #2e2131;
+    --color-code-background: #251928;
+    --color-code-text: #ece5ed;
+    --color-error: #ff8880;
+    --color-code-comment: #ababab;
+    --color-code-tag: #acaaab;
+    --color-code-name: #ff8880;
+    --color-code-literal: #f1944f;
+    --color-code-class: #cba63a;
+    --color-code-string: #94b74c;
+    --color-code-support: #5ab9b8;
+    --color-code-function: #7aadef;
+    --color-code-keyword: #cb97e3;
+    --color-code-meta: #d0a093;
+    --color-code-added-background: #213622;
+    --color-code-removed-background: #442727;
+  }
+}
+
+:root[data-scheme='ocean'] {
+  --color-body: #eef9fb;
+  --color-text: #141c1d;
+  --color-muted: #435153;
+  --color-primary: #04585c;
+  --color-secondary: #184f90;
+  --color-rule: #d2e1e3;
+  --color-edge: #7c888a;
+  --color-base: #e5f4f6;
+  --color-base-2: #eff3f7;
+  --color-base-3: #ffffff;
+  --color-code-background: #e5f4f6;
+  --color-code-text: #141c1d;
+  --color-error: #9e131d;
+  --color-code-comment: #4f4f4f;
+  --color-code-tag: #514e4f;
+  --color-code-name: #991c21;
+  --color-code-literal: #7d3e00;
+  --color-code-class: #624c03;
+  --color-code-string: #405603;
+  --color-code-support: #045858;
+  --color-code-function: #1f4f8a;
+  --color-code-keyword: #6b3b80;
+  --color-code-meta: #6d443a;
+  --color-code-added-background: #d6f0d6;
+  --color-code-removed-background: #fedbda;
+
+  @variant dark {
+    --color-body: #08191f;
+    --color-text: #e0eaee;
+    --color-muted: #91b1be;
+    --color-primary: #57c5cb;
+    --color-secondary: #77aff7;
+    --color-rule: #122b35;
+    --color-edge: #59717a;
+    --color-base: #0a212a;
+    --color-base-2: #1a1e26;
+    --color-base-3: #122a33;
+    --color-code-background: #0a212a;
+    --color-code-text: #e0eaee;
+    --color-error: #ff8a83;
+    --color-code-comment: #acacac;
+    --color-code-tag: #adabab;
+    --color-code-name: #ff8a83;
+    --color-code-literal: #f29551;
+    --color-code-class: #cca83c;
+    --color-code-string: #95b84d;
+    --color-code-support: #5bbaba;
+    --color-code-function: #7caff1;
+    --color-code-keyword: #cd98e4;
+    --color-code-meta: #d1a195;
+    --color-code-added-background: #213622;
+    --color-code-removed-background: #442727;
+  }
+}
+
+:root[data-scheme='ink'] {
+  --color-body: #ffffff;
+  --color-text: #030303;
+  --color-muted: #3f3f3f;
+  --color-primary: #1b388a;
+  --color-secondary: #3f3f3f;
+  --color-rule: #e6e6e6;
+  --color-edge: #737373;
+  --color-base: #f9f9f9;
+  --color-base-2: #fbfbfb;
+  --color-base-3: #ffffff;
+  --color-code-background: #f9f9f9;
+  --color-code-text: #030303;
+  --color-error: #840111;
+  --color-code-comment: #3f3f3f;
+  --color-code-tag: #3f3e3f;
+  --color-code-name: #6c2927;
+  --color-code-literal: #61320b;
+  --color-code-class: #4e3d02;
+  --color-code-string: #334408;
+  --color-code-support: #114646;
+  --color-code-function: #264061;
+  --color-code-keyword: #4f345b;
+  --color-code-meta: #513933;
+  --color-code-added-background: #d6f0d6;
+  --color-code-removed-background: #fedbda;
+
+  @variant dark {
+    --color-body: #0d0d0d;
+    --color-text: #f5f5f5;
+    --color-muted: #c2c2c2;
+    --color-primary: #aec8fe;
+    --color-secondary: #c2c2c2;
+    --color-rule: #1e1e1e;
+    --color-edge: #7f7f7f;
+    --color-base: #151515;
+    --color-base-2: #151515;
+    --color-base-3: #1d1d1d;
+    --color-code-background: #151515;
+    --color-code-text: #f5f5f5;
+    --color-error: #ffaaa2;
+    --color-code-comment: #c2c2c2;
+    --color-code-tag: #c1c0c0;
+    --color-code-name: #fcaba4;
+    --color-code-literal: #edb48d;
+    --color-code-class: #d4bf86;
+    --color-code-string: #b1c88c;
+    --color-code-support: #96cac9;
+    --color-code-function: #a4c3eb;
+    --color-code-keyword: #d4b5e3;
+    --color-code-meta: #d8bab2;
+    --color-code-added-background: #213622;
+    --color-code-removed-background: #442727;
+  }
+}
+
 /* Tailwind's utilities, drawn from the tokens above rather than its own
    palette, which is cleared so a utility can only name a colour of this
    design. `inline` puts the `var()` in the utility, so the scheme the custom
@@ -124,7 +424,8 @@
   --color-surface: var(--color-base);
   --color-code: var(--color-code-background);
   --color-error: var(--color-error);
-  --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --font-heading: var(--font-heading);
+  --font-body: var(--font-body);
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
 }
@@ -162,6 +463,12 @@
 }
 
 @layer base {
+  :root {
+    --font-heading:
+      'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+    --font-body: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  }
+
   /* `scrollbar-gutter` keeps the scrollbar's room whether or not the page is
      long enough to scroll, so moving between a short page and a long one does
      not shift the column sideways. */
@@ -173,7 +480,7 @@
   }
 
   body {
-    @apply bg-paper font-serif leading-relaxed text-ink antialiased;
+    @apply bg-paper font-body leading-relaxed text-ink antialiased;
   }
 
   h1,
@@ -182,7 +489,7 @@
   h4,
   h5,
   h6 {
-    @apply font-bold tracking-tight;
+    @apply font-heading font-bold tracking-tight;
     text-wrap: balance;
   }
 
@@ -285,7 +592,7 @@
   }
 
   .header-link-home {
-    @apply target text-lg font-bold;
+    @apply target font-heading text-lg font-bold;
   }
 
   .site-icon {
@@ -927,7 +1234,7 @@
   }
 
   .backlinks-title {
-    @apply mb-2 text-[0.72rem] font-normal tracking-[0.14em] text-muted uppercase;
+    @apply mb-2 font-sans text-[0.72rem] font-normal tracking-[0.14em] text-muted uppercase;
   }
 
   .backlinks ol {
@@ -1165,7 +1472,7 @@
   }
 
   :is(.comment-respond, .search-form) :is(input:not([type='checkbox'], [type='hidden']), textarea) {
-    @apply block w-full rounded-md border border-edge bg-surface px-3 py-2 font-serif text-base text-ink;
+    @apply block w-full rounded-md border border-edge bg-surface px-3 py-2 font-body text-base text-ink;
   }
 
   /* A field the reader has left invalid, or one a refused submission marked,
