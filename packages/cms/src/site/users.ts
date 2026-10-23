@@ -2,6 +2,8 @@ import { adminTheme } from './admin-theme.ts';
 import type { AdminTheme } from './admin-theme.ts';
 import { dashboardLayout, isEmpty } from './dashboard-layout.ts';
 import type { DashboardLayout } from './dashboard-layout.ts';
+import { writingGoals } from './writing-goals.ts';
+import type { WritingGoals } from './writing-goals.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import {
   deliveryMode,
@@ -91,6 +93,7 @@ export interface User {
    * changed anything (TASK-469). Absent means the default arrangement.
    */
   readonly dashboardLayout?: DashboardLayout | undefined;
+  readonly writingGoals?: WritingGoals | undefined;
   /**
    * What the public site says about this person, when somebody has filled any
    * of it in (TASK-67).
@@ -521,6 +524,14 @@ export async function setUserDashboardLayout(input: {
   return updateUser(input.dataDir, input.userId, () => ({ dashboardLayout: layout }));
 }
 
+export async function setUserWritingGoals(input: {
+  dataDir: string;
+  userId: number;
+  goals: WritingGoals;
+}): Promise<boolean> {
+  return updateUser(input.dataDir, input.userId, () => ({ writingGoals: input.goals }));
+}
+
 /**
  * Thrown when the id being set already belongs to somebody else.
  *
@@ -635,6 +646,7 @@ function withoutHash(user: StoredUser): User {
     ...(user.notificationModes === undefined ? {} : { notificationModes: user.notificationModes }),
     ...(user.adminTheme === undefined ? {} : { adminTheme: user.adminTheme }),
     ...(user.dashboardLayout === undefined ? {} : { dashboardLayout: user.dashboardLayout }),
+    ...(user.writingGoals === undefined ? {} : { writingGoals: user.writingGoals }),
     ...(user.profile === undefined ? {} : { profile: user.profile }),
     ...(user.actorId === undefined ? {} : { actorId: user.actorId }),
     createdAt: user.createdAt,
@@ -733,6 +745,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
   const modes = notificationModesFrom(record['notificationModes']);
   const theme = adminTheme(record['adminTheme']);
   const layout = dashboardLayout(record['dashboardLayout']);
+  const goals = writingGoals(record['writingGoals']);
   const profile = profileFrom(record['profile']);
   const actorId = storedActorIdFrom(record['actorId']);
   const passwordHash = record['passwordHash'];
@@ -768,6 +781,7 @@ function userFrom(entry: unknown, index: number, file: string): StoredUser {
     ...(modes === undefined ? {} : { notificationModes: modes }),
     ...(theme === undefined ? {} : { adminTheme: theme }),
     ...(layout === undefined ? {} : { dashboardLayout: layout }),
+    ...(goals === undefined ? {} : { writingGoals: goals }),
     // Dropped field by field on the same rule, and for the sharper reason that
     // a profile is prose somebody may well have typed straight into the file:
     // a bio that is a number is not a bio, and refusing to load the users file

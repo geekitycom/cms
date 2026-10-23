@@ -72,16 +72,6 @@ export function isFocusShortcut(press: KeyPress): boolean {
   );
 }
 
-export function wordCount(text: string): number {
-  let count = 0;
-  for (const run of text.split(/\s+/)) if (/[\p{L}\p{N}]/u.test(run)) count += 1;
-  return count;
-}
-
-export function wordsLabel(count: number): string {
-  return `${count.toLocaleString('en-US')} ${count === 1 ? 'word' : 'words'}`;
-}
-
 export interface Tree<T> {
   readonly parentOf: (node: T) => T | null;
   readonly childrenOf: (node: T) => readonly T[];

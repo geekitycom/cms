@@ -136,6 +136,19 @@ describe('a block, given input it cannot draw', () => {
     ],
     ['a calendar of no days', { calendar: { caption: 'Posts', days: [] } }],
     [
+      'a calendar with a mark that is not true or false',
+      {
+        calendar: {
+          caption: 'Words',
+          mark: 'Met the streak rule',
+          days: [{ day: '2026-10-01', count: 1, marked: 'yes' }],
+        },
+      },
+    ],
+    ['progress with no goal', { progress: { label: 'Words', value: 3, max: 0 } }],
+    ['progress with a negative value', { progress: { label: 'Words', value: -1, max: 10 } }],
+    ['progress with no label', { progress: { value: 1, max: 10 } }],
+    [
       'a calendar with a count that is not a number',
       { calendar: { caption: 'Posts', days: [{ day: '2026-10-01', count: Infinity }] } },
     ],
@@ -526,6 +539,63 @@ describe('a calendar', () => {
   it('keeps a short calendar at its own size', () => {
     const svg = /<svg role="img"[^>]*>/.exec(draw(calendar))?.[0] ?? '';
     assert.match(svg, /class="mr-auto h-auto shrink-0"/);
+  });
+});
+
+describe('a calendar with marked days (TASK-501)', () => {
+  const marked = {
+    calendar: {
+      caption: 'Words per day',
+      mark: 'Met the streak rule',
+      days: [
+        { day: '2026-10-05', count: 300, marked: true },
+        { day: '2026-10-06', count: 40, marked: false },
+        { day: '2026-10-07', count: 250, marked: true },
+      ],
+    },
+  };
+
+  it('outlines a marked day and names the mark in its title', () => {
+    const html = draw(marked);
+    const cells = all(html, /<rect class="([^"]*)"[^>]*><title>[^<]*<\/title><\/rect>/g);
+    assert.equal(cells.filter((cell) => cell.includes('stroke-base-content')).length, 2);
+    assert.match(html, /<title>5 Oct 2026: 300\. Met the streak rule\.<\/title>/);
+    assert.match(html, /<title>6 Oct 2026: 40<\/title>/);
+  });
+
+  it('says how many days are marked, and marks them in the table and the key', () => {
+    const html = draw(marked);
+    assert.match(html, /class="sr-only">Words per day, [^<]*\. Met the streak rule: 2 days\.<\/p>/);
+    const table = /<table[^>]*>(.*?)<\/table>/.exec(html)?.[1] ?? '';
+    assert.match(table, /<th scope="col">Met the streak rule<\/th>/);
+    assert.match(table, /<th scope="row">5 Oct 2026<\/th><td>300<\/td><td>Yes<\/td>/);
+    assert.match(table, /<th scope="row">6 Oct 2026<\/th><td>40<\/td><td>No<\/td>/);
+    assert.match(html, /<span>Met the streak rule<\/span>/);
+  });
+
+  it('draws no mark, column or key when no day is marked', () => {
+    const html = draw({ calendar: { caption: 'Posts', days: [{ day: '2026-10-05', count: 1 }] } });
+    assert.doesNotMatch(html, /stroke-base-content/);
+    assert.doesNotMatch(html, /<td>No<\/td>/);
+  });
+});
+
+describe('progress (TASK-501)', () => {
+  it('draws a bar with the value, the goal and the percentage', () => {
+    const html = draw({ progress: { label: 'Words this month', value: 1250, max: 5000 } });
+    assert.match(
+      html,
+      /<progress class="progress progress-primary w-full" value="1250" max="5000" aria-label="Words this month">25%<\/progress>/,
+    );
+    assert.match(html, /Words this month/);
+    assert.match(html, /1,250 of 5,000/);
+    assert.match(html, />25%</);
+  });
+
+  it('says the true percentage past the goal, with the bar full', () => {
+    const html = draw({ progress: { label: 'Words this week', value: 6000, max: 5000 } });
+    assert.match(html, /value="5000" max="5000"/);
+    assert.match(html, />120%</);
   });
 });
 

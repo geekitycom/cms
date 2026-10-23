@@ -13,7 +13,17 @@ export type DrawnBlock =
       readonly items: readonly DrawnRankedItem[];
     }
   | ({ readonly kind: 'bars' } & DrawnBars)
-  | ({ readonly kind: 'calendar' } & DrawnCalendar);
+  | ({ readonly kind: 'calendar' } & DrawnCalendar)
+  | ({ readonly kind: 'progress' } & DrawnProgress);
+
+interface DrawnProgress {
+  readonly label: string;
+  readonly value: string;
+  readonly max: string;
+  readonly filled: number;
+  readonly limit: number;
+  readonly percent: string;
+}
 
 type DrawnCell =
   | PluginScreenText
@@ -97,8 +107,10 @@ interface DrawnCalendar extends DrawnFigure {
     readonly x: number;
     readonly y: number;
     readonly level: CalendarLevel;
+    readonly marked: boolean;
     readonly title: string;
   }[];
+  readonly mark: string | undefined;
   readonly months: readonly { readonly x: number; readonly label: string }[];
   readonly weekdays: readonly { readonly y: number; readonly label: string }[];
   readonly cell: number;
@@ -512,13 +524,18 @@ function drawCalendar(data: unknown): DrawnBlock {
   const days = data['days'];
   if (!Array.isArray(days) || days.length === 0) return empty;
 
+  const mark = typeof data['mark'] === 'string' ? data['mark'] : 'Marked';
   const counts = new Map<number, number>();
+  const marked = new Set<number>();
   for (const entry of days) {
     const time = isRecord(entry) ? dayTime(entry['day']) : undefined;
     if (time === undefined || !isRecord(entry) || !isAmount(entry['count']) || counts.has(time)) {
       return empty;
     }
+    const { marked: isMarked = false } = entry;
+    if (typeof isMarked !== 'boolean') return empty;
     counts.set(time, entry['count']);
+    if (isMarked) marked.add(time);
   }
   const first = Math.min(...counts.keys());
   const last = Math.max(...counts.keys());
@@ -552,7 +569,8 @@ function drawCalendar(data: unknown): DrawnBlock {
         count === 0
           ? 0
           : (Math.min(4, Math.max(1, Math.ceil((count / most) * 4))) as CalendarLevel),
-      title: `${longDay.format(time)}: ${whole.format(count)}`,
+      marked: marked.has(time),
+      title: `${longDay.format(time)}: ${whole.format(count)}${marked.has(time) ? `. ${mark}.` : ''}`,
     });
   }
   const columns = Math.floor((length - 1 + lead) / 7) + 1;
@@ -561,10 +579,15 @@ function drawCalendar(data: unknown): DrawnBlock {
       ? 'none'
       : `${whole.format(total)} in all, most on ${shortDay.format(busiest)} (${whole.format(most)})`;
 
+  const markSummary =
+    marked.size === 0
+      ? ''
+      : ` ${mark}: ${whole.format(marked.size)} ${marked.size === 1 ? 'day' : 'days'}.`;
+
   return {
     kind: 'calendar',
     id: nextFigureId(),
-    description: `${caption}, ${spanText(first, last)}: ${summary}.`,
+    description: `${caption}, ${spanText(first, last)}: ${summary}.${markSummary}`,
     width: left + columns * pitch,
     height: top + 7 * pitch,
     cell,
@@ -577,11 +600,33 @@ function drawCalendar(data: unknown): DrawnBlock {
       { y: top + 2 * pitch + cell - 2, label: 'Wed' },
       { y: top + 4 * pitch + cell - 2, label: 'Fri' },
     ],
-    columns: ['Day', caption],
+    mark: marked.size === 0 ? undefined : mark,
+    columns: marked.size === 0 ? ['Day', caption] : ['Day', caption, mark],
     rows: [...counts.entries()]
-      .filter(([, count]) => count > 0)
+      .filter(([time, count]) => count > 0 || marked.has(time))
       .toSorted(([a], [b]) => a - b)
-      .map(([time, count]) => ({ heading: longDay.format(time), cells: [whole.format(count)] })),
+      .map(([time, count]) => ({
+        heading: longDay.format(time),
+        cells:
+          marked.size === 0
+            ? [whole.format(count)]
+            : [whole.format(count), marked.has(time) ? 'Yes' : 'No'],
+      })),
+  };
+}
+
+function drawProgress(data: unknown): DrawnBlock {
+  if (!isRecord(data) || typeof data['label'] !== 'string') return EMPTY;
+  const { label, value, max } = data;
+  if (!isAmount(value) || !isAmount(max) || max === 0) return { kind: 'empty', caption: label };
+  return {
+    kind: 'progress',
+    label,
+    value: whole.format(value),
+    max: whole.format(max),
+    filled: Math.min(value, max),
+    limit: max,
+    percent: `${whole.format(Math.floor((value / max) * 100))}%`,
   };
 }
 
@@ -599,5 +644,6 @@ export function drawBlock(block: unknown): DrawnBlock {
   if ('ranked' in block) return drawRanked(block['ranked']);
   if ('bars' in block) return drawBars(block['bars']);
   if ('calendar' in block) return drawCalendar(block['calendar']);
+  if ('progress' in block) return drawProgress(block['progress']);
   return EMPTY;
 }

@@ -6,6 +6,7 @@ import { CSRF_FIELD } from '../forms/protection.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import type { GeekityEnv } from '../web/env.ts';
+import { creditWriting } from '../writing/ledger.ts';
 import { returnPath } from './documents.ts';
 import { flash, noteClearedAutosave } from './flash.ts';
 
@@ -16,6 +17,7 @@ export const AUTOSAVE_DISCARD_JSON_PATH = `${AUTOSAVE_DISCARD_PATH}.json`;
 export interface AutosaveResult {
   key: string;
   savedAt: string;
+  wordsToday: number;
 }
 
 const BAD_KEY =
@@ -32,16 +34,32 @@ export function mountAutosave(app: Hono<GeekityEnv>): void {
       return c.json({ error: 'There is no document at that path. Reload the editor.' }, 404);
     }
 
-    const savedAt = c.var.config.now().toISOString();
+    const { dataDir, now } = c.var.config;
+    const userId = signedInUser(c);
+    const at = now();
+    const fields = submittedFields(body);
+    const copies = autosaveCopies(dataDir);
+    const before =
+      copies.read(userId, key.key)?.fields['body'] ??
+      (key.kind === 'existing' ? c.var.store.getByPath(key.path)?.body : undefined) ??
+      '';
+    const savedAt = at.toISOString();
     const record: AutosaveRecord = {
       ...identity,
       hash: stringOrEmpty(body['hash']),
-      fields: submittedFields(body),
+      fields,
       savedAt,
     };
-    autosaveCopies(c.var.config.dataDir).save(signedInUser(c), key.key, record);
+    copies.save(userId, key.key, record);
+    const wordsToday = await creditWriting(dataDir, {
+      userId,
+      before,
+      after: fields['body'] ?? before,
+      at,
+      timezone: c.var.siteAtRequestStart.timezone,
+    });
 
-    const result: AutosaveResult = { key: key.key, savedAt };
+    const result: AutosaveResult = { key: key.key, savedAt, wordsToday };
     return c.json(result);
   });
 

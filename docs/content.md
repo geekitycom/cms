@@ -113,6 +113,7 @@ the same directory reads all of it, and everything in it is public.
 | `data/jobs.json`                 | The admin jobs: each one's state, progress and result, with the newest five ended jobs of each name. See [Admin jobs](configuration.md#admin-jobs). |
 | `data/queue.sqlite`              | Deliveries, inbox activities and retries still waiting. Mode `0600`. See [The message queue](federation.md#the-message-queue).                      |
 | `data/autosave/{user id}/`       | Each user's editor forms not saved yet, one file for each document. Mode `0600`. See [Autosaved copies](admin.md#autosaved-copies).                 |
+| `data/writing/{user id}.json`    | The words each user wrote on each day, for writing goals. Mode `0600`. See [Writing goals](writing-goals.md#where-the-counts-are-kept).             |
 
 [Personal data](personal-data.md) lists the files that hold readers' data, and
 how long each is kept.

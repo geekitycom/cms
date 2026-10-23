@@ -20,7 +20,7 @@ export const LOOK = {
     'h-auto! border-transparent! bg-transparent! px-0! text-3xl! leading-tight font-bold shadow-none!',
   focusBar:
     'sticky bottom-0 mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-base-200 bg-base-100 py-3 text-sm text-base-content/60 [&>p]:min-h-0 [&>p]:basis-auto',
-  focusCount: 'tabular-nums',
+  wordsAnnounced: 'sr-only',
   focusExit: 'btn btn-ghost btn-sm ms-auto',
   resume: 'my-6',
   resumeAlert: 'alert alert-warning alert-vertical sm:alert-horizontal',

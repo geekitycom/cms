@@ -7,7 +7,11 @@ export const AUTOSAVE_STATUS_ID = 'editor-autosave-status';
 
 const MINTED = /^new-[0-9a-f]{32}$/;
 
-export function startAutosave(form: HTMLFormElement, tools: HTMLElement): Autosave | undefined {
+export function startAutosave(
+  form: HTMLFormElement,
+  tools: HTMLElement,
+  credited: (body: string, wordsToday: number) => void,
+): Autosave | undefined {
   const url = tools.dataset['autosaveUrl'] ?? '';
   const userId = tools.dataset['autosaveUser'] ?? '';
   const keyField = form.elements.namedItem('autosave');
@@ -31,7 +35,13 @@ export function startAutosave(form: HTMLFormElement, tools: HTMLElement): Autosa
     storage,
     held: offer.from !== 'none',
     read: () => snapshotOf(form),
-    send: (snapshot) => send(url, payload(form, snapshot)),
+    send: async (snapshot) => {
+      const outcome = await send(url, payload(form, snapshot));
+      const body = snapshot.find(([name]) => name === 'body')?.[1];
+      if (outcome.kind === 'saved' && outcome.wordsToday !== undefined && body !== undefined)
+        credited(body, outcome.wordsToday);
+      return outcome;
+    },
     beacon: (snapshot) => navigator.sendBeacon(url, payload(form, snapshot)),
     now: () => new Date(),
   });
@@ -101,7 +111,11 @@ function payload(form: HTMLFormElement, snapshot: Snapshot): FormData {
   return data;
 }
 
-async function send(url: string, body: FormData): Promise<SendOutcome> {
+type Sent =
+  | Exclude<SendOutcome, { kind: 'saved' }>
+  | { kind: 'saved'; savedAt: string; wordsToday: number | undefined };
+
+async function send(url: string, body: FormData): Promise<Sent> {
   let response: Response;
   try {
     // An expired session is answered with a redirect to the login form, which
@@ -122,11 +136,16 @@ async function send(url: string, body: FormData): Promise<SendOutcome> {
 
   const result = (await response.json().catch(() => ({}))) as {
     savedAt?: unknown;
+    wordsToday?: unknown;
     error?: unknown;
   };
   if (response.ok) {
     return typeof result.savedAt === 'string'
-      ? { kind: 'saved', savedAt: result.savedAt }
+      ? {
+          kind: 'saved',
+          savedAt: result.savedAt,
+          wordsToday: typeof result.wordsToday === 'number' ? result.wordsToday : undefined,
+        }
       : { kind: 'unreachable' };
   }
   return {

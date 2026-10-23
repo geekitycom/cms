@@ -25,9 +25,11 @@ function widget(
     width?: 'full' | 'half';
     owner?: string;
     period?: 7 | 30;
+    viewer?: number;
   } = {},
 ): WidgetLoad {
   return {
+    ...(options.viewer === undefined ? {} : { viewer: options.viewer }),
     owner: options.owner ?? '@acme/plugin-stats',
     placement: 'activity',
     period: options.period ?? 7,
@@ -201,6 +203,30 @@ describe('the widget board', () => {
       now,
     );
     assert.deepEqual(month[0]?.blocks, [{ paragraph: ['30 days'] }]);
+  });
+
+  it('keeps a result for one user apart from the same widget’s result for another (TASK-501)', async () => {
+    const board = createWidgetBoard({ timeLimitMs: 1000 });
+    const now = clockAt('2026-10-20T12:00:00Z').now;
+    await board.load([widget('goal', () => [{ paragraph: ['Ada'] }], { viewer: 1 })], now);
+    const bob = await board.load(
+      [widget('goal', () => [{ paragraph: ['Bob'] }], { viewer: 2 })],
+      now,
+    );
+    assert.deepEqual(bob[0]?.blocks, [{ paragraph: ['Bob'] }]);
+    const failing = await board.load(
+      [
+        widget(
+          'goal',
+          () => {
+            throw new Error('down');
+          },
+          { viewer: 3, refreshSeconds: 0 },
+        ),
+      ],
+      now,
+    );
+    assert.equal(failing[0]?.status, 'unavailable', 'no other user’s result is shown as stale');
   });
 
   it('draws the last good result marked stale, with when it was loaded, when a later load fails', async () => {

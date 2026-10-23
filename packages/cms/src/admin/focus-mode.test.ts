@@ -1,51 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import {
-  FOCUS_OFF,
-  focusStep,
-  isFocusShortcut,
-  outsideOf,
-  wordCount,
-  wordsLabel,
-} from './focus-mode.ts';
+import { FOCUS_OFF, focusStep, isFocusShortcut, outsideOf } from './focus-mode.ts';
 import type { FocusState, KeyPress } from './focus-mode.ts';
-
-describe('wordCount', () => {
-  it('counts nothing in an empty or blank body', () => {
-    assert.equal(wordCount(''), 0);
-    assert.equal(wordCount('  \n\n\t '), 0);
-  });
-
-  it('counts words across lines and paragraphs', () => {
-    assert.equal(wordCount('One two\nthree.\n\nFour, five!'), 5);
-  });
-
-  it('does not count Markdown marks standing on their own', () => {
-    assert.equal(wordCount('# A heading\n\n- item\n\n---\n\n> quoted words'), 5);
-  });
-
-  it('counts a word once however it is marked up', () => {
-    assert.equal(wordCount('**bold** and _quiet_ and `code`'), 5);
-    assert.equal(wordCount('[two words](https://example.com/a-long-path)'), 2);
-  });
-
-  it('counts words in other scripts and numbers', () => {
-    assert.equal(wordCount('café naïve 2026 Ελλάδα'), 4);
-  });
-});
-
-describe('wordsLabel', () => {
-  it('says word for one and words otherwise', () => {
-    assert.equal(wordsLabel(0), '0 words');
-    assert.equal(wordsLabel(1), '1 word');
-    assert.equal(wordsLabel(2), '2 words');
-  });
-
-  it('groups thousands', () => {
-    assert.equal(wordsLabel(12345), '12,345 words');
-  });
-});
 
 describe('isFocusShortcut', () => {
   const press = (over: Partial<KeyPress>): KeyPress => ({

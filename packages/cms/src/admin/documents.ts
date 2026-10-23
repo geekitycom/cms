@@ -64,7 +64,9 @@ import { isServed } from '../content/served.ts';
 import { SEARCH_KINDS } from '../item-lookup/lookup.ts';
 import type { CitedPicture } from '../webmention/cited-picture.ts';
 import { syndicationTargetsReader } from '../webmention/syndication.ts';
+import { creditWriting } from '../writing/ledger.ts';
 import { editorActionViews } from './editor-actions.ts';
+import { editorWordCounter } from './editor-word-counter.ts';
 import {
   BLANK_ALTERNATE_ROW,
   enclosureChoices,
@@ -514,6 +516,7 @@ async function saveFromForm(
     });
   }
   const { saved, undescribed, respelled } = written;
+  await creditSave(c, document, saved, mintedId(body[AUTOSAVE_FIELD]));
   discardAutosaves(c, [document?.path, saved.path, mintedId(body[AUTOSAVE_FIELD])]);
 
   flash(
@@ -858,6 +861,26 @@ function filterTabs(
   ];
 }
 
+async function creditSave(
+  c: Context<GeekityEnv>,
+  document: Document | undefined,
+  saved: Document,
+  minted: string | undefined,
+): Promise<void> {
+  const userId = c.var.session?.userId;
+  if (userId == null) return;
+  const key = document?.path ?? minted;
+  const copy =
+    key === undefined ? undefined : autosaveCopies(c.var.config.dataDir).read(userId, key);
+  await creditWriting(c.var.config.dataDir, {
+    userId,
+    before: copy?.fields['body'] ?? document?.body ?? '',
+    after: saved.body,
+    at: c.var.config.now(),
+    timezone: c.var.siteAtRequestStart.timezone,
+  });
+}
+
 function discardAutosaves(c: Context<GeekityEnv>, keys: readonly (string | undefined)[]): void {
   const userId = c.var.session?.userId;
   if (userId == null) return;
@@ -1077,6 +1100,7 @@ async function renderEditor(
     autosaveCopySavedAt: copy?.savedAt,
     autosaveFileTime: document?.updated,
     autosaveTimezone: timezone,
+    words: editorWordCounter(c, form.body),
     resume,
     viewUrl: document !== undefined && isServed(document, now) ? document.permalink : undefined,
     // Named beside the date field, because a wall clock with no zone on it is

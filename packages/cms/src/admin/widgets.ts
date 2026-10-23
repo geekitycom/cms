@@ -3,6 +3,8 @@ import { Temporal } from '@js-temporal/polyfill';
 import { calendarDayIn } from '../content/time.ts';
 import type { DashboardPeriod, PluginBlock, PluginWidget } from '../plugin.ts';
 import { pluginSite } from '../plugins/site.ts';
+import { findUserById } from '../site/users.ts';
+import type { User } from '../site/users.ts';
 import type { Clock } from '../util/clock.ts';
 import { messageOf } from '../util/errors.ts';
 import type { GeekityEnv } from '../web/env.ts';
@@ -24,9 +26,11 @@ export function daysEndingToday(vars: Readonly<GeekityEnv['Variables']>, count: 
 
 export interface CoreWidget extends Omit<PluginWidget, 'load'> {
   readonly placement?: WidgetPlacement;
+  readonly forUser?: (user: User) => boolean;
   load(
     context: Readonly<GeekityEnv['Variables']>,
     period: DashboardPeriod,
+    user: User | undefined,
   ): readonly PluginBlock[] | Promise<readonly PluginBlock[]>;
 }
 
@@ -41,6 +45,7 @@ export interface WidgetLoad {
   readonly widget: Omit<PluginWidget, 'load'>;
   readonly placement: WidgetPlacement;
   readonly period: DashboardPeriod;
+  readonly viewer?: number;
   load(signal: AbortSignal): readonly PluginBlock[] | Promise<readonly PluginBlock[]>;
 }
 
@@ -89,7 +94,7 @@ export function createWidgetBoard(options: { timeLimitMs: number }): WidgetBoard
 
   async function loadOne(entry: WidgetLoad, now: Clock): Promise<LoadedWidget> {
     const { widget } = entry;
-    const key = `${entry.owner}\u0000${widget.id}\u0000${String(entry.period)}`;
+    const key = [entry.owner, widget.id, entry.period, entry.viewer ?? ''].join('\u0000');
     const last = kept.get(key);
     const drawn = (status: LoadedWidget['status'], result: Result | undefined): LoadedWidget => ({
       key: widgetKey(entry.owner, widget.id),
@@ -133,14 +138,24 @@ export function dashboardWidgets(
     timezone: vars.siteAtRequestStart.timezone,
     period,
   };
+  const userId = vars.session?.userId;
+  const user = userId == null ? undefined : findUserById(vars.config.dataDir, userId);
   return [
-    ...core.map((widget) => ({
-      owner: 'core',
-      widget,
-      placement: widget.placement ?? 'activity',
-      period,
-      load: () => widget.load(vars, period),
-    })),
+    ...core.flatMap((widget) => {
+      if (widget.forUser !== undefined && (user === undefined || !widget.forUser(user))) {
+        return [];
+      }
+      return [
+        {
+          owner: 'core',
+          widget,
+          placement: widget.placement ?? 'activity',
+          period,
+          ...(widget.forUser === undefined || user === undefined ? {} : { viewer: user.id }),
+          load: () => widget.load(vars, period, user),
+        },
+      ];
+    }),
     ...[...vars.activePlugins].flatMap((name) =>
       (vars.plugins.find(name)?.widgets ?? []).map((widget) => ({
         owner: name,

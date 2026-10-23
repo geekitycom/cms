@@ -66,6 +66,7 @@ import { mountPluginsScreen, pluginScreens } from './plugins.ts';
 import type { LoginThrottle } from '../web/throttle.ts';
 import { mountUploads, refuseOversizedUpload, UPLOADS_PATH } from './uploads.ts';
 import { mountUsers } from './users.ts';
+import { mountWritingGoals } from './writing-goals.ts';
 import { mountDashboard } from './dashboard.ts';
 
 /** Where the first-run form lives. */
@@ -384,6 +385,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // What apps sent to the IndieAuth and Micropub endpoints (TASK-221), before
   // the users screens for the same reason.
   mountAppActivity(app, { render });
+  mountWritingGoals(app, { render });
 
   // Who may sign in: the list, the add form, and the change-password form for
   // whoever is looking at it.

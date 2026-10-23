@@ -83,7 +83,9 @@ async function snapshot(dir: string, skip: (relative: string) => boolean): Promi
 }
 
 const notCache = (relative: string): boolean =>
-  relative.startsWith('autosave') || relative.startsWith('geekity.db');
+  relative.startsWith('autosave') ||
+  relative.startsWith('writing') ||
+  relative.startsWith('geekity.db');
 
 describe('POST /admin/autosave', () => {
   it("stores the editor's fields for the signed-in user and touches nothing else", async () => {
