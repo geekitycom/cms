@@ -165,6 +165,11 @@ export interface MarkdownChromeOptions {
    * `backlinks`, and `archiveMonths` when it says `archive: true`.
    */
   document?: Document | undefined;
+  /**
+   * Leave the archive page's descriptions off, so each of its posts converts
+   * to a gemfeed line, `=> url YYYY-MM-DD title`.
+   */
+  gemfeed?: boolean | undefined;
 }
 
 /** A page's Markdown header and footer, as the theme wrote them. */
@@ -833,7 +838,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     return archiveMonths(posts, siteTimezone(site), siteLocale(site), citedPage);
   }
 
-  function markdownArchiveContext(document: Document | undefined): Record<string, unknown> {
+  function markdownArchiveContext(
+    document: Document | undefined,
+    gemfeed: boolean,
+  ): Record<string, unknown> {
     const months = document === undefined ? undefined : archiveOf(document);
     if (months === undefined) return {};
 
@@ -844,7 +852,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         label: entry.title,
         url: entry.url,
         date: calendarDayIn(entry.date, timezone),
-        description: entry.description === undefined ? undefined : oneLine(entry.description),
+        description:
+          gemfeed || entry.description === undefined ? undefined : oneLine(entry.description),
       })),
     }));
     return { archiveMonths: markdownMonths };
@@ -1173,7 +1182,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
   function renderMarkdownChrome(
     chrome: MarkdownChrome,
-    { markdownUrl, frontPage, document }: MarkdownChromeOptions,
+    { markdownUrl, frontPage, document, gemfeed = false }: MarkdownChromeOptions,
   ): MarkdownChromeText {
     const site = siteData.read();
     useThemeDirs(markdownEnvironment, themes.current().dirs);
@@ -1184,7 +1193,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       navigation: navigationLinks(site),
       ...(soloAuthor === undefined ? {} : { soloAuthor }),
       ...(frontPage === undefined ? {} : newestPostsContext(frontPage)),
-      ...markdownArchiveContext(document),
+      ...markdownArchiveContext(document, gemfeed),
       ...markdownLinksContext(document),
       ...markdownKindContext(document),
       ...markdownConversationContext(document, chrome.url),

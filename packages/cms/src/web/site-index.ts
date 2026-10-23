@@ -10,7 +10,7 @@ import { archiveOf, homeListing } from './listing-subject.ts';
 import type { ListingSubject } from './listing-subject.ts';
 import { generatedLlmsTxt, llmsTxtResponse, ownLlmsTxt } from './llms.ts';
 import type { LlmsEntry, LlmsIndex } from './llms.ts';
-import { markdownUrlFor } from './markdown-representation.ts';
+import { siteUrlFor } from './markdown-representation.ts';
 import { navigationLinks } from '../site/navigation.ts';
 import { lastModifiedOf, latestModified } from './negotiate.ts';
 import { pageCount } from './pagination.ts';
@@ -42,7 +42,8 @@ export function llmsTxt(c: Context<GeekityEnv>): Response {
   const { contentDir, baseUrl } = c.var.config;
   if (!c.var.siteAtRequestStart.llms_txt) return notFound(c);
   const file =
-    ownLlmsTxt(contentDir) ?? generatedLlmsTxt(llmsIndex(c), baseUrl, markdownUrlFor(c, '/'));
+    ownLlmsTxt(contentDir) ??
+    generatedLlmsTxt(llmsIndex(c), baseUrl, siteUrlFor(c, '/', 'markdown'));
   return llmsTxtResponse(file, conditionalHeaders(c));
 }
 

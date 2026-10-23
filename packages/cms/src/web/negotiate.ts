@@ -12,12 +12,37 @@ import { matchesEtag } from '../theme/assets.ts';
  * decide *what* is at a URL; this module decides *which body* to hand back and
  * how to label it, so the two questions never get tangled together.
  */
-export type Representation = 'html' | 'markdown' | 'text' | 'json';
+export type Representation = 'html' | 'markdown' | 'gemini' | 'text' | 'json';
+
+/**
+ * The formats a page's text representations are written in. Markdown is
+ * served as itself and as `text/plain`; gemtext is converted from the same
+ * Markdown (decision-60).
+ */
+export type TextFormat = 'markdown' | 'gemini';
+
+/** The representations written in a {@link TextFormat}. */
+export type TextRepresentation = 'markdown' | 'gemini' | 'text';
+
+/** The format a representation is written in, or `undefined` for HTML and JSON. */
+export function textFormatOf(representation: Representation): TextFormat | undefined {
+  switch (representation) {
+    case 'markdown':
+    case 'text':
+      return 'markdown';
+    case 'gemini':
+      return 'gemini';
+    case 'html':
+    case 'json':
+      return undefined;
+  }
+}
 
 /** The media type each representation is served as. */
 export const MEDIA_TYPES: Readonly<Record<Representation, string>> = {
   html: 'text/html',
   markdown: 'text/markdown',
+  gemini: 'text/gemini',
   text: 'text/plain',
   json: 'application/json',
 };
@@ -32,13 +57,19 @@ export const MEDIA_TYPES: Readonly<Record<Representation, string>> = {
 export const DOCUMENT_REPRESENTATIONS: readonly Representation[] = [
   'html',
   'markdown',
+  'gemini',
   'text',
   'json',
 ];
 
 export const LISTING_REPRESENTATIONS: readonly Representation[] = DOCUMENT_REPRESENTATIONS;
 
-export const COMMENT_REPRESENTATIONS: readonly Representation[] = ['html', 'markdown', 'text'];
+export const COMMENT_REPRESENTATIONS: readonly Representation[] = [
+  'html',
+  'markdown',
+  'gemini',
+  'text',
+];
 
 /**
  * The representation a request accepts, or `undefined` when it accepts none of
@@ -148,6 +179,7 @@ function bestOf(
  */
 export const REPRESENTATION_EXTENSIONS: Readonly<Partial<Record<Representation, string>>> = {
   markdown: '.md',
+  gemini: '.gmi',
   json: '.json',
 };
 
@@ -160,8 +192,8 @@ export interface RepresentationExtension {
 }
 
 /**
- * A `.md` or `.json` suffix taken off a request path, or `undefined` when the
- * path carries neither.
+ * A `.md`, `.gmi` or `.json` suffix taken off a request path, or `undefined`
+ * when the path carries none of them.
  *
  * Both spellings are recognised: `/2026/09/hello/index.md` — the one the `Link`
  * header advertises, and the one an Eleventy-style static build would produce —
@@ -266,6 +298,7 @@ export function documentJson(document: Document, options: DocumentJsonOptions): 
 export const CONTENT_TYPES: Readonly<Record<Representation, string>> = {
   html: 'text/html; charset=utf-8',
   markdown: 'text/markdown; charset=utf-8',
+  gemini: 'text/gemini; charset=utf-8',
   text: 'text/plain; charset=utf-8',
   json: 'application/json; charset=utf-8',
 };
@@ -369,8 +402,8 @@ export function representationResponse(options: RepresentationResponseOptions): 
   }
 
   headers.set('content-type', CONTENT_TYPES[options.representation]);
-  if (options.representation === 'markdown' || options.representation === 'text') {
-    // The point of the Markdown representation is to be read, not downloaded.
+  if (textFormatOf(options.representation) !== undefined) {
+    // The point of the Markdown and gemtext is to be read, not downloaded.
     headers.set('content-disposition', 'inline');
   }
 
@@ -615,8 +648,8 @@ function splitList(header: string): string[] {
 }
 
 /**
- * The representation the failed request was after: the one its `.md` or
- * `.json` suffix names, else the one its `Accept` header prefers, else HTML.
+ * The representation the failed request was after: the one its `.md`, `.gmi`
+ * or `.json` suffix names, else the one its `Accept` header prefers, else HTML.
  */
 export function representationOf(pathname: string, accept: string | undefined): Representation {
   return (

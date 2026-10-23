@@ -23,6 +23,7 @@ import {
   notAcceptableResponse,
   representationEtag,
   representationResponse,
+  textFormatOf,
 } from './negotiate.ts';
 import type { Representation } from './negotiate.ts';
 import { commentsFeedHref } from './paths.ts';
@@ -167,15 +168,16 @@ export function commentPage(
 
   const href = commentPageHref(found.comment.key);
   if (representation === undefined) return notAcceptableResponse(href, COMMENT_REPRESENTATIONS);
-  const markdown = representation === 'markdown' || representation === 'text';
-  const body = markdown ? commentMarkdown(c, found) : renderer.renderComment(found);
+  const format = textFormatOf(representation);
+  const body =
+    format === undefined ? renderer.renderComment(found) : commentMarkdown(c, found, format);
   return representationResponse({
     body,
     representation,
     href,
     available: COMMENT_REPRESENTATIONS,
     noindex: true,
-    ...(markdown ? { etag: representationEtag(representation, body) } : {}),
+    ...(format === undefined ? {} : { etag: representationEtag(representation, body) }),
     conditional: conditionalHeaders(c),
   });
 }

@@ -528,12 +528,12 @@ describe('a comment’s own page in Markdown (TASK-477)', () => {
     const html = await get(cms, `/comment/${GRACE}/`);
     assert.equal(
       html.headers.get('link'),
-      `</comment/${GRACE}/index.md>; rel="alternate"; type="text/markdown"`,
+      `</comment/${GRACE}/index.md>; rel="alternate"; type="text/markdown", </comment/${GRACE}/index.gmi>; rel="alternate"; type="text/gemini"`,
     );
     const markdown = await get(cms, `/comment/${GRACE}/index.md`);
     assert.equal(
       markdown.headers.get('link'),
-      `</comment/${GRACE}/>; rel="alternate"; type="text/html"`,
+      `</comment/${GRACE}/>; rel="alternate"; type="text/html", </comment/${GRACE}/index.gmi>; rel="alternate"; type="text/gemini"`,
     );
     assert.ok(markdown.headers.get('etag') !== null);
 

@@ -161,12 +161,12 @@ describe('releaseOrder', () => {
     );
   });
 
-  it('orders this repository core first and plugin-llm before the plugins that require it', () => {
+  it('orders this repository md2gemini, then core, then plugin-llm before the plugins that require it', () => {
     const order = releaseOrder(readWorkspace(path.join(PACKAGE_ROOT, '..', '..'))).map(
       (p) => p.name,
     );
 
-    assert.equal(order[0], CORE);
+    assert.deepEqual(order.slice(0, 2), ['@geekity/md2gemini', CORE]);
     for (const dependent of ['@geekity/plugin-post-summary', '@geekity/plugin-tag-suggest']) {
       assert.ok(order.indexOf('@geekity/plugin-llm') < order.indexOf(dependent), order.join());
     }

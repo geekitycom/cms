@@ -334,6 +334,7 @@ describe('choosing from Accept', () => {
     assert.deepEqual((body as { alternates: unknown }).alternates, [
       { type: 'text/html', url: '/2026/09/hello/' },
       { type: 'text/markdown', url: '/2026/09/hello/index.md' },
+      { type: 'text/gemini', url: '/2026/09/hello/index.gmi' },
       { type: 'application/json', url: '/2026/09/hello/index.json' },
     ]);
   });
@@ -361,15 +362,15 @@ describe('validators and alternates', () => {
     for (const [accept, expected] of [
       [
         'text/html',
-        `</2026/09/hello/index.md>; rel="alternate"; type="text/markdown", </2026/09/hello/index.json>; rel="alternate"; type="application/json"${webmention}`,
+        `</2026/09/hello/index.md>; rel="alternate"; type="text/markdown", </2026/09/hello/index.gmi>; rel="alternate"; type="text/gemini", </2026/09/hello/index.json>; rel="alternate"; type="application/json"${webmention}`,
       ],
       [
         'text/markdown',
-        `</2026/09/hello/>; rel="alternate"; type="text/html", </2026/09/hello/index.json>; rel="alternate"; type="application/json"${webmention}`,
+        `</2026/09/hello/>; rel="alternate"; type="text/html", </2026/09/hello/index.gmi>; rel="alternate"; type="text/gemini", </2026/09/hello/index.json>; rel="alternate"; type="application/json"${webmention}`,
       ],
       [
         'application/json',
-        `</2026/09/hello/>; rel="alternate"; type="text/html", </2026/09/hello/index.md>; rel="alternate"; type="text/markdown"${webmention}`,
+        `</2026/09/hello/>; rel="alternate"; type="text/html", </2026/09/hello/index.md>; rel="alternate"; type="text/markdown", </2026/09/hello/index.gmi>; rel="alternate"; type="text/gemini"${webmention}`,
       ],
     ] as const) {
       const response = await cms.app.request('/2026/09/hello/', { headers: { accept } });
@@ -556,6 +557,7 @@ describe('listings', () => {
     assert.deepEqual(body.alternates, [
       { type: 'text/html', url: '/' },
       { type: 'text/markdown', url: '/index.md' },
+      { type: 'text/gemini', url: '/index.gmi' },
       { type: 'application/json', url: '/index.json' },
     ]);
   });
@@ -566,7 +568,7 @@ describe('listings', () => {
     const html = await cms.app.request('/tag/notes/');
     assert.equal(
       html.headers.get('link'),
-      '</tag/notes/index.md>; rel="alternate"; type="text/markdown", ' +
+      '</tag/notes/index.md>; rel="alternate"; type="text/markdown", </tag/notes/index.gmi>; rel="alternate"; type="text/gemini", ' +
         '</tag/notes/index.json>; rel="alternate"; type="application/json"',
     );
 
@@ -579,7 +581,7 @@ describe('listings', () => {
     assert.equal(
       response.headers.get('link'),
       '</tag/notes/>; rel="alternate"; type="text/html", ' +
-        '</tag/notes/index.md>; rel="alternate"; type="text/markdown"',
+        '</tag/notes/index.md>; rel="alternate"; type="text/markdown", </tag/notes/index.gmi>; rel="alternate"; type="text/gemini"',
     );
     assert.match(etag, /^"[0-9a-f]{32}"$/);
 

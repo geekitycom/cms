@@ -150,9 +150,9 @@ While it is on, every public page, feed, sitemap, `robots.txt` and ActivityPub
 endpoint answers `503 Service Unavailable` with `Retry-After` and
 `Cache-Control: no-store`. `Retry-After` is the `--until` time as an HTTP date
 while that time is in the future, and 600 seconds otherwise. A page renders the
-theme's `layouts/503.njk`. A `.json` or `.md` request gets the answer in that
-format. The Markdown comes from `layouts/503.md.njk` and gives the back-by time
-when there is one. A crawler keeps the page in its index. A server whose inbox delivery
+theme's `layouts/503.njk`. A `.json`, `.md` or `.gmi` request gets the answer
+in that format. The Markdown comes from `layouts/503.md.njk` and gives the
+back-by time when there is one, and the gemtext is converted from it. A crawler keeps the page in its index. A server whose inbox delivery
 was refused queues the delivery for a retry and does not drop it.
 
 These requests are still served:
@@ -192,7 +192,7 @@ redirect_from:
   - /2026/01/second-name/
 ```
 
-Every URL in `redirect_from`, and its `.md` and `.json` spellings, answers
+Every URL in `redirect_from`, and its `.md`, `.gmi` and `.json` spellings, answers
 `301 Moved Permanently` with the current permalink. Each entry points to the
 document itself, not to the next rename, so redirects never chain. The list is
 in the file, so it keeps working after you delete `data/geekity.db`.
@@ -309,25 +309,28 @@ proxy, the header shows which layer sent each one.
 ## Content negotiation
 
 Every public URL is one resource with more than one body. A post, a page and
-a listing each have three.
+a listing each have four.
 
 | Media type         | Extension | Body                                                                                |
 | ------------------ | --------- | ----------------------------------------------------------------------------------- |
 | `text/html`        | —         | The document through the theme. The default.                                        |
 | `text/markdown`    | `.md`     | The document as Markdown for a Markdown browser. See [The Markdown](#the-markdown). |
+| `text/gemini`      | `.gmi`    | The document as gemtext for a Gemini client. See [The gemtext](#the-gemtext).       |
 | `application/json` | `.json`   | The document as data, see below.                                                    |
 
 Listings are `/`, `/page/N/`, the posts page, the tag, category and author
-archives, and their pages. The search at `/search/?q=…` has the same three,
-with the query after the extension: `/search/index.md?q=otters` and
-`/search/index.json?q=otters`. A comment's own page, `/comment/{key}/`, has
-HTML and Markdown at `/comment/{key}/index.md`, and no JSON.
+archives, and their pages. The search at `/search/?q=…` has the same four,
+with the query after the extension: `/search/index.md?q=otters`,
+`/search/index.gmi?q=otters` and `/search/index.json?q=otters`. A comment's
+own page, `/comment/{key}/`, has HTML, Markdown at `/comment/{key}/index.md`
+and gemtext at `/comment/{key}/index.gmi`, and no JSON.
 
 The server chooses the representation in this order:
 
-1. A `.md` or `.json` suffix on the path decides, and the server ignores
-   `Accept`. Both spellings work: `/2026/09/hello/index.md` (the one the `Link`
-   header advertises) and the shorter `/2026/09/hello.md`.
+1. A `.md`, `.gmi` or `.json` suffix on the path decides, and the server
+   ignores `Accept`. Both spellings work: `/2026/09/hello/index.md` (the one
+   the `Link` header advertises) and the shorter `/2026/09/hello.md`, which
+   answers `301` to the first with its query kept.
 2. Otherwise the server matches `Accept` with q-values. The highest q wins. A
    tie goes to the more specific range. A remaining tie goes to HTML.
 3. No `Accept` header, an empty one, or `*/*` means HTML, so a browser and a
@@ -336,7 +339,7 @@ The server chooses the representation in this order:
    body listing what it could have asked for.
 
 A static homepage is served at `/` in every representation, at `/`,
-`/index.md` and `/index.json`. Its Markdown front matter says `permalink: /`
+`/index.md`, `/index.gmi` and `/index.json`. Its Markdown front matter says `permalink: /`
 and its JSON `url` is the site root, whatever permalink the page's file
 carries. Each URL under that permalink answers one `301` to the root form of
 the same representation:
@@ -345,16 +348,18 @@ the same representation:
 | -------------------------------------- | ---------------------- |
 | `/about/`                              | `301` to `/`           |
 | `/about/index.md`, `/about.md`         | `301` to `/index.md`   |
+| `/about/index.gmi`, `/about.gmi`       | `301` to `/index.gmi`  |
 | `/about/index.json`, `/about.json`     | `301` to `/index.json` |
 
-A page that is not the homepage keeps its own URLs. The posts page's `index.md`
-and `index.json` are its listing's.
+A page that is not the homepage keeps its own URLs. The posts page's
+`index.md`, `index.gmi` and `index.json` are its listing's.
 
 The feeds are fixed routes and are not negotiated, because feed readers do not
 send useful `Accept` headers. See [Feeds](feeds.md).
 
 ```sh
 curl -H 'Accept: text/markdown' https://example.com/2026/09/hello/
+curl https://example.com/2026/09/hello/index.gmi
 curl https://example.com/2026/09/hello/index.json
 curl 'https://example.com/index.json?full=1'
 ```
@@ -501,6 +506,7 @@ representations in the `Link` header, the search's with the query kept:
 
 ```
 Link: </search/index.md?q=otters>; rel="alternate"; type="text/markdown",
+      </search/index.gmi?q=otters>; rel="alternate"; type="text/gemini",
       </search/index.json?q=otters>; rel="alternate"; type="application/json"
 ```
 
@@ -527,6 +533,50 @@ with `*/*`, or one that ranks HTML at least as high gets the HTML page.
 
 A theme overrides either partial, and each status page's Markdown body, like
 any other template. See [The Markdown representation](theme/markdown.md).
+
+### The gemtext
+
+The gemtext representation is for Gemini clients: `text/gemini;
+charset=utf-8`, at a page's `.gmi` URL or by `Accept: text/gemini`. It is made
+from the same data as the Markdown. The server renders the Markdown page with
+every link to the site's own pages pointing at their `.gmi` URLs, through the
+same resolver that gives `.md`. Then
+[`@geekity/md2gemini`](../packages/md2gemini/README.md) converts it, with
+emphasis, code marks and HTML removed. Links to other sites and to files such
+as uploads stay as they are.
+
+Gemtext has no front matter. The title is the header's heading, as in the
+Markdown. A post or a page with a date has a `Published YYYY-MM-DD` line under
+the header, in the site's timezone. A post's previous and next posts, its
+byline, the feeds and the menus are link lines from the footer. A link home,
+`=> /index.gmi Home`, ends the page unless the page already has that line.
+
+Gemtext has no inline links. A paragraph's links are numbered and listed after
+it, `=> /about/index.gmi 1: /about/index.gmi`. A paragraph that is one link,
+such as a byline, and a list whose every item is a link, such as a menu,
+become plain link lines.
+
+Every listing, the search and the archive page list their posts as gemfeed
+lines, so a Gemini feed reader can subscribe to any of them. The descriptions
+and search snippets the Markdown prints are left out:
+
+```
+# notes
+
+## Posts
+
+=> /one/index.gmi 2026-09-03 One
+=> /two/index.gmi 2026-09-02 Two
+
+## More posts
+
+=> /tag/notes/page/2/index.gmi Older posts
+```
+
+A 404, 410, 500 or 503 asked for at a `.gmi` URL, or by an `Accept` that
+prefers `text/gemini`, keeps its status and is the status page's Markdown
+converted the same way. The header and footer are the theme's Markdown
+partials in this release.
 
 ### The JSON shape
 
@@ -581,6 +631,7 @@ A 406 body names the alternates:
   "alternates": [
     { "type": "text/html", "url": "/2026/09/hello/" },
     { "type": "text/markdown", "url": "/2026/09/hello/index.md" },
+    { "type": "text/gemini", "url": "/2026/09/hello/index.gmi" },
     { "type": "application/json", "url": "/2026/09/hello/index.json" }
   ]
 }
@@ -593,14 +644,15 @@ points to the other representations:
 
 ```
 Link: </2026/09/hello/index.md>; rel="alternate"; type="text/markdown",
+      </2026/09/hello/index.gmi>; rel="alternate"; type="text/gemini",
       </2026/09/hello/index.json>; rel="alternate"; type="application/json"
 ```
 
 It also carries these headers:
 
 - `ETag`, derived from the representation and what it holds: the document's
-  content hash for the JSON, and what was drawn for the HTML and the
-  Markdown, which show the conversation too. A new reply changes the HTML's
+  content hash for the JSON, and what was drawn for the HTML, the Markdown
+  and the gemtext, which show the conversation too. A new reply changes the HTML's
   and the Markdown's ETag. A client that holds the JSON never gets a `304`
   for the Markdown.
 - `Last-Modified`, on the JSON only, from the document's `updated`, or its
@@ -615,12 +667,12 @@ The server honours `If-None-Match` and `If-Modified-Since` and answers with
 While `watch` is on, the server sends the HTML representation without
 validators. The hash covers only the document, and a template edit changes the
 page without changing the document. With validators, a development server would
-answer `304` for a page that had changed. The `.md` and `.json` representations
-have validators either way.
+answer `304` for a page that had changed. The `.md`, `.gmi` and `.json`
+representations have validators either way.
 
 Every representation except HTML carries `X-Robots-Tag: noindex`, whether the
 request used an extension or `Accept`. They hold the same content as the page.
-Without `noindex`, a search engine would list one page two or three times.
+Without `noindex`, a search engine would list one page several times.
 
 To add a representation, such as an ActivityStreams object, add it to
 `Representation` in `src/web/negotiate.ts` with its media type and, optionally,

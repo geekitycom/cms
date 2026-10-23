@@ -1,3 +1,4 @@
+import { convert } from '@geekity/md2gemini';
 import type { Context } from 'hono';
 
 import { commentAnchor, commentKeyAt } from '../comments/conversation.ts';
@@ -30,6 +31,7 @@ import {
   bioOf,
   entryList,
   escapeMarkdown,
+  HOME_LINK,
   linkList,
   markdownFile,
   namedAuthor,
@@ -38,6 +40,7 @@ import {
 } from './markdown-page.ts';
 import type { MarkdownChrome, MarkdownFeed, MarkdownLink, MarkdownUrl } from './markdown-page.ts';
 import { representationHref } from './negotiate.ts';
+import type { TextFormat } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
 import { STATUS_PAGES } from './render.ts';
 import type { StatusPageName } from './render.ts';
@@ -47,11 +50,16 @@ import { SEARCH_PATH, snippetMarkdown } from './search.ts';
 import { servedPath, siteView } from './site-view.ts';
 
 /**
- * A document's Markdown at `url`, which is its permalink everywhere but the
- * front page. The front matter says where it is served; everything the page
- * lists about the document, such as its comments feed, is the stored one's.
+ * A document's Markdown or gemtext at `url`, which is its permalink everywhere
+ * but the front page. The front matter says where it is served; everything the
+ * page lists about the document, such as its comments feed, is the stored one's.
  */
-export function documentMarkdown(c: Context<GeekityEnv>, document: Document, url: string): string {
+export function documentMarkdown(
+  c: Context<GeekityEnv>,
+  document: Document,
+  url: string,
+  format: TextFormat,
+): string {
   const writer = authorContext(siteView(c).users(), document.author);
   const neighbours = document.type === 'post' ? c.var.store.neighbours(document) : {};
   const link = (neighbour: Document | undefined): MarkdownLink | undefined =>
@@ -86,12 +94,13 @@ export function documentMarkdown(c: Context<GeekityEnv>, document: Document, url
     ],
   };
 
-  return markdownPage(
+  return textPage(
     c,
+    format,
     namedAuthor(documentFrontMatter({ ...document, permalink: url }), writer),
     chrome,
-    [rewriteMarkdownLinks(body, markdownHrefFor(c, url))],
-    { frontPage: url === '/' ? document : undefined, document },
+    [rewriteMarkdownLinks(body, siteHrefFor(c, url, format))],
+    { frontPage: url === '/' ? document : undefined, document, published: document.date },
   );
 }
 
@@ -99,6 +108,7 @@ export function listingMarkdown(
   c: Context<GeekityEnv>,
   archive: Archive,
   page: { href: string; title: string; pagination: Pagination; documents: readonly Document[] },
+  format: TextFormat,
 ): string {
   const { next, previous } = page.pagination.href;
   const home = siteView(c).pages.home;
@@ -106,7 +116,7 @@ export function listingMarkdown(
   const description = oneLine(archive.description(site));
   const timezone = siteTimezone(site);
   const url = decodedPath(page.href);
-  const markdownUrl = markdownUrlFor(c, url);
+  const linkUrl = siteUrlFor(c, url, format);
 
   const newer = previous === null ? undefined : { label: 'Newer posts', url: previous };
   const older = next === null ? undefined : { label: 'Older posts', url: next };
@@ -127,26 +137,33 @@ export function listingMarkdown(
     label: documentLabel(c, document),
     url: servedPath(document, home),
     date: document.date === undefined ? undefined : calendarDayIn(document.date, timezone),
-    description: document.description,
+    description: format === 'gemini' ? undefined : document.description,
   }));
   const pager = [newer, older].filter((link) => link !== undefined);
   const { document } = archive.context;
 
-  return markdownPage(c, { title: page.title, permalink: url }, chrome, [
+  return textPage(c, format, { title: page.title, permalink: url }, chrome, [
     description === '' ? '' : `> ${description}`,
     document === undefined
       ? ''
-      : rewriteMarkdownLinks(normalizeBody(document.body), markdownHrefFor(c, document.permalink)),
-    entries.length === 0 ? '' : `## Posts\n\n${entryList(entries, markdownUrl)}`,
-    pager.length === 0 ? '' : `## More posts\n\n${linkList(pager, markdownUrl)}`,
+      : rewriteMarkdownLinks(
+          normalizeBody(document.body),
+          siteHrefFor(c, document.permalink, format),
+        ),
+    entries.length === 0 ? '' : `## Posts\n\n${entryList(entries, linkUrl)}`,
+    pager.length === 0 ? '' : `## More posts\n\n${linkList(pager, linkUrl)}`,
   ]);
 }
 
 /**
- * A native comment's page in Markdown: the post and the comments it answers
- * above it, its own words as the body, and its replies below.
+ * A native comment's page in Markdown or gemtext: the post and the comments it
+ * answers above it, its own words as the body, and its replies below.
  */
-export function commentMarkdown(c: Context<GeekityEnv>, found: CommentThread): string {
+export function commentMarkdown(
+  c: Context<GeekityEnv>,
+  found: CommentThread,
+  format: TextFormat,
+): string {
   const { post, comment } = found;
   const url = commentPageHref(comment.key);
   const users = siteView(c).users();
@@ -172,8 +189,9 @@ export function commentMarkdown(c: Context<GeekityEnv>, found: CommentThread): s
     thread,
   };
 
-  return markdownPage(
+  return textPage(
     c,
+    format,
     {
       title: `${comment.author.name} on ${label}`,
       permalink: url,
@@ -193,13 +211,14 @@ export function commentMarkdown(c: Context<GeekityEnv>, found: CommentThread): s
 export function searchMarkdown(
   c: Context<GeekityEnv>,
   page: { href: string; query: string; pagination: Pagination; hits: readonly SearchHit[] },
+  format: TextFormat,
 ): string {
   const { query, pagination } = page;
   const { next, previous } = pagination.href;
   const home = siteView(c).pages.home;
   const site = c.var.renderer.site();
   const timezone = siteTimezone(site);
-  const markdownUrl = markdownUrlFor(c, SEARCH_PATH);
+  const linkUrl = siteUrlFor(c, SEARCH_PATH, format);
   const title =
     query === ''
       ? 'Search'
@@ -226,31 +245,33 @@ export function searchMarkdown(
     label: documentLabel(c, document),
     url: servedPath(document, home),
     date: document.date === undefined ? undefined : calendarDayIn(document.date, timezone),
-    description: snippetMarkdown(snippet),
+    description: format === 'gemini' ? undefined : snippetMarkdown(snippet),
   }));
   const pager = [newer, older].filter((link) => link !== undefined);
 
-  return markdownPage(
+  return textPage(
     c,
+    format,
     { title, permalink: page.href, ...(query === '' ? {} : { query }) },
     chrome,
     [
       summary,
-      entries.length === 0 ? '' : `## Results\n\n${entryList(entries, markdownUrl)}`,
-      pager.length === 0 ? '' : `## More results\n\n${linkList(pager, markdownUrl)}`,
+      entries.length === 0 ? '' : `## Results\n\n${entryList(entries, linkUrl)}`,
+      pager.length === 0 ? '' : `## More results\n\n${linkList(pager, linkUrl)}`,
     ],
   );
 }
 
 /**
- * A 404, 410, 500 or 503 in Markdown: the theme's body for it between the
- * header and footer every page has, with the maintenance page's back-by time
- * in the front matter as well.
+ * A 404, 410, 500 or 503 in Markdown or gemtext: the theme's body for it
+ * between the header and footer every page has, with the maintenance page's
+ * back-by time in the Markdown's front matter as well.
  */
 export function statusMarkdown(
   c: Context<GeekityEnv>,
   page: StatusPageName,
   url: string,
+  format: TextFormat,
   until?: Date,
 ): string {
   const { title } = STATUS_PAGES[page];
@@ -262,11 +283,12 @@ export function statusMarkdown(
   };
   const body = c.var.renderer.renderStatusMarkdown(page, {
     url,
-    markdownUrl: markdownUrlFor(c, url),
+    markdownUrl: siteUrlFor(c, url, format),
     until,
   });
-  return markdownPage(
+  return textPage(
     c,
+    format,
     { title, ...(until === undefined ? {} : { until: until.toISOString() }) },
     chrome,
     [body],
@@ -290,33 +312,75 @@ function siteFeeds(siteTitle: string): MarkdownFeed[] {
   ];
 }
 
-function markdownPage(
+/**
+ * One page in a text format: the theme's Markdown header, the blocks and the
+ * theme's Markdown footer, with every link to the site written in that format.
+ *
+ * Markdown carries the page's data as front matter. Gemtext has none, so the
+ * page is converted with a document's date as a line under the header and a
+ * link home at the end. Its dated lists are drawn without descriptions, so
+ * each converts to a gemfeed line, `=> url YYYY-MM-DD title`.
+ */
+function textPage(
   c: Context<GeekityEnv>,
+  format: TextFormat,
   frontMatter: Record<string, unknown>,
   chrome: MarkdownChrome,
   blocks: readonly string[],
-  pages: { frontPage?: Document | undefined; document?: Document | undefined } = {},
+  {
+    published,
+    ...pages
+  }: {
+    frontPage?: Document | undefined;
+    document?: Document | undefined;
+    /** A document's date, which gemtext writes as a line under the header. */
+    published?: string | undefined;
+  } = {},
 ): string {
-  const markdownUrl = markdownUrlFor(c, chrome.url);
+  const linkUrl = siteUrlFor(c, chrome.url, format);
   const { header, footer } = c.var.renderer.renderMarkdownChrome(chrome, {
-    markdownUrl,
+    markdownUrl: linkUrl,
+    gemfeed: format === 'gemini',
     ...pages,
   });
-  return markdownFile({ ...frontMatter, ...navigationFrontMatter(chrome, markdownUrl) }, [
-    header,
-    ...blocks,
-    footer,
-  ]);
+  if (format === 'markdown') {
+    return markdownFile({ ...frontMatter, ...navigationFrontMatter(chrome, linkUrl) }, [
+      header,
+      ...blocks,
+      footer,
+    ]);
+  }
+
+  const day =
+    published === undefined
+      ? undefined
+      : calendarDayIn(published, siteTimezone(c.var.renderer.site()));
+  const dateline = day === undefined ? '' : `Published ${day}`;
+  const markdown = [header, dateline, ...blocks, footer]
+    .map((block) => block.trim())
+    .filter((block) => block !== '')
+    .join('\n\n');
+  const gemtext = convert(markdown, GEMTEXT);
+  const home = `=> ${linkUrl(HOME_LINK.url)} ${HOME_LINK.label}`;
+  return gemtext.split('\n').includes(home) ? gemtext : `${gemtext}\n${home}\n`;
 }
 
-export function markdownUrlFor(c: Context<GeekityEnv>, pageUrl: string): MarkdownUrl {
-  const href = markdownHrefFor(c, pageUrl);
+/** How a page's Markdown becomes gemtext: no emphasis or code marks, no HTML. */
+export const GEMTEXT = { plain: true, stripHtml: true } as const;
+
+/** Every link on the page at `pageUrl` as `format` links it, the site's own pages in that format. */
+export function siteUrlFor(
+  c: Context<GeekityEnv>,
+  pageUrl: string,
+  format: TextFormat,
+): MarkdownUrl {
+  const href = siteHrefFor(c, pageUrl, format);
   return (url) => href(url) ?? url;
 }
 
 /**
- * A link on the page at `pageUrl` as the Markdown URL of what it names, or
- * `undefined` when it names nothing on this site with a Markdown
+ * A link on the page at `pageUrl` as the Markdown or gemtext URL of what it
+ * names, or `undefined` when it names nothing on this site with such a
  * representation.
  *
  * The link is followed the way the site answers a request for it: a query
@@ -325,9 +389,10 @@ export function markdownUrlFor(c: Context<GeekityEnv>, pageUrl: string): Markdow
  * permalink all land on the `.md` of the document they reach. A fragment is
  * kept, and so is the query of a link to the search.
  */
-function markdownHrefFor(
+function siteHrefFor(
   c: Context<GeekityEnv>,
   pageUrl: string,
+  format: TextFormat,
 ): (href: string) => string | undefined {
   const { config } = c.var;
   const view = siteView(c);
@@ -365,7 +430,7 @@ function markdownHrefFor(
     const { pathname } = new URL(absoluteUrl(encodePath(served), config.baseUrl));
     const target = URL.parse(href, page);
     const query = served === SEARCH_PATH ? (target?.search ?? '') : '';
-    return `${representationHref(`${pathname}${query}`, 'markdown')}${target?.hash ?? ''}`;
+    return `${representationHref(`${pathname}${query}`, format)}${target?.hash ?? ''}`;
   };
 }
 

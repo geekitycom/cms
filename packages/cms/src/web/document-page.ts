@@ -19,6 +19,7 @@ import {
   notAcceptableResponse,
   representationEtag,
   representationResponse,
+  textFormatOf,
 } from './negotiate.ts';
 import type { Representation } from './negotiate.ts';
 import { conditionalHeaders, drawnForSomebody, encodePath } from './request.ts';
@@ -65,10 +66,8 @@ export function negotiateDocument(
       : undefined;
 
   const served = path === document.permalink ? document : { ...document, permalink: path };
-  const markdown =
-    representation === 'markdown' || representation === 'text'
-      ? documentMarkdown(c, document, path)
-      : undefined;
+  const format = textFormatOf(representation);
+  const markdown = format === undefined ? undefined : documentMarkdown(c, document, path, format);
   const body =
     markdown ??
     (representation === 'json'

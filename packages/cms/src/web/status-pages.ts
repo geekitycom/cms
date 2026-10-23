@@ -1,9 +1,11 @@
+import { convert } from '@geekity/md2gemini';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 
 import type { GeekityEnv } from './env.ts';
-import { statusMarkdown } from './markdown-representation.ts';
+import { GEMTEXT, statusMarkdown } from './markdown-representation.ts';
 import { CONTENT_TYPES, representationOf } from './negotiate.ts';
+import type { TextRepresentation } from './negotiate.ts';
 import type { StatusPageName } from './render.ts';
 import { requestPath } from './request.ts';
 
@@ -18,8 +20,9 @@ export function gone(c: Context<GeekityEnv>): Response {
 }
 
 /**
- * A status page in the representation the request asked for: Markdown for a
- * `.md` URL or an `Accept` that prefers it, HTML for anything else.
+ * A status page in the representation the request asked for: Markdown or
+ * gemtext for a `.md` or `.gmi` URL or an `Accept` that prefers it, HTML for
+ * anything else.
  */
 function statusPage(
   c: Context<GeekityEnv>,
@@ -29,31 +32,45 @@ function statusPage(
 ): Response {
   const pathname = requestPath(c);
   const representation = representationOf(pathname, c.req.header('accept'));
-  if (representation === 'markdown' || representation === 'text') {
-    return statusMarkdownResponse(c, representation, page, status);
+  switch (representation) {
+    case 'markdown':
+    case 'gemini':
+    case 'text':
+      return statusMarkdownResponse(c, representation, page, status);
+    case 'html':
+    case 'json':
+      return c.html(html(pathname), status, { vary: 'Accept' });
   }
-  return c.html(html(pathname), status, { vary: 'Accept' });
 }
 
 /** How {@link statusMarkdownResponse} answers. */
 export interface StatusMarkdownOptions {
   /** The maintenance page's back-by time. */
   until?: Date | undefined;
-  /** The body when the theme's fails to render; without one the failure is thrown. */
+  /**
+   * The body, in Markdown, when the theme's fails to render; without one the
+   * failure is thrown.
+   */
   fallback?: string | undefined;
   headers?: Record<string, string> | undefined;
 }
 
-/** A status page's Markdown, labelled as the representation the request asked for. */
+/**
+ * A status page's Markdown or gemtext, labelled as the representation the
+ * request asked for, which is Markdown, plain text or gemtext.
+ */
 export function statusMarkdownResponse(
   c: Context<GeekityEnv>,
-  representation: 'markdown' | 'text',
+  representation: TextRepresentation,
   page: StatusPageName,
   status: ContentfulStatusCode,
   { until, fallback, headers }: StatusMarkdownOptions = {},
 ): Response {
-  const draw = (): string => statusMarkdown(c, page, requestPath(c), until);
-  const body = fallback === undefined ? draw() : orFallback(draw, fallback);
+  const format = representation === 'gemini' ? 'gemini' : 'markdown';
+  const draw = (): string => statusMarkdown(c, page, requestPath(c), format, until);
+  const written =
+    fallback === undefined || format === 'markdown' ? fallback : convert(fallback, GEMTEXT);
+  const body = written === undefined ? draw() : orFallback(draw, written);
   return c.body(body, status, {
     ...headers,
     vary: 'Accept',

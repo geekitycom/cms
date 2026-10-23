@@ -3,7 +3,7 @@ id: doc-3
 title: Content Negotiation
 type: specification
 created_date: '2026-09-02 13:21'
-updated_date: '2026-10-22 01:21'
+updated_date: '2026-10-23 16:42'
 ---
 # Content Negotiation
 
@@ -15,6 +15,7 @@ Every public content URL serves one document in several representations. The rep
 | --- | --- | --- |
 | `text/html` | rendered through the theme | default when nothing else matches |
 | `text/markdown` | the document's front matter with navigation added, the theme's Markdown header, the stored body with its links to the site's own pages pointing at their `.md`, and the theme's Markdown footer (see [The Markdown layout](#the-markdown-layout)) | `Content-Disposition: inline`, charset utf-8; validated by its own bytes |
+| `text/gemini` | the `text/markdown` page converted to gemtext by `@geekity/md2gemini`, with the site's own links pointing at their `.gmi` (see [The gemtext](#the-gemtext)) | `Content-Disposition: inline`, charset utf-8; validated by its own bytes |
 | `text/plain` | the `text/markdown` body, labelled `text/plain; charset=utf-8` | `Content-Disposition: inline`; reached only by `Accept`, so it has no URL and is never advertised |
 | `application/json` | `{ "frontMatter": {...}, "markdown": "...", "html": "...", "url": "..." }` | stable shape, versioned via `"schema": 1` |
 | `application/activity+json` | the post's ActivityStreams `Article` | a published post only; its `id` is this URL (decision-13) |
@@ -22,17 +23,18 @@ Every public content URL serves one document in several representations. The rep
 
 ## Selection
 
-1. If the path ends in `.md` or `.json` and the path without the extension resolves, use that representation and ignore `Accept`. Each representation has one URL: `index` before the extension when the resource's URL ends in `/` (`/2026/09/hello-world/index.md`), the extension straight after it otherwise. The other spelling, `/2026/09/hello-world.md`, answers `301` to that URL with its query kept.
+1. If the path ends in `.md`, `.gmi` or `.json` and the path without the extension resolves, use that representation and ignore `Accept`. Each representation has one URL: `index` before the extension when the resource's URL ends in `/` (`/2026/09/hello-world/index.md`), the extension straight after it otherwise. The other spelling, `/2026/09/hello-world.md`, answers `301` to that URL with its query kept.
 2. Otherwise run standard `Accept` matching with q-values against the list above. `*/*`, `text/*` and a missing header mean HTML. `text/plain` gets the Markdown under that label, and `text/markdown` wins whenever the request ranks it at least as high as `text/plain`.
 3. ActivityStreams types are claimed before this code runs, so they never reach the negotiator. A post's object id is its permalink, so the permalink itself answers them with the `Article`: one URL, a browser and a peer, decided by `Accept`. A page and a listing federate nothing and fall through to the negotiator, which answers 406 to a request that will take nothing else.
 4. A request whose only acceptable types are unsupported returns 406 with a short JSON body listing the options that have a URL of their own, which leaves out `text/plain`.
 
-A request that ends in 404, 410, 500 or 503 keeps its status and is answered in the representation it asked for by the same rules: its `.md` suffix, else its `Accept`, else HTML. A `.md` URL or an `Accept` that prefers `text/markdown` or `text/plain` gets the theme's Markdown status page (`layouts/404.md.njk`, `410.md.njk`, `500.md.njk`, `503.md.njk`) between the Markdown header and footer, labelled as asked, with `Vary: Accept` (TASK-478). The body says what happened, links the homepage and the search, and the 503's gives its back-by time, which its front matter carries as `until`. No `Accept`, `*/*`, and an `Accept` that ranks HTML at least as high get the HTML page. A 404 or 410 asked for as JSON gets the HTML page; a 500 or 503 asked for as JSON gets a short JSON error.
+A request that ends in 404, 410, 500 or 503 keeps its status and is answered in the representation it asked for by the same rules: its `.md` or `.gmi` suffix, else its `Accept`, else HTML. A `.gmi` URL or an `Accept` that prefers `text/gemini` gets the Markdown status page converted to gemtext, labelled `text/gemini; charset=utf-8` (TASK-481). A `.md` URL or an `Accept` that prefers `text/markdown` or `text/plain` gets the theme's Markdown status page (`layouts/404.md.njk`, `410.md.njk`, `500.md.njk`, `503.md.njk`) between the Markdown header and footer, labelled as asked, with `Vary: Accept` (TASK-478). The body says what happened, links the homepage and the search, and the 503's gives its back-by time, which its front matter carries as `until`. No `Accept`, `*/*`, and an `Accept` that ranks HTML at least as high get the HTML page. A 404 or 410 asked for as JSON gets the HTML page; a 500 or 503 asked for as JSON gets a short JSON error.
 
 Every response includes `Vary: Accept` and a `Link` header advertising the alternates. `text/plain` is never among them:
 
 ```
 Link: </2026/09/hello-world/index.md>; rel="alternate"; type="text/markdown",
+      </2026/09/hello-world/index.gmi>; rel="alternate"; type="text/gemini",
       </2026/09/hello-world/index.json>; rel="alternate"; type="application/json"
 ```
 
@@ -40,12 +42,13 @@ Link: </2026/09/hello-world/index.md>; rel="alternate"; type="text/markdown",
 
 `/` is the site's latest posts until the Reading settings say otherwise. With a
 `homepage` set it is that page instead, negotiated like any other document —
-HTML, Markdown at `/index.md`, JSON at `/index.json` — and served at `/` in
+HTML, Markdown at `/index.md`, gemtext at `/index.gmi`, JSON at `/index.json` — and served at `/` in
 every representation: the Markdown's front matter says `permalink: /` and the
 JSON's `url` is the site root, whatever permalink the file carries. Each of the
 page's own URLs answers one `301` to the root form of the same representation:
 `{permalink}` to `/`, `{permalink}index.md` and the short `.md` spelling to
-`/index.md`, `{permalink}index.json` and the short `.json` spelling to
+`/index.md`, `{permalink}index.gmi` and the short `.gmi` spelling to
+`/index.gmi`, `{permalink}index.json` and the short `.json` spelling to
 `/index.json` (TASK-345). A theme may lay it out on its own with
 `layouts/front-page.njk`, which falls back to the page layout.
 
@@ -95,6 +98,18 @@ A Markdown representation is shaped for a Markdown browser (Dave Winer's Markdow
 
 The partials render with autoescaping off and get their links as data, a label and a canonical URL each, never as written Markdown. The `.md` is added only when a link is written, by the `markdownUrl` filter or by code, so a renderer of another format (gemtext) can take the same data. `escapeMarkdown` keeps a label literal.
 
+## The gemtext
+
+Gemtext (`text/gemini`, decision-60, TASK-481) is a second text representation beside the Markdown, at `{url}index.gmi` and by `Accept: text/gemini`. It is built from the same data: the Markdown page is drawn with every link to the site's own pages written by the resolver that gives `.md`, asked for `.gmi` instead (the body through `rewriteMarkdownLinks`, the chrome through the `markdownUrl` filter), and `@geekity/md2gemini` converts it with `plain` and `stripHtml` on.
+
+| Part | What it becomes |
+| --- | --- |
+| Front matter | Not written. The title is the header's heading. A document with a `date` has `Published YYYY-MM-DD` (the site's timezone) under the header. `previous` and `next` are the footer's link lines on a post and the `## More posts` lines on a listing. `home` is a closing `=> /index.gmi Home`, left out when the page already has that line. |
+| Header and footer | The theme's Markdown partials, converted. Theme-written Gemini templates come with TASK-482. |
+| Body | The stored body, its site links at their `.gmi`, converted. A paragraph's links are numbered and listed after it; a paragraph that is one link, and a list whose every item is one link, become plain `=>` lines. |
+
+Every listing, the search and an archive page list their posts as gemfeed lines, `=> url YYYY-MM-DD title`, so a Gemini feed reader can subscribe to any of them; the descriptions and search snippets the Markdown prints after a link are left out, because a gemfeed reader would read them as part of the title. A comment page's gemtext is its Markdown converted. Gemtext carries `X-Robots-Tag: noindex` and an `ETag` over its bytes, as the Markdown does.
+
 ## Collections
 
 Listing URLs (home, tag archives, author archives, paginated archives)
@@ -126,7 +141,7 @@ The posts page's `index.md` and `index.json` are the listing's, as `Accept` at i
 
 ## Search
 
-`/search/?q=term` is a route rather than a document, so no permalink can take the URL the theme's search form submits to; `/search?q=term` redirects there with its query kept. It negotiates like a listing, and `/search/index.md?q=term` and `/search/index.json?q=term` are the same escape hatches: the query goes after the extension. The `Link` header and a 406 body name the other representations with the query carried over.
+`/search/?q=term` is a route rather than a document, so no permalink can take the URL the theme's search form submits to; `/search?q=term` redirects there with its query kept. It negotiates like a listing, and `/search/index.md?q=term`, `/search/index.gmi?q=term` and `/search/index.json?q=term` are the same escape hatches: the query goes after the extension. The `Link` header and a 406 body name the other representations with the query carried over.
 
 Markdown has a listing's shape (TASK-477): front matter with `title`, `permalink` (query included), `query`, `home`, and `previous` and `next` with the query kept; the theme's header; a line saying how many results the query found, or how to search without one; `## Results` as `- [YYYY-MM-DD title](index.md URL): snippet` with the matched words in bold; `## More results`; the theme's footer. A link to `/search/?q=…` in any Markdown becomes `/search/index.md?q=…`.
 
@@ -136,7 +151,7 @@ Results come from an FTS5 table in the content index, ranked by BM25 with the ti
 
 ## Comment pages
 
-A native comment's page, `/comment/{key}/` (TASK-318), negotiates HTML, Markdown and `text/plain`; it has no JSON. Its Markdown is at `/comment/{key}/index.md` (TASK-477): front matter with `title`, `permalink`, the comment's `author` and `date`; the theme's header writes the post it is on and each comment it answers, a withheld one as a placeholder, and the comment's byline; the comment's words are the body; the footer lists its replies and links the comment's anchor on the post. It answers 404 and 410 as the HTML does, and a link to a comment page becomes its `.md` while the comment is approved and its post served.
+A native comment's page, `/comment/{key}/` (TASK-318), negotiates HTML, Markdown, gemtext (at `/comment/{key}/index.gmi`) and `text/plain`; it has no JSON. Its Markdown is at `/comment/{key}/index.md` (TASK-477): front matter with `title`, `permalink`, the comment's `author` and `date`; the theme's header writes the post it is on and each comment it answers, a withheld one as a placeholder, and the comment's byline; the comment's words are the body; the footer lists its replies and links the comment's anchor on the post. It answers 404 and 410 as the HTML does, and a link to a comment page becomes its `.md` while the comment is approved and its post served.
 
 ## Feeds
 
@@ -190,7 +205,7 @@ Two more fixed routes, at the only paths a crawler looks for them:
 
 The sitemap lists the home archive and each of its pages, every public post and page, and every tag and category archive with each of its pages, under the bases the site holds at that moment. `<lastmod>` is `updated` else `date` for a document, and the newest of those on a listing page; something nothing dates carries no `<lastmod>` rather than an invented one. Drafts, the trash, posts whose date has not arrived and unlisted documents are absent, because the sitemap is drawn from the same queries and the same `isListed` the listings use.
 
-Nothing else is disallowed in `robots.txt` unless the site's settings say so. Every group the file carries keeps `Disallow: /admin/`, because a crawler obeys only the group that names it. The `.md` and `.json` representations carry `X-Robots-Tag: noindex`, so search results list the HTML alone. `/ap/` is left open on purpose: the actor and its collections are documents meant to be fetched, and a crawler that follows one gets JSON it will ignore.
+Nothing else is disallowed in `robots.txt` unless the site's settings say so. Every group the file carries keeps `Disallow: /admin/`, because a crawler obeys only the group that names it. The `.md`, `.gmi` and `.json` representations carry `X-Robots-Tag: noindex`, so search results list the HTML alone. `/ap/` is left open on purpose: the actor and its collections are documents meant to be fetched, and a crawler that follows one gets JSON it will ignore.
 
 Both are registered routes rather than anything resolved from the index, so a document permalinked at `/sitemap.xml` cannot take the URL a search engine polls, and both carry `ETag` and `Last-Modified` and answer conditional requests with 304 the way the feeds do.
 

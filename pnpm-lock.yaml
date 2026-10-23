@@ -241,6 +241,9 @@ importers:
       '@fedify/vocab':
         specifier: ^2.4.4
         version: 2.4.4
+      '@geekity/md2gemini':
+        specifier: workspace:^
+        version: link:../md2gemini
       '@hono/node-server':
         specifier: ^2.1.5
         version: 2.1.5(hono@4.13.13)

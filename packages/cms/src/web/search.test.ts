@@ -149,7 +149,7 @@ describe('GET /search/', () => {
     const html = await cms.app.request('/search/?q=otters');
     assert.equal(
       html.headers.get('link'),
-      '</search/index.md?q=otters>; rel="alternate"; type="text/markdown", ' +
+      '</search/index.md?q=otters>; rel="alternate"; type="text/markdown", </search/index.gmi?q=otters>; rel="alternate"; type="text/gemini", ' +
         '</search/index.json?q=otters>; rel="alternate"; type="application/json"',
     );
     assert.equal(html.headers.get('vary'), 'Accept, Accept-Encoding');
@@ -158,6 +158,7 @@ describe('GET /search/', () => {
     assert.equal(
       markdown.headers.get('link'),
       '</search/?q=otters>; rel="alternate"; type="text/html", ' +
+        '</search/index.gmi?q=otters>; rel="alternate"; type="text/gemini", ' +
         '</search/index.json?q=otters>; rel="alternate"; type="application/json"',
     );
   });
@@ -261,6 +262,7 @@ describe('GET /search/', () => {
     assert.deepEqual(body.alternates, [
       { type: 'text/html', url: '/search/?q=otters' },
       { type: 'text/markdown', url: '/search/index.md?q=otters' },
+      { type: 'text/gemini', url: '/search/index.gmi?q=otters' },
       { type: 'application/json', url: '/search/index.json?q=otters' },
     ]);
   });

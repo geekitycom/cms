@@ -49,9 +49,13 @@ COPY apps/demo/package.json apps/demo/package.json
 RUN pnpm install --offline --frozen-lockfile --ignore-scripts
 
 COPY tsconfig.base.json ./
+COPY packages/md2gemini packages/md2gemini
 COPY packages/cms packages/cms
 
-# tsc into dist/ and the admin editor bundle into admin/static/editor.js.
+# Core imports @geekity/md2gemini from the workspace, so its dist/ is built
+# first. Then tsc into dist/ and the admin editor bundle into
+# admin/static/editor.js.
+RUN pnpm --filter @geekity/md2gemini build
 RUN pnpm --filter @geekity/cms build
 
 # The package as npm would publish it (package.json `files`: dist, admin,

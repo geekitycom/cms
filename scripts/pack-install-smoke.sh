@@ -88,7 +88,9 @@ readonly site="${scratch}/scratch-site"
 
 log "building ${ROOT}/packages/cms"
 # `pnpm pack` ships whatever is in dist/, so a stale build would make this
-# whole script test the wrong bytes.
+# whole script test the wrong bytes. Core imports @geekity/md2gemini, so that
+# is built first.
+pnpm --dir "${ROOT}" --filter @geekity/md2gemini build
 pnpm --dir "${ROOT}" --filter @geekity/cms build
 
 log "packing the tarball into ${scratch}"
@@ -115,6 +117,10 @@ pack_plugin() {
   fi
   echo "packed ${packed}"
 }
+# Core depends on @geekity/md2gemini at the version beside it, which the
+# registry may not have yet, so the site installs it from its own tarball.
+pack_plugin md2gemini
+md2gemini_tarball="${packed}"
 pack_plugin plugin-wordpress
 wordpress_tarball="${packed}"
 pack_plugin plugin-llm
@@ -145,6 +151,8 @@ node --input-type=commonjs -e '
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
 ' "${site}/package.json" "${tarball}" "${wordpress_tarball}" "${llm_tarball}" "${summary_tarball}" "${tags_tarball}" "${umami_tarball}"
 grep '@geekity/' "${site}/package.json"
+printf 'overrides:\n  "@geekity/md2gemini": "file:%s"\n' "${md2gemini_tarball}" >>"${site}/pnpm-workspace.yaml"
+cat "${site}/pnpm-workspace.yaml"
 
 log "installing the WordPress, LLM, post summary, tag suggestion and Umami plugins in the site config"
 node --input-type=commonjs -e '

@@ -112,6 +112,7 @@ function unavailable(c: Context<GeekityEnv>, pathname: string, until: Date | und
         'content-type': 'application/json; charset=utf-8',
       });
     case 'markdown':
+    case 'gemini':
     case 'text':
       return statusMarkdownResponse(c, representation, 'maintenance', 503, {
         until: upcoming,

@@ -97,7 +97,7 @@ describe('the text/plain representation', () => {
     const links = alternateLinks('/tag/x/', 'html', LISTING_REPRESENTATIONS);
     assert.equal(
       links,
-      '</tag/x/index.md>; rel="alternate"; type="text/markdown", ' +
+      '</tag/x/index.md>; rel="alternate"; type="text/markdown", </tag/x/index.gmi>; rel="alternate"; type="text/gemini", ' +
         '</tag/x/index.json>; rel="alternate"; type="application/json"',
     );
 
@@ -105,7 +105,7 @@ describe('the text/plain representation', () => {
     const body = (await refused.json()) as { alternates: { type: string }[] };
     assert.deepEqual(
       body.alternates.map((alternate) => alternate.type),
-      ['text/html', 'text/markdown', 'application/json'],
+      ['text/html', 'text/markdown', 'text/gemini', 'application/json'],
     );
     assert.doesNotMatch(refused.headers.get('link') ?? '', /text\/plain/);
   });
