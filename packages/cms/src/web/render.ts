@@ -87,6 +87,7 @@ import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
 import { createThemeSource, findThemeFile } from '../theme/themes.ts';
 import type { ThemeColors, ThemeFont, ThemeSource } from '../theme/themes.ts';
 import type { PageFont } from '../fonts/index.ts';
+import type { TextFormat } from './negotiate.ts';
 import { schemeTokens } from '../theme/scheme-tokens.ts';
 import type { SchemeTokens } from '../theme/scheme-tokens.ts';
 import { formatFileSize } from '../util/file-size.ts';
@@ -136,22 +137,36 @@ export const OPTIONAL_TEMPLATES = {
   postsPage: 'layouts/posts-page.njk',
 } as const;
 
-/**
- * The two partials around a page's Markdown, found on the theme search path
- * like every other template.
- */
-export const MARKDOWN_TEMPLATES = {
-  header: 'partials/markdown-header.md.njk',
-  footer: 'partials/markdown-footer.md.njk',
-} as const;
+/** One slot a theme fills in a text representation: its Markdown and its gemtext template. */
+export interface TextTemplates {
+  readonly markdown: string;
+  readonly gemini: string;
+}
 
-/** What {@link Renderer.renderStatusMarkdown} writes a status page's Markdown with. */
+/** What a theme wrote for one slot, and whether it wrote it in Markdown or gemtext. */
+export interface ThemeText {
+  readonly format: TextFormat;
+  readonly text: string;
+}
+
+/**
+ * The two partials around a page's Markdown or gemtext, found on the theme
+ * search path like every other template.
+ */
+const CHROME_TEMPLATES = {
+  header: { markdown: 'partials/markdown-header.md.njk', gemini: 'partials/gemini-header.gmi.njk' },
+  footer: { markdown: 'partials/markdown-footer.md.njk', gemini: 'partials/gemini-footer.gmi.njk' },
+} as const satisfies Record<string, TextTemplates>;
+
+/** What {@link Renderer.renderStatusMarkdown} writes a status page's Markdown or gemtext with. */
 export interface StatusMarkdownContext {
   /** The path the request was for. */
   url: string;
   markdownUrl: MarkdownUrl;
   /** On the maintenance page: when the operator expects the site back. */
   until?: Date | undefined;
+  /** Defaults to `markdown`. */
+  format?: TextFormat | undefined;
 }
 
 /** What {@link Renderer.renderMarkdownChrome} writes links with. */
@@ -166,16 +181,17 @@ export interface MarkdownChromeOptions {
    */
   document?: Document | undefined;
   /**
-   * Leave the archive page's descriptions off, so each of its posts converts
-   * to a gemfeed line, `=> url YYYY-MM-DD title`.
+   * Defaults to `markdown`. For `gemini`, the archive page's descriptions are
+   * left off, so each of its posts converts to a gemfeed line,
+   * `=> url YYYY-MM-DD title`.
    */
-  gemfeed?: boolean | undefined;
+  format?: TextFormat | undefined;
 }
 
-/** A page's Markdown header and footer, as the theme wrote them. */
+/** A page's header and footer, as the theme wrote them. */
 export interface MarkdownChromeText {
-  readonly header: string;
-  readonly footer: string;
+  readonly header: ThemeText;
+  readonly footer: ThemeText;
 }
 
 /** A listing of documents, ready to render. */
@@ -311,19 +327,23 @@ export interface Renderer {
    */
   renderMaintenance(url: string, until: Date | undefined): string;
   /**
-   * The body of a status page's Markdown, from the theme's `markdown`
-   * template in {@link STATUS_PAGES}, with autoescaping off. The template gets
-   * `site`, `url`, `title`, the maintenance page's `until` and `untilText`,
-   * and the filters the Markdown partials have.
+   * The body of a status page's Markdown or gemtext, from the theme's
+   * templates in {@link STATUS_PAGES}, with autoescaping off. The template
+   * gets `site`, `url`, `title`, the maintenance page's `until` and
+   * `untilText`, and the filters the Markdown partials have.
    */
-  renderStatusMarkdown(page: StatusPageName, context: StatusMarkdownContext): string;
+  renderStatusMarkdown(page: StatusPageName, context: StatusMarkdownContext): ThemeText;
   /**
-   * The header and footer of a page's Markdown, through
-   * {@link MARKDOWN_TEMPLATES} with autoescaping off: Markdown is not HTML.
+   * The header and footer of a page's Markdown or gemtext, through
+   * {@link CHROME_TEMPLATES} with autoescaping off: Markdown is not HTML.
    * The partials get `site`, `menus`, `soloAuthor`, the chrome's links as
    * data, a document's `categories`, `tags`, `backlinks`, `conversation` and
    * form links, `archiveMonths` on an archive page, and the `escapeMarkdown`,
-   * `nest` and `markdownUrl` filters.
+   * `nest`, `markdownUrl` and `geminiUrl` filters.
+   *
+   * Gemtext comes from the first of the chosen theme's `.gmi.njk`, its
+   * `.md.njk`, the default theme's `.gmi.njk` and its `.md.njk`
+   * (decision-60), and the result says which format the theme wrote.
    */
   renderMarkdownChrome(chrome: MarkdownChrome, options: MarkdownChromeOptions): MarkdownChromeText;
   /** Any template by name, with the site data already in the context. */
@@ -633,12 +653,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     ),
   );
   markdownEnvironment.addFilter('quote', (value: unknown) => quote(filterText(value)));
-  markdownEnvironment.addFilter('markdownUrl', function (this: unknown, value: unknown) {
-    const url = filterText(value);
-    const lookup = (this as { lookup?: (name: string) => unknown } | undefined)?.lookup;
-    const write = typeof lookup === 'function' ? lookup.call(this, 'markdownUrl') : undefined;
-    return typeof write === 'function' ? (write as MarkdownUrl)(url) : url;
-  });
+  for (const name of ['markdownUrl', 'geminiUrl']) {
+    markdownEnvironment.addFilter(name, function (this: unknown, value: unknown) {
+      const url = filterText(value);
+      const lookup = (this as { lookup?: (name: string) => unknown } | undefined)?.lookup;
+      const write = typeof lookup === 'function' ? lookup.call(this, name) : undefined;
+      return typeof write === 'function' ? (write as MarkdownUrl)(url) : url;
+    });
+  }
   const pages = options.pages ?? ((): readonly Document[] => []);
   const users = options.users ?? ((): readonly User[] => []);
 
@@ -1182,10 +1204,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
   function renderMarkdownChrome(
     chrome: MarkdownChrome,
-    { markdownUrl, frontPage, document, gemfeed = false }: MarkdownChromeOptions,
+    { markdownUrl, frontPage, document, format = 'markdown' }: MarkdownChromeOptions,
   ): MarkdownChromeText {
     const site = siteData.read();
-    useThemeDirs(markdownEnvironment, themes.current().dirs);
     const soloAuthor = siteAuthorContext(users(), site.author);
     const context = {
       site,
@@ -1193,7 +1214,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       navigation: navigationLinks(site),
       ...(soloAuthor === undefined ? {} : { soloAuthor }),
       ...(frontPage === undefined ? {} : newestPostsContext(frontPage)),
-      ...markdownArchiveContext(document, gemfeed),
+      ...markdownArchiveContext(document, format === 'gemini'),
       ...markdownLinksContext(document),
       ...markdownKindContext(document),
       ...markdownConversationContext(document, chrome.url),
@@ -1202,11 +1223,29 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),
       staticFrontPage: frontPage !== undefined,
       markdownUrl,
+      ...(format === 'gemini' ? { geminiUrl: markdownUrl } : {}),
     };
     return {
-      header: markdownEnvironment.render(MARKDOWN_TEMPLATES.header, context),
-      footer: markdownEnvironment.render(MARKDOWN_TEMPLATES.footer, context),
+      header: renderText(CHROME_TEMPLATES.header, format, context),
+      footer: renderText(CHROME_TEMPLATES.footer, format, context),
     };
+  }
+
+  /**
+   * One slot in `format`. Gemtext is the first of the chosen theme's
+   * `.gmi.njk`, its `.md.njk`, the default theme's `.gmi.njk` and its
+   * `.md.njk`, so a theme's Markdown beats the default theme's gemtext.
+   * Nunjucks then finds the same file, since it walks the same directories.
+   */
+  function renderText(
+    templates: TextTemplates,
+    format: TextFormat,
+    context: Record<string, unknown>,
+  ): ThemeText {
+    const { dirs } = themes.current();
+    useThemeDirs(markdownEnvironment, dirs);
+    const written = format === 'gemini' && writesGemtext(dirs, templates) ? 'gemini' : 'markdown';
+    return { format: written, text: markdownEnvironment.render(templates[written], context) };
   }
 
   return {
@@ -1361,14 +1400,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     renderMaintenance: (url, until) =>
       statusPage(STATUS_PAGES.maintenance, url, untilContext(until)),
 
-    renderStatusMarkdown(page, { url, markdownUrl, until }) {
-      useThemeDirs(markdownEnvironment, themes.current().dirs);
-      const { markdown, title } = STATUS_PAGES[page];
-      return markdownEnvironment.render(markdown, {
+    renderStatusMarkdown(page, { url, markdownUrl, until, format = 'markdown' }) {
+      const templates = STATUS_PAGES[page];
+      return renderText(templates, format, {
         site: siteData.read(),
         url,
-        title,
+        title: templates.title,
         markdownUrl,
+        ...(format === 'gemini' ? { geminiUrl: markdownUrl } : {}),
         ...untilContext(until),
       });
     },
@@ -1377,26 +1416,46 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   };
 }
 
-interface StatusPage {
+interface StatusPage extends TextTemplates {
   readonly template: string;
-  readonly markdown: string;
   readonly title: string;
 }
 
 export const STATUS_PAGES = {
-  notFound: { template: TEMPLATES.notFound, markdown: 'layouts/404.md.njk', title: 'Not found' },
-  gone: { template: TEMPLATES.gone, markdown: 'layouts/410.md.njk', title: 'Deleted' },
+  notFound: {
+    template: TEMPLATES.notFound,
+    markdown: 'layouts/404.md.njk',
+    gemini: 'layouts/404.gmi.njk',
+    title: 'Not found',
+  },
+  gone: {
+    template: TEMPLATES.gone,
+    markdown: 'layouts/410.md.njk',
+    gemini: 'layouts/410.gmi.njk',
+    title: 'Deleted',
+  },
   serverError: {
     template: TEMPLATES.serverError,
     markdown: 'layouts/500.md.njk',
+    gemini: 'layouts/500.gmi.njk',
     title: 'Something went wrong',
   },
   maintenance: {
     template: TEMPLATES.maintenance,
     markdown: 'layouts/503.md.njk',
+    gemini: 'layouts/503.gmi.njk',
     title: 'Down for maintenance',
   },
 } as const satisfies Record<string, StatusPage>;
+
+/** Whether the first theme on `dirs` with either template wrote the gemtext one. */
+function writesGemtext(dirs: readonly string[], templates: TextTemplates): boolean {
+  for (const dir of dirs) {
+    if (findThemeFile([dir], templates.gemini) !== undefined) return true;
+    if (findThemeFile([dir], templates.markdown) !== undefined) return false;
+  }
+  return false;
+}
 
 export type StatusPageName = keyof typeof STATUS_PAGES;
 

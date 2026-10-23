@@ -574,9 +574,13 @@ and search snippets the Markdown prints are left out:
 ```
 
 A 404, 410, 500 or 503 asked for at a `.gmi` URL, or by an `Accept` that
-prefers `text/gemini`, keeps its status and is the status page's Markdown
-converted the same way. The header and footer are the theme's Markdown
-partials in this release.
+prefers `text/gemini`, keeps its status. Its body is the default theme's
+gemtext: the status page's sentence, then `=> /index.gmi Home` and
+`=> /search/index.gmi Search the site`.
+
+A theme can write the header, the footer and each status page's body in
+gemtext, and gets its Markdown templates converted where it does not. See
+[The Gemini representation](theme/gemini.md).
 
 ### The JSON shape
 

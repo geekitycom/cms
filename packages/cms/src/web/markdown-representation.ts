@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { convert } from '@geekity/md2gemini';
 import type { Context } from 'hono';
 
@@ -43,7 +45,7 @@ import { representationHref } from './negotiate.ts';
 import type { TextFormat } from './negotiate.ts';
 import type { Pagination } from './pagination.ts';
 import { STATUS_PAGES } from './render.ts';
-import type { StatusPageName } from './render.ts';
+import type { StatusPageName, ThemeText } from './render.ts';
 import { classifyPath } from './paths.ts';
 import { documentLabel, encodePath } from './request.ts';
 import { SEARCH_PATH, snippetMarkdown } from './search.ts';
@@ -285,6 +287,7 @@ export function statusMarkdown(
     url,
     markdownUrl: siteUrlFor(c, url, format),
     until,
+    format,
   });
   return textPage(
     c,
@@ -313,8 +316,9 @@ function siteFeeds(siteTitle: string): MarkdownFeed[] {
 }
 
 /**
- * One page in a text format: the theme's Markdown header, the blocks and the
- * theme's Markdown footer, with every link to the site written in that format.
+ * One page in a text format: the theme's header, the blocks and the theme's
+ * footer, with every link to the site written in that format. A block is
+ * Markdown, or what the theme wrote for a status page's body.
  *
  * Markdown carries the page's data as front matter. Gemtext has none, so the
  * page is converted with a document's date as a line under the header and a
@@ -326,7 +330,7 @@ function textPage(
   format: TextFormat,
   frontMatter: Record<string, unknown>,
   chrome: MarkdownChrome,
-  blocks: readonly string[],
+  blocks: readonly (string | ThemeText)[],
   {
     published,
     ...pages
@@ -340,29 +344,52 @@ function textPage(
   const linkUrl = siteUrlFor(c, chrome.url, format);
   const { header, footer } = c.var.renderer.renderMarkdownChrome(chrome, {
     markdownUrl: linkUrl,
-    gemfeed: format === 'gemini',
+    format,
     ...pages,
   });
+  const body = blocks.map((block) =>
+    typeof block === 'string' ? { format: 'markdown' as const, text: block } : block,
+  );
   if (format === 'markdown') {
-    return markdownFile({ ...frontMatter, ...navigationFrontMatter(chrome, linkUrl) }, [
-      header,
-      ...blocks,
-      footer,
-    ]);
+    return markdownFile(
+      { ...frontMatter, ...navigationFrontMatter(chrome, linkUrl) },
+      [header, ...body, footer].map(({ text }) => text),
+    );
   }
 
   const day =
     published === undefined
       ? undefined
       : calendarDayIn(published, siteTimezone(c.var.renderer.site()));
-  const dateline = day === undefined ? '' : `Published ${day}`;
-  const markdown = [header, dateline, ...blocks, footer]
-    .map((block) => block.trim())
-    .filter((block) => block !== '')
-    .join('\n\n');
-  const gemtext = convert(markdown, GEMTEXT);
+  const dateline = {
+    format: 'markdown' as const,
+    text: day === undefined ? '' : `Published ${day}`,
+  };
+  const gemtext = gemtextOf([header, dateline, ...body, footer]);
   const home = `=> ${linkUrl(HOME_LINK.url)} ${HOME_LINK.label}`;
   return gemtext.split('\n').includes(home) ? gemtext : `${gemtext}\n${home}\n`;
+}
+
+/**
+ * The parts as one gemtext page. The Markdown is converted in one pass, so
+ * its `[n]` link numbers run through the whole page. What a theme wrote as
+ * gemtext stands in that pass as a placeholder paragraph and is put back
+ * unconverted, with its `=>` lines unnumbered as the theme wrote them.
+ */
+function gemtextOf(parts: readonly ThemeText[]): string {
+  const token = `geekity-gemtext-${randomUUID()}`;
+  const gemtext: string[] = [];
+  const markdown = parts
+    .map(({ format, text }) => ({ format, text: text.trim() }))
+    .filter(({ text }) => text !== '')
+    .map(({ format, text }) =>
+      format === 'markdown' ? text : `${token}-${String(gemtext.push(text) - 1)}`,
+    )
+    .join('\n\n');
+  return convert(markdown, GEMTEXT).replace(
+    new RegExp(`^${token}-(\\d+)$`, 'gm'),
+    (_, index: string) => gemtext[Number(index)] ?? '',
+  );
 }
 
 /** How a page's Markdown becomes gemtext: no emphasis or code marks, no HTML. */

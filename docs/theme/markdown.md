@@ -51,14 +51,10 @@ Every link in the context is data: a `label` and the canonical `url` of what
 it names, never a `.md` URL. Write a link through the `markdownUrl` filter.
 It gives a URL that the site answers with a document or a listing its
 root-relative `.md` URL, the search's with its query kept. It leaves any
-other URL as it is, such as another site's page or a feed. The data stays the same for a renderer of another
-format, such as a Gemini page:
-
-```njk
-{% for item in navigation %}
-=> {{ item.url | markdownUrl }} {{ item.label }}
-{% endfor %}
-```
+other URL as it is, such as another site's page or a feed. The data stays the
+same for another format. The `.gmi` page converts these templates, and a
+theme's Gemini templates read the same context. See
+[The Gemini representation](gemini.md).
 
 ## Context
 

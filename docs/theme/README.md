@@ -22,6 +22,7 @@ themes/default/
     500.njk      the request failed on the server
     503.njk      the site is in maintenance mode
     404.md.njk   the 404 page's Markdown body, and likewise 410, 500 and 503
+    404.gmi.njk  the 404 page's gemtext body, and likewise 410, 500 and 503
     comment.njk  a native comment on a page of its own
   partials/
     post-list.njk     the h-feed a listing is made of
@@ -105,6 +106,7 @@ properties. See [Colours](page-shell.md#colours).
 - [The page shell](page-shell.md). The base layout, entries, listings, the head, colours, code and video.
 - [Mail templates](mail-templates.md). The messages the site sends, and how to override them.
 - [The Markdown representation](markdown.md). The header and footer of every page's Markdown.
+- [The Gemini representation](gemini.md). Gemini templates, and the Markdown ones converted.
 - [Template context](template-context.md). Every key a template is handed.
 - [Bylines and author archives](bylines.md). Who an entry is by, and the author pages.
 - [Navigation](navigation.md). Menu areas and how the theme prints them.
