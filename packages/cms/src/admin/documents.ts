@@ -83,7 +83,7 @@ import {
 } from './editor-kinds.ts';
 import type { PostKind } from './editor-kinds.ts';
 import { editorSections, openGroups, sidebarLocation } from './editor-layout.ts';
-import { flash } from './flash.ts';
+import { flash, noteClearedAutosave } from './flash.ts';
 import {
   ITEM_LOOKUP_BUTTON,
   ITEM_LOOKUP_PATH,
@@ -92,8 +92,8 @@ import {
 } from './item-lookup.ts';
 import { formatInTimezone } from './formatting.ts';
 import { allowGeolocation } from './headers.ts';
-import { AUTOSAVE_DISCARD_PATH, AUTOSAVE_PATH } from './autosave.ts';
-import { later } from './autosave-client.ts';
+import { AUTOSAVE_DISCARD_JSON_PATH, AUTOSAVE_DISCARD_PATH, AUTOSAVE_PATH } from './autosave.ts';
+import { laterOrOnlyKnown } from './autosave-client.ts';
 import { PREVIEW_PATH } from './preview.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -270,8 +270,8 @@ export function mountDocumentScreens(
   app.get(newEditorPath(kind), (c) => {
     const postKind = c.req.query('kind');
     if (kind.type === 'post' && !isPostKind(postKind)) return renderChooser(c, kind, render);
-    const id = c.req.query(AUTOSAVE_FIELD);
-    const copy = isMintedAutosaveId(id) ? ownCopy(c, kind, id) : undefined;
+    const id = mintedId(c.req.query(AUTOSAVE_FIELD));
+    const copy = id === undefined ? undefined : ownCopy(c, kind, id);
     const restoring = copy !== undefined && c.req.query(RESTORE) !== undefined;
     return renderEditor(c, {
       kind,
@@ -303,8 +303,6 @@ export function mountDocumentScreens(
     const restore = c.req.query(RESTORE);
     if (copy !== undefined && restore !== undefined) {
       const form = submittedForm(kind, copy.fields, c.var.config.contentDir);
-      // Decided from the file on disk, as a save would be. A file deleted
-      // behind the index is no conflict: saving the copy writes it again.
       const conflict = await conflictWith(c.var.config.contentDir, document, copy.hash);
       if (restore === REBASE || conflict === undefined) {
         return renderEditor(c, {
@@ -417,7 +415,7 @@ function switchKind(
     document,
     form: submittedForm(kind, body, c.var.config.contentDir),
     postKind,
-    autosave: body[AUTOSAVE_FIELD],
+    autosave: mintedId(body[AUTOSAVE_FIELD]),
   });
 }
 
@@ -437,7 +435,7 @@ function lookUpItem(
       form: { ...form, review: outcome.review },
       postKind: 'review',
       itemLookup: { message: outcome.message, failed: outcome.failed },
-      autosave: body[AUTOSAVE_FIELD],
+      autosave: mintedId(body[AUTOSAVE_FIELD]),
     });
   })();
 }
@@ -499,7 +497,7 @@ async function saveFromForm(
       postKind: isPostKind(body['kind']) ? body['kind'] : undefined,
       refusal,
       status: 400,
-      autosave: body[AUTOSAVE_FIELD],
+      autosave: mintedId(body[AUTOSAVE_FIELD]),
     });
   }
 
@@ -516,11 +514,7 @@ async function saveFromForm(
     });
   }
   const { saved, undescribed, respelled } = written;
-  discardAutosaves(c, [
-    document?.path,
-    saved.path,
-    isMintedAutosaveId(body[AUTOSAVE_FIELD]) ? body[AUTOSAVE_FIELD] : undefined,
-  ]);
+  discardAutosaves(c, [document?.path, saved.path, mintedId(body[AUTOSAVE_FIELD])]);
 
   flash(
     c,
@@ -621,7 +615,6 @@ interface RenderConflictOptions {
   /** The recording and the photos the submitted form resolved to. */
   media: ResolvedMedia;
   conflict: Conflict;
-  /** Set when this is an unsaved copy offered back over a file that changed since. */
   restoring?: { rebaseUrl: string; discardUrl: string; key: string } | undefined;
 }
 
@@ -678,10 +671,6 @@ function renderConflict(c: Context<GeekityEnv>, options: RenderConflictOptions):
   });
 }
 
-/**
- * The recording, photos and review a restored copy names, for showing it as a
- * file. Anything the copy cannot resolve is shown as the document has it.
- */
 function copyMedia(form: EditorForm, document: Document, contentDir: string): ResolvedMedia {
   const previous = enclosureOf(document.extra);
   const recording = resolveEnclosure(form.enclosure, previous, contentDir);
@@ -738,14 +727,10 @@ async function moveDocument(
   );
 }
 
-/** The query parameter that fills the editor from the user's copy rather than the file. */
 const RESTORE = 'restore';
-/** Its value for a copy kept over a file that changed since: the form takes the file's hash. */
 const REBASE = 'rebase';
-/** The listing status that shows the user's copies. */
 const UNSAVED = 'unsaved';
 
-/** The signed-in user's copy under `key`, when it is of this kind of document. */
 function ownCopy(
   c: Context<GeekityEnv>,
   kind: DocumentKind,
@@ -757,12 +742,8 @@ function ownCopy(
   return copy?.type === kind.type ? copy : undefined;
 }
 
-/**
- * Whether a copy is later than the last save of the file. A file with no
- * `updated` has never been saved through the admin, so any copy of it is.
- */
-function newerThan(copy: AutosaveCopy, document: Document | undefined): boolean {
-  return later(copy.savedAt, document?.updated);
+function mintedId(value: unknown): string | undefined {
+  return isMintedAutosaveId(value) ? value : undefined;
 }
 
 function withQuery(address: string, query: Record<string, string>): string {
@@ -771,7 +752,6 @@ function withQuery(address: string, query: Record<string, string>): string {
   return `${address}${address.includes('?') ? '&' : '?'}${search}`;
 }
 
-/** What a new document's editor carries in its address, so it opens its own copy. */
 function newDocumentQuery(
   kind: DocumentKind,
   id: string,
@@ -782,7 +762,6 @@ function newDocumentQuery(
     : { [AUTOSAVE_FIELD]: id };
 }
 
-/** The editor filled in from a copy: the document's own editor, or a new one carrying the id. */
 function resumeUrl(
   kind: DocumentScreens,
   document: Document | undefined,
@@ -794,20 +773,16 @@ function resumeUrl(
     : withQuery(documentEditorPath(kind, document), { [RESTORE]: '1' });
 }
 
-/** One row of the Unsaved listing. */
 interface UnsavedRow {
   label: string;
   kind: string;
   savedAt: string;
-  /** `savedAt` in the site's time zone. */
   at: string;
-  /** What the copy is of: a new document, or edits to the one named. */
   of: string;
   resumeUrl: string | undefined;
   key: string;
 }
 
-/** The signed-in user's copies of this kind of document, newest first, each with Resume and Discard. */
 function renderUnsaved(
   c: Context<GeekityEnv>,
   kind: DocumentScreens,
@@ -856,7 +831,6 @@ function renderUnsaved(
   });
 }
 
-/** What an Unsaved row's link says: the copy's title, or the first words of its body. */
 function copyLabel(copy: AutosaveCopy): string {
   const title = (copy.fields['title'] ?? '').trim();
   if (title !== '') return title;
@@ -864,7 +838,6 @@ function copyLabel(copy: AutosaveCopy): string {
   return text === '' ? 'Untitled' : firstWords(text);
 }
 
-/** The listing's tabs: the filters doc-5 asks for, then the user's unsaved copies. */
 function filterTabs(
   kind: DocumentScreens,
   current: DocumentFilter | typeof UNSAVED,
@@ -885,7 +858,6 @@ function filterTabs(
   ];
 }
 
-/** The signed-in user's autosaved copies under these keys, once what they held is saved. */
 function discardAutosaves(c: Context<GeekityEnv>, keys: readonly (string | undefined)[]): void {
   const userId = c.var.session?.userId;
   if (userId == null) return;
@@ -893,7 +865,7 @@ function discardAutosaves(c: Context<GeekityEnv>, keys: readonly (string | undef
   for (const key of new Set(keys)) {
     if (key === undefined) continue;
     copies.discard(userId, key);
-    flash(c, 'autosave-cleared', key);
+    noteClearedAutosave(c, key);
   }
 }
 
@@ -944,11 +916,8 @@ interface RenderEditorOptions {
   postKind?: PostKind | undefined;
   refusal?: Refusal | undefined;
   itemLookup?: { message: string; failed: boolean } | undefined;
-  /** The autosave id a new document's editor was opened or posted with; kept when it is one. */
-  autosave?: unknown;
-  /** The signed-in user's copy of this document, if there is one. */
+  autosave?: string | undefined;
   copy?: AutosaveCopy | undefined;
-  /** Whether to offer the copy back, when it is newer than the file. */
   offer?: boolean | undefined;
   /** The status to answer with. Defaults to 200. */
   status?: 200 | 400 | undefined;
@@ -988,11 +957,12 @@ async function renderEditor(
   if (trashed) actions.push({ value: 'restore', label: 'Restore' });
   else if (document !== undefined) actions.push({ value: 'trash', label: 'Move to trash' });
 
-  const autosaveKey =
-    document?.path ?? (isMintedAutosaveId(options.autosave) ? options.autosave : mintAutosaveId());
+  const autosaveKey = document?.path ?? options.autosave ?? mintAutosaveId();
   const copy = options.copy;
   const resume =
-    options.offer === true && copy !== undefined && newerThan(copy, document)
+    options.offer === true &&
+    copy !== undefined &&
+    laterOrOnlyKnown(copy.savedAt, document?.updated)
       ? {
           key: copy.key,
           savedAt: copy.savedAt,
@@ -1102,7 +1072,7 @@ async function renderEditor(
     previewUrl: PREVIEW_PATH,
     autosaveUrl: AUTOSAVE_PATH,
     autosaveKey,
-    autosaveDiscardUrl: AUTOSAVE_DISCARD_PATH,
+    autosaveDiscardUrl: AUTOSAVE_DISCARD_JSON_PATH,
     autosaveUser: c.var.session?.userId ?? undefined,
     autosaveCopySavedAt: copy?.savedAt,
     autosaveFileTime: document?.updated,

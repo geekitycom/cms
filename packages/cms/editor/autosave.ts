@@ -1,22 +1,12 @@
-/**
- * The editor's autosave on the page: `src/admin/autosave-client.ts` decides
- * when to post and what an answer means; this file gives it the form, the
- * network, localStorage and the status line.
- */
 import { autosave, localCopyKey, statusMessage } from '../src/admin/autosave-client.ts';
 import type { Autosave, SendOutcome, Snapshot } from '../src/admin/autosave-client.ts';
 import { LOOK } from './look.ts';
 import { findOffer, offerBack } from './resume.ts';
 
-/** The status line, which a reader of the autosave state can also find by id and `data-state`. */
 export const AUTOSAVE_STATUS_ID = 'editor-autosave-status';
 
 const MINTED = /^new-[0-9a-f]{32}$/;
 
-/**
- * Start autosaving `form`, or return `undefined` when the page does not name
- * an endpoint, a user and a key. The status line is appended to `tools`.
- */
 export function startAutosave(form: HTMLFormElement, tools: HTMLElement): Autosave | undefined {
   const url = tools.dataset['autosaveUrl'] ?? '';
   const userId = tools.dataset['autosaveUser'] ?? '';
@@ -33,7 +23,6 @@ export function startAutosave(form: HTMLFormElement, tools: HTMLElement): Autosa
   if (MINTED.test(key)) keepIdInUrl(form, key);
 
   const storageKey = localCopyKey(site, userId, key);
-  // Read after the cleared copies are gone, so a saved copy is never offered.
   const offer = findOffer(tools, storage, storageKey, snapshotOf(form));
 
   const controller = autosave({
@@ -96,7 +85,6 @@ export function startAutosave(form: HTMLFormElement, tools: HTMLElement): Autosa
   return controller;
 }
 
-/** Every text field the form would submit, except the CSRF token, which is not the writer's. */
 function snapshotOf(form: HTMLFormElement): Snapshot {
   const fields: [string, string][] = [];
   for (const [name, value] of new FormData(form)) {
@@ -150,11 +138,6 @@ async function send(url: string, body: FormData): Promise<SendOutcome> {
   };
 }
 
-/**
- * Put a new document's id into the address, so a reload opens the same copy.
- * A refused save re-renders at `/new` with no query, so the post kind goes in
- * too.
- */
 function keepIdInUrl(form: HTMLFormElement, key: string): void {
   const address = new URL(location.href);
   address.searchParams.set('autosave', key);
@@ -165,7 +148,6 @@ function keepIdInUrl(form: HTMLFormElement, key: string): void {
   history.replaceState(history.state, '', address);
 }
 
-/** The keys the save that led here cleared on the server, whose browser copies go too. */
 function clearedKeys(tools: HTMLElement): string[] {
   try {
     const parsed: unknown = JSON.parse(tools.dataset['autosaveCleared'] ?? '[]');

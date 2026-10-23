@@ -43,7 +43,6 @@ function userId(cms: Cms, username = 'ada'): number {
   return user.id;
 }
 
-/** File a copy straight into the store, as an earlier autosave would have. */
 function keep(cms: Cms, key: string, record: Partial<AutosaveRecord>, username = 'ada'): void {
   autosaveCopies(cms.config.dataDir).save(userId(cms, username), key, {
     type: 'post',

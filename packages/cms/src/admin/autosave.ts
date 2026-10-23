@@ -7,13 +7,12 @@ import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { returnPath } from './documents.ts';
-import { flash } from './flash.ts';
+import { flash, noteClearedAutosave } from './flash.ts';
 
-/** Where the editor posts its whole form while the writer types. */
 export const AUTOSAVE_PATH = `${ADMIN_PREFIX}/autosave`;
 export const AUTOSAVE_DISCARD_PATH = `${AUTOSAVE_PATH}/discard`;
+export const AUTOSAVE_DISCARD_JSON_PATH = `${AUTOSAVE_DISCARD_PATH}.json`;
 
-/** What a stored autosave answers with. */
 export interface AutosaveResult {
   key: string;
   savedAt: string;
@@ -22,11 +21,6 @@ export interface AutosaveResult {
 const BAD_KEY =
   'The autosave key is not a content path or an id this editor was given. Reload the editor.';
 
-/**
- * Register the autosave endpoints (decision-62). A copy is written under
- * `data/autosave/` for the signed-in user only; the document, and every other
- * store, is left alone until the writer saves.
- */
 export function mountAutosave(app: Hono<GeekityEnv>): void {
   app.post(AUTOSAVE_PATH, async (c) => {
     const body = await c.req.parseBody();
@@ -51,36 +45,35 @@ export function mountAutosave(app: Hono<GeekityEnv>): void {
     return c.json(result);
   });
 
+  app.post(AUTOSAVE_DISCARD_JSON_PATH, async (c) => {
+    const body = await c.req.parseBody();
+    const key = parseAutosaveKey(c.var.config.contentDir, body[AUTOSAVE_FIELD]);
+    if (key === undefined) return c.json({ error: BAD_KEY }, 400);
+    const discarded = autosaveCopies(c.var.config.dataDir).discard(signedInUser(c), key.key);
+    return c.json({ discarded });
+  });
+
   app.post(AUTOSAVE_DISCARD_PATH, async (c) => {
     const body = await c.req.parseBody();
     const key = parseAutosaveKey(c.var.config.contentDir, body[AUTOSAVE_FIELD]);
-    const back = returnPath(stringOrEmpty(body['return']));
+    const back = returnPath(stringOrEmpty(body['return'])) ?? ADMIN_PREFIX;
     if (key === undefined) {
-      if (back === undefined) return c.json({ error: BAD_KEY }, 400);
       flash(c, 'error', BAD_KEY);
       return c.redirect(back, 303);
     }
-
-    const discarded = autosaveCopies(c.var.config.dataDir).discard(signedInUser(c), key.key);
-    if (back === undefined) return c.json({ discarded });
+    autosaveCopies(c.var.config.dataDir).discard(signedInUser(c), key.key);
     flash(c, 'notice', 'Discarded the unsaved changes.');
-    // The editor this goes back to drops the browser's copy of the key too.
-    flash(c, 'autosave-cleared', key.key);
+    noteClearedAutosave(c, key.key);
     return c.redirect(back, 303);
   });
 }
 
-/** The user the admin guard let through. */
 function signedInUser(c: Context<GeekityEnv>): number {
   const userId = c.var.session?.userId;
   if (userId == null) throw new Error('The admin guard let a request through with no user.');
   return userId;
 }
 
-/**
- * The document a copy is of. An existing document is named by the store, so
- * a form cannot file a copy of a page as a post; a new one by what its form says.
- */
 function identityOf(
   c: Context<GeekityEnv>,
   key: AutosaveKey,
@@ -98,7 +91,6 @@ function identityOf(
     : { type: document.type, path: document.path };
 }
 
-/** Every text field the form posted, as the editor's save handler would read them. */
 function submittedFields(body: Record<string, unknown>): Record<string, string> {
   return Object.fromEntries(
     Object.entries(body).filter(

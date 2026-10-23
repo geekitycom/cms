@@ -454,9 +454,6 @@
   {% endif %}
 
   {% if resume %}
-    {# The user's autosaved copy, offered back. Outside the editor form, since
-       Discard is a form of its own. editor.js holds the autosave until one of
-       the two is chosen, so typing here cannot overwrite the copy. #}
     <div class="my-6" id="autosave-resume" data-saved-at="{{ resume.savedAt }}">
       {% call alert(color='warning', direction='responsive', labelledby='autosave-resume-message') %}
         <p id="autosave-resume-message">
@@ -482,8 +479,6 @@
        longer matches what is on disk is refused rather than overwriting
        somebody else's edit (doc-1). #}
     <input type="hidden" name="hash" value="{{ form.hash }}" />
-    {# Which autosaved copy this form is: the content path, or for a document
-       not saved yet the id it was opened with (decision-62). #}
     <input type="hidden" name="autosave" value="{{ autosaveKey }}" />
     {# Which layout the preview renders through. The save handler ignores it. #}
     <input type="hidden" name="type" value="{{ kind.type }}" />

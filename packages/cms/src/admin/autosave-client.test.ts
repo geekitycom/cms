@@ -28,7 +28,6 @@ class MemoryStorage {
   }
 }
 
-/** A form, a server and a browser store the controller is wired to. */
 function rig(answers: SendOutcome[] = [], options: { held?: boolean } = {}) {
   const form = new Map<string, string>([
     ['title', 'Hello'],
@@ -86,7 +85,6 @@ function rig(answers: SendOutcome[] = [], options: { held?: boolean } = {}) {
   };
 }
 
-/** Let the promise callbacks a send queued run. */
 async function settle(): Promise<void> {
   for (let i = 0; i < 5; i++) await Promise.resolve();
 }

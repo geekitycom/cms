@@ -1,11 +1,7 @@
 {# A save that was refused because the file changed after the form loaded.
    Nothing has been written. Both versions are here in full, side by side from
    `lg`, so the decision is made by somebody who has seen them, not by whoever
-   saved last.
-
-   With `restoring` it is an autosaved copy being restored over a file that
-   has changed since the copy was made: the same two versions, and a choice
-   between editing the copy over the file and discarding it. #}
+   saved last. #}
 {% extends "layouts/shell.njk" %}
 
 {% block title %}{% if restoring %}Restore unsaved changes{% else %}Conflicting edit{% endif %}{% endblock %}

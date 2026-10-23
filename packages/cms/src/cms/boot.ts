@@ -129,7 +129,6 @@ export function boot(
     assertActorKeysUsable(resolved.dataDir, user.username);
   }
 
-  // Editor copies nobody came back to within a month.
   autosaveCopies(resolved.dataDir).prune(resolved.now());
 
   return { resolved, plugins, store, admin, commentRecords, settings };

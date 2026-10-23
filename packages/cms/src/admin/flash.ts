@@ -32,3 +32,15 @@ export function takeFlash(c: Context<GeekityEnv>): FlashMessage[] {
   if (session === undefined) return [];
   return c.var.admin.takeFlash(session.id);
 }
+
+export function noteClearedAutosave(c: Context<GeekityEnv>, key: string): void {
+  const session = c.var.session;
+  if (session === undefined) return;
+  c.var.admin.pushClearedAutosave(session.id, key);
+}
+
+export function takeClearedAutosaves(c: Context<GeekityEnv>): string[] {
+  const session = c.var.session;
+  if (session === undefined) return [];
+  return c.var.admin.takeClearedAutosaves(session.id);
+}

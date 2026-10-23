@@ -4,9 +4,7 @@
  * Everything here is an upgrade to a form that already works. The server
  * renders a plain `<textarea>` and a Preview button that submits the form to
  * `/admin/preview` in a new tab; this file replaces the textarea's *view* with
- * CodeMirror, turns the button into a tab, adds an upload control and a
- * distraction-free mode (`focus.ts`), and autosaves the form while the writer
- * types (`autosave.ts`). The
+ * CodeMirror, turns the button into a tab, and adds an upload control. The
  * textarea itself never goes away — it stays in the form as the value that is
  * submitted, and CodeMirror writes into it on every change and again on submit.
  * If this script fails to load, or fails outright, the editor is exactly what

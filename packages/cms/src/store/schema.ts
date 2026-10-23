@@ -587,6 +587,10 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE comments ADD COLUMN actor TEXT;
     `,
   },
+  {
+    version: 27,
+    sql: `ALTER TABLE sessions ADD COLUMN cleared_autosaves TEXT;`,
+  },
 ];
 
 export function openAdminDatabase(dataDir: string, now: Clock): DatabaseSync {

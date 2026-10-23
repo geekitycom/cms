@@ -8,25 +8,18 @@ import { AUTOSAVE, dataFolder, dataPath } from '../files/data-files.ts';
 import { isNotFound } from '../util/files.ts';
 import { isRecord } from '../util/guards.ts';
 
-/** How long a copy nobody saved or discarded is kept. */
 export const AUTOSAVE_KEEP_DAYS = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const COPY_MODE = 0o600;
 
-/** What one autosave holds besides its key. */
 export interface AutosaveRecord {
   readonly type: DocumentType;
-  /** The post kind the editor was showing, when it showed one. */
   readonly kind?: string;
-  /** The document's content path, for a document that exists. */
   readonly path?: string;
-  /** The hash of the file the form was filled in from; empty for a new document. */
   readonly hash: string;
-  /** Every string field the editor form posted, by its name in the form, `csrf_token` left out. */
   readonly fields: Readonly<Record<string, string>>;
-  /** An ISO instant. */
   readonly savedAt: string;
 }
 
@@ -34,20 +27,12 @@ export interface AutosaveCopy extends AutosaveRecord {
   readonly key: string;
 }
 
-/**
- * Each user's autosaved editor forms, one file per user and key under
- * `data/autosave/<userId>/`. A copy is never the document: nothing here
- * touches `content/`.
- */
 export interface AutosaveCopies {
   save(userId: number, key: string, record: AutosaveRecord): void;
   read(userId: number, key: string): AutosaveCopy | undefined;
-  /** Newest first. */
   list(userId: number): AutosaveCopy[];
-  /** Whether there was a copy to delete. */
   discard(userId: number, key: string): boolean;
   discardUser(userId: number): void;
-  /** Delete every copy saved more than {@link AUTOSAVE_KEEP_DAYS} before `now`, and say how many. */
   prune(now: Date): number;
 }
 

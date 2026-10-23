@@ -1,14 +1,3 @@
-/**
- * The editor's distraction-free mode (decision-62) on the page:
- * `src/admin/focus-mode.ts` decides what each key, click and fullscreen answer
- * means; this file hides the page around the title and the body, asks for
- * fullscreen, and puts everything back.
- *
- * Everything around the title and the body is given `hidden` and `inert`, so
- * neither the eye, Tab nor a screen reader reaches it. The card they sit in is
- * drawn as a sheet over the window with the `focus*` classes in `look.ts`,
- * and `html.editor-focus` restyles CodeMirror (`admin/src/admin.css`).
- */
 import type { EditorView } from 'codemirror';
 
 import {
@@ -29,21 +18,16 @@ const ON = 'editor-focus';
 export interface FocusOptions {
   readonly view: EditorView;
   readonly form: HTMLFormElement;
-  /** CodeMirror's box; the card around it becomes the sheet. */
   readonly surface: HTMLElement;
-  /** Switch the body to its Write tab, from Preview. */
   readonly write: () => void;
   readonly say: (message: string, tone?: 'news' | 'error') => void;
 }
 
 export interface FocusMode {
-  /** The button that enters the mode. */
   readonly button: HTMLButtonElement;
-  /** The body changed; the word count follows while the mode is on. */
   readonly changed: (doc: EditorView['state']['doc']) => void;
 }
 
-/** Wire the mode up, or return `undefined` when the page is not laid out the way it expects. */
 export function focusMode(options: FocusOptions): FocusMode | undefined {
   const { view, form, surface } = options;
   const layout = layoutAround(surface);
@@ -164,7 +148,6 @@ export function focusMode(options: FocusOptions): FocusMode | undefined {
     options.write();
 
     const kept = [titleField, bodyField, bar].filter((element) => element !== null);
-    // Only what is visible and live now, so leaving gives back exactly what was there.
     hidden = outsideOf<Element>(document.body, kept, {
       parentOf: (element) => element.parentElement,
       childrenOf: (element) => Array.from(element.children),
@@ -215,7 +198,6 @@ export function focusMode(options: FocusOptions): FocusMode | undefined {
     window.scrollTo(scroll.x, scroll.y);
   }
 
-  /** Add the classes `element` lacks, and say which, so taking them off leaves its own. */
   function style(element: HTMLElement, classes: string): { element: HTMLElement; added: string[] } {
     const added = classes.split(' ').filter((name) => !element.classList.contains(name));
     element.classList.add(...added);
@@ -230,7 +212,6 @@ export function focusMode(options: FocusOptions): FocusMode | undefined {
   };
 }
 
-/** The editor's card, its body, and the body field holding CodeMirror. */
 function layoutAround(
   surface: HTMLElement,
 ): { sheet: HTMLElement; column: HTMLElement; bodyField: HTMLElement } | undefined {

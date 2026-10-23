@@ -1,23 +1,12 @@
-/**
- * The decisions behind the editor's distraction-free mode (decision-62), kept
- * apart from the DOM so they can be tested without one. `editor/focus.ts` is
- * the page side.
- */
-
-/**
- * Where the mode is. `asked` is waiting on the browser's answer to a
- * fullscreen request; `window` fills the window instead, because fullscreen
- * was refused or is not available.
- */
 export type FocusState =
-  { readonly on: false } | { readonly on: true; readonly fullscreen: 'asked' | 'on' | 'window' };
+  | { readonly on: false }
+  | { readonly on: true; readonly fullscreen: 'requested' | 'on' | 'filling-window' };
 
 export const FOCUS_OFF: FocusState = { on: false };
 
 export type FocusEvent =
   | {
       readonly type: 'button' | 'shortcut';
-      /** An offer of unsaved changes is waiting for Restore or Discard. */
       readonly blocked: boolean;
       readonly canFullscreen: boolean;
     }
@@ -40,8 +29,8 @@ export function focusStep(state: FocusState, event: FocusEvent): FocusStep {
       if (state.on) return event.type === 'shortcut' ? leave(state) : still;
       if (event.blocked) return { state, effects: ['explain-blocked'] };
       return event.canFullscreen
-        ? { state: { on: true, fullscreen: 'asked' }, effects: ['enter', 'request-fullscreen'] }
-        : { state: { on: true, fullscreen: 'window' }, effects: ['enter'] };
+        ? { state: { on: true, fullscreen: 'requested' }, effects: ['enter', 'request-fullscreen'] }
+        : { state: { on: true, fullscreen: 'filling-window' }, effects: ['enter'] };
     case 'escape':
     case 'exit':
       return state.on ? leave(state) : still;
@@ -50,7 +39,7 @@ export function focusStep(state: FocusState, event: FocusEvent): FocusStep {
         ? { state: { on: true, fullscreen: 'on' }, effects: [] }
         : { state, effects: ['exit-fullscreen'] };
     case 'fullscreen-refused':
-      return state.on ? { state: { on: true, fullscreen: 'window' }, effects: [] } : still;
+      return state.on ? { state: { on: true, fullscreen: 'filling-window' }, effects: [] } : still;
     case 'fullscreen-off':
       return state.on && state.fullscreen === 'on'
         ? { state: FOCUS_OFF, effects: ['leave'] }
@@ -61,11 +50,10 @@ export function focusStep(state: FocusState, event: FocusEvent): FocusStep {
 function leave(state: FocusState & { on: true }): FocusStep {
   return {
     state: FOCUS_OFF,
-    effects: state.fullscreen === 'window' ? ['leave'] : ['leave', 'exit-fullscreen'],
+    effects: state.fullscreen === 'filling-window' ? ['leave'] : ['leave', 'exit-fullscreen'],
   };
 }
 
-/** The parts of a `KeyboardEvent` the shortcut is read from. */
 export interface KeyPress {
   readonly key: string;
   readonly code: string;
@@ -75,7 +63,6 @@ export interface KeyPress {
   readonly altKey: boolean;
 }
 
-/** Ctrl+Shift+F, or Cmd+Shift+F, by the key's place as well as its letter. */
 export function isFocusShortcut(press: KeyPress): boolean {
   return (
     (press.ctrlKey || press.metaKey) &&
@@ -85,7 +72,6 @@ export function isFocusShortcut(press: KeyPress): boolean {
   );
 }
 
-/** Whitespace-separated runs with a letter or a digit in them, so `#`, `-` and `---` are not words. */
 export function wordCount(text: string): number {
   let count = 0;
   for (const run of text.split(/\s+/)) if (/[\p{L}\p{N}]/u.test(run)) count += 1;
@@ -101,11 +87,6 @@ export interface Tree<T> {
   readonly childrenOf: (node: T) => readonly T[];
 }
 
-/**
- * Everything under `root` that has to be hidden for only `kept` to be left:
- * each sibling met on the way from a kept node up to the root. Nothing inside
- * a kept node is touched, and nothing inside a hidden one needs to be.
- */
 export function outsideOf<T>(root: T, kept: readonly T[], tree: Tree<T>): T[] {
   const onPath = new Set<T>();
   for (const node of kept) {

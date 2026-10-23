@@ -24,19 +24,9 @@ export interface Session {
   readonly expiresAt: string;
 }
 
-/**
- * How loudly a flash message reads, or `autosave-cleared`: not a message but
- * an autosave key a save cleared, for the editor's script to drop its browser
- * copy of.
- */
-export type FlashKind = 'notice' | 'warning' | 'error' | 'autosave-cleared';
+export type FlashKind = 'notice' | 'warning' | 'error';
 
-const FLASH_KINDS: ReadonlySet<unknown> = new Set<FlashKind>([
-  'notice',
-  'warning',
-  'error',
-  'autosave-cleared',
-]);
+const FLASH_KINDS: ReadonlySet<unknown> = new Set<FlashKind>(['notice', 'warning', 'error']);
 
 /**
  * One message queued for the next page a session asks for.
@@ -98,6 +88,8 @@ export interface SessionStore {
    * queued, for the worker that takes over to show again.
    */
   takeFlash(sessionId: string): FlashMessage[];
+  pushClearedAutosave(sessionId: string, key: string): void;
+  takeClearedAutosaves(sessionId: string): string[];
 }
 
 export function openSessionStore(
@@ -116,6 +108,8 @@ export function openSessionStore(
     pruneSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
     readFlash: db.prepare('SELECT flash FROM sessions WHERE id = ?'),
     writeFlash: db.prepare('UPDATE sessions SET flash = ? WHERE id = ?'),
+    readCleared: db.prepare('SELECT cleared_autosaves FROM sessions WHERE id = ?'),
+    writeCleared: db.prepare('UPDATE sessions SET cleared_autosaves = ? WHERE id = ?'),
   };
 
   /**
@@ -125,15 +119,14 @@ export function openSessionStore(
    */
   function readFlash(sessionId: string): FlashMessage[] {
     const row = statements.readFlash.get(sessionId) as Record<string, unknown> | undefined;
-    const raw = row?.['flash'];
-    if (typeof raw !== 'string' || raw === '') return [];
+    return parseList(row?.['flash']).filter(isFlashMessage);
+  }
 
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.filter(isFlashMessage) : [];
-    } catch {
-      return [];
-    }
+  function readCleared(sessionId: string): string[] {
+    const row = statements.readCleared.get(sessionId) as Record<string, unknown> | undefined;
+    return parseList(row?.['cleared_autosaves']).filter(
+      (key): key is string => typeof key === 'string',
+    );
   }
 
   return {
@@ -193,7 +186,28 @@ export function openSessionStore(
       if (!isReadOnly()) statements.writeFlash.run(null, sessionId);
       return queued;
     },
+
+    pushClearedAutosave(sessionId, key) {
+      const queued = [...readCleared(sessionId), key];
+      statements.writeCleared.run(JSON.stringify(queued), sessionId);
+    },
+
+    takeClearedAutosaves(sessionId) {
+      const queued = readCleared(sessionId);
+      if (!isReadOnly()) statements.writeCleared.run(null, sessionId);
+      return queued;
+    },
   };
+}
+
+function parseList(raw: unknown): unknown[] {
+  if (typeof raw !== 'string' || raw === '') return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function isFlashMessage(value: unknown): value is FlashMessage {

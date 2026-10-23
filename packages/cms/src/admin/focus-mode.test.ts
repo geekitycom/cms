@@ -81,19 +81,22 @@ describe('isFocusShortcut', () => {
 
 describe('focusStep', () => {
   const ROOM = { blocked: false, canFullscreen: true };
-  const on = (fullscreen: 'asked' | 'on' | 'window'): FocusState => ({ on: true, fullscreen });
+  const on = (fullscreen: 'requested' | 'on' | 'filling-window'): FocusState => ({
+    on: true,
+    fullscreen,
+  });
 
   describe('entering', () => {
     it('enters by the button and asks for fullscreen', () => {
       assert.deepEqual(focusStep(FOCUS_OFF, { type: 'button', ...ROOM }), {
-        state: on('asked'),
+        state: on('requested'),
         effects: ['enter', 'request-fullscreen'],
       });
     });
 
     it('enters by the shortcut the same way', () => {
       assert.deepEqual(focusStep(FOCUS_OFF, { type: 'shortcut', ...ROOM }), {
-        state: on('asked'),
+        state: on('requested'),
         effects: ['enter', 'request-fullscreen'],
       });
     });
@@ -101,7 +104,7 @@ describe('focusStep', () => {
     it('fills the window without asking where fullscreen is not available', () => {
       assert.deepEqual(
         focusStep(FOCUS_OFF, { type: 'button', blocked: false, canFullscreen: false }),
-        { state: on('window'), effects: ['enter'] },
+        { state: on('filling-window'), effects: ['enter'] },
       );
     });
 
@@ -117,15 +120,15 @@ describe('focusStep', () => {
 
   describe('fullscreen answers', () => {
     it('is in fullscreen once the browser grants it', () => {
-      assert.deepEqual(focusStep(on('asked'), { type: 'fullscreen-on' }), {
+      assert.deepEqual(focusStep(on('requested'), { type: 'fullscreen-on' }), {
         state: on('on'),
         effects: [],
       });
     });
 
     it('stays in the mode, filling the window, when the browser refuses', () => {
-      assert.deepEqual(focusStep(on('asked'), { type: 'fullscreen-refused' }), {
-        state: on('window'),
+      assert.deepEqual(focusStep(on('requested'), { type: 'fullscreen-refused' }), {
+        state: on('filling-window'),
         effects: [],
       });
     });
@@ -155,7 +158,7 @@ describe('focusStep', () => {
       });
 
       it(`leaves by ${type} from the window-filling fallback`, () => {
-        assert.deepEqual(focusStep(on('window'), { type }), {
+        assert.deepEqual(focusStep(on('filling-window'), { type }), {
           state: FOCUS_OFF,
           effects: ['leave'],
         });
@@ -170,7 +173,7 @@ describe('focusStep', () => {
     });
 
     it('ends a fullscreen request still in flight', () => {
-      assert.deepEqual(focusStep(on('asked'), { type: 'exit' }), {
+      assert.deepEqual(focusStep(on('requested'), { type: 'exit' }), {
         state: FOCUS_OFF,
         effects: ['leave', 'exit-fullscreen'],
       });
@@ -190,8 +193,8 @@ describe('focusStep', () => {
     });
 
     it('ignores fullscreen ending in the window-filling fallback, which never had it', () => {
-      assert.deepEqual(focusStep(on('window'), { type: 'fullscreen-off' }), {
-        state: on('window'),
+      assert.deepEqual(focusStep(on('filling-window'), { type: 'fullscreen-off' }), {
+        state: on('filling-window'),
         effects: [],
       });
     });

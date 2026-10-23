@@ -542,8 +542,7 @@ const GONE_USER = 'That user is already gone.';
  * Take a user out of the file. Returns `false` when there was nothing to take.
  *
  * Their IndieAuth tokens go with them (TASK-160): a token is a file in
- * `data/` too, so it is revoked here, where every caller deletes a user. So do
- * their autosaved editor copies.
+ * `data/` too, so it is revoked here, where every caller deletes a user.
  *
  * Their sessions are not ended here: sessions are in the database, and the
  * screen that deletes a user ends them itself. A session that outlives this —

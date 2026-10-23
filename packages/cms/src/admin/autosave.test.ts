@@ -43,7 +43,6 @@ function userId(cms: Cms, username: string): number {
   return user.id;
 }
 
-/** The editor's fields as the browser would post them, with some replaced. */
 async function editorFields(
   agent: Browser,
   url: string,
@@ -53,7 +52,6 @@ async function editorFields(
   return { ...Object.fromEntries(fieldsOf(html)), ...overrides };
 }
 
-/** Post fields as `multipart/form-data`, the way the bundle's `FormData` does. */
 async function postFormData(
   cms: Cms,
   agent: Browser,
@@ -207,15 +205,16 @@ describe('POST /admin/autosave', () => {
   });
 });
 
-describe('POST /admin/autosave/discard', () => {
+describe('POST /admin/autosave/discard.json', () => {
   it("deletes the user's copy for a key and answers JSON", async () => {
     const { cms, ada } = await site();
     const fields = await editorFields(ada, '/admin/posts/hello', { autosave: POST_FILE });
     await postFormData(cms, ada, '/admin/autosave', fields);
 
-    const response = await postFormData(cms, ada, '/admin/autosave/discard', {
+    const response = await postFormData(cms, ada, '/admin/autosave/discard.json', {
       csrf_token: fields['csrf_token'] ?? '',
       autosave: POST_FILE,
+      return: '/admin/posts',
     });
 
     assert.equal(response.status, 200);
@@ -223,7 +222,25 @@ describe('POST /admin/autosave/discard', () => {
     assert.equal(autosaveCopies(cms.config.dataDir).read(userId(cms, 'ada'), POST_FILE), undefined);
   });
 
-  it('goes back to a return path under /admin when the form names one, for a page with no script', async () => {
+  it('refuses a key that does not parse with 400', async () => {
+    const { ada } = await site();
+    const token = csrfField(await (await ada.get('/admin/posts/hello')).text()) ?? '';
+    const response = await ada.post('/admin/autosave/discard.json', {
+      csrf_token: token,
+      autosave: '../users.json',
+    });
+    assert.equal(response.status, 400);
+  });
+
+  it('is the address the editor script discards through', async () => {
+    const { ada } = await site();
+    const html = await (await ada.get('/admin/posts/hello')).text();
+    assert.match(html, /data-autosave-discard-url="\/admin\/autosave\/discard\.json"/);
+  });
+});
+
+describe('POST /admin/autosave/discard', () => {
+  it('goes back to the return path under /admin, for a page with no script', async () => {
     const { cms, ada } = await site();
     const fields = await editorFields(ada, '/admin/posts/hello', { autosave: POST_FILE });
     await postFormData(cms, ada, '/admin/autosave', fields);
@@ -237,16 +254,35 @@ describe('POST /admin/autosave/discard', () => {
     assert.equal(response.status, 303);
     assert.equal(response.headers.get('location'), '/admin/posts');
     assert.equal(autosaveCopies(cms.config.dataDir).read(userId(cms, 'ada'), POST_FILE), undefined);
+    assert.match(await (await ada.get('/admin/posts')).text(), /Discarded the unsaved changes\./);
   });
 
-  it('refuses a key that does not parse with 400', async () => {
+  it('goes back to the admin when the form names no return path under it', async () => {
+    const { cms, ada } = await site();
+    const fields = await editorFields(ada, '/admin/posts/hello', { autosave: POST_FILE });
+    await postFormData(cms, ada, '/admin/autosave', fields);
+
+    const response = await ada.post('/admin/autosave/discard', {
+      csrf_token: fields['csrf_token'] ?? '',
+      autosave: POST_FILE,
+      return: 'https://elsewhere.example/',
+    });
+
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin');
+  });
+
+  it('goes back with an error for a key that does not parse', async () => {
     const { ada } = await site();
     const token = csrfField(await (await ada.get('/admin/posts/hello')).text()) ?? '';
     const response = await ada.post('/admin/autosave/discard', {
       csrf_token: token,
       autosave: '../users.json',
+      return: '/admin/posts',
     });
-    assert.equal(response.status, 400);
+    assert.equal(response.status, 303);
+    assert.equal(response.headers.get('location'), '/admin/posts');
+    assert.match(await (await ada.get('/admin/posts')).text(), /The autosave key is not/);
   });
 });
 
@@ -266,7 +302,7 @@ describe('a copy belongs to the user who wrote it', () => {
       body: "Grace's words.",
     });
     await postFormData(cms, grace, '/admin/autosave', graceFields);
-    const discarded = await postFormData(cms, grace, '/admin/autosave/discard', {
+    const discarded = await postFormData(cms, grace, '/admin/autosave/discard.json', {
       csrf_token: graceFields['csrf_token'] ?? '',
       autosave: POST_FILE,
     });

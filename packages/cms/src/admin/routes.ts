@@ -29,7 +29,7 @@ import {
   POST_SCREENS,
 } from './documents.ts';
 import { mountFederationScreen } from './federation.ts';
-import { takeFlash } from './flash.ts';
+import { takeClearedAutosaves, takeFlash } from './flash.ts';
 import { adminSecurityHeaders } from './headers.ts';
 import { mountCommentsScreen } from './comments.ts';
 import { MEDIA_UPLOAD_PATH, mountMediaScreen } from './media.ts';
@@ -152,7 +152,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const session = c.var.session;
     const userId = session?.userId ?? null;
     const user = userId === null ? undefined : findUserById(c.var.config.dataDir, userId);
-    const queued = takeFlash(c);
 
     const html = templates(c).render(template, {
       site: c.var.renderer.site(),
@@ -171,10 +170,8 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
         user === undefined
           ? undefined
           : { name: user.profile?.displayName ?? user.username, url: editUserPath(user.id) },
-      flash: queued.filter((entry) => entry.kind !== 'autosave-cleared'),
-      clearedAutosaves: queued
-        .filter((entry) => entry.kind === 'autosave-cleared')
-        .map((entry) => entry.message),
+      flash: takeFlash(c),
+      clearedAutosaves: takeClearedAutosaves(c),
       devModeUrl: c.var.devMode ? DEV_MODE_PATH : undefined,
       dataTheme: ACCOUNT_TEMPLATES.has(template) ? undefined : user?.adminTheme,
       barScheme: adminColorScheme(user?.adminTheme),
@@ -338,9 +335,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // read and written the way the settings are (TASK-218).
   mountSyndicationTargetsScreen(app, { render });
 
-  // The endpoints the editor talks to rather than navigates to. All are
-  // inside the guard, so all need the session's CSRF token like every other
-  // POST in the admin.
   mountPreview(app);
   mountUploads(app);
   mountAutosave(app);

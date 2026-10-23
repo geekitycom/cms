@@ -305,6 +305,24 @@ describe('flash messages', () => {
   });
 });
 
+describe('cleared autosave keys', () => {
+  it('hands queued keys back once, in order, apart from the flash', async () => {
+    const admin = await store();
+    const session = admin.createSession({ userId: null, lifetimeSeconds: HOUR });
+
+    admin.pushFlash(session.id, { kind: 'notice', message: 'Draft saved.' });
+    admin.pushClearedAutosave(session.id, 'posts/hello.md');
+    admin.pushClearedAutosave(session.id, 'new-0123456789abcdef0123456789abcdef');
+
+    assert.deepEqual(admin.takeClearedAutosaves(session.id), [
+      'posts/hello.md',
+      'new-0123456789abcdef0123456789abcdef',
+    ]);
+    assert.deepEqual(admin.takeClearedAutosaves(session.id), []);
+    assert.deepEqual(admin.takeFlash(session.id), [{ kind: 'notice', message: 'Draft saved.' }]);
+  });
+});
+
 describe('followers', () => {
   /** The user every follower here follows: decision-14 makes followers a user's. */
   const BLOG = 'blog';

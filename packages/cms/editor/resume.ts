@@ -1,13 +1,3 @@
-/**
- * The banner that offers an autosaved copy back when the editor opens
- * (decision-62). The server renders it for its own copy; this file adds the
- * browser's copy when that one is newer, holds the autosave until the writer
- * chooses, and does Discard without leaving the page.
- *
- * Restore always goes through the server: a browser copy is first posted as
- * the server's copy, then the editor is reopened with `restore=1`, which fills
- * every field, CodeMirror included, the way the no-JS Resume does.
- */
 import { readLocalCopy, resumeOffer } from '../src/admin/autosave-client.ts';
 import { formatInTimezone } from '../src/admin/formatting.ts';
 import type {
@@ -20,10 +10,8 @@ import type {
 } from '../src/admin/autosave-client.ts';
 import { LOOK } from './look.ts';
 
-/** The banner's id, on the server's and on this file's. */
 export const RESUME_ID = 'autosave-resume';
 
-/** Which copy, if any, the page should offer back. */
 export function findOffer(
   tools: HTMLElement,
   storage: KeyValueStorage | undefined,
@@ -46,11 +34,9 @@ export interface OfferBack {
   readonly controller: Autosave;
   readonly storage: KeyValueStorage | undefined;
   readonly storageKey: string;
-  /** Post fields as the server's copy of this key. */
   readonly keep: (fields: Snapshot) => Promise<SendOutcome>;
 }
 
-/** Show the offer and wire its Restore and Discard. The controller stays held until one is chosen. */
 export function offerBack(options: OfferBack): void {
   const { form, offer } = options;
   let banner = document.getElementById(RESUME_ID);
@@ -94,21 +80,15 @@ async function discard(
   banner: HTMLElement,
   form: HTMLFormElement,
 ): Promise<void> {
-  const data = new FormData(form);
-  // Without a return path the endpoint answers JSON rather than a redirect.
-  data.delete('return');
-  let discarded = false;
-  try {
-    const response = await fetch(form.action, {
-      method: 'POST',
-      body: data,
-      credentials: 'same-origin',
-      redirect: 'manual',
-    });
-    discarded = response.ok;
-  } catch {
-    // Unreachable: the banner stays and says so.
-  }
+  const discarded = await fetch(options.tools.dataset['autosaveDiscardUrl'] ?? '', {
+    method: 'POST',
+    body: new FormData(form),
+    credentials: 'same-origin',
+    redirect: 'manual',
+  }).then(
+    (response) => response.ok,
+    () => false,
+  );
   if (!discarded) {
     say(banner, 'The unsaved changes could not be discarded. Try again.');
     return;
@@ -160,8 +140,6 @@ function browserBanner(
   restore.textContent = 'Restore';
 
   const discardForm = document.createElement('form');
-  discardForm.method = 'post';
-  discardForm.action = tools.dataset['autosaveDiscardUrl'] ?? '';
   for (const name of ['csrf_token', 'autosave']) {
     const field = document.createElement('input');
     field.type = 'hidden';
@@ -182,7 +160,6 @@ function browserBanner(
   return wrapper;
 }
 
-/** Say why a choice did not go through, inside the banner so it is read out. */
 function say(banner: HTMLElement, text: string): void {
   let line = banner.querySelector<HTMLElement>('[data-resume-problem]');
   if (line === null) {
@@ -194,7 +171,6 @@ function say(banner: HTMLElement, text: string): void {
   line.textContent = text;
 }
 
-/** With the banner gone, put the writer back in the title, or in the body. */
 function focusWriting(form: HTMLFormElement): void {
   const title = form.elements.namedItem('title');
   if (title instanceof HTMLInputElement) {

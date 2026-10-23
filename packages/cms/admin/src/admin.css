@@ -176,11 +176,6 @@
   color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
 }
 
-/*
- * The body in the editor's distraction-free mode: `editor/focus.ts` puts the
- * class on <html>, and the sheet around it is drawn with utilities from
- * `editor/look.ts`.
- */
 html.editor-focus #editor-surface .cm-editor {
   height: auto;
   min-height: 60dvh;
@@ -189,7 +184,6 @@ html.editor-focus #editor-surface .cm-editor {
   font-size: 1.0625rem;
 }
 
-/* The caret marks the body as focused; a ring round the whole sheet would be chrome. */
 html.editor-focus #editor-surface .cm-editor.cm-focused {
   outline: none;
 }
