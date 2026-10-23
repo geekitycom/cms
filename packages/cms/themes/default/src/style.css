@@ -288,6 +288,10 @@
     @apply target text-lg font-bold;
   }
 
+  .site-icon {
+    @apply me-[0.3em] inline-block size-[1em] rounded-[0.18em] align-[-0.12em];
+  }
+
   .site-tagline {
     @apply mt-3 text-lg text-muted italic;
   }

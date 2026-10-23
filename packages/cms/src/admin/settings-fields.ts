@@ -398,6 +398,8 @@ const SETTING_ROWS: SettingRows = {
 
   llms_txt: flag('llms_txt', 'llms_txt'),
 
+  header_icon: flag('header_icon', 'header_icon'),
+
   index_now: flag('index_now', 'index_now'),
 
   mail_provider: choice(

@@ -48,6 +48,7 @@ const STABLE_SITE_JSON_KEYS = [
   'contentSignalAiTrain',
   'robotsRules',
   'llmsTxt',
+  'headerIcon',
   'indexNow',
   'indexNowKey',
   'mailProvider',

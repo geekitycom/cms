@@ -29,6 +29,15 @@ is on its own line under the tagline. On every other page, the stylesheet lays
 out the header as one line, with the menu beside the link home. See
 [Navigation](navigation.md).
 
+**The header icon.** When the site turns on **Show the icon before the site
+title in the header** in Settings > General, the context carries `headerIcon`.
+It is the URL of the site's icon, ready to print: the SVG upload itself when the
+icon is an SVG, else the derived 180 pixel PNG. The default theme prints it as
+`img.site-icon` with `alt=""` inside the link home, in front of the title, on
+both shapes of the header. The title names the link, so the image has no text
+of its own. `headerIcon` is absent while the setting is off, while the site has
+no icon, and while image optimization is off.
+
 **The footer** prints these items, in order:
 
 1. The copyright, with the current year and the site author's display name,

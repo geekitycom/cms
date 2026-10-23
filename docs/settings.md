@@ -5,7 +5,7 @@ has six pages under the Settings menu:
 
 | Page           | What it holds                                                                                                                                                                                 |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **General**    | Title, tagline, author, base URL, time zone, language, the locale for dates and counts when it differs from the language, site icon and license.                                              |
+| **General**    | Title, tagline, author, base URL, time zone, language, the locale for dates and counts when it differs from the language, site icon, whether the header shows it, and license.                |
 | **Reading**    | What the homepage displays, posts per page, and the notify server the feeds advertise.                                                                                                        |
 | **Permalinks** | The tag and category archive bases, and the archive redirects already recorded.                                                                                                               |
 | **Discussion** | Comments, which types take them by default, and when they close, webmentions sent and received, the Akismet key, and how long commenter emails, address hashes and contact messages are kept. |
@@ -62,7 +62,7 @@ The file holds these keys:
 - `title`, `tagline`, `url`
 - `author` (a username, when the site has one author)
 - `postsPerPage`, `homepage`, `postsPage`
-- `timezone`, `language`, `locale` (when set), `icon` (when set)
+- `timezone`, `language`, `locale` (when set), `icon` (when set), `headerIcon`
 - `license` and `licenseName` (when a license is chosen, see [License](#license))
 - `tagBase`, `categoryBase`
 - `comments`, `commentsOnPosts`, `commentsOnPages`, `commentsCloseAfterDays`
@@ -377,6 +377,12 @@ empty. If a hand-written `site.json` has an `avatar` and no `icon`, the site
 uses the avatar as its icon. The field shows that avatar, and the next save of
 the General page writes it as `icon`. With image optimization turned off, the
 site derives no icons and links none.
+
+**Show the icon before the site title in the header** puts the icon in the
+default theme's header, inside the link home and in front of the title, on
+every page. It is off by default. `site.json` stores it as `headerIcon`. The
+header shows no icon while the box is clear, while the site has no icon, or
+while image optimization is off. See [The page shell](theme/page-shell.md).
 
 ## License
 

@@ -26,6 +26,7 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     language: 'en',
     locale: '',
     icon: '',
+    header_icon: '',
     license: '',
     license_url: '',
     license_name: '',

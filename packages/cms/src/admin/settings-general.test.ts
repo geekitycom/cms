@@ -510,6 +510,30 @@ describe('the Site icon field (TASK-212)', () => {
   });
 });
 
+describe('the header icon checkbox (TASK-486)', () => {
+  it('is off by default, keeps its value after a save, and puts the icon in the header (AC #1)', async () => {
+    const { cms, contentDir, agent } = await siteWithIconUpload({ icon: ICON });
+    const checked = /name="header_icon" type="checkbox" value="1" checked/;
+
+    const before = await (await agent.get('/admin/settings')).text();
+    assert.match(before, /name="header_icon" type="checkbox"/);
+    assert.doesNotMatch(before, checked);
+    assert.doesNotMatch(await (await cms.app.request('/')).text(), /class="site-icon"/);
+
+    assert.equal(
+      (await saveSettings(agent, 'general', { icon: ICON, header_icon: '1' })).status,
+      303,
+    );
+    assert.equal((await siteJson(contentDir))['headerIcon'], true);
+    assert.match(await (await agent.get('/admin/settings')).text(), checked);
+    assert.match(await (await cms.app.request('/')).text(), /class="site-icon"/);
+
+    assert.equal((await saveSettings(agent, 'general', { icon: ICON })).status, 303);
+    assert.equal((await siteJson(contentDir))['headerIcon'], false);
+    assert.doesNotMatch(await (await agent.get('/admin/settings')).text(), checked);
+  });
+});
+
 function licenseOptions(html: string): { value: string; label: string; selected: boolean }[] {
   const select = /<select id="settings-license" name="license"[^>]*>([\s\S]*?)<\/select>/.exec(
     html,
