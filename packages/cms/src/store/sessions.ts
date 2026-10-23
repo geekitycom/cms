@@ -24,8 +24,19 @@ export interface Session {
   readonly expiresAt: string;
 }
 
-/** How loudly a flash message reads. */
-export type FlashKind = 'notice' | 'warning' | 'error';
+/**
+ * How loudly a flash message reads, or `autosave-cleared`: not a message but
+ * an autosave key a save cleared, for the editor's script to drop its browser
+ * copy of.
+ */
+export type FlashKind = 'notice' | 'warning' | 'error' | 'autosave-cleared';
+
+const FLASH_KINDS: ReadonlySet<unknown> = new Set<FlashKind>([
+  'notice',
+  'warning',
+  'error',
+  'autosave-cleared',
+]);
 
 /**
  * One message queued for the next page a session asks for.
@@ -188,10 +199,7 @@ export function openSessionStore(
 function isFlashMessage(value: unknown): value is FlashMessage {
   if (typeof value !== 'object' || value === null) return false;
   const entry = value as Record<string, unknown>;
-  return (
-    (entry['kind'] === 'notice' || entry['kind'] === 'warning' || entry['kind'] === 'error') &&
-    typeof entry['message'] === 'string'
-  );
+  return FLASH_KINDS.has(entry['kind']) && typeof entry['message'] === 'string';
 }
 
 function toSession(row: Record<string, unknown>): Session {

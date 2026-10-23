@@ -165,7 +165,7 @@ describe('POST /admin/autosave', () => {
 
   it('refuses a key that does not parse, or a path outside the content directory, with 400', async () => {
     const { cms, ada } = await site();
-    const fields = await editorFields(ada, '/admin/posts/hello');
+    const { autosave: _, ...fields } = await editorFields(ada, '/admin/posts/hello');
     for (const key of [
       undefined,
       '',
@@ -409,5 +409,92 @@ describe('boot', () => {
       copies.list(1).map((copy) => copy.key),
       ['new-00000000000000000000000000000002'],
     );
+  });
+});
+
+describe('the editor page', () => {
+  const autosaveOf = (html: string): string | undefined =>
+    /<input type="hidden" name="autosave" value="([^"]*)"/.exec(html)?.[1];
+  const enhance = (html: string): string =>
+    /<div[^>]*id="editor-enhance"[^>]*>/.exec(html)?.[0] ?? '';
+
+  it('carries the content path of a document that exists as its autosave key', async () => {
+    const { ada } = await site();
+    const html = await (await ada.get('/admin/posts/hello')).text();
+    assert.equal(autosaveOf(html), POST_FILE);
+  });
+
+  it('mints an id for a new document, a fresh one each time it opens', async () => {
+    const { ada } = await site();
+    const first = autosaveOf(await (await ada.get('/admin/posts/new?kind=note')).text());
+    const second = autosaveOf(await (await ada.get('/admin/pages/new')).text());
+    assert.match(first ?? '', /^new-[0-9a-f]{32}$/);
+    assert.match(second ?? '', /^new-[0-9a-f]{32}$/);
+    assert.notEqual(first, second);
+  });
+
+  it('keeps the id a reloaded new editor names in its URL, and mints over one that is not an id', async () => {
+    const { ada } = await site();
+    const id = mintAutosaveId();
+    const kept = await (await ada.get(`/admin/posts/new?kind=note&autosave=${id}`)).text();
+    assert.equal(autosaveOf(kept), id);
+
+    const minted = autosaveOf(
+      await (await ada.get('/admin/posts/new?kind=note&autosave=posts/x.md')).text(),
+    );
+    assert.match(minted ?? '', /^new-[0-9a-f]{32}$/);
+  });
+
+  it('keeps the posted id when a new document comes back refused', async () => {
+    const { ada } = await site();
+    const id = mintAutosaveId();
+    const fields = await editorFields(ada, '/admin/posts/new?kind=note', {
+      autosave: id,
+      'in-reply-to': 'their post',
+    });
+    const refused = await ada.post('/admin/posts/new', { ...fields, action: 'publish' });
+    assert.equal(refused.status, 400);
+    assert.equal(autosaveOf(await refused.text()), id);
+  });
+
+  it('names the autosave endpoint and the signed-in user for the script', async () => {
+    const { cms, ada } = await site();
+    const tag = enhance(await (await ada.get('/admin/posts/hello')).text());
+    assert.match(tag, /data-autosave-url="\/admin\/autosave"/);
+    assert.match(tag, new RegExp(`data-autosave-user="${String(userId(cms, 'ada'))}"`));
+  });
+
+  it('names the keys a save cleared on the next editor page, once', async () => {
+    const { ada } = await site();
+    const id = mintAutosaveId();
+    const fields = await editorFields(ada, '/admin/posts/new?kind=note', { autosave: id });
+    const saved = await ada.post('/admin/posts/new', {
+      ...fields,
+      body: 'Saved by hand.',
+      action: 'publish',
+    });
+    assert.equal(saved.status, 303);
+    const next = saved.headers.get('location') ?? '';
+
+    const after = await (await ada.get(next)).text();
+    const cleared = /data-autosave-cleared="([^"]*)"/.exec(enhance(after))?.[1] ?? '';
+    const keys = JSON.parse(cleared.replaceAll('&quot;', '"')) as string[];
+    assert.ok(keys.includes(id), cleared);
+    assert.match(after, /Published/, 'the save message still shows');
+
+    const again = enhance(await (await ada.get(next)).text());
+    assert.doesNotMatch(again, /data-autosave-cleared/);
+  });
+
+  it('names nothing cleared after a save that was refused', async () => {
+    const { ada } = await site();
+    const fields = await editorFields(ada, '/admin/posts/hello');
+    const refused = await ada.post('/admin/posts/hello', {
+      ...fields,
+      'in-reply-to': 'their post',
+      action: 'update',
+    });
+    assert.equal(refused.status, 400);
+    assert.doesNotMatch(enhance(await refused.text()), /data-autosave-cleared/);
   });
 });

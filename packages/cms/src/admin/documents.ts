@@ -1,6 +1,11 @@
 import type { Context, Hono } from 'hono';
 
-import { AUTOSAVE_FIELD, autosaveCopies, isMintedAutosaveId } from '../autosave/index.ts';
+import {
+  AUTOSAVE_FIELD,
+  autosaveCopies,
+  isMintedAutosaveId,
+  mintAutosaveId,
+} from '../autosave/index.ts';
 import { CITATION_PROPERTIES, citedHost, citesAnImage, shownInFull } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { commentPolicyOf } from '../comments/policy.ts';
@@ -86,6 +91,7 @@ import {
 } from './item-lookup.ts';
 import { formatInTimezone } from './formatting.ts';
 import { allowGeolocation } from './headers.ts';
+import { AUTOSAVE_PATH } from './autosave.ts';
 import { PREVIEW_PATH } from './preview.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { ADMIN_TEMPLATES } from './templates.ts';
@@ -272,6 +278,7 @@ export function mountDocumentScreens(
       document: undefined,
       form: blankForm(kind, siteTimezone(c), c.var.store.now()),
       postKind: isPostKind(postKind) ? postKind : undefined,
+      autosave: c.req.query(AUTOSAVE_FIELD),
     });
   });
 
@@ -372,6 +379,7 @@ function switchKind(
     document,
     form: submittedForm(kind, body, c.var.config.contentDir),
     postKind,
+    autosave: body[AUTOSAVE_FIELD],
   });
 }
 
@@ -391,6 +399,7 @@ function lookUpItem(
       form: { ...form, review: outcome.review },
       postKind: 'review',
       itemLookup: { message: outcome.message, failed: outcome.failed },
+      autosave: body[AUTOSAVE_FIELD],
     });
   })();
 }
@@ -452,6 +461,7 @@ async function saveFromForm(
       postKind: isPostKind(body['kind']) ? body['kind'] : undefined,
       refusal,
       status: 400,
+      autosave: body[AUTOSAVE_FIELD],
     });
   }
 
@@ -676,7 +686,11 @@ function discardAutosaves(c: Context<GeekityEnv>, keys: readonly (string | undef
   const userId = c.var.session?.userId;
   if (userId == null) return;
   const copies = autosaveCopies(c.var.config.dataDir);
-  for (const key of new Set(keys)) if (key !== undefined) copies.discard(userId, key);
+  for (const key of new Set(keys)) {
+    if (key === undefined) continue;
+    copies.discard(userId, key);
+    flash(c, 'autosave-cleared', key);
+  }
 }
 
 /** Report a move that did not happen and go back where the form came from. */
@@ -726,6 +740,8 @@ interface RenderEditorOptions {
   postKind?: PostKind | undefined;
   refusal?: Refusal | undefined;
   itemLookup?: { message: string; failed: boolean } | undefined;
+  /** The autosave id a new document's editor was opened or posted with; kept when it is one. */
+  autosave?: unknown;
   /** The status to answer with. Defaults to 200. */
   status?: 200 | 400 | undefined;
 }
@@ -854,6 +870,11 @@ async function renderEditor(
     saveUrl: document === undefined ? newEditorPath(kind) : documentEditorPath(kind, document),
     listUrl: kind.basePath,
     previewUrl: PREVIEW_PATH,
+    autosaveUrl: AUTOSAVE_PATH,
+    autosaveKey:
+      document?.path ??
+      (isMintedAutosaveId(options.autosave) ? options.autosave : mintAutosaveId()),
+    autosaveUser: c.var.session?.userId ?? undefined,
     viewUrl: document !== undefined && isServed(document, now) ? document.permalink : undefined,
     // Named beside the date field, because a wall clock with no zone on it is
     // exactly the ambiguity decision-11 exists to remove.

@@ -1,0 +1,276 @@
+/**
+ * The editor's autosave, without the DOM: when to post the form, what to do
+ * with the answer, and when to keep a copy in the browser instead
+ * (decision-62). `editor/autosave.ts` wires it to the page; everything here
+ * runs under `node:test` with fake timers.
+ */
+
+/** How long typing has to pause before the form is posted. */
+export const AUTOSAVE_DELAY_MS = 2000;
+const RETRY_FIRST_MS = 2000;
+const RETRY_LONGEST_MS = 60_000;
+const LOCAL_COPY_VERSION = 1;
+
+/** The form's text fields, in order, without the CSRF token. */
+export type Snapshot = readonly (readonly [string, string])[];
+
+/** What one autosave post came back with. */
+export type SendOutcome =
+  | { readonly kind: 'saved'; readonly savedAt: string }
+  /** A network failure or a 5xx. */
+  | { readonly kind: 'unreachable' }
+  /** A 401 or 403, or a redirect to the login form: the session or its token is gone. */
+  | { readonly kind: 'signed-out' }
+  /** Any other refusal, with the server's reason. */
+  | { readonly kind: 'refused'; readonly message: string };
+
+/** Where the writer's latest copy is, which is what the status line says. */
+export type AutosaveStatus =
+  | { readonly state: 'idle' }
+  | { readonly state: 'server'; readonly at: Date }
+  | { readonly state: 'browser'; readonly at: Date }
+  | { readonly state: 'signed-out'; readonly at: Date }
+  | { readonly state: 'refused'; readonly message: string };
+
+/** A copy kept in localStorage while the server would not take it. */
+export interface LocalCopy {
+  readonly version: typeof LOCAL_COPY_VERSION;
+  readonly key: string;
+  /** The `hash` field of the form: the file the copy was edited from. */
+  readonly hash: string;
+  readonly savedAt: string;
+  readonly fields: Snapshot;
+}
+
+/** The part of `Storage` this uses. */
+export interface KeyValueStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+export interface AutosaveOptions {
+  /** The form's `autosave` field. */
+  readonly key: string;
+  /** Where the browser copy goes; see {@link localCopyKey}. */
+  readonly storageKey: string;
+  /** `undefined` where localStorage is not available. */
+  readonly storage: KeyValueStorage | undefined;
+  readonly read: () => Snapshot;
+  readonly send: (snapshot: Snapshot) => Promise<SendOutcome>;
+  /** Queue the snapshot for a page that is going away; false when it could not be queued. */
+  readonly beacon: (snapshot: Snapshot) => boolean;
+  readonly now: () => Date;
+}
+
+export interface Autosave {
+  /** Something in the form changed: post it once typing pauses. */
+  changed(): void;
+  /** A field lost focus: post now if anything is waiting. */
+  flush(): void;
+  /** The page is going away: send what is unsaved with a beacon, or keep it in the browser. */
+  leave(): void;
+  /** The form is being submitted: stop, so nothing races the save. */
+  submitting(): void;
+  /** Whether the form holds changes the server does not have. */
+  unsaved(): boolean;
+  status(): AutosaveStatus;
+  /** Called on every new status; returns the unsubscribe. */
+  subscribe(listener: (status: AutosaveStatus) => void): () => void;
+}
+
+/** The localStorage key of the copy of one autosave key, for one user of one site. */
+export function localCopyKey(site: string, userId: string, key: string): string {
+  return `geekity-autosave:${site}:${userId}:${key}`;
+}
+
+/** The copy under `storageKey`, or `undefined` when there is none or it does not parse. */
+export function readLocalCopy(storage: KeyValueStorage, storageKey: string): LocalCopy | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(storage.getItem(storageKey) ?? 'null');
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const copy = parsed as Record<string, unknown>;
+  if (
+    copy['version'] !== LOCAL_COPY_VERSION ||
+    typeof copy['key'] !== 'string' ||
+    typeof copy['hash'] !== 'string' ||
+    typeof copy['savedAt'] !== 'string' ||
+    !Array.isArray(copy['fields']) ||
+    !copy['fields'].every(
+      (field: unknown) =>
+        Array.isArray(field) &&
+        field.length === 2 &&
+        typeof field[0] === 'string' &&
+        typeof field[1] === 'string',
+    )
+  ) {
+    return undefined;
+  }
+  return copy as unknown as LocalCopy;
+}
+
+/** What the status line says, with times printed by `time`. */
+export function statusMessage(status: AutosaveStatus, time: (at: Date) => string): string {
+  switch (status.state) {
+    case 'idle':
+      return '';
+    case 'server':
+      return `Saved a copy at ${time(status.at)}.`;
+    case 'browser':
+      return `Server unreachable — saved in this browser at ${time(status.at)}.`;
+    case 'signed-out':
+      return `You are signed out — saved in this browser at ${time(status.at)}. Sign in again in another tab; nothing has been discarded.`;
+    case 'refused':
+      return status.message;
+  }
+}
+
+export function autosave(options: AutosaveOptions): Autosave {
+  const { now } = options;
+  const listeners = new Set<(status: AutosaveStatus) => void>();
+  let current: AutosaveStatus = { state: 'idle' };
+  /** The form as the server last had it: as served, then as last autosaved. */
+  let onServer = serialize(options.read());
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let inFlight = false;
+  let again = false;
+  let failures = 0;
+  let stopped = false;
+  /** Only a copy this page wrote is removed; one found on load is the resume banner's. */
+  let wroteLocal = false;
+
+  function announce(status: AutosaveStatus): void {
+    current = status;
+    for (const listener of listeners) listener(status);
+  }
+
+  function schedule(delay: number): void {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = undefined;
+      void attempt();
+    }, delay);
+  }
+
+  function keepLocally(snapshot: Snapshot, at: Date): void {
+    if (options.storage === undefined) return;
+    const copy: LocalCopy = {
+      version: LOCAL_COPY_VERSION,
+      key: options.key,
+      hash: snapshot.find(([name]) => name === 'hash')?.[1] ?? '',
+      savedAt: at.toISOString(),
+      fields: snapshot,
+    };
+    try {
+      options.storage.setItem(options.storageKey, JSON.stringify(copy));
+      wroteLocal = true;
+    } catch {
+      // Storage full or refused: the status line still says the server lacks it.
+    }
+  }
+
+  function dropLocal(): void {
+    if (!wroteLocal || options.storage === undefined) return;
+    options.storage.removeItem(options.storageKey);
+    wroteLocal = false;
+  }
+
+  async function attempt(): Promise<void> {
+    if (stopped) return;
+    if (inFlight) {
+      again = true;
+      return;
+    }
+    const snapshot = options.read();
+    const serialized = serialize(snapshot);
+    if (serialized === onServer) {
+      dropLocal();
+      return;
+    }
+
+    inFlight = true;
+    const outcome = await options.send(snapshot);
+    inFlight = false;
+    if (stopped) return;
+
+    const at = now();
+    switch (outcome.kind) {
+      case 'saved':
+        onServer = serialized;
+        failures = 0;
+        dropLocal();
+        announce({ state: 'server', at: savedTime(outcome.savedAt, at) });
+        break;
+      case 'unreachable':
+        keepLocally(snapshot, at);
+        announce({ state: 'browser', at });
+        again = false;
+        schedule(Math.min(RETRY_FIRST_MS * 2 ** failures, RETRY_LONGEST_MS));
+        failures += 1;
+        return;
+      case 'signed-out':
+        keepLocally(snapshot, at);
+        announce({ state: 'signed-out', at });
+        break;
+      case 'refused':
+        keepLocally(snapshot, at);
+        announce({ state: 'refused', message: outcome.message });
+        break;
+    }
+
+    if (again) {
+      again = false;
+      schedule(AUTOSAVE_DELAY_MS);
+    }
+  }
+
+  return {
+    changed() {
+      if (stopped) return;
+      schedule(AUTOSAVE_DELAY_MS);
+    },
+    flush() {
+      if (stopped) return;
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+      void attempt();
+    },
+    leave() {
+      if (stopped) return;
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+      const snapshot = options.read();
+      if (serialize(snapshot) === onServer) return;
+      if (!options.beacon(snapshot)) keepLocally(snapshot, now());
+    },
+    submitting() {
+      stopped = true;
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+    },
+    unsaved() {
+      return !stopped && serialize(options.read()) !== onServer;
+    },
+    status() {
+      return current;
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+function serialize(snapshot: Snapshot): string {
+  return JSON.stringify(snapshot);
+}
+
+/** The server's own time for the copy, or ours when it sent something odd. */
+function savedTime(savedAt: string, fallback: Date): Date {
+  const parsed = Date.parse(savedAt);
+  return Number.isNaN(parsed) ? fallback : new Date(parsed);
+}

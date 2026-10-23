@@ -84,6 +84,7 @@ const FILLED_FORM: [string, string][] = [
   ['alternate-url-0', '/uploads/2026/10/episode.mp4'],
   ['alternate-url-1', ''],
   ['author', 'ada'],
+  ['autosave', 'posts/2026-10-02-everything.md'],
   ['body', 'Every box.'],
   ['categories', ''],
   ['cited-alt', 'Everything'],

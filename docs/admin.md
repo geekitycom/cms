@@ -329,6 +329,8 @@ terms allow non-commercial use with attribution, which the panel gives.
   body and shows the response in a sandboxed frame.
 - An "Add file…" button, or a file dropped on the editor, posts to
   `/admin/uploads` and pastes the returned Markdown at the cursor.
+- The form is autosaved to `/admin/autosave` while you type. See
+  [Autosave in the editor](#autosave-in-the-editor).
 
 `editor.js` is a build product. Its source is `packages/cms/editor/main.ts`,
 which has its own `tsconfig.json` with the DOM lib and no node types. esbuild
@@ -424,6 +426,51 @@ A copy is deleted when:
   instead, for a form without JavaScript.
 - your user is deleted.
 - it is more than 30 days old when the site starts.
+
+#### Autosave in the editor
+
+With JavaScript on, `editor.js` posts the whole editor form to
+`/admin/autosave`:
+
+- about two seconds after the last change to the title, the body or any other
+  field
+- when a field loses focus, if something changed
+- when the page is hidden or closed (`pagehide`), with `navigator.sendBeacon`
+
+A form that is the same as the one the server last had is not posted again.
+Pressing Save draft, Publish or Update stops autosave for that page, so no
+copy is written after the save.
+
+The editor of a new document carries its id in the hidden `autosave` field.
+The script also puts the id in the address, as in
+`/admin/posts/new?kind=note&autosave=new-…`, so a reload opens the editor
+with the same id. The server keeps an id it finds in the address or in a
+posted form, and mints a new one otherwise.
+
+A status line under the body says where the latest copy is. It is a polite
+live region, and it changes only when an autosave finishes, not on each
+keystroke:
+
+| Status                                                 | Meaning                                                                                                                                |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Saved a copy at 12:03.                                 | The server has the copy.                                                                                                               |
+| Server unreachable — saved in this browser at 12:03.   | The post failed on the network or with a 5xx. The fields are in localStorage, and the script retries after 2, 4, 8 … up to 60 seconds. |
+| You are signed out — saved in this browser at 12:03. … | The answer was a 401 or 403, or a redirect to the login form. The fields are in localStorage. Sign in again in another tab.            |
+| The server's reason                                    | Any other refusal, such as a 400 for a key the server does not accept. The fields are in localStorage.                                 |
+
+A browser copy is stored under the localStorage key
+`geekity-autosave:<origin>:<user id>:<autosave key>`. The value is JSON with
+`version`, `key`, `hash`, `savedAt` and `fields`, a list of `[name, value]`
+pairs without the CSRF token. The script removes a copy it wrote when a later
+server autosave succeeds. After a successful save, the next editor page names
+the keys whose server copies the save deleted, and the script removes its
+browser copies of them too. A signed-out autosave is not retried on a timer,
+because the page's CSRF token no longer matches. The next change tries again.
+
+If you leave the page while the form holds changes the server does not have,
+the browser asks whether to leave. Submitting the form does not ask.
+
+With JavaScript off there is no autosave, and the form works as before.
 
 The editor's Visibility field chooses Public or Unlisted. An unlisted post or
 page:

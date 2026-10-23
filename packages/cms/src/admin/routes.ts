@@ -152,6 +152,7 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
     const session = c.var.session;
     const userId = session?.userId ?? null;
     const user = userId === null ? undefined : findUserById(c.var.config.dataDir, userId);
+    const queued = takeFlash(c);
 
     const html = templates(c).render(template, {
       site: c.var.renderer.site(),
@@ -170,7 +171,10 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
         user === undefined
           ? undefined
           : { name: user.profile?.displayName ?? user.username, url: editUserPath(user.id) },
-      flash: takeFlash(c),
+      flash: queued.filter((entry) => entry.kind !== 'autosave-cleared'),
+      clearedAutosaves: queued
+        .filter((entry) => entry.kind === 'autosave-cleared')
+        .map((entry) => entry.message),
       devModeUrl: c.var.devMode ? DEV_MODE_PATH : undefined,
       dataTheme: ACCOUNT_TEMPLATES.has(template) ? undefined : user?.adminTheme,
       barScheme: adminColorScheme(user?.adminTheme),

@@ -459,6 +459,9 @@
        longer matches what is on disk is refused rather than overwriting
        somebody else's edit (doc-1). #}
     <input type="hidden" name="hash" value="{{ form.hash }}" />
+    {# Which autosaved copy this form is: the content path, or for a document
+       not saved yet the id it was opened with (decision-62). #}
+    <input type="hidden" name="autosave" value="{{ autosaveKey }}" />
     {# Which layout the preview renders through. The save handler ignores it. #}
     <input type="hidden" name="type" value="{{ kind.type }}" />
     {% if editorKind %}
@@ -494,6 +497,9 @@
           data-preview-url="{{ previewUrl }}"
           data-upload-url="{{ uploadsUrl }}"
           data-kind="{{ kind.type }}"
+          data-autosave-url="{{ autosaveUrl }}"
+          data-autosave-user="{{ autosaveUser }}"
+          {% if clearedAutosaves and clearedAutosaves.length %}data-autosave-cleared="{{ clearedAutosaves | dump }}"{% endif %}
         >
           {{ button('Preview', type='submit', id='editor-preview-fallback', style='soft', formaction=previewUrl, formtarget='_blank', formnovalidate=true) }}
         </div>

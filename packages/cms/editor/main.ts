@@ -4,7 +4,8 @@
  * Everything here is an upgrade to a form that already works. The server
  * renders a plain `<textarea>` and a Preview button that submits the form to
  * `/admin/preview` in a new tab; this file replaces the textarea's *view* with
- * CodeMirror, turns the button into a tab, and adds an upload control. The
+ * CodeMirror, turns the button into a tab, adds an upload control, and
+ * autosaves the form while the writer types (`autosave.ts`). The
  * textarea itself never goes away — it stays in the form as the value that is
  * submitted, and CodeMirror writes into it on every change and again on submit.
  * If this script fails to load, or fails outright, the editor is exactly what
@@ -20,7 +21,9 @@ import { tags } from '@lezer/highlight';
 import { basicSetup, EditorView } from 'codemirror';
 
 import { ownParagraph } from '../src/admin/own-paragraph.ts';
+import type { Autosave } from '../src/admin/autosave-client.ts';
 import { videoOf } from '../src/content/video.ts';
+import { startAutosave } from './autosave.ts';
 import { LOOK } from './look.ts';
 
 /** The element the server hangs the editor's URLs off. */
@@ -63,6 +66,8 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   status.className = LOOK.status;
   status.setAttribute('role', 'status');
 
+  let autosave: Autosave | undefined = undefined;
+
   const view = new EditorView({
     doc: textarea.value,
     extensions: [
@@ -76,7 +81,9 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
       EditorView.lineWrapping,
       // The textarea is the form's value; the view is only a view of it.
       EditorView.updateListener.of((update) => {
-        if (update.docChanged) textarea.value = update.state.doc.toString();
+        if (!update.docChanged) return;
+        textarea.value = update.state.doc.toString();
+        autosave?.changed();
       }),
       EditorView.domEventHandlers({
         dragover: (event) => {
@@ -117,6 +124,7 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   const tabs = tabStrip();
   tools.insertAdjacentElement('afterbegin', tabs.element);
   tools.append(uploadControl(), videoControl(), status);
+  autosave = startAutosave(form, tools);
 
   // The fallback did the job of the Preview tab; two of them would be one too
   // many.
