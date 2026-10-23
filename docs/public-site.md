@@ -839,6 +839,9 @@ reads no HTML. The default theme's head carries
 `<link rel="describedby" type="text/markdown" href="/llms.txt">`. A theme
 gets the path as `llmsTxt` while the site serves the file.
 
+While the site serves Gemini, the generated file says so under its title:
+`This site is also a Gemini capsule at <gemini://example.com/>.`
+
 To write the file yourself, put it at `content/llms.txt`. The CMS serves it
 as written, in place of the generated one, dated by the file. To serve
 no file at all, clear **Serve /llms.txt** under Settings → Reading. This

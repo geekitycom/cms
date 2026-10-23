@@ -87,11 +87,13 @@ import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
 import { createThemeSource, findThemeFile } from '../theme/themes.ts';
 import type { ThemeColors, ThemeFont, ThemeSource } from '../theme/themes.ts';
 import type { PageFont } from '../fonts/index.ts';
+import { representationHref } from './negotiate.ts';
 import type { TextFormat } from './negotiate.ts';
 import { schemeTokens } from '../theme/scheme-tokens.ts';
 import type { SchemeTokens } from '../theme/scheme-tokens.ts';
 import { formatFileSize } from '../util/file-size.ts';
 import { absoluteUrl } from '../util/url.ts';
+import { capsuleUrl } from '../gemini/capsule.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import { readCitedStart } from '../webmention/cited-start.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
@@ -1122,6 +1124,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ),
       url,
       page: { ...context.page, url },
+      ...capsuleContext(url),
       ...(objectId === undefined ? {} : { activityStreams: objectId }),
       ...(feedsIt ? { commentsFeed: commentsFeedPath(document.permalink) } : {}),
       // And the whole archive, for a page whose front matter asked for it
@@ -1194,6 +1197,21 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     return { ...form, loaded: mark };
   }
 
+  /**
+   * The page at `url` on the site's Gemini capsule, for a theme to link as an
+   * alternate, while the site serves one (TASK-485). Only a page that has
+   * gemtext carries it, so a 404 does not point at another 404.
+   */
+  function capsuleContext(url: string): { capsuleUrl?: string } {
+    const { pathname, search } = new URL(absoluteUrl(url, config.baseUrl));
+    const capsule = capsuleUrl(
+      config,
+      requestSite(),
+      representationHref(`${pathname}${search}`, 'gemini'),
+    );
+    return capsule === undefined ? {} : { capsuleUrl: capsule };
+  }
+
   function statusPage(
     { template, title }: StatusPage,
     url: string,
@@ -1224,6 +1242,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       staticFrontPage: frontPage !== undefined,
       markdownUrl,
       ...(format === 'gemini' ? { geminiUrl: markdownUrl } : {}),
+      ...(format === 'markdown' && chrome.type !== 'status' ? capsuleContext(chrome.url) : {}),
     };
     return {
       header: renderText(CHROME_TEMPLATES.header, format, context),
@@ -1335,6 +1354,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         title: listing.title,
         url: listing.url,
         page: { ...document?.page, url: listing.url },
+        ...capsuleContext(listing.url),
         // `posts` is the friendly name a theme loops over; `pagination.items`
         // is the same array under the name Eleventy gives it.
         posts: items,
@@ -1371,6 +1391,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         title: search.query === '' ? 'Search' : `Search results for “${search.query}”`,
         url: search.url,
         page: { url: search.url },
+        ...capsuleContext(search.url),
         // The words as the reader typed them, for the form to put back in the
         // box and the heading to repeat. Autoescaped like any other string.
         query: search.query,
@@ -1386,6 +1407,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         title: `${comment.author.name} on ${on.label}`,
         url,
         page: { url },
+        ...capsuleContext(url),
         noindex: true,
         comment,
         ancestors,

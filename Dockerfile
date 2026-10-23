@@ -112,7 +112,8 @@ WORKDIR /site
 # Runs unprivileged, as the uid 1000 the base image ships as `node`.
 USER node
 
-EXPOSE 3000
+# 1965 is Gemini, which listens only while the site has it turned on.
+EXPOSE 3000 1965
 
 # Only the status code is read, which is why /healthz answers 503 rather than a
 # 200 carrying an error when the site cannot serve. start_period covers boot, so

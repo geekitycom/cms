@@ -66,19 +66,24 @@ GEEKITY_BASE_URL=https://blog.example.com
 
 # The port on 127.0.0.1 the reverse proxy connects to. Defaults to 3000.
 # GEEKITY_HOST_PORT=3000
+
+# The port on 127.0.0.1 a layer-4 proxy connects to for Gemini. Defaults to
+# 1965. See "Serving Gemini" below.
+# GEEKITY_GEMINI_HOST_PORT=1965
 ```
 
 If `GEEKITY_TAG` or `GEEKITY_BASE_URL` is missing, compose refuses to start the
 stack and names the missing variable.
 
-The compose file sets three variables itself. Its values take precedence over
+The compose file sets four variables itself. Its values take precedence over
 the `.env`:
 
-| Variable              | Value  | Why                                                                       |
-| --------------------- | ------ | ------------------------------------------------------------------------- |
-| `GEEKITY_BASE_URL`    | `.env` | Passed through, so compose can refuse to start without it.                |
-| `GEEKITY_TRUST_PROXY` | `true` | The client address comes from the proxy's `X-Forwarded-For`.              |
-| `GEEKITY_PORT`        | `3000` | The port mapping and the health check assume it. Use `GEEKITY_HOST_PORT`. |
+| Variable              | Value  | Why                                                                                                              |
+| --------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
+| `GEEKITY_BASE_URL`    | `.env` | Passed through, so compose can refuse to start without it.                                                       |
+| `GEEKITY_TRUST_PROXY` | `true` | The client address comes from the proxy's `X-Forwarded-For`, or from a Gemini proxy's PROXY header.              |
+| `GEEKITY_PORT`        | `3000` | The port mapping and the health check assume it. Use `GEEKITY_HOST_PORT`.                                        |
+| `GEEKITY_GEMINI_PORT` | `1965` | The port mapping assumes it, and the site's gemini:// links leave out port 1965. Use `GEEKITY_GEMINI_HOST_PORT`. |
 
 The image sets `GEEKITY_CONTENT_DIR`, `GEEKITY_DATA_DIR`, `GEEKITY_THEMES_DIR`
 and `GEEKITY_SEED_CONTENT`. Do not change them. You can put any other setting
@@ -319,6 +324,193 @@ that ships in the image. To use your own theme:
 
 A theme can replace a single template or `style.css` and use the default theme
 for everything else.
+
+### Serving Gemini
+
+A site can also serve its pages over `gemini://`. Turn Gemini on with
+**Serve over Gemini** on Settings > Reading, or add
+`GEEKITY_SITE__GEMINI=on` to the `.env`. The site then generates its
+certificate and listens on port 1965 in the container. See
+[The Gemini certificate](configuration.md#the-gemini-certificate) and
+[The Gemini listener](configuration.md#the-gemini-listener).
+
+The compose file publishes the Gemini port on `127.0.0.1` only, as it does
+HTTP:
+
+```yaml
+- '127.0.0.1:${GEEKITY_GEMINI_HOST_PORT:-1965}:1965'
+```
+
+An HTTP reverse proxy cannot forward Gemini. Gemini is its own protocol over
+TLS, and a Gemini client trusts the certificate it saw on its first visit.
+TLS must therefore end in Geekity CMS, with the site's own certificate. A
+layer-4 proxy reads the server name (SNI) from the client's TLS handshake,
+picks the site by that name, and passes the connection through without
+decrypting it. Several sites on one host can then share port 1965,
+and each keeps its own certificate.
+
+Choose one of these setups:
+
+- Caddy with the `caddy-l4` module, on a host that already runs Caddy.
+- nginx with the `stream` module.
+- No proxy, on a host with one Gemini site.
+
+#### The client address and the PROXY protocol
+
+A proxy that passes TLS through cannot add `X-Forwarded-For`. It can send a
+PROXY protocol header before the client's first byte instead. Geekity CMS
+reads version 1 and version 2 of that header while `GEEKITY_TRUST_PROXY` is
+on, which the compose file sets. The Gemini throttle counts the address in the
+header, and the access log shows it when it logs addresses. Without the header, every
+visitor has the proxy's address and shares one throttle of 60 requests a
+minute.
+
+The header is optional. A connection without one is served, with the
+address of the socket. The site tells the two apart by the first byte,
+because no PROXY header starts with the byte a TLS handshake starts with. A
+header that is malformed, longer than 2 KiB, or not complete within 10
+seconds closes the connection. While `GEEKITY_TRUST_PROXY` is off, a
+connection that opens with a PROXY header is closed.
+
+#### Caddy with caddy-l4
+
+Stock Caddy has no layer-4 proxy. Get a Caddy binary that includes
+[`caddy-l4`](https://github.com/mholt/caddy-l4) in one of these ways:
+
+- Build it with [xcaddy](https://github.com/caddyserver/xcaddy):
+
+  ```sh
+  xcaddy build --with github.com/mholt/caddy-l4
+  ```
+
+- Download a build from the [Caddy download page](https://caddyserver.com/download)
+  with `github.com/mholt/caddy-l4` selected, or swap the installed binary with
+  `caddy add-package github.com/mholt/caddy-l4`.
+- If Caddy runs in Docker, build an image on the official one:
+
+  ```dockerfile
+  FROM caddy:2-builder AS builder
+  RUN xcaddy build --with github.com/mholt/caddy-l4
+
+  FROM caddy:2
+  COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+  ```
+
+`caddy list-modules | grep layer4` lists the module's parts when the binary
+has it.
+
+This example serves two sites from one host. Each site is its own stack, with
+its own `GEEKITY_GEMINI_HOST_PORT` in its `.env`:
+
+```sh
+# /opt/stacks/blog/.env
+GEEKITY_BASE_URL=https://blog.example.com
+GEEKITY_GEMINI_HOST_PORT=19651
+
+# /opt/stacks/notes/.env
+GEEKITY_BASE_URL=https://notes.example.org
+GEEKITY_HOST_PORT=3001
+GEEKITY_GEMINI_HOST_PORT=19652
+```
+
+Add a `layer4` block to the global options at the top of the Caddyfile. The
+site blocks for HTTP stay as they are:
+
+```caddyfile
+{
+	layer4 {
+		:1965 {
+			@blog tls sni blog.example.com
+			route @blog {
+				proxy {
+					proxy_protocol v2
+					upstream 127.0.0.1:19651
+				}
+			}
+			@notes tls sni notes.example.org
+			route @notes {
+				proxy {
+					proxy_protocol v2
+					upstream 127.0.0.1:19652
+				}
+			}
+		}
+	}
+}
+
+blog.example.com {
+	reverse_proxy 127.0.0.1:3000
+}
+
+notes.example.org {
+	reverse_proxy 127.0.0.1:3001
+}
+```
+
+Caddy in a container cannot reach `127.0.0.1` on the host. In that case, put
+Caddy and the site containers on one Docker network, and use each site
+container's name on that network with port 1965 as its upstream. A connection whose server name matches
+neither site is closed.
+
+Open port 1965 in the host firewall, reload Caddy, and check each site with a
+Gemini client or with `openssl`:
+
+```sh
+printf 'gemini://blog.example.com/\r\n' \
+  | openssl s_client -quiet -connect blog.example.com:1965 -servername blog.example.com
+```
+
+The first line of the answer is `20 text/gemini; charset=utf-8`.
+
+#### nginx stream
+
+nginx passes TLS through by SNI with the `stream` module and `ssl_preread`.
+Most distribution packages include both. The `stream` block goes at the top
+level of `nginx.conf`, beside `http`, not inside it:
+
+```nginx
+stream {
+    map $ssl_preread_server_name $gemini_site {
+        blog.example.com  127.0.0.1:19651;
+        notes.example.org 127.0.0.1:19652;
+    }
+
+    server {
+        listen 1965;
+        listen [::]:1965;
+        ssl_preread on;
+        proxy_pass $gemini_site;
+        proxy_protocol on;
+    }
+}
+```
+
+nginx sends a version 1 PROXY header. A server name that is not in the map
+leaves `$gemini_site` empty, and nginx closes the connection.
+
+#### One site, no proxy
+
+A host with one Gemini site can publish the port on every interface. Change
+the mapping in `compose.yaml`:
+
+```yaml
+- '1965:1965'
+```
+
+The site then sees each client's own address, and no PROXY header is needed.
+`GEEKITY_TRUST_PROXY` stays on for HTTP, so a client that connects directly
+can open with a PROXY header and name any address. The Gemini throttle then
+counts that address, and the access log shows it. It does not reach the
+HTTP side or the sign-in throttle. To avoid it, run one of the proxies above.
+
+#### Links to the capsule
+
+While Gemini is on, each public HTML page links to its gemini:// URL with
+`<link rel="alternate" type="text/gemini">`, each page's Markdown ends with a
+`Gemini` section that links to it, and `/llms.txt` names the capsule. The links
+use the host of the base URL and `GEEKITY_GEMINI_PORT`, and leave out the port
+when it is 1965. Behind a proxy on 1965, keep `GEEKITY_GEMINI_PORT` at 1965, as
+the compose file does.
 
 ## Back up and move a site
 

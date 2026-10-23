@@ -6,6 +6,7 @@
  * or a status cannot read differently over Gemini than at its `.gmi` URL.
  */
 
+import net from 'node:net';
 import tls from 'node:tls';
 import type { TLSSocket } from 'node:tls';
 
@@ -13,6 +14,7 @@ import type { Clock } from '../util/clock.ts';
 import { accessLine } from './access-line.ts';
 import { headerFor, readRequestLine, routeRequest } from './gemini-request.ts';
 import type { GeminiHeader } from './gemini-request.ts';
+import { readProxyPreamble } from './proxy-protocol.ts';
 import { createRequestLimit } from './throttle.ts';
 
 /** Per client address: about one a second, which a reader never reaches and a crawler can keep to. */
@@ -32,6 +34,12 @@ export interface GeminiListenerOptions {
   /** Where the access log goes, and whether its lines carry the client address; `undefined` logs nothing. */
   readonly log: { readonly write: (line: string) => void; readonly address: boolean } | undefined;
   readonly now: Clock;
+  /**
+   * Whether a PROXY protocol header is believed. On, a connection may open
+   * with one, and the client it names is the one throttled and logged; a
+   * connection without one is the client itself. Off, one is refused.
+   */
+  readonly trustProxy: boolean;
   readonly limit?: { readonly requests: number; readonly windowSeconds: number };
   readonly requestTimeoutMs?: number;
 }
@@ -115,23 +123,30 @@ export async function listenForGemini(options: GeminiListenerOptions): Promise<G
     }
   }
 
-  const server = tls.createServer(
-    {
-      cert: options.certificate.cert,
-      key: options.certificate.key,
-      minVersion: 'TLSv1.2',
-      handshakeTimeout: HANDSHAKE_TIMEOUT_MS,
-    },
-    (socket) => {
+  const secureContext = tls.createSecureContext({
+    cert: options.certificate.cert,
+    key: options.certificate.key,
+    minVersion: 'TLSv1.2',
+  });
+  const server = net.createServer((raw) => {
+    raw.on('error', () => undefined);
+    void readPreamble(raw, timeoutMs).then((preamble) => {
+      if (preamble === undefined || (preamble.proxied && !options.trustProxy)) {
+        raw.destroy();
+        return;
+      }
+      const socket = new tls.TLSSocket(raw, { isServer: true, secureContext });
       socket.on('error', () => undefined);
+      const handshake = setTimeout(() => socket.destroy(), HANDSHAKE_TIMEOUT_MS);
+      socket.once('secure', () => clearTimeout(handshake));
+      socket.once('close', () => clearTimeout(handshake));
       socket.setTimeout(timeoutMs * 3, () => socket.destroy());
-      answer(socket, socket.remoteAddress).catch((error: unknown) => {
+      answer(socket, preamble.address ?? raw.remoteAddress).catch((error: unknown) => {
         console.error('A Gemini request failed:', error);
         if (!socket.destroyed) socket.end('40 Something went wrong\r\n');
       });
-    },
-  );
-  server.on('tlsClientError', () => undefined);
+    });
+  });
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -156,6 +171,52 @@ export async function listenForGemini(options: GeminiListenerOptions): Promise<G
       return closing;
     },
   };
+}
+
+/**
+ * Read past a PROXY header, if the connection opens with one, and leave every
+ * byte after it for TLS. `undefined` for a header that cannot be read or does
+ * not finish within `timeoutMs`, or a connection that ends first. A header
+ * without an address leaves `address` to the socket's.
+ */
+function readPreamble(
+  raw: net.Socket,
+  timeoutMs: number,
+): Promise<{ readonly proxied: boolean; readonly address: string | undefined } | undefined> {
+  return new Promise((resolve) => {
+    let received = Buffer.alloc(0);
+    const finish = (
+      result: { proxied: boolean; address: string | undefined } | undefined,
+      rest?: Buffer,
+    ) => {
+      clearTimeout(timer);
+      raw.off('data', onData);
+      raw.off('end', onEnd);
+      raw.pause();
+      if (rest !== undefined && rest.length > 0) raw.unshift(rest);
+      resolve(result);
+    };
+    const onData = (chunk: Buffer) => {
+      received = Buffer.concat([received, chunk]);
+      const preamble = readProxyPreamble(received);
+      switch (preamble.kind) {
+        case 'partial':
+          return;
+        case 'none':
+          finish({ proxied: false, address: undefined }, received);
+          return;
+        case 'invalid':
+          finish(undefined);
+          return;
+        case 'header':
+          finish({ proxied: true, address: preamble.address }, received.subarray(preamble.length));
+      }
+    };
+    const onEnd = () => finish(undefined);
+    const timer = setTimeout(() => finish(undefined), timeoutMs);
+    raw.on('data', onData);
+    raw.on('end', onEnd);
+  });
 }
 
 /** The request line as far as it has come, a header to answer at once, or a 59 when time runs out. */

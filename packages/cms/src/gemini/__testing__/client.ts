@@ -13,23 +13,25 @@ export interface GeminiAnswer {
 
 /**
  * Send `request` as it is (add the CRLF yourself) over a real TLS connection
- * and read until the server closes.
+ * and read until the server closes. A `preamble`, such as a PROXY header, is
+ * written in the clear ahead of the TLS handshake, as a layer-4 proxy does.
  */
 export async function geminiRequest(
   port: number,
   request: string | Buffer,
   servername = 'example.com',
+  preamble?: Buffer,
 ): Promise<GeminiAnswer> {
   return await new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let fingerprint256 = '';
-    const socket = tls.connect(
-      { host: '127.0.0.1', port, servername, rejectUnauthorized: false },
-      () => {
-        fingerprint256 = socket.getPeerCertificate().fingerprint256;
-        socket.write(request);
-      },
-    );
+    const raw = net.connect(port, '127.0.0.1');
+    raw.on('error', reject);
+    if (preamble !== undefined) raw.write(preamble);
+    const socket = tls.connect({ socket: raw, servername, rejectUnauthorized: false }, () => {
+      fingerprint256 = socket.getPeerCertificate().fingerprint256;
+      socket.write(request);
+    });
     let ended = false;
     socket.on('data', (chunk: Buffer) => chunks.push(chunk));
     socket.on('end', () => {
@@ -55,6 +57,39 @@ export async function geminiRequest(
 /** `gemini://example.com<path>` and its CRLF, the usual request. */
 export async function gemini(port: number, path: string): Promise<GeminiAnswer> {
   return await geminiRequest(port, `gemini://example.com${path}\r\n`);
+}
+
+/** A PROXY protocol v2 header for a TCP client at `address`, or a LOCAL one. */
+export function proxyV2(
+  options: { readonly address?: string; readonly local?: boolean; readonly tlv?: Buffer } = {},
+): Buffer {
+  const signature = Buffer.from('0d0a0d0a000d0a515549540a', 'hex');
+  const six = options.address?.includes(':') === true;
+  const addresses =
+    options.address === undefined
+      ? Buffer.alloc(0)
+      : Buffer.concat([
+          six ? ipv6Bytes(options.address) : Buffer.from(options.address.split('.').map(Number)),
+          six ? ipv6Bytes('2001:db8::1') : Buffer.from([192, 0, 2, 1]),
+          Buffer.from([0xc7, 0x38, 0x07, 0xad]),
+        ]);
+  const body = Buffer.concat([addresses, options.tlv ?? Buffer.alloc(0)]);
+  const head = Buffer.alloc(4);
+  head[0] = options.local === true ? 0x20 : 0x21;
+  head[1] = options.address === undefined ? 0x00 : six ? 0x21 : 0x11;
+  head.writeUInt16BE(body.length, 2);
+  return Buffer.concat([signature, head, body]);
+}
+
+function ipv6Bytes(address: string): Buffer {
+  const [left = '', right = ''] = address.split('::');
+  const groups = (part: string) => (part === '' ? [] : part.split(':'));
+  const head = groups(left);
+  const tail = groups(right);
+  const all = [...head, ...Array<string>(8 - head.length - tail.length).fill('0'), ...tail];
+  const bytes = Buffer.alloc(16);
+  all.forEach((group, index) => bytes.writeUInt16BE(Number.parseInt(group, 16), index * 2));
+  return bytes;
 }
 
 /** Whether anything accepts a TCP connection on the port. */

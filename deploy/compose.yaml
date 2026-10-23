@@ -59,6 +59,11 @@ services:
       # The container always listens on 3000 (GEEKITY_PORT below); only the
       # host side is configurable.
       - '127.0.0.1:${GEEKITY_HOST_PORT:-3000}:3000'
+      # Gemini, for a layer-4 proxy in front that passes TLS through by SNI
+      # (caddy-l4 or nginx stream). Nothing listens until Gemini is turned on.
+      # A single-site host with no proxy can publish it on every interface
+      # instead: '1965:1965'. See docs/deploying.md.
+      - '127.0.0.1:${GEEKITY_GEMINI_HOST_PORT:-1965}:1965'
 
     # Every variable in .env reaches the container, so any GEEKITY_* setting in
     # docs/configuration.md can be set there.
@@ -69,11 +74,15 @@ services:
     # `environment` wins over `env_file`.
     environment:
       GEEKITY_BASE_URL: ${GEEKITY_BASE_URL:?set GEEKITY_BASE_URL in .env to the public https URL}
-      # The reverse proxy in front terminates TLS and sets X-Forwarded-For.
+      # The reverse proxy in front terminates TLS and sets X-Forwarded-For, and
+      # a Gemini proxy may send a PROXY protocol header.
       GEEKITY_TRUST_PROXY: 'true'
       # Fixed so the port mapping above and the healthcheck agree with it. A
       # GEEKITY_PORT or PORT in .env would otherwise move the server.
       GEEKITY_PORT: '3000'
+      # Fixed for the same reason. The gemini:// links the site prints leave
+      # the port out at 1965, which is the port a proxy in front listens on.
+      GEEKITY_GEMINI_PORT: '1965'
 
     volumes:
       # Must exist and be owned by uid 1000 before the first start.

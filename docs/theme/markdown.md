@@ -352,6 +352,7 @@ heading over a list, and leaves out a section that has nothing to list:
 | `Replies`         | On a comment's own page: `thread.comment.replies`, then a link to the whole thread. |
 | `Leave a comment` | A link to the comment form on the HTML page, while the document takes comments.     |
 | `Send a message`  | A link to the contact form on the HTML page.                                        |
+| `Gemini`          | `capsuleUrl`, a link to this page over Gemini, while the site serves Gemini.        |
 | `Feeds`           | `feeds`, each labelled with its title and format.                                   |
 
 ```markdown

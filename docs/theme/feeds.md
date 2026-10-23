@@ -50,6 +50,17 @@ that has a comments feed. A layout that overrides the block without calling
 `super()` must emit both links itself. The values are on the context, not in
 `post.njk`, so a site that overrides that layout, as the demo does, keeps them.
 
+Inside the block, while the site serves Gemini, the base layout also links
+the page's gemini:// URL from `capsuleUrl`:
+
+```html
+<link
+  rel="alternate"
+  type="text/gemini"
+  href="gemini://example.com/2026/09/hello/index.gmi"
+/>
+```
+
 After the block, and outside it, the base layout writes the webmention
 endpoint:
 

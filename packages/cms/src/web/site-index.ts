@@ -4,6 +4,8 @@ import type { Document } from '../content/document.ts';
 import { isListed } from '../content/served.ts';
 import { calendarDayIn } from '../content/time.ts';
 import type { GeekityEnv } from './env.ts';
+import { capsuleUrl } from '../gemini/capsule.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { siteTimezone } from '../theme/site-data.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
 import { archiveOf, homeListing } from './listing-subject.ts';
@@ -148,6 +150,11 @@ function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
   return {
     title: site.title,
     description: site.tagline ?? '',
+    capsule: capsuleUrl(
+      c.var.config,
+      c.var.siteAtRequestStart,
+      new URL(absoluteUrl('/', c.var.config.baseUrl)).pathname,
+    ),
     navigation: navigationLinks(site).map((item) => ({ title: item.label, href: item.url })),
     pages: pages.map(entry).sort((a, b) => a.title.localeCompare(b.title)),
     posts: posts.map((document) => ({

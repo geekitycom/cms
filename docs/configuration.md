@@ -43,7 +43,7 @@ directory. Absolute directories are used as given.
 | `sessionLifetime`  | `1209600` (14 days)                                  | `GEEKITY_SESSION_LIFETIME`   | How long an admin login lasts, in seconds.                                                                                                                                                                                                                                                                               |
 | `loginAttempts`    | `5`                                                  | `GEEKITY_LOGIN_ATTEMPTS`     | Failed sign-ins a username or an address may make before it is locked out.                                                                                                                                                                                                                                               |
 | `loginLockout`     | `900` (15 minutes)                                   | `GEEKITY_LOGIN_LOCKOUT`      | How long the first lockout lasts, in seconds. See [Login hardening](security.md#login-hardening).                                                                                                                                                                                                                        |
-| `trustProxy`       | `false`                                              | `GEEKITY_TRUST_PROXY`        | Trust `X-Forwarded-For` to give the address a sign-in came from.                                                                                                                                                                                                                                                         |
+| `trustProxy`       | `false`                                              | `GEEKITY_TRUST_PROXY`        | Trust `X-Forwarded-For` to give the address a sign-in came from, and a PROXY protocol header to give a Gemini client's. See [The Gemini listener](#the-gemini-listener).                                                                                                                                                 |
 | `accessLog`        | `false`; `true` under `geekity serve`                | `GEEKITY_ACCESS_LOG`         | One line per request on stdout: method, path with query, status, duration. See [The access log](#the-access-log).                                                                                                                                                                                                        |
 | `accessLogAddress` | `false`                                              | `GEEKITY_ACCESS_LOG_ADDRESS` | Add the client address to the end of each access-log line. `trustProxy` decides which address is used.                                                                                                                                                                                                                   |
 | `accessLogWriter`  | stdout                                               | —                            | Where the lines go instead. See [The access log](#the-access-log).                                                                                                                                                                                                                                                       |
@@ -224,6 +224,21 @@ unchanged.
 Each client address may make 60 requests a minute. A request over that gets
 `44` with the seconds to wait.
 
+Behind a layer-4 proxy, the socket's address is the proxy's. With `trustProxy`
+on, a connection may open with a PROXY protocol header, version 1 or 2, and
+the client address in it is the one the throttle counts and the access log
+shows. The header is optional: a connection without one is the client itself.
+A header that cannot be read, is longer than 2 KiB, or is not complete
+within 10 seconds closes the connection. With `trustProxy` off, a connection that opens with a
+PROXY header is closed. [Serving Gemini](deploying.md#serving-gemini) has
+proxy configurations for Caddy and nginx.
+
+While Gemini is on, the site links to its capsule. Each HTML page that has
+gemtext carries `<link rel="alternate" type="text/gemini">` with its
+gemini:// URL, its Markdown ends with a `Gemini` section linking the same URL,
+and the generated `/llms.txt` names the capsule. A gemini:// URL has the host
+of the base URL in effect and `geminiPort`, left out when it is 1965.
+
 ## Plugin settings
 
 A plugin's settings are kept in its folder under `data/plugins/`:
@@ -365,7 +380,8 @@ blog keeps it with no retention policy unless the site owner sets one.
 `trustProxy` decides which address is logged:
 
 - When `trustProxy` is on and the proxy sets `X-Forwarded-For`, the leftmost
-  entry of that header.
+  entry of that header. For a Gemini request, the address in the PROXY
+  protocol header the connection opened with.
 - Otherwise, the socket's own address.
 
 The login throttle counts failed sign-ins against the same address, so the log

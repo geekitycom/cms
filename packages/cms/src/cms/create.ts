@@ -376,6 +376,7 @@ export function createCms(
           }
         : undefined,
       now: resolved.now,
+      trustProxy: resolved.trustProxy,
     });
   }
 

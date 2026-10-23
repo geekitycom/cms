@@ -4,11 +4,12 @@
  * timeout, the throttle and the log.
  */
 import assert from 'node:assert/strict';
+import net from 'node:net';
 import tls from 'node:tls';
 import { after, describe, it } from 'node:test';
 
 import { selfSignedCertificate } from '../gemini/certificate.ts';
-import { gemini, geminiRequest, refuses } from '../gemini/__testing__/client.ts';
+import { gemini, geminiRequest, proxyV2, refuses } from '../gemini/__testing__/client.ts';
 import { listenForGemini } from './gemini-listener.ts';
 import type { GeminiListener, GeminiListenerOptions } from './gemini-listener.ts';
 
@@ -39,6 +40,7 @@ async function listen(options: Partial<GeminiListenerOptions> = {}): Promise<Stu
     },
     log: { write: (line) => lines.push(line), address: true },
     now: () => new Date(),
+    trustProxy: false,
     ...options,
   });
   listeners.push(listener);
@@ -129,5 +131,79 @@ describe('the gemini listener', () => {
     const { listener } = await listen();
     await listener.close();
     assert.ok(await refuses(listener.port));
+  });
+});
+
+const LOCAL = /(?:::ffff:)?127\.0\.0\.1$/;
+
+function proxyV1(address: string): Buffer {
+  return Buffer.from(`PROXY TCP4 ${address} 192.0.2.1 51000 1965\r\n`);
+}
+
+function proxied(port: number, preamble: Buffer): ReturnType<typeof geminiRequest> {
+  return geminiRequest(port, 'gemini://example.com/\r\n', 'example.com', preamble);
+}
+
+/** Whether the server closes a connection that has sent `bytes` and then nothing, without a word. */
+async function closesSilently(port: number, bytes: Buffer): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const socket = net.connect(port, '127.0.0.1', () => socket.write(bytes));
+    let answered = false;
+    socket.on('data', () => {
+      answered = true;
+    });
+    socket.on('error', () => undefined);
+    socket.on('close', () => resolve(!answered));
+  });
+}
+
+describe('the gemini listener behind a layer-4 proxy (TASK-485)', () => {
+  it('logs and throttles by the address a PROXY v1 or v2 header carries, when it trusts the proxy', async () => {
+    const { listener, lines } = await listen({
+      trustProxy: true,
+      limit: { requests: 1, windowSeconds: 60 },
+    });
+    assert.equal((await proxied(listener.port, proxyV1('203.0.113.7'))).status, 20);
+    assert.equal((await proxied(listener.port, proxyV2({ address: '198.51.100.9' }))).status, 20);
+    assert.equal((await proxied(listener.port, proxyV2({ address: '2001:db8::7' }))).status, 20);
+    assert.equal(
+      (await proxied(listener.port, proxyV1('203.0.113.7'))).status,
+      44,
+      'the second request from one proxied client is slowed',
+    );
+    assert.match(lines[0] ?? '', / 203\.0\.113\.7$/);
+    assert.match(lines[1] ?? '', / 198\.51\.100\.9$/);
+    assert.match(lines[2] ?? '', / 2001:db8::7$/);
+  });
+
+  it('uses the socket address for a v2 LOCAL header or no header at all', async () => {
+    const { listener, lines } = await listen({ trustProxy: true });
+    assert.equal((await proxied(listener.port, proxyV2({ local: true }))).status, 20);
+    assert.equal((await gemini(listener.port, '/')).status, 20);
+    assert.match(lines[0] ?? '', LOCAL);
+    assert.match(lines[1] ?? '', LOCAL);
+  });
+
+  it('refuses a PROXY header when it does not trust a proxy', async () => {
+    const { listener, lines } = await listen({ trustProxy: false });
+    await assert.rejects(proxied(listener.port, proxyV1('203.0.113.7')));
+    await assert.rejects(proxied(listener.port, proxyV2({ address: '203.0.113.7' })));
+    assert.ok(await closesSilently(listener.port, proxyV1('203.0.113.7')));
+    assert.deepEqual(lines, []);
+    assert.equal((await gemini(listener.port, '/')).status, 20, 'a direct client is served');
+  });
+
+  it('closes a connection whose header is malformed, too long, or never finishes', async () => {
+    const { listener, asked } = await listen({ trustProxy: true, requestTimeoutMs: 200 });
+    assert.ok(await closesSilently(listener.port, Buffer.from('PROXY TCP4 nonsense\r\n')));
+    assert.ok(await closesSilently(listener.port, Buffer.from(`PROXY ${'9'.repeat(200)}`)));
+    assert.ok(
+      await closesSilently(
+        listener.port,
+        proxyV2({ address: '203.0.113.7', tlv: Buffer.alloc(8192) }).subarray(0, 16),
+      ),
+    );
+    assert.ok(await closesSilently(listener.port, Buffer.from('PROXY TCP4 203.0.')));
+    assert.equal(asked.length, 0);
   });
 });
