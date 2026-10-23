@@ -161,4 +161,19 @@
   {% endset %}
   {{ field.checkbox('settings-index-now', fields.index_now, 'Submit changes to IndexNow',
        checked=form.index_now, hintHtml=indexNowHint) }}
+
+  {# TASK-483. The capsule's certificate, which clients pin on first visit. #}
+  {% set geminiHint %}
+    Serves the site as a Gemini capsule at <code>gemini://</code> with a self-signed
+    certificate the site generates once and keeps. Gemini clients remember the
+    certificate on their first visit, so a new one makes every visitor's client warn.
+    {% if geminiCertificate and geminiCertificate.ok %}
+      <span class="block mt-1">SHA-256 fingerprint:
+        <code class="break-all">{{ geminiCertificate.certificate.fingerprint256 }}</code></span>
+    {% elif geminiCertificate %}
+      <span class="block mt-1 text-error">{{ geminiCertificate.problem }}</span>
+    {% endif %}
+  {% endset %}
+  {{ field.checkbox('settings-gemini', fields.gemini, 'Serve over Gemini',
+       checked=form.gemini, hintHtml=geminiHint) }}
 {% endblock %}

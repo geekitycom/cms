@@ -39,7 +39,16 @@ const LAYERS: readonly Layer[] = [
   { name: 'federation', units: ['federation/'] },
   {
     name: 'services',
-    units: ['autosave/', 'avatars/', 'fonts/', 'media/', 'indieauth/', 'item-lookup/', 'writing/'],
+    units: [
+      'autosave/',
+      'avatars/',
+      'fonts/',
+      'media/',
+      'indieauth/',
+      'item-lookup/',
+      'writing/',
+      'gemini/',
+    ],
   },
   { name: 'plugins', units: ['plugins/'] },
   { name: 'site export', units: ['export/'] },

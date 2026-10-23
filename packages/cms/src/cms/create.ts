@@ -38,6 +38,7 @@ import { SITE } from '../site/namespace.ts';
 import { messageOf } from '../util/errors.ts';
 import type { ReplyContextService, WebmentionService } from '../webmention/index.ts';
 import { syndicationTargetProblems } from '../webmention/syndication.ts';
+import { warnAboutGeminiCertificate } from '../gemini/site-certificate.ts';
 import { createApp } from './app.ts';
 import { boot } from './boot.ts';
 import { endServices, releaseServices, startServices } from './lifecycle.ts';
@@ -404,6 +405,8 @@ export function createCms(
       // A syndication target the site declares badly is ignored everywhere,
       // and said so once here rather than on every page (TASK-155).
       for (const problem of syndicationTargetProblems(resolved.contentDir)) console.warn(problem);
+
+      await warnAboutGeminiCertificate(resolved, booted.settings);
 
       return new Promise((resolve) => {
         server = serveNode({ fetch: app.fetch, port: resolved.port }, (info) => {

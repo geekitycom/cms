@@ -93,27 +93,29 @@ the same directory reads all of it, and everything in it is public.
 
 `data/` is private. It is gitignored. Copy it somewhere safe.
 
-| Path                             | What it holds                                                                                                                                       |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data/users.json`                | Usernames and argon2id password hashes. Mode `0600`.                                                                                                |
-| `data/keys/`                     | Each user's actor key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                                          |
-| `data/locations.json`            | Where each post was written, keyed by permalink. It is never in `content/`, so a public repository never holds it (decision-29). Mode `0600`.       |
-| `data/kept-properties.json`      | The Micropub properties a post was sent that the site does not understand, such as an `itinerary`, keyed by permalink (decision-27). Mode `0600`.   |
-| `data/comment-salt`              | The salt that hides commenters' IP addresses in the published comment files. Mode `0600`.                                                           |
-| `data/comments/{slug}.json`      | The emails of that post's commenters, and whether each asked to hear about replies, keyed by comment id. Mode `0600`.                               |
-| `data/akismet.json`              | The Akismet key, and the last `verify-key` result for it. Mode `0600`.                                                                              |
-| `data/mail.json`                 | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                                     |
-| `data/notification-secret`       | The secret that signs the one-click links in a notification. Mode `0600`. Losing it breaks every link already sent, and nothing else.               |
-| `data/comment-optouts.json`      | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                                               |
-| `data/indieauth-tokens.json`     | A SHA-256 hash of each IndieAuth access and refresh token, with its user, app, scopes and expiry (decision-24). Mode `0600`.                        |
-| `data/notification-digests.json` | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early, and nothing else.                                             |
-| `data/plugins/<package name>/`   | Each plugin's private folder. Its secret settings are in `secrets.json`, mode `0600`. The plugin decides what else goes there.                      |
-| `data/plugin-changes.json`       | Who added, updated and removed which plugin on Admin > Plugins, and when. Mode `0600`.                                                              |
-| `data/follower-history.jsonl`    | One line for each follow and unfollow: when, which user, and the site's follower count after it. The dashboard's Followers card is drawn from it.   |
-| `data/jobs.json`                 | The admin jobs: each one's state, progress and result, with the newest five ended jobs of each name. See [Admin jobs](configuration.md#admin-jobs). |
-| `data/queue.sqlite`              | Deliveries, inbox activities and retries still waiting. Mode `0600`. See [The message queue](federation.md#the-message-queue).                      |
-| `data/autosave/{user id}/`       | Each user's editor forms not saved yet, one file for each document. Mode `0600`. See [Autosaved copies](admin.md#autosaved-copies).                 |
-| `data/writing/{user id}.json`    | The words each user wrote on each day, for writing goals. Mode `0600`. See [Writing goals](writing-goals.md#where-the-counts-are-kept).             |
+| Path                             | What it holds                                                                                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data/users.json`                | Usernames and argon2id password hashes. Mode `0600`.                                                                                                          |
+| `data/keys/`                     | Each user's actor key pairs as JWK files. Mode `0600`. **Losing these breaks federation.**                                                                    |
+| `data/locations.json`            | Where each post was written, keyed by permalink. It is never in `content/`, so a public repository never holds it (decision-29). Mode `0600`.                 |
+| `data/kept-properties.json`      | The Micropub properties a post was sent that the site does not understand, such as an `itinerary`, keyed by permalink (decision-27). Mode `0600`.             |
+| `data/comment-salt`              | The salt that hides commenters' IP addresses in the published comment files. Mode `0600`.                                                                     |
+| `data/comments/{slug}.json`      | The emails of that post's commenters, and whether each asked to hear about replies, keyed by comment id. Mode `0600`.                                         |
+| `data/akismet.json`              | The Akismet key, and the last `verify-key` result for it. Mode `0600`.                                                                                        |
+| `data/mail.json`                 | The mail credential: a Brevo API key, an SMTP connection, or both. Mode `0600`.                                                                               |
+| `data/gemini/cert.pem`           | The site's self-signed Gemini certificate. Gemini clients pin it on their first visit. See [The Gemini certificate](configuration.md#the-gemini-certificate). |
+| `data/gemini/key.pem`            | The private key of that certificate. Mode `0600`, in a folder of mode `0700`.                                                                                 |
+| `data/notification-secret`       | The secret that signs the one-click links in a notification. Mode `0600`. Losing it breaks every link already sent, and nothing else.                         |
+| `data/comment-optouts.json`      | The addresses that have unsubscribed from reply notices. Mode `0600`.                                                                                         |
+| `data/indieauth-tokens.json`     | A SHA-256 hash of each IndieAuth access and refresh token, with its user, app, scopes and expiry (decision-24). Mode `0600`.                                  |
+| `data/notification-digests.json` | When each user was last sent a digest. Mode `0600`. Losing it sends one digest early, and nothing else.                                                       |
+| `data/plugins/<package name>/`   | Each plugin's private folder. Its secret settings are in `secrets.json`, mode `0600`. The plugin decides what else goes there.                                |
+| `data/plugin-changes.json`       | Who added, updated and removed which plugin on Admin > Plugins, and when. Mode `0600`.                                                                        |
+| `data/follower-history.jsonl`    | One line for each follow and unfollow: when, which user, and the site's follower count after it. The dashboard's Followers card is drawn from it.             |
+| `data/jobs.json`                 | The admin jobs: each one's state, progress and result, with the newest five ended jobs of each name. See [Admin jobs](configuration.md#admin-jobs).           |
+| `data/queue.sqlite`              | Deliveries, inbox activities and retries still waiting. Mode `0600`. See [The message queue](federation.md#the-message-queue).                                |
+| `data/autosave/{user id}/`       | Each user's editor forms not saved yet, one file for each document. Mode `0600`. See [Autosaved copies](admin.md#autosaved-copies).                           |
+| `data/writing/{user id}.json`    | The words each user wrote on each day, for writing goals. Mode `0600`. See [Writing goals](writing-goals.md#where-the-counts-are-kept).                       |
 
 [Personal data](personal-data.md) lists the files that hold readers' data, and
 how long each is kept.

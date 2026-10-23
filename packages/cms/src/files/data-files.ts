@@ -178,6 +178,18 @@ export const ACTOR_KEYS = declareDataFile({
   lost: "The actors' signing keys: remote servers reject signatures until they fetch the actor again, and proofs on objects already sent stop verifying.",
 });
 
+export const GEMINI_CERTIFICATE = declareDataFile({
+  pattern: 'gemini/cert.pem',
+  dataClass: KEPT,
+  lost: 'The certificate Gemini clients pinned on first visit: a new one is generated, and every client that has visited warns that the capsule changed identity.',
+});
+
+export const GEMINI_KEY = declareDataFile({
+  pattern: 'gemini/key.pem',
+  dataClass: KEPT,
+  lost: "The Gemini certificate's private key, without which the certificate is useless and a new pair is generated.",
+});
+
 export const USERS = declareDataFile({
   pattern: 'users.json',
   dataClass: KEPT,
@@ -337,6 +349,8 @@ export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   IMPORT_ASIDE,
   EXPORTS,
   ACTOR_KEYS,
+  GEMINI_CERTIFICATE,
+  GEMINI_KEY,
   USERS,
   NOTIFICATION_SECRET,
   COMMENT_SALT,

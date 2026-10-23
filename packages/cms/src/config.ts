@@ -457,6 +457,15 @@ export interface GeekityConfig {
    * by `GEEKITY_PLUGIN_WATCH`.
    */
   pluginWatch?: boolean;
+  /**
+   * The operator's own certificate for the Gemini listener, a PEM file,
+   * instead of the self-signed one the site generates under
+   * `data/gemini/`. Needs {@link GeekityConfig.geminiKey} too. Overridden by
+   * `GEEKITY_GEMINI_CERT`.
+   */
+  geminiCert?: string;
+  /** The private key for {@link GeekityConfig.geminiCert}, a PEM file. Overridden by `GEEKITY_GEMINI_KEY`. */
+  geminiKey?: string;
 }
 
 /**
@@ -541,6 +550,10 @@ export interface ResolvedConfig {
   readonly pluginInstall: boolean;
   /** Whether `geekity serve` reloads by itself when the plugins folder changes. */
   readonly pluginWatch: boolean;
+  /** The operator's Gemini certificate file, or `undefined` for the generated one. */
+  readonly geminiCert: string | undefined;
+  /** The operator's Gemini key file, or `undefined` for the generated one. */
+  readonly geminiKey: string | undefined;
 }
 
 /** Ambient inputs {@link resolveConfig} reads, injectable so the resolution is testable. */
@@ -753,7 +766,7 @@ const DIRECTORY: SettingKind<string, string> = {
     path.resolve(cwd, value === undefined || value === '' ? fallback : value),
 };
 
-const OPTIONAL_DIRECTORY: SettingKind<string, string | undefined> = {
+const OPTIONAL_PATH: SettingKind<string, string | undefined> = {
   fromEnv: (text, { cwd }) => path.resolve(cwd, text),
   fromConfig: (value, fallback, { cwd }) =>
     value === undefined || value === '' ? fallback : path.resolve(cwd, value),
@@ -819,9 +832,11 @@ const ENV_SETTINGS = {
   maintenance: setting('GEEKITY_MAINTENANCE', BOOLEAN, false),
   devMode: setting('GEEKITY_DEV_MODE', BOOLEAN, false),
   compression: setting('GEEKITY_COMPRESSION', BOOLEAN, true),
-  pluginsDir: setting('GEEKITY_PLUGINS_DIR', OPTIONAL_DIRECTORY, undefined),
+  pluginsDir: setting('GEEKITY_PLUGINS_DIR', OPTIONAL_PATH, undefined),
   pluginInstall: setting('GEEKITY_PLUGIN_INSTALL', BOOLEAN, true),
   pluginWatch: setting('GEEKITY_PLUGIN_WATCH', BOOLEAN, true),
+  geminiCert: setting('GEEKITY_GEMINI_CERT', OPTIONAL_PATH, undefined),
+  geminiKey: setting('GEEKITY_GEMINI_KEY', OPTIONAL_PATH, undefined),
 } satisfies {
   [K in keyof GeekityConfig]?: EnvSetting<NonNullable<GeekityConfig[K]>, unknown>;
 };

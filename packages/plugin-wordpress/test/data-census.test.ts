@@ -509,6 +509,7 @@ async function settings(cms: Cms): Promise<void> {
   );
   await cms.settings.set('akismet', new Map([['key', 'akismet-key']]), 'admin');
   await cms.settings.set('tmdb', new Map([['key', 'tmdb-key']]), 'admin');
+  await cms.settings.set('site', new Map([['gemini', true]]), 'admin');
   await cms.settings.set('maintenance', new Map([['on', true]]), 'admin');
   await cms.settings.set('dev_mode', new Map([['on', true]]), 'admin');
 }

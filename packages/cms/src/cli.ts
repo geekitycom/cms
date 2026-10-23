@@ -29,7 +29,9 @@ import { askToReload, isServing } from './supervisor/control.ts';
 import { DEV_MODE, DEV_MODE_LATCHED } from './settings/dev-mode.ts';
 import { MAINTENANCE, MAINTENANCE_FILE } from './settings/maintenance.ts';
 import { overridden, sourceLabel } from './settings/registry.ts';
-import { createSettings } from './site/namespace.ts';
+import { readGeminiCertificate, regenerateGeminiCertificate } from './gemini/certificate.ts';
+import { geminiHost } from './gemini/site-certificate.ts';
+import { SITE, createSettings } from './site/namespace.ts';
 import type { SettingRef, SettingsRegistry } from './settings/types.ts';
 import { messageOf } from './util/errors.ts';
 
@@ -41,6 +43,7 @@ type CoreCommand =
   | 'resend'
   | 'maintenance'
   | 'dev-mode'
+  | 'gemini'
   | 'settings'
   | 'strip-metadata'
   | 'export'
@@ -135,6 +138,30 @@ const COMMANDS: Readonly<Record<CoreCommand, CommandEntry>> = {
       ],
     ],
     run: devModeCommand,
+  },
+  gemini: {
+    synopsis: ['gemini (cert | new-cert) [--config <file>]'],
+    help: [
+      [
+        'gemini cert',
+        [
+          "Print the Gemini certificate's subject, expiry and SHA-256",
+          'fingerprint, and say when it does not name the base URL',
+          'host. It makes nothing: the site generates the certificate',
+          'when it starts with Gemini on.',
+        ],
+      ],
+      [
+        'gemini new-cert',
+        [
+          'Replace the generated certificate with a new one for the',
+          'base URL host. Every Gemini client that visited pinned the',
+          'old one and warns about the new one. Restart the site to',
+          'serve it.',
+        ],
+      ],
+    ],
+    run: geminiCommand,
   },
   settings: {
     synopsis: [
@@ -366,7 +393,9 @@ Environment overrides:
   GEEKITY_PORT (or PORT), GEEKITY_CONTENT_DIR, GEEKITY_DATA_DIR,
   GEEKITY_THEMES_DIR, GEEKITY_PLUGINS_DIR, GEEKITY_BASE_URL, GEEKITY_WATCH,
   GEEKITY_MAINTENANCE (on keeps the site in maintenance until a restart),
-  GEEKITY_DEV_MODE (on starts the site in dev mode; only dev-mode off ends it)
+  GEEKITY_DEV_MODE (on starts the site in dev mode; only dev-mode off ends it),
+  GEEKITY_GEMINI_CERT and GEEKITY_GEMINI_KEY (the operator's own Gemini
+  certificate and key instead of the generated pair)
 `;
 
 /** Turn `process.argv.slice(2)` into a command, its options and its arguments. */
@@ -579,6 +608,40 @@ async function maintenanceCommand({ args, configPath, flags }: ParsedArgs): Prom
   }
 
   throw new Error('geekity maintenance needs on, off or status.');
+}
+
+async function geminiCommand({ args, configPath }: ParsedArgs): Promise<number> {
+  const action = args[0];
+  if (action !== 'cert' && action !== 'new-cert') {
+    throw new Error('geekity gemini needs cert or new-cert.');
+  }
+  const config = await loadResolvedConfig(configPath);
+  const host = geminiHost(config, await createSettings({ config }).values(SITE));
+  const result =
+    action === 'cert'
+      ? await readGeminiCertificate(config, host)
+      : await regenerateGeminiCertificate(config, host, config.now());
+  if (!result.ok) throw new Error(result.problem);
+  const { certificate } = result;
+  if (action === 'new-cert') {
+    process.stdout.write(
+      'A new Gemini certificate is written. Every Gemini client that visited before warns that the capsule changed identity. Restart the site to serve it.\n',
+    );
+  }
+  process.stdout.write(
+    [
+      `Certificate: ${certificate.certFile}${certificate.source === 'operator' ? " (the operator's own)" : ''}`,
+      `Subject: ${certificate.subject}`,
+      `Expires: ${certificate.validTo.toISOString()}`,
+      `SHA-256 fingerprint: ${certificate.fingerprint256}`,
+      ...(certificate.coversHost
+        ? []
+        : [
+            `It does not name ${host}, the base URL host. Run geekity gemini new-cert to replace it; every client that pinned it will warn.`,
+          ]),
+    ].join('\n') + '\n',
+  );
+  return 0;
 }
 
 async function devModeCommand({ args, configPath }: ParsedArgs): Promise<number> {

@@ -410,6 +410,8 @@ const SETTING_ROWS: SettingRows = {
 
   index_now: flag('index_now', 'index_now'),
 
+  gemini: flag('gemini', 'gemini'),
+
   mail_provider: choice(
     'mail_provider',
     'mail_provider',

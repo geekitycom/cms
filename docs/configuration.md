@@ -51,6 +51,8 @@ directory. Absolute directories are used as given.
 | `maintenance`      | `false`                                              | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode, answering 503, until it restarts without this field. For everyday use, run `geekity maintenance on` and `off`, or use Tools > Maintenance. See [Maintenance mode](public-site.md#maintenance-mode).                                                                                   |
 | `devMode`          | `false`                                              | `GEEKITY_DEV_MODE`           | Start the site in dev mode. Dev mode holds every outbound side effect until `geekity dev-mode off` or the switch at Tools > Dev mode. See [Dev mode](deploying.md#dev-mode).                                                                                                                                             |
 | `compression`      | `true`                                               | `GEEKITY_COMPRESSION`        | Compress text responses with brotli or gzip. Turn it off behind a proxy that compresses. See [Compression](public-site.md#compression).                                                                                                                                                                                  |
+| `geminiCert`       | none                                                 | `GEEKITY_GEMINI_CERT`        | Your own PEM certificate for Gemini, instead of the one the site generates. Needs `geminiKey`. See [The Gemini certificate](#the-gemini-certificate).                                                                                                                                                                    |
+| `geminiKey`        | none                                                 | `GEEKITY_GEMINI_KEY`         | The PEM private key for `geminiCert`.                                                                                                                                                                                                                                                                                    |
 | `securityHeaders`  | [see Security headers](security.md#security-headers) | —                            | Headers on every response. A string replaces a default or adds a header. `false` removes a header.                                                                                                                                                                                                                       |
 | `onDocumentChange` | none                                                 | —                            | Hook run for every change to the index. See [Hooks](plugins.md#hooks).                                                                                                                                                                                                                                                   |
 | `onPublish`        | none                                                 | —                            | Hook run when a document becomes visible. See [Hooks](plugins.md#hooks).                                                                                                                                                                                                                                                 |
@@ -132,6 +134,55 @@ precedence, and the form shows which value is in effect and why. When neither
 sets a value, the site uses the stored setting instead of the
 `http://localhost:<port>` fallback.
 [The base URL setting](settings.md#the-base-url-setting) has the full rule.
+
+## The Gemini certificate
+
+Gemini is off until `site.gemini` is on. Turn it on with **Serve over
+Gemini** on Settings > Reading, with `"gemini": true` in
+`content/_data/site.json`, or with `GEEKITY_SITE__GEMINI=on`.
+
+Gemini clients do not check a certificate against a certificate authority.
+A client trusts the certificate it sees on its first visit, and it keeps that
+certificate (trust on first use, or TOFU). If the certificate changes later,
+the client warns the reader that the capsule may be an impostor. Keep the same
+certificate for as long as the site exists.
+
+When the site starts with Gemini on and has no certificate, it generates one:
+
+- `data/gemini/cert.pem` is a self-signed X.509 certificate for the host of
+  the base URL in effect. It uses an ECDSA P-256 key and is valid for 50 years.
+- `data/gemini/key.pem` is its private key, at mode `0600` in a folder of mode
+  `0700`.
+
+Turning Gemini on from the admin generates the pair at once. Every later start
+uses the same pair. Both files are `kept` data, so a backup of `data/` and
+`geekity export` carry them, and `geekity import` restores them with their
+modes. A site moved with its archive keeps its identity.
+
+A changed base URL does not replace the certificate. `geekity gemini cert`
+says when the certificate does not name the host of the base URL. To replace
+it, run `geekity gemini new-cert` and restart the site. Every client that
+visited before then warns about the new certificate.
+
+```
+$ geekity gemini cert
+Certificate: /srv/site/data/gemini/cert.pem
+Subject: CN=shll.me
+Expires: 2076-10-23T12:00:00.000Z
+SHA-256 fingerprint: 3F:9A:…:C2
+```
+
+Settings > Reading shows the same fingerprint below **Serve over Gemini**.
+Publish it where readers can compare it with what their client shows.
+
+To use your own certificate, set `geminiCert` and `geminiKey`, or
+`GEEKITY_GEMINI_CERT` and `GEEKITY_GEMINI_KEY`, to PEM files. Set both or
+neither. The site does not generate a certificate while they are set, and
+`geekity gemini new-cert` refuses to replace your files. When a file is
+missing, cannot be read, is not a PEM certificate or key, or the key does not
+belong to the certificate, the site still starts and serves HTTP. It does not
+serve Gemini, and it logs one line that names the file and the problem.
+Settings > Reading and `geekity gemini cert` show the same problem.
 
 ## Plugin settings
 

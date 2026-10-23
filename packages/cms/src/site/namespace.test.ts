@@ -50,6 +50,7 @@ const STABLE_SITE_JSON_KEYS = [
   'llmsTxt',
   'headerIcon',
   'indexNow',
+  'gemini',
   'indexNowKey',
   'mailProvider',
   'mailFromName',

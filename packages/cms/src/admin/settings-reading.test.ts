@@ -6,6 +6,7 @@ import { after, describe, it } from 'node:test';
 import { sandbox, signedIn } from './__testing__/harness.ts';
 import { saveSettings } from './__testing__/settings.ts';
 import { siteSettingsIn } from '../__testing__/site-settings.ts';
+import { readGeminiCertificate } from '../gemini/certificate.ts';
 
 /**
  * The Reading settings page: what the homepage shows, how many posts a listing
@@ -474,5 +475,44 @@ describe('whether the site serves /llms.txt (TASK-149)', () => {
 
     const back = await (await agent.get('/admin/settings/reading')).text();
     assert.doesNotMatch(back, /name="llms_txt" type="checkbox" value="1" checked/);
+  });
+});
+
+describe('whether the site serves Gemini (TASK-483)', () => {
+  it('is off by default and shows no certificate', async () => {
+    const cms = await box.site({ contentDir: await withPages() });
+    const agent = await signedIn(cms);
+
+    const html = await (await agent.get('/admin/settings/reading')).text();
+
+    assert.match(html, /name="gemini" type="checkbox" value="1"(?! checked)/);
+    assert.doesNotMatch(html, /SHA-256 fingerprint/);
+  });
+
+  it('turning it on makes the certificate and shows its fingerprint', async () => {
+    const contentDir = await withPages();
+    const cms = await box.site({ contentDir, baseUrl: 'https://shll.me' });
+    const agent = await signedIn(cms);
+
+    assert.equal((await saveSettings(agent, 'reading', { gemini: '1' })).status, 303);
+
+    assert.equal((await siteJson(contentDir))['gemini'], true);
+    const certificate = await readGeminiCertificate(cms.config, 'shll.me');
+    assert.ok(certificate.ok, certificate.ok ? '' : certificate.problem);
+    const html = await (await agent.get('/admin/settings/reading')).text();
+    assert.match(html, /name="gemini" type="checkbox" value="1" checked/);
+    assert.ok(html.includes(certificate.certificate.fingerprint256), 'the fingerprint is shown');
+  });
+
+  it('shows what is wrong with an operator certificate', async () => {
+    const contentDir = await withPages();
+    const missing = path.join(contentDir, 'nowhere.crt');
+    const cms = await box.site({ contentDir, geminiCert: missing, geminiKey: missing });
+    const agent = await signedIn(cms);
+
+    await saveSettings(agent, 'reading', { gemini: '1' });
+
+    const html = await (await agent.get('/admin/settings/reading')).text();
+    assert.ok(html.includes(missing), 'the problem names the file');
   });
 });

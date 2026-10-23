@@ -76,6 +76,8 @@ The file holds these keys:
   [Colour scheme and mode](#colour-scheme-and-mode))
 - `headingFont` and `bodyFont` (when set, see
   [Heading and body fonts](#heading-and-body-fonts))
+- `gemini` (see
+  [The Gemini certificate](configuration.md#the-gemini-certificate))
 
 A save writes every one of these keys, so the file always holds the whole set
 of values in effect for a theme or an Eleventy build to read. It keeps every
