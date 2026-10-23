@@ -1,6 +1,3 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-
 import type { Context, Hono } from 'hono';
 
 import {
@@ -54,7 +51,7 @@ import { zoneLabel } from '../content/time.ts';
 import { moveDocumentFile } from '../content/trash.ts';
 import { isVisibility, visibilityOf } from '../content/visibility.ts';
 import type { StoredVisibility } from '../content/visibility.ts';
-import { missingAltText, writeDocument } from '../content/write.ts';
+import { conflictWith, missingAltText, writeDocument } from '../content/write.ts';
 import { currentUsername, documentSite } from '../web/document-site.ts';
 import type { Conflict } from '../content/write.ts';
 import { normalizeBody, serializeDocument } from '../content/writer.ts';
@@ -306,12 +303,15 @@ export function mountDocumentScreens(
     const restore = c.req.query(RESTORE);
     if (copy !== undefined && restore !== undefined) {
       const form = submittedForm(kind, copy.fields, c.var.config.contentDir);
-      if (restore === REBASE || copy.hash === document.hash) {
+      // Decided from the file on disk, as a save would be. A file deleted
+      // behind the index is no conflict: saving the copy writes it again.
+      const conflict = await conflictWith(c.var.config.contentDir, document, copy.hash);
+      if (restore === REBASE || conflict === undefined) {
         return renderEditor(c, {
           kind,
           render,
           document,
-          form: { ...form, hash: document.hash },
+          form: { ...form, hash: conflict?.hash ?? copy.hash },
           postKind: isPostKind(copy.kind) ? copy.kind : undefined,
           copy,
         });
@@ -322,13 +322,7 @@ export function mountDocumentScreens(
         document,
         form,
         media: copyMedia(form, document, c.var.config.contentDir),
-        conflict: {
-          current: await readFile(
-            path.join(c.var.config.contentDir, ...document.path.split('/')),
-            'utf8',
-          ),
-          hash: document.hash,
-        },
+        conflict,
         restoring: {
           rebaseUrl: withQuery(documentEditorPath(kind, document), { [RESTORE]: REBASE }),
           discardUrl: AUTOSAVE_DISCARD_PATH,
@@ -1003,7 +997,9 @@ async function renderEditor(
           key: copy.key,
           savedAt: copy.savedAt,
           at: formatInTimezone(copy.savedAt, timezone),
-          changedSince: document !== undefined && copy.hash !== document.hash,
+          changedSince:
+            document !== undefined &&
+            (await conflictWith(c.var.config.contentDir, document, copy.hash)) !== undefined,
           noun: kind.singular,
           restoreUrl: resumeUrl(kind, document, autosaveKey, postKind),
           discardUrl: AUTOSAVE_DISCARD_PATH,

@@ -214,6 +214,46 @@ describe('Restore', () => {
     assert.equal(fields['hash'], hash, 'the form carries the hash of the file as it is now');
   });
 
+  it('compares the copy with the file on disk, not the index, when the file changed behind it', async () => {
+    const { cms, ada, contentDir, hash } = await site();
+    keep(cms, POST_FILE, postCopy(hash));
+    await writeFile(
+      path.join(contentDir, POST_FILE),
+      `---\ntitle: Hello\ndate: '2026-01-02T10:00:00.000Z'\nupdated: '${UPDATED}'\npermalink: /2026/01/hello/\n---\n\nWords from another editor.\n`,
+    );
+
+    const shown = banner(await (await ada.get(EDITOR)).text());
+    assert.ok(shown !== undefined);
+    assert.match(shown, /This post has changed since/);
+
+    const html = await (await ada.get(`${EDITOR}?restore=1`)).text();
+    assert.match(html, /<h1[^>]*>This post changed since your unsaved changes<\/h1>/);
+    assert.match(html, /id="conflict-current"[^>]*>[^<]*Words from another editor\./);
+
+    const fields = Object.fromEntries(
+      fieldsOf(await (await ada.get(`${EDITOR}?restore=rebase`)).text()),
+    );
+    assert.equal(fields['body'], 'Words nobody saved.');
+    assert.notEqual(fields['hash'], hash, 'the form carries the hash of the file on disk');
+  });
+
+  it('restores the copy into the editor when the file was deleted behind the index', async () => {
+    const { cms, ada, contentDir } = await site();
+    keep(cms, POST_FILE, postCopy('an-older-hash'));
+    const { rm } = await import('node:fs/promises');
+    await rm(path.join(contentDir, POST_FILE));
+
+    const shown = banner(await (await ada.get(EDITOR)).text());
+    assert.ok(shown !== undefined);
+    assert.doesNotMatch(shown, /changed since/);
+
+    const response = await ada.get(`${EDITOR}?restore=1`);
+    assert.equal(response.status, 200);
+    const fields = Object.fromEntries(fieldsOf(await response.text()));
+    assert.equal(fields['body'], 'Words nobody saved.');
+    assert.equal(fields['autosave'], POST_FILE);
+  });
+
   it('opens the editor as it is when there is no copy to restore', async () => {
     const { ada } = await site();
     const fields = Object.fromEntries(
