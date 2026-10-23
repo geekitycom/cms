@@ -77,6 +77,7 @@ describe('content/_data/site.json', () => {
       llmsTxt: true,
       headerIcon: false,
       indexNow: false,
+      gemini: false,
       // The mail settings the file carries. The key and the SMTP password are
       // not among them: those are credentials and live in `data/mail.json`.
       mailProvider: 'none',

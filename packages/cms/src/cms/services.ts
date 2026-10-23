@@ -10,6 +10,7 @@ import { createAvatarService } from '../avatars/index.ts';
 import type { AvatarService } from '../avatars/index.ts';
 import { createFontStore, createPageFonts, fontFetchJob, queueFontFetch } from '../fonts/index.ts';
 import type { FontStore } from '../fonts/index.ts';
+import { warnAboutGeminiCertificate } from '../gemini/site-certificate.ts';
 import { followAllMovedComments, followMovedComments } from '../comments/index.ts';
 import { createReplyNotices } from '../comments/reply-notices.ts';
 import { createContentSync, createScheduler } from '../content/index.ts';
@@ -394,6 +395,9 @@ export function createServices({
   });
   settings.watch(SITE.relays, async () => {
     await relays.sync();
+  });
+  settings.watch(SITE.gemini, async ({ next }) => {
+    if (next) await warnAboutGeminiCertificate(resolved, settings);
   });
 
   const jobs = createJobQueue({

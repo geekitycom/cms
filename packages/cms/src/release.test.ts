@@ -110,18 +110,18 @@ describe('readWorkspace', () => {
     );
   });
 
-  it('reads core and every plugin package of this repository', () => {
+  it('reads every package of this repository', () => {
     const root = path.join(PACKAGE_ROOT, '..', '..');
-    const plugins = fs
+    const packages = fs
       .readdirSync(path.join(root, 'packages'))
-      .filter((dir) => dir.startsWith('plugin-'))
-      .map((dir) => `@geekity/${dir}`);
+      .map((dir) => (dir === 'cms' ? CORE : `@geekity/${dir}`));
 
     const names = readWorkspace(root).map((p) => p.name);
 
-    assert.equal(plugins.length, 5);
-    assert.ok(plugins.includes('@geekity/plugin-umami'));
-    assert.deepEqual(new Set(names), new Set([CORE, ...plugins]));
+    assert.equal(packages.length, 7);
+    assert.ok(packages.includes('@geekity/plugin-umami'));
+    assert.ok(packages.includes('@geekity/md2gemini'));
+    assert.deepEqual(new Set(names), new Set(packages));
   });
 
   it('marks every package of this repository public', () => {
@@ -161,12 +161,12 @@ describe('releaseOrder', () => {
     );
   });
 
-  it('orders this repository core first and plugin-llm before the plugins that require it', () => {
+  it('orders this repository md2gemini, then core, then plugin-llm before the plugins that require it', () => {
     const order = releaseOrder(readWorkspace(path.join(PACKAGE_ROOT, '..', '..'))).map(
       (p) => p.name,
     );
 
-    assert.equal(order[0], CORE);
+    assert.deepEqual(order.slice(0, 2), ['@geekity/md2gemini', CORE]);
     for (const dependent of ['@geekity/plugin-post-summary', '@geekity/plugin-tag-suggest']) {
       assert.ok(order.indexOf('@geekity/plugin-llm') < order.indexOf(dependent), order.join());
     }

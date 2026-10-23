@@ -13,6 +13,8 @@ import type { Context } from 'hono';
 
 import { postLabel } from '../content/post-type.ts';
 import { isServed } from '../content/served.ts';
+import { readGeminiCertificate } from '../gemini/certificate.ts';
+import { geminiHost } from '../gemini/site-certificate.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { settingsPagePath } from './settings-page.ts';
 import type { SettingsPage } from './settings-page.ts';
@@ -66,9 +68,10 @@ export const READING_SETTINGS: SettingsPage = {
     'robots_rules',
     'llms_txt',
     'index_now',
+    'gemini',
   ],
 
-  panels: (c, settings) => {
+  panels: async (c, settings) => {
     const choices = pageChoices(c);
     const missing = (slug: string): boolean =>
       slug !== '' && !choices.some((choice) => choice.slug === slug);
@@ -77,6 +80,9 @@ export const READING_SETTINGS: SettingsPage = {
       pageChoices: choices,
       homepageMissing: missing(settings.homepage),
       postsPageMissing: missing(settings.posts_page),
+      geminiCertificate: settings.gemini
+        ? await readGeminiCertificate(c.var.config, geminiHost(c.var.config, settings))
+        : undefined,
     };
   },
 };

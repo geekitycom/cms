@@ -139,6 +139,34 @@ export function createLoginThrottle(options: LoginThrottleOptions): LoginThrottl
   };
 }
 
+export interface RequestLimitOptions {
+  requests: number;
+  windowSeconds: number;
+  now: Clock;
+}
+
+export interface RequestLimit {
+  take(key: string): number | undefined;
+}
+
+export function createRequestLimit(options: RequestLimitOptions): RequestLimit {
+  const window = options.windowSeconds * 1000;
+  const entries = new Map<string, { count: number; endsAt: number }>();
+
+  return {
+    take(key) {
+      const at = options.now().getTime();
+      for (const [each, entry] of entries) {
+        if (at >= entry.endsAt) entries.delete(each);
+      }
+      const entry = entries.get(key) ?? { count: 0, endsAt: at + window };
+      entry.count += 1;
+      entries.set(key, entry);
+      return entry.count > options.requests ? Math.ceil((entry.endsAt - at) / 1000) : undefined;
+    },
+  };
+}
+
 /**
  * Where a request came from, as far as the site can tell, or `undefined`.
  *

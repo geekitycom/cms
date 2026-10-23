@@ -39,6 +39,7 @@ RUN pnpm fetch
 # alone (decision-33).
 COPY packages/cms/package.json packages/cms/package.json
 COPY packages/plugin-wordpress/package.json packages/plugin-wordpress/package.json
+COPY packages/md2gemini/package.json packages/md2gemini/package.json
 COPY apps/demo/package.json apps/demo/package.json
 
 # --ignore-scripts: the root `prepare` is `husky && pnpm build`, and husky has
@@ -48,9 +49,10 @@ COPY apps/demo/package.json apps/demo/package.json
 RUN pnpm install --offline --frozen-lockfile --ignore-scripts
 
 COPY tsconfig.base.json ./
+COPY packages/md2gemini packages/md2gemini
 COPY packages/cms packages/cms
 
-# tsc into dist/ and the admin editor bundle into admin/static/editor.js.
+RUN pnpm --filter @geekity/md2gemini build
 RUN pnpm --filter @geekity/cms build
 
 # The package as npm would publish it (package.json `files`: dist, admin,
@@ -107,7 +109,7 @@ WORKDIR /site
 # Runs unprivileged, as the uid 1000 the base image ships as `node`.
 USER node
 
-EXPOSE 3000
+EXPOSE 3000 1965
 
 # Only the status code is read, which is why /healthz answers 503 rather than a
 # 200 carrying an error when the site cannot serve. start_period covers boot, so

@@ -84,6 +84,7 @@ export const serverError: ErrorHandler<GeekityEnv> = (error, c) => {
         'cache-control': NO_STORE,
       });
     case 'markdown':
+    case 'gemini':
     case 'text':
       return statusMarkdownResponse(c, representation, 'serverError', 500, {
         fallback: FALLBACK_MARKDOWN,

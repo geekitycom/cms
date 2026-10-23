@@ -64,6 +64,7 @@ these:
 | [`@geekity/plugin-post-summary`](packages/plugin-post-summary/README.md) | Suggests a post's title and description in the editor.             |
 | [`@geekity/plugin-tag-suggest`](packages/plugin-tag-suggest/README.md)   | Suggests tags for a post in the editor.                            |
 | [`@geekity/plugin-umami`](packages/plugin-umami/README.md)               | Adds the Umami tracker to public pages and stats to the dashboard. |
+| [`@geekity/md2gemini`](packages/md2gemini/README.md)                     | Converts Markdown to gemtext for Gemini.                           |
 
 ## License
 

@@ -337,10 +337,12 @@ request.
 
 ## Releasing
 
-Five packages are released from this repository: `@geekity/cms` in
-`packages/cms` and the four plugin packages in `packages/plugin-*`. Each has
-its own version, changelog and tag. Core's tags look like `v0.26.0`. A
-plugin's tags include its component, for example `plugin-llm-v0.2.0`.
+Seven packages are released from this repository: `@geekity/cms` in
+`packages/cms`, the five plugin packages in `packages/plugin-*`, and the
+Markdown to gemtext converter `@geekity/md2gemini` in `packages/md2gemini`.
+Each has its own version, changelog and tag. Core's tags look like `v0.26.0`.
+Every other package's tags include its component, for example
+`plugin-llm-v0.2.0` or `md2gemini-v0.1.0`.
 `apps/demo` is private and unversioned, so release-please does not track it.
 
 release-please writes the versions, the changelogs and the tags (decision-7).
@@ -348,8 +350,8 @@ release-please writes the versions, the changelogs and the tags (decision-7).
 request runs it in GitHub Actions (decision-58).
 
 `packages/cms` publishes only `dist`, `admin`, `themes`, `templates`,
-`README.md` and `LICENSE`. A plugin package publishes only `dist`, `README.md`
-and `LICENSE`. To check what a package would publish, run:
+`README.md` and `LICENSE`. A plugin package and `packages/md2gemini` publish only
+`dist`, `README.md` and `LICENSE`. To check what a package would publish, run:
 
 ```sh
 pnpm build

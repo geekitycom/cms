@@ -56,6 +56,7 @@ imperative, and carries no trailing full stop.
 | `plugin-post-summary` | The published `@geekity/plugin-post-summary` package. |
 | `plugin-tag-suggest`  | The published `@geekity/plugin-tag-suggest` package.  |
 | `plugin-umami`        | The published `@geekity/plugin-umami` package.        |
+| `md2gemini`           | The published `@geekity/md2gemini` package.           |
 
 Examples:
 

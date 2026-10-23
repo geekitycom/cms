@@ -54,6 +54,7 @@ export interface LlmsIndex {
   title: string;
   /** The site's tagline, or empty for none. */
   description: string;
+  capsule?: string | undefined;
   /** The site's menus, every item once. */
   navigation: readonly LlmsEntry[];
   pages: readonly LlmsEntry[];
@@ -74,6 +75,9 @@ export function llmsTxt(index: LlmsIndex, baseUrl: string, markdownUrl: Markdown
   return markdownFile([
     `# ${oneLine(index.title)}`,
     ...(description === '' ? [] : [`> ${description}`]),
+    ...(index.capsule === undefined
+      ? []
+      : [`This site is also a Gemini capsule at <${index.capsule}>.`]),
     ...section('Navigation', index.navigation, link),
     ...section('Pages', index.pages, link),
     ...section('Posts', index.posts, link),

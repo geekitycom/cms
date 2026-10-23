@@ -4,13 +4,15 @@ import type { Document } from '../content/document.ts';
 import { isListed } from '../content/served.ts';
 import { calendarDayIn } from '../content/time.ts';
 import type { GeekityEnv } from './env.ts';
+import { capsuleUrl } from '../gemini/capsule.ts';
+import { absoluteUrl } from '../util/url.ts';
 import { siteTimezone } from '../theme/site-data.ts';
 import { feedExcerpt } from '../content/excerpt.ts';
 import { archiveOf, homeListing } from './listing-subject.ts';
 import type { ListingSubject } from './listing-subject.ts';
 import { generatedLlmsTxt, llmsTxtResponse, ownLlmsTxt } from './llms.ts';
 import type { LlmsEntry, LlmsIndex } from './llms.ts';
-import { markdownUrlFor } from './markdown-representation.ts';
+import { siteUrlFor } from './markdown-representation.ts';
 import { navigationLinks } from '../site/navigation.ts';
 import { lastModifiedOf, latestModified } from './negotiate.ts';
 import { pageCount } from './pagination.ts';
@@ -42,7 +44,8 @@ export function llmsTxt(c: Context<GeekityEnv>): Response {
   const { contentDir, baseUrl } = c.var.config;
   if (!c.var.siteAtRequestStart.llms_txt) return notFound(c);
   const file =
-    ownLlmsTxt(contentDir) ?? generatedLlmsTxt(llmsIndex(c), baseUrl, markdownUrlFor(c, '/'));
+    ownLlmsTxt(contentDir) ??
+    generatedLlmsTxt(llmsIndex(c), baseUrl, siteUrlFor(c, '/', 'markdown'));
   return llmsTxtResponse(file, conditionalHeaders(c));
 }
 
@@ -147,6 +150,11 @@ function llmsIndex(c: Context<GeekityEnv>): LlmsIndex {
   return {
     title: site.title,
     description: site.tagline ?? '',
+    capsule: capsuleUrl(
+      c.var.config,
+      c.var.siteAtRequestStart,
+      new URL(absoluteUrl('/', c.var.config.baseUrl)).pathname,
+    ),
     navigation: navigationLinks(site).map((item) => ({ title: item.label, href: item.url })),
     pages: pages.map(entry).sort((a, b) => a.title.localeCompare(b.title)),
     posts: posts.map((document) => ({

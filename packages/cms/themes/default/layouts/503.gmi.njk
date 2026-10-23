@@ -1,0 +1,9 @@
+{#
+  The body of the maintenance page's gemtext, written as gemtext for the
+  reason 404.gmi.njk gives. `until` and `untilText` are as in 503.md.njk.
+  When this fails, the CMS writes a fixed body instead.
+#}
+This site is down for maintenance and will be back shortly.{% if until %} It should be back by {{ untilText }}.{% endif %} Please try again then.
+
+=> {{ "/" | geminiUrl }} Home
+=> {{ "/search/" | geminiUrl }} Search the site

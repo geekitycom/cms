@@ -87,10 +87,13 @@ import { createTemplateEnvironment, useThemeDirs } from '../theme/templates.ts';
 import { createThemeSource, findThemeFile } from '../theme/themes.ts';
 import type { ThemeColors, ThemeFont, ThemeSource } from '../theme/themes.ts';
 import type { PageFont } from '../fonts/index.ts';
+import { representationHref } from './negotiate.ts';
+import type { TextFormat } from './negotiate.ts';
 import { schemeTokens } from '../theme/scheme-tokens.ts';
 import type { SchemeTokens } from '../theme/scheme-tokens.ts';
 import { formatFileSize } from '../util/file-size.ts';
 import { absoluteUrl } from '../util/url.ts';
+import { capsuleUrl } from '../gemini/capsule.ts';
 import { citedPictureAlt } from '../webmention/cited-picture.ts';
 import { readCitedStart } from '../webmention/cited-start.ts';
 import type { ReplyContext } from '../webmention/reply-context.ts';
@@ -136,22 +139,28 @@ export const OPTIONAL_TEMPLATES = {
   postsPage: 'layouts/posts-page.njk',
 } as const;
 
-/**
- * The two partials around a page's Markdown, found on the theme search path
- * like every other template.
- */
-export const MARKDOWN_TEMPLATES = {
-  header: 'partials/markdown-header.md.njk',
-  footer: 'partials/markdown-footer.md.njk',
-} as const;
+export interface TextTemplates {
+  readonly markdown: string;
+  readonly gemini: string;
+}
 
-/** What {@link Renderer.renderStatusMarkdown} writes a status page's Markdown with. */
+export interface ThemeText {
+  readonly format: TextFormat;
+  readonly text: string;
+}
+
+const CHROME_TEMPLATES = {
+  header: { markdown: 'partials/markdown-header.md.njk', gemini: 'partials/gemini-header.gmi.njk' },
+  footer: { markdown: 'partials/markdown-footer.md.njk', gemini: 'partials/gemini-footer.gmi.njk' },
+} as const satisfies Record<string, TextTemplates>;
+
 export interface StatusMarkdownContext {
   /** The path the request was for. */
   url: string;
   markdownUrl: MarkdownUrl;
   /** On the maintenance page: when the operator expects the site back. */
   until?: Date | undefined;
+  format: TextFormat;
 }
 
 /** What {@link Renderer.renderMarkdownChrome} writes links with. */
@@ -165,12 +174,16 @@ export interface MarkdownChromeOptions {
    * `backlinks`, and `archiveMonths` when it says `archive: true`.
    */
   document?: Document | undefined;
+  /**
+   * For `gemini`, the archive page's descriptions are left off, so each of
+   * its posts converts to a gemfeed line, `=> url YYYY-MM-DD title`.
+   */
+  format: TextFormat;
 }
 
-/** A page's Markdown header and footer, as the theme wrote them. */
 export interface MarkdownChromeText {
-  readonly header: string;
-  readonly footer: string;
+  readonly header: ThemeText;
+  readonly footer: ThemeText;
 }
 
 /** A listing of documents, ready to render. */
@@ -306,19 +319,23 @@ export interface Renderer {
    */
   renderMaintenance(url: string, until: Date | undefined): string;
   /**
-   * The body of a status page's Markdown, from the theme's `markdown`
-   * template in {@link STATUS_PAGES}, with autoescaping off. The template gets
-   * `site`, `url`, `title`, the maintenance page's `until` and `untilText`,
-   * and the filters the Markdown partials have.
+   * The body of a status page's Markdown or gemtext, from the theme's
+   * templates in {@link STATUS_PAGES}, with autoescaping off. The template
+   * gets `site`, `url`, `title`, the maintenance page's `until` and
+   * `untilText`, and the filters the Markdown partials have.
    */
-  renderStatusMarkdown(page: StatusPageName, context: StatusMarkdownContext): string;
+  renderStatusMarkdown(page: StatusPageName, context: StatusMarkdownContext): ThemeText;
   /**
-   * The header and footer of a page's Markdown, through
-   * {@link MARKDOWN_TEMPLATES} with autoescaping off: Markdown is not HTML.
+   * The header and footer of a page's Markdown or gemtext, through
+   * {@link CHROME_TEMPLATES} with autoescaping off: Markdown is not HTML.
    * The partials get `site`, `menus`, `soloAuthor`, the chrome's links as
    * data, a document's `categories`, `tags`, `backlinks`, `conversation` and
    * form links, `archiveMonths` on an archive page, and the `escapeMarkdown`,
-   * `nest` and `markdownUrl` filters.
+   * `nest`, `markdownUrl` and `geminiUrl` filters.
+   *
+   * Gemtext comes from the first of the chosen theme's `.gmi.njk`, its
+   * `.md.njk`, the default theme's `.gmi.njk` and its `.md.njk`
+   * (decision-60), and the result says which format the theme wrote.
    */
   renderMarkdownChrome(chrome: MarkdownChrome, options: MarkdownChromeOptions): MarkdownChromeText;
   /** Any template by name, with the site data already in the context. */
@@ -628,12 +645,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     ),
   );
   markdownEnvironment.addFilter('quote', (value: unknown) => quote(filterText(value)));
-  markdownEnvironment.addFilter('markdownUrl', function (this: unknown, value: unknown) {
-    const url = filterText(value);
-    const lookup = (this as { lookup?: (name: string) => unknown } | undefined)?.lookup;
-    const write = typeof lookup === 'function' ? lookup.call(this, 'markdownUrl') : undefined;
-    return typeof write === 'function' ? (write as MarkdownUrl)(url) : url;
-  });
+  for (const name of ['markdownUrl', 'geminiUrl']) {
+    markdownEnvironment.addFilter(name, function (this: unknown, value: unknown) {
+      const url = filterText(value);
+      const lookup = (this as { lookup?: (name: string) => unknown } | undefined)?.lookup;
+      const write = typeof lookup === 'function' ? lookup.call(this, name) : undefined;
+      return typeof write === 'function' ? (write as MarkdownUrl)(url) : url;
+    });
+  }
   const pages = options.pages ?? ((): readonly Document[] => []);
   const users = options.users ?? ((): readonly User[] => []);
 
@@ -833,7 +852,10 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     return archiveMonths(posts, siteTimezone(site), siteLocale(site), citedPage);
   }
 
-  function markdownArchiveContext(document: Document | undefined): Record<string, unknown> {
+  function markdownArchiveContext(
+    document: Document | undefined,
+    gemfeed: boolean,
+  ): Record<string, unknown> {
     const months = document === undefined ? undefined : archiveOf(document);
     if (months === undefined) return {};
 
@@ -844,7 +866,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         label: entry.title,
         url: entry.url,
         date: calendarDayIn(entry.date, timezone),
-        description: entry.description === undefined ? undefined : oneLine(entry.description),
+        description:
+          gemfeed || entry.description === undefined ? undefined : oneLine(entry.description),
       })),
     }));
     return { archiveMonths: markdownMonths };
@@ -1091,6 +1114,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       ),
       url,
       page: { ...context.page, url },
+      ...capsuleContext(url),
       ...(objectId === undefined ? {} : { activityStreams: objectId }),
       ...(feedsIt ? { commentsFeed: commentsFeedPath(document.permalink) } : {}),
       // And the whole archive, for a page whose front matter asked for it
@@ -1163,6 +1187,16 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     return { ...form, loaded: mark };
   }
 
+  function capsuleContext(url: string): { capsuleUrl?: string } {
+    const { pathname, search } = new URL(absoluteUrl(url, config.baseUrl));
+    const capsule = capsuleUrl(
+      config,
+      requestSite(),
+      representationHref(`${pathname}${search}`, 'gemini'),
+    );
+    return capsule === undefined ? {} : { capsuleUrl: capsule };
+  }
+
   function statusPage(
     { template, title }: StatusPage,
     url: string,
@@ -1173,10 +1207,9 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
   function renderMarkdownChrome(
     chrome: MarkdownChrome,
-    { markdownUrl, frontPage, document }: MarkdownChromeOptions,
+    { markdownUrl, frontPage, document, format }: MarkdownChromeOptions,
   ): MarkdownChromeText {
     const site = siteData.read();
-    useThemeDirs(markdownEnvironment, themes.current().dirs);
     const soloAuthor = siteAuthorContext(users(), site.author);
     const context = {
       site,
@@ -1184,7 +1217,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       navigation: navigationLinks(site),
       ...(soloAuthor === undefined ? {} : { soloAuthor }),
       ...(frontPage === undefined ? {} : newestPostsContext(frontPage)),
-      ...markdownArchiveContext(document),
+      ...markdownArchiveContext(document, format === 'gemini'),
       ...markdownLinksContext(document),
       ...markdownKindContext(document),
       ...markdownConversationContext(document, chrome.url),
@@ -1193,11 +1226,24 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       bio: chrome.bio ?? (chrome.url === '/' ? bioOf(soloAuthor) : undefined),
       staticFrontPage: frontPage !== undefined,
       markdownUrl,
+      ...(format === 'gemini' ? { geminiUrl: markdownUrl } : {}),
+      ...(format === 'markdown' && chrome.type !== 'status' ? capsuleContext(chrome.url) : {}),
     };
     return {
-      header: markdownEnvironment.render(MARKDOWN_TEMPLATES.header, context),
-      footer: markdownEnvironment.render(MARKDOWN_TEMPLATES.footer, context),
+      header: renderText(CHROME_TEMPLATES.header, format, context),
+      footer: renderText(CHROME_TEMPLATES.footer, format, context),
     };
+  }
+
+  function renderText(
+    templates: TextTemplates,
+    format: TextFormat,
+    context: Record<string, unknown>,
+  ): ThemeText {
+    const { dirs } = themes.current();
+    useThemeDirs(markdownEnvironment, dirs);
+    const written = format === 'gemini' && writesGemtext(dirs, templates) ? 'gemini' : 'markdown';
+    return { format: written, text: markdownEnvironment.render(templates[written], context) };
   }
 
   return {
@@ -1287,6 +1333,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         title: listing.title,
         url: listing.url,
         page: { ...document?.page, url: listing.url },
+        ...capsuleContext(listing.url),
         // `posts` is the friendly name a theme loops over; `pagination.items`
         // is the same array under the name Eleventy gives it.
         posts: items,
@@ -1323,6 +1370,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         title: search.query === '' ? 'Search' : `Search results for “${search.query}”`,
         url: search.url,
         page: { url: search.url },
+        ...capsuleContext(search.url),
         // The words as the reader typed them, for the form to put back in the
         // box and the heading to repeat. Autoescaped like any other string.
         query: search.query,
@@ -1338,6 +1386,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
         title: `${comment.author.name} on ${on.label}`,
         url,
         page: { url },
+        ...capsuleContext(url),
         noindex: true,
         comment,
         ancestors,
@@ -1352,14 +1401,14 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     renderMaintenance: (url, until) =>
       statusPage(STATUS_PAGES.maintenance, url, untilContext(until)),
 
-    renderStatusMarkdown(page, { url, markdownUrl, until }) {
-      useThemeDirs(markdownEnvironment, themes.current().dirs);
-      const { markdown, title } = STATUS_PAGES[page];
-      return markdownEnvironment.render(markdown, {
+    renderStatusMarkdown(page, { url, markdownUrl, until, format }) {
+      const templates = STATUS_PAGES[page];
+      return renderText(templates, format, {
         site: siteData.read(),
         url,
-        title,
+        title: templates.title,
         markdownUrl,
+        ...(format === 'gemini' ? { geminiUrl: markdownUrl } : {}),
         ...untilContext(until),
       });
     },
@@ -1368,26 +1417,45 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
   };
 }
 
-interface StatusPage {
+interface StatusPage extends TextTemplates {
   readonly template: string;
-  readonly markdown: string;
   readonly title: string;
 }
 
 export const STATUS_PAGES = {
-  notFound: { template: TEMPLATES.notFound, markdown: 'layouts/404.md.njk', title: 'Not found' },
-  gone: { template: TEMPLATES.gone, markdown: 'layouts/410.md.njk', title: 'Deleted' },
+  notFound: {
+    template: TEMPLATES.notFound,
+    markdown: 'layouts/404.md.njk',
+    gemini: 'layouts/404.gmi.njk',
+    title: 'Not found',
+  },
+  gone: {
+    template: TEMPLATES.gone,
+    markdown: 'layouts/410.md.njk',
+    gemini: 'layouts/410.gmi.njk',
+    title: 'Deleted',
+  },
   serverError: {
     template: TEMPLATES.serverError,
     markdown: 'layouts/500.md.njk',
+    gemini: 'layouts/500.gmi.njk',
     title: 'Something went wrong',
   },
   maintenance: {
     template: TEMPLATES.maintenance,
     markdown: 'layouts/503.md.njk',
+    gemini: 'layouts/503.gmi.njk',
     title: 'Down for maintenance',
   },
 } as const satisfies Record<string, StatusPage>;
+
+function writesGemtext(dirs: readonly string[], templates: TextTemplates): boolean {
+  for (const dir of dirs) {
+    if (findThemeFile([dir], templates.gemini) !== undefined) return true;
+    if (findThemeFile([dir], templates.markdown) !== undefined) return false;
+  }
+  return false;
+}
 
 export type StatusPageName = keyof typeof STATUS_PAGES;
 

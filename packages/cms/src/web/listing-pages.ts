@@ -13,6 +13,7 @@ import {
   notAcceptableResponse,
   representationEtag,
   representationResponse,
+  textFormatOf,
 } from './negotiate.ts';
 import type { Representation } from './negotiate.ts';
 import { offsetForPage, paginate } from './pagination.ts';
@@ -158,8 +159,9 @@ export function listing(
   const title = archive.pageTitle(renderer.site());
   const available = LISTING_REPRESENTATIONS;
 
-  if (page.representation === 'markdown' || page.representation === 'text') {
-    const body = listingMarkdown(c, archive, { ...page, title, documents });
+  const format = textFormatOf(page.representation);
+  if (format !== undefined) {
+    const body = listingMarkdown(c, archive, { ...page, title, documents }, format);
     return pagedResponse(c, page, { body, documents, available, fingerprint: body });
   }
 
@@ -211,8 +213,9 @@ export function search(
   const documents = hits.map((hit) => hit.document);
   const available = LISTING_REPRESENTATIONS;
 
-  if (page.representation === 'markdown' || page.representation === 'text') {
-    const body = searchMarkdown(c, { ...page, query, hits });
+  const format = textFormatOf(page.representation);
+  if (format !== undefined) {
+    const body = searchMarkdown(c, { ...page, query, hits }, format);
     return pagedResponse(c, page, { body, documents, available, fingerprint: body });
   }
 

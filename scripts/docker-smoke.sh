@@ -128,6 +128,9 @@ container="$(docker run --detach \
   --volume "${NAME}-data:/site/data" \
   --volume "${NAME}-plugins:/site/plugins" \
   --env GEEKITY_BASE_URL=http://localhost:3000 \
+  --env GEEKITY_SITE__GEMINI=on \
+  --env GEEKITY_TRUST_PROXY=true \
+  --env GEEKITY_ACCESS_LOG_ADDRESS=true \
   "${image}")"
 
 hostport="$(docker port "${container}" 3000/tcp | head -n 1)"
@@ -174,6 +177,25 @@ if ! cmp -s "${scratch}/packaged.css" "${scratch}/style.css"; then
   fail "GET /theme/style.css is not ${STYLE} from the image"
 fi
 echo "ok  GET /theme/style.css is the default theme's stylesheet"
+
+log "checking the container answers gemini://, directly and behind a PROXY header"
+docker cp "${ROOT}/scripts/lib/gemini-request.mjs" "${container}:/tmp/gemini-request.mjs"
+gemini=""
+for _ in $(seq 20); do
+  if gemini="$(docker exec "${container}" node /tmp/gemini-request.mjs 1965 gemini://localhost/ 2>/dev/null)"; then
+    break
+  fi
+  sleep 0.5
+done
+[[ "${gemini}" == "20 text/gemini; charset=utf-8" ]] \
+  || fail "gemini://localhost/ answered '${gemini:-nothing}', not 20 text/gemini"
+proxied="$(docker exec "${container}" node /tmp/gemini-request.mjs 1965 gemini://localhost/about/ 203.0.113.7)" \
+  || fail "gemini://localhost/about/ behind a PROXY header got no answer"
+[[ "${proxied}" == "20 text/gemini; charset=utf-8" ]] \
+  || fail "gemini://localhost/about/ behind a PROXY header answered '${proxied}'"
+docker logs "${container}" 2>&1 | grep -qE '^GEMINI /about/ 20 [0-9.]+ms 203\.0\.113\.7$' \
+  || fail "the access log did not name the client the PROXY header carried"
+echo "ok  gemini://localhost/ and gemini://localhost/about/ behind a PROXY header"
 
 readonly PLUGIN="@geekity-smoke/plugin-hello"
 readonly REGISTRY_PORT=4873

@@ -360,7 +360,7 @@ after it posts a draft.
   `X-Robots-Tag: noindex` and a robots `noindex` meta, with no `ETag` or
   `Last-Modified`. No shared cache keeps it, and no later request revalidates
   against it.
-- Only the HTML page is served. Its `.md` and `.json` representations and its
+- Only the HTML page is served. Its `.md`, `.gmi` and `.json` representations and its
   ActivityStreams object still return 404.
 - The post stays off every list, feed, the sitemap and search, for signed-in
   users too.

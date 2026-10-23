@@ -23,6 +23,7 @@ export default {
      * - `plugin-post-summary` the published @geekity/plugin-post-summary package
      * - `plugin-tag-suggest` the published @geekity/plugin-tag-suggest package
      * - `plugin-umami` the published @geekity/plugin-umami package
+     * - `md2gemini` the published @geekity/md2gemini package
      */
     'scope-enum': [
       2,
@@ -39,6 +40,7 @@ export default {
         'plugin-post-summary',
         'plugin-tag-suggest',
         'plugin-umami',
+        'md2gemini',
       ],
     ],
   },

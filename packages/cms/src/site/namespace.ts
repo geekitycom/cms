@@ -420,6 +420,12 @@ export const SITE = declareNamespace({
       description: 'Whether the site tells the IndexNow search engines what changed.',
       onChange: mintIndexNowKey,
     },
+    gemini: {
+      fileKey: 'gemini',
+      type: boolean,
+      default: false,
+      description: 'Whether the site serves gemini:// and keeps a certificate for it.',
+    },
     mail_provider: {
       fileKey: 'mailProvider',
       type: oneOf(MAIL_PROVIDERS),

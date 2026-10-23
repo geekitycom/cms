@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 
+import { accessLine } from './web/access-line.ts';
 import { clientAddress } from './web/throttle.ts';
 import type { AccessLogWriter, ResolvedConfig } from './config.ts';
 import type { GeekityEnv } from './web/env.ts';
@@ -17,8 +18,18 @@ export interface AccessLogOptions {
 }
 
 /** The default sink: one write per line, the newline included, like the CLI's. */
-function writeToStdout(line: string): void {
+export function writeToStdout(line: string): void {
   process.stdout.write(`${line}\n`);
+}
+
+const LOGGED_ELSEWHERE = Symbol('logged elsewhere');
+
+export const LOGGED_ELSEWHERE_ENV: Readonly<Record<symbol, true>> = Object.freeze({
+  [LOGGED_ELSEWHERE]: true,
+});
+
+function loggedElsewhere(env: unknown): boolean {
+  return typeof env === 'object' && env !== null && LOGGED_ELSEWHERE in env;
 }
 
 /**
@@ -61,6 +72,7 @@ export function createAccessLog(options: AccessLogOptions): MiddlewareHandler<Ge
   const { accessLogAddress, trustProxy } = options.config;
 
   return async function accessLog(c, next) {
+    if (loggedElsewhere(c.env)) return await next();
     const started = performance.now();
     let threw = false;
     try {
@@ -74,14 +86,9 @@ export function createAccessLog(options: AccessLogOptions): MiddlewareHandler<Ge
       threw = true;
       throw error;
     } finally {
-      const elapsed = (performance.now() - started).toFixed(1);
       const status = threw ? 500 : c.res.status;
-      let line = `${c.req.method} ${requestTarget(c.req.url)} ${String(status)} ${elapsed}ms`;
-      if (accessLogAddress) {
-        const address = clientAddress(c, { trustProxy });
-        if (address !== undefined) line += ` ${address}`;
-      }
-      write(line);
+      const address = accessLogAddress ? clientAddress(c, { trustProxy }) : undefined;
+      write(accessLine(c.req.method, requestTarget(c.req.url), status, started, address));
     }
   };
 }

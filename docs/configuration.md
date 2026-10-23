@@ -43,7 +43,7 @@ directory. Absolute directories are used as given.
 | `sessionLifetime`  | `1209600` (14 days)                                  | `GEEKITY_SESSION_LIFETIME`   | How long an admin login lasts, in seconds.                                                                                                                                                                                                                                                                               |
 | `loginAttempts`    | `5`                                                  | `GEEKITY_LOGIN_ATTEMPTS`     | Failed sign-ins a username or an address may make before it is locked out.                                                                                                                                                                                                                                               |
 | `loginLockout`     | `900` (15 minutes)                                   | `GEEKITY_LOGIN_LOCKOUT`      | How long the first lockout lasts, in seconds. See [Login hardening](security.md#login-hardening).                                                                                                                                                                                                                        |
-| `trustProxy`       | `false`                                              | `GEEKITY_TRUST_PROXY`        | Trust `X-Forwarded-For` to give the address a sign-in came from.                                                                                                                                                                                                                                                         |
+| `trustProxy`       | `false`                                              | `GEEKITY_TRUST_PROXY`        | Trust `X-Forwarded-For` to give the address a sign-in came from, and a PROXY protocol header to give a Gemini client's. See [The Gemini listener](#the-gemini-listener).                                                                                                                                                 |
 | `accessLog`        | `false`; `true` under `geekity serve`                | `GEEKITY_ACCESS_LOG`         | One line per request on stdout: method, path with query, status, duration. See [The access log](#the-access-log).                                                                                                                                                                                                        |
 | `accessLogAddress` | `false`                                              | `GEEKITY_ACCESS_LOG_ADDRESS` | Add the client address to the end of each access-log line. `trustProxy` decides which address is used.                                                                                                                                                                                                                   |
 | `accessLogWriter`  | stdout                                               | —                            | Where the lines go instead. See [The access log](#the-access-log).                                                                                                                                                                                                                                                       |
@@ -51,6 +51,9 @@ directory. Absolute directories are used as given.
 | `maintenance`      | `false`                                              | `GEEKITY_MAINTENANCE`        | Keep the site in maintenance mode, answering 503, until it restarts without this field. For everyday use, run `geekity maintenance on` and `off`, or use Tools > Maintenance. See [Maintenance mode](public-site.md#maintenance-mode).                                                                                   |
 | `devMode`          | `false`                                              | `GEEKITY_DEV_MODE`           | Start the site in dev mode. Dev mode holds every outbound side effect until `geekity dev-mode off` or the switch at Tools > Dev mode. See [Dev mode](deploying.md#dev-mode).                                                                                                                                             |
 | `compression`      | `true`                                               | `GEEKITY_COMPRESSION`        | Compress text responses with brotli or gzip. Turn it off behind a proxy that compresses. See [Compression](public-site.md#compression).                                                                                                                                                                                  |
+| `geminiCert`       | none                                                 | `GEEKITY_GEMINI_CERT`        | Your own PEM certificate for Gemini, instead of the one the site generates. Needs `geminiKey`. See [The Gemini certificate](#the-gemini-certificate).                                                                                                                                                                    |
+| `geminiKey`        | none                                                 | `GEEKITY_GEMINI_KEY`         | The PEM private key for `geminiCert`.                                                                                                                                                                                                                                                                                    |
+| `geminiPort`       | `1965`                                               | `GEEKITY_GEMINI_PORT`        | Port the Gemini listener uses while Gemini is on. `0` picks a free one. See [The Gemini listener](#the-gemini-listener).                                                                                                                                                                                                 |
 | `securityHeaders`  | [see Security headers](security.md#security-headers) | —                            | Headers on every response. A string replaces a default or adds a header. `false` removes a header.                                                                                                                                                                                                                       |
 | `onDocumentChange` | none                                                 | —                            | Hook run for every change to the index. See [Hooks](plugins.md#hooks).                                                                                                                                                                                                                                                   |
 | `onPublish`        | none                                                 | —                            | Hook run when a document becomes visible. See [Hooks](plugins.md#hooks).                                                                                                                                                                                                                                                 |
@@ -132,6 +135,116 @@ precedence, and the form shows which value is in effect and why. When neither
 sets a value, the site uses the stored setting instead of the
 `http://localhost:<port>` fallback.
 [The base URL setting](settings.md#the-base-url-setting) has the full rule.
+
+## The Gemini certificate
+
+Gemini is off until `site.gemini` is on. Turn it on with **Serve over
+Gemini** on Settings > Reading, with `"gemini": true` in
+`content/_data/site.json`, or with `GEEKITY_SITE__GEMINI=on`.
+
+Gemini clients do not check a certificate against a certificate authority.
+A client trusts the certificate it sees on its first visit, and it keeps that
+certificate (trust on first use, or TOFU). If the certificate changes later,
+the client warns the reader that the capsule may be an impostor. Keep the same
+certificate for as long as the site exists.
+
+When the site starts with Gemini on and has no certificate, it generates one:
+
+- `data/gemini/cert.pem` is a self-signed X.509 certificate for the host of
+  the base URL in effect. It uses an ECDSA P-256 key and is valid for 50 years.
+- `data/gemini/key.pem` is its private key, at mode `0600` in a folder of mode
+  `0700`.
+
+Turning Gemini on from the admin generates the pair at once. Every later start
+uses the same pair. Both files are `kept` data, so a backup of `data/` and
+`geekity export` carry them, and `geekity import` restores them with their
+modes. A site moved with its archive keeps its identity.
+
+A changed base URL does not replace the certificate. `geekity gemini cert`
+says when the certificate does not name the host of the base URL. To replace
+it, run `geekity gemini new-cert` and restart the site. Every client that
+visited before then warns about the new certificate.
+
+```
+$ geekity gemini cert
+Certificate: /srv/site/data/gemini/cert.pem
+Subject: CN=shll.me
+Expires: 2076-10-23T12:00:00.000Z
+SHA-256 fingerprint: 3F:9A:…:C2
+```
+
+Settings > Reading shows the same fingerprint below **Serve over Gemini**.
+Publish it where readers can compare it with what their client shows.
+
+To use your own certificate, set `geminiCert` and `geminiKey`, or
+`GEEKITY_GEMINI_CERT` and `GEEKITY_GEMINI_KEY`, to PEM files. Set both or
+neither. The site does not generate a certificate while they are set, and
+`geekity gemini new-cert` refuses to replace your files. When a file is
+missing, cannot be read, is not a PEM certificate or key, or the key does not
+belong to the certificate, the site still starts and serves HTTP. It does not
+serve Gemini, and it logs one line that names the file and the problem.
+Settings > Reading and `geekity gemini cert` show the same problem.
+
+## The Gemini listener
+
+While `site.gemini` is on and the certificate is usable, the site answers
+`gemini://` requests on `geminiPort` (default `1965`), in the same process as
+HTTP. Turning Gemini on or off in the admin starts or stops the listener
+without a restart. Under `geekity serve`, a reload keeps the port open, as it
+does the HTTP port. `geekity serve` prints the port when it starts:
+
+```
+Geekity CMS is serving https://shll.me on port 3000
+Gemini is on port 1965 for shll.me
+```
+
+The listener answers only for the host of the base URL in effect, the host
+the certificate names. A request for another host or another scheme gets `53`.
+Each request is one absolute URL of at most 1024 bytes, ending in CR LF, that
+arrives within 10 seconds. Anything else gets `59`.
+
+Each request is answered from the same page HTTP serves for it:
+
+| Request                                     | Answer                                                                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `gemini://host/path/`                       | `20 text/gemini` with the body of `/path/index.gmi`                                                            |
+| `gemini://host/path/index.gmi`              | the same                                                                                                       |
+| `gemini://host/uploads/…`, an image variant | `20` with the file's media type                                                                                |
+| a moved page                                | `31` (permanent) or `30` (temporary), to a path on the capsule                                                 |
+| a page that does not exist                  | `51`                                                                                                           |
+| a deleted page                              | `52`                                                                                                           |
+| maintenance mode                            | `41`, with the back-by time when one is set                                                                    |
+| a server error                              | `40`                                                                                                           |
+| `gemini://host/search/`                     | `10`, asking for a query. The client sends it back as the query string, and the answer is the search's gemtext |
+
+Every gemtext page links to the site's pages by root-relative `.gmi` paths, so
+a reader who follows a link stays on the capsule. Links to other sites are
+unchanged.
+
+Each client address may make 60 requests a minute. A request over that gets
+`44` with the seconds to wait.
+
+Behind a layer-4 proxy, the socket's address is the proxy's. With `trustProxy`
+on, a connection may open with a PROXY protocol header, version 1 or 2, and
+the client address in it is the one the throttle counts and the access log
+shows. The header is optional: a connection without one is the client itself.
+A header that cannot be read, is longer than 2 KiB, or is not complete
+within 10 seconds closes the connection. Only a proxy whose own address is
+loopback (127.0.0.0/8, `::1`), private (10.0.0.0/8, 172.16.0.0/12,
+192.168.0.0/16, `fc00::/7`) or link-local (169.254.0.0/16, `fe80::/10`) may
+send the header, IPv4-mapped IPv6 forms included. That covers a proxy on the
+same host and one that reaches the container over the Docker bridge. A
+connection from any other address that opens with a PROXY header is closed,
+so a proxy on another host with a public address is not trusted, and a
+visitor cannot name a different client address. With `trustProxy` off, a
+connection that opens with a PROXY header is closed. [Serving Gemini](deploying.md#serving-gemini) has
+proxy configurations for Caddy and nginx.
+
+While Gemini is on, the site links to its capsule. Each HTML page that has
+gemtext carries `<link rel="alternate" type="text/gemini">` with its
+gemini:// URL, its Markdown ends with a `Gemini` section linking the same URL,
+and the generated `/llms.txt` names the capsule. A gemini:// URL has the host
+of the base URL in effect and `geminiPort`, left out when it is 1965.
 
 ## Plugin settings
 
@@ -274,11 +387,24 @@ blog keeps it with no retention policy unless the site owner sets one.
 `trustProxy` decides which address is logged:
 
 - When `trustProxy` is on and the proxy sets `X-Forwarded-For`, the leftmost
-  entry of that header.
+  entry of that header. For a Gemini request, the address in the PROXY
+  protocol header the connection opened with.
 - Otherwise, the socket's own address.
 
 The login throttle counts failed sign-ins against the same address, so the log
 and the throttle always agree on the client.
+
+A Gemini request gets one line in the same order, with `GEMINI` as the method
+and the Gemini status as the third field. A request that cannot be read has `-`
+as its path:
+
+```
+GEMINI /2026/10/hello-world/ 20 5.3ms
+GEMINI /nothing-here/ 51 1.8ms
+GEMINI - 59 0.4ms
+```
+
+Gemini has no forwarded header, so its address is always the socket's own.
 
 The lines go to stdout because a container collects stdout, dockge shows it
 and journald keeps it. To write to a file, redirect stdout. `accessLogWriter`

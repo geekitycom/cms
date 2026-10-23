@@ -13,6 +13,7 @@ The generated `sync` script calls it the third way.
 | `geekity resend --all`, `<slug>...`       | Send announced posts again, as they read now, to every follower and relay, as the same job the federation screen queues. See [Quote posts](federation.md#quote-posts).                                             |
 | `geekity maintenance on`, `off`, `status` | Take the public site down with a 503 and `Retry-After`, or bring it back, without a restart. `on --until <time>` sets when the site is due back.                                                                   |
 | `geekity dev-mode on`, `off`, `status`    | Hold everything the site sends to the outside world while you build or migrate it, or take it live. See [Dev mode](deploying.md#dev-mode).                                                                         |
+| `geekity gemini cert`, `new-cert`         | Print the Gemini certificate's subject, expiry and SHA-256 fingerprint, or replace the generated one. See [The Gemini certificate](configuration.md#the-gemini-certificate).                                       |
 | `geekity settings list`, `get`, `set`     | Print, read or change the runtime settings, such as `maintenance.on`, and each running plugin's settings, with where each value comes from. See [Runtime settings](settings.md#runtime-settings).                  |
 | `geekity settings migrate-plugins`        | Move plugin settings out of `content/_data/site.json` into `data/plugins/<name>/settings.json`. A server does this when it starts. See [Plugin settings](configuration.md#moving-plugin-settings-out-of-sitejson). |
 | `geekity strip-metadata`                  | Remove location and camera metadata from files already in `content/uploads`, as the same job the Maintenance screen queues. See [Location and camera metadata](media.md#location-and-camera-metadata).             |
@@ -29,7 +30,7 @@ this includes a plugin in the plugins folder. [Plugins and hooks](plugins.md)
 describes `geekity plugin add` and how to write a plugin.
 
 These commands take `--config <file>`: `serve`, `sync`, `rebuild`, `resend`,
-`maintenance`, `dev-mode`, `settings`, `strip-metadata`, `export`, `import`, `user add`, `plugin` and every
+`maintenance`, `dev-mode`, `gemini`, `settings`, `strip-metadata`, `export`, `import`, `user add`, `plugin` and every
 plugin command. Without the option, they look in the working directory for
 `geekity.config.ts`, then `geekity.config.js`, then `geekity.config.mjs`. If
 none exists, they run on defaults.

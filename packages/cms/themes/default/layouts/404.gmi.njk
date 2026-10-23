@@ -1,0 +1,10 @@
+{#
+  The body of the 404 page's gemtext. Converting 404.md.njk would turn its
+  closing sentence into "Go home[1], or search the site[2]." over two
+  numbered link lines, so the links are written as link lines here.
+  The context is the Markdown one's; links go through `geminiUrl`.
+#}
+Content not found.
+
+=> {{ "/" | geminiUrl }} Home
+=> {{ "/search/" | geminiUrl }} Search the site

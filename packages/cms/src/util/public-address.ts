@@ -23,41 +23,55 @@ export type HostLookup = (hostname: string) => Promise<readonly string[]>;
 export const systemHostLookup: HostLookup = async (hostname) =>
   (await dnsLookup(hostname, { all: true })).map((found) => found.address);
 
-/** Every range that is not the public internet. */
-const PRIVATE_RANGES = new BlockList();
-for (const [network, prefix] of [
-  ['0.0.0.0', 8],
-  ['10.0.0.0', 8],
-  ['100.64.0.0', 10],
-  ['127.0.0.0', 8],
-  ['169.254.0.0', 16],
-  ['172.16.0.0', 12],
-  ['192.0.0.0', 24],
-  ['192.168.0.0', 16],
-  ['198.18.0.0', 15],
-  ['224.0.0.0', 4],
-  ['240.0.0.0', 4],
-] as const) {
-  PRIVATE_RANGES.addSubnet(network, prefix, 'ipv4');
+type Range = readonly [network: string, prefix: number, type: 'ipv4' | 'ipv6'];
+
+const LOCAL: readonly Range[] = [
+  ['10.0.0.0', 8, 'ipv4'],
+  ['127.0.0.0', 8, 'ipv4'],
+  ['169.254.0.0', 16, 'ipv4'],
+  ['172.16.0.0', 12, 'ipv4'],
+  ['192.168.0.0', 16, 'ipv4'],
+  ['::1', 128, 'ipv6'],
+  ['fc00::', 7, 'ipv6'],
+  ['fe80::', 10, 'ipv6'],
+];
+
+const RESERVED: readonly Range[] = [
+  ['0.0.0.0', 8, 'ipv4'],
+  ['100.64.0.0', 10, 'ipv4'],
+  ['192.0.0.0', 24, 'ipv4'],
+  ['198.18.0.0', 15, 'ipv4'],
+  ['224.0.0.0', 4, 'ipv4'],
+  ['240.0.0.0', 4, 'ipv4'],
+  ['::', 128, 'ipv6'],
+  ['ff00::', 8, 'ipv6'],
+];
+
+function blockList(ranges: readonly Range[]): BlockList {
+  const list = new BlockList();
+  for (const [network, prefix, type] of ranges) list.addSubnet(network, prefix, type);
+  return list;
 }
-for (const [network, prefix] of [
-  ['::', 128],
-  ['::1', 128],
-  ['fc00::', 7],
-  ['fe80::', 10],
-  ['ff00::', 8],
-] as const) {
-  PRIVATE_RANGES.addSubnet(network, prefix, 'ipv6');
+
+const LOCAL_RANGES = blockList(LOCAL);
+const PRIVATE_RANGES = blockList([...LOCAL, ...RESERVED]);
+
+function onRanges(ranges: BlockList, address: string): boolean | undefined {
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address)?.[1];
+  if (mapped !== undefined) return onRanges(ranges, mapped);
+
+  const version = isIP(address);
+  if (version === 0) return undefined;
+  return ranges.check(address, version === 4 ? 'ipv4' : 'ipv6');
 }
 
 /** Whether an IP address is on a loopback, private, link-local or reserved range. */
 function isPrivateAddress(address: string): boolean {
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address)?.[1];
-  if (mapped !== undefined) return isPrivateAddress(mapped);
+  return onRanges(PRIVATE_RANGES, address) ?? true;
+}
 
-  const version = isIP(address);
-  if (version === 0) return true;
-  return PRIVATE_RANGES.check(address, version === 4 ? 'ipv4' : 'ipv6');
+export function isLocalAddress(address: string): boolean {
+  return onRanges(LOCAL_RANGES, address) ?? false;
 }
 
 /**

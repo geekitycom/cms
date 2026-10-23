@@ -17,6 +17,7 @@ Usage:
   geekity resend (--all | <slug>...) [--config <file>]
   geekity maintenance (on [--until <time>] | off | status) [--config <file>]
   geekity dev-mode (on | off | status) [--config <file>]
+  geekity gemini (cert | new-cert) [--config <file>]
   geekity settings list [<namespace>] [--config <file>]
   geekity settings get <namespace.key> [--config <file>]
   geekity settings set <namespace.key> (<value> | --unset) [--config <file>]
@@ -51,6 +52,14 @@ Commands:
                    built or migrated, and record each one in
                    data/dev-mode.jsonl. off takes the site live: nothing held
                    is sent then, and the record says when it went live.
+  gemini cert      Print the Gemini certificate's subject, expiry and SHA-256
+                   fingerprint, and say when it does not name the base URL
+                   host. It makes nothing: the site generates the certificate
+                   when it starts with Gemini on.
+  gemini new-cert  Replace the generated certificate with a new one for the
+                   base URL host. Every Gemini client that visited pinned the
+                   old one and warns about the new one. Restart the site to
+                   serve it.
   settings list    Print every runtime setting: its value in effect, where
                    that value came from (env, config, file or default) and
                    what it does. A secret prints as (set) or (not set).
@@ -141,7 +150,9 @@ Environment overrides:
   GEEKITY_PORT (or PORT), GEEKITY_CONTENT_DIR, GEEKITY_DATA_DIR,
   GEEKITY_THEMES_DIR, GEEKITY_PLUGINS_DIR, GEEKITY_BASE_URL, GEEKITY_WATCH,
   GEEKITY_MAINTENANCE (on keeps the site in maintenance until a restart),
-  GEEKITY_DEV_MODE (on starts the site in dev mode; only dev-mode off ends it)
+  GEEKITY_DEV_MODE (on starts the site in dev mode; only dev-mode off ends it),
+  GEEKITY_GEMINI_CERT and GEEKITY_GEMINI_KEY (the operator's own Gemini
+  certificate and key instead of the generated pair)
 `;
 
 const PLUGIN_HELP = `

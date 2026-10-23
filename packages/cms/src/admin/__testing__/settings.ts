@@ -45,6 +45,7 @@ export const SETTINGS_PAGE_FORMS: Record<string, Record<string, string>> = {
     robots_rules: '',
     llms_txt: '1',
     index_now: '',
+    gemini: '',
   },
   permalinks: {
     tag_base: 'tag',

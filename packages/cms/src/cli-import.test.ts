@@ -12,6 +12,7 @@ import type { FakePackage, FakeRegistry } from './__testing__/npm-registry.ts';
 import { ARCHIVE_BASE_URL, siteArchive, siteFiles } from './__testing__/site-archive.ts';
 import type { ArchivedEntry } from './__testing__/site-archive.ts';
 import type { ExportManifest } from './export/site-export.ts';
+import { ensureGeminiCertificate, readGeminiCertificate } from './gemini/certificate.ts';
 import { createToken } from './indieauth/tokens.ts';
 import { createCms } from './index.ts';
 import type { Cms } from './index.ts';
@@ -212,6 +213,45 @@ describe('geekity import', () => {
     } finally {
       await after.close();
     }
+  });
+
+  it('brings back the Gemini certificate, so clients that pinned it see the same one', async () => {
+    const source = await temporaryDir('geekity-import-source-');
+    const config = {
+      dataDir: path.join(source, 'data'),
+      geminiCert: undefined,
+      geminiKey: undefined,
+    };
+    await fs.mkdir(path.join(source, 'content', 'posts'), { recursive: true });
+    await fs.writeFile(
+      path.join(source, 'content', 'posts', '2026-01-01-one.md'),
+      '---\ntitle: One\npermalink: /one/\n---\n\nOne.\n',
+    );
+    const made = await ensureGeminiCertificate(
+      config,
+      new URL(ARCHIVE_BASE_URL).hostname,
+      new Date(),
+    );
+    assert.ok(made.ok);
+
+    const exported = await geekity(source, ['export', '--out', 'site.tar.gz'], {
+      GEEKITY_BASE_URL: ARCHIVE_BASE_URL,
+    });
+    assert.equal(exported.code, 0, exported.stderr);
+    const target = await temporaryDir('geekity-import-target-');
+    const imported = await geekity(target, ['import', path.join(source, 'site.tar.gz')], {
+      GEEKITY_BASE_URL: ARCHIVE_BASE_URL,
+    });
+    assert.equal(imported.code, 0, imported.stderr);
+
+    const restored = await readGeminiCertificate(
+      { ...config, dataDir: path.join(target, 'data') },
+      new URL(ARCHIVE_BASE_URL).hostname,
+    );
+    assert.ok(restored.ok, restored.ok ? '' : restored.problem);
+    assert.equal(restored.certificate.fingerprint256, made.certificate.fingerprint256);
+    assert.equal(restored.certificate.key, made.certificate.key);
+    assert.equal((await fs.stat(restored.certificate.keyFile)).mode & 0o777, 0o600);
   });
 
   it('installs each folder plugin at its recorded version, keeps enabled states, names config plugins, and says what is left to do', async () => {

@@ -241,6 +241,9 @@ importers:
       '@fedify/vocab':
         specifier: ^2.4.4
         version: 2.4.4
+      '@geekity/md2gemini':
+        specifier: workspace:^
+        version: link:../md2gemini
       '@hono/node-server':
         specifier: ^2.1.5
         version: 2.1.5(hono@4.13.13)
@@ -338,6 +341,25 @@ importers:
       typescript-classic:
         specifier: npm:typescript@^6.0.3
         version: typescript@6.0.3
+
+  packages/md2gemini:
+    dependencies:
+      markdown-it:
+        specifier: ^15.0.3
+        version: 15.0.3
+      markdown-it-footnote:
+        specifier: ^4.0.0
+        version: 4.0.0
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
 
   packages/plugin-llm:
     dependencies:

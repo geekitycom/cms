@@ -111,6 +111,44 @@ describe('resolveConfig', () => {
     );
   });
 
+  it('names no Gemini certificate files unless the config or the environment does', () => {
+    const cwd = '/srv/site';
+    const none = resolveConfig({}, { cwd, env: {} });
+    assert.equal(none.geminiCert, undefined);
+    assert.equal(none.geminiKey, undefined);
+
+    const configured = resolveConfig(
+      { geminiCert: 'tls/gemini.crt', geminiKey: 'tls/gemini.key' },
+      { cwd, env: {} },
+    );
+    assert.equal(configured.geminiCert, path.join(cwd, 'tls/gemini.crt'));
+    assert.equal(configured.geminiKey, path.join(cwd, 'tls/gemini.key'));
+
+    const fromEnv = resolveConfig(
+      { geminiCert: 'tls/gemini.crt', geminiKey: 'tls/gemini.key' },
+      {
+        cwd,
+        env: { GEEKITY_GEMINI_CERT: '/etc/gemini/cert.pem', GEEKITY_GEMINI_KEY: 'key.pem' },
+      },
+    );
+    assert.equal(fromEnv.geminiCert, '/etc/gemini/cert.pem');
+    assert.equal(fromEnv.geminiKey, path.join(cwd, 'key.pem'));
+  });
+
+  it('listens for Gemini on 1965 unless the config or GEEKITY_GEMINI_PORT names a port', () => {
+    const cwd = '/srv/site';
+    assert.equal(resolveConfig({}, { cwd, env: {} }).geminiPort, 1965);
+    assert.equal(resolveConfig({ geminiPort: 1966 }, { cwd, env: {} }).geminiPort, 1966);
+    assert.equal(
+      resolveConfig({ geminiPort: 1966 }, { cwd, env: { GEEKITY_GEMINI_PORT: '0' } }).geminiPort,
+      0,
+    );
+    assert.throws(
+      () => resolveConfig({}, { cwd, env: { GEEKITY_GEMINI_PORT: '70000' } }),
+      /GEEKITY_GEMINI_PORT/,
+    );
+  });
+
   it('watches the plugins folder unless the config or GEEKITY_PLUGIN_WATCH turns it off', () => {
     const cwd = '/srv/site';
     assert.equal(resolveConfig({}, { cwd, env: {} }).pluginWatch, true);
@@ -731,6 +769,9 @@ describe('what the environment and config may say', () => {
       pluginsDir: undefined,
       pluginInstall: true,
       pluginWatch: true,
+      geminiCert: undefined,
+      geminiKey: undefined,
+      geminiPort: 1965,
     });
   });
 
