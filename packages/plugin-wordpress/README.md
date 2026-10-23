@@ -109,7 +109,7 @@ reason.
 | `kept`      | The file was edited on this site and WordPress has not changed it since. The edit stays.                 |
 | `conflict`  | The file was edited on this site and changed on WordPress too. The edit stays. The row gives both dates. |
 | `clash`     | A file the import never wrote is at the path. It is left alone.                                          |
-| `skipped`   | The item has no Geekity counterpart, such as a revision, a menu or the ActivityPub plugin's records.     |
+| `skipped`   | The item has no Geekity CMS counterpart, such as a revision, a menu or the ActivityPub plugin's records. |
 | `warned`    | The item was imported, with something the operator should check.                                         |
 
 **You can run it any number of times.** Two runs over one export leave the

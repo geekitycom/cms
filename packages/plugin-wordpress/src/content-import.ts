@@ -64,12 +64,12 @@ export interface WordPressImporter {
 
 const SKIPPED_POST_TYPES: Readonly<Record<string, string>> = {
   revision: 'an earlier version of a post; the import takes the current one',
-  oembed_cache: "WordPress's cache of embed answers; Geekity fetches its own",
-  nav_menu_item: 'a navigation menu entry; a Geekity theme draws its own menu',
-  wp_navigation: 'a block navigation menu; a Geekity theme draws its own menu',
-  wp_global_styles: "the block theme's styles; a Geekity theme carries its own",
-  wp_template: 'a block theme template; a Geekity theme carries its own',
-  wp_template_part: 'a block theme template part; a Geekity theme carries its own',
+  oembed_cache: "WordPress's cache of embed answers; Geekity CMS fetches its own",
+  nav_menu_item: 'a navigation menu entry; a Geekity CMS theme draws its own menu',
+  wp_navigation: 'a block navigation menu; a Geekity CMS theme draws its own menu',
+  wp_global_styles: "the block theme's styles; a Geekity CMS theme carries its own",
+  wp_template: 'a block theme template; a Geekity CMS theme carries its own',
+  wp_template_part: 'a block theme template part; a Geekity CMS theme carries its own',
   wp_font_family: 'a font installed into the block theme',
   wp_font_face: 'a font installed into the block theme',
   custom_css: "the Customizer's extra CSS; put it in a Geekity theme",
