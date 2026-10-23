@@ -124,7 +124,7 @@
       Every link here is published with <code>rel="me"</code> whether or not
       you type it: it is how Mastodon verifies a profile field that points back
       at this site, and how IndieAuth knows these are yours. Nothing else in
-      Geekity needs it.
+      Geekity CMS needs it.
     {% endset %}
     {{ field.textarea('profile-links', fields.links, 'Links', account.profile.links, rows='4',
          hintHtml=linksHint, error=profileProblems.links) }}

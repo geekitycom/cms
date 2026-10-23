@@ -257,7 +257,7 @@ export function notifyServerOf(site: SiteData): NotifyServer | undefined {
 export const DEFAULT_FEED_SIZE = 20;
 
 /** What the feeds name themselves as. */
-export const FEED_GENERATOR = 'Geekity';
+export const FEED_GENERATOR = 'Geekity CMS';
 
 /** Where a reader can go to find out what wrote the feed. */
 export const FEED_GENERATOR_URI = 'https://www.npmjs.com/package/@geekity/cms';

@@ -510,7 +510,7 @@ Navigation screen.
 Every profile link is published with `rel="me"`, whether or not the line says
 `me`. Mastodon uses `rel="me"` to verify a profile field that points back at
 this site, and IndieAuth uses it to confirm the link is yours. Nothing else in
-Geekity reads it. Typing `| me` therefore adds nothing, and
+Geekity CMS reads it. Typing `| me` therefore adds nothing, and
 `| me nofollow author` puts all three values on the rendered `rel`.
 
 A link stored before the box was validated still renders and still appears in

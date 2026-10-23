@@ -35,7 +35,7 @@ out the header as one line, with the menu beside the link home. See
    `soloAuthor.name`. On a site with several authors, it prints the site title
    instead.
 2. The page's license, when it has one, as `<a rel="license">` with its name.
-3. `Published with Geekity`.
+3. `Published with Geekity CMS`.
 4. `menus.footer`, the `footer` area this theme declares. It is the only source
    of links in the footer.
 

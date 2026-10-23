@@ -72,11 +72,11 @@ function sha256(text: string): string {
 const BEFORE_RECORDINGS: Record<string, { etag: string; sha256: string }> = {
   '/feed/': {
     etag: '"5d01db89136bbdc975a68de7ad42c9fe"',
-    sha256: '7579f385caeccd0fca1b72956b432fc46225e45d626711e405806052ea1152e5',
+    sha256: '2a4483cff3ec3391a5c2e930a1818afc7a685030c01512b40c33600e66420d96',
   },
   '/feed/atom/': {
     etag: '"ce276412bda7eefad128e8b142c7102f"',
-    sha256: '5236065b0772b50726ec08650945918a6a399b18388c0616c6f7c87ee32a310b',
+    sha256: '068155ec31baa8cc43d33a45254256144da2e997975dc841745e7e87df848b4f',
   },
   '/feed/json/': {
     etag: '"60b5636affb1e6499d37d222a3c9749d"',
