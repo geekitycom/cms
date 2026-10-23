@@ -8,6 +8,7 @@ import {
   openAdminDatabase,
 } from '../admin/index.ts';
 import type { AdminStore } from '../admin/index.ts';
+import { autosaveCopies } from '../autosave/index.ts';
 import { databaseFile, rebuildingIfOutdated } from '../cache.ts';
 import {
   createAkismetChecker,
@@ -127,6 +128,9 @@ export function boot(
   for (const user of listUsers(resolved.dataDir)) {
     assertActorKeysUsable(resolved.dataDir, user.username);
   }
+
+  // Editor copies nobody came back to within a month.
+  autosaveCopies(resolved.dataDir).prune(resolved.now());
 
   return { resolved, plugins, store, admin, commentRecords, settings };
 }

@@ -559,6 +559,18 @@ describe('the data census', () => {
         'the metadata sweep was queued',
       );
       assert.equal(
+        (
+          await admin.post('/admin/autosave', {
+            autosave: `new-${'0'.repeat(32)}`,
+            type: 'post',
+            kind: 'note',
+            body: 'Words not saved yet.',
+          })
+        ).status,
+        200,
+        'an editor form was autosaved',
+      );
+      assert.equal(
         (await admin.post('/admin/plugins/remove', { plugin: GONE, password: ADA.password }))
           .status,
         303,

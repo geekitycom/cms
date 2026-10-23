@@ -112,6 +112,7 @@ the same directory reads all of it, and everything in it is public.
 | `data/follower-history.jsonl`    | One line for each follow and unfollow: when, which user, and the site's follower count after it. The dashboard's Followers card is drawn from it.   |
 | `data/jobs.json`                 | The admin jobs: each one's state, progress and result, with the newest five ended jobs of each name. See [Admin jobs](configuration.md#admin-jobs). |
 | `data/queue.sqlite`              | Deliveries, inbox activities and retries still waiting. Mode `0600`. See [The message queue](federation.md#the-message-queue).                      |
+| `data/autosave/{user id}/`       | Each user's editor forms not saved yet, one file for each document. Mode `0600`. See [Autosaved copies](admin.md#autosaved-copies).                 |
 
 [Personal data](personal-data.md) lists the files that hold readers' data, and
 how long each is kept.
@@ -125,7 +126,7 @@ declares its own file.
 | kept        | The site cannot be rebuilt without it: every file in the table above apart from those below, `dev-mode.json`, `dev-mode.jsonl`, each plugin's `settings.json`, each plugin file the plugin declares `kept`, and every file but `secrets.json` in the folder of a plugin that is not loaded. See **Data files** in [Writing a plugin](plugins.md#writing-a-plugin). |
 | credential  | Typed in again from another service: `mail.json`, `akismet.json` and each plugin's `secrets.json`.                                                                                                                                                                                                                                                                 |
 | rebuildable | Made again, fetched again or reset to a default: `geekity.db` with its `-wal` and `-shm`, `images/`, `avatars/`, `fonts/`, `maintenance.json`, `notification-digests.json`, `indieauth-activity.json`, `micropub-media.json`, and each plugin file the plugin declares `rebuildable`.                                                                              |
-| pending     | Work not done yet, tied to this host: `queue.sqlite` with its `-wal` and `-shm`.                                                                                                                                                                                                                                                                                   |
+| pending     | Work not done yet, tied to this host: `queue.sqlite` with its `-wal` and `-shm`, and `autosave/`.                                                                                                                                                                                                                                                                  |
 | scratch     | Left by a write or a lock in flight: the `<file>.<pid>-<n>.tmp` files of atomic writes, and under `data/` the `*.lock` files with their `.lock.takeover`. Also `exports/`, for site exports written inside `data/`, and what `geekity import` leaves while it runs or after `--replace`: `.geekity-import`, `.geekity-importing/` and `.geekity-before-import-*/`. |
 
 `geekity export` follows these classes: it exports `kept` files, and

@@ -1,5 +1,6 @@
 import type { Context, Hono } from 'hono';
 
+import { AUTOSAVE_FIELD, autosaveCopies, isMintedAutosaveId } from '../autosave/index.ts';
 import { CITATION_PROPERTIES, citedHost, citesAnImage, shownInFull } from '../content/citation.ts';
 import type { CitedPageReader } from '../content/citation.ts';
 import { commentPolicyOf } from '../comments/policy.ts';
@@ -467,6 +468,11 @@ async function saveFromForm(
     });
   }
   const { saved, undescribed, respelled } = written;
+  discardAutosaves(c, [
+    document?.path,
+    saved.path,
+    isMintedAutosaveId(body[AUTOSAVE_FIELD]) ? body[AUTOSAVE_FIELD] : undefined,
+  ]);
 
   flash(
     c,
@@ -650,6 +656,7 @@ async function moveDocument(
     action,
   );
   if (moved.outcome === 'refused') return backTo(c, options, moved.reason);
+  if (action === 'trash') discardAutosaves(c, [document.path]);
 
   const label = postLabel(document, (url) =>
     c.var.replyContexts.read(url, c.var.siteAtRequestStart),
@@ -662,6 +669,14 @@ async function moveDocument(
       (action === 'trash' ? kind.basePath : documentEditorPath(kind, moved.document)),
     303,
   );
+}
+
+/** The signed-in user's autosaved copies under these keys, once what they held is saved. */
+function discardAutosaves(c: Context<GeekityEnv>, keys: readonly (string | undefined)[]): void {
+  const userId = c.var.session?.userId;
+  if (userId == null) return;
+  const copies = autosaveCopies(c.var.config.dataDir);
+  for (const key of new Set(keys)) if (key !== undefined) copies.discard(userId, key);
 }
 
 /** Report a move that did not happen and go back where the form came from. */

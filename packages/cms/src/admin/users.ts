@@ -28,6 +28,7 @@ import {
   notificationSwitches,
 } from '../site/notification-preferences.ts';
 import { revokeTokensForUser } from '../indieauth/tokens.ts';
+import { autosaveCopies } from '../autosave/index.ts';
 import { stringOrEmpty } from '../util/forms.ts';
 import { ADMIN_THEMES, adminTheme } from '../site/admin-theme.ts';
 import { emailProblem, passwordProblem, usernameProblem } from './credentials.ts';
@@ -541,7 +542,8 @@ const GONE_USER = 'That user is already gone.';
  * Take a user out of the file. Returns `false` when there was nothing to take.
  *
  * Their IndieAuth tokens go with them (TASK-160): a token is a file in
- * `data/` too, so it is revoked here, where every caller deletes a user.
+ * `data/` too, so it is revoked here, where every caller deletes a user. So do
+ * their autosaved editor copies.
  *
  * Their sessions are not ended here: sessions are in the database, and the
  * screen that deletes a user ends them itself. A session that outlives this —
@@ -555,6 +557,7 @@ export async function deleteUser(input: {
 }): Promise<boolean> {
   const deleted = await removeUserRecord(input);
   await revokeTokensForUser(input.dataDir, input.userId, input.now);
+  autosaveCopies(input.dataDir).discardUser(input.userId);
   return deleted;
 }
 

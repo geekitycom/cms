@@ -387,6 +387,44 @@ browser gets the 413 as plain text instead of JSON.
 Both endpoints are behind the admin's guard and need the session's CSRF token,
 like every other POST in the admin.
 
+### Autosaved copies
+
+`POST /admin/autosave` keeps a copy of an editor form that has not been saved
+yet (decision-62). A copy is never the document. The endpoint does not write
+the post or page, `locations.json` or any other store, and a published post
+does not change until you press Update.
+
+The request is the editor form, as `multipart/form-data` or urlencoded, with
+the session's CSRF token. The `autosave` field names the copy:
+
+- For a document that exists, it is the document's content path, such as
+  `posts/2026-01-02-hello.md`.
+- For a new document, it is an id of the form `new-` and 32 lowercase hex
+  digits, given to the editor when it opens.
+
+The server stores every text field of the form except `csrf_token`, the
+`hash` the form carries, the document's type, post kind and path, and the
+time. It answers `{ "key": "...", "savedAt": "<ISO time>" }`. A key that is
+neither a content path inside `content/` nor such an id gets a 400, and a
+content path that names no document gets a 404, both as `{ "error": "..." }`.
+A second autosave for the same key replaces the first.
+
+Copies are stored in `data/autosave/<user id>/`, one file for each key, mode
+`0600`. A copy belongs to the user who wrote it. Nobody else can read, restore
+or discard it, so two users editing one post each have their own copy.
+
+A copy is deleted when:
+
+- you save, publish or update the document in the editor. A save that is
+  refused or that conflicts with a newer file keeps the copy.
+- you move the document to the trash from the editor.
+- you post its key to `POST /admin/autosave/discard`. The answer is
+  `{ "discarded": true }`, or `false` when there was no copy. With a `return`
+  field that names a path under `/admin`, the answer is a redirect there
+  instead, for a form without JavaScript.
+- your user is deleted.
+- it is more than 30 days old when the site starts.
+
 The editor's Visibility field chooses Public or Unlisted. An unlisted post or
 page:
 

@@ -4,6 +4,7 @@ import type { Environment } from 'nunjucks';
 import type { ResolvedConfig } from '../config.ts';
 import type { GeekityEnv } from '../web/env.ts';
 import { mountAppActivity } from './app-activity.ts';
+import { mountAutosave } from './autosave.ts';
 import { mountConnectedApps } from './connected-apps.ts';
 import { CONSENT_PATH, mountConsentScreen } from './indieauth-consent.ts';
 import {
@@ -333,11 +334,12 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // read and written the way the settings are (TASK-218).
   mountSyndicationTargetsScreen(app, { render });
 
-  // The two endpoints the editor talks to rather than navigates to. Both are
-  // inside the guard, so both need the session's CSRF token like every other
+  // The endpoints the editor talks to rather than navigates to. All are
+  // inside the guard, so all need the session's CSRF token like every other
   // POST in the admin.
   mountPreview(app);
   mountUploads(app);
+  mountAutosave(app);
 
   // Every menu the site holds, and which of them the active theme renders. A
   // section of its own rather than a settings page: a menu is content a site
