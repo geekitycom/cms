@@ -102,6 +102,10 @@ A note may be up to 60 characters of text outside the link. An item with no
 link, a second link, an image, a longer note or a nested block makes the list
 an ordinary one.
 
+A paragraph that is one link and nothing else becomes a single `=>` line
+labelled with the link text, in every link mode except `off`. A byline such
+as `[Written by Ada](/author/ada/)` reads `=> /author/ada/ Written by Ada`.
+
 ## Other elements
 
 - Headings deeper than `###` become `###`.
@@ -121,8 +125,9 @@ an ordinary one.
 
 This package follows the options and behaviour that the Python
 [md2gemini](https://github.com/makew0rld/md2gemini) documents, with a few
-changes: `paragraph` is the default link mode, the list-of-links rule is new,
-and `rewriteLink` replaces md2gemini's `md_links`, `base_url` and `link_func`.
+changes: `paragraph` is the default link mode, the list-of-links and
+lone-link rules are new, and `rewriteLink` replaces md2gemini's `md_links`,
+`base_url` and `link_func`.
 Its code is written from scratch on markdown-it. It is not derived from
 md2gemini's code, which is LGPL-3.0 and was archived in 2023. This package is
 MIT licensed.

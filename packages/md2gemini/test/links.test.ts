@@ -228,6 +228,31 @@ describe('a list of links', () => {
   });
 });
 
+describe('a paragraph that is one link', () => {
+  it('becomes a link line labelled with its text in every mode but off', () => {
+    for (const mode of ['paragraph', 'at-end', 'copy', 'newline'] satisfies LinkMode[]) {
+      assert.equal(
+        convert('[Written by Ada](/author/ada/)', { links: mode }),
+        lines('=> /author/ada/ Written by Ada'),
+      );
+    }
+  });
+
+  it('stays text in off mode', () => {
+    assert.equal(
+      convert('[Written by Ada](/author/ada/)', { links: 'off' }),
+      lines('Written by Ada'),
+    );
+  });
+
+  it('is an ordinary paragraph when it has text beside the link', () => {
+    assert.equal(
+      convert('By [Ada](/author/ada/)'),
+      lines('By Ada[1]', '', '=> /author/ada/ 1: /author/ada/'),
+    );
+  });
+});
+
 describe('a Markdown file with no links', () => {
   const markdown = '# Title\n\nJust text, *nothing* to follow.\n\n- one\n- two';
 

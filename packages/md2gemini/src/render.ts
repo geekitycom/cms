@@ -50,7 +50,7 @@ export function renderDocument(nodes: readonly Node[], options: Options): string
   const state: State = { options, pending: [], atEnd: [], linkNumber: 0 };
   const blocks: string[][] = [];
   for (const node of nodes) {
-    blocks.push(renderBlock(node, state, 'flow'));
+    blocks.push(loneLink(node, state) ?? renderBlock(node, state, 'flow'));
     blocks.push(state.pending);
     state.pending = [];
   }
@@ -189,6 +189,19 @@ function linkList(list: Node, state: State): string[] | undefined {
     lines.push(`=> ${href} ${renderLine(inline, textOnly) || href}`);
   }
   return lines;
+}
+
+/** The `=>` line of a top-level paragraph that is one link and nothing else, such as a byline. */
+function loneLink(block: Node, state: State): string[] | undefined {
+  if (block.type !== 'paragraph' || state.options.links === 'off') return undefined;
+  const inline = inlineOf(block).filter(
+    (node) => node.type !== 'text' || node.token.content.trim() !== '',
+  );
+  const [link] = inline;
+  if (inline.length !== 1 || link?.type !== 'link' || count(inline, LINKS) !== 1) return undefined;
+  const textOnly: State = { ...state, options: { ...state.options, links: 'off' } };
+  const href = hrefOf(link, state);
+  return [`=> ${href} ${renderLine(link.children, textOnly) || href}`];
 }
 
 function inlineOf(block: Node): readonly Node[] {
