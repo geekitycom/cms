@@ -39,6 +39,7 @@ RUN pnpm fetch
 # alone (decision-33).
 COPY packages/cms/package.json packages/cms/package.json
 COPY packages/plugin-wordpress/package.json packages/plugin-wordpress/package.json
+COPY packages/md2gemini/package.json packages/md2gemini/package.json
 COPY apps/demo/package.json apps/demo/package.json
 
 # --ignore-scripts: the root `prepare` is `husky && pnpm build`, and husky has

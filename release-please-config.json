@@ -46,6 +46,12 @@
       "include-component-in-tag": true,
       "changelog-path": "CHANGELOG.md",
       "extra-files": ["src/version.ts"]
+    },
+    "packages/md2gemini": {
+      "package-name": "@geekity/md2gemini",
+      "component": "md2gemini",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
     }
   }
 }

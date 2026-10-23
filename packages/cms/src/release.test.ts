@@ -110,18 +110,18 @@ describe('readWorkspace', () => {
     );
   });
 
-  it('reads core and every plugin package of this repository', () => {
+  it('reads every package of this repository', () => {
     const root = path.join(PACKAGE_ROOT, '..', '..');
-    const plugins = fs
+    const packages = fs
       .readdirSync(path.join(root, 'packages'))
-      .filter((dir) => dir.startsWith('plugin-'))
-      .map((dir) => `@geekity/${dir}`);
+      .map((dir) => (dir === 'cms' ? CORE : `@geekity/${dir}`));
 
     const names = readWorkspace(root).map((p) => p.name);
 
-    assert.equal(plugins.length, 5);
-    assert.ok(plugins.includes('@geekity/plugin-umami'));
-    assert.deepEqual(new Set(names), new Set([CORE, ...plugins]));
+    assert.equal(packages.length, 7);
+    assert.ok(packages.includes('@geekity/plugin-umami'));
+    assert.ok(packages.includes('@geekity/md2gemini'));
+    assert.deepEqual(new Set(names), new Set(packages));
   });
 
   it('marks every package of this repository public', () => {
