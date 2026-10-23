@@ -159,7 +159,7 @@ export interface RequestLimit {
 }
 
 export function createRequestLimit(options: RequestLimitOptions): RequestLimit {
-  const window = Math.max(1, options.windowSeconds) * 1000;
+  const window = options.windowSeconds * 1000;
   const entries = new Map<string, { count: number; endsAt: number }>();
 
   return {

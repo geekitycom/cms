@@ -167,8 +167,7 @@ export interface StatusMarkdownContext {
   markdownUrl: MarkdownUrl;
   /** On the maintenance page: when the operator expects the site back. */
   until?: Date | undefined;
-  /** Defaults to `markdown`. */
-  format?: TextFormat | undefined;
+  format: TextFormat;
 }
 
 /** What {@link Renderer.renderMarkdownChrome} writes links with. */
@@ -183,11 +182,10 @@ export interface MarkdownChromeOptions {
    */
   document?: Document | undefined;
   /**
-   * Defaults to `markdown`. For `gemini`, the archive page's descriptions are
-   * left off, so each of its posts converts to a gemfeed line,
-   * `=> url YYYY-MM-DD title`.
+   * For `gemini`, the archive page's descriptions are left off, so each of
+   * its posts converts to a gemfeed line, `=> url YYYY-MM-DD title`.
    */
-  format?: TextFormat | undefined;
+  format: TextFormat;
 }
 
 /** A page's header and footer, as the theme wrote them. */
@@ -1222,7 +1220,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
 
   function renderMarkdownChrome(
     chrome: MarkdownChrome,
-    { markdownUrl, frontPage, document, format = 'markdown' }: MarkdownChromeOptions,
+    { markdownUrl, frontPage, document, format }: MarkdownChromeOptions,
   ): MarkdownChromeText {
     const site = siteData.read();
     const soloAuthor = siteAuthorContext(users(), site.author);
@@ -1422,7 +1420,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     renderMaintenance: (url, until) =>
       statusPage(STATUS_PAGES.maintenance, url, untilContext(until)),
 
-    renderStatusMarkdown(page, { url, markdownUrl, until, format = 'markdown' }) {
+    renderStatusMarkdown(page, { url, markdownUrl, until, format }) {
       const templates = STATUS_PAGES[page];
       return renderText(templates, format, {
         site: siteData.read(),
