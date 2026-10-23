@@ -1,5 +1,6 @@
 import type { AdminStore, Session } from '../store/admin-store.ts';
 import type { AvatarService } from '../avatars/avatars.ts';
+import type { FontStore } from '../fonts/index.ts';
 import type { SignedInAccount } from '../comments/viewer.ts';
 import type { ResolvedConfig } from '../config.ts';
 import type { Document } from '../content/document.ts';
@@ -86,6 +87,8 @@ export interface GeekityEnv {
      * site so a reader's browser never asks the server they live on (TASK-134).
      */
     avatars: AvatarService;
+    /** The Google Fonts the site hosts under `data/fonts/` (decision-61). */
+    fonts: FontStore;
     /**
      * The profiles of the actors who are not followers, which the inbox asks
      * for when one of them is heard from (TASK-184).

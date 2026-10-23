@@ -6,6 +6,7 @@ import type { Hono } from 'hono';
 
 import type { AdminStore } from '../admin/index.ts';
 import type { AvatarService } from '../avatars/index.ts';
+import type { FontStore } from '../fonts/index.ts';
 import type { DocumentChangeHook, GeekityConfig, ResolvedConfig } from '../config.ts';
 import type {
   ContentEventMap,
@@ -129,6 +130,11 @@ export interface Cms {
    * serves; a site or a test reaches for it to sweep now or to wait.
    */
   readonly avatars: AvatarService;
+  /**
+   * The Google Fonts the site hosts, fetched into `data/fonts/` and served
+   * from `/_geekity/fonts/` (decision-61).
+   */
+  readonly fonts: FontStore;
   /**
    * The profiles of the fediverse actors who are not followers, cached in the
    * database and fetched in the background (TASK-184). Swept on a timer once
@@ -348,6 +354,7 @@ export function createCms(
     webmentions: services.webmentions,
     replyContexts: services.replyContexts,
     avatars: services.avatars,
+    fonts: services.fonts,
     actorProfiles: services.actorProfiles,
     replyBackfill: services.replyBackfill,
     retention: services.retention,

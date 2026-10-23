@@ -33,6 +33,9 @@ const ADA = { username: 'ada', password: 'correct horse battery', email: 'ada@bl
 const APP = 'https://app.example/';
 const CALLBACK = `${APP}callback`;
 const AVATAR = 'https://grace.example/avatar.png';
+const FONT_CSS =
+  'https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,700&display=swap';
+const FONT_FILE = 'https://fonts.gstatic.com/s/atkinsonhyperlegible/v11/bold.woff2';
 const LLM = '@geekity/plugin-llm';
 const TAGS = '@geekity/plugin-tag-suggest';
 const GONE = '@acme/plugin-gone';
@@ -52,6 +55,13 @@ before(async () => {
         headers: { 'content-type': 'text/html' },
       }),
     [AVATAR]: () => new Response(png(64, 64), { headers: { 'content-type': 'image/png' } }),
+    [FONT_CSS]: () =>
+      new Response(
+        `@font-face { font-family: 'Atkinson Hyperlegible'; font-style: normal; font-weight: 700; src: url(${FONT_FILE}) format('woff2'); }`,
+        { headers: { 'content-type': 'text/css' } },
+      ),
+    [FONT_FILE]: () =>
+      new Response(Buffer.from('wOF2 bold'), { headers: { 'content-type': 'font/woff2' } }),
   };
   globalThis.fetch = (input, init) => {
     const answer = web[new Request(input, init).url];
@@ -539,6 +549,10 @@ describe('the data census', () => {
         `/_geekity/avatars/${Buffer.from(AVATAR).toString('base64url')}`,
       );
       assert.equal(avatar.status, 200, 'the avatar was fetched');
+      const font = await cms.fonts.ensure('Atkinson Hyperlegible', [
+        { weight: 700, italic: false },
+      ]);
+      assert.ok(font.ok, 'a Google Fonts family was fetched');
       assert.equal(
         (await admin.post('/admin/tools/maintenance/strip-metadata', {})).status,
         303,

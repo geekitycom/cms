@@ -1,6 +1,7 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 
 import { mountAvatars } from './avatar-routes.ts';
+import { mountFonts } from './font-routes.ts';
 import { mountComments } from './comment-routes.ts';
 import { mountContact } from './contact-routes.ts';
 import { COMMENT_PAGE_PREFIX } from '../content/guids.ts';
@@ -108,6 +109,9 @@ export function mountPublicSite(
   // And where the avatars a conversation shows are served from (TASK-134):
   // the same prefix again, so a reader's browser fetches every face from here.
   mountAvatars(app);
+
+  // And the Google Fonts the site chose, which it hosts itself (decision-61).
+  mountFonts(app);
 
   app.get('/', (c) => {
     // The site's latest posts, or the page the Reading setting names — the

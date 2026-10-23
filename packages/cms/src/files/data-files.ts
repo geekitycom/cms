@@ -298,6 +298,12 @@ export const AVATARS = declareDataFile({
   lost: 'Cached avatars, fetched again by the avatar sweep.',
 });
 
+export const FONTS = declareDataFile({
+  pattern: 'fonts/**',
+  dataClass: REBUILDABLE,
+  lost: "The Google Fonts the site hosts. Pages use the theme's system fonts until a job fetches them again.",
+});
+
 export const QUEUE = declareDataFile({
   pattern: 'queue.sqlite',
   dataClass: PENDING,
@@ -339,6 +345,7 @@ export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   DATABASE_LOG,
   IMAGES,
   AVATARS,
+  FONTS,
   QUEUE,
   QUEUE_LOG,
 ];

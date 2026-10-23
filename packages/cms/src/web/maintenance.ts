@@ -3,6 +3,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
 import { signedInAccount } from './signed-in.ts';
 import type { GeekityEnv } from './env.ts';
+import { FONT_PATH_PREFIX } from '../fonts/index.ts';
 import { THEME_ASSET_PREFIX } from '../theme/assets.ts';
 import { representationOf, PRIVATE_CACHE_CONTROL } from './negotiate.ts';
 import { HEALTH_PATH } from './health.ts';
@@ -50,7 +51,8 @@ const JSON_BODY = `${JSON.stringify(
  * Paths that answer as usual during maintenance: the health checks, so an
  * orchestrator can tell a site that is down on purpose from a broken one; the
  * admin, login page included, so an admin can sign in and work; the
- * theme's files, so the maintenance page is drawn in the site's own style;
+ * theme's files and the fonts the site hosts, so the maintenance page is drawn
+ * in the site's own style;
  * security.txt, since an outage is when a researcher may most need to reach
  * somebody; and change-password, which only points into the admin.
  */
@@ -62,7 +64,8 @@ function isExempt(pathname: string): boolean {
     pathname === CHANGE_PASSWORD_WELL_KNOWN_PATH ||
     pathname === ADMIN_PREFIX ||
     pathname.startsWith(`${ADMIN_PREFIX}/`) ||
-    pathname.startsWith(THEME_ASSET_PREFIX)
+    pathname.startsWith(THEME_ASSET_PREFIX) ||
+    pathname.startsWith(FONT_PATH_PREFIX)
   );
 }
 

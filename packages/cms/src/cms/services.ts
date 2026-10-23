@@ -8,6 +8,8 @@ import { readObjectIds } from '../federation/object-ids.ts';
 import type { ConversationWrite } from '../store/admin-store.ts';
 import { createAvatarService } from '../avatars/index.ts';
 import type { AvatarService } from '../avatars/index.ts';
+import { createFontStore, fontFetchJob } from '../fonts/index.ts';
+import type { FontStore } from '../fonts/index.ts';
 import { followAllMovedComments, followMovedComments } from '../comments/index.ts';
 import { createReplyNotices } from '../comments/reply-notices.ts';
 import { createContentSync, createScheduler } from '../content/index.ts';
@@ -113,6 +115,7 @@ export interface Services {
   readonly webmentions: WebmentionService;
   readonly replyContexts: ReplyContextService;
   readonly avatars: AvatarService;
+  readonly fonts: FontStore;
   readonly actorProfiles: ActorProfileService;
   readonly replyBackfill: ReplyBackfill;
   readonly retention: RetentionService;
@@ -243,6 +246,10 @@ export function createServices({
   // The faces in a conversation, fetched here and served from here so a
   // reader's address never reaches the servers they live on (TASK-134).
   const avatars = createAvatarService({ admin, config: resolved });
+
+  // The Google Fonts the site chose, fetched into `data/fonts/` and served from
+  // here so a reader's browser never contacts Google (decision-61).
+  const fonts = createFontStore(resolved);
 
   // What keeps a site from holding its readers' personal data for longer than
   // its settings say (TASK-135).
@@ -394,6 +401,7 @@ export function createServices({
       stripMetadataJob(resolved.contentDir),
       resendJob({ store, delivery, webmentions }),
       siteExportJob({ config: resolved, settings, plugins }, resolved.now),
+      fontFetchJob(fonts),
       ...(resolved.jobs.definitions ?? []),
     ],
     now: resolved.now,
@@ -500,6 +508,7 @@ export function createServices({
       settled: () => replyContexts.settled(),
     },
     avatars,
+    { settled: () => fonts.settled() },
     actorProfiles,
     replyBackfill,
     retention,
@@ -540,6 +549,7 @@ export function createServices({
     webmentions,
     replyContexts,
     avatars,
+    fonts,
     actorProfiles,
     replyBackfill,
     retention,

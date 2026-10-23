@@ -28,6 +28,10 @@ export interface FetchPublicOptions {
   /** The `Accept` header sent. */
   readonly accept: string;
   readonly headers?: Readonly<Record<string, string>> & { readonly 'user-agent'?: never };
+  /** The `User-Agent` sent. Defaults to the site's own. */
+  readonly userAgent?: string;
+  /** Which URLs may be fetched, checked on every hop besides the public-address check. */
+  readonly allowed?: (url: URL) => boolean;
   /** The content types taken, and what to call anything else when refusing it. */
   readonly contentType: { readonly pattern: RegExp; readonly name: string };
   readonly headersOnly?: RegExp;
@@ -80,6 +84,8 @@ export async function fetchPublic(
     lookup: options.lookup,
     signal: options.signal,
     headers: { ...options.headers, accept: options.accept },
+    userAgent: options.userAgent,
+    allowed: options.allowed,
   });
   if (!answered.ok) return answered;
   const { response, url } = answered;
@@ -116,6 +122,8 @@ export interface RequestPublicOptions {
   readonly method?: string;
   readonly headers: Readonly<Record<string, string>> & { readonly 'user-agent'?: never };
   readonly body?: string;
+  readonly userAgent?: string | undefined;
+  readonly allowed?: ((url: URL) => boolean) | undefined;
 }
 
 export interface PublicAnswer {
@@ -134,13 +142,16 @@ export async function requestPublic(
   let body = options.body ?? null;
   let headers: Record<string, string> = {
     ...options.headers,
-    'user-agent': WEBMENTION_USER_AGENT,
+    'user-agent': options.userAgent ?? WEBMENTION_USER_AGENT,
   };
 
   try {
     for (let hop = 0; ; hop += 1) {
       const url = webUrl(at);
       if (url === undefined) return refuse('not an http or https URL');
+      if (options.allowed !== undefined && !options.allowed(url)) {
+        return refuse(`${url.origin} is not a host this fetch may reach`);
+      }
       if (!(await publicHost(url.hostname, options.lookup))) {
         return refuse('not a public address');
       }

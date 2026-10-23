@@ -74,6 +74,7 @@ export function createApp(
     c.set('renderer', services.renderer);
     c.set('conversation', services.conversation);
     c.set('avatars', services.avatars);
+    c.set('fonts', services.fonts);
     c.set('actorProfiles', services.actorProfiles);
     c.set('announce', (change) => content.announce(change));
     c.set('rescan', () => content.sync());

@@ -430,6 +430,42 @@ variables.
 [The page shell](theme/page-shell.md#colour-schemes-and-modes) describes how a
 page prints the chosen scheme and mode.
 
+## Hosted Google Fonts
+
+A site can use Google Fonts families, and the server hosts their files
+(decision-61). A visitor's browser loads the fonts from the site and never
+contacts Google.
+
+When a family is saved, the server fetches it from Google Fonts:
+
+1. It asks `https://fonts.googleapis.com/css2` for the family in the styles
+   it needs.
+2. It downloads every WOFF2 file that stylesheet lists from
+   `https://fonts.gstatic.com`, one file for each Unicode subset.
+3. It writes the files to `data/fonts/<family>/` and writes a stylesheet beside
+   them that points at those files on the site.
+
+The site serves these files under `/_geekity/fonts/`. A font file is named by
+the hash of its bytes, and browsers may cache it for a year. The stylesheet URL
+carries a `v` parameter with the hash of the stylesheet, as theme assets do.
+The files are served during maintenance mode, as theme assets are.
+
+A family name is letters and digits in words separated by single spaces, for
+example `Atkinson Hyperlegible`. The save is refused when Google Fonts has no
+family of that name, or when the family lacks a style the site needs. The
+message names the missing family or styles. Nothing is written in either case.
+
+**Saving a font needs outbound HTTPS from the server** to `fonts.googleapis.com`
+and `fonts.gstatic.com`. The server contacts no other host for fonts, and
+refuses a stylesheet that names a file on any other host. Visitors never need
+access to Google.
+
+`data/fonts/` is rebuildable (see
+[Two directories](content.md#two-directories-content-and-data)). A site export
+leaves it out. When the files are missing, for example in a new container,
+pages use the theme's system fonts, and a `fetch-font`
+[admin job](configuration.md#admin-jobs) downloads them again.
+
 ## License
 
 **License** on the General page sets what visitors may do with the site's
