@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.42.0](https://github.com/geekitycom/cms/compare/v0.41.0...v0.42.0) (2026-10-23)
+
+
+### Features
+
+* **cms:** credit the words each user writes to a per-user daily ledger ([4bcfcba](https://github.com/geekitycom/cms/commit/4bcfcbaff11aea0a515473a5d94bbd3d55892d55))
+* **cms:** keep a long-lived self-signed certificate for gemini ([623f3af](https://github.com/geekitycom/cms/commit/623f3af88e7ddbd04d3de9245b39b7daa2b11631))
+* **cms:** let each user set a writing goal and streak rule ([e22d48d](https://github.com/geekitycom/cms/commit/e22d48d3874150fec0e810b753065cc514e82b7a))
+* **cms:** let themes write gemini templates ([a16e1d6](https://github.com/geekitycom/cms/commit/a16e1d6f42caf88e5b53ca0a78a226b50e63b22b))
+* **cms:** read proxy headers on the gemini listener and advertise the capsule ([8c56ebf](https://github.com/geekitycom/cms/commit/8c56ebf945efff18c5b37ae904b7b98253d5ce45))
+* **cms:** serve every page as gemtext at its .gmi url ([c790179](https://github.com/geekitycom/cms/commit/c79017922a05650a9da20baf5e147c66d7f9ce2b))
+* **cms:** serve the site over gemini:// ([4043b4c](https://github.com/geekitycom/cms/commit/4043b4c9f007efa0619488d09358da9743f8cfa6))
+* **cms:** share word counting and added-word diff for markdown bodies ([1f4f316](https://github.com/geekitycom/cms/commit/1f4f316091f11dab702281928f3fd751e864dd41))
+* **cms:** show the word count and words written today in the editor ([3f71460](https://github.com/geekitycom/cms/commit/3f7146005e5de32893cec1fc027d9720792b009d))
+* **cms:** show writing goal progress on the dashboard ([2434703](https://github.com/geekitycom/cms/commit/24347038a7b3949d388a343c8e83a328be43488d))
+* **md2gemini:** convert markdown to gemtext ([c81460b](https://github.com/geekitycom/cms/commit/c81460b02e6df4bd2f6b1d1c2d359a2508c343bb))
+
+
+### Bug Fixes
+
+* **cms:** accept a gemini proxy header only from a loopback or private peer ([d0c969f](https://github.com/geekitycom/cms/commit/d0c969fbc56edb8e36a6a419b0c4f137bb6fb4f6))
+
 ## [0.41.0](https://github.com/geekitycom/cms/compare/v0.40.0...v0.41.0) (2026-10-23)
 
 
