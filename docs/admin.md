@@ -331,6 +331,9 @@ terms allow non-commercial use with attribution, which the panel gives.
   `/admin/uploads` and pastes the returned Markdown at the cursor.
 - The form is autosaved to `/admin/autosave` while you type. See
   [Autosave in the editor](#autosave-in-the-editor).
+- A "Write in focus" button beside the Write/Preview tabs, or Ctrl+Shift+F
+  (Cmd+Shift+F on a Mac), shows only the title and the body. See
+  [Writing in focus](#writing-in-focus).
 
 `editor.js` is a build product. Its source is `packages/cms/editor/main.ts`,
 which has its own `tsconfig.json` with the DOM lib and no node types. esbuild
@@ -388,6 +391,43 @@ browser gets the 413 as plain text instead of JSON.
 
 Both endpoints are behind the admin's guard and need the session's CSRF token,
 like every other POST in the admin.
+
+### Writing in focus
+
+The "Write in focus" button, or Ctrl+Shift+F (Cmd+Shift+F on a Mac), turns on
+a distraction-free mode. The title and the body fill the window in a centred
+column about 70 characters wide, in the colours of your admin theme. The admin
+bar, the menu, the sidebar, the other sections of the post and the Preview,
+"Add file…" and "Add video…" controls are hidden. They are also `inert`, so Tab
+and a screen reader cannot reach them. Entering from the Preview tab switches
+to Write first.
+
+A status line under the body shows the word count and the autosave status.
+There is no save button in this mode: autosave keeps the copy, and you leave
+the mode to save draft, publish or update. The word count is not announced as
+you type. The autosave status is the same live region as outside the mode.
+
+The mode asks the browser for fullscreen. If the browser refuses, or has no
+Fullscreen API, the mode fills the window instead. These leave the mode:
+
+- Escape. When CodeMirror's search panel or a completion is open, the first
+  Escape closes that instead.
+- Ctrl+Shift+F or Cmd+Shift+F again.
+- The Exit focus button.
+- Leaving browser fullscreen.
+
+Focus then returns to the control that entered the mode: the button, or the
+field that had focus when you pressed the shortcut. The text, the cursor and
+the selection are unchanged. The choice is not remembered, so the editor always
+opens with the mode off.
+
+While an alert offers unsaved changes back (see
+[Resuming unsaved changes](#resuming-unsaved-changes)), the mode does not turn
+on. The editor's status line asks you to choose Restore or Discard first, so
+the alert is never hidden without a choice.
+
+With JavaScript off there is no button and no shortcut, and the editor is the
+plain form.
 
 ### Autosaved copies
 
@@ -476,7 +516,7 @@ With JavaScript off there is no autosave, and the form works as before.
 
 When you open the editor of a document and the server has your copy of it, an
 alert above the form says "Unsaved changes from <time>" and offers Restore and
-Discard. The alert is shown only when the copy was saved after the document's
+Discard. The time is in the site's time zone, for a browser copy too. The alert is shown only when the copy was saved after the document's
 `updated` time, which is when the document was last saved through the admin.
 A document with no `updated` time always shows the alert for a copy. An older
 copy is not offered in the editor, but it is still in the Unsaved list. A new

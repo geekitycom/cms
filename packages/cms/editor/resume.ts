@@ -9,6 +9,7 @@
  * every field, CodeMirror included, the way the no-JS Resume does.
  */
 import { readLocalCopy, resumeOffer } from '../src/admin/autosave-client.ts';
+import { formatInTimezone } from '../src/admin/formatting.ts';
 import type {
   Autosave,
   KeyValueStorage,
@@ -136,10 +137,7 @@ function browserBanner(
   message.id = `${RESUME_ID}-message`;
   const time = document.createElement('time');
   time.dateTime = copy.savedAt;
-  time.textContent = new Date(copy.savedAt).toLocaleString([], {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
+  time.textContent = formatInTimezone(copy.savedAt, tools.dataset['autosaveTimezone'] ?? 'UTC');
   const noun = tools.dataset['kind'] === 'page' ? 'page' : 'post';
   message.append(
     'Unsaved changes from ',

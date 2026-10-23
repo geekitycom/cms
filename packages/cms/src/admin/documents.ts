@@ -1113,6 +1113,7 @@ async function renderEditor(
     autosaveUser: c.var.session?.userId ?? undefined,
     autosaveCopySavedAt: copy?.savedAt,
     autosaveFileTime: document?.updated,
+    autosaveTimezone: timezone,
     resume,
     viewUrl: document !== undefined && isServed(document, now) ? document.permalink : undefined,
     // Named beside the date field, because a wall clock with no zone on it is

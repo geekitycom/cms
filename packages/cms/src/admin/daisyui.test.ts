@@ -135,7 +135,9 @@ describe('the authored rules in the stylesheet source', async () => {
     assert.deepEqual(
       selectors.filter(
         (selector) =>
-          !/^#editor-surface \.cm-[\w-]+(?:\.cm-[\w-]+)?(?: \.cm-[\w-]+)?$/.test(selector),
+          !/^(?:html\.editor-focus )?#editor-surface \.cm-[\w-]+(?:\.cm-[\w-]+)?(?: \.cm-[\w-]+)?$/.test(
+            selector,
+          ),
       ),
       [],
     );
@@ -143,7 +145,9 @@ describe('the authored rules in the stylesheet source', async () => {
   });
 
   it('colour the CodeMirror surface in the theme’s own colours, so it follows the theme', () => {
-    for (const { selectors, body } of rules.filter((rule) => rule.selectors[0]?.startsWith('#'))) {
+    for (const { selectors, body } of rules.filter((rule) =>
+      /^(?:html\.editor-focus )?#/.test(rule.selectors[0] ?? ''),
+    )) {
       for (const [, property, value] of body.matchAll(/([\w-]+)\s*:\s*([^;]+);/g)) {
         if (
           !/color|background|border|outline/.test(property ?? '') ||

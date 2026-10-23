@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { siteSettingsIn, writeSiteSettings } from '../__testing__/site-settings.ts';
 import { autosaveCopies, mintAutosaveId } from '../autosave/index.ts';
 import type { AutosaveRecord } from '../autosave/index.ts';
 import { createUser, findUser } from '../site/users.ts';
@@ -462,6 +463,24 @@ describe('the editor page', () => {
     const tag = enhance(await (await ada.get('/admin/posts/hello')).text());
     assert.match(tag, /data-autosave-url="\/admin\/autosave"/);
     assert.match(tag, new RegExp(`data-autosave-user="${String(userId(cms, 'ada'))}"`));
+  });
+
+  it('names the site time zone, so a browser copy is offered in the same clock as a server one', async () => {
+    const { ada, contentDir } = await site();
+    await writeSiteSettings({
+      contentDir,
+      settings: { ...(await siteSettingsIn(contentDir)), timezone: 'America/Chicago' },
+    });
+    const tag = enhance(await (await ada.get('/admin/posts/hello')).text());
+    assert.match(tag, /data-autosave-timezone="America\/Chicago"/);
+  });
+
+  it('has no distraction-free mode without JavaScript: no button, no status line, nothing hidden', async () => {
+    const { ada } = await site();
+    for (const url of ['/admin/posts/hello', '/admin/pages/new']) {
+      const html = await (await ada.get(url)).text();
+      assert.doesNotMatch(html, /Write in focus|editor-focus|data-focus-hidden|\sinert\b/, url);
+    }
   });
 
   it('names the keys a save cleared on the next editor page, once', async () => {
