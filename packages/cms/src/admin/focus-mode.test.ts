@@ -1,20 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { FOCUS_OFF, focusStep, isFocusShortcut, outsideOf, wordsLabel } from './focus-mode.ts';
+import { FOCUS_OFF, focusStep, isFocusShortcut, outsideOf } from './focus-mode.ts';
 import type { FocusState, KeyPress } from './focus-mode.ts';
-
-describe('wordsLabel', () => {
-  it('says word for one and words otherwise', () => {
-    assert.equal(wordsLabel(0), '0 words');
-    assert.equal(wordsLabel(1), '1 word');
-    assert.equal(wordsLabel(2), '2 words');
-  });
-
-  it('groups thousands', () => {
-    assert.equal(wordsLabel(12345), '12,345 words');
-  });
-});
 
 describe('isFocusShortcut', () => {
   const press = (over: Partial<KeyPress>): KeyPress => ({

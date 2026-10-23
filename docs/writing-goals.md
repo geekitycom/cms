@@ -16,7 +16,9 @@ Markdown markers such as `#`, `*`, `>`, list bullets and code fences. So
 counts.
 
 The editor uses the same rules for its word count, so the editor and the
-dashboard give the same figures.
+dashboard give the same figures. Under the body, the editor shows the body's
+word count and, if you track writing goals, the words you wrote today. See
+[The word counter](admin.md#the-word-counter).
 
 ## What counts as writing
 

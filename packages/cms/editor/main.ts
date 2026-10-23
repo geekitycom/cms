@@ -24,8 +24,8 @@ import type { Autosave } from '../src/admin/autosave-client.ts';
 import { videoOf } from '../src/content/video.ts';
 import { startAutosave } from './autosave.ts';
 import { focusMode } from './focus.ts';
-import type { FocusMode } from './focus.ts';
 import { LOOK } from './look.ts';
+import { wordCounter } from './words.ts';
 
 /** The element the server hangs the editor's URLs off. */
 const TOOLS_ID = 'editor-enhance';
@@ -68,7 +68,7 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   status.setAttribute('role', 'status');
 
   let autosave: Autosave | undefined = undefined;
-  let focus: FocusMode | undefined = undefined;
+  const words = wordCounter(textarea.value);
 
   const view = new EditorView({
     doc: textarea.value,
@@ -86,7 +86,7 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
         if (!update.docChanged) return;
         textarea.value = update.state.doc.toString();
         autosave?.changed();
-        focus?.changed(update.state.doc);
+        words?.changed(textarea.value);
       }),
       EditorView.domEventHandlers({
         dragover: (event) => {
@@ -127,9 +127,9 @@ function attach(tools: HTMLElement, textarea: HTMLTextAreaElement, form: HTMLFor
   const tabs = tabStrip();
   tools.insertAdjacentElement('afterbegin', tabs.element);
   tools.append(uploadControl(), videoControl(), status);
-  autosave = startAutosave(form, tools);
-  focus = focusMode({ view, form, surface, write: tabs.write, say });
-  if (focus !== undefined) tabs.element.after(focus.button);
+  autosave = startAutosave(form, tools, (body, today) => words?.credited(body, today));
+  const focus = focusMode({ view, form, surface, words: words?.element, write: tabs.write, say });
+  if (focus !== undefined) tabs.element.after(focus);
 
   // The fallback did the job of the Preview tab; two of them would be one too
   // many.

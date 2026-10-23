@@ -65,6 +65,7 @@ import { SEARCH_KINDS } from '../item-lookup/lookup.ts';
 import type { CitedPicture } from '../webmention/cited-picture.ts';
 import { syndicationTargetsReader } from '../webmention/syndication.ts';
 import { editorActionViews } from './editor-actions.ts';
+import { editorWordCounter } from './editor-word-counter.ts';
 import {
   BLANK_ALTERNATE_ROW,
   enclosureChoices,
@@ -1103,6 +1104,7 @@ async function renderEditor(
     autosaveCopySavedAt: copy?.savedAt,
     autosaveFileTime: document?.updated,
     autosaveTimezone: timezone,
+    words: editorWordCounter(c, form.body),
     resume,
     viewUrl: document !== undefined && isServed(document, now) ? document.permalink : undefined,
     // Named beside the date field, because a wall clock with no zone on it is

@@ -1,14 +1,7 @@
 import type { EditorView } from 'codemirror';
 
-import {
-  FOCUS_OFF,
-  focusStep,
-  isFocusShortcut,
-  outsideOf,
-  wordsLabel,
-} from '../src/admin/focus-mode.ts';
+import { FOCUS_OFF, focusStep, isFocusShortcut, outsideOf } from '../src/admin/focus-mode.ts';
 import type { FocusEffect, FocusEvent, FocusState } from '../src/admin/focus-mode.ts';
-import { wordCount } from '../src/content/words.ts';
 import { AUTOSAVE_STATUS_ID } from './autosave.ts';
 import { LOOK } from './look.ts';
 import { RESUME_ID } from './resume.ts';
@@ -19,16 +12,13 @@ export interface FocusOptions {
   readonly view: EditorView;
   readonly form: HTMLFormElement;
   readonly surface: HTMLElement;
+  /** The word counter, which the bar shows while the mode is on. */
+  readonly words: HTMLElement | undefined;
   readonly write: () => void;
   readonly say: (message: string, tone?: 'news' | 'error') => void;
 }
 
-export interface FocusMode {
-  readonly button: HTMLButtonElement;
-  readonly changed: (doc: EditorView['state']['doc']) => void;
-}
-
-export function focusMode(options: FocusOptions): FocusMode | undefined {
+export function focusMode(options: FocusOptions): HTMLButtonElement | undefined {
   const { view, form, surface } = options;
   const layout = layoutAround(surface);
   if (layout === undefined) return undefined;
@@ -44,9 +34,6 @@ export function focusMode(options: FocusOptions): FocusMode | undefined {
   button.title = 'Ctrl+Shift+F, or ⌘⇧F on a Mac';
   button.setAttribute('aria-keyshortcuts', 'Control+Shift+F Meta+Shift+F');
 
-  const count = document.createElement('span');
-  count.className = LOOK.focusCount;
-
   const exit = document.createElement('button');
   exit.type = 'button';
   exit.className = LOOK.focusExit;
@@ -56,7 +43,7 @@ export function focusMode(options: FocusOptions): FocusMode | undefined {
   const bar = document.createElement('div');
   bar.className = LOOK.focusBar;
   bar.hidden = true;
-  bar.append(count, exit);
+  bar.append(exit);
   column.append(bar);
 
   let state: FocusState = FOCUS_OFF;
@@ -64,7 +51,7 @@ export function focusMode(options: FocusOptions): FocusMode | undefined {
   let scroll = { x: 0, y: 0 };
   let hidden: HTMLElement[] = [];
   let styled: { element: HTMLElement; added: string[] }[] = [];
-  let status: { element: HTMLElement; parent: Node; next: Node | null } | undefined;
+  let carried: { element: HTMLElement; parent: Node; next: Node | null }[] = [];
 
   button.addEventListener('click', () => {
     dispatch({ type: 'button', ...room() });
@@ -147,6 +134,11 @@ export function focusMode(options: FocusOptions): FocusMode | undefined {
     options.say('');
     options.write();
 
+    for (const element of [options.words, document.getElementById(AUTOSAVE_STATUS_ID)]) {
+      if (element == null || element.parentNode === null) continue;
+      carried.push({ element, parent: element.parentNode, next: element.nextSibling });
+      exit.before(element);
+    }
     const kept = [titleField, bodyField, bar].filter((element) => element !== null);
     hidden = outsideOf<Element>(document.body, kept, {
       parentOf: (element) => element.parentElement,
@@ -165,12 +157,6 @@ export function focusMode(options: FocusOptions): FocusMode | undefined {
       ...(title instanceof HTMLInputElement ? [style(title, LOOK.focusTitle)] : []),
     ];
 
-    const line = document.getElementById(AUTOSAVE_STATUS_ID);
-    if (line !== null && line.parentNode !== null) {
-      status = { element: line, parent: line.parentNode, next: line.nextSibling };
-      exit.before(line);
-    }
-    count.textContent = wordsLabel(wordCount(view.state.doc.toString()));
     bar.hidden = false;
     document.documentElement.classList.add(ON);
 
@@ -181,10 +167,8 @@ export function focusMode(options: FocusOptions): FocusMode | undefined {
   function leave(): void {
     document.documentElement.classList.remove(ON);
     bar.hidden = true;
-    if (status !== undefined) {
-      status.parent.insertBefore(status.element, status.next);
-      status = undefined;
-    }
+    for (const { element, parent, next } of carried.reverse()) parent.insertBefore(element, next);
+    carried = [];
     for (const element of hidden) {
       element.hidden = false;
       element.inert = false;
@@ -204,12 +188,7 @@ export function focusMode(options: FocusOptions): FocusMode | undefined {
     return { element, added };
   }
 
-  return {
-    button,
-    changed: (doc) => {
-      if (state.on) count.textContent = wordsLabel(wordCount(doc.toString()));
-    },
-  };
+  return button;
 }
 
 function layoutAround(

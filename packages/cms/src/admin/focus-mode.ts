@@ -72,10 +72,6 @@ export function isFocusShortcut(press: KeyPress): boolean {
   );
 }
 
-export function wordsLabel(count: number): string {
-  return `${count.toLocaleString('en-US')} ${count === 1 ? 'word' : 'words'}`;
-}
-
 export interface Tree<T> {
   readonly parentOf: (node: T) => T | null;
   readonly childrenOf: (node: T) => readonly T[];

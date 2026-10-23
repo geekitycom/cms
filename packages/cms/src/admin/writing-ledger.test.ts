@@ -10,7 +10,7 @@ import { after, describe, it } from 'node:test';
 
 import { siteSettingsIn, writeSiteSettings } from '../__testing__/site-settings.ts';
 import { mintAutosaveId } from '../autosave/index.ts';
-import { createUser, findUser } from '../site/users.ts';
+import { createUser, findUser, setUserWritingGoals } from '../site/users.ts';
 import type { Cms } from '../index.ts';
 import { readWritingLedger } from '../writing/ledger.ts';
 import { fieldsOf } from './__testing__/editor-form.ts';
@@ -247,5 +247,61 @@ describe('deleting a user', () => {
     await deleteUser({ dataDir: cms.config.dataDir, userId: id, now: NOW });
 
     assert.deepEqual(readWritingLedger(cms.config.dataDir, id).days, {});
+  });
+});
+
+describe("the editor's word counter", () => {
+  async function track(cms: Cms, tracking: boolean): Promise<void> {
+    await setUserWritingGoals({
+      dataDir: cms.config.dataDir,
+      userId: idOf(cms, 'ada'),
+      goals: { tracking, words: 500, period: 'day', streak: { dailyWords: 500, missesAllowed: 0 } },
+    });
+  }
+
+  async function counter(agent: Browser): Promise<string> {
+    const response = await agent.get(EDITOR);
+    assert.equal(response.status, 200);
+    const found = /<p\b[^>]*\bid="editor-words"[^>]*>[^<]*<\/p>/.exec(await response.text());
+    assert.ok(found !== null, 'the editor renders a word counter');
+    return found[0];
+  }
+
+  it("shows the body's word count to a user who does not track writing goals, and no words today", async () => {
+    const { cms, ada } = await site();
+    await autosave(ada, {
+      ...(await editorFields(ada, EDITOR)),
+      body: 'Saved words here, and more.',
+    });
+    await track(cms, false);
+
+    const shown = await counter(ada);
+
+    assert.match(shown, />3 words</);
+    assert.doesNotMatch(shown, /today|data-words-today/);
+  });
+
+  it("adds today's words from the ledger for a user who tracks writing goals", async () => {
+    const { cms, ada } = await site();
+    await autosave(ada, {
+      ...(await editorFields(ada, EDITOR)),
+      body: 'Saved words here, and more.',
+    });
+    await track(cms, true);
+
+    const shown = await counter(ada);
+
+    assert.match(shown, />3 words · 2 today</);
+    assert.match(shown, /data-words-today="2"/);
+  });
+
+  it('still opens the editor, counting 0 today, when the ledger cannot be read', async () => {
+    const { cms, ada } = await site();
+    await track(cms, true);
+    const ledger = path.join(cms.config.dataDir, 'writing', `${String(idOf(cms, 'ada'))}.json`);
+    await mkdir(path.dirname(ledger), { recursive: true });
+    await writeFile(ledger, 'not json');
+
+    assert.match(await counter(ada), />3 words · 0 today</);
   });
 });

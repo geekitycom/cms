@@ -334,6 +334,7 @@ terms allow non-commercial use with attribution, which the panel gives.
 - A "Write in focus" button beside the Write/Preview tabs, or Ctrl+Shift+F
   (Cmd+Shift+F on a Mac), shows only the title and the body. See
   [Writing in focus](#writing-in-focus).
+- The [word counter](#the-word-counter) under the body updates as you type.
 
 `editor.js` is a build product. Its source is `packages/cms/editor/main.ts`,
 which has its own `tsconfig.json` with the DOM lib and no node types. esbuild
@@ -392,6 +393,24 @@ browser gets the 413 as plain text instead of JSON.
 Both endpoints are behind the admin's guard and need the session's CSRF token,
 like every other POST in the admin.
 
+### The word counter
+
+A line under the body shows the body's word count, such as "1,240 words". If
+you track writing goals, it also shows the words you wrote today: "1,240 words
+· 312 today". Both use the rules in
+[What counts as a word](writing-goals.md#what-counts-as-a-word).
+
+The server renders the counter, so without JavaScript it shows the counts as of
+page load. With JavaScript it updates as you type. The words written today are
+the total from your last autosave plus the words you added since then. Each
+autosave answer replaces that total with the server's figure. Deleting text
+that the server already has does not lower the figure. Deleting words that you
+typed after the last autosave removes them again, because the server never
+counts them. See [What counts as writing](writing-goals.md#what-counts-as-writing).
+
+Screen readers hear the counter through a polite live region, and only after
+typing pauses for a moment, not on each keystroke.
+
 ### Writing in focus
 
 The "Write in focus" button, or Ctrl+Shift+F (Cmd+Shift+F on a Mac), turns on
@@ -402,10 +421,10 @@ bar, the menu, the sidebar, the other sections of the post and the Preview,
 and a screen reader cannot reach them. Entering from the Preview tab switches
 to Write first.
 
-A status line under the body shows the word count and the autosave status.
-There is no save button in this mode: autosave keeps the copy, and you leave
-the mode to save draft, publish or update. The word count is not announced as
-you type. The autosave status is the same live region as outside the mode.
+A status line under the body shows the [word counter](#the-word-counter) and
+the autosave status. There is no save button in this mode: autosave keeps the
+copy, and you leave the mode to save draft, publish or update. The autosave
+status is the same live region as outside the mode.
 
 The mode asks the browser for fullscreen. If the browser refuses, or has no
 Fullscreen API, the mode fills the window instead. These leave the mode:

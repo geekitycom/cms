@@ -502,6 +502,7 @@
         {% endif %}
 
         {{ field.textarea('editor-body', 'body', (editorKind.body if editorKind else 'Body'), value=form.body, rows=(8 if editorKind and editorKind.sections | length else 20)) }}
+        <p id="editor-words" class="text-sm text-base-content/70 tabular-nums"{% if words.today is defined %} data-words-today="{{ words.today }}"{% endif %}>{{ words.label }}</p>
 
         {# Everything the editor's own script needs, on the element it hangs
            off. With JavaScript off this is one button that posts the form to
