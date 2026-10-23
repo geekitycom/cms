@@ -232,6 +232,12 @@ export const KEPT_PROPERTIES = declareDataFile({
   lost: 'Micropub properties the site does not understand, such as an RSVP.',
 });
 
+export const WRITING_LEDGERS = declareDataFile({
+  pattern: 'writing/*.json',
+  dataClass: KEPT,
+  lost: "Each user's words written per day, which writing goals and streaks are counted from. Nothing else holds it.",
+});
+
 export const PLUGIN_CHANGES = declareDataFile({
   pattern: 'plugin-changes.json',
   dataClass: KEPT,
@@ -340,6 +346,7 @@ export const CORE_DATA_FILES: readonly DataFileDeclaration[] = [
   INDIEAUTH_TOKENS,
   LOCATIONS,
   KEPT_PROPERTIES,
+  WRITING_LEDGERS,
   PLUGIN_CHANGES,
   JOBS,
   DEV_MODE_RECORD,

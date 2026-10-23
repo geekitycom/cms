@@ -83,6 +83,7 @@ import {
 } from './editor-kinds.ts';
 import type { PostKind } from './editor-kinds.ts';
 import { editorSections, openGroups, sidebarLocation } from './editor-layout.ts';
+import { creditWriting } from '../writing/ledger.ts';
 import { flash, noteClearedAutosave } from './flash.ts';
 import {
   ITEM_LOOKUP_BUTTON,
@@ -514,6 +515,7 @@ async function saveFromForm(
     });
   }
   const { saved, undescribed, respelled } = written;
+  await creditSave(c, document, saved, mintedId(body[AUTOSAVE_FIELD]));
   discardAutosaves(c, [document?.path, saved.path, mintedId(body[AUTOSAVE_FIELD])]);
 
   flash(
@@ -856,6 +858,30 @@ function filterTabs(
       current: current === UNSAVED,
     },
   ];
+}
+
+/**
+ * Credit the signed-in user with the words a save adds to the last text the
+ * server saw from them: their autosave copy, else the file as it was.
+ */
+async function creditSave(
+  c: Context<GeekityEnv>,
+  document: Document | undefined,
+  saved: Document,
+  minted: string | undefined,
+): Promise<void> {
+  const userId = c.var.session?.userId;
+  if (userId == null) return;
+  const key = document?.path ?? minted;
+  const copy =
+    key === undefined ? undefined : autosaveCopies(c.var.config.dataDir).read(userId, key);
+  await creditWriting(c.var.config.dataDir, {
+    userId,
+    before: copy?.fields['body'] ?? document?.body ?? '',
+    after: saved.body,
+    at: c.var.config.now(),
+    timezone: c.var.siteAtRequestStart.timezone,
+  });
 }
 
 function discardAutosaves(c: Context<GeekityEnv>, keys: readonly (string | undefined)[]): void {

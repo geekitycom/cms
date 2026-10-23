@@ -77,6 +77,7 @@ describe('the core declarations', () => {
       'indieauth-tokens.json': 'kept',
       'locations.json': 'kept',
       'kept-properties.json': 'kept',
+      'writing/1.json': 'kept',
       'plugin-changes.json': 'kept',
       'jobs.json': 'kept',
       'dev-mode.jsonl': 'kept',

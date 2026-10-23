@@ -14,6 +14,7 @@ import type { DocumentLookup, IndexClock, TaxonomyReader } from '../content/stor
 import { moveDocumentFile } from '../content/trash.ts';
 import { VISIBILITIES } from '../content/visibility.ts';
 import { writeDocument } from '../content/write.ts';
+import { creditWriting } from '../writing/ledger.ts';
 import { documentSiteFrom } from '../web/document-site.ts';
 import { logMicropubRequest } from '../web/indieauth-activity-log.ts';
 import { insufficientScope, requireBearer } from '../web/indieauth-bearer.ts';
@@ -380,6 +381,7 @@ const ACTIONS: {
       return invalid(written.message).answer(c);
     }
     if (written.outcome === 'conflict') throw new Error('A new post has no file to conflict with.');
+    await credit(c, '', written.saved.body);
 
     c.header('cache-control', 'no-store');
     c.header('location', absoluteUrl(written.saved.permalink, c.var.config.baseUrl));
@@ -413,6 +415,7 @@ const ACTIONS: {
     if (written.outcome === 'conflict') {
       return new Refusal(409, 'conflict', `${url ?? ''} changed on disk; read it again.`).answer(c);
     }
+    await credit(c, document.body, written.saved.body);
 
     c.header('cache-control', 'no-store');
     if (written.saved.permalink === document.permalink) return c.body(null, 204);
@@ -423,6 +426,17 @@ const ACTIONS: {
   delete: async (c, { url }) => await moved(c, url, 'trash'),
   undelete: async (c, { url }) => await moved(c, url, 'restore'),
 };
+
+/** Credit the token's user with the words a write added (decision-63). */
+async function credit(c: Context<BearerEnv>, before: string, after: string): Promise<void> {
+  await creditWriting(c.var.config.dataDir, {
+    userId: c.var.bearer.user.id,
+    before,
+    after,
+    at: c.var.store.now(),
+    timezone: c.var.siteAtRequestStart.timezone,
+  });
+}
 
 function postFor(c: Context<BearerEnv>, url: string | undefined): Document | Refusal {
   const { store, config, bearer } = c.var;

@@ -446,7 +446,9 @@ the session's CSRF token. The `autosave` field names the copy:
 
 The server stores every text field of the form except `csrf_token`, the
 `hash` the form carries, the document's type, post kind and path, and the
-time. It answers `{ "key": "...", "savedAt": "<ISO time>" }`. A key that is
+time. It answers `{ "key": "...", "savedAt": "<ISO time>", "wordsToday": 312 }`,
+where `wordsToday` is your total of [words written](#words-written) today,
+this autosave included. A key that is
 neither a content path inside `content/` nor such an id gets a 400, and a
 content path that names no document gets a 404, both as `{ "error": "..." }`.
 A second autosave for the same key replaces the first.
@@ -565,6 +567,42 @@ saved, and whether it is a new document or edits to an existing one.
 
 The list works without JavaScript. A copy of a document that has since been
 deleted has no Resume, only Discard.
+
+#### Words written
+
+The site counts the words each user writes, for writing goals (decision-63).
+A word is a run of characters that holds a letter or a digit, counted in the
+Markdown body only. Link and image addresses, HTML tags and Markdown markers
+are not words. Text inside code is. The title, summary and other fields do not
+count.
+
+Only the words you add count. Deleting words never takes any away, and
+replacing one word with another adds one. Words are credited to you when the
+server receives new text from you:
+
+- **Autosave.** The words added since your previous autosave copy of that
+  document, or since the saved file when you have no copy. All of a new
+  document's words count.
+- **Save draft, Publish or Update.** The words added since your autosave copy,
+  or since the file on disk when you have no copy. Text an autosave already
+  credited is not credited again, so typing 100 words, autosaving and then
+  saving counts 100 words. Saving twice with no change counts nothing the
+  second time. A save that is refused or meets a conflict counts nothing.
+- **Micropub.** A create counts the whole body for the token's user. An update
+  counts the words it adds to the file.
+
+Imports, such as the WordPress import, and the command line do not count. They
+move text; they are not writing. Each user is counted from their own copy, so
+two users editing one post are credited separately. Discarding a copy does not
+take back words already counted.
+
+Each word is counted on the day it reaches the server, in the site time zone
+(Settings > General). Writing at 00:30 in another zone lands on the site's day.
+
+The counts are kept in `data/writing/<user id>.json`, mode `0600`, as
+`{ "days": { "2026-10-23": 312 } }`. Days with no words are not stored. The
+file is written atomically, is in every site export, and is deleted with its
+user. It cannot be rebuilt from anything else.
 
 The editor's Visibility field chooses Public or Unlisted. An unlisted post or
 page:
