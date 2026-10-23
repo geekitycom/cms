@@ -53,7 +53,8 @@ theme. Each entry has these fields:
 | `label`      | Optional. The name a person sees. Defaults to `name`.                                                                   |
 | `themeColor` | Optional. The browser colour for this scheme, as `{ "light", "dark" }`. A value left out is the top-level one.          |
 
-The first entry is the default. The CMS drops an entry that is not an object,
+The first entry is the default. **Appearance > Look** lists the entries in this
+order, by `label`. The CMS drops an entry that is not an object,
 has no usable `name`, or repeats an earlier name. It keeps the rest.
 
 The stylesheet must draw every scheme the manifest names. See

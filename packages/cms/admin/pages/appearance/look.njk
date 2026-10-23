@@ -1,0 +1,96 @@
+{# /admin/appearance/look: how the theme in use is coloured (decision-61).
+
+   A column of sections, each a card holding a form of its own that posts to
+   its own path and saves only its own settings, so a section added below
+   Colours saves without touching the colours.
+
+   The swatches are SVG with the colours in `fill` attributes: the admin's CSP
+   refuses a `style` attribute, and a presentation attribute is not one. #}
+{% extends "layouts/shell.njk" %}
+{% from "components/alert.njk" import alert %}
+{% from "components/badge.njk" import badge %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card, cardActions %}
+
+{% macro swatch(mode, colours) -%}
+<span class="flex flex-col gap-1" aria-hidden="true">
+  <svg data-mode="{{ mode }}" viewBox="0 0 96 56" class="h-auto w-full" focusable="false">
+    <rect x="0.5" y="0.5" width="95" height="55" rx="6" fill="{{ colours.page }}" stroke="currentColor" stroke-opacity="0.3" />
+    <text x="10" y="35" font-size="20" font-weight="700" fill="{{ colours.text }}">Aa</text>
+    <circle cx="58" cy="28" r="9" fill="{{ colours.accent }}" />
+    <circle cx="80" cy="28" r="9" fill="{{ colours.secondary }}" />
+  </svg>
+  <span class="text-xs">{{ 'Light' if mode == 'light' else 'Dark' }}</span>
+</span>
+{%- endmacro %}
+
+{% block title %}{{ heading }}{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">{{ heading }}</h1>
+
+  <div class="flex max-w-5xl flex-col gap-6">
+    {% call card(title='Colours') %}
+      {% if problems %}
+        {% call alert(color='error') %}
+          <p>Nothing was changed. {{ problems | join(' ') }}</p>
+        {% endcall %}
+      {% endif %}
+
+      <form method="post" action="{{ coloursUrl }}">
+        <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+        {% if schemes.length %}
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Colour scheme</legend>
+            <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {% for scheme in schemes %}
+                <li>
+                  <label data-scheme-card class="card card-border cursor-pointer bg-base-100 has-checked:border-2 has-checked:border-primary">
+                    <span class="card-body gap-3 p-4">
+                      <span class="flex flex-wrap items-center gap-2">
+                        <input type="radio" class="radio radio-sm" name="{{ fields.scheme }}" value="{{ scheme.name }}"{% if scheme.chosen %} checked{% endif %} />
+                        <span class="font-semibold">{{ scheme.label }}</span>
+                        {% if scheme.name == savedScheme %}{{ badge('In use', color='primary', style='soft') }}{% endif %}
+                      </span>
+                      {% if scheme.light and scheme.dark %}
+                        <span class="grid grid-cols-2 gap-2">
+                          {{ swatch('light', scheme.light) }}
+                          {{ swatch('dark', scheme.dark) }}
+                        </span>
+                      {% endif %}
+                    </span>
+                  </label>
+                </li>
+              {% endfor %}
+            </ul>
+            <p class="label whitespace-normal">Each swatch shows the page, the text, the accent and the secondary colour.</p>
+          </fieldset>
+        {% else %}
+          <p>This theme has one palette, so there is no colour scheme to choose.</p>
+        {% endif %}
+
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Mode</legend>
+          {% for mode in modes %}
+            <label class="label cursor-pointer justify-start gap-2">
+              <input type="radio" class="radio radio-sm" name="{{ fields.mode }}" value="{{ mode.value }}"{% if mode.chosen %} checked{% endif %} />
+              <span class="text-base-content">{{ mode.label }}</span>
+            </label>
+          {% endfor %}
+          <p class="label whitespace-normal">
+            {% if schemes.length %}
+              Follow the system draws light or dark as each reader's device is set.
+            {% else %}
+              The theme's stylesheet decides light and dark; the mode applies once the theme declares colour schemes.
+            {% endif %}
+          </p>
+        </fieldset>
+
+        {% call cardActions() %}
+          {{ button('Save colours', type='submit', color='primary') }}
+        {% endcall %}
+      </form>
+    {% endcall %}
+  </div>
+{% endblock %}

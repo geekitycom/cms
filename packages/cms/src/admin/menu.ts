@@ -17,6 +17,7 @@
  */
 
 import { THEMES_PATH } from './appearance.ts';
+import { LOOK_CHILD, LOOK_PATH } from './look.ts';
 import { COMMENTS_PATH } from './comments.ts';
 import { newEditorPath, PAGE_SCREENS, POST_SCREENS } from './documents.ts';
 import { FEDERATION_PATH, FEDERATION_SETTINGS_PATH } from './federation.ts';
@@ -123,9 +124,12 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   section('comments', 'Comments', [{ child: 'all', label: 'All comments', url: COMMENTS_PATH }]),
   section('messages', 'Messages', [{ child: 'all', label: 'All messages', url: MESSAGES_PATH }]),
   // In WordPress's place, between what the site holds and who may change it.
-  // One child, because the rule is uniform: a second kind of theme, or a menu
-  // editor, slots in beside Themes without the menu changing shape.
-  section('appearance', 'Appearance', [{ child: 'themes', label: 'Themes', url: THEMES_PATH }]),
+  // Themes picks what the site wears; Look sets how the theme in use is
+  // coloured (decision-61).
+  section('appearance', 'Appearance', [
+    { child: 'themes', label: 'Themes', url: THEMES_PATH },
+    { child: LOOK_CHILD, label: 'Look', url: LOOK_PATH },
+  ]),
   section(PLUGINS_SECTION, 'Plugins', [
     { child: PLUGINS_CHILD, label: 'Installed plugins', url: PLUGINS_PATH },
   ]),

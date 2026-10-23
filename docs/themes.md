@@ -155,6 +155,11 @@ The stylesheet sets:
 - six colour schemes (Paper, Slate, Forest, Plum, Ocean and Ink), each with a
   light and a dark set of the same `--color-*` tokens
 
+Choose the scheme and the mode on **Appearance > Look** in the admin. The screen
+shows each scheme of the theme in use as a card with its page, text, accent and
+secondary colours in light and dark, read from the theme's compiled
+stylesheet.
+
 `packages/cms/src/web/theme-colors.test.ts` reads the `--color-*` custom
 properties from the compiled stylesheet. It checks that every run of text in
 every scheme, in both modes, meets 7:1 contrast and every border a visitor

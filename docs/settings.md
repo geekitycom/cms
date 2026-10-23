@@ -33,8 +33,8 @@ the `site` namespace of the settings registry (see
 such as `title` or `postsPerPage`. No other store holds a setting, and
 `data/geekity.db` holds none.
 
-Every settings page, the Navigation, Taxonomy and Connected apps screens, and
-Appearance > Themes save through the registry. Each saves only its own
+Every settings page, the Navigation, Taxonomy and Connected apps screens,
+Appearance > Themes and Appearance > Look save through the registry. Each saves only its own
 settings. The registry re-reads the file inside the write and applies the
 change to that copy, so when two people save two different pages at the same
 moment, both saves land. Each page validates only the fields it shows. A
@@ -394,6 +394,10 @@ Two settings choose how the site's pages are coloured (decision-61):
 | ------------------- | --------------- | ------------------------- | -------------------------------- |
 | `site.color_scheme` | `colorScheme`   | A scheme name, or empty   | Empty: the theme's first scheme. |
 | `site.color_mode`   | `colorMode`     | `system`, `light`, `dark` | `system`                         |
+
+Set both on **Appearance > Look** in the admin. Its Colours section saves
+`colorScheme` and `colorMode` and nothing else. Under a theme with no schemes it
+saves `colorMode` alone.
 
 `colorScheme` names one of the colour schemes that the active theme declares in
 its `theme.json` (see [Colour schemes](theme/manifest.md#colour-schemes)). The
