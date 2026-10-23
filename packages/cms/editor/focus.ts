@@ -5,10 +5,10 @@ import {
   focusStep,
   isFocusShortcut,
   outsideOf,
-  wordCount,
   wordsLabel,
 } from '../src/admin/focus-mode.ts';
 import type { FocusEffect, FocusEvent, FocusState } from '../src/admin/focus-mode.ts';
+import { wordCount } from '../src/content/words.ts';
 import { AUTOSAVE_STATUS_ID } from './autosave.ts';
 import { LOOK } from './look.ts';
 import { RESUME_ID } from './resume.ts';
