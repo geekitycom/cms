@@ -80,6 +80,7 @@ export const ADMIN_TEMPLATES = {
   connectedApps: 'pages/users/apps.njk',
   appActivity: 'pages/users/activity.njk',
   appActivityEntry: 'pages/users/activity-entry.njk',
+  writingGoals: 'pages/users/writing-goals.njk',
   federation: 'pages/federation/followers.njk',
   federationSettings: 'pages/federation/settings.njk',
   indieauthConsent: 'pages/indieauth/consent.njk',

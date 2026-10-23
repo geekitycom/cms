@@ -46,7 +46,7 @@ export async function creditWriting(dataDir: string, credit: WritingCredit): Pro
 
 async function creditDay(dataDir: string, credit: WritingCredit): Promise<number> {
   const added = addedWords(credit.before, credit.after);
-  const day = dayOf(credit.at, credit.timezone);
+  const day = writingDay(credit.at, credit.timezone);
   const file = ledgerFile(dataDir, credit.userId);
   if (added === 0) return parseLedger(file, readFileIfPresentSync(file)).days[day] ?? 0;
 
@@ -74,7 +74,8 @@ function ledgerFile(dataDir: string, userId: number): string {
   return dataPath(dataDir, WRITING_LEDGERS, `${String(userId)}.json`);
 }
 
-function dayOf(at: Date, timezone: string): string {
+/** The ledger day `at` falls on in the site timezone, as `YYYY-MM-DD`. */
+export function writingDay(at: Date, timezone: string): string {
   const day = calendarDayIn(at, timezone) ?? calendarDayIn(at, DEFAULT_TIMEZONE);
   if (day === undefined) throw new Error(`${at.toISOString()} has no calendar day.`);
   return day;

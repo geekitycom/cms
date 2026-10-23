@@ -604,6 +604,30 @@ The counts are kept in `data/writing/<user id>.json`, mode `0600`, as
 file is written atomically, is in every site export, and is deleted with its
 user. It cannot be rebuilt from anything else.
 
+#### Writing goals
+
+Users > Writing goals at `/admin/users/writing-goals` holds your own goal. It
+starts with a **Track writing goals** checkbox, off for every user. Tick it
+and save, and the page shows the goal and streak fields:
+
+- **Words** and **Every**: the goal, such as 250 words a day or 100,000 words
+  a month. Weeks start on Monday. A goal is required while tracking is on.
+- **Words a day**: a day keeps your streak when you write at least this many
+  words. Left empty, it is the goal for a daily goal and the goal's daily pace
+  rounded up otherwise: a week is 7 days, a month 30 and a year 365, so
+  100,000 words a month gives 3,334.
+- **Missed days allowed**: how many missed days in a row the streak survives,
+  from 0 to 7. With 1, missing a day is fine and missing two in a row ends it.
+  Missed days do not add to the streak.
+
+Today does not break your streak until it is over. The best streak is the
+longest run anywhere in your history under the current rules, so changing the
+rules recounts all of it.
+
+Untick the box to stop tracking. Your goal and rules are kept, and ticking the
+box again restores them. The words you write are counted either way. The
+settings are stored on your entry in `data/users.json` as `writingGoals`.
+
 The editor's Visibility field chooses Public or Unlisted. An unlisted post or
 page:
 
@@ -646,7 +670,7 @@ Each Save returns to the same screen, which shows the result.
 
 **`data/users.json` is the source.** It has one entry per user with an id, a
 username, an argon2 hash and a created time. A user may also have an email
-address, notification preferences, a public profile and the
+address, notification preferences, writing goals, a public profile and the
 [stored actor id](federation.md#a-users-stored-actor-id) they were published
 under elsewhere.
 

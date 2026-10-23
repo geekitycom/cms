@@ -34,6 +34,7 @@ import { EXPORT_CHILD, EXPORT_PATH } from './export.ts';
 import { MAINTENANCE_CHILD, MAINTENANCE_PATH } from './maintenance.ts';
 import { PERSONAL_DATA_CHILD, PERSONAL_DATA_PATH } from './personal-data.ts';
 import { TOOLS_PATH } from './tools.ts';
+import { WRITING_GOALS_CHILD, WRITING_GOALS_PATH } from './writing-goals.ts';
 import {
   ADD_USER_PATH,
   APP_ACTIVITY_CHILD,
@@ -138,6 +139,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     // Beside the apps, because it is where to look when one will not connect
     // or post (TASK-221).
     { child: APP_ACTIVITY_CHILD, label: 'App activity', url: APP_ACTIVITY_PATH },
+    { child: WRITING_GOALS_CHILD, label: 'Writing goals', url: WRITING_GOALS_PATH },
   ]),
   // Where WordPress keeps Tools: after Users, before Settings. A setting is
   // something you type and save; this is a job you run, so it is not a

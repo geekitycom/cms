@@ -1,0 +1,69 @@
+{# /admin/users/writing-goals: the signed-in user's own writing goal and
+   streak rule (TASK-500, decision-63).
+
+   The goal fields are drawn only while the switch is on, as saved or as just
+   posted, so without JavaScript ticking the switch and saving reveals them. #}
+{% extends "layouts/shell.njk" %}
+{% import "components/fields.njk" as field %}
+{% from "components/button.njk" import button %}
+{% from "components/card.njk" import card %}
+
+{% block title %}Writing goals{% endblock %}
+
+{% block content %}
+  <h1 class="mb-6 text-2xl font-bold">Writing goals</h1>
+
+  <div class="flex max-w-2xl flex-col gap-6">
+  {% if hasProblems %}
+    {% call field.summary('Nothing was saved. Fix the fields marked below and save again.') %}
+      {{ field.problem('goal-words', problems.words) }}
+      {{ field.problem('goal-period', problems.period) }}
+      {{ field.problem('streak-daily-words', problems.dailyWords) }}
+      {{ field.problem('streak-misses-allowed', problems.missesAllowed) }}
+    {% endcall %}
+  {% endif %}
+
+  {% call card() %}
+  <form method="post" action="{{ formUrl }}">
+    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+
+    <p class="text-sm">
+      The site counts the words you write in the editor whether or not you
+      track a goal. Tracking shows your progress and your streak on the
+      dashboard. Turning it off keeps your goal for when you turn it on again.
+    </p>
+
+    {{ field.checkbox('writing-tracking', fields.tracking, 'Track writing goals', checked=form.tracking,
+         hint=('Save to set your goal.' if not form.tracking else '')) }}
+
+    {% if form.tracking or hasProblems %}
+      <h2 class="mt-4 font-semibold">Goal</h2>
+      {{ field.text('goal-words', fields.words, 'Words', form.words, type='number', min='1', step='1',
+           inputmode='numeric', error=problems.words) }}
+      {% call field.select('goal-period', fields.period, 'Every', error=problems.period) %}
+        {% for period in periods %}
+          <option value="{{ period.value }}"{% if period.chosen %} selected{% endif %}>{{ period.label }}</option>
+        {% endfor %}
+      {% endcall %}
+
+      <h2 class="mt-4 font-semibold">Streak</h2>
+      {% set dailyHint %}
+        A day keeps your streak when you write at least this many words. Leave
+        it empty to use your goal's daily pace{% if paceWords %} ({{ paceWords }} words){% endif %}.
+      {% endset %}
+      {{ field.text('streak-daily-words', fields.dailyWords, 'Words a day', form.dailyWords, type='number',
+           min='1', step='1', inputmode='numeric', error=problems.dailyWords, hintHtml=dailyHint) }}
+      {% set missesHint %}
+        How many missed days in a row your streak survives, from 0 to {{ maxMissesAllowed }}.
+        With 1, missing a day is fine and missing two in a row ends it.
+      {% endset %}
+      {{ field.text('streak-misses-allowed', fields.missesAllowed, 'Missed days allowed', form.missesAllowed,
+           type='number', min='0', step='1', inputmode='numeric', error=problems.missesAllowed,
+           hintHtml=missesHint) }}
+    {% endif %}
+
+    <div class="mt-4">{{ button('Save writing goals', type='submit', color='primary') }}</div>
+  </form>
+  {% endcall %}
+  </div>
+{% endblock %}
