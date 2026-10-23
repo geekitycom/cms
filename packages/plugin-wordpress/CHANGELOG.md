@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.8.0...plugin-wordpress-v0.9.0) (2026-10-23)
+
+
+### Features
+
+* **cms:** download a chosen Google Fonts family into data/fonts and serve it from the site ([a0a09bd](https://github.com/geekitycom/cms/commit/a0a09bd592bef1c82656316901f6004a1307c33d))
+* **cms:** keep a per-user autosave copy of an editor form under data/autosave ([d387538](https://github.com/geekitycom/cms/commit/d3875384abdadd9f55c499472e9d1142c9fc2877))
+
+
+### Bug Fixes
+
+* **plugin-wordpress:** name the CMS Geekity CMS in import labels ([83c757a](https://github.com/geekitycom/cms/commit/83c757a66147d7a7e80ba556f48231952f764d5e))
+
 ## [0.8.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.7.1...plugin-wordpress-v0.8.0) (2026-10-21)
 
 
