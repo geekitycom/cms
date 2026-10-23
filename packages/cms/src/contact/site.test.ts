@@ -12,7 +12,7 @@ import type { Cms, GeekityConfig } from '../index.ts';
 import { createMemoryMailProvider } from '../mail/memory.ts';
 import type { MemoryMailProvider } from '../mail/memory.ts';
 import { writeSiteSettings } from '../__testing__/site-settings.ts';
-import { createUser } from '../site/users.ts';
+import { createUser, setUserProfile } from '../site/users.ts';
 import { CONTACT_ANCHOR, CONTACT_FIELDS, CONTACT_NOTICE_PARAM, CONTACT_POST_PATH } from './form.ts';
 import { listContactMessages } from './records.ts';
 import { CONTACT_RATE_LIMIT, CONTACT_RATE_WINDOW_SECONDS } from './submission.ts';
@@ -200,6 +200,32 @@ describe('a page that asks for a contact form', () => {
       /<script/i,
       'the page carries a script that runs',
     );
+  });
+
+  it('puts the form above the bio and the backlinks', async () => {
+    const { cms, dataDir } = await site({
+      ...PAGES,
+      '_data/site.json': JSON.stringify({ title: 'A Site', author: 'Ada Lovelace' }),
+      'posts/linking.md': `---
+title: Linking
+date: '2026-09-01T09:00:00Z'
+permalink: /2026/09/linking/
+---
+
+[Write to me](/contact/).
+`,
+    });
+    const user = await createUser({ dataDir, username: 'ada', password: PASSWORD });
+    await setUserProfile({ dataDir, userId: user.id, profile: { displayName: 'Ada Lovelace' } });
+    await cms.sync();
+    const html = await page(cms, '/contact/');
+
+    const form = html.indexOf('id="contact"');
+    const bio = html.indexOf('class="bio p-author h-card"');
+    const backlinks = html.indexOf('class="backlinks"');
+    assert.ok(form > html.indexOf('Write to me.'), 'the form follows the words');
+    assert.ok(bio > form, 'the bio follows the form');
+    assert.ok(backlinks > form, 'the backlinks follow the form');
   });
 
   it('leaves a page that did not ask for one without a form (AC #1)', async () => {

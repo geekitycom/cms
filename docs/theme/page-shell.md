@@ -549,11 +549,12 @@ After the entry, a post prints:
    neither neighbour prints no nav.
 3. The conversation and the comment form.
 
-A page prints its backlinks too. Then it prints the conversation and the
-comment form when it takes comments, and the contact form when its front
-matter asks for one. A page has no neighbours, no tags and no syndication
-links. A page with no title prints no `h1`, and its header holds only the
-kicker (see [Titles](../content.md#titles)).
+A page whose front matter asks for a contact form prints it inside the
+article, under its words and above the bio. After the entry, a page prints
+its backlinks, then the conversation and the comment form when it takes
+comments. A page has no neighbours, no tags and no syndication links. A page
+with no title prints no `h1`, and its header holds only the kicker (see
+[Titles](../content.md#titles)).
 
 ## Backlinks
 
