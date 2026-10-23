@@ -6,9 +6,10 @@ import {
   autosave,
   localCopyKey,
   readLocalCopy,
+  resumeOffer,
   statusMessage,
 } from './autosave-client.ts';
-import type { AutosaveStatus, SendOutcome, Snapshot } from './autosave-client.ts';
+import type { AutosaveStatus, LocalCopy, SendOutcome, Snapshot } from './autosave-client.ts';
 
 const KEY = 'posts/2026-01-02-hello.md';
 const STORAGE_KEY = localCopyKey('https://example.com', '1', KEY);
@@ -28,7 +29,7 @@ class MemoryStorage {
 }
 
 /** A form, a server and a browser store the controller is wired to. */
-function rig(answers: SendOutcome[] = []) {
+function rig(answers: SendOutcome[] = [], options: { held?: boolean } = {}) {
   const form = new Map<string, string>([
     ['title', 'Hello'],
     ['body', 'Saved words.'],
@@ -43,6 +44,7 @@ function rig(answers: SendOutcome[] = []) {
   let holding = false;
 
   const controller = autosave({
+    ...(options.held === undefined ? {} : { held: options.held }),
     key: KEY,
     storageKey: STORAGE_KEY,
     storage,
@@ -354,5 +356,146 @@ describe('localCopyKey', () => {
     assert.equal(readLocalCopy(storage, 'a'), undefined);
     assert.equal(readLocalCopy(storage, 'b'), undefined);
     assert.equal(readLocalCopy(storage, 'missing'), undefined);
+  });
+});
+
+describe('while a copy is offered back', () => {
+  it('posts, beacons and keeps nothing in the browser until it is released', async () => {
+    const { controller, sent, beacons, storage, type } = rig([{ kind: 'unreachable' }], {
+      held: true,
+    });
+    type('Typed before choosing.');
+    mock.timers.tick(5000);
+    controller.flush();
+    controller.leave();
+    await settle();
+
+    assert.equal(sent.length, 0);
+    assert.equal(beacons.length, 0);
+    assert.equal(storage.items.size, 0, 'the offered browser copy is not overwritten');
+    assert.equal(controller.unsaved(), true, 'leaving still warns');
+  });
+
+  it('autosaves what changed meanwhile once released', async () => {
+    const { controller, sent, type } = rig([], { held: true });
+    type('Typed before choosing.');
+    controller.release();
+    mock.timers.tick(2000);
+    await settle();
+
+    assert.equal(sent.length, 1);
+    assert.equal(new Map(sent[0]).get('body'), 'Typed before choosing.');
+  });
+
+  it('posts nothing on release when nothing changed', async () => {
+    const { controller, sent } = rig([], { held: true });
+    controller.release();
+    mock.timers.tick(5000);
+    await settle();
+    assert.equal(sent.length, 0);
+  });
+});
+
+describe('resumeOffer', () => {
+  const current: Snapshot = [
+    ['title', 'Hello'],
+    ['body', 'Saved words.'],
+    ['hash', 'abc'],
+  ];
+  const local = (savedAt: string, body = 'Words in the browser.'): LocalCopy => ({
+    version: 1,
+    key: KEY,
+    hash: 'abc',
+    savedAt,
+    fields: [
+      ['title', 'Hello'],
+      ['body', body],
+      ['hash', 'abc'],
+    ],
+  });
+
+  it('offers nothing with no copy anywhere', () => {
+    assert.deepEqual(
+      resumeOffer({ server: undefined, offered: false, local: undefined, fileTime: '', current }),
+      { from: 'none' },
+    );
+  });
+
+  it('offers the server copy the page shows when there is no browser copy', () => {
+    assert.deepEqual(
+      resumeOffer({
+        server: '2026-10-23T12:00:00.000Z',
+        offered: true,
+        local: undefined,
+        fileTime: '',
+        current,
+      }),
+      { from: 'server' },
+    );
+  });
+
+  it('offers a browser copy that is newer than the server copy and the file', () => {
+    const copy = local('2026-10-23T12:05:00.000Z');
+    assert.deepEqual(
+      resumeOffer({
+        server: '2026-10-23T12:00:00.000Z',
+        offered: true,
+        local: copy,
+        fileTime: '2026-10-23T11:00:00.000Z',
+        current,
+      }),
+      { from: 'browser', copy, changedSince: false },
+    );
+  });
+
+  it('offers a browser copy when the server has none', () => {
+    const copy = local('2026-10-23T12:05:00.000Z');
+    assert.equal(
+      resumeOffer({ server: undefined, offered: false, local: copy, fileTime: '', current }).from,
+      'browser',
+    );
+  });
+
+  it('keeps to the server copy when the browser copy is older', () => {
+    assert.deepEqual(
+      resumeOffer({
+        server: '2026-10-23T12:10:00.000Z',
+        offered: true,
+        local: local('2026-10-23T12:05:00.000Z'),
+        fileTime: '',
+        current,
+      }),
+      { from: 'server' },
+    );
+  });
+
+  it('ignores a browser copy older than the last save of the file, or the same as the form', () => {
+    for (const copy of [
+      local('2026-10-23T12:05:00.000Z'),
+      local('2026-10-23T13:05:00.000Z', 'Saved words.'),
+    ]) {
+      assert.deepEqual(
+        resumeOffer({
+          server: undefined,
+          offered: false,
+          local: copy,
+          fileTime: '2026-10-23T13:00:00.000Z',
+          current,
+        }),
+        { from: 'none' },
+      );
+    }
+  });
+
+  it('says a browser copy was made from another version of the file', () => {
+    const copy = { ...local('2026-10-23T12:05:00.000Z'), hash: 'older' };
+    const offer = resumeOffer({
+      server: undefined,
+      offered: false,
+      local: copy,
+      fileTime: '',
+      current,
+    });
+    assert.deepEqual(offer, { from: 'browser', copy, changedSince: true });
   });
 });

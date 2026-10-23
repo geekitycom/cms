@@ -453,6 +453,29 @@
     </div>
   {% endif %}
 
+  {% if resume %}
+    {# The user's autosaved copy, offered back. Outside the editor form, since
+       Discard is a form of its own. editor.js holds the autosave until one of
+       the two is chosen, so typing here cannot overwrite the copy. #}
+    <div class="my-6" id="autosave-resume" data-saved-at="{{ resume.savedAt }}">
+      {% call alert(color='warning', direction='responsive', labelledby='autosave-resume-message') %}
+        <p id="autosave-resume-message">
+          Unsaved changes from <time datetime="{{ resume.savedAt }}">{{ resume.at }}</time>.
+          {% if resume.changedSince %}This {{ resume.noun }} has changed since. Restore shows both versions side by side.{% endif %}
+        </p>
+        <div class="flex flex-wrap gap-2">
+          {{ buttonLink('Restore', resume.restoreUrl, color='primary', size='sm') }}
+          <form method="post" action="{{ resume.discardUrl }}" id="autosave-resume-discard">
+            <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+            <input type="hidden" name="autosave" value="{{ resume.key }}" />
+            <input type="hidden" name="return" value="{{ resume.returnUrl }}" />
+            {{ button('Discard', type='submit', style='soft', size='sm') }}
+          </form>
+        </div>
+      {% endcall %}
+    </div>
+  {% endif %}
+
   <form class="group/editor grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]" id="editor-form" method="post" action="{{ saveUrl }}">
     <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
     {# The hash of the file this form was filled in from. A save whose hash no
@@ -499,6 +522,9 @@
           data-kind="{{ kind.type }}"
           data-autosave-url="{{ autosaveUrl }}"
           data-autosave-user="{{ autosaveUser }}"
+          data-autosave-discard-url="{{ autosaveDiscardUrl }}"
+          {% if autosaveCopySavedAt %}data-autosave-copy-saved-at="{{ autosaveCopySavedAt }}"{% endif %}
+          {% if autosaveFileTime %}data-autosave-file-time="{{ autosaveFileTime }}"{% endif %}
           {% if clearedAutosaves and clearedAutosaves.length %}data-autosave-cleared="{{ clearedAutosaves | dump }}"{% endif %}
         >
           {{ button('Preview', type='submit', id='editor-preview-fallback', style='soft', formaction=previewUrl, formtarget='_blank', formnovalidate=true) }}

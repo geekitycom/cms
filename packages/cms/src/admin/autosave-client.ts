@@ -61,6 +61,8 @@ export interface AutosaveOptions {
   /** Queue the snapshot for a page that is going away; false when it could not be queued. */
   readonly beacon: (snapshot: Snapshot) => boolean;
   readonly now: () => Date;
+  /** Start held: a copy is being offered back, and nothing may overwrite it until {@link Autosave.release}. */
+  readonly held?: boolean;
 }
 
 export interface Autosave {
@@ -72,6 +74,8 @@ export interface Autosave {
   leave(): void;
   /** The form is being submitted: stop, so nothing races the save. */
   submitting(): void;
+  /** The offered copy was restored or discarded: autosave from here on, starting with what changed meanwhile. */
+  release(): void;
   /** Whether the form holds changes the server does not have. */
   unsaved(): boolean;
   status(): AutosaveStatus;
@@ -113,6 +117,50 @@ export function readLocalCopy(storage: KeyValueStorage, storageKey: string): Loc
   return copy as unknown as LocalCopy;
 }
 
+/** Which copy the editor offers back when it opens. */
+export type ResumeOffer =
+  | { readonly from: 'none' }
+  /** The one the server put in the page's banner. */
+  | { readonly from: 'server' }
+  | { readonly from: 'browser'; readonly copy: LocalCopy; readonly changedSince: boolean };
+
+export interface ResumeInput {
+  /** When the server's copy of this key was saved, if it has one. */
+  readonly server: string | undefined;
+  /** Whether the page offers the server's copy. */
+  readonly offered: boolean;
+  readonly local: LocalCopy | undefined;
+  /** The file's last save through the admin; empty when it has none. */
+  readonly fileTime: string;
+  /** The form as the page loaded it. */
+  readonly current: Snapshot;
+}
+
+/**
+ * The newer of the server's and the browser's copies. A browser copy is only
+ * worth offering when it is later than both the server copy and the file's
+ * last save, and holds something the form does not.
+ */
+export function resumeOffer(input: ResumeInput): ResumeOffer {
+  const { local } = input;
+  if (
+    local !== undefined &&
+    later(local.savedAt, input.server) &&
+    later(local.savedAt, input.fileTime) &&
+    serialize(local.fields) !== serialize(input.current)
+  ) {
+    const hash = input.current.find(([name]) => name === 'hash')?.[1] ?? '';
+    return { from: 'browser', copy: local, changedSince: local.hash !== hash };
+  }
+  return input.offered ? { from: 'server' } : { from: 'none' };
+}
+
+function later(instant: string, than: string | undefined): boolean {
+  if (than === undefined || than === '') return true;
+  const other = Date.parse(than);
+  return Number.isNaN(other) || Date.parse(instant) > other;
+}
+
 /** What the status line says, with times printed by `time`. */
 export function statusMessage(status: AutosaveStatus, time: (at: Date) => string): string {
   switch (status.state) {
@@ -140,6 +188,7 @@ export function autosave(options: AutosaveOptions): Autosave {
   let again = false;
   let failures = 0;
   let stopped = false;
+  let held = options.held === true;
   /** Only a copy this page wrote is removed; one found on load is the resume banner's. */
   let wroteLocal = false;
 
@@ -180,7 +229,7 @@ export function autosave(options: AutosaveOptions): Autosave {
   }
 
   async function attempt(): Promise<void> {
-    if (stopped) return;
+    if (stopped || held) return;
     if (inFlight) {
       again = true;
       return;
@@ -240,7 +289,7 @@ export function autosave(options: AutosaveOptions): Autosave {
       void attempt();
     },
     leave() {
-      if (stopped) return;
+      if (stopped || held) return;
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
       const snapshot = options.read();
@@ -251,6 +300,11 @@ export function autosave(options: AutosaveOptions): Autosave {
       stopped = true;
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
+    },
+    release() {
+      if (!held) return;
+      held = false;
+      if (!stopped && serialize(options.read()) !== onServer) schedule(AUTOSAVE_DELAY_MS);
     },
     unsaved() {
       return !stopped && serialize(options.read()) !== onServer;

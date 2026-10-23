@@ -130,7 +130,7 @@ export function postLabel(document: PostDocument, cited?: CitedPageReader): stri
   return firstWords(text);
 }
 
-function firstWords(text: string): string {
+export function firstWords(text: string): string {
   const words = text.split(' ');
   return words.length <= LABEL_WORDS ? text : `${words.slice(0, LABEL_WORDS).join(' ')} …`;
 }

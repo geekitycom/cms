@@ -472,6 +472,60 @@ the browser asks whether to leave. Submitting the form does not ask.
 
 With JavaScript off there is no autosave, and the form works as before.
 
+#### Resuming unsaved changes
+
+When you open the editor of a document and the server has your copy of it, an
+alert above the form says "Unsaved changes from <time>" and offers Restore and
+Discard. The alert is shown only when the copy was saved after the document's
+`updated` time, which is when the document was last saved through the admin.
+A document with no `updated` time always shows the alert for a copy. An older
+copy is not offered in the editor, but it is still in the Unsaved list. A new
+document's editor shows the alert when it opens with the id of a copy in its
+address.
+
+- **Restore** opens the same editor with `restore=1` in the address. The
+  server fills every field from the copy, including the body, checkboxes,
+  selects and repeated fields such as photos. Nothing is saved until you press
+  Save draft, Publish or Update.
+- **Discard** posts the key to `POST /admin/autosave/discard`. It deletes the
+  server copy and the browser copy, and leaves the form as it loaded.
+
+If the copy's base `hash` is not the hash of the file now, the alert also says
+that the post has changed since. Restore then shows your unsaved version and
+the file on disk side by side, in the same layout as the conflict screen. From
+there, Edit mine over the file (`restore=rebase`) opens the editor from the copy
+with the file's current hash, so the next save overwrites the file on purpose.
+Discard mine deletes the copy and opens the editor on the file.
+
+With JavaScript on, the script also reads the browser copy for the key. It
+offers that copy instead of the server's when it is newer than the server copy
+and the file's `updated` time, and when it holds something the form does not.
+Restore for a browser copy first posts its fields to `/admin/autosave`, so the
+server has the copy, removes the browser copy, and then opens the editor with
+`restore=1`. Both kinds of copy are restored by the server in the same way.
+
+While the alert is shown, autosave is held. Typing does not overwrite the
+offered copy on the server or in the browser. When you choose Discard, autosave
+starts again and saves what you typed meanwhile. If you leave the page with
+such changes, the browser asks whether to leave.
+
+#### The Unsaved list
+
+The Posts and Pages lists have an Unsaved tab (`/admin/posts?status=unsaved`,
+`/admin/pages?status=unsaved`). It lists your copies of that type of document,
+newest first, including new documents that were never saved. Each row shows the
+copy's title, or the first words of its body, the post kind, the time it was
+saved, and whether it is a new document or edits to an existing one.
+
+- **Resume** opens the editor with `restore=1`. A copy of a new document opens
+  `/admin/posts/new?kind=<kind>&autosave=<id>&restore=1`, or
+  `/admin/pages/new?autosave=<id>&restore=1`. Saving it creates the document
+  and deletes the copy.
+- **Discard** deletes the copy and returns to the list.
+
+The list works without JavaScript. A copy of a document that has since been
+deleted has no Resume, only Discard.
+
 The editor's Visibility field chooses Public or Unlisted. An unlisted post or
 page:
 

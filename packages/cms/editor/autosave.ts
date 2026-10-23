@@ -6,6 +6,7 @@
 import { autosave, localCopyKey, statusMessage } from '../src/admin/autosave-client.ts';
 import type { Autosave, SendOutcome, Snapshot } from '../src/admin/autosave-client.ts';
 import { LOOK } from './look.ts';
+import { findOffer, offerBack } from './resume.ts';
 
 /** The status line, which a reader of the autosave state can also find by id and `data-state`. */
 export const AUTOSAVE_STATUS_ID = 'editor-autosave-status';
@@ -31,10 +32,15 @@ export function startAutosave(form: HTMLFormElement, tools: HTMLElement): Autosa
   }
   if (MINTED.test(key)) keepIdInUrl(form, key);
 
+  const storageKey = localCopyKey(site, userId, key);
+  // Read after the cleared copies are gone, so a saved copy is never offered.
+  const offer = findOffer(tools, storage, storageKey, snapshotOf(form));
+
   const controller = autosave({
     key,
-    storageKey: localCopyKey(site, userId, key),
+    storageKey,
     storage,
+    held: offer.from !== 'none',
     read: () => snapshotOf(form),
     send: (snapshot) => send(url, payload(form, snapshot)),
     beacon: (snapshot) => navigator.sendBeacon(url, payload(form, snapshot)),
@@ -74,6 +80,18 @@ export function startAutosave(form: HTMLFormElement, tools: HTMLElement): Autosa
     // Chrome before 119 and Safari only prompt when this is set.
     event.returnValue = '';
   });
+
+  if (offer.from !== 'none') {
+    offerBack({
+      form,
+      tools,
+      offer,
+      controller,
+      storage,
+      storageKey,
+      keep: (fields) => send(url, payload(form, fields)),
+    });
+  }
 
   return controller;
 }

@@ -64,6 +64,8 @@ export function mountAutosave(app: Hono<GeekityEnv>): void {
     const discarded = autosaveCopies(c.var.config.dataDir).discard(signedInUser(c), key.key);
     if (back === undefined) return c.json({ discarded });
     flash(c, 'notice', 'Discarded the unsaved changes.');
+    // The editor this goes back to drops the browser's copy of the key too.
+    flash(c, 'autosave-cleared', key.key);
     return c.redirect(back, 303);
   });
 }

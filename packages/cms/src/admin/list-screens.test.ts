@@ -102,7 +102,7 @@ describe('the list screens', async () => {
   });
 
   it('draws the posts filters as tabs with the current one marked (AC #2)', () => {
-    const labels = ['All', 'Published', 'Scheduled', 'Drafts', 'Trash'];
+    const labels = ['All', 'Published', 'Scheduled', 'Drafts', 'Trash', 'Unsaved'];
     for (const [screen, current] of [
       ['posts', 'All'],
       ['postDrafts', 'Drafts'],

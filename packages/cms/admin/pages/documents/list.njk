@@ -22,7 +22,50 @@
     {{ tabs(filters, 'Show ' + (kind.plural | lower)) }}
   </div>
 
-  {% if documents.length %}
+  {% if unsaved %}
+    {% if unsaved.length %}
+      {% call table('Unsaved ' + (kind.plural | lower)) %}
+        <thead>
+          <tr>
+            <th scope="col">Title</th>
+            {{ heading('Kind') }}
+            {{ heading('Of') }}
+            {{ heading('Saved') }}
+          </tr>
+        </thead>
+        <tbody>
+          {% for copy in unsaved %}
+            {% call row() %}
+              <td>
+                {% if copy.resumeUrl %}
+                  <a class="link link-hover font-medium" href="{{ copy.resumeUrl }}">{{ copy.label }}</a>
+                {% else %}
+                  <span class="font-medium">{{ copy.label }}</span>
+                {% endif %}
+                <div class="-ms-2 mt-1 flex items-center gap-1 whitespace-nowrap">
+                  {% if copy.resumeUrl %}
+                    {{ buttonLink('Resume', copy.resumeUrl, style='ghost', size='xs') }}
+                  {% endif %}
+                  <form method="post" action="{{ discardUrl }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrfToken }}" />
+                    <input type="hidden" name="autosave" value="{{ copy.key }}" />
+                    <input type="hidden" name="return" value="{{ returnUrl }}" />
+                    {{ button('Discard', type='submit', style='ghost', size='xs', ariaLabel='Discard the unsaved changes to ' + copy.label) }}
+                  </form>
+                </div>
+                {{ rowToggle(copy.label) }}
+              </td>
+              {% call cell('Kind', nowrap=true) %}{{ copy.kind }}{% endcall %}
+              {% call cell('Of') %}{{ copy.of }}{% endcall %}
+              {% call cell('Saved', nowrap=true) %}<time datetime="{{ copy.savedAt }}">{{ copy.at }}</time>{% endcall %}
+            {% endcall %}
+          {% endfor %}
+        </tbody>
+      {% endcall %}
+    {% else %}
+      <p>No unsaved changes.</p>
+    {% endif %}
+  {% elif documents.length %}
     {% call table(kind.plural) %}
       <thead>
         <tr>
