@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.9.0...plugin-wordpress-v0.10.0) (2026-10-23)
+
+
+### Features
+
+* **cms:** keep a long-lived self-signed certificate for gemini ([623f3af](https://github.com/geekitycom/cms/commit/623f3af88e7ddbd04d3de9245b39b7daa2b11631))
+
 ## [0.9.0](https://github.com/geekitycom/cms/compare/plugin-wordpress-v0.8.0...plugin-wordpress-v0.9.0) (2026-10-23)
 
 
