@@ -4,12 +4,12 @@
  * The source. `pnpm build` compiles it with Tailwind v4 to `static/style.css`,
  * which is what a page loads and what the package ships; that file is a build
  * product and gitignored. Nothing about Tailwind reaches a reader: no script,
- * no CDN, no web font, one stylesheet.
+ * no CDN, one stylesheet. A site may choose Google Fonts for headings and
+ * body; the site serves their files itself, so nothing third-party loads.
  *
  * One warm column at 42rem, serif throughout, sans reserved for small labels.
  * Only an article has a headline; every other kind of post is its words under
- * a small-caps kicker that names the kind. Six colour schemes, each light and
- * dark; the mode follows the system unless the site fixes it (decision-61).
+ * a small-caps kicker that names the kind.
  *
  * The look lives here, on the theme's semantic class names, through `@apply`:
  * the templates carry no utility classes, so a site theme that has CSS for the
@@ -27,10 +27,6 @@
 @source '../layouts';
 @source '../partials';
 
-/* A scheme's dark set applies when the reader's system asks for dark and the
-   site has not fixed the mode at light, and always when the site has fixed it
-   at dark (decision-61). Redefining `dark` puts every `dark:` utility under
-   the same rule. */
 @custom-variant dark {
   @media (prefers-color-scheme: dark) {
     &:not([data-mode='light']) {
@@ -43,9 +39,6 @@
   }
 }
 
-/* Light and dark are both drawn below, so a browser may paint its own form
-   controls, scrollbars and spellcheck marks to match, unless the site has
-   fixed the mode. */
 :root {
   color-scheme: light dark;
 }
@@ -58,11 +51,6 @@
   color-scheme: dark;
 }
 
-/* The colour schemes `theme.json` declares, one block each: the light set on
-   `:root[data-scheme="<name>"]` and the dark set under `@variant dark`. Paper
-   is first and is also plain `:root`, so a page that names no scheme is drawn
-   in Paper. Every later scheme comes after it in the file and sets every
-   token, so it wins over Paper wherever it is named. */
 :root,
 :root[data-scheme='paper'] {
   /* `body` is the paper and `text` the ink. `muted` is every small line of
@@ -140,7 +128,6 @@
   }
 }
 
-/* Slate: cool grey-blue paper, a blue link and violet tags. */
 :root[data-scheme='slate'] {
   --color-body: #f4f7fb;
   --color-text: #161b20;
@@ -197,7 +184,6 @@
   }
 }
 
-/* Forest: a green-tinted paper, a deep green link and amber tags. */
 :root[data-scheme='forest'] {
   --color-body: #f5f7ed;
   --color-text: #1a1b15;
@@ -254,7 +240,6 @@
   }
 }
 
-/* Plum: a pink-tinted paper, a plum link and indigo tags. */
 :root[data-scheme='plum'] {
   --color-body: #fbf3fa;
   --color-text: #1e191d;
@@ -311,7 +296,6 @@
   }
 }
 
-/* Ocean: a sea-tinted paper, a teal link and blue tags. */
 :root[data-scheme='ocean'] {
   --color-body: #eef9fb;
   --color-text: #141c1d;
@@ -368,8 +352,6 @@
   }
 }
 
-/* Ink: near-black on white, grey for everything muted and one restrained
-   blue for links, held to 10:1 for text and 4.5:1 for borders. */
 :root[data-scheme='ink'] {
   --color-body: #ffffff;
   --color-text: #030303;
@@ -481,9 +463,6 @@
 }
 
 @layer base {
-  /* The font roles theme.json declares under `fonts` (decision-61), each set
-     to the fallback the manifest names for it. A page that sets a font for a
-     role sets the property again outside any layer, which wins over this. */
   :root {
     --font-heading:
       'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;

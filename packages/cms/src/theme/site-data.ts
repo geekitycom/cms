@@ -289,7 +289,6 @@ export interface FrontPageSlugs {
   postsPage: string;
 }
 
-/** The scheme and the mode a page is drawn in (decision-61). */
 export interface SiteColors {
   readonly scheme: ThemeScheme;
   readonly mode: ColorMode;

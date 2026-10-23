@@ -3,6 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { messageOf } from '../util/errors.ts';
+import { cssFontStack } from './font-family.ts';
+import type { CssFontStack } from './font-family.ts';
 
 /**
  * Where a theme is, and what makes a directory one.
@@ -116,7 +118,6 @@ export interface ThemeColors {
  */
 export interface ThemeScheme {
   readonly name: string;
-  /** What the Appearance screen calls the scheme, for a person to read. */
   readonly label: string;
   readonly themeColor: ThemeColors['themeColor'];
 }
@@ -140,12 +141,11 @@ export interface ThemeScheme {
  */
 export interface ThemeFont {
   readonly role: string;
-  /** What the Appearance screen calls the role, for a person to read. */
   readonly label: string;
   /** The custom property the stylesheet reads the role from: `--font-<role>`. */
   readonly property: `--font-${string}`;
   /** The `font-family` list the role uses when the site sets no font. */
-  readonly fallback: string;
+  readonly fallback: CssFontStack;
 }
 
 /**
@@ -154,7 +154,6 @@ export interface ThemeFont {
  */
 export const COLOR_MODES = ['system', 'light', 'dark'] as const;
 
-/** One of {@link COLOR_MODES}. */
 export type ColorMode = (typeof COLOR_MODES)[number];
 
 /**
@@ -307,11 +306,6 @@ function themeColorOf(color: unknown): ThemeColors['themeColor'] {
 
 const SCHEME_NAME = /^[a-z][a-z0-9-]*$/;
 
-/**
- * A `schemes` value as the schemes it declares, ignoring anything that is not
- * one, tolerant for the reason {@link themeAreasOf} is. A name that is not
- * {@link SCHEME_NAME} is dropped because the stylesheet could not select on it.
- */
 function themeSchemesOf(value: unknown, fallback: ThemeColors['themeColor']): ThemeScheme[] {
   if (!Array.isArray(value)) return [];
 
@@ -335,15 +329,6 @@ function themeSchemesOf(value: unknown, fallback: ThemeColors['themeColor']): Th
   return schemes;
 }
 
-/** One family in a fallback stack: a quoted name, or words of letters, digits, `_` and `-`. */
-const FAMILY = /^(?:'[^'"\\<>;{}]*'|"[^'"\\<>;{}]*"|[\w-]+(?: +[\w-]+)*)$/;
-
-/**
- * A `fonts` value as the roles it declares, tolerant for the reason
- * {@link themeAreasOf} is. A role named other than {@link SCHEME_NAME}, or
- * whose fallback is not a list of {@link FAMILY} names, is dropped, because a
- * page prints both into a style rule.
- */
 function themeFontsOf(value: unknown): ThemeFont[] {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return [];
 
@@ -352,8 +337,8 @@ function themeFontsOf(value: unknown): ThemeFont[] {
     if (!SCHEME_NAME.test(role) || typeof entry !== 'object' || entry === null) continue;
     const { label, fallback } = entry as Record<string, unknown>;
     if (typeof fallback !== 'string') continue;
-    const stack = fallback.trim();
-    if (!stack.split(',').every((family) => FAMILY.test(family.trim()))) continue;
+    const stack = cssFontStack(fallback);
+    if (stack === undefined) continue;
 
     const words = typeof label === 'string' ? label.trim() : '';
     fonts.push({
@@ -379,12 +364,7 @@ export function themeScheme(
   return schemes.find((scheme) => scheme.name === name) ?? schemes[0];
 }
 
-/**
- * A chosen theme's schemes or font roles. A site theme that declares none but
- * keeps the packaged stylesheet still draws the packaged ones, so it has
- * those; one that ships its own `static/style.css` and declares none has none.
- */
-function resolvedFromStylesheet<Key extends 'schemes' | 'fonts'>(
+function inheritPackagedUnlessOwnStylesheet<Key extends 'schemes' | 'fonts'>(
   theme: Theme | undefined,
   key: Key,
 ): Theme[Key] {
@@ -583,8 +563,8 @@ export function chooseTheme(options: { themesDir: string; name: string }): Chose
   return {
     ...chosen,
     colors: resolvedColors(chosen.theme),
-    schemes: resolvedFromStylesheet(chosen.theme, 'schemes'),
-    fonts: resolvedFromStylesheet(chosen.theme, 'fonts'),
+    schemes: inheritPackagedUnlessOwnStylesheet(chosen.theme, 'schemes'),
+    fonts: inheritPackagedUnlessOwnStylesheet(chosen.theme, 'fonts'),
   };
 }
 

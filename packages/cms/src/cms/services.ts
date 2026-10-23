@@ -247,8 +247,6 @@ export function createServices({
   // reader's address never reaches the servers they live on (TASK-134).
   const avatars = createAvatarService({ admin, config: resolved });
 
-  // The Google Fonts the site chose, fetched into `data/fonts/` and served from
-  // here so a reader's browser never contacts Google (decision-61).
   const fonts = createFontStore(resolved);
 
   // What keeps a site from holding its readers' personal data for longer than
@@ -258,8 +256,6 @@ export function createServices({
   const renderer = createRenderer({
     config: resolved,
     themes,
-    // A family whose files are gone is fetched again by a job, queued from
-    // the first page drawn without it (decision-61).
     fonts: createPageFonts({
       store: fonts,
       refetch: (family, styles) => queueFontFetch(jobs, family, styles),

@@ -87,7 +87,6 @@ export interface GeekityEnv {
      * site so a reader's browser never asks the server they live on (TASK-134).
      */
     avatars: AvatarService;
-    /** The Google Fonts the site hosts under `data/fonts/` (decision-61). */
     fonts: FontStore;
     /**
      * The profiles of the actors who are not followers, which the inbox asks

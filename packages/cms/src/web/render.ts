@@ -569,7 +569,6 @@ function requestSite(): SiteSettings {
   return requestInputs.getStore()?.site ?? DEFAULT_SITE_SETTINGS;
 }
 
-/** What the head prints for the fonts a page is set in. */
 function pageFontsContext(fonts: readonly PageFont[]): {
   stylesheets: string[];
   properties: { property: string; value: string }[];
@@ -703,13 +702,7 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
       site,
       menus,
       icons,
-      // The hosted Google Fonts the site chose (decision-61): the stylesheets
-      // to link and each role's custom property, on the context only while a
-      // font is in use, so a page that sets none loads nothing more.
       ...(fonts.length === 0 ? {} : { fonts: pageFontsContext(fonts) }),
-      // The colours the head declares before the stylesheet loads (TASK-146),
-      // and the scheme and mode the site chose when the theme has schemes to
-      // choose from.
       theme: { ...chosen.colors, ...siteColors(site, chosen.schemes) },
       // Where the index for language models is (TASK-149), while the site
       // serves one, so a theme asks `{% if llmsTxt %}`.

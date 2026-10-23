@@ -110,7 +110,6 @@ export function mountPublicSite(
   // the same prefix again, so a reader's browser fetches every face from here.
   mountAvatars(app);
 
-  // And the Google Fonts the site chose, which it hosts itself (decision-61).
   mountFonts(app);
 
   app.get('/', (c) => {

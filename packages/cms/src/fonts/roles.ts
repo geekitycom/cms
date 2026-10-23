@@ -1,14 +1,9 @@
-import { isFontFamilyName } from '../theme/font-family.ts';
+import { cssFontStackWith, isFontFamilyName } from '../theme/font-family.ts';
+import type { CssFontStack } from '../theme/font-family.ts';
 import type { ThemeFont } from '../theme/themes.ts';
 import type { FontStyle } from './family.ts';
 import type { FontStore } from './store.ts';
 
-/**
- * The font roles a site can set a Google family for (decision-61): the
- * setting that holds it, the key `site.json` keeps it under, and the styles
- * the role uses, which the family must have. Body text sets regular, italic
- * and bold; headings set bold.
- */
 export const FONT_ROLES = [
   {
     role: 'heading',
@@ -35,15 +30,13 @@ export const FONT_ROLES = [
 
 export type FontRole = (typeof FONT_ROLES)[number];
 
-/** A font role a page sets: the theme's role, and the hosted family it is set in. */
 export interface PageFont {
   readonly font: ThemeFont;
-  /** The family as Google names it. */
   readonly family: string;
   /** The hosted `@font-face` stylesheet, same-origin and fingerprinted. */
   readonly href: string;
   /** What the role's custom property is set to: the family, then the theme's stack. */
-  readonly value: string;
+  readonly value: CssFontStack;
 }
 
 /** The roles the theme declares that the site can set a font for, in {@link FONT_ROLES} order. */
@@ -56,10 +49,6 @@ export function declaredFontRoles(
   });
 }
 
-/**
- * The roles the theme declares that the site can set, each with the family
- * `site.json` names for it under its file key, empty when it names none.
- */
 function chosenFonts(
   site: Readonly<Record<string, unknown>>,
   declared: readonly ThemeFont[],
@@ -72,7 +61,6 @@ function chosenFonts(
 
 export interface PageFontsOptions {
   readonly store: FontStore;
-  /** Queue a fetch of a family whose files are missing. */
   readonly refetch: (family: string, styles: readonly FontStyle[]) => Promise<unknown>;
 }
 
@@ -104,13 +92,9 @@ export function createPageFonts(
         return [];
       }
       queued.delete(key);
-      return [
-        {
-          font,
-          family: stylesheet.family,
-          href: stylesheet.href,
-          value: `"${stylesheet.family}", ${font.fallback}`,
-        },
-      ];
+      const value = cssFontStackWith(stylesheet.family, font.fallback);
+      return value === undefined
+        ? []
+        : [{ font, family: stylesheet.family, href: stylesheet.href, value }];
     });
 }

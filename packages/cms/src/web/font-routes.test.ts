@@ -1,7 +1,3 @@
-/**
- * The fonts a site hosts, served from `/_geekity/fonts/` and fetched again by
- * a job when their files are gone (decision-61, TASK-491). Google is stubbed.
- */
 import assert from 'node:assert/strict';
 import { readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';

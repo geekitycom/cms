@@ -1,9 +1,3 @@
-/**
- * Appearance > Look, Fonts: a Google family for each font role the theme
- * declares, downloaded before it is saved (decision-61, TASK-492). Through
- * HTTP with Google stubbed, because the questions are what the screen offers,
- * what a save writes into `site.json`, and what the public site links next.
- */
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -104,7 +98,6 @@ async function written(siteJson: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(siteJson, 'utf8')) as Record<string, unknown>;
 }
 
-/** The fieldset of one role, by its data attribute. */
 function roleFieldset(html: string, role: string): string {
   const found = new RegExp(`<fieldset\\b[^>]*data-font-role="${role}"[\\s\\S]*?</fieldset>`).exec(
     html,

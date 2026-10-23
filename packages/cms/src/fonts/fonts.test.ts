@@ -1,8 +1,3 @@
-/**
- * The font store (decision-61, TASK-491), against a stubbed Google: the CSS2
- * API and fonts.gstatic.com are a table of responses, and nothing reaches the
- * network.
- */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';

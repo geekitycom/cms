@@ -20,7 +20,6 @@ export interface SettingType<V> {
 export type Parsed<V> =
   { readonly ok: true; readonly value: V } | { readonly ok: false; readonly problem: string };
 
-/** The directories a site is, as a check and a change hook see them. */
 export interface SettingsDirs {
   readonly contentDir: string;
   readonly dataDir: string;

@@ -65,8 +65,6 @@ const SEPARATELY: Readonly<Record<string, readonly Record<string, unknown>[]>> =
     syndicationRefused('target-new'),
   ],
   'pages/plugins/screen.njk': [pluginSettingsRefused()],
-  // The Fonts card's form, refused on both roles; the Colours card above it
-  // states its own refusal without the field macros.
   'pages/appearance/look.njk': [fontsRefused()],
   'pages/plugins/installed.njk': [{ installer: 'on', add: {}, plugins: [], changeLog: [] }],
   'pages/plugins/confirm.njk': [{ ready: true, lines: [] }],
@@ -83,7 +81,6 @@ const SEPARATELY: Readonly<Record<string, readonly Record<string, unknown>[]>> =
   ],
 };
 
-/** The Look screen's Fonts form with a refusal on each role, one under Custom. */
 function fontsRefused(): Record<string, unknown> {
   const font = (role: string, customChosen: boolean) => ({
     role,

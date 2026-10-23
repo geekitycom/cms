@@ -545,12 +545,10 @@ describe('the embed view in the colour scheme and mode the site chooses (TASK-48
   const paperOf = (name: string): { light: string; dark: string } =>
     packaged.schemes.find((scheme) => scheme.name === name)?.themeColor ?? { light: '', dark: '' };
 
-  /** The opening `<html …>` tag. */
   function htmlTag(html: string): string {
     return /<html[^>]*>/.exec(html)?.[0] ?? '';
   }
 
-  /** The style's `@media (prefers-color-scheme: dark)` part, or empty. */
   function darkPart(style: string): string {
     return /@media \(prefers-color-scheme: ?dark\)\{(.*)\}\}/.exec(style)?.[1] ?? '';
   }

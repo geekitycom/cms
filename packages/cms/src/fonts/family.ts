@@ -1,14 +1,11 @@
-/** One face of a family: a weight, upright or italic. */
 export type FontStyle = {
   /** 100 to 900, in hundreds. */
   readonly weight: number;
   readonly italic: boolean;
 };
 
-/** Where the CSS2 API is asked for a family's stylesheet. */
 export const CSS2_ORIGIN = 'https://fonts.googleapis.com';
 
-/** Where the files the CSS2 stylesheet lists are served from. */
 export const FONT_FILES_ORIGIN = 'https://fonts.gstatic.com';
 
 /** The folder name a family's files live under: `atkinson-hyperlegible`. */

@@ -1,36 +1,18 @@
 import { readFileSync, statSync } from 'node:fs';
 
-/**
- * The `--color-*` tokens a theme's compiled stylesheet gives `<html>` in one
- * colour scheme and mode (decision-61), worked out the way a browser would:
- * from the selectors, their specificity, their order, the `@layer` they sit
- * in and the `prefers-color-scheme` query around them.
- *
- * The contrast test holds every pair of these to its minimum. The embed view
- * draws its card in them, and the Appearance screen shows them as swatches.
- * Only what a scheme block uses is read: `:root`, attribute selectors on
- * `data-scheme` and `data-mode`, `:not()`, `:is()` and `:where()`, and
- * `@media (prefers-color-scheme: …)`. Anything else cannot match `<html>` here
- * and is listed by {@link stylesheetProblems}.
- */
-
-/** What the stylesheet sets on `<html>` that is read here. */
 const READ = (property: string): boolean =>
   property.startsWith('--color-') || property === 'color-scheme';
 
-/** One style rule of a stylesheet, with what it sits inside. */
 export interface StyleRule {
   readonly selectors: readonly string[];
   /** The conditions of every `@media` around it, innermost last. */
   readonly media: readonly string[];
-  /** Inside an `@layer`, which an unlayered rule beats whatever its specificity. */
   readonly layered: boolean;
   readonly declarations: ReadonlyMap<string, string>;
   /** Whether it held a rule of its own, which this reader does not flatten. */
   readonly nested: boolean;
 }
 
-/** `<html>` as the stylesheet sees it, and the reader's system setting. */
 export interface TokenPage {
   readonly scheme?: string | undefined;
   readonly mode?: 'light' | 'dark' | undefined;
@@ -106,7 +88,6 @@ function closingBrace(css: string, open: number): number {
   return -1;
 }
 
-/** A selector list split on the commas that are not inside parentheses. */
 function splitTopLevel(list: string): string[] {
   const parts: string[] = [];
   let depth = 0;
@@ -123,15 +104,9 @@ function splitTopLevel(list: string): string[] {
   return parts;
 }
 
-/** A selector's match against `<html>`, or why it could not be read. */
 type SelectorMatch =
   { readonly matches: boolean; readonly specificity: number } | { readonly unreadable: string };
 
-/**
- * Whether one compound selector matches `<html>` on this page, and its
- * specificity as a count of class-level parts, the only kind these use.
- * `:host` never matches.
- */
 function matchSelector(selector: string, page: TokenPage): SelectorMatch {
   const attributes: Record<string, string | undefined> = {
     'data-scheme': page.scheme,
@@ -187,7 +162,6 @@ function matchSelector(selector: string, page: TokenPage): SelectorMatch {
   return { matches, specificity };
 }
 
-/** Whether one selector matches `<html>` on this page. */
 export function selectorMatches(selector: string, page: TokenPage): boolean {
   const result = matchSelector(selector, page);
   return 'matches' in result && result.matches;
@@ -222,7 +196,6 @@ export function stylesheetProblems(rules: readonly StyleRule[]): string[] {
   return [...problems];
 }
 
-/** What `<html>` ends up with on this page: the cascade over {@link stylesheetRules}. */
 export function computedTokens(rules: readonly StyleRule[], page: TokenPage): Map<string, string> {
   const applying: { rule: StyleRule; specificity: number; order: number }[] = [];
 

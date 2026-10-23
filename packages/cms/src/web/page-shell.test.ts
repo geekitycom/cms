@@ -752,12 +752,10 @@ describe('the colour scheme and mode the site chooses (TASK-488)', () => {
     return scheme.themeColor;
   };
 
-  /** The opening `<html …>` tag. */
   function htmlTag(html: string): string {
     return /<html[^>]*>/.exec(html)?.[0] ?? '';
   }
 
-  /** Every `<meta name="theme-color">` of a page, whole. */
   function themeColors(html: string): string[] {
     return [...html.matchAll(/<meta name="theme-color"[^>]*>/g)].map((match) => match[0]);
   }

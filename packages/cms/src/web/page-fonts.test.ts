@@ -1,9 +1,3 @@
-/**
- * The fonts a page is set in (decision-61, TASK-492): the hosted stylesheet of
- * each Google family the site chose, linked from the head, and the role's
- * custom property set to the family before the theme's stack. Google is
- * stubbed.
- */
 import assert from 'node:assert/strict';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -83,7 +77,6 @@ async function fontJobs(cms: Cms): Promise<number> {
   return waiting.filter((job) => job.name === FONT_FETCH_JOB.name).length;
 }
 
-/** Jobs sent to the transport, so a test can wait for the one a render queues. */
 const sent = new Set<() => void>();
 
 function nextJobSent(): Promise<void> {
@@ -136,8 +129,6 @@ describe('the head of a page with fonts chosen (AC #4)', () => {
       html.includes(`--font-body: "${FAMILY}", ${fallbackOf('body')};`),
       'the body property names the body family first',
     );
-    // After the theme stylesheet, so its unlayered rule wins over the
-    // stylesheet's layered default.
     assert.ok(html.indexOf('--font-body') > html.indexOf('style.css'));
   });
 

@@ -1,13 +1,3 @@
-/**
- * Appearance > Look: how the theme in use is coloured and set (decision-61).
- *
- * The screen is a column of sections, each a card with a form of its own that
- * posts to a path of its own and saves only its own settings. Colours is the
- * first: the active theme's colour schemes as radio cards drawn in each
- * scheme's own tokens, and the mode. Fonts is the second: a Google family for
- * each font role the theme declares, downloaded before it is saved.
- */
-
 import type { Context, Hono } from 'hono';
 
 import type { GeekityEnv } from '../web/env.ts';
@@ -17,6 +7,7 @@ import type { ColorMode, ThemeFont, ThemeScheme } from '../theme/themes.ts';
 import { declaredFontRoles } from '../fonts/index.ts';
 import type { FontRole } from '../fonts/index.ts';
 import { schemeTokens } from '../theme/scheme-tokens.ts';
+import type { CssFontStack } from '../theme/font-family.ts';
 import type { AdminRender } from './documents.ts';
 import { flash } from './flash.ts';
 import { ADMIN_PREFIX } from '../site/admin-paths.ts';
@@ -25,18 +16,14 @@ import { APPEARANCE_SECTION } from './appearance.ts';
 
 export const LOOK_PATH = `${ADMIN_PREFIX}/appearance/look`;
 
-/** Where the Colours section posts. */
 export const LOOK_COLOURS_PATH = `${LOOK_PATH}/colours`;
 
-/** Where the Fonts section posts. */
 export const LOOK_FONTS_PATH = `${LOOK_PATH}/fonts`;
 
 export const LOOK_CHILD = 'look';
 
-/** What a font select posts for "type a family in". */
-const CUSTOM = 'custom';
+const CUSTOM_FAMILY_OPTION = 'custom';
 
-/** The body families offered by name: legible at length, with italic and bold. */
 const BODY_FAMILIES = [
   'Atkinson Hyperlegible',
   'Source Serif 4',
@@ -48,19 +35,16 @@ const BODY_FAMILIES = [
   'IBM Plex Sans',
 ];
 
-/** Headings take every body family, and two display faces besides. */
 const CURATED: Readonly<Record<FontRole['role'], readonly string[]>> = {
   body: BODY_FAMILIES,
   heading: [...BODY_FAMILIES, 'Fraunces', 'Playfair Display'],
 };
 
-/** A family as a role's form posts it: the select, and the box Custom uses. */
 interface FontChoice {
   readonly picked: string;
   readonly custom: string;
 }
 
-/** One role's controls on the Fonts card. */
 interface FontControl {
   role: string;
   label: string;
@@ -68,15 +52,13 @@ interface FontControl {
   options: { value: string; label: string; selected: boolean }[];
   custom: string;
   customChosen: boolean;
-  fallback: string;
-  /** The saved family, as the sample line is set in it, when its files are here. */
+  fallback: CssFontStack;
   sample: { family: string; href: string } | undefined;
   problem: string | undefined;
 }
 
-/** The family a role's form names: the select's, or the box's under Custom. */
 function familyOf(choice: FontChoice): string {
-  return choice.picked === CUSTOM ? choice.custom.trim() : choice.picked;
+  return choice.picked === CUSTOM_FAMILY_OPTION ? choice.custom.trim() : choice.picked;
 }
 
 function fontControl(
@@ -89,7 +71,7 @@ function fontControl(
 ): FontControl {
   const curated = CURATED[role.role];
   const choice: FontChoice = submitted ?? {
-    picked: saved === '' || curated.includes(saved) ? saved : CUSTOM,
+    picked: saved === '' || curated.includes(saved) ? saved : CUSTOM_FAMILY_OPTION,
     custom: saved === '' || curated.includes(saved) ? '' : saved,
   };
   return {
@@ -99,10 +81,10 @@ function fontControl(
     options: [
       { value: '', label: 'The theme’s own' },
       ...curated.map((family) => ({ value: family, label: family })),
-      { value: CUSTOM, label: 'Custom…' },
+      { value: CUSTOM_FAMILY_OPTION, label: 'Custom…' },
     ].map((option) => ({ ...option, selected: option.value === choice.picked })),
     custom: choice.custom,
-    customChosen: choice.picked === CUSTOM,
+    customChosen: choice.picked === CUSTOM_FAMILY_OPTION,
     fallback: font.fallback,
     sample,
     problem,
@@ -118,7 +100,6 @@ const MODE_LABELS: Readonly<Record<ColorMode, string>> = {
   dark: 'Always dark',
 };
 
-/** The four colours a swatch draws. */
 interface Swatch {
   page: string;
   text: string;
@@ -208,9 +189,6 @@ export function mountLookScreen(app: Hono<GeekityEnv>, options: MountLookOptions
     return c.redirect(LOOK_PATH, 303);
   });
 
-  // Each family is downloaded before anything is written, so a family Google
-  // lacks, or one without the styles its role sets, is refused beside its
-  // field and the site keeps the fonts it had (decision-61).
   app.post(LOOK_FONTS_PATH, async (c) => {
     const body = await c.req.parseBody();
     const roles = declaredFontRoles(activeTheme(c).fonts);
@@ -257,7 +235,6 @@ export function mountLookScreen(app: Hono<GeekityEnv>, options: MountLookOptions
     });
   }
 
-  /** Everything the Look template renders, with what was submitted when a save was refused. */
   function screen(
     c: Context<GeekityEnv>,
     submitted?: { scheme: string; mode: string },

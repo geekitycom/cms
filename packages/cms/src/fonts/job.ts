@@ -16,7 +16,6 @@ export type FontFetchResult = {
   readonly fetched: boolean;
 };
 
-/** Fetch a family whose files are missing, as a page that found them gone asks. */
 export const FONT_FETCH_JOB = jobName<FontFetchPayload, FontFetchResult>('fetch-font');
 
 export function fontFetchJob(fonts: FontStore): JobDefinition<FontFetchPayload, FontFetchResult> {

@@ -44,7 +44,6 @@ const STYLESHEET = path.join(PACKAGED_THEME_DIR, 'static', 'style.css');
 interface Pair {
   /** What a reader is looking at, for the assertion message. */
   readonly what: string;
-  /** The custom property the foreground comes from, without the `--color-`. */
   readonly foreground: string;
   /** The custom property the background comes from. */
   readonly background: string;
@@ -278,7 +277,6 @@ function contrast(foreground: string, background: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-/** The same colour however it is written, so `#FFF` and `#ffffff` compare equal. */
 function normal(color: string | undefined): string | undefined {
   return color === undefined ? undefined : channels(color).join(' ');
 }

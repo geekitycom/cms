@@ -91,18 +91,6 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    {#
-      The colours (TASK-146). The colour scheme goes before the
-      stylesheet, so a reader in dark mode gets a dark canvas while the
-      stylesheet is still on its way rather than a white flash. The theme
-      colour tints the browser around the page and is the page's own
-      background so the two meet without a seam.
-
-      With `theme.scheme`, the site's chosen scheme and mode: the stylesheet
-      selects on `data-scheme` and `data-mode`, a fixed mode declares one
-      colour scheme and one theme colour, and the system mode both. A theme
-      with no schemes prints what its `theme.json` declares.
-    #}
     {% set colorModes = (["light", "dark"] if theme.mode == "system" else [theme.mode]) if theme.scheme else ["light", "dark"] %}
     {% set themeColor = theme.scheme.themeColor if theme.scheme else theme.themeColor %}
     {% set colorScheme = colorModes | join(" ") if theme.scheme else theme.colorScheme %}
@@ -122,15 +110,6 @@
     {% endif %}
     <link rel="canonical" href="{{ canonicalUrl }}">
     <link rel="stylesheet" href="{{ "style.css" | asset }}">
-    {#
-      The Google Fonts the site chose (decision-61), hosted by the site: each
-      family's `@font-face` stylesheet, then each role's custom property set to
-      the family before the theme's stack. Unlayered, so it wins over the
-      stylesheet's default in `@layer base`. Both values were checked before
-      they reached the page, the family as letters and digits and the stack as
-      family names, which is why they are printed as they are. With no font
-      chosen there is no `fonts` and nothing is printed.
-    #}
     {% if fonts %}
     {% for href in fonts.stylesheets %}
     <link rel="stylesheet" href="{{ href | url }}">

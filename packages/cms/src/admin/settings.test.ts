@@ -94,7 +94,6 @@ describe('content/_data/site.json', () => {
       // (TASK-108), so no settings save invents one.
       menus: {},
       taxonomyRedirects: [],
-      // The look (TASK-488): the mode is written; an empty scheme is not.
       colorMode: 'system',
     });
   });

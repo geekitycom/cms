@@ -124,8 +124,6 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   section('comments', 'Comments', [{ child: 'all', label: 'All comments', url: COMMENTS_PATH }]),
   section('messages', 'Messages', [{ child: 'all', label: 'All messages', url: MESSAGES_PATH }]),
   // In WordPress's place, between what the site holds and who may change it.
-  // Themes picks what the site wears; Look sets how the theme in use is
-  // coloured (decision-61).
   section('appearance', 'Appearance', [
     { child: 'themes', label: 'Themes', url: THEMES_PATH },
     { child: LOOK_CHILD, label: 'Look', url: LOOK_PATH },

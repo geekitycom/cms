@@ -220,10 +220,8 @@ export function embedPage(subject: EmbedSubject & { colors: EmbedColors | undefi
   return { html, policy: embedPolicy(style) };
 }
 
-/** The scheme an embed is drawn in, its mode, and the scheme's colour tokens. */
 export type EmbedColors = SiteColors & { readonly tokens: SchemeTokens };
 
-/** The embed view's page and the policy that lets its one style and script run. */
 export interface EmbedPage {
   readonly html: string;
   readonly policy: string;
@@ -256,10 +254,6 @@ export function embedResponse(
   return new Response(page.html, { headers });
 }
 
-/**
- * The tokens the card is drawn in, each with the colour the plain card uses
- * when a theme's stylesheet does not give its scheme one.
- */
 const EMBED_TOKENS = {
   body: '#fff',
   text: '#1f1f1f',
@@ -268,23 +262,17 @@ const EMBED_TOKENS = {
   edge: '#d6d6d6',
 } as const;
 
-/** A colour value that cannot close the rule or the element it is printed in. */
-const PLAIN_VALUE = /^[\w#%.,() -]+$/;
+const CSS_SAFE_COLOUR = /^[\w#%.,() -]+$/;
 
 function tokenDeclarations(tokens: ReadonlyMap<string, string>): string {
   return Object.entries(EMBED_TOKENS)
     .map(([name, fallback]) => {
       const value = tokens.get(name);
-      return `--${name}:${value !== undefined && PLAIN_VALUE.test(value) ? value : fallback}`;
+      return `--${name}:${value !== undefined && CSS_SAFE_COLOUR.test(value) ? value : fallback}`;
     })
     .join(';');
 }
 
-/**
- * The card's look in a scheme: the plain look's rules over the scheme's
- * tokens, the light set and the dark set under the system's query, or the one
- * set a fixed mode shows.
- */
 function schemeStyle({ mode, tokens }: EmbedColors): string {
   const first = mode === 'dark' ? tokens.dark : tokens.light;
   return [
@@ -302,7 +290,6 @@ function schemeStyle({ mode, tokens }: EmbedColors): string {
   ].join('');
 }
 
-/** The card's rules, in the colour each token names. */
 function cardRules(color: Readonly<Record<keyof typeof EMBED_TOKENS, string>>): string {
   return [
     `body{margin:0;background:${color.body};color:${color.text};font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}`,
@@ -313,11 +300,6 @@ function cardRules(color: Readonly<Record<keyof typeof EMBED_TOKENS, string>>): 
   ].join('');
 }
 
-/**
- * The card's look inside the frame under a theme with no schemes. Inline,
- * like the script, because the page loads nothing: one request per embed is
- * all a framing page should cost.
- */
 const EMBED_STYLE = `html{color-scheme:light}${cardRules(EMBED_TOKENS)}`;
 
 /**

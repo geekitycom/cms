@@ -58,8 +58,6 @@ export function mountPreview(app: Hono<GeekityEnv>): void {
             (url) => c.var.replyContexts.read(url, c.var.siteAtRequestStart),
           ),
           editorPreview: true,
-          // The admin's policy refuses an inline style without it, and the
-          // site's fonts are set in one (decision-61).
           cspNonce: c.var.cspNonce,
         },
       ),

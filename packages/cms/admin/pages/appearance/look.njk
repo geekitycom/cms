@@ -1,11 +1,3 @@
-{# /admin/appearance/look: how the theme in use is coloured (decision-61).
-
-   A column of sections, each a card holding a form of its own that posts to
-   its own path and saves only its own settings, so a section added below
-   Colours saves without touching the colours.
-
-   The swatches are SVG with the colours in `fill` attributes: the admin's CSP
-   refuses a `style` attribute, and a presentation attribute is not one. #}
 {% extends "layouts/shell.njk" %}
 {% from "components/alert.njk" import alert %}
 {% from "components/badge.njk" import badge %}
@@ -96,10 +88,6 @@
 
     {% call card(title='Fonts') %}
       {% if fonts.length %}
-        {#- The sample lines are set in the saved fonts from the files the site
-            hosts, linked from this origin, so the admin's CSP needs no font
-            host of Google's. The family is applied by a style block the
-            response's nonce lets run, since a style attribute is refused. #}
         {% for font in fonts %}{% if font.sample %}
           <link rel="stylesheet" href="{{ font.sample.href }}" />
         {% endif %}{% endfor %}

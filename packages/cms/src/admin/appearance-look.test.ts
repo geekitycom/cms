@@ -1,9 +1,3 @@
-/**
- * Appearance > Look: the colour scheme and the mode the site's pages are drawn
- * in (decision-61, TASK-489). Through HTTP, because the questions are what the
- * screen shows, what a save writes into `content/_data/site.json`, and what
- * the public site serves on the next request.
- */
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -40,7 +34,6 @@ async function writeTree(root: string, files: Record<string, string>): Promise<v
   }
 }
 
-/** A site theme with a stylesheet of its own and no `schemes`: one palette. */
 const ONE_PALETTE: Record<string, string> = {
   'theme.json': JSON.stringify({ name: 'Plain', kind: 'site' }),
   'static/style.css': ':root { --color-body: #ffffff; --color-text: #000000; }',
@@ -73,7 +66,6 @@ async function screen(agent: Browser): Promise<string> {
   return response.text();
 }
 
-/** Each scheme card, keyed by the value of its radio. */
 function schemeCards(html: string): Map<string, string> {
   const cards = new Map<string, string>();
   for (const [card] of html.matchAll(/<label\b[^>]*data-scheme-card[\s\S]*?<\/label>/g)) {
@@ -83,7 +75,6 @@ function schemeCards(html: string): Map<string, string> {
   return cards;
 }
 
-/** The fieldset whose legend is `legend`. */
 function fieldset(html: string, legend: string): string | undefined {
   return [...html.matchAll(/<fieldset\b[\s\S]*?<\/fieldset>/g)]
     .map(([match]) => match)

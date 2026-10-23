@@ -2,11 +2,6 @@ import type { HostLookup } from '../../util/public-address.ts';
 import { css2Url } from '../family.ts';
 import type { FontStyle } from '../family.ts';
 
-/**
- * Google Fonts as a table of responses: the CSS2 API and fonts.gstatic.com,
- * with Google's 400 for anything the table does not hold.
- */
-
 export const REGULAR: FontStyle = { weight: 400, italic: false };
 export const ITALIC: FontStyle = { weight: 400, italic: true };
 export const BOLD: FontStyle = { weight: 700, italic: false };
@@ -55,17 +50,13 @@ function combinations(styles: readonly FontStyle[]): FontStyle[][] {
 }
 
 export interface StubbedGoogle {
-  /** Every request made, with the user agent it carried. */
   readonly requested: { url: string; userAgent: string | null }[];
-  /** What each URL answers. */
   web: Record<string, () => Response>;
-  /** Serve a family that has these styles, two subsets each, for any combination asked. */
   serveFamily(styles: readonly FontStyle[], family?: string): void;
   reset(): void;
   restore(): void;
 }
 
-/** Replace `fetch` with the table until {@link StubbedGoogle.restore}. */
 export function stubGoogle(): StubbedGoogle {
   const original = globalThis.fetch;
   const stub: StubbedGoogle = {

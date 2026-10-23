@@ -23,22 +23,6 @@ import {
 } from './family.ts';
 import type { FontStyle } from './family.ts';
 
-/**
- * Google Fonts, hosted by the site (decision-61).
- *
- * A family is fetched once, when it is chosen: the CSS2 API's stylesheet for
- * the styles a role needs, then every WOFF2 file it lists, every
- * unicode-range subset. The files are written under
- * `data/fonts/<family-slug>/` named by a hash of their bytes, and last a
- * stylesheet of the store's own whose `@font-face` rules point at them on
- * this site, so a reader's browser never contacts Google. Only
- * fonts.googleapis.com and fonts.gstatic.com are reached, over https.
- *
- * The folder is rebuildable (decision-55): a family whose files are gone is
- * fetched again by {@link FONT_FETCH_JOB}.
- */
-
-/** Where a family's files and stylesheets are served, followed by `<slug>/<file>`. */
 export const FONT_PATH_PREFIX = '/_geekity/fonts/';
 
 /**
@@ -73,11 +57,9 @@ export type FontRefusal =
     }
   | { readonly kind: 'unavailable'; readonly family: string; readonly message: string };
 
-/** A family's stylesheet as a page links it. */
 export interface FontStylesheet {
   /** Same-origin, with `?v=` the hash of its bytes, so it can be cached for a year. */
   readonly href: string;
-  /** The family as Google names it, which is what `font-family` has to say. */
   readonly family: string;
 }
 
@@ -286,10 +268,6 @@ async function fetchCss(
   return { kind: 'unavailable', reason: fetched.reason };
 }
 
-/**
- * Which of the styles Google lacks, after it refused them together: each
- * style alone, and the family alone when it had none of them.
- */
 async function whatIsMissing(
   family: string,
   styles: readonly FontStyle[],
@@ -323,7 +301,6 @@ type Downloaded =
   | { readonly ok: true; readonly files: ReadonlyMap<string, Uint8Array> }
   | { readonly ok: false; readonly reason: string };
 
-/** Every file the faces name, into memory, so a failure part way writes nothing. */
 async function downloadAll(
   faces: readonly GoogleFace[],
   lookup: HostLookup,

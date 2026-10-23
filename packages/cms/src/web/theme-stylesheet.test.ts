@@ -194,7 +194,6 @@ describe('the default theme stylesheet', () => {
   });
 
   describe('font roles (TASK-490)', () => {
-    /** A font list as the compiler prints it: no quotes, one space after a comma. */
     const stack = (value: string | undefined) =>
       value
         ?.replaceAll(/['"]/g, '')

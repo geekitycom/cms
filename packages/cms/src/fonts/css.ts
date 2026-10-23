@@ -2,7 +2,6 @@ import { isFontFamilyName } from '../theme/font-family.ts';
 import { FONT_FILES_ORIGIN } from './family.ts';
 import type { FontStyle } from './family.ts';
 
-/** One `@font-face` of a CSS2 stylesheet, read and checked. */
 export interface GoogleFace {
   readonly family: string;
   readonly style: FontStyle;
@@ -20,7 +19,6 @@ const FACE_BLOCK = /@font-face\s*\{([^{}]*)\}/g;
 const UNICODE_RANGE =
   /^U\+[0-9A-Fa-f?]{1,6}(?:-[0-9A-Fa-f]{1,6})?(?:\s*,\s*U\+[0-9A-Fa-f?]{1,6}(?:-[0-9A-Fa-f]{1,6})?)*$/;
 
-/** Whether a URL is one of Google's font files: https, on fonts.gstatic.com. */
 export function isFontFileUrl(url: URL): boolean {
   return url.origin === FONT_FILES_ORIGIN && url.username === '' && url.password === '';
 }
@@ -99,7 +97,6 @@ function readFace(body: string): GoogleFace | string {
   return { family, style: { weight, italic: fontStyle === 'italic' }, src, unicodeRange };
 }
 
-/** One face as the site serves it, pointing at its own copy of the file. */
 export function faceRule(face: GoogleFace, href: string): string {
   return [
     '@font-face {',
