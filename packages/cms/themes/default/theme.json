@@ -16,6 +16,16 @@
     { "name": "ocean", "label": "Ocean", "themeColor": { "light": "#eef9fb", "dark": "#08191f" } },
     { "name": "ink", "label": "Ink", "themeColor": { "light": "#ffffff", "dark": "#0d0d0d" } }
   ],
+  "fonts": {
+    "heading": {
+      "label": "Headings",
+      "fallback": "'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif"
+    },
+    "body": {
+      "label": "Body text",
+      "fallback": "'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif"
+    }
+  },
   "areas": [
     { "name": "primary", "label": "Site menu" },
     { "name": "footer", "label": "Footer links" }

@@ -149,7 +149,8 @@ Microdata. To emit a different graph, a site replaces that one file.
 
 The stylesheet sets:
 
-- a serif body and sans headings at an 18px root
+- serif body text and headings at an 18px root, read through the `heading` and
+  `body` font roles, with sans for small labels
 - one column at 42rem
 - warm paper with a rust primary and a blue secondary
 - six colour schemes (Paper, Slate, Forest, Plum, Ocean and Ink), each with a

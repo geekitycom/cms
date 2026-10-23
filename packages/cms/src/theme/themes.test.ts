@@ -413,6 +413,118 @@ describe('the colour schemes a theme declares (TASK-487 AC #1)', () => {
   });
 });
 
+const SERIF = "'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif";
+
+describe('the font roles a theme declares (TASK-490 AC #1)', () => {
+  it('reads each role, its label, its custom property and its fallback out of a theme.json', async () => {
+    const { dir } = await themeDir('lettered', {
+      [THEME_MANIFEST_FILE]: JSON.stringify({
+        name: 'Lettered',
+        kind: 'site',
+        fonts: {
+          heading: { label: 'Headings', fallback: 'Georgia, serif' },
+          body: { label: 'Body text', fallback: SERIF },
+          caption: { fallback: '"Gill Sans", sans-serif' },
+        },
+      }),
+    });
+
+    const read = readTheme(dir);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.fonts, [
+      {
+        role: 'heading',
+        label: 'Headings',
+        property: '--font-heading',
+        fallback: 'Georgia, serif',
+      },
+      { role: 'body', label: 'Body text', property: '--font-body', fallback: SERIF },
+      {
+        role: 'caption',
+        label: 'caption',
+        property: '--font-caption',
+        fallback: '"Gill Sans", sans-serif',
+      },
+    ]);
+  });
+
+  it('drops a role it cannot use: a bad name, no fallback, or one that is not a font list', async () => {
+    const { dir } = await themeDir('rough-fonts', {
+      [THEME_MANIFEST_FILE]: JSON.stringify({
+        name: 'Rough',
+        kind: 'site',
+        fonts: {
+          'Two Words': { label: 'Not a property name', fallback: 'serif' },
+          plain: 'serif',
+          bare: { label: 'No fallback' },
+          empty: { fallback: '  ' },
+          escape: { fallback: 'serif; } body { display: none' },
+          tag: { fallback: 'serif</style><script>' },
+          open: { fallback: '"Unclosed, serif' },
+          body: { label: 'Body', fallback: ' Georgia ,serif ' },
+        },
+      }),
+    });
+
+    const read = readTheme(dir);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.fonts, [
+      { role: 'body', label: 'Body', property: '--font-body', fallback: 'Georgia ,serif' },
+    ]);
+  });
+
+  it('loads a theme with no fonts as before, declaring none', async () => {
+    for (const fonts of [undefined, 'serif', ['heading']]) {
+      const { dir } = await themeDir('bare', {
+        [THEME_MANIFEST_FILE]: JSON.stringify({ name: 'Bare', kind: 'site', fonts }),
+      });
+
+      const read = readTheme(dir);
+
+      assert.ok(read.ok, read.ok ? '' : read.reason);
+      assert.deepEqual(read.theme.fonts, []);
+    }
+  });
+
+  it('is what the packaged theme declares: heading and body, both on the serif stack', () => {
+    const read = readTheme(PACKAGED_THEME_DIR);
+
+    assert.ok(read.ok, read.ok ? '' : read.reason);
+    assert.deepEqual(read.theme.fonts, [
+      { role: 'heading', label: 'Headings', property: '--font-heading', fallback: SERIF },
+      { role: 'body', label: 'Body text', property: '--font-body', fallback: SERIF },
+    ]);
+  });
+
+  it('gives a chosen theme the packaged roles while it keeps the packaged stylesheet', async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), 'geekity-themes-fonts-'));
+    temporaryDirs.push(parent);
+    const manifest = JSON.stringify({ name: 'Laid over', kind: 'site' });
+    await mkdir(path.join(parent, 'over'));
+    await writeFile(path.join(parent, 'over', THEME_MANIFEST_FILE), manifest);
+    await mkdir(path.join(parent, 'own', 'static'), { recursive: true });
+    await writeFile(path.join(parent, 'own', THEME_MANIFEST_FILE), manifest);
+    await writeFile(path.join(parent, 'own', 'static', 'style.css'), 'body { color: red; }');
+    await mkdir(path.join(parent, 'mono'));
+    await writeFile(
+      path.join(parent, 'mono', THEME_MANIFEST_FILE),
+      JSON.stringify({ name: 'Mono', kind: 'site', fonts: { body: { fallback: 'monospace' } } }),
+    );
+
+    const packaged = readTheme(PACKAGED_THEME_DIR);
+    assert.ok(packaged.ok);
+
+    assert.deepEqual(chooseTheme({ themesDir: parent, name: '' }).fonts, packaged.theme.fonts);
+    assert.deepEqual(chooseTheme({ themesDir: parent, name: 'over' }).fonts, packaged.theme.fonts);
+    assert.deepEqual(chooseTheme({ themesDir: parent, name: 'own' }).fonts, []);
+    assert.deepEqual(chooseTheme({ themesDir: parent, name: 'mono' }).fonts, [
+      { role: 'body', label: 'body', property: '--font-body', fallback: 'monospace' },
+    ]);
+  });
+});
+
 describe('the site theme search path', () => {
   it('is the site theme first and the packaged theme second', () => {
     assert.deepEqual(themeSearchPath('/srv/site/theme'), ['/srv/site/theme', PACKAGED_THEME_DIR]);

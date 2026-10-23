@@ -442,7 +442,8 @@
   --color-surface: var(--color-base);
   --color-code: var(--color-code-background);
   --color-error: var(--color-error);
-  --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --font-heading: var(--font-heading);
+  --font-body: var(--font-body);
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
 }
@@ -480,6 +481,15 @@
 }
 
 @layer base {
+  /* The font roles theme.json declares under `fonts` (decision-61), each set
+     to the fallback the manifest names for it. A page that sets a font for a
+     role sets the property again outside any layer, which wins over this. */
+  :root {
+    --font-heading:
+      'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+    --font-body: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  }
+
   /* `scrollbar-gutter` keeps the scrollbar's room whether or not the page is
      long enough to scroll, so moving between a short page and a long one does
      not shift the column sideways. */
@@ -491,7 +501,7 @@
   }
 
   body {
-    @apply bg-paper font-serif leading-relaxed text-ink antialiased;
+    @apply bg-paper font-body leading-relaxed text-ink antialiased;
   }
 
   h1,
@@ -500,7 +510,7 @@
   h4,
   h5,
   h6 {
-    @apply font-bold tracking-tight;
+    @apply font-heading font-bold tracking-tight;
     text-wrap: balance;
   }
 
@@ -603,7 +613,7 @@
   }
 
   .header-link-home {
-    @apply target text-lg font-bold;
+    @apply target font-heading text-lg font-bold;
   }
 
   .site-icon {
@@ -1245,7 +1255,7 @@
   }
 
   .backlinks-title {
-    @apply mb-2 text-[0.72rem] font-normal tracking-[0.14em] text-muted uppercase;
+    @apply mb-2 font-sans text-[0.72rem] font-normal tracking-[0.14em] text-muted uppercase;
   }
 
   .backlinks ol {
@@ -1483,7 +1493,7 @@
   }
 
   :is(.comment-respond, .search-form) :is(input:not([type='checkbox'], [type='hidden']), textarea) {
-    @apply block w-full rounded-md border border-edge bg-surface px-3 py-2 font-serif text-base text-ink;
+    @apply block w-full rounded-md border border-edge bg-surface px-3 py-2 font-body text-base text-ink;
   }
 
   /* A field the reader has left invalid, or one a refused submission marked,

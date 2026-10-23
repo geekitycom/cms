@@ -122,6 +122,33 @@ export interface ThemeScheme {
 }
 
 /**
+ * One font role a theme declares, as its `theme.json` writes it under `fonts`
+ * (decision-61):
+ *
+ *     "fonts": {
+ *       "heading": { "label": "Headings", "fallback": "Georgia, serif" },
+ *       "body": { "label": "Body text", "fallback": "Georgia, serif" }
+ *     }
+ *
+ * A role is a place the theme's stylesheet reads a font from: it sets
+ * `font-family` from the `--font-<role>` custom property and gives that
+ * property the `fallback` stack on `:root`. A page that sets a font for the
+ * role sets the property to the family followed by the fallback. Both are
+ * printed into a style rule, so the role is lower-case letters, digits and
+ * hyphens, and the fallback is a comma-separated list of family names, plain
+ * or quoted.
+ */
+export interface ThemeFont {
+  readonly role: string;
+  /** What the Appearance screen calls the role, for a person to read. */
+  readonly label: string;
+  /** The custom property the stylesheet reads the role from: `--font-<role>`. */
+  readonly property: `--font-${string}`;
+  /** The `font-family` list the role uses when the site sets no font. */
+  readonly fallback: string;
+}
+
+/**
  * Whether a page follows the reader's system setting or is always light or
  * always dark (decision-61): the `colorMode` setting.
  */
@@ -168,6 +195,8 @@ export interface Theme {
   readonly colors: ThemeColors;
   /** The colour schemes it draws, default first. Empty for a theme that declares none. */
   readonly schemes: readonly ThemeScheme[];
+  /** The font roles it declares, in manifest order. Empty for a theme that declares none. */
+  readonly fonts: readonly ThemeFont[];
 }
 
 /** A theme, or the reason the directory is not one. */
@@ -240,6 +269,7 @@ export function readTheme(dir: string): ThemeRead {
       areas: themeAreasOf(manifest['areas']),
       colors,
       schemes: themeSchemesOf(manifest['schemes'], colors.themeColor),
+      fonts: themeFontsOf(manifest['fonts']),
     },
   };
 }
@@ -305,6 +335,38 @@ function themeSchemesOf(value: unknown, fallback: ThemeColors['themeColor']): Th
   return schemes;
 }
 
+/** One family in a fallback stack: a quoted name, or words of letters, digits, `_` and `-`. */
+const FAMILY = /^(?:'[^'"\\<>;{}]*'|"[^'"\\<>;{}]*"|[\w-]+(?: +[\w-]+)*)$/;
+
+/**
+ * A `fonts` value as the roles it declares, tolerant for the reason
+ * {@link themeAreasOf} is. A role named other than {@link SCHEME_NAME}, or
+ * whose fallback is not a list of {@link FAMILY} names, is dropped, because a
+ * page prints both into a style rule.
+ */
+function themeFontsOf(value: unknown): ThemeFont[] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return [];
+
+  const fonts: ThemeFont[] = [];
+  for (const [role, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!SCHEME_NAME.test(role) || typeof entry !== 'object' || entry === null) continue;
+    const { label, fallback } = entry as Record<string, unknown>;
+    if (typeof fallback !== 'string') continue;
+    const stack = fallback.trim();
+    if (!stack.split(',').every((family) => FAMILY.test(family.trim()))) continue;
+
+    const words = typeof label === 'string' ? label.trim() : '';
+    fonts.push({
+      role,
+      label: words === '' ? role : words,
+      property: `--font-${role}`,
+      fallback: stack,
+    });
+  }
+
+  return fonts;
+}
+
 /**
  * The scheme a page is drawn in: the one named, or the theme's first when the
  * name is empty or names a scheme the theme does not declare, so a site that
@@ -318,16 +380,19 @@ export function themeScheme(
 }
 
 /**
- * A chosen theme's schemes. A site theme that declares none but keeps the
- * packaged stylesheet still draws the packaged schemes, so it has those; one
- * that ships its own `static/style.css` and declares none has none.
+ * A chosen theme's schemes or font roles. A site theme that declares none but
+ * keeps the packaged stylesheet still draws the packaged ones, so it has
+ * those; one that ships its own `static/style.css` and declares none has none.
  */
-function resolvedSchemes(theme: Theme | undefined): readonly ThemeScheme[] {
-  if (theme !== undefined && theme.schemes.length > 0) return theme.schemes;
+function resolvedFromStylesheet<Key extends 'schemes' | 'fonts'>(
+  theme: Theme | undefined,
+  key: Key,
+): Theme[Key] {
+  if (theme !== undefined && theme[key].length > 0) return theme[key];
   if (theme !== undefined && existsSync(path.join(theme.dir, 'static', 'style.css'))) return [];
 
   const packaged = readTheme(PACKAGED_THEME_DIR);
-  return packaged.ok ? packaged.theme.schemes : [];
+  return packaged.ok ? packaged.theme[key] : [];
 }
 
 /**
@@ -501,6 +566,8 @@ export interface ChosenTheme {
    * page uses with {@link themeScheme}.
    */
   readonly schemes: readonly ThemeScheme[];
+  /** The font roles the site may set a font for, in manifest order. */
+  readonly fonts: readonly ThemeFont[];
 }
 
 /**
@@ -516,14 +583,15 @@ export function chooseTheme(options: { themesDir: string; name: string }): Chose
   return {
     ...chosen,
     colors: resolvedColors(chosen.theme),
-    schemes: resolvedSchemes(chosen.theme),
+    schemes: resolvedFromStylesheet(chosen.theme, 'schemes'),
+    fonts: resolvedFromStylesheet(chosen.theme, 'fonts'),
   };
 }
 
 function chooseThemeDirs(options: {
   themesDir: string;
   name: string;
-}): Omit<ChosenTheme, 'colors' | 'schemes'> {
+}): Omit<ChosenTheme, 'colors' | 'schemes' | 'fonts'> {
   const name = options.name.trim();
   if (name === PACKAGED_THEME) {
     return { theme: undefined, dirs: themeSearchPath(), problem: undefined };

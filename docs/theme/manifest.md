@@ -20,7 +20,11 @@
       "label": "Slate",
       "themeColor": { "light": "#f4f7fb", "dark": "#12161c" }
     }
-  ]
+  ],
+  "fonts": {
+    "heading": { "label": "Headings", "fallback": "Georgia, serif" },
+    "body": { "label": "Body text", "fallback": "Georgia, serif" }
+  }
 }
 ```
 
@@ -32,6 +36,7 @@
 | `colorScheme` | One of `normal`, `light`, `dark`, `light dark`, `dark light` or `only light`, preferred scheme first.                                            |
 | `themeColor`  | The colour of the browser around the page, one per scheme, as a three- or six-digit hex colour with no alpha. Make it the page's own background. |
 | `schemes`     | Optional. The colour schemes the theme's stylesheet draws, default first. See [Colour schemes](#colour-schemes).                                 |
+| `fonts`       | Optional. The font roles the theme's stylesheet reads, by role. See [Font roles](#font-roles).                                                   |
 
 The directory name is the theme's id. A directory is not a theme if its
 manifest is missing or unreadable, or if the manifest names a kind this CMS
@@ -67,3 +72,35 @@ its own `static/style.css` offers none.
 
 The packaged theme declares `paper`, `slate`, `forest`, `plum`, `ocean` and
 `ink`. Paper is the default.
+
+## Font roles
+
+`fonts` names the places a site can set a font without writing a theme
+(decision-61). It is an object keyed by role. Each value has these fields:
+
+| Field      | Value                                                                                                                                         |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `label`    | Optional. The name a person sees. Defaults to the role.                                                                                       |
+| `fallback` | The `font-family` list the role uses when the site sets no font, such as `'Iowan Old Style', Georgia, serif`. Each family is plain or quoted. |
+
+The role is lower-case letters, digits and hyphens, starting with a letter.
+The stylesheet reads each role from the custom property `--font-<role>`. A
+page that sets a font for a role sets that property to the family followed by
+the fallback, for example `--font-heading: "Fraunces", Georgia, serif`.
+
+The CMS drops a role whose name is not usable, that has no `fallback`, or whose
+fallback holds anything other than family names separated by commas: no `;`,
+braces, angle brackets or backslashes, and no quote left open. It keeps the
+rest, in the order the manifest lists them.
+
+The stylesheet must give `--font-<role>` its fallback on `:root` and read
+every role it declares. See [Fonts](page-shell.md#fonts).
+
+A theme with no `fonts` loads as before. Font roles follow the same rule as
+schemes: a site theme with no `fonts` that ships no `static/style.css` of its
+own offers the packaged theme's roles, and one that ships its own stylesheet
+offers none.
+
+The packaged theme declares `heading` (Headings) and `body` (Body text). Both
+fall back to the serif stack
+`'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif`.

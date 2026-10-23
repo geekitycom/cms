@@ -1358,6 +1358,45 @@ decoration. A site that recolours it can make it as faint as it likes.
 Anything drawn with `--color-edge` must stay at 3:1 against the paper and the
 surface.
 
+## Fonts
+
+The stylesheet uses three font stacks. Headings and body text use the font
+roles that `theme.json` declares under `fonts` (see
+[Font roles](manifest.md#font-roles)). Small labels and code keep fixed system
+stacks.
+
+| What                                                                                                                              | Font                                 |
+| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Body text, and the text in comment and contact fields                                                                             | `var(--font-body)`                   |
+| `h1` to `h6`: the site title, entry and page titles, prose headings, the reply and comment headings, and the inner-page home link | `var(--font-heading)`                |
+| Kickers, menus, meta lines, section and reaction labels, backlinks, buttons                                                       | `system-ui`, then the system sans    |
+| `code`, `kbd`, `samp`, `pre`                                                                                                      | `ui-monospace`, then the system mono |
+
+Both role properties are set on `:root` inside `@layer base`, each to the
+fallback the manifest names for it. With no font chosen, both are the serif
+stack `'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif`.
+A page that sets a font for a role sets the property again outside any layer,
+for example `:root { --font-heading: "Fraunces", 'Iowan Old Style', Georgia, serif; }`,
+and that rule wins. To change a font in a site's own stylesheet, redefine the
+property the same way. There is no need to replace this stylesheet.
+
+In `src/style.css`, `@theme inline` maps the `font-heading` and `font-body`
+utilities onto the two properties, so `@apply font-heading` writes
+`font-family: var(--font-heading)`.
+
+### A site theme's own stylesheet
+
+A site theme that replaces `static/style.css` and declares `fonts` must, for
+each role:
+
+- set `--font-<role>` on `:root` to the role's `fallback`, in a layer or at a
+  specificity that a plain `:root` rule printed by the page can override
+- set `font-family: var(--font-<role>)` on the elements the role covers
+
+A site theme that replaces `static/style.css` and declares no `fonts` offers
+no font roles, and a font a site chose for the packaged theme does not apply
+to it.
+
 ## Code highlighting
 
 The CMS renders a fenced block as
