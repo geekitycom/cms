@@ -645,6 +645,8 @@ export function createRenderer(options: CreateRendererOptions): Renderer {
     // all: a theme that was handed the icon's path would have to build the URL
     // itself and would link 404s on a site with image optimization off.
     const icons = siteIcons(config, iconSetting(site));
+    // The icon a header prints before the title, when the site asks for one
+    // (TASK-486): the SVG itself if it is one, which is sharp at any size.
     const headerIcon = site['headerIcon'] === true ? svgElseTouchIconHref(icons) : undefined;
     // The picture a shared link shows (TASK-146), here for the reason the
     // icons are: its alt text and its size are in files only this side reads.
