@@ -64,6 +64,7 @@ import { isServed } from '../content/served.ts';
 import { SEARCH_KINDS } from '../item-lookup/lookup.ts';
 import type { CitedPicture } from '../webmention/cited-picture.ts';
 import { syndicationTargetsReader } from '../webmention/syndication.ts';
+import { creditWriting } from '../writing/ledger.ts';
 import { editorActionViews } from './editor-actions.ts';
 import { editorWordCounter } from './editor-word-counter.ts';
 import {
@@ -84,7 +85,6 @@ import {
 } from './editor-kinds.ts';
 import type { PostKind } from './editor-kinds.ts';
 import { editorSections, openGroups, sidebarLocation } from './editor-layout.ts';
-import { creditWriting } from '../writing/ledger.ts';
 import { flash, noteClearedAutosave } from './flash.ts';
 import {
   ITEM_LOOKUP_BUTTON,

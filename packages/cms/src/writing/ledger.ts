@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 
-import { calendarDayIn, DEFAULT_TIMEZONE } from '../content/time.ts';
+import { calendarDayIn } from '../content/time.ts';
 import { addedWords } from '../content/words.ts';
 import { readFileIfPresentSync, updateFileAtomically } from '../files/atomic.ts';
 import { dataPath, WRITING_LEDGERS } from '../files/data-files.ts';
@@ -76,7 +76,7 @@ function ledgerFile(dataDir: string, userId: number): string {
 
 /** The ledger day `at` falls on in the site timezone, as `YYYY-MM-DD`. */
 export function writingDay(at: Date, timezone: string): string {
-  const day = calendarDayIn(at, timezone) ?? calendarDayIn(at, DEFAULT_TIMEZONE);
+  const day = calendarDayIn(at, timezone);
   if (day === undefined) throw new Error(`${at.toISOString()} has no calendar day.`);
   return day;
 }

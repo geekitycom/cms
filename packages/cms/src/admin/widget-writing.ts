@@ -30,8 +30,9 @@ export const WRITING_WIDGET: CoreWidget = {
   refreshSeconds: 0,
   forUser: (user) => trackedWritingGoals(user) !== undefined,
   load(vars, _period, user) {
-    const goals = user === undefined ? undefined : trackedWritingGoals(user);
-    if (user === undefined || goals === undefined) return [];
+    if (user === undefined) return [];
+    const goals = trackedWritingGoals(user);
+    if (goals === undefined) return [];
 
     let ledger: WritingLedger;
     try {
