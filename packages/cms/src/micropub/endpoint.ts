@@ -427,7 +427,6 @@ const ACTIONS: {
   undelete: async (c, { url }) => await moved(c, url, 'restore'),
 };
 
-/** Credit the token's user with the words a write added (decision-63). */
 async function credit(c: Context<BearerEnv>, before: string, after: string): Promise<void> {
   await creditWriting(c.var.config.dataDir, {
     userId: c.var.bearer.user.id,

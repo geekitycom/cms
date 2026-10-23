@@ -12,7 +12,6 @@ export interface FocusOptions {
   readonly view: EditorView;
   readonly form: HTMLFormElement;
   readonly surface: HTMLElement;
-  /** The word counter, which the bar shows while the mode is on. */
   readonly words: HTMLElement | undefined;
   readonly write: () => void;
   readonly say: (message: string, tone?: 'news' | 'error') => void;

@@ -10,11 +10,9 @@ import { wordsLabel } from './editor-words.ts';
 
 export interface EditorWordCounter {
   readonly label: string;
-  /** The signed-in user's words written today, for a user who tracks writing goals only. */
   readonly today: number | undefined;
 }
 
-/** The editor's counter as of page load, which the editor bundle keeps up to date (decision-63). */
 export function editorWordCounter(c: Context<GeekityEnv>, body: string): EditorWordCounter {
   const today = wordsToday(c);
   return { label: wordsLabel(wordCount(body), today), today };

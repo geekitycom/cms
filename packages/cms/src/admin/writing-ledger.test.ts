@@ -1,8 +1,3 @@
-/**
- * The writing ledger (TASK-499, decision-63): the words a user adds in the
- * editor are credited to them on autosave and on save, each measured from the
- * last text the server saw from that user.
- */
 import assert from 'node:assert/strict';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';

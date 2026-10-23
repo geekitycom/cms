@@ -26,10 +26,6 @@ export function daysEndingToday(vars: Readonly<GeekityEnv['Variables']>, count: 
 
 export interface CoreWidget extends Omit<PluginWidget, 'load'> {
   readonly placement?: WidgetPlacement;
-  /**
-   * Makes the card the signed-in user's own: it is on the dashboard only for
-   * a user this returns true for, and its result is kept for each user apart.
-   */
   readonly forUser?: (user: User) => boolean;
   load(
     context: Readonly<GeekityEnv['Variables']>,
@@ -49,7 +45,6 @@ export interface WidgetLoad {
   readonly widget: Omit<PluginWidget, 'load'>;
   readonly placement: WidgetPlacement;
   readonly period: DashboardPeriod;
-  /** The user whose own card this is, for a card that differs from user to user. */
   readonly viewer?: number;
   load(signal: AbortSignal): readonly PluginBlock[] | Promise<readonly PluginBlock[]>;
 }

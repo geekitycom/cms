@@ -93,7 +93,6 @@ export interface User {
    * changed anything (TASK-469). Absent means the default arrangement.
    */
   readonly dashboardLayout?: DashboardLayout | undefined;
-  /** This user's writing goal and streak rule, once they have saved one (decision-63). */
   readonly writingGoals?: WritingGoals | undefined;
   /**
    * What the public site says about this person, when somebody has filled any
@@ -525,7 +524,6 @@ export async function setUserDashboardLayout(input: {
   return updateUser(input.dataDir, input.userId, () => ({ dashboardLayout: layout }));
 }
 
-/** Save a user's writing goals. Returns `false` when there is no such user. */
 export async function setUserWritingGoals(input: {
   dataDir: string;
   userId: number;

@@ -21,12 +21,10 @@ const PERIOD_LABEL: Readonly<Record<GoalPeriod, string>> = {
   year: 'Words this year',
 };
 
-/** The signed-in user's progress toward their writing goal (decision-63). */
 export const WRITING_WIDGET: CoreWidget = {
   id: 'writing-goal',
   title: 'Writing goal',
   width: 'half',
-  // The ledger is one small local file and changes with every autosave.
   refreshSeconds: 0,
   forUser: (user) => trackedWritingGoals(user) !== undefined,
   load(vars, _period, user) {

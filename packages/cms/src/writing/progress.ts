@@ -4,9 +4,7 @@ import type { GoalPeriod, StreakRule, WritingGoals } from '../site/writing-goals
 import { writingDay } from './ledger.ts';
 import type { WritingLedger } from './ledger.ts';
 
-/** Where a user stands against their goal and streak rule today (decision-63). */
 export interface WritingProgress {
-  /** Today in the site timezone, `YYYY-MM-DD`. */
   readonly today: string;
   readonly wordsToday: number;
   readonly period: PeriodProgress;
@@ -14,24 +12,18 @@ export interface WritingProgress {
 }
 
 export interface PeriodProgress {
-  /** The period's first and last days, inclusive. */
   readonly start: string;
   readonly end: string;
   readonly words: number;
   readonly goal: number;
-  /** The even share of the goal for the days up to and including today, rounded up. */
   readonly expected: number;
-  /** `words - expected`: ahead of pace when positive, behind when negative. */
   readonly pace: number;
 }
 
 export interface StreakProgress {
-  /** Days that met the rule in the current run. Allowed misses add nothing. */
   readonly current: number;
-  /** The longest run anywhere in the ledger under the current rule. */
   readonly best: number;
   readonly todayMet: boolean;
-  /** Words still to write today to meet the rule, 0 once met. */
   readonly todayNeeds: number;
 }
 
@@ -55,7 +47,6 @@ export function writingProgress(
   };
 }
 
-/** Whether a day's words keep the streak. */
 export function meetsStreak(words: number | undefined, rule: StreakRule): boolean {
   return (words ?? 0) >= rule.dailyWords;
 }
@@ -106,10 +97,6 @@ function periodBounds(
   }
 }
 
-/**
- * One pass from the first day in the ledger to today. Today counts once it
- * meets the rule and is never a miss, because it is not over.
- */
 function streaks(
   ledger: WritingLedger,
   rule: StreakRule,
@@ -125,19 +112,20 @@ function streaks(
   let best = 0;
   for (
     let day = Temporal.PlainDate.from(first);
-    Temporal.PlainDate.compare(day, today) <= 0;
+    Temporal.PlainDate.compare(day, today) < 0;
     day = day.add({ days: 1 })
   ) {
     if (meetsStreak(ledger.days[day.toString()], rule)) {
       run += 1;
       misses = 0;
-    } else if (!day.equals(today)) {
+    } else {
       misses += 1;
       if (misses > rule.missesAllowed) run = 0;
     }
     best = Math.max(best, run);
   }
-  return { current: run, best };
+  if (meetsStreak(ledger.days[today.toString()], rule)) run += 1;
+  return { current: run, best: Math.max(best, run) };
 }
 
 function daysBetween(from: Temporal.PlainDate, to: Temporal.PlainDate): number {

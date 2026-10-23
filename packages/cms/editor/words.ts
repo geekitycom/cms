@@ -9,7 +9,6 @@ const ANNOUNCE_AFTER_MS = 1500;
 export interface WordCounter {
   readonly element: HTMLElement;
   readonly changed: (body: string) => void;
-  /** An autosave of `body` answered that the user has written `today` words today. */
   readonly credited: (body: string, today: number) => void;
 }
 
@@ -22,8 +21,6 @@ export function wordCounter(body: string): WordCounter | undefined {
   let current = body;
   let pause: ReturnType<typeof setTimeout> | undefined;
 
-  // Seen and changed on every keystroke, so kept from screen readers, which
-  // hear the label only once typing pauses.
   const shown = document.createElement('span');
   shown.setAttribute('aria-hidden', 'true');
   const heard = document.createElement('span');

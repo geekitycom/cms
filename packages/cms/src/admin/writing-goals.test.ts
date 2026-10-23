@@ -1,7 +1,3 @@
-/**
- * Users > Writing goals (TASK-500): the signed-in user's own "Track writing
- * goals" switch, goal and streak rule.
- */
 import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 
@@ -39,7 +35,6 @@ function storedGoals(cms: Cms) {
   return findUser(cms.config.dataDir, 'ada')?.writingGoals;
 }
 
-/** The text between a field's control and the next field. */
 function fieldBlock(html: string, id: string): string {
   const start = html.indexOf(`id="${id}"`);
   assert.ok(start >= 0, `the page has #${id}`);
@@ -172,7 +167,6 @@ describe('the writing goals screen', () => {
     const off = (await screen(agent)).html;
     for (const id of GOAL_FIELDS) assert.doesNotMatch(off, new RegExp(`id="${id}"`));
 
-    // With the fields hidden, the form posts only the switch.
     const response = await save(agent, { tracking: '1' });
     assert.equal(response.status, 303);
     assert.deepEqual(storedGoals(cms), { tracking: true, ...goal });

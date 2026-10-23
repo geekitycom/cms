@@ -1,7 +1,3 @@
-/**
- * The dashboard's Writing goal card (TASK-501): the signed-in user's own
- * progress, pace and streak, drawn only while they track writing goals.
- */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -36,11 +32,6 @@ const MONTHLY: WritingGoals = {
   streak: { dailyWords: 1000, missesAllowed: 1 },
 };
 
-/**
- * Today is Tuesday 20 October 2026 in Chicago. October so far holds 21,000
- * words against an even pace of 20,000. The current run is 15, 16, 18 and 19
- * October (the 17th is one allowed miss), and the best run is 1 to 6 September.
- */
 const ADA_DAYS: Record<string, number> = {
   '2026-09-01': 1000,
   '2026-09-02': 1000,
@@ -96,7 +87,6 @@ async function dashboard(agent: Browser): Promise<string> {
   return html;
 }
 
-/** The card's markup, or `undefined` when the dashboard does not draw it. */
 async function card(agent: Browser): Promise<string | undefined> {
   const html = screenOf(await dashboard(agent));
   const start = html.indexOf(`<h2 class="card-title">${TITLE}</h2>`);

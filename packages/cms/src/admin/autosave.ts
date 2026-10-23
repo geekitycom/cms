@@ -17,7 +17,6 @@ export const AUTOSAVE_DISCARD_JSON_PATH = `${AUTOSAVE_DISCARD_PATH}.json`;
 export interface AutosaveResult {
   key: string;
   savedAt: string;
-  /** The signed-in user's words written today, this autosave's included. */
   wordsToday: number;
 }
 

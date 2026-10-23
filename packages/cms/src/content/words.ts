@@ -82,13 +82,12 @@ function insertions(before: readonly string[], after: readonly string[]): number
   const inserted = after.slice(start, endAfter);
   if (removed.length === 0 || inserted.length === 0) return inserted.length;
 
-  const edits = editDistance(removed, inserted);
-  if (edits === undefined) return surplus(removed, inserted);
+  const edits = cappedEditDistance(removed, inserted);
+  if (edits === undefined) return unmatchedWordCount(removed, inserted);
   return (edits + inserted.length - removed.length) / 2;
 }
 
-// Myers' shortest edit script length, giving up past MAX_EDITS.
-function editDistance(a: readonly string[], b: readonly string[]): number | undefined {
+function cappedEditDistance(a: readonly string[], b: readonly string[]): number | undefined {
   const max = Math.min(a.length + b.length, MAX_EDITS);
   const offset = max + 1;
   const furthest = new Int32Array(2 * max + 3);
@@ -108,9 +107,7 @@ function editDistance(a: readonly string[], b: readonly string[]): number | unde
   return undefined;
 }
 
-// Words in `after` beyond the copies `before` already had: a lower bound on
-// the insertions, used when the bodies differ too much for an exact diff.
-function surplus(before: readonly string[], after: readonly string[]): number {
+function unmatchedWordCount(before: readonly string[], after: readonly string[]): number {
   const counts = new Map<string, number>();
   for (const word of before) counts.set(word, (counts.get(word) ?? 0) + 1);
   let added = 0;

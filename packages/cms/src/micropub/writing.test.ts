@@ -1,7 +1,3 @@
-/**
- * Micropub writes credit the token's user in the writing ledger (TASK-499,
- * decision-63): a create credits the whole body, an update the words it adds.
- */
 import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 

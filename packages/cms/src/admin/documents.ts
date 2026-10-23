@@ -861,10 +861,6 @@ function filterTabs(
   ];
 }
 
-/**
- * Credit the signed-in user with the words a save adds to the last text the
- * server saw from them: their autosave copy, else the file as it was.
- */
 async function creditSave(
   c: Context<GeekityEnv>,
   document: Document | undefined,

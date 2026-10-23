@@ -20,7 +20,6 @@ interface DrawnProgress {
   readonly label: string;
   readonly value: string;
   readonly max: string;
-  /** The value as the bar draws it, no more than `max`. */
   readonly filled: number;
   readonly limit: number;
   readonly percent: string;

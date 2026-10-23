@@ -1,13 +1,3 @@
-/**
- * Users > Writing goals (TASK-500, decision-63): the signed-in user's own
- * "Track writing goals" switch, goal and streak rule, stored on their record.
- *
- * The goal fields are drawn only while tracking is on, as saved or as just
- * posted, so the page works without JavaScript: ticking the switch and saving
- * reveals them. A field the post does not carry, because it was not drawn,
- * keeps its saved value, which is how turning tracking back on restores the
- * goal.
- */
 import type { Context, Hono } from 'hono';
 
 import type { AdminRender } from './documents.ts';
@@ -46,7 +36,6 @@ const PERIOD_LABELS: Readonly<Record<(typeof GOAL_PERIODS)[number], string>> = {
   year: 'a year',
 };
 
-/** The form as drawn: what is saved, or what was just posted. */
 export interface GoalsForm {
   readonly tracking: boolean;
   readonly words: string;
@@ -95,10 +84,6 @@ export function mountWritingGoals(app: Hono<GeekityEnv>, options: { render: Admi
   });
 }
 
-/**
- * A posted form as the goals to save, or the form to draw again with what is
- * wrong. Unticked keeps the stored goal and only turns tracking off.
- */
 export function readGoalsForm(
   body: Readonly<Record<string, unknown>>,
   stored: WritingGoals | undefined,
@@ -198,7 +183,6 @@ function signedInUser(c: Context<GeekityEnv>) {
   return userId == null ? undefined : findUserById(c.var.config.dataDir, userId);
 }
 
-/** A typed count, allowing thousands separators: `100,000` is 100000. */
 function wholeNumber(text: string): number | undefined {
   const digits = text.replaceAll(',', '');
   if (!/^\d+$/.test(digits)) return undefined;

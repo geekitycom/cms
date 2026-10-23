@@ -9,16 +9,13 @@ import { isRecord } from '../util/guards.ts';
 
 const LEDGER_MODE = 0o600;
 
-/** A user's words written per day, keyed by `YYYY-MM-DD` in the site timezone. Days with none are absent. */
 export interface WritingLedger {
   readonly days: Readonly<Record<string, number>>;
 }
 
 export interface WritingCredit {
   readonly userId: number;
-  /** The Markdown body the server last saw from this user, or `''` for a new document. */
   readonly before: string;
-  /** The Markdown body the user sent now. */
   readonly after: string;
   readonly at: Date;
   readonly timezone: string;
@@ -29,12 +26,6 @@ export function readWritingLedger(dataDir: string, userId: number): WritingLedge
   return parseLedger(file, readFileIfPresentSync(file));
 }
 
-/**
- * Credit the words `after` adds to `before` to the user's day, and answer the
- * user's total for that day. A credit of nothing writes nothing. Callers have
- * already saved the user's text, so a ledger that cannot be read is warned
- * about and answers 0 rather than failing that save.
- */
 export async function creditWriting(dataDir: string, credit: WritingCredit): Promise<number> {
   try {
     return await creditDay(dataDir, credit);
@@ -74,15 +65,12 @@ function ledgerFile(dataDir: string, userId: number): string {
   return dataPath(dataDir, WRITING_LEDGERS, `${String(userId)}.json`);
 }
 
-/** The ledger day `at` falls on in the site timezone, as `YYYY-MM-DD`. */
 export function writingDay(at: Date, timezone: string): string {
   const day = calendarDayIn(at, timezone);
   if (day === undefined) throw new Error(`${at.toISOString()} has no calendar day.`);
   return day;
 }
 
-// The ledger cannot be rebuilt, so a file that does not parse is refused
-// rather than overwritten with a fresh one.
 function parseLedger(file: string, text: string | undefined): WritingLedger {
   if (text === undefined) return { days: {} };
   let parsed: unknown;

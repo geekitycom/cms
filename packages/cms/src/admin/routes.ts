@@ -385,7 +385,6 @@ export function mountAdmin(app: Hono<GeekityEnv>): void {
   // What apps sent to the IndieAuth and Micropub endpoints (TASK-221), before
   // the users screens for the same reason.
   mountAppActivity(app, { render });
-  // The signed-in user's writing goals (TASK-500), before the users screens for the same reason.
   mountWritingGoals(app, { render });
 
   // Who may sign in: the list, the add form, and the change-password form for
