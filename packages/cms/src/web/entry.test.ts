@@ -246,8 +246,11 @@ describe('the bio (AC #2)', () => {
       /Written by\s*<a class="u-url p-name" rel="author me" href="\/author\/ada\/">Ada Lovelace<\/a>/,
       'the name is not a p-name u-url linked rel="author me"',
     );
-    assert.match(inside, /<span class="p-job-title">Analyst<\/span>/, 'no p-job-title');
-    assert.match(inside, /<span class="p-locality">London<\/span>/, 'no p-locality');
+    assert.match(
+      inside,
+      /<\/a>, <span class="p-job-title">Analyst<\/span> from <span class="p-locality">London<\/span>\./,
+      'the job title is not an appositive without an article, followed by the place',
+    );
   });
 
   it('leaves out what the profile does not say', async () => {

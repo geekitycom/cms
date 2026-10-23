@@ -68,7 +68,7 @@
       {%- else %}
       <strong class="p-name">{{ bioAuthor.name }}</strong>
       {%- endif %}
-      {%- if bioAuthor.jobTitle %}, a <span class="p-job-title">{{ bioAuthor.jobTitle }}</span>{% endif %}
+      {%- if bioAuthor.jobTitle %}, <span class="p-job-title">{{ bioAuthor.jobTitle }}</span>{% endif %}
       {%- if bioAuthor.location %} from <span class="p-locality">{{ bioAuthor.location }}</span>{% endif %}.
     </p>
 
